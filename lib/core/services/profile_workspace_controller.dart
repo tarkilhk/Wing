@@ -941,6 +941,39 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat.nextHistoryOffset = page.nextOffset == null
           ? null
           : refreshed.length;
+      // The page limit counts raw rows. A running turn can fill it with tool
+      // calls and empty assistant rows, hiding the conversation on reopen.
+      // Include the latest visible user prompt before offering older history.
+      while (chat.nextHistoryOffset != null &&
+          !chat.messages.any(
+            (row) => isAnswerPrompt(row) && !isHiddenAnswerMessage(row),
+          )) {
+        _changed();
+        final olderPage = await resource.gateway.history(
+          chat.historySessionId!,
+          offset: chat.nextHistoryOffset!,
+        );
+        if (_closed || chat.historyGeneration != generation) return;
+        if (olderPage.sessionId != chat.historySessionId) {
+          throw StateError('History moved to a new segment');
+        }
+        final ids = chat.messages.map((row) => row['id']).toSet();
+        final oldest =
+            chat.messages.where((row) => row['id'] is int).firstOrNull?['id']
+                as int?;
+        final older = olderPage.rows
+            .where(
+              (row) =>
+                  !ids.contains(row['id']) &&
+                  (oldest == null || (row['id'] as int) < oldest),
+            )
+            .toList();
+        if (older.isEmpty && olderPage.nextOffset != null) {
+          throw StateError('History did not advance');
+        }
+        chat.messages = [...older, ...chat.messages];
+        chat.nextHistoryOffset = olderPage.nextOffset;
+      }
       unawaited(refreshContext(chat));
     } catch (_) {
       if (!_closed && chat.historyGeneration == generation) {
