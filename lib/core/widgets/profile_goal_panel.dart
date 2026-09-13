@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'anchored_expansion_tile.dart';
+import 'profile_transcript_disclosure.dart';
 
 import '../models/session_control.dart';
 import '../services/profile_workspace_controller.dart';
@@ -253,22 +253,15 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
       final goal = snapshot?.goal;
       final working = chat.sessionControlLoading || chat.sessionControlWorking;
       final error = chat.sessionControlError;
-      return AnchoredExpansionTile(
+      return ProfileTranscriptDisclosure(
         key: ValueKey(('goal', chat.key)),
         initiallyExpanded: widget.initiallyExpanded,
-        minTileHeight: 48,
-        shape: const Border(),
-        collapsedShape: const Border(),
-        leading: const Icon(Icons.track_changes_outlined, size: 20),
-        title: const Text('Goal'),
-        subtitle: Text(_summary(goal, chat.sessionControlNotice)),
-        trailing: chat.sessionControlLoading
-            ? const SizedBox.square(
-                dimension: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : null,
-        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        maintainState: false,
+        icon: Icons.track_changes_outlined,
+        label: 'Goal',
+        summary: Text(_summary(goal, chat.sessionControlNotice)),
+        loading: chat.sessionControlLoading,
+        childrenPadding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
         children: [
           if (error != null)
             Row(

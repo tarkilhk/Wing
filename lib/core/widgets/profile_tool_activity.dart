@@ -23,6 +23,7 @@ class ProfileActivitySection extends StatelessWidget {
     label: 'Activity',
     icon: Icons.bolt_rounded,
     summary: subtitle,
+    childrenPadding: const EdgeInsets.only(left: 12),
     initiallyExpanded: initiallyExpanded,
     children: children,
   );

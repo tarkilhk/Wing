@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'anchored_expansion_tile.dart';
+import 'profile_transcript_disclosure.dart';
 
 import '../models/gateway_insight.dart';
 import '../services/profile_workspace_controller.dart';
@@ -56,25 +56,18 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
     listenable: widget.controller,
     builder: (context, _) {
       final chat = widget.chat;
-      return AnchoredExpansionTile(
+      return ProfileTranscriptDisclosure(
         key: ValueKey(('subagents', chat.key)),
         initiallyExpanded: widget.initiallyExpanded,
+        maintainState: false,
         onExpansionChanged: (expanded) {
           if (expanded) _refresh();
         },
-        minTileHeight: 48,
-        shape: const Border(),
-        collapsedShape: const Border(),
-        leading: const Icon(Icons.account_tree_outlined, size: 20),
-        title: const Text('Subagents'),
-        subtitle: Text(_summary(chat.subagents, chat.unconfirmedSubagentIds)),
-        trailing: chat.subagentsLoading
-            ? const SizedBox.square(
-                dimension: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : null,
-        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        icon: Icons.account_tree_outlined,
+        label: 'Subagents',
+        summary: Text(_summary(chat.subagents, chat.unconfirmedSubagentIds)),
+        loading: chat.subagentsLoading,
+        childrenPadding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
         children: [
           if (chat.unconfirmedSubagentIds.isNotEmpty)
             const Padding(
@@ -100,12 +93,17 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
           for (final activity in chat.subagents)
             ListTile(
               key: ValueKey(('subagent', chat.key, activity.id)),
+              dense: true,
+              minLeadingWidth: 16,
+              horizontalTitleGap: 8,
+              titleTextStyle: Theme.of(context).textTheme.bodyMedium,
+              subtitleTextStyle: Theme.of(context).textTheme.labelMedium,
               contentPadding: EdgeInsets.zero,
               leading: Icon(
                 chat.unconfirmedSubagentIds.contains(activity.id)
                     ? Icons.help_outline
                     : _statusIcon(activity.status),
-                size: 20,
+                size: 16,
               ),
               title: Text(
                 _goal(activity),
@@ -120,7 +118,7 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
                   ),
                 ),
               ),
-              trailing: const Icon(Icons.chevron_right),
+              trailing: const Icon(Icons.chevron_right, size: 16),
               onTap: () => showModalBottomSheet<void>(
                 context: context,
                 isScrollControlled: true,

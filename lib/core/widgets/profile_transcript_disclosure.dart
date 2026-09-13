@@ -10,6 +10,9 @@ class ProfileTranscriptDisclosure extends StatefulWidget {
     required this.children,
     this.summary,
     this.initiallyExpanded = false,
+    this.loading = false,
+    this.maintainState = true,
+    this.onExpansionChanged,
     this.childrenPadding = EdgeInsets.zero,
   });
 
@@ -18,6 +21,9 @@ class ProfileTranscriptDisclosure extends StatefulWidget {
   final Widget? summary;
   final List<Widget> children;
   final bool initiallyExpanded;
+  final bool loading;
+  final bool maintainState;
+  final ValueChanged<bool>? onExpansionChanged;
   final EdgeInsetsGeometry childrenPadding;
 
   @override
@@ -37,7 +43,7 @@ class _ProfileTranscriptDisclosureState
       horizontalTitleGap: 0,
       child: AnchoredExpansionTile(
         initiallyExpanded: widget.initiallyExpanded,
-        maintainState: true,
+        maintainState: widget.maintainState,
         minTileHeight: 28,
         tilePadding: EdgeInsets.zero,
         childrenPadding: widget.childrenPadding,
@@ -45,7 +51,10 @@ class _ProfileTranscriptDisclosureState
         shape: const Border(),
         collapsedShape: const Border(),
         trailing: const SizedBox.shrink(),
-        onExpansionChanged: (expanded) => setState(() => _expanded = expanded),
+        onExpansionChanged: (expanded) {
+          setState(() => _expanded = expanded);
+          widget.onExpansionChanged?.call(expanded);
+        },
         title: DefaultTextStyle(
           style: Theme.of(context).textTheme.labelMedium!.copyWith(
             fontSize: 12,
@@ -56,7 +65,17 @@ class _ProfileTranscriptDisclosureState
           ),
           child: Row(
             children: [
-              Icon(widget.icon, size: 14, color: color),
+              if (widget.loading)
+                SizedBox.square(
+                  dimension: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    color: color,
+                    semanticsLabel: 'Refreshing ${widget.label}',
+                  ),
+                )
+              else
+                Icon(widget.icon, size: 14, color: color),
               const SizedBox(width: 6),
               Flexible(
                 child: Wrap(

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.31.22+2207] - 2026-09-14
+
+### Changed
+
+- Match Tasks, Subagents, current tool activity, Goal and Background work to the compact Activity header, with lighter text, small icons, inline counts and chevrons.
+- Reduce spacing in task rows and subagent summaries, while keeping loading indicators, refresh-on-expand and detail controls available.
+
 ## [2.31.21+2206] - 2026-09-14
 
 ### Fixed
