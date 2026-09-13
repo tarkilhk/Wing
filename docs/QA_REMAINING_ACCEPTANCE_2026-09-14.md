@@ -27,7 +27,13 @@ with exact SHA-256 matches: PDF, SVG, PNG, WAV, MP3, MP4, WebM, invalid MP4 and
 Markdown containing file links. Evidence: `build/qa-real-media-downloads.json`.
 This verifies transport only; it does not substitute for native playback/zoom.
 
-## Cases to finish
+## Final results
+
+The finite batch is complete. R01–R05 and R07 passed. R08 proved usable file
+contents and durable reopen, but automatic reference expansion still encounters
+the backend workspace restriction described below. R06 could not reach a vault
+form because the configured local browser runtime failed. Neither limitation is
+reported as a passing test or an Android fix.
 
 | Case | Required real acceptance | Status |
 | --- | --- | --- |
@@ -37,8 +43,32 @@ This verifies transport only; it does not substitute for native playback/zoom.
 | R04 | Open media through a Markdown file downloaded from Hermes. Invalid media offers a useful return/save/open path. | Passed. `links.md` opened its WAV through the real file client; native Play/Pause/Seek passed. Invalid MP4 displayed the format error with instructions to return and open/save/share; Back returned successfully. |
 | R05 | Receive a real manual approval, act on its card, and verify the saved tool result. | Passed. Both Deny and Allow once were exercised on real cards, cleared after response and completed with saved results. The command targeted an owned disposable repository containing one empty commit. |
 | R06 | Receive and submit/cancel real vault OTP/save-login forms with dummy data; verify no draft/history leakage. | Unavailable in the configured local environment. Stock browser execution timed out, then reported an unavailable browser before emitting a vault request. The owned turn was stopped. No form response was tested; external-manager unlock also lacks a configured manager. |
-| R07 | Original remote server: authenticated diagnostics, existing QA chat reopen/context, fresh nonce reply and durable reopen. | Emulator prepared with signed 2.31.19. The remote server requires both username and password. Host, port and password have been entered through the normal connection form; username remains required before authentication can be tested. This is not a remote acceptance result. |
-| R08 | Original remote server: attach a synthetic file whose content marker is absent from the prompt/filename; verify content-based reply and reopen. | Waiting for the remote username and successful emulator login. A synthetic file and independent marker are prepared and the file is on the emulator; no remote attachment was submitted during this attempt. The phone has been released and its original screen timeout restored. |
+| R07 | Original remote server: authenticated diagnostics, existing QA chat reopen/context, fresh nonce reply and durable reopen. | Passed on signed 2.31.19 in the emulator. Password login, profiles/chats, authenticated dashboard diagnostics, configured provider and credential readiness succeeded. A fresh unique reply was independently verified in saved history. That chat reopened with both exchanges and about 16,119 / 272,000 context tokens. Older owned QA chat `20260913_125250_47e82b` reopened with saved history and about 54,027 / 272,000 tokens. Code 5000 did not recur; the original failure's cause remains unproven. |
+| R08 | Original remote server: attach a synthetic file whose content marker is absent from the prompt/filename; verify content-based reply and reopen. | Content delivery and reopen passed, with a backend limitation. Android's Files picker uploaded the 53-byte fixture, Hermes read its independent marker using `read_file`, and the correct reply persisted. Saved history still contains `path is outside the allowed workspace` from automatic `@file` expansion. The successful tool read does not establish successful automatic expansion. Current Desktop/Android source parity was reconfirmed; no client workaround or backend change was made. |
+
+### Remote evidence and attachment boundary
+
+Evidence is under ignored `build/qa-remote-acceptance/`: `nonce-reply.xml`,
+`nonce-saved.json`, `file-reply.xml`, `file-saved.json`, `reopened.xml`,
+`older-chat.xml`, `admin.xml` and `diagnostics.xml`. The fresh session is
+`20260914_030533_d48503`. The file marker was absent from both its filename and
+the prompt. Its saved `read_file` result contains the actual 53-byte content,
+followed by the exact marker reply. The Activity section remained collapsed.
+The remote administration screen reported backend version/update status as
+unavailable; dashboard authentication and provider readiness checks passed.
+No backend update was attempted.
+
+The source recheck used the available official Desktop checkout:
+`use-prompt-actions/index.ts:191–205` calls `file.attach` and accepts `ref_text`;
+`submit.ts:750–755` submits the synchronized references. Android does the same
+in `profile_workspace_controller.dart:3804–3826`. Stock
+`tui_gateway/prompt_attachments.py:82–174` stages files under profile-home
+`attachments`, while `agent/context_references.py:168–195,269–274,342–345`
+restricts expansion to the workspace. A staged absolute path can therefore be
+outside that boundary. There is no verified upload-destination parameter for
+Android to correct this. Rewriting the reference or pasting file bytes would
+depart from Desktop's contract. See
+[attachment parity](DESKTOP_ATTACHMENT_REGENERATION_PARITY.md).
 
 ## Scope limits
 
