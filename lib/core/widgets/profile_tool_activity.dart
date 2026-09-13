@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'anchored_expansion_tile.dart';
+import 'profile_activity_tabs.dart';
 import '../models/answer_versions.dart';
 import '../models/review_notice.dart';
 import 'profile_review_notice_card.dart';
@@ -12,20 +12,41 @@ class ProfileActivitySection extends StatelessWidget {
     required this.children,
     this.subtitle,
     this.initiallyExpanded = false,
+    this.tabs = const [],
+    this.thinking,
+    this.toolCount = 0,
   });
 
   final List<Widget> children;
   final Widget? subtitle;
   final bool initiallyExpanded;
+  final List<ProfileActivityTab> tabs;
+  final Widget? thinking;
+  final int toolCount;
 
   @override
   Widget build(BuildContext context) => ProfileTranscriptDisclosure(
     label: 'Activity',
     icon: Icons.bolt_rounded,
     summary: subtitle,
-    childrenPadding: const EdgeInsets.only(left: 12),
     initiallyExpanded: initiallyExpanded,
-    children: children,
+    children: [
+      ProfileActivityTabs(
+        tabs: [
+          if (children.isNotEmpty)
+            ProfileActivityTab(
+              id: 'tools',
+              label: toolCount > 0 ? 'Tools $toolCount' : 'Tools',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
+            ),
+          ...tabs,
+        ],
+        thinking: thinking,
+      ),
+    ],
   );
 }
 
@@ -38,12 +59,18 @@ class ProfileToolActivitySection extends StatelessWidget {
     this.focusedMessageKey,
     this.showLatestReview = false,
     this.currentActivity = const [],
+    this.tabs = const [],
+    this.thinking,
+    this.liveToolCount = 0,
   });
   final List<List<Map<String, dynamic>>> groups;
   final int? expandedMessageId;
   final GlobalKey? focusedMessageKey;
   final bool showLatestReview;
   final List<Widget> currentActivity;
+  final List<ProfileActivityTab> tabs;
+  final Widget? thinking;
+  final int liveToolCount;
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +96,9 @@ class ProfileToolActivitySection extends StatelessWidget {
           (group) => group.any((message) => message['id'] == expandedMessageId),
         );
     return ProfileActivitySection(
+      tabs: tabs,
+      thinking: thinking,
+      toolCount: count > 0 ? count : liveToolCount,
       initiallyExpanded: expanded,
       subtitle: Text(
         [
@@ -154,84 +184,65 @@ class ProfileToolActivity extends StatelessWidget {
     final name = messages.length == 1
         ? messages.single['tool_name']?.toString() ?? 'Tool result'
         : '${messages.length} tool results';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: colors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(14),
-        clipBehavior: Clip.antiAlias,
-        child: AnchoredExpansionTile(
-          initiallyExpanded: initiallyExpanded,
-          minTileHeight: 48,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-          shape: const Border(),
-          collapsedShape: const Border(),
-          leading: Icon(
-            Icons.terminal_rounded,
-            size: 18,
-            color: colors.onSurfaceVariant,
-          ),
-          title: Text(
-            name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: colors.onSurfaceVariant,
-            ),
-          ),
-          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-          expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final message in messages)
-              Container(
-                key:
-                    focusedMessageId != null &&
-                        message['id'] == focusedMessageId
-                    ? focusedMessageKey
-                    : null,
-                decoration:
-                    focusedMessageId != null &&
-                        message['id'] == focusedMessageId
-                    ? BoxDecoration(
-                        color: colors.primaryContainer.withValues(alpha: 0.45),
-                        border: Border.all(color: colors.primary, width: 2),
-                        borderRadius: BorderRadius.circular(10),
-                      )
-                    : null,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Divider(height: 16),
-                    if (messages.length > 1)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          message['tool_name']?.toString() ?? 'Tool result',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
+    return ProfileTranscriptDisclosure(
+      initiallyExpanded: initiallyExpanded,
+      maintainState: false,
+      icon: Icons.terminal_rounded,
+      label: name,
+      children: [
+        ProfileActivityGuide(
+          inset: 0,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final message in messages)
+                Container(
+                  key:
+                      focusedMessageId != null &&
+                          message['id'] == focusedMessageId
+                      ? focusedMessageKey
+                      : null,
+                  decoration:
+                      focusedMessageId != null &&
+                          message['id'] == focusedMessageId
+                      ? BoxDecoration(
+                          color: colors.primaryContainer.withValues(alpha: .45),
+                          border: Border.all(color: colors.primary, width: 2),
+                          borderRadius: BorderRadius.circular(6),
+                        )
+                      : null,
+                  padding: const EdgeInsets.only(top: 4, bottom: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (messages.length > 1)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            message['tool_name']?.toString() ?? 'Tool result',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                              color: colors.onSurfaceVariant,
+                            ),
                           ),
                         ),
+                      SelectableText(
+                        (message['display_content'] ?? message['content'] ?? '')
+                            .toString(),
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: colors.onSurfaceVariant,
+                        ),
                       ),
-                    SelectableText(
-                      (message['display_content'] ?? message['content'] ?? '')
-                          .toString(),
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        height: 1.5,
-                        color: colors.onSurface,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }

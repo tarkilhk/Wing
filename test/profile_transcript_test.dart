@@ -272,7 +272,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       extraTail = [ProfileReasoningDisclosure(text: 'Reasoning line\n' * 100)];
       await show(tester);
       await toggleInPlace(tester, find.text('Activity'));
-      final current = find.text('Current tool activity');
+      final current = find.text('Current tools');
       await tester.ensureVisible(current);
       await tester.pumpAndSettle();
       await toggleInPlace(tester, current);
@@ -349,6 +349,11 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(find.text('read_file'), findsOneWidget);
     expect(find.text('2 tool results'), findsOneWidget);
     expect(find.text('Read output'), findsNothing);
+    await Scrollable.ensureVisible(
+      tester.element(find.text('read_file')),
+      alignment: 0.3,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('read_file'));
     await tester.pumpAndSettle();
     expect(find.text('Read output'), findsOneWidget);

@@ -163,7 +163,7 @@ void main() {
     );
 
     expect(find.text('Completed in 400 ms'), findsNothing);
-    await tester.tap(find.text('Current tool activity'));
+    await tester.tap(find.text('Current tools'));
     await tester.pumpAndSettle();
     expect(find.text('Completed in 400 ms'), findsOneWidget);
     await tester.tap(find.text('Search files'));
@@ -212,7 +212,7 @@ void main() {
       await tester.pump();
       expect(find.text('Search files'), findsNothing);
 
-      await tester.tap(find.text('Current tool activity'));
+      await tester.tap(find.text('Current tools'));
       await tester.pumpAndSettle();
       expect(find.text('Search files'), findsOneWidget);
 

@@ -270,7 +270,7 @@ void main() {
 
       await show(tester);
       expect(find.text('Activity'), findsNWidgets(2));
-      expect(find.text('Current tool activity'), findsNothing);
+      expect(find.text('Current tools'), findsNothing);
       expect(find.text('Current private reasoning'), findsNothing);
       expect(find.text('Activity'), findsNWidgets(2));
       expect(find.text('Visible saved reply'), findsOneWidget);
@@ -281,7 +281,7 @@ void main() {
 
       await tester.tap(find.text('Activity').first);
       await tester.pumpAndSettle();
-      expect(find.text('Current tool activity'), findsOneWidget);
+      expect(find.text('Current tools'), findsOneWidget);
       expect(find.text('Thought'), findsOneWidget);
 
       await tester.enterText(
@@ -289,11 +289,11 @@ void main() {
         'Typing must not collapse current activity',
       );
       await tester.pump();
-      expect(find.text('Current tool activity'), findsOneWidget);
+      expect(find.text('Current tools'), findsOneWidget);
 
       await tester.tap(find.text('Activity').first);
       await tester.pumpAndSettle();
-      expect(find.text('Current tool activity'), findsNothing);
+      expect(find.text('Current tools'), findsNothing);
       expect(find.text('Activity'), findsNWidgets(2));
       expect(find.text('Visible saved reply'), findsOneWidget);
     },

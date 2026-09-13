@@ -10,12 +10,14 @@ class ProfileSubagentPanel extends StatefulWidget {
   final ProfileWorkspaceController controller;
   final ProfileChat chat;
   final bool initiallyExpanded;
+  final bool embedded;
 
   const ProfileSubagentPanel({
     super.key,
     required this.controller,
     required this.chat,
     this.initiallyExpanded = false,
+    this.embedded = false,
   });
 
   @override
@@ -26,7 +28,8 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
   @override
   void initState() {
     super.initState();
-    if (widget.initiallyExpanded || widget.chat.subagents.isEmpty) {
+    if (!widget.embedded &&
+        (widget.initiallyExpanded || widget.chat.subagents.isEmpty)) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
     }
   }
@@ -34,7 +37,8 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
   @override
   void didUpdateWidget(ProfileSubagentPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.chat, widget.chat) &&
+    if (!widget.embedded &&
+        !identical(oldWidget.chat, widget.chat) &&
         (widget.initiallyExpanded || widget.chat.subagents.isEmpty)) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
     }
@@ -56,6 +60,103 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
     listenable: widget.controller,
     builder: (context, _) {
       final chat = widget.chat;
+      final children = <Widget>[
+        if (widget.embedded && chat.subagentsLoading)
+          const LinearProgressIndicator(minHeight: 1),
+        if (chat.unconfirmedSubagentIds.isNotEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Refresh could not confirm every subagent. Showing their last known activity.',
+            ),
+          ),
+        if (chat.subagentsError case final error?)
+          Row(
+            children: [
+              Expanded(child: Text(error)),
+              TextButton(onPressed: _refresh, child: const Text('Retry')),
+            ],
+          ),
+        if (!chat.subagentsLoading &&
+            chat.subagentsError == null &&
+            chat.subagents.isEmpty)
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text('No live subagents for this chat.'),
+          ),
+        for (final activity in chat.subagents)
+          ListTile(
+            key: ValueKey(('subagent', chat.key, activity.id)),
+            dense: true,
+            minLeadingWidth: 16,
+            horizontalTitleGap: 8,
+            titleTextStyle: TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            subtitleTextStyle: TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(
+              chat.unconfirmedSubagentIds.contains(activity.id)
+                  ? Icons.help_outline
+                  : _statusIcon(activity.status),
+              size: 16,
+            ),
+            minTileHeight: 32,
+            minVerticalPadding: 0,
+            title: Wrap(
+              spacing: 8,
+              runSpacing: 2,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  _goal(activity),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  _activitySubtitle(
+                    activity,
+                    unconfirmed: chat.unconfirmedSubagentIds.contains(
+                      activity.id,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.chevron_right, size: 16),
+              ],
+            ),
+            onTap: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              showDragHandle: true,
+              builder: (_) => _SubagentDetailSheet(
+                controller: widget.controller,
+                chat: chat,
+                subagentId: activity.id,
+                initialActivity: activity,
+              ),
+            ),
+          ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: chat.subagentsLoading ? null : _refresh,
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('Refresh'),
+          ),
+        ),
+      ];
+      if (widget.embedded) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        );
+      }
       return ProfileTranscriptDisclosure(
         key: ValueKey(('subagents', chat.key)),
         initiallyExpanded: widget.initiallyExpanded,
@@ -68,78 +169,7 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
         summary: Text(_summary(chat.subagents, chat.unconfirmedSubagentIds)),
         loading: chat.subagentsLoading,
         childrenPadding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
-        children: [
-          if (chat.unconfirmedSubagentIds.isNotEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                'Refresh could not confirm every subagent. Showing their last known activity.',
-              ),
-            ),
-          if (chat.subagentsError case final error?)
-            Row(
-              children: [
-                Expanded(child: Text(error)),
-                TextButton(onPressed: _refresh, child: const Text('Retry')),
-              ],
-            ),
-          if (!chat.subagentsLoading &&
-              chat.subagentsError == null &&
-              chat.subagents.isEmpty)
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text('No live subagents for this chat.'),
-            ),
-          for (final activity in chat.subagents)
-            ListTile(
-              key: ValueKey(('subagent', chat.key, activity.id)),
-              dense: true,
-              minLeadingWidth: 16,
-              horizontalTitleGap: 8,
-              titleTextStyle: Theme.of(context).textTheme.bodyMedium,
-              subtitleTextStyle: Theme.of(context).textTheme.labelMedium,
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                chat.unconfirmedSubagentIds.contains(activity.id)
-                    ? Icons.help_outline
-                    : _statusIcon(activity.status),
-                size: 16,
-              ),
-              title: Text(
-                _goal(activity),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                _activitySubtitle(
-                  activity,
-                  unconfirmed: chat.unconfirmedSubagentIds.contains(
-                    activity.id,
-                  ),
-                ),
-              ),
-              trailing: const Icon(Icons.chevron_right, size: 16),
-              onTap: () => showModalBottomSheet<void>(
-                context: context,
-                isScrollControlled: true,
-                showDragHandle: true,
-                builder: (_) => _SubagentDetailSheet(
-                  controller: widget.controller,
-                  chat: chat,
-                  subagentId: activity.id,
-                  initialActivity: activity,
-                ),
-              ),
-            ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: chat.subagentsLoading ? null : _refresh,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Refresh'),
-            ),
-          ),
-        ],
+        children: children,
       );
     },
   );

@@ -85,8 +85,10 @@ void main() {
       expect(find.text('1 active · 2 total'), findsOneWidget);
       if (scale == 1) {
         expect(
-          tester.getSize(find.byType(ProfileActivitySection)).height,
-          lessThanOrEqualTo(100),
+          tester
+              .getSize(find.byKey(const ValueKey(('activity-tab', 'tools'))))
+              .height,
+          lessThanOrEqualTo(32),
         );
         expect(
           tester.getTopLeft(find.text('Tasks 1/2')).dx,

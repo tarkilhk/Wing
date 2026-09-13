@@ -50,7 +50,7 @@ void main() {
     await tester.tap(find.text('Activity'));
     await tester.pumpAndSettle();
     expect(find.text('67 tool results'), findsOneWidget);
-    expect(find.text('Current tool activity'), findsOneWidget);
+    expect(find.text('Current tools'), findsOneWidget);
     expect(find.text('Continue searching'), findsOneWidget);
     await tester.enterText(
       find.byKey(const Key('profile-message-composer')),
@@ -58,7 +58,7 @@ void main() {
     );
     await tester.pump();
     expect(find.text('67 tool results'), findsOneWidget);
-    expect(find.text('Current tool activity'), findsOneWidget);
+    expect(find.text('Current tools'), findsOneWidget);
     await Scrollable.ensureVisible(
       tester.element(find.text('67 tool results')),
       alignment: 0.3,

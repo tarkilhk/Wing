@@ -43,7 +43,7 @@ class AnchoredExpansionTile extends StatelessWidget {
   final ValueChanged<bool>? onExpansionChanged;
 
   @override
-  Widget build(BuildContext context) => _ExpansionSizeObserver(
+  Widget build(BuildContext context) => ExpansionSizeObserver(
     child: ExpansionTile(
       title: title,
       subtitle: subtitle,
@@ -66,8 +66,9 @@ class AnchoredExpansionTile extends StatelessWidget {
   );
 }
 
-class _ExpansionSizeObserver extends SingleChildRenderObjectWidget {
-  const _ExpansionSizeObserver({required super.child});
+/// Shares transcript anchoring with other disclosures, such as activity tabs.
+class ExpansionSizeObserver extends SingleChildRenderObjectWidget {
+  const ExpansionSizeObserver({super.key, required super.child});
 
   @override
   ExpansionAnchorBox createRenderObject(BuildContext context) =>

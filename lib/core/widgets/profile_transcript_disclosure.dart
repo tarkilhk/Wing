@@ -57,7 +57,7 @@ class _ProfileTranscriptDisclosureState
         },
         title: DefaultTextStyle(
           style: Theme.of(context).textTheme.labelMedium!.copyWith(
-            fontSize: 12,
+            fontSize: 13,
             height: 1.25,
             fontWeight: FontWeight.w400,
             letterSpacing: 0,
@@ -67,7 +67,7 @@ class _ProfileTranscriptDisclosureState
             children: [
               if (widget.loading)
                 SizedBox.square(
-                  dimension: 14,
+                  dimension: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 1.5,
                     color: color,
@@ -75,11 +75,11 @@ class _ProfileTranscriptDisclosureState
                   ),
                 )
               else
-                Icon(widget.icon, size: 14, color: color),
-              const SizedBox(width: 6),
+                Icon(widget.icon, size: 16, color: color),
+              const SizedBox(width: 8),
               Flexible(
                 child: Wrap(
-                  spacing: 6,
+                  spacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(widget.label),
@@ -88,7 +88,7 @@ class _ProfileTranscriptDisclosureState
                       _expanded
                           ? Icons.keyboard_arrow_up_rounded
                           : Icons.keyboard_arrow_down_rounded,
-                      size: 14,
+                      size: 16,
                       color: color,
                     ),
                   ],

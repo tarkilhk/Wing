@@ -4,6 +4,7 @@ import '../services/profile_workspace_controller.dart';
 import '../utils/expansion_scroll_controller.dart';
 import '../widgets/anchored_expansion_tile.dart';
 import '../widgets/profile_tool_activity.dart';
+import '../widgets/profile_activity_tabs.dart';
 
 /// Reversed layout opens at the newest row. Older pages grow at the far end;
 /// a visible durable row anchors the viewport when streaming changes the tail.
@@ -14,6 +15,9 @@ class ProfileTranscript extends StatefulWidget {
   final List<Widget> tail;
   final List<Widget> beforeActivity;
   final List<Widget> currentActivity;
+  final List<ProfileActivityTab> activityTabs;
+  final Widget? activityThinking;
+  final int liveToolCount;
   final List<Map<String, dynamic>>? nearbyMessages;
   final int? focusedMessageId;
   final VoidCallback? onBackToLatest;
@@ -25,6 +29,9 @@ class ProfileTranscript extends StatefulWidget {
     required this.tail,
     this.beforeActivity = const [],
     this.currentActivity = const [],
+    this.activityTabs = const [],
+    this.activityThinking,
+    this.liveToolCount = 0,
     this.nearbyMessages,
     this.focusedMessageId,
     this.onBackToLatest,
@@ -203,9 +210,15 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         widget.beforeActivity.isEmpty && rows.isNotEmpty && rows.first.isTool;
     final tail = [
       ...widget.beforeActivity,
-      if (widget.currentActivity.isNotEmpty && !joinCurrentActivity)
+      if ((widget.currentActivity.isNotEmpty ||
+              widget.activityTabs.isNotEmpty ||
+              widget.activityThinking != null) &&
+          !joinCurrentActivity)
         ProfileActivitySection(
           key: ValueKey(('activity', chat.key)),
+          tabs: widget.activityTabs,
+          thinking: widget.activityThinking,
+          toolCount: widget.liveToolCount,
           children: widget.currentActivity,
         ),
       ...widget.tail,
@@ -302,6 +315,16 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                               groups: section.groups,
                               showLatestReview:
                                   rowIndex == 0 && chat.streaming.isEmpty,
+                              tabs: rowIndex == 0 && joinCurrentActivity
+                                  ? widget.activityTabs
+                                  : const [],
+                              thinking: rowIndex == 0 && joinCurrentActivity
+                                  ? widget.activityThinking
+                                  : null,
+                              liveToolCount:
+                                  rowIndex == 0 && joinCurrentActivity
+                                  ? widget.liveToolCount
+                                  : 0,
                               currentActivity:
                                   rowIndex == 0 && joinCurrentActivity
                                   ? widget.currentActivity

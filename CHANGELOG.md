@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.32.0+2209] - 2026-09-14
+
+### Changed
+
+- Organize activity into slim Tools, Tasks and Agents tabs, with Work available for goals and background processes.
+- Use consistent light text, small icons and inline chevrons for tool results and live activity. Keep expanded details close to the left guide with equal insets.
+- Keep Thinking below a subtle horizontal divider across tabs. Preserve selected categories, open tool details and transcript position while switching tabs or receiving updates.
+
 ## [2.31.23+2208] - 2026-09-14
 
 ### Fixed

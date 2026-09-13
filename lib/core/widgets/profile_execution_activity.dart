@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/gateway_activity.dart';
 import '../models/gateway_todo.dart';
 import 'profile_transcript_disclosure.dart';
+import 'profile_activity_tabs.dart';
 
 class ProfileLiveToolActivity extends StatelessWidget {
   final List<GatewayToolActivity> activities;
@@ -12,10 +13,14 @@ class ProfileLiveToolActivity extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ProfileTranscriptDisclosure(
     key: const ValueKey('live-tool-activity'),
-    icon: Icons.terminal_rounded,
-    label: 'Current tool activity',
+    icon: activities.any((activity) => !activity.isTerminal)
+        ? Icons.pending_outlined
+        : Icons.terminal_rounded,
+    label: 'Current tools',
     summary: Text(
-      '${activities.length} tool ${activities.length == 1 ? 'call' : 'calls'}',
+      activities.any((activity) => !activity.isTerminal)
+          ? '${activities.where((activity) => !activity.isTerminal).length} running'
+          : '${activities.length} tool ${activities.length == 1 ? 'call' : 'calls'}',
     ),
     children: [
       for (final activity in activities)
@@ -29,19 +34,36 @@ class ProfileLiveToolActivity extends StatelessWidget {
               : Icons.pending_outlined,
           label: activity.displayName,
           summary: Text(activity.statusLabel),
-          childrenPadding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
           children: [
-            if (activity.detail case final detail?) SelectableText(detail),
-            if (activity.arguments case final arguments?) ...[
-              const SizedBox(height: 8),
-              const Text('Arguments'),
-              SelectableText(arguments),
-            ],
-            if (activity.result case final result?) ...[
-              const SizedBox(height: 8),
-              const Text('Result'),
-              SelectableText(result),
-            ],
+            ProfileActivityGuide(
+              inset: 0,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (activity.detail case final detail?)
+                    SelectableText(
+                      detail,
+                      style: const TextStyle(fontSize: 13, height: 1.4),
+                    ),
+                  if (activity.arguments case final arguments?) ...[
+                    const SizedBox(height: 8),
+                    const Text('Arguments'),
+                    SelectableText(
+                      arguments,
+                      style: const TextStyle(fontSize: 13, height: 1.4),
+                    ),
+                  ],
+                  if (activity.result case final result?) ...[
+                    const SizedBox(height: 8),
+                    const Text('Result'),
+                    SelectableText(
+                      result,
+                      style: const TextStyle(fontSize: 13, height: 1.4),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
     ],
@@ -51,36 +73,54 @@ class ProfileLiveToolActivity extends StatelessWidget {
 class ProfileTodoPanel extends StatelessWidget {
   final List<GatewayTodo> todos;
 
-  const ProfileTodoPanel({super.key, required this.todos});
+  const ProfileTodoPanel({
+    super.key,
+    required this.todos,
+    this.embedded = false,
+  });
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
     final completed = todos
         .where((todo) => todo.status == GatewayTodoStatus.completed)
         .length;
+    final children = <Widget>[
+      for (final todo in todos)
+        ListTile(
+          dense: true,
+          minTileHeight: 32,
+          minVerticalPadding: 0,
+          minLeadingWidth: 16,
+          horizontalTitleGap: 8,
+          contentPadding: EdgeInsets.only(
+            left: todo.parent == null
+                ? (embedded ? 0 : 12)
+                : (embedded ? 12 : 24),
+            right: 0,
+          ),
+          leading: Icon(_todoIcon(todo.status), size: 16),
+          title: SelectableText(
+            todo.content,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+    ];
+    if (embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      );
+    }
     return ProfileTranscriptDisclosure(
       key: const ValueKey('server-todos'),
       icon: Icons.checklist_rounded,
       label: 'Tasks $completed/${todos.length}',
-      children: [
-        for (final todo in todos)
-          ListTile(
-            dense: true,
-            minTileHeight: 32,
-            minVerticalPadding: 0,
-            minLeadingWidth: 16,
-            horizontalTitleGap: 8,
-            contentPadding: EdgeInsets.only(
-              left: todo.parent == null ? 20 : 36,
-              right: 0,
-            ),
-            leading: Icon(_todoIcon(todo.status), size: 16),
-            title: SelectableText(
-              todo.content,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
-      ],
+      children: children,
     );
   }
 
@@ -107,8 +147,18 @@ class ProfileReasoningDisclosure extends StatelessWidget {
     key: const ValueKey('reasoning-disclosure'),
     label: running ? 'Thinking' : 'Thought',
     icon: running ? Icons.pending_outlined : Icons.psychology_outlined,
-    childrenPadding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
-    children: [SelectableText(text)],
+    children: [
+      ProfileActivityGuide(
+        inset: 0,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 8),
+          child: SelectableText(
+            text,
+            style: const TextStyle(fontSize: 13, height: 1.4),
+          ),
+        ),
+      ),
+    ],
   );
 }
 

@@ -6,7 +6,10 @@ import 'package:flutter/material.dart';
 import '../services/profile_workspace_controller.dart';
 import '../services/remote_files_client.dart';
 import '../widgets/profile_message.dart';
+import '../widgets/profile_transcript_disclosure.dart';
 import '../widgets/anchored_expansion_tile.dart';
+import '../widgets/profile_activity_tabs.dart';
+import '../models/gateway_todo.dart';
 import '../widgets/profile_queued_messages.dart';
 import '../widgets/queued_prompt_editor.dart';
 import '../models/queued_prompt_draft.dart';
@@ -451,7 +454,8 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   }) {
     if (isHiddenAnswerMessage(message)) return const SizedBox.shrink();
     final reasoning = profileMessageReasoning(message);
-    final displayedHistory = _activeFindResult(chat)?.page.rows ?? chat.messages;
+    final displayedHistory =
+        _activeFindResult(chat)?.page.rows ?? chat.messages;
     final sender = interAgentReplySender(
       displayedHistory,
       displayedHistory.indexOf(message),
@@ -677,50 +681,73 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 streaming: true,
               ),
           ],
+          liveToolCount: chat.toolActivities.length,
           currentActivity: [
             if (chat.tool != null &&
                 !chat.toolActivities.any((activity) => !activity.isTerminal))
-              AnchoredExpansionTile(
-                minTileHeight: 48,
-                shape: const Border(),
-                collapsedShape: const Border(),
-                leading: const Icon(Icons.terminal, size: 20),
-                title: Text(
-                  'Using ${chat.tool!}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+              ProfileTranscriptDisclosure(
+                icon: Icons.terminal_rounded,
+                label: 'Using ${chat.tool!}',
                 children: const [Text('Running on the connected Hermes host')],
               ),
             if (chat.toolActivities.isNotEmpty)
               ProfileLiveToolActivity(activities: chat.toolActivities),
-            if (chat.todos.isNotEmpty) ProfileTodoPanel(todos: chat.todos),
-            if (chat.sessionControl?.goal != null)
-              ProfileGoalPanel(
-                key: ValueKey(('goal', chat.key)),
-                controller: controller,
-                chat: chat,
+          ],
+          activityTabs: [
+            if (chat.todos.isNotEmpty)
+              ProfileActivityTab(
+                id: 'tasks',
+                label:
+                    'Tasks ${chat.todos.where((todo) => todo.status == GatewayTodoStatus.completed).length}/${chat.todos.length}',
+                child: ProfileTodoPanel(todos: chat.todos, embedded: true),
               ),
             if (chat.subagents.isNotEmpty)
-              ProfileSubagentPanel(
-                key: ValueKey(('subagents', chat.key)),
-                controller: controller,
-                chat: chat,
+              ProfileActivityTab(
+                id: 'agents',
+                label:
+                    'Agents ${chat.subagents.where((agent) => !agent.isTerminal).length}/${chat.subagents.length}',
+                onSelected: () => unawaited(controller.refreshSubagents(chat)),
+                child: ProfileSubagentPanel(
+                  key: ValueKey(('subagents', chat.key)),
+                  controller: controller,
+                  chat: chat,
+                  embedded: true,
+                ),
               ),
-            if (chat.sessionControl?.loop != null ||
+            if (chat.sessionControl?.goal != null ||
+                chat.sessionControl?.loop != null ||
                 chat.sessionControl?.heartbeat != null ||
                 chat.processes.isNotEmpty)
-              ProfileBackgroundWorkPanel(
-                key: ValueKey(('background', chat.key)),
-                controller: controller,
-                chat: chat,
-              ),
-            if (chat.reasoning.isNotEmpty)
-              ProfileReasoningDisclosure(
-                text: chat.reasoning,
-                running: chat.busy,
+              ProfileActivityTab(
+                id: 'work',
+                label: 'Work',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (chat.sessionControl?.goal != null)
+                      ProfileGoalPanel(
+                        key: ValueKey(('goal', chat.key)),
+                        controller: controller,
+                        chat: chat,
+                      ),
+                    if (chat.sessionControl?.loop != null ||
+                        chat.sessionControl?.heartbeat != null ||
+                        chat.processes.isNotEmpty)
+                      ProfileBackgroundWorkPanel(
+                        key: ValueKey(('background', chat.key)),
+                        controller: controller,
+                        chat: chat,
+                      ),
+                  ],
+                ),
               ),
           ],
+          activityThinking: chat.reasoning.isEmpty
+              ? null
+              : ProfileReasoningDisclosure(
+                  text: chat.reasoning,
+                  running: chat.busy,
+                ),
           tail: [
             if (chat.error != null)
               Text(
