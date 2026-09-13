@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.31.9+2194] - 2026-09-13
+
+### Fixed
+
+- Keep saved attachment prompts readable and prevent file context from multiplying when regenerating or editing a response.
+- Show a readable image label instead of encoded image data when reopening saved chats.
+
 ## [2.31.8+2193] - 2026-09-13
 
 ### Fixed

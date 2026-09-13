@@ -4,6 +4,29 @@ import 'package:hermes_android/core/widgets/markdown_code_block.dart';
 import 'package:hermes_android/core/widgets/profile_message.dart';
 
 void main() {
+  testWidgets(
+    'saved user attachments display the prompt without expanded context',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: ProfileMessage(
+              message: {
+                'role': 'user',
+                'content':
+                    '@file:notes.txt\n\nRead the marker.\n\n'
+                    '--- Attached Context ---\n\n'
+                    '📄 @file:notes.txt\n```\nPRIVATE FILE BODY\n```',
+              },
+            ),
+          ),
+        ),
+      );
+      expect(find.text('@file:notes.txt\n\nRead the marker.'), findsOneWidget);
+      expect(find.textContaining('PRIVATE FILE BODY'), findsNothing);
+    },
+  );
+
   test(
     'fences preserve embedded shorter fences and unfinished streamed code',
     () {

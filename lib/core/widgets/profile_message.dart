@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models/answer_versions.dart';
 import '../models/chat_output.dart';
 import '../services/web_preview.dart';
 import 'markdown_message_content.dart';
@@ -39,8 +40,9 @@ class ProfileMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final role = message['role']?.toString() ?? '';
-    final content = (message['display_content'] ?? message['content'] ?? '')
-        .toString();
+    final content = role == 'user'
+        ? answerMessageDisplayText(message)
+        : (message['display_content'] ?? message['content'] ?? '').toString();
     if (content.isEmpty) return const SizedBox.shrink();
     if (role == 'tool') {
       return ProfileToolActivity(messages: [message]);

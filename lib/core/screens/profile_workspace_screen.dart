@@ -529,7 +529,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     ProfileChat chat,
     Map<String, dynamic> message,
   ) async {
-    var input = answerMessageText(message);
+    var input = answerMessageDisplayText(message);
     var submitting = false;
     String? inlineError;
     await showDialog<void>(

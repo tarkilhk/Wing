@@ -250,6 +250,131 @@ void main() {
     );
   });
 
+  test('saved user prompts use the Desktop attached-context projection', () {
+    const marker = '--- Attached Context ---';
+    const block = '''📄 @file:fixture.txt (4 tokens)
+```text
+fixture-value-amber-729
+```''';
+    final expanded =
+        '@file:fixture.txt\n\nSummarize this file.\n\n$marker\n\n$block';
+    final duplicated = '$expanded\n\n$marker\n\n$block\n\n$block';
+
+    expect(
+      answerMessageDisplayText({'role': 'user', 'content': expanded}),
+      '@file:fixture.txt\n\nSummarize this file.',
+    );
+    expect(
+      answerMessageDisplayText({'role': 'user', 'content': duplicated}),
+      '@file:fixture.txt\n\nSummarize this file.',
+      reason: 'Desktop treats the first producer marker as the boundary',
+    );
+    expect(
+      answerMessageDisplayText({
+        'role': 'user',
+        'content': 'Look here\n\n$marker\n\n$block',
+      }),
+      '@file:fixture.txt\n\nLook here',
+      reason: 'References stripped by older producers are restored once',
+    );
+  });
+
+  test('user display projection preserves non-context message forms', () {
+    expect(
+      answerMessageDisplayText({
+        'role': 'user',
+        'content': [
+          {'type': 'text', 'text': 'serialized '},
+          {'type': 'input_text', 'text': 'prompt'},
+        ],
+      }),
+      'serialized prompt',
+    );
+    expect(
+      answerMessageDisplayText({
+        'role': 'user',
+        'content': 'Email me at qa@example.test',
+      }),
+      'Email me at qa@example.test',
+    );
+    expect(
+      answerMessageDisplayText({
+        'role': 'user',
+        'content': 'Visible\n\n--- Context Warnings ---\n- unavailable',
+      }),
+      'Visible',
+    );
+    expect(
+      answerMessageDisplayText({
+        'role': 'user',
+        'content': 'wire text',
+        'display_content': 'visible text',
+      }),
+      'visible text',
+    );
+    expect(
+      answerMessageDisplayText({
+        'role': 'user',
+        'content': 'fallback text',
+        'display_content': null,
+      }),
+      'fallback text',
+    );
+  });
+
+  test(
+    'saved multimodal user display hides image bytes but retains raw text',
+    () {
+      const encoded = 'data:image/png;base64,QA_IMAGE_BYTES';
+      final saved = <String, dynamic>{
+        'role': 'user',
+        'row_id': 17,
+        'content': [
+          {'type': 'text', 'text': 'Read this image'},
+          {
+            'type': 'image_url',
+            'image_url': {'url': encoded},
+          },
+        ],
+      };
+      final row = answerHistoryRows([saved]).single;
+      expect(answerMessageDisplayText(row), 'Read this image\n[image]');
+      expect(answerMessageText(row), answerMessageText(saved));
+      expect(answerMessageText(row), contains(encoded));
+      expect(answerMessageId(row), 17);
+      expect(
+        answerMessageDisplayText({...saved, 'display_content': 'Visible'}),
+        'Visible',
+      );
+      expect(
+        answerMessageDisplayText({...saved, 'display_content': null}),
+        'Read this image\n[image]',
+      );
+      expect(
+        answerMessageDisplayText({'role': 'user', 'content': encoded}),
+        encoded,
+        reason: 'Do not remove data URLs authored as plain text',
+      );
+      final assistant = {...saved, 'role': 'assistant'};
+      expect(
+        answerMessageDisplayText(answerHistoryRows([assistant]).single),
+        answerMessageText(assistant),
+      );
+    },
+  );
+
+  test('assistant content is never treated as attached user context', () {
+    const content = '''Answer code:
+--- Attached Context ---
+```dart
+void main() {}
+```''';
+    expect(
+      answerMessageDisplayText({'role': 'assistant', 'content': content}),
+      content,
+    );
+  });
+
   test('hidden notices count toward the persisted fork boundary', () async {
     host.history('a', 'original').insert(1, {
       'role': 'user',
@@ -414,6 +539,42 @@ void main() {
       isEmpty,
     );
   });
+
+  test(
+    'regeneration replays visible text from duplicated persisted context',
+    () async {
+      const marker = '--- Attached Context ---';
+      const block = '''📄 @file:fixture.txt (4 tokens)
+```text
+fixture-value-amber-729
+```''';
+      const visible = '@file:fixture.txt\n\nSummarize this file.';
+      const persisted =
+          '$visible\n\n$marker\n\n$block\n\n$marker\n\n$block\n\n$block';
+      host.history('a', 'original')[0]
+        ..remove('text')
+        ..['content'] = persisted;
+      original.messages[0]
+        ..remove('text')
+        ..['content'] = persisted;
+      original.draft = 'Keep this draft';
+
+      final regenerated = (await controller.branchAnswer(
+        original,
+        2,
+        regenerate: true,
+      ))!;
+
+      final submit = host.calls.lastWhere((call) => call.$1 == 'prompt.submit');
+      expect(regenerated, same(original));
+      expect(submit.$2['session_id'], original.runtimeId);
+      expect(submit.$2['truncate_before_row_id'], 1);
+      expect(submit.$2['text'], visible);
+      expect(submit.$2['text'], isNot(contains(marker)));
+      expect(submit.$2['text'], isNot(contains('fixture-value-amber-729')));
+      expect(original.draft, 'Keep this draft');
+    },
+  );
 
   test('startup purges only obsolete local answer relationships', () async {
     controller.dispose();

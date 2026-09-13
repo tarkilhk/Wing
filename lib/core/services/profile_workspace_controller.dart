@@ -2832,7 +2832,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _changed();
       await resource.gateway.call('prompt.submit', {
         'session_id': chat.runtimeId,
-        'text': target.prompt,
+        'text': answerMessageDisplayText(prompt),
         'truncate_before_row_id': rowId,
         'confirm_truncate': true,
         'confirm_empty_truncate': true,
