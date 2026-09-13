@@ -28,6 +28,14 @@ if (signingEnvironment.values.any { !System.getenv(it).isNullOrBlank() }) {
     }
 }
 val hasReleaseSigning = keystoreProperties.containsKey("storeFile")
+// Opt in only for personal development APKs. Ordinary debug builds retain
+// their separate Dev identity and debug signing key.
+val personalDevelopment = providers.gradleProperty("hermesPersonalDevelopment").orNull == "true"
+check(!personalDevelopment || signingEnvironment.keys.all {
+    !keystoreProperties.getProperty(it).isNullOrBlank()
+}) {
+    "Personal development APKs require the complete personal signing configuration"
+}
 
 android {
    namespace = "com.hermesagent.hermes_android"
@@ -73,8 +81,11 @@ android {
            // verifies the packaged arm64 code against that scheme.
            applicationIdSuffix = ".dev"
            versionNameSuffix = "-dev"
-           manifestPlaceholders["appLabel"] = "Hermes Agent Dev"
-           resValue("string", "hermes_application_id", "com.hermesagent.hermes_android.dev")
+           manifestPlaceholders["appLabel"] = if (personalDevelopment) "Hermes Personal Dev" else "Hermes Agent Dev"
+           resValue("string", "hermes_application_id", if (personalDevelopment) "com.tarkilhk.hermes.android" else "com.hermesagent.hermes_android.dev")
+           if (personalDevelopment) {
+               signingConfig = signingConfigs.getByName("release")
+           }
        }
        release {
            // CI/local analysis may build a release artifact without access to
@@ -92,6 +103,11 @@ android {
 
 // Keep the installed Dev identity, but never replace the unrelated upstream app.
 androidComponents {
+    onVariants(selector().withBuildType("debug")) { variant ->
+        if (personalDevelopment) {
+            variant.applicationId.set("com.tarkilhk.hermes.android")
+        }
+    }
     onVariants(selector().withBuildType("release")) { variant ->
         variant.applicationId.set("com.tarkilhk.hermes.android")
     }

@@ -1,14 +1,76 @@
 # Local Android build setup
 
-Current verification on 2026-09-12 uses the OneDrive checkout at
-`C:\Users\rober\OneDrive\Documents\Cursor Projects\hermes-android` and the same
-`Development\android-dev` toolchain. Isolated release tests/builds run from its
-ignored `build/camera-release` snapshot to avoid changing source while a build
-is active. The disposable Android 36 QA device is `Hermes_Roadmap_QA`,
-`emulator-5556`. The earlier relocation and verification below are historical.
-See [the emulator record](EMULATOR_ROADMAP_VERIFICATION.md) for current results.
+The owner selected `C:\Users\rober\Documents\Projects\hermes-android` on
+2026-09-14. Build directly from this persistent checkout outside OneDrive with
+the existing `C:\Users\rober\Development\android-dev` toolchain. Keep `build/`,
+`.dart_tool/`, and `android/.gradle/` between updates. Creating a fresh release
+snapshot for each version discards useful incremental state.
 
-## Current Windows checkout
+```powershell
+Set-Location 'C:\Users\rober\Documents\Projects\hermes-android'
+.\scripts\build-personal-release.ps1 -ToolchainRoot 'C:\Users\rober\Development\android-dev'
+```
+
+The personal script uses signed, non-debuggable ARM64 release builds. It skips
+Android R8/code and resource shrinking for faster updates, while retaining Dart
+AOT release compilation, icon tree shaking, and Android Lint. Add
+`-OptimizeAndroid` when producing the smaller fully optimized Android APK.
+The standard Flutter commands in CI retain full optimization.
+
+Run tests before the release build, and keep one Android build active at a time.
+The personal script rejects overlapping invocations across checkouts with a
+named mutex. The shared Gradle settings also reject overlapping builds across
+checkouts with an OS file lock. This covers direct Flutter and Gradle commands
+that use the updated settings. Older snapshots must update first. Keep one workspace for each genuinely simultaneous development
+stream and reuse it rather than creating a version-named directory every time.
+
+The profiling results and tradeoffs are recorded in
+[the build performance report](BUILD_PERFORMANCE_2026-09-14.md). The original
+OneDrive checkout is retained to protect work in existing tasks. New work should
+use the selected local checkout.
+
+The 2026-09-12 verification used the OneDrive checkout and an ignored
+`build/camera-release` snapshot. The disposable Android 36 QA device was
+`Hermes_Roadmap_QA`, `emulator-5556`. The relocation and verification below are
+historical. See [the emulator record](EMULATOR_ROADMAP_VERIFICATION.md) for
+device results.
+
+## Faster personal development APKs
+
+For everyday functional changes, add `-Development` to the personal build script.
+This uses Dart's development compiler instead of release AOT compilation. It
+builds an ARM64 APK signed by the existing Personal key, with the same package
+name and ABI version-code scheme. The launcher label becomes Hermes Personal
+Dev. An Android update with the matching key and a sufficient version code keeps
+the app's stored data. This task verifies the artifact; it does not install it.
+
+```powershell
+.\scripts\build-personal-release.ps1 -ToolchainRoot 'C:\Users\rober\Development\android-dev' -Development
+```
+
+Development mode enables assertions and debugging, produces a larger APK, and
+can run more slowly than release. Use release mode to judge animation, startup,
+battery, and runtime performance. The first development build prepares a separate
+set of native outputs; keep those caches for later source edits.
+
+For the shortest feedback loop, run the development app through Flutter on the
+phone and use hot reload for Dart edits. Reload updates running Dart code without
+rebuilding an APK. Native Android changes still need a build. See
+[Flutter hot reload](https://docs.flutter.dev/tools/hot-reload).
+
+After installing the development APK, connect the phone using USB or wireless
+ADB, open Hermes Personal Dev, and attach from this same checkout:
+
+```powershell
+.\scripts\attach-personal-development.ps1 -ToolchainRoot 'C:\Users\rober\Development\android-dev' -DeviceId '<phone-id>'
+```
+
+Use `flutter devices` to find the phone ID. In the attached terminal, press `r`
+after a Dart edit. Press `R` when a change needs a Dart restart, and `d` to detach.
+This helper attaches to the existing app; it does not install or replace an APK.
+Hot reload updates the running process, so build a fresh APK when the changes
+need to survive closing and relaunching the app.
+## Historical Windows checkout, 2026-09-06
 
 On 2026-09-06, development moved to
 `C:\Users\rober\Development\hermes-android` on Prestige. The OneDrive checkout
