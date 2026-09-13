@@ -8,8 +8,9 @@ The [repository README](../README.md) describes the current implementation and s
 
 The approved [delivery sequence](DELIVERY_SEQUENCE.md) tracks implementation in small phone-testable increments, starting with draft protection and conversation reliability.
 
-The [implemented-feature QA sweep](QA_SWEEP_2026-09-13.md) records current
-coverage, failures, fixes and retests. New feature work is paused during this sweep.
+The [implemented-feature QA sweep](QA_SWEEP_2026-09-13.md) records coverage,
+failures, fixes and retests. The [remaining real-backend acceptance cases](QA_REMAINING_ACCEPTANCE_2026-09-14.md)
+track its final checks separately from subsequent feature releases.
 
 [Background notifications](BACKGROUND_NOTIFICATIONS.md) records the Firebase
 setup, verified backend gaps and existing Android notification paths to reuse.

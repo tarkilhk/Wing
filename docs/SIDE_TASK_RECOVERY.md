@@ -6,9 +6,25 @@ retained only as research. They were never deployed. Use existing Hermes APIs;
 features requiring those invented contracts are deferred, not delivered. Do not
 configure a new Hermes sender or deploy patches based on this document.
 
-Updated for 2.30.0, D11/Q12/T14. The existing `/btw`, `/bg` and `/background`
-cards now recover from the server when a chat resumes or receives session info.
-The composer stays available when only background work is running.
+## Current behavior
+
+Android displays live side-question and background-task events. A real `/btw`
+round trip passed QA. Cold recovery and discovery of unseen child-only work
+remain unavailable through the verified stock-server contract. In live QA,
+`session.active_list` omitted the idle parent while its child was running and
+provided no `side_tasks_running` count. Android cannot infer an authoritative
+cross-profile list from events it never received.
+
+The client can parse optional task snapshots, but those parsers do not establish
+server support. Current evidence and limits are recorded in
+[the QA sweep](QA_SWEEP_2026-09-13.md).
+
+## Historical proposal, rejected and never deployed
+
+The following describes the 2.30.0 proposal, not delivered backend behavior.
+The proposed D11/Q12/T14 recovery would restore `/btw`, `/bg` and `/background`
+cards from server snapshots when a chat resumed or received session info,
+while keeping the composer available during background-only work.
 
 Backend patch 0006 supplies `side_tasks` with `retention: live_session` and task
 IDs, kinds, prompts, status and available results. Android replaces the displayed

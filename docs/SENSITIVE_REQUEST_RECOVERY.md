@@ -6,8 +6,22 @@ retained only as research. They were never deployed. Use existing Hermes APIs;
 features requiring those invented contracts are deferred, not delivered. Do not
 configure a new Hermes sender or deploy patches based on this document.
 
-D07, R08, R09 and the existing R02/S14 server-refresh boundary. Updated
-2026-09-12. This extends the existing password, secret and verification forms.
+## Current behavior
+
+D07/R08/R09 handle live sudo, environment-secret and vault requests through
+the server's existing request/response events. Android checks the request's
+identity before submitting and clears matching expired or answered forms.
+Entered values remain in memory, outside drafts and conversation storage.
+
+Cold or cross-client recovery is deferred. No pending-sensitive snapshot has
+been verified on unmodified Hermes. The client can parse `pending_sensitive`
+if supplied, but that parser does not make the server capability available.
+Live acceptance and environment limits are recorded in
+[the remaining QA cases](QA_REMAINING_ACCEPTANCE_2026-09-14.md).
+
+## Historical proposal, rejected and never deployed
+
+The following describes the 2026-09-12 proposal, not delivered backend behavior.
 
 The Android client reads `pending_sensitive` from session resume responses and
 session-info updates. An explicit null clears an expired or answered request.
