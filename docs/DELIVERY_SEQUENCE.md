@@ -147,11 +147,16 @@ which are excluded from this release and are not product failures. The isolated
 Evidence is `build/2.31.11-isolated-full-tests.log`. Analyzer verification is
 clean after 11.5 seconds in `build/2.31.11-isolated-analysis-final.log`. The only
 intervening edit added analyzer-required braces around one test-cleanup `if`;
-product code and behavior were unchanged. Signing and the phone update to 2.31.11
-are pending; the installed phone version is confirmed as 2.31.8.
+product code and behavior were unchanged. The signed, non-debuggable Personal
+package retained the existing certificate and identity
+`com.tarkilhk.hermes.android`. Install replacement succeeded; `adb` confirmed
+2.31.11 / 21962 and a successful 661 ms cold launch. Evidence is
+`build/2.31.11-signed-release.log`. This verifies installation and launch, not a
+full phone acceptance pass. Release code, QA and changelog were committed and
+pushed as `5f5d2e5`.
 
-Remaining acceptance includes signing and phone verification, plus checks needing
-external conditions, physical hardware or an upstream contract.
+Remaining acceptance needs external conditions, physical hardware or an
+upstream contract.
 Broad K administration, background push,
 synchronized answer versions, cold sensitive/side-task recovery and remote TUI
 restart remain deferred. No backend changes are authorized by this queue.
