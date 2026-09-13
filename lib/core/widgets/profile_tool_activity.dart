@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/answer_versions.dart';
 import '../models/review_notice.dart';
 import 'profile_review_notice_card.dart';
 
@@ -248,6 +249,7 @@ List<List<Map<String, dynamic>>> groupTranscriptRows(
 ) {
   final groups = <List<Map<String, dynamic>>>[];
   for (final row in rows) {
+    if (isHiddenAnswerMessage(row)) continue;
     if (row['role'] == 'tool' &&
         groups.isNotEmpty &&
         groups.last.last['role'] == 'tool') {

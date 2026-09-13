@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../models/answer_versions.dart';
+import '../models/transcript_notice.dart';
 import '../services/profile_gateway.dart';
 
 typedef ChatHistoryPageLoader = Future<ProfileHistoryPage> Function(int offset);
@@ -100,6 +102,11 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
   }
 
   static String _rowText(Map<String, dynamic> row) {
+    if (isHiddenAnswerMessage(row)) return '';
+    final notice = transcriptNoticeText(row);
+    if (notice != null) {
+      return [notice, ?transcriptNoticeResult(row)].join('\n\n');
+    }
     final content = row['content'] ?? row['text'] ?? row['message'];
     return content is String ? content : content?.toString() ?? '';
   }
@@ -166,7 +173,9 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                           itemBuilder: (_, index) {
                             final entry = matches[index];
                             final row = entry.row;
-                            final role = row['role']?.toString() ?? 'message';
+                            final role = transcriptNoticeKind(row) != null
+                                ? 'system'
+                                : row['role']?.toString() ?? 'message';
                             final key = _rowKey(row);
                             final expanded = _expanded.contains(key);
                             return ExpansionTile(

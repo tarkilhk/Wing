@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/answer_versions.dart';
 import '../models/chat_output.dart';
 import '../models/review_notice.dart';
+import '../models/transcript_notice.dart';
 import '../services/web_preview.dart';
 import 'markdown_message_content.dart';
 import 'profile_tool_activity.dart';
@@ -40,8 +41,39 @@ class ProfileMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (isHiddenAnswerMessage(message)) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final role = message['role']?.toString() ?? '';
+    final notice = transcriptNoticeText(message);
+    if (notice != null) {
+      final result = transcriptNoticeResult(message);
+      final label = Text(
+        notice,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        child: result == null
+            ? Center(child: label)
+            : ExpansionTile(
+                key: ValueKey(('transcript-notice', message['id'])),
+                title: label,
+                subtitle: const Text('View result'),
+                shape: const Border(),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: MarkdownMessageContent(
+                      data: result,
+                      onOpenRemoteFile: onOpenRemoteFile,
+                    ),
+                  ),
+                ],
+              ),
+      );
+    }
     final review = reviewMessageText(message);
     if (review != null) return ProfileReviewNoticeRow(text: review);
     final steering = steeringMessageText(message);

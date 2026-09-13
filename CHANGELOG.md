@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.31.19+2204] - 2026-09-14
+
+### Fixed
+
+- Use Hermes Desktop's message display types for internal events. Delegation completions show a compact notice with expandable results instead of a user bubble containing agent instructions.
+- Keep hidden messages out of the transcript and internal delivery text out of Find in chat. Model changes, resumed turns and personality changes use compact notices.
+
 ## [2.31.18+2203] - 2026-09-14
 
 ### Changed
