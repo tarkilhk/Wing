@@ -5,7 +5,9 @@ import '../services/profile_workspace_controller.dart';
 import '../widgets/profile_diagnostics_panel.dart';
 import '../widgets/backend_version_card.dart';
 import '../widgets/profile_editor_sheet.dart';
+import '../widgets/profile_default_model_sheet.dart';
 import '../widgets/profile_usage_panel.dart';
+import 'profile_capabilities_screen.dart';
 
 enum _ActivityFilter { all, running, needsInput }
 
@@ -173,6 +175,21 @@ class HermesAdministrationContent extends StatelessWidget {
   final ProfileWorkspaceController controller;
   final VoidCallback? onConnections;
 
+  Future<void> _editDefaultModel(BuildContext context) async {
+    final workspace = controller.current;
+    if (workspace == null) return;
+    final changed = await showProfileDefaultModelSheet(
+      context,
+      gateway: workspace.gateway,
+      connectionLabel: controller.connection.label,
+    );
+    if (changed &&
+        context.mounted &&
+        identical(controller.current, workspace)) {
+      await controller.refresh();
+    }
+  }
+
   Future<void> _editProfile(BuildContext context) async {
     final workspace = controller.current;
     if (workspace == null) return;
@@ -234,11 +251,14 @@ class HermesAdministrationContent extends StatelessWidget {
                         : () => _editProfile(context),
                   ),
                 ),
-                if (profile.model != null)
-                  ListTile(
-                    title: const Text('Default model'),
-                    subtitle: Text(profile.model!),
-                  ),
+                ListTile(
+                  title: const Text('Default model'),
+                  subtitle: Text(profile.model ?? 'Not configured'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: controller.switching
+                      ? null
+                      : () => _editDefaultModel(context),
+                ),
                 if (profile.provider != null)
                   ListTile(
                     title: const Text('Provider'),
@@ -249,6 +269,31 @@ class HermesAdministrationContent extends StatelessWidget {
           ),
         ),
         if (controller.current != null) ...[
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.extension_outlined),
+              title: const Text('Skills and tools'),
+              subtitle: const Text(
+                'Inspect capabilities and manage what this profile can use',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: controller.switching
+                  ? null
+                  : () {
+                      final gateway = controller.current!.gateway;
+                      final label = controller.connection.label;
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ProfileCapabilitiesScreen(
+                            gateway: gateway,
+                            connectionLabel: label,
+                          ),
+                        ),
+                      );
+                    },
+            ),
+          ),
           const SizedBox(height: 12),
           BackendVersionCard(
             key: ValueKey(controller.current!.gateway),

@@ -1,5 +1,11 @@
 # Background notification delivery
 
+Current decision, 2026-09-14: **Firebase delivery is dropped**, not an outstanding
+milestone. The older proposal below is historical research. Existing local alerts
+remain selected; sparse real alerts are being investigated. Permission/channel
+checks passed, but live-event coverage currently depends on loaded chats. See
+[current findings](ADMINISTRATION_ROADMAP.md#notification-findings).
+
 Owner correction, 2026-09-12: **No Hermes backend modifications.** Any patch
 contracts or deployment instructions described below are rejected experiments,
 retained only as research. They were never deployed. Use existing Hermes APIs;

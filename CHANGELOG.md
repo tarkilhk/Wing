@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Change a profile's default model from Hermes administration, with provider groups, search and server-required confirmation.
+- Browse and search installed skills, read their instructions, and enable or disable individual skills.
+- Inspect toolsets, their setup status and included tools, and change enablement for the selected server profile.
+
 ## [2.32.0+2209] - 2026-09-14
 
 ### Changed

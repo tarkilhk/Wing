@@ -77,6 +77,7 @@ class ProfileGateway {
   final ScopedRpc _rpc;
   final ScopedPatch? _patch;
   final ScopedPost? _post;
+  final ScopedPost? _put;
   final ScopedDelete? _delete;
   final Future<void> Function() _connect;
   final void Function() _close;
@@ -90,6 +91,7 @@ class ProfileGateway {
     required ScopedRpc rpc,
     ScopedPatch? patch,
     ScopedPost? post,
+    ScopedPost? put,
     ScopedDelete? delete,
     required this.discover,
     Future<void> Function()? connect,
@@ -98,6 +100,7 @@ class ProfileGateway {
        _rpc = rpc,
        _patch = patch,
        _post = post,
+       _put = put,
        _delete = delete,
        _connect = connect ?? _nothing,
        _close = close ?? _noop;
@@ -159,6 +162,9 @@ class ProfileGateway {
           .timeout(const Duration(seconds: 20)),
       post: (endpoint, body) => dashboard
           .apiPost(endpoint, body: body)
+          .timeout(const Duration(seconds: 30)),
+      put: (endpoint, body) => dashboard
+          .apiPut(endpoint, body: body)
           .timeout(const Duration(seconds: 30)),
       delete: (endpoint, query) => dashboard
           .apiDelete(
@@ -261,6 +267,23 @@ class ProfileGateway {
     final send = _delete;
     if (send == null) throw StateError('Dashboard writes are unavailable');
     return send(endpoint, {'profile': scope.profileName});
+  }
+
+  Future<Map<String, dynamic>> put(String endpoint, Map<String, dynamic> body) {
+    final send = _put;
+    if (send == null) throw StateError('Dashboard writes are unavailable');
+    final uri = Uri.parse(endpoint);
+    return send(
+      uri
+          .replace(
+            queryParameters: {
+              ...uri.queryParameters,
+              'profile': scope.profileName,
+            },
+          )
+          .toString(),
+      body,
+    );
   }
 
   static const sessionPageSize = 50;

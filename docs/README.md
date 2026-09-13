@@ -8,13 +8,17 @@ The [repository README](../README.md) describes the current implementation and s
 
 The approved [delivery sequence](DELIVERY_SEQUENCE.md) tracks implementation in small phone-testable increments, starting with draft protection and conversation reliability.
 
+The [administration roadmap](ADMINISTRATION_ROADMAP.md) ranks the broader mobile
+administration scope selected on 2026-09-14 and records each implementation slice.
+
 The [implemented-feature QA sweep](QA_SWEEP_2026-09-13.md) records coverage,
 failures, fixes and retests. The [final real-backend acceptance results](QA_REMAINING_ACCEPTANCE_2026-09-14.md)
 record completed checks and the remaining backend/environment limits separately
 from subsequent feature releases.
 
-[Background notifications](BACKGROUND_NOTIFICATIONS.md) records the Firebase
-setup, verified backend gaps and existing Android notification paths to reuse.
+[Background notifications](BACKGROUND_NOTIFICATIONS.md) records existing Android
+notification paths and backend gaps. Firebase delivery is dropped. Current
+missing-alert findings are tracked in the administration roadmap.
 
 [Server chat relationships](SERVER_CHAT_RELATIONSHIPS.md) records server-backed
 parent navigation and the remaining answer-version metadata dependency.
