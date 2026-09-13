@@ -74,9 +74,18 @@ QA-018 stays open until a content-dependent text-file answer passes. QA-019
 requires successful regeneration of the recorded attachment-bearing case before
 its live failure can be closed.
 
-Final result: 1,325 unit/widget tests pass after the release-version assertion
+Automated result: 1,325 unit/widget tests pass after the release-version assertion
 was updated, with four opt-in skips. Static analysis is clean. Signed 2.31.8 /
 21932 is installed on the phone. Live tests stopped before submission because
 the existing QA chats could not be opened, also observed on 2.31.7. Dashboard
 authentication/provider checks passed; the session-open failure is unclassified
-QA-028 in the ledger. No attachment-content or regeneration live pass is claimed.
+QA-028 in the ledger. Those initial phone checks did not establish a live pass.
+
+The subsequent local-server emulator retest passed saved-chat opening,
+content-dependent image and text delivery, and same-chat regeneration of the
+text attachment. Earlier history and an unsent draft survived; saved history
+contains exactly two user/assistant pairs with no child conversation. The
+updated emulator interaction test also passes against isolated gateway data.
+The original deployment's outside-workspace condition is not ruled out by a
+passing local file path. Regeneration exposed duplicated attachment context in
+the saved user row, now tracked separately as QA-029 in the ledger.
