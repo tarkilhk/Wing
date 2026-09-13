@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.31.13+2198] - 2026-09-14
+
+### Fixed
+
+- Show queued messages as compact italic rows with return arrows above the composer.
+- Confirm accepted steering in the transcript and hide the backend delivery wrapper in saved steering messages.
+- Preserve subagents omitted by refresh as unconfirmed, show their recent tool and progress events, and retain previously received live output.
+
 ## [2.31.12+2197] - 2026-09-13
 
 ### Fixed

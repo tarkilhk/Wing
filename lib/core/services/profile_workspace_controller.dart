@@ -109,6 +109,7 @@ class ProfileChat {
   List<GatewayTodo> todos = [];
   int? todoRevision;
   List<GatewaySubagentActivity> subagents = [];
+  final Set<String> unconfirmedSubagentIds = {};
   int subagentsRevision = 0;
   bool subagentsLoading = false;
   String? subagentsError;
@@ -961,18 +962,25 @@ class ProfileWorkspaceController extends ChangeNotifier {
         snapshot.add(item);
       }
       final ids = snapshot.map((item) => item.id).toSet();
-      final next = before
-          .where((item) => item.isTerminal || ids.contains(item.id))
-          .toList();
+      // A roster read can omit children still reported by live events. Absence
+      // is not a completion event: retain their work and expose uncertainty.
+      final next = List<GatewaySubagentActivity>.of(before);
       for (final item in snapshot) {
         final index = next.indexWhere((existing) => existing.id == item.id);
         if (index < 0) {
           next.add(item);
         } else if (!next[index].isTerminal) {
-          next[index] = next[index].merge(item);
+          next[index] = next[index].merge(item, snapshot: true);
         }
       }
       chat.subagents = next;
+      chat.unconfirmedSubagentIds
+        ..clear()
+        ..addAll(
+          before
+              .where((item) => !item.isTerminal && !ids.contains(item.id))
+              .map((item) => item.id),
+        );
       chat.subagentsRevision++;
     } catch (_) {
       if (_subagentReadIsCurrent(resource, chat, runtime, revision, before)) {
@@ -3788,7 +3796,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
         );
       }
       final status = result['status']?.toString();
-      if (status == 'queued') return true;
+      if (status == 'queued') {
+        chat.messages.add({
+          'role': 'user',
+          'display_kind': 'steer',
+          'content': text,
+        });
+        return true;
+      }
       if (status == 'rejected') return false;
       throw const FormatException('Unsupported steering response.');
     } finally {
@@ -4264,6 +4279,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       next[index] = next[index].merge(update);
     }
     chat.subagents = next;
+    chat.unconfirmedSubagentIds.remove(update.id);
     chat.subagentsRevision++;
     chat.subagentsError = null;
   }
@@ -4689,6 +4705,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat.todos = [];
       chat.todoRevision = null;
       chat.subagents = [];
+      chat.unconfirmedSubagentIds.clear();
       chat.subagentsRevision++;
       chat.subagentsLoading = false;
       chat.subagentsError = null;

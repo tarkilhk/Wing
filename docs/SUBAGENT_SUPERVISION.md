@@ -17,3 +17,23 @@ The view uses the backend's existing `subagent.list`, `subagent.tail`, `subagent
 ## Verification
 
 The 2.7.0 source snapshot passed 1,029 tests with four opt-in skips and a clean analyzer. Controller checks cover sparse events, terminal status, stale snapshots, bounded tails, ownership and exact acknowledgements, including completion before an interrupt reply. UI checks cover the actual chat-menu entry, rejected draft retention, polling failure/retry, and a 320-pixel layout at 1.8x text with a 260-pixel keyboard inset. The signed Personal APK passed package/certificate checks and was installed in place and launched on the owner's phone as 2.7.0 / 21562. No live subagent has been interrupted or steered during these checks; live-server behavior QA remains.
+
+## Refresh and unavailable output
+
+A roster response can omit children that live events previously reported.
+Refresh now retains those entries with an unconfirmed status and their last
+known activity. It does not treat absence as completion. A subsequent event or
+snapshot for the same child confirms its state again. Controls are disabled
+while its status is unconfirmed. Runtime replacement clears that uncertainty
+with the old roster.
+
+The detail sheet keeps the latest received transcript when a subsequent read
+fails or returns unavailable. It also displays up to 40 recent tool/progress
+entries, including tool previews and event output tails, following Desktop's
+activity stream. Snapshot refreshes do not overwrite that event trail with a
+single tool name. Repeated adjacent entries are collapsed.
+
+When Hermes returns no live transcript, Android says so and shows the received
+activity instead. This does not create transcript content that the server has
+not exposed. Terminal summaries and known children remain bound to the original
+chat and profile.

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../services/profile_workspace_controller.dart';
 import '../services/remote_files_client.dart';
 import '../widgets/profile_message.dart';
+import '../widgets/profile_queued_messages.dart';
 import '../models/answer_versions.dart';
 import '../models/chat_output.dart';
 import '../widgets/answer_actions.dart';
@@ -852,6 +853,13 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           composer: _composer,
         ),
       if (chat.commandRunning) const LinearProgressIndicator(),
+      ProfileQueuedMessages(
+        key: ValueKey(('queued-messages', chat.key)),
+        chat: chat,
+        onOpenActions: _hasMessageActions(chat)
+            ? () => _showBusyActions(chat, context)
+            : null,
+      ),
       SafeArea(
         top: false,
         child: Padding(

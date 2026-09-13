@@ -66,7 +66,7 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
         collapsedShape: const Border(),
         leading: const Icon(Icons.account_tree_outlined, size: 20),
         title: const Text('Subagents'),
-        subtitle: Text(_summary(chat.subagents)),
+        subtitle: Text(_summary(chat.subagents, chat.unconfirmedSubagentIds)),
         trailing: chat.subagentsLoading
             ? const SizedBox.square(
                 dimension: 20,
@@ -75,6 +75,13 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
             : null,
         childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
         children: [
+          if (chat.unconfirmedSubagentIds.isNotEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Refresh could not confirm every subagent. Showing their last known activity.',
+              ),
+            ),
           if (chat.subagentsError case final error?)
             Row(
               children: [
@@ -93,13 +100,25 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
             ListTile(
               key: ValueKey(('subagent', chat.key, activity.id)),
               contentPadding: EdgeInsets.zero,
-              leading: Icon(_statusIcon(activity.status), size: 20),
+              leading: Icon(
+                chat.unconfirmedSubagentIds.contains(activity.id)
+                    ? Icons.help_outline
+                    : _statusIcon(activity.status),
+                size: 20,
+              ),
               title: Text(
                 _goal(activity),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              subtitle: Text(_activitySubtitle(activity)),
+              subtitle: Text(
+                _activitySubtitle(
+                  activity,
+                  unconfirmed: chat.unconfirmedSubagentIds.contains(
+                    activity.id,
+                  ),
+                ),
+              ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => showModalBottomSheet<void>(
                 context: context,
@@ -155,6 +174,8 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
   bool _loadingTail = false;
   bool _steering = false;
   bool _interrupting = false;
+  GatewaySubagentTail? _lastAvailableTail;
+  bool _expandedGoal = false;
 
   @override
   void initState() {
@@ -206,6 +227,7 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
       }
       setState(() {
         _tail = tail;
+        if (tail.available && tail.text.isNotEmpty) _lastAvailableTail = tail;
         _tailError = null;
         _tailFailures = 0;
       });
@@ -329,7 +351,11 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
           .where((item) => item.id == widget.subagentId)
           .firstOrNull;
       final current = activity ?? widget.initialActivity;
-      final canControl = activity != null && !activity.isTerminal;
+      final unconfirmed = widget.chat.unconfirmedSubagentIds.contains(
+        widget.subagentId,
+      );
+      final canControl =
+          activity != null && !activity.isTerminal && !unconfirmed;
       return SafeArea(
         child: AnimatedPadding(
           duration: const Duration(milliseconds: 150),
@@ -346,9 +372,22 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
                   Text(
                     _goal(current),
                     style: Theme.of(context).textTheme.titleMedium,
+                    maxLines: _expandedGoal ? null : 3,
+                    overflow: _expandedGoal ? null : TextOverflow.ellipsis,
                   ),
+                  if (_goal(current).length > 120)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: () =>
+                            setState(() => _expandedGoal = !_expandedGoal),
+                        child: Text(
+                          _expandedGoal ? 'Show less' : 'Show full task',
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 4),
-                  Text(_activitySubtitle(current)),
+                  Text(_activitySubtitle(current, unconfirmed: unconfirmed)),
                   if (current.acceptingSteer && canControl) ...[
                     const SizedBox(height: 12),
                     TextField(
@@ -398,6 +437,9 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
 
   Widget _tailBody(GatewaySubagentActivity activity) {
     final tail = _tail;
+    final readableTail = tail != null && tail.available && tail.text.isNotEmpty
+        ? tail
+        : _lastAvailableTail;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -432,30 +474,69 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
           Text(
             activity.isTerminal
                 ? 'Live output is unavailable after completion.'
-                : 'Live output is not available yet.',
+                : 'Hermes has not provided a live transcript for this subagent.',
           ),
-        ] else ...[
-          if (tail.truncated)
+        ] else if (tail.text.isEmpty) ...[
+          const Text('Waiting for transcript text...'),
+        ],
+        if (readableTail != null) ...[
+          if (_tailError != null ||
+              tail?.available != true ||
+              tail!.text.isEmpty)
+            const Text('Showing the last received output.'),
+          if (readableTail.truncated)
             const Text('Showing the latest 16 KiB of live output.'),
           const SizedBox(height: 6),
-          SelectableText(tail.text),
+          SelectableText(readableTail.text),
+        ],
+        if (activity.recentActivity.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text('Recent activity'),
+          const SizedBox(height: 6),
+          for (final line in activity.recentActivity)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: SelectableText(
+                line,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
         ],
       ],
     );
   }
 }
 
-String _summary(List<GatewaySubagentActivity> activities) {
+String _summary(
+  List<GatewaySubagentActivity> activities,
+  Set<String> unconfirmedIds,
+) {
   if (activities.isEmpty) {
     return 'No live tasks';
   }
   final running = activities.where((activity) => !activity.isTerminal).length;
+  final unconfirmed = activities
+      .where(
+        (activity) =>
+            !activity.isTerminal && unconfirmedIds.contains(activity.id),
+      )
+      .length;
+  if (unconfirmed > 0) {
+    return [
+      if (running > unconfirmed) '${running - unconfirmed} active',
+      '$unconfirmed unconfirmed',
+      '${activities.length} total',
+    ].join(' · ');
+  }
   return running == 0
       ? '${activities.length} finished'
       : '$running active · ${activities.length} total';
 }
 
-String _activitySubtitle(GatewaySubagentActivity activity) {
+String _activitySubtitle(
+  GatewaySubagentActivity activity, {
+  bool unconfirmed = false,
+}) {
   final status = switch (activity.status) {
     GatewaySubagentStatus.queued => 'Queued',
     GatewaySubagentStatus.running => 'Running',
@@ -478,7 +559,7 @@ String _activitySubtitle(GatewaySubagentActivity activity) {
       ? '${elapsedSeconds}s'
       : '${elapsedSeconds ~/ 60}m';
   return [
-    status,
+    unconfirmed ? 'Last seen ${status.toLowerCase()}' : status,
     ?elapsed,
     if (detail != null && detail.isNotEmpty) detail,
   ].join(' · ');

@@ -40,6 +40,40 @@ class ProfileMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final role = message['role']?.toString() ?? '';
+    final steering = steeringMessageText(message);
+    if (steering != null) {
+      final style = theme.textTheme.bodySmall?.copyWith(
+        fontSize: 12,
+        color: theme.colorScheme.onSurfaceVariant,
+      );
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        child: Center(
+          child: FractionallySizedBox(
+            widthFactor: .86,
+            child: Semantics(
+              liveRegion: true,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.explore_outlined,
+                    size: 14,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Text('steered', style: style),
+                  Text(' · ', style: style),
+                  Flexible(child: SelectableText(steering, style: style)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     final content = role == 'user'
         ? answerMessageDisplayText(message)
         : (message['display_content'] ?? message['content'] ?? '').toString();

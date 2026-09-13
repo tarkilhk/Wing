@@ -4,6 +4,28 @@ String answerMessageText(Map<String, dynamic> message) {
   return _answerText(value);
 }
 
+/// The gateway's delivery envelope is model context, not user-facing prose.
+/// Only recognize a complete user-row envelope; quoted or partial markers stay
+/// visible. Typed steering rows can also contain already-clean display text.
+String? steeringMessageText(Map<String, dynamic> message) {
+  if (message['role'] == 'system') {
+    final text = answerMessageText(message);
+    return text.startsWith('steer:') ? text.substring(6).trim() : null;
+  }
+  if (message['role'] != 'user') return null;
+  final raw = answerMessageText(message).trim();
+  final match = _steeringEnvelope.firstMatch(raw);
+  if (match != null) return match.group(1)!.trim();
+  if (message['display_kind'] != 'steer') return null;
+  return _answerText(
+    message['display_content'] ?? message['content'] ?? message['text'],
+  ).trim();
+}
+
+final _steeringEnvelope = RegExp(
+  r'^\[OUT-OF-BAND USER MESSAGE(?: — [^\]\r\n]*)?\]\r?\n([\s\S]*?)\r?\n\[/OUT-OF-BAND USER MESSAGE\]$',
+);
+
 /// Desktop-compatible text for displaying or replaying a saved user prompt.
 ///
 /// Hermes persists expanded `@` context in `content`. Desktop removes the
@@ -11,6 +33,8 @@ String answerMessageText(Map<String, dynamic> message) {
 /// that hydrated text. Assistant content must stay byte-for-byte visible.
 String answerMessageDisplayText(Map<String, dynamic> message) {
   if (message['role'] != 'user') return answerMessageText(message);
+  final steering = steeringMessageText(message);
+  if (steering != null) return steering;
   final value =
       message['display_content'] ?? message['content'] ?? message['text'];
   final text = _answerText(value, displayImages: true);

@@ -17,6 +17,8 @@ class _SubagentFixture extends ProfileActionsFixture {
   int tailFailures = 0;
   bool acceptSteer = false;
   bool findInterrupt = false;
+  bool emptyList = false;
+  bool tailAvailable = true;
   final requests = <(String, Map<String, dynamic>)>[];
 
   @override
@@ -33,14 +35,15 @@ class _SubagentFixture extends ProfileActionsFixture {
             listCalls += 1;
             return {
               'subagents': [
-                {
-                  'subagent_id': 'child-1',
-                  'goal': 'Inspect the release',
-                  'status': 'running',
-                  'model': 'test-model',
-                  'last_tool': 'read_file',
-                  'accepting_steer': true,
-                },
+                if (!emptyList)
+                  {
+                    'subagent_id': 'child-1',
+                    'goal': 'Inspect the release',
+                    'status': 'running',
+                    'model': 'test-model',
+                    'last_tool': 'read_file',
+                    'accepting_steer': true,
+                  },
               ],
               'delegations': const [],
             };
@@ -51,8 +54,8 @@ class _SubagentFixture extends ProfileActionsFixture {
             }
             return {
               'subagent_id': 'child-1',
-              'available': true,
-              'text': 'latest child output',
+              'available': tailAvailable,
+              'text': tailAvailable ? 'latest child output' : '',
               'truncated': false,
             };
           case 'subagent.steer':
@@ -129,6 +132,85 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
   }
+
+  testWidgets('refresh retains two live event children beside a failed child', (
+    tester,
+  ) async {
+    fixture.emptyList = true;
+    chat.subagents = [
+      GatewaySubagentActivity.fromGatewayEvent('subagent.complete', {
+        'subagent_id': 'failed',
+        'goal': 'Timed out research',
+        'status': 'timeout',
+      })!,
+      GatewaySubagentActivity.fromGatewayEvent('subagent.start', {
+        'subagent_id': 'one',
+        'goal': 'Research one',
+      })!,
+      GatewaySubagentActivity.fromGatewayEvent('subagent.start', {
+        'subagent_id': 'two',
+        'goal': 'Research two',
+      })!,
+    ];
+    await showPanel(tester);
+    expect(chat.subagents.map((item) => item.id), ['failed', 'one', 'two']);
+    expect(find.text('Research one'), findsOneWidget);
+    expect(find.text('Research two'), findsOneWidget);
+    expect(find.text('1 finished'), findsNothing);
+  });
+
+  testWidgets(
+    'detail shows received activity when the server has no transcript',
+    (tester) async {
+      fixture.tailAvailable = false;
+      chat.subagents = [
+        GatewaySubagentActivity.fromGatewayEvent('subagent.start', {
+          'subagent_id': 'child-1',
+          'goal': 'Inspect the release',
+        })!.merge(
+          GatewaySubagentActivity.fromGatewayEvent('subagent.tool', {
+            'subagent_id': 'child-1',
+            'tool_name': 'read_file',
+            'tool_preview': 'Checking android/app/build.gradle.kts',
+          })!,
+        ),
+      ];
+      await openDetails(tester);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Recent activity'),
+        160,
+        scrollable: find.byType(Scrollable).last,
+      );
+      expect(find.text('Recent activity'), findsOneWidget);
+      expect(
+        find.textContaining('Checking android/app/build.gradle.kts'),
+        findsOneWidget,
+      );
+      Navigator.of(tester.element(find.text('Live output'))).pop();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'an unavailable tail refresh preserves the output already received',
+    (tester) async {
+      await openDetails(tester);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('latest child output'),
+        160,
+        scrollable: find.byType(Scrollable).last,
+      );
+      expect(find.text('latest child output'), findsOneWidget);
+      fixture.tailAvailable = false;
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(find.text('latest child output'), findsOneWidget);
+      Navigator.of(tester.element(find.text('Live output'))).pop();
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets('shows live tail and keeps rejected steering text', (
     tester,

@@ -178,6 +178,7 @@ enum GatewaySubagentPhase { requested, running, thinking, tool, completed }
 enum GatewaySubagentStatus { queued, running, completed, failed, interrupted }
 
 class GatewaySubagentActivity {
+  static const maxRecentActivity = 40;
   final String id;
   final String? parentId;
   final int? depth;
@@ -193,6 +194,7 @@ class GatewaySubagentActivity {
   final double? startedAt;
   final int? toolCount;
   final String? lastTool;
+  final List<String> recentActivity;
 
   const GatewaySubagentActivity({
     required this.id,
@@ -210,6 +212,7 @@ class GatewaySubagentActivity {
     this.startedAt,
     this.toolCount,
     this.lastTool,
+    this.recentActivity = const [],
   });
 
   GatewaySubagentStatus get status =>
@@ -228,7 +231,10 @@ class GatewaySubagentActivity {
     GatewaySubagentStatus.interrupted,
   }.contains(status);
 
-  GatewaySubagentActivity merge(GatewaySubagentActivity next) {
+  GatewaySubagentActivity merge(
+    GatewaySubagentActivity next, {
+    bool snapshot = false,
+  }) {
     if (isTerminal) return this;
     return GatewaySubagentActivity(
       id: id,
@@ -246,6 +252,9 @@ class GatewaySubagentActivity {
       startedAt: next.startedAt ?? startedAt,
       toolCount: next.toolCount ?? toolCount,
       lastTool: next.lastTool ?? lastTool,
+      recentActivity: snapshot && recentActivity.isNotEmpty
+          ? recentActivity
+          : _mergeActivity(recentActivity, next.recentActivity),
     );
   }
 
@@ -276,6 +285,7 @@ class GatewaySubagentActivity {
       startedAt: _number(data['started_at']),
       toolCount: _integer(data['tool_count']),
       lastTool: lastTool,
+      recentActivity: lastTool == null ? const [] : ['Tool: $lastTool'],
     );
   }
 
@@ -311,6 +321,7 @@ class GatewaySubagentActivity {
       ),
       model: GatewayNotice.safeLine(data['model']?.toString(), 120),
       detail: detail,
+      recentActivity: _eventActivity(eventType, data),
       status: status,
       acceptingSteer: data['accepting_steer'] is bool
           ? data['accepting_steer'] == true
@@ -346,6 +357,49 @@ class GatewaySubagentActivity {
     _ when terminalEvent => GatewaySubagentStatus.failed,
     _ => GatewaySubagentStatus.running,
   };
+
+  static List<String> _mergeActivity(List<String> previous, List<String> next) {
+    final result = [...previous];
+    for (final line in next) {
+      if (result.lastOrNull != line) result.add(line);
+    }
+    return List.unmodifiable(
+      result.skip((result.length - maxRecentActivity).clamp(0, result.length)),
+    );
+  }
+
+  static List<String> _eventActivity(
+    String eventType,
+    Map<String, dynamic> data,
+  ) {
+    final lines = <String>[];
+    void add(Object? value, {Object? tool}) {
+      final text = GatewayNotice.safeLine(value?.toString(), 1000);
+      final name = GatewayNotice.safeLine(tool?.toString(), 160);
+      if (name != null) {
+        lines.add(
+          'Tool: $name${text == null || text == name ? '' : ' · $text'}',
+        );
+      } else if (text != null) {
+        lines.add(text);
+      }
+    }
+
+    final tail = data['output_tail'];
+    if (tail is List) {
+      for (final entry in tail.whereType<Map>()) {
+        add(entry['preview'], tool: entry['tool']);
+      }
+    }
+    if (data['tool_name'] != null) {
+      add(data['tool_preview'] ?? data['text'], tool: data['tool_name']);
+    } else if (eventType == 'subagent.complete') {
+      add(data['summary'] ?? data['text']);
+    } else {
+      add(data['text'] ?? data['tool_preview']);
+    }
+    return _mergeActivity(const [], lines);
+  }
 
   static int? _integer(dynamic value) => value is num ? value.toInt() : null;
   static double? _number(dynamic value) =>

@@ -111,7 +111,7 @@ void main() {
   });
 
   test(
-    'active snapshot keeps terminal event rows and uses the parent runtime',
+    'partial snapshot keeps known children and uses the parent runtime',
     () async {
       host.event('a', 'subagent.complete', {
         'subagent_id': 'done',
@@ -143,8 +143,13 @@ void main() {
 
       await controller.refreshSubagents(chat);
 
-      expect(chat.subagents.map((item) => item.id), ['done', 'active']);
+      expect(chat.subagents.map((item) => item.id), [
+        'done',
+        'stale',
+        'active',
+      ]);
       final active = chat.subagents.last;
+      expect(chat.unconfirmedSubagentIds, {'stale'});
       expect(active.parentId, 'root');
       expect(active.delegationId, 'batch');
       expect(active.acceptingSteer, isTrue);
@@ -251,6 +256,79 @@ void main() {
       host.pendingControl!.complete({'found': true, 'subagent_id': 'child'});
       expect(await interrupt, isTrue);
       expect(chat.subagents.single.status, GatewaySubagentStatus.interrupted);
+    },
+  );
+
+  test(
+    'missing children recover on fresh events and settle only on completion',
+    () async {
+      host.event('a', 'subagent.start', {
+        'subagent_id': 'child',
+        'goal': 'Research',
+      });
+      await controller.refreshSubagents(chat);
+      expect(chat.subagents.single.isTerminal, isFalse);
+      expect(chat.unconfirmedSubagentIds, {'child'});
+      host.event('a', 'subagent.tool', {
+        'subagent_id': 'child',
+        'tool_name': 'browser_snapshot',
+      });
+      expect(chat.unconfirmedSubagentIds, isEmpty);
+      expect(chat.subagents.single.lastTool, 'browser_snapshot');
+      await controller.refreshSubagents(chat);
+      expect(chat.unconfirmedSubagentIds, {'child'});
+      host.event('a', 'subagent.complete', {
+        'subagent_id': 'child',
+        'status': 'completed',
+        'summary': 'Research saved',
+      });
+      expect(chat.unconfirmedSubagentIds, isEmpty);
+      expect(chat.subagents.single.isTerminal, isTrue);
+      expect(chat.subagents.single.recentActivity.last, 'Research saved');
+    },
+  );
+
+  test(
+    'recent activity keeps bounded tool previews and server output tails',
+    () async {
+      for (var index = 0; index < 45; index++) {
+        host.event('a', 'subagent.progress', {
+          'subagent_id': 'child',
+          'text': 'Progress $index',
+        });
+      }
+      host.event('a', 'subagent.tool', {
+        'subagent_id': 'child',
+        'tool_name': 'read_file',
+        'tool_preview': 'Checking build.gradle',
+        'output_tail': [
+          {'tool': 'browser_snapshot', 'preview': 'Found the booking page'},
+        ],
+      });
+      expect(
+        chat.subagents.single.recentActivity,
+        hasLength(GatewaySubagentActivity.maxRecentActivity),
+      );
+      expect(
+        chat.subagents.single.recentActivity,
+        contains('Tool: browser_snapshot · Found the booking page'),
+      );
+      expect(
+        chat.subagents.single.recentActivity.last,
+        'Tool: read_file · Checking build.gradle',
+      );
+      final before = chat.subagents.single.recentActivity;
+      host.listResponse = {
+        'subagents': [
+          {
+            'subagent_id': 'child',
+            'last_tool': 'read_file',
+            'status': 'running',
+          },
+        ],
+      };
+      await controller.refreshSubagents(chat);
+      expect(chat.subagents.single.recentActivity, before);
     },
   );
 
