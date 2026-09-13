@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.31.18+2203] - 2026-09-14
+
+### Changed
+
+- Add a soft moving highlight to live activity text above the composer. The text stays readable, and the animation pauses for idle chats, input requests and reduced-motion settings.
+
 ## [2.31.17+2202] - 2026-09-14
 
 ### Fixed

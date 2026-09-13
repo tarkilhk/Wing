@@ -159,15 +159,18 @@ void main() {
     );
     expect(find.text('Waiting for your message'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(ShaderMask), findsNothing);
     host.event('a', 'message.start');
     host.event('a', 'reasoning.delta', {'text': 'Planning'});
     await tester.pump();
     expect(find.text('Thinking…'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(ShaderMask), findsOneWidget);
     host.event('a', 'clarify.request', {'question': 'Which city?'});
     await tester.pump();
     expect(find.text('Waiting for your reply'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(ShaderMask), findsNothing);
   });
 
   testWidgets('status stays below scrolling history and above the keyboard', (
@@ -242,6 +245,7 @@ void main() {
     );
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.byTooltip(label()), findsOneWidget);
+    expect(find.byType(ShaderMask), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

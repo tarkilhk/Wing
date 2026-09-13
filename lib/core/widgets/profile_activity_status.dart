@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/gateway_activity.dart';
+import '../models/profile_live_activity.dart';
 import '../services/profile_workspace_controller.dart';
+import 'activity_shimmer.dart';
 import 'profile_chat_indicator.dart';
 
 /// A current activity summary, independent of the scrollable transcript.
@@ -61,6 +63,12 @@ class ProfileActivityStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = label;
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
+    final active =
+        chat.status != ProfileTurnStatus.attention &&
+        chat.status != ProfileTurnStatus.reconnecting &&
+        chat.status != ProfileTurnStatus.failed &&
+        (chat.commandRunning ||
+            chat.activityState == ProfileLiveActivityState.running);
     return Semantics(
       container: true,
       liveRegion: true,
@@ -92,13 +100,16 @@ class ProfileActivityStatus extends StatelessWidget {
                   ProfileChatIndicator(chat: chat, row: const {}),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    text,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelMedium?.copyWith(color: color),
+                  child: ActivityShimmer(
+                    active: active,
+                    child: Text(
+                      text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelMedium?.copyWith(color: color),
+                    ),
                   ),
                 ),
               ],
