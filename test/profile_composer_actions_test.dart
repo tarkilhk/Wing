@@ -100,17 +100,31 @@ void main() {
     return chat;
   }
 
-  testWidgets('opening a queued item offers actions without removing it', (
+  testWidgets('long press edits in the composer and reveals delete', (
     tester,
   ) async {
-    final chat = await show(tester, queued: ['Keep this queued'], paused: true);
-    await tester.tap(find.text('Keep this queued'));
-    await pumpFrames(tester, count: 4);
-    await tester.tap(find.widgetWithText(ListTile, 'Queued: Keep this queued'));
+    final chat = await show(
+      tester,
+      queued: ['Keep this queued'],
+      draft: 'My draft',
+      paused: true,
+    );
+    await tester.longPress(find.text('Keep this queued'));
     await pumpFrames(tester, count: 4);
     expect(chat.queuedPrompts.single.text, 'Keep this queued');
-    expect(find.text('Edit'), findsOneWidget);
-    expect(find.text('Delete'), findsOneWidget);
+    expect(chat.draft, 'My draft');
+    expect(chat.composerText, 'Keep this queued');
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Queue'), findsOneWidget);
+    expect(find.text('Steer'), findsOneWidget);
+    expect(find.byTooltip('Delete queued message'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('profile-message-composer')))
+          .focusNode!
+          .hasFocus,
+      isTrue,
+    );
   });
 
   testWidgets('normal tap remains Stop when the turn is busy', (tester) async {
@@ -179,7 +193,9 @@ void main() {
     expect(find.byIcon(Icons.explore_outlined), findsOneWidget);
   });
 
-  testWidgets('slash steer shows only its centered confirmation', (tester) async {
+  testWidgets('slash steer shows only its centered confirmation', (
+    tester,
+  ) async {
     final chat = await show(
       tester,
       status: ProfileTurnStatus.running,
@@ -238,80 +254,141 @@ void main() {
     expect(find.text('1 attachment: report.pdf'), findsOneWidget);
   });
 
-  testWidgets(
-    'queued deletion requires confirmation and cancel keeps the message',
-    (tester) async {
-      final chat = await show(
-        tester,
-        queued: ['review this queued item'],
-        paused: true,
-      );
-      await tester.tap(find.byTooltip('Message actions'));
-      await pumpFrames(tester, count: 4);
-      expect(find.text('Queued messages are paused'), findsOneWidget);
-      expect(find.text('Queued: review this queued item'), findsOneWidget);
-      await tester.tap(find.text('Queued: review this queued item'));
-      await pumpFrames(tester, count: 4);
-      expect(chat.queuedPrompts, hasLength(1));
-      await tester.tap(find.text('Delete'));
-      await pumpFrames(tester, count: 4);
-      expect(find.text('Delete queued message?'), findsOneWidget);
-      expect(chat.queuedPrompts, hasLength(1));
-      await tester.tap(find.text('Cancel'));
-      await pumpFrames(tester, count: 4);
-      expect(chat.queuedPrompts, hasLength(1));
-      await tester.tap(find.byTooltip('Message actions'));
-      await pumpFrames(tester, count: 4);
-      await tester.tap(find.text('Queued: review this queued item'));
-      await pumpFrames(tester, count: 4);
-      await tester.tap(find.text('Delete'));
-      await pumpFrames(tester, count: 4);
-      await tester.tap(find.text('Delete'));
-      await tester.pumpAndSettle();
-      expect(chat.queuedPrompts, isEmpty);
-      expect(find.text('review this queued item'), findsNothing);
-    },
-  );
-
-  testWidgets('editing a queued message saves in place and cancel keeps it', (
+  testWidgets('delete cross confirms deletion and restores the draft', (
     tester,
   ) async {
+    final chat = await show(
+      tester,
+      queued: ['Delete this'],
+      draft: 'Separate draft',
+      paused: true,
+    );
+    await tester.longPress(find.text('Delete this'));
+    await pumpFrames(tester, count: 4);
+    await tester.tap(find.byTooltip('Delete queued message'));
+    await pumpFrames(tester, count: 4);
+    expect(find.text('Delete queued instruction?'), findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Cancel'),
+      ),
+    );
+    await pumpFrames(tester, count: 4);
+    expect(chat.queuedPrompts, hasLength(1));
+    expect(chat.composerText, 'Delete this');
+    await tester.tap(find.byTooltip('Delete queued message'));
+    await pumpFrames(tester, count: 4);
+    await tester.tap(find.text('Delete'));
+    await pumpFrames(tester, count: 4);
+    expect(chat.queuedPrompts, isEmpty);
+    expect(chat.composerText, 'Separate draft');
+    expect(find.text('Editing queued message'), findsNothing);
+  });
+
+  testWidgets('composer queue edit cancels or saves in place', (tester) async {
     final chat = await show(
       tester,
       queued: ['Original', 'Second'],
       draft: 'Separate draft',
       paused: true,
     );
-    Future<void> openEditor() async {
-      await tester.tap(find.byTooltip('Message actions'));
-      await pumpFrames(tester, count: 4);
-      await tester.tap(find.text('Queued: Original'));
-      await pumpFrames(tester, count: 4);
-      await tester.tap(find.text('Edit'));
-      await pumpFrames(tester, count: 4);
-    }
-
-    final editor = find.byKey(const ValueKey('queued-message-editor'));
-    await openEditor();
+    final editor = find.byKey(const Key('profile-message-composer'));
+    await tester.longPress(find.text('Original'));
+    await pumpFrames(tester, count: 4);
     await tester.enterText(editor, 'Discarded edit');
     await tester.tap(find.text('Cancel'));
     await pumpFrames(tester, count: 4);
     expect(chat.queuedPrompts.first.text, 'Original');
-    await openEditor();
-    await tester.enterText(editor, '');
-    await tester.tap(find.text('Save'));
+    expect(chat.composerText, 'Separate draft');
+    await tester.longPress(find.text('Original'));
     await pumpFrames(tester, count: 4);
-    expect(find.text('Enter a message.'), findsOneWidget);
-    expect(chat.queuedPrompts.first.text, 'Original');
+    await tester.enterText(editor, '');
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Queue'))
+          .onPressed,
+      isNull,
+    );
     await tester.enterText(editor, 'Updated');
-    await tester.tap(find.text('Save'));
+    await tester.pump();
+    await tester.tap(find.text('Queue'));
     await pumpFrames(tester, count: 4);
     expect(chat.queuedPrompts.map((prompt) => prompt.text), [
       'Updated',
       'Second',
     ]);
+    expect(chat.composerText, 'Separate draft');
+    expect(find.text('Editing queued message'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('edited steering replaces only the selected queued instruction', (
+    tester,
+  ) async {
+    final chat = await show(
+      tester,
+      status: ProfileTurnStatus.running,
+      queued: ['Original', 'Second'],
+      draft: 'Separate draft',
+    );
+    await tester.longPress(find.text('Original'));
+    await pumpFrames(tester, count: 4);
+    await tester.enterText(
+      find.byKey(const Key('profile-message-composer')),
+      'Changed direction',
+    );
+    await tester.tap(find.text('Steer'));
+    await pumpFrames(tester, count: 4);
+    expect(chat.queuedPrompts.map((prompt) => prompt.text), ['Second']);
+    expect(chat.composerText, 'Separate draft');
+    expect(find.text('Changed direction'), findsOneWidget);
+    expect(find.text('steered'), findsOneWidget);
+  });
+
+  testWidgets('rejected queued steer keeps the edit and the buffered draft', (
+    tester,
+  ) async {
+    fixture.steerResult = {'status': 'rejected'};
+    final chat = await show(
+      tester,
+      status: ProfileTurnStatus.running,
+      queued: ['Original'],
+      draft: 'Separate draft',
+    );
+    await tester.longPress(find.text('Original'));
+    await pumpFrames(tester, count: 4);
+    await tester.enterText(
+      find.byKey(const Key('profile-message-composer')),
+      'Try this',
+    );
+    await tester.tap(find.text('Steer'));
+    await pumpFrames(tester, count: 4);
+    expect(chat.queuedPrompts.single.text, 'Original');
+    expect(chat.composerText, 'Try this');
     expect(chat.draft, 'Separate draft');
-    expect(find.text('Edit queued message'), findsNothing);
+    expect(find.text('steered'), findsNothing);
+    expect(find.text('Hermes rejected the steering message.'), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+    fixture.steerResult = {'status': 'queued'};
+    await tester.tap(find.text('Steer'));
+    await pumpFrames(tester, count: 4);
+    expect(chat.queuedPrompts, isEmpty);
+    expect(chat.composerText, 'Separate draft');
+    expect(find.text('steered'), findsOneWidget);
+  });
+
+  testWidgets('queue editing fits large text with the keyboard open', (
+    tester,
+  ) async {
+    await show(tester, scale: 2.4, queued: ['Original'], paused: true);
+    await tester.longPress(find.text('Original'));
+    await pumpFrames(tester, count: 4);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    await pumpFrames(tester, count: 4);
+    expect(find.text('Queue'), findsOneWidget);
+    expect(find.text('Steer'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

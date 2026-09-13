@@ -411,6 +411,138 @@ void main() {
     },
   );
 
+  test('editing holds the queue when the active turn finishes', () async {
+    await controller.queuePrompt(chat, 'Original');
+    await controller.queuePrompt(chat, 'Second');
+    final file = await attachment('draft-buffer.txt');
+    chat.attachments.add(file);
+    await controller.updateDraft(chat, 'Separate draft');
+    await controller.beginQueuedPromptEdit(chat, chat.queuedPrompts.first);
+    controller.updateQueuedPromptEdit(chat, 'Changed');
+    finish();
+    await until(() => chat.status == ProfileTurnStatus.completed);
+    expect(sends(), 0);
+    expect((await saved())!.queuePaused, isTrue);
+    expect((await saved())!.text, 'Separate draft');
+    await controller.saveQueuedPromptEdit(chat);
+    await until(() => sends() == 1 && !chat.queueDraining);
+    expect(
+      host.calls.singleWhere((call) => call.$2 == 'prompt.submit').$3['text'],
+      'Changed',
+    );
+    expect(queuedTexts(), ['Second']);
+    expect(chat.composerText, 'Separate draft');
+    expect(chat.attachments, [same(file)]);
+    expect(await File(file.cachedPath).exists(), isTrue);
+  });
+
+  test(
+    'cancel restores the draft without changing queued attachments',
+    () async {
+      final queuedFile = await attachment('queued-edit.txt');
+      chat.draft = 'Original';
+      chat.attachments.add(queuedFile);
+      await controller.queuePrompt(chat, 'Original');
+      await controller.updateDraft(chat, 'Separate draft');
+      await controller.beginQueuedPromptEdit(chat, chat.queuedPrompts.first);
+      controller.updateQueuedPromptEdit(chat, 'Discard');
+      await controller.cancelQueuedPromptEdit(chat);
+      expect(chat.composerText, 'Separate draft');
+      expect(chat.queuedPrompts.single.text, 'Original');
+      expect(chat.queuedPrompts.single.attachments, [same(queuedFile)]);
+      expect(await File(queuedFile.cachedPath).exists(), isTrue);
+    },
+  );
+
+  test(
+    'failed composer queue save retains the edit and separate draft',
+    () async {
+      await controller.queuePrompt(chat, 'Original');
+      await controller.updateDraft(chat, 'Separate draft');
+      await controller.beginQueuedPromptEdit(chat, chat.queuedPrompts.first);
+      controller.updateQueuedPromptEdit(chat, 'Changed');
+      draftStore.failNextWrite = true;
+      await expectLater(
+        controller.saveQueuedPromptEdit(chat),
+        throwsStateError,
+      );
+      expect(chat.composerText, 'Changed');
+      expect(chat.draft, 'Separate draft');
+      expect(chat.queuedPrompts.single.text, 'Original');
+      expect(chat.queuePaused, isTrue);
+    },
+  );
+
+  test(
+    'queued steering preserves the buffered draft and its attachments',
+    () async {
+      await controller.queuePrompt(chat, 'Original');
+      await controller.queuePrompt(chat, 'Second');
+      final file = await attachment('buffered.txt');
+      chat.attachments.add(file);
+      await controller.updateDraft(chat, 'Separate draft');
+      await controller.beginQueuedPromptEdit(chat, chat.queuedPrompts.first);
+      controller.updateQueuedPromptEdit(chat, 'Changed direction');
+      expect(await controller.steerQueuedPromptEdit(chat), isTrue);
+      expect(
+        host.calls.singleWhere((call) => call.$2 == 'session.steer').$3['text'],
+        'Changed direction',
+      );
+      expect(queuedTexts(), ['Second']);
+      expect(chat.composerText, 'Separate draft');
+      expect(chat.attachments, [same(file)]);
+      expect((await saved())!.queuedPrompts.single.text, 'Second');
+      expect((await saved())!.text, 'Separate draft');
+      expect(await File(file.cachedPath).exists(), isTrue);
+      expect(host.calls.where((call) => call.$2 == 'file.attach'), isEmpty);
+    },
+  );
+
+  test(
+    'failed steering preflight save never attempts delivery or loses the edit',
+    () async {
+      await controller.queuePrompt(chat, 'Original');
+      await controller.beginQueuedPromptEdit(chat, chat.queuedPrompts.first);
+      controller.updateQueuedPromptEdit(chat, 'Changed');
+      draftStore.failNextWrite = true;
+      await expectLater(
+        controller.steerQueuedPromptEdit(chat),
+        throwsStateError,
+      );
+      expect(host.calls.where((call) => call.$2 == 'session.steer'), isEmpty);
+      expect(chat.queuedPrompts.single.text, 'Original');
+      expect(chat.composerText, 'Changed');
+      expect(chat.queueMutating, isFalse);
+      expect((await saved())!.queuedPrompts.single.text, 'Original');
+    },
+  );
+
+  test(
+    'accepted steer with a failed final save never resends automatically',
+    () async {
+      await controller.queuePrompt(chat, 'Original');
+      await controller.updateDraft(chat, 'Separate draft');
+      await controller.beginQueuedPromptEdit(chat, chat.queuedPrompts.first);
+      controller.updateQueuedPromptEdit(chat, 'Changed');
+      draftStore.failNextEmptyQueueWrite = true;
+      await expectLater(
+        controller.steerQueuedPromptEdit(chat),
+        throwsStateError,
+      );
+      expect(
+        host.calls.where((call) => call.$2 == 'session.steer'),
+        hasLength(1),
+      );
+      expect(chat.queuedPrompts, isEmpty);
+      expect(chat.composerText, 'Separate draft');
+      expect(chat.queuePaused, isTrue);
+      expect((await saved())!.queuePaused, isTrue);
+      finish();
+      await until(() => chat.status == ProfileTurnStatus.completed);
+      expect(sends(), 0);
+    },
+  );
+
   test(
     'editing keeps queue order, attachments and the separate draft on disk',
     () async {

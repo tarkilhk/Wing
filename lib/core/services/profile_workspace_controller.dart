@@ -156,6 +156,11 @@ class ProfileChat {
   bool archived = false;
   final List<AttachmentDraft> attachments = [];
   final List<QueuedPromptDraft> queuedPrompts = [];
+  // The normal draft and its attachments remain untouched while editing.
+  QueuedPromptDraft? editingQueuedPrompt;
+  String queuedEditText = '';
+  String get composerText =>
+      editingQueuedPrompt == null ? draft : queuedEditText;
   bool queuePaused = false;
   bool steering = false;
   bool draftRestored = false;
@@ -2752,7 +2757,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final attachments = List<AttachmentDraft>.of(chat.attachments);
     final queue = List<QueuedPromptDraft>.of(chat.queuedPrompts);
     final submissionUncertain = chat.draftSubmissionUncertain;
-    final queuePaused = chat.queuePaused || chat.queueDraining;
+    final queuePaused =
+        chat.queuePaused ||
+        chat.queueDraining ||
+        chat.editingQueuedPrompt != null;
     Future<void> save() => _drafts.write(
       profileName: key.workspace.profileName,
       sessionId: key.sessionId,
@@ -3886,10 +3894,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
   /// Sends one text-only correction to the currently running server turn.
   /// The caller owns draft/queue handling because a rejected response remains
   /// unsent local work and must not be mistaken for a delivered turn.
-  Future<bool> steer(ProfileChat chat, String rawText) async {
+  Future<bool> steer(
+    ProfileChat chat,
+    String rawText, {
+    bool preserveComposer = false,
+  }) async {
     final text = rawText.trim();
     if (text.isEmpty || text.startsWith('/')) return false;
-    if (chat.attachments.isNotEmpty ||
+    if ((!preserveComposer && chat.attachments.isNotEmpty) ||
         !{
           ProfileTurnStatus.running,
           ProfileTurnStatus.attention,
@@ -3987,6 +3999,112 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
     }
     await _drainQueuedPrompts(chat);
+  }
+
+  Future<void> beginQueuedPromptEdit(
+    ProfileChat chat,
+    QueuedPromptDraft prompt,
+  ) async {
+    _owned(chat);
+    if (chat.queueMutating ||
+        chat.queueDraining ||
+        chat.steering ||
+        chat._replacingExpiredRuntime ||
+        !chat.queuedPrompts.contains(prompt)) {
+      throw StateError('This queued message is currently being sent or saved.');
+    }
+    if (identical(chat.editingQueuedPrompt, prompt)) return;
+    if (chat.editingQueuedPrompt != null) {
+      throw StateError('Queue or cancel your current edit first.');
+    }
+    chat.editingQueuedPrompt = prompt;
+    chat.queuedEditText = prompt.text;
+    _changed();
+    // If the app exits mid-edit, recover the original as paused unsent work.
+    await _persistDraft(chat);
+  }
+
+  void updateQueuedPromptEdit(ProfileChat chat, String text) {
+    _owned(chat);
+    if (chat.editingQueuedPrompt == null || chat.queueMutating) return;
+    chat.queuedEditText = text;
+    _changed();
+  }
+
+  Future<void> cancelQueuedPromptEdit(ProfileChat chat) async {
+    _owned(chat);
+    if (chat.queueMutating || chat.steering) return;
+    chat.editingQueuedPrompt = null;
+    chat.queuedEditText = '';
+    _changed();
+    await _persistDraft(chat);
+    await _drainQueuedPrompts(chat);
+  }
+
+  Future<void> saveQueuedPromptEdit(ProfileChat chat) async {
+    final prompt = chat.editingQueuedPrompt;
+    if (prompt == null) return;
+    await editQueuedPrompt(
+      chat,
+      chat.queuedPrompts.indexOf(prompt),
+      chat.queuedEditText,
+      expectedPrompt: prompt,
+    );
+    await cancelQueuedPromptEdit(chat);
+  }
+
+  Future<bool> steerQueuedPromptEdit(ProfileChat chat) async {
+    _owned(chat);
+    final prompt = chat.editingQueuedPrompt;
+    final text = chat.queuedEditText.trim();
+    if (prompt == null ||
+        chat.queueMutating ||
+        chat.queueDraining ||
+        chat.steering ||
+        prompt.attachments.isNotEmpty ||
+        text.isEmpty ||
+        text.startsWith('/') ||
+        !{
+          ProfileTurnStatus.running,
+          ProfileTurnStatus.attention,
+        }.contains(chat.status)) {
+      return false;
+    }
+    final index = chat.queuedPrompts.indexOf(prompt);
+    if (index < 0) throw StateError('This queued message has changed.');
+    chat.queueMutating = true;
+    var accepted = false;
+    var attempted = false;
+    _changed();
+    try {
+      // Keep the entry durably paused until acknowledgement. A process exit
+      // before delivery must not lose it or automatically submit it as a turn.
+      await _persistQueueMutation(chat);
+      attempted = true;
+      accepted = await steer(chat, text, preserveComposer: true);
+      if (!accepted) return false;
+      chat.queuedPrompts.removeAt(index);
+      chat.editingQueuedPrompt = null;
+      chat.queuedEditText = '';
+    } catch (_) {
+      if (attempted) chat.queuePaused = true;
+      rethrow;
+    } finally {
+      try {
+        await _persistQueueMutation(chat);
+      } catch (_) {
+        chat.queuePaused = true;
+        chat.error = accepted
+            ? 'Steering was sent. The remaining queue could not be saved.'
+            : 'Queue paused. Unsent messages could not be saved.';
+        rethrow;
+      } finally {
+        chat.queueMutating = false;
+        _changed();
+      }
+    }
+    await _drainQueuedPrompts(chat);
+    return true;
   }
 
   Future<void> editQueuedPrompt(
@@ -4089,6 +4207,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
         _changed();
       }
     }
+    if (identical(chat.editingQueuedPrompt, removed)) {
+      chat.editingQueuedPrompt = null;
+      chat.queuedEditText = '';
+      _changed();
+      await _persistDraft(chat);
+    }
     await attachments.removeAll(removed.attachments);
     await _drainQueuedPrompts(chat);
   }
@@ -4127,6 +4251,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   Future<void> _drainQueuedPrompts(ProfileChat chat) async {
     if (_closed ||
+        chat.editingQueuedPrompt != null ||
         chat.queuePaused ||
         chat.queueMutating ||
         chat.queueDraining ||

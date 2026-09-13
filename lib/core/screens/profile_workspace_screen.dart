@@ -11,7 +11,6 @@ import '../widgets/anchored_expansion_tile.dart';
 import '../widgets/profile_activity_tabs.dart';
 import '../models/gateway_todo.dart';
 import '../widgets/profile_queued_messages.dart';
-import '../widgets/queued_prompt_editor.dart';
 import '../models/queued_prompt_draft.dart';
 import '../models/answer_versions.dart';
 import '../models/transcript_notice.dart';
@@ -70,6 +69,8 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     with WidgetsBindingObserver {
   ProfileWorkspaceController get controller => widget.controller;
   final _composer = TextEditingController();
+  final _composerFocus = FocusNode();
+  final _queuedEditErrors = <ProfileSessionKey, String>{};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   ProfileSessionKey? _composerKey;
   ProfileSessionKey? _loadingIntelligence;
@@ -135,6 +136,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     controller.visible = false;
     WidgetsBinding.instance.removeObserver(this);
     _composer.dispose();
+    _composerFocus.dispose();
     super.dispose();
   }
 
@@ -154,11 +156,14 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     builder: (context, _) {
       final current = controller.current;
       final chat = current?.chat;
-      if (_composerKey != chat?.key || _composer.text != (chat?.draft ?? '')) {
+      if (_composerKey != chat?.key ||
+          _composer.text != (chat?.composerText ?? '')) {
         _composerKey = chat?.key;
         _composer.value = TextEditingValue(
-          text: chat?.draft ?? '',
-          selection: TextSelection.collapsed(offset: chat?.draft.length ?? 0),
+          text: chat?.composerText ?? '',
+          selection: TextSelection.collapsed(
+            offset: chat?.composerText.length ?? 0,
+          ),
         );
       }
       if (_destination != AppDestination.chats) {
@@ -176,7 +181,13 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       return PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) _handleBack(controller.showList);
+          if (!didPop) {
+            if (chat.editingQueuedPrompt != null) {
+              unawaited(_run(() => controller.cancelQueuedPromptEdit(chat)));
+            } else {
+              _handleBack(controller.showList);
+            }
+          }
         },
         child: Scaffold(
           key: _scaffoldKey,
@@ -653,569 +664,714 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     );
   }
 
-  Widget _chat(ProfileChat chat, BuildContext context) => Column(
-    children: [
-      Expanded(
-        child: ProfileTranscript(
-          key: ValueKey((
-            chat.key,
-            _activeFindResult(chat)?.page.offset,
-            _activeFindResult(chat)?.rowId,
-          )),
-          chat: chat,
-          controller: controller,
-          messageBuilder: (message) => _answer(
-            chat,
-            message,
-            allowSavedActions: _activeFindResult(chat) == null,
-          ),
-          nearbyMessages: _activeFindResult(chat)?.page.rows,
-          focusedMessageId: _activeFindResult(chat)?.rowId,
-          onBackToLatest: _activeFindResult(chat) == null
-              ? null
-              : _backToLatest,
-          beforeActivity: [
-            if (chat.streaming.isNotEmpty)
-              ProfileMessage(
-                message: {'role': 'assistant', 'content': chat.streaming},
-                streaming: true,
-              ),
-          ],
-          liveToolCount: chat.toolActivities.length,
-          currentActivity: [
-            if (chat.tool != null &&
-                !chat.toolActivities.any((activity) => !activity.isTerminal))
-              ProfileTranscriptDisclosure(
-                icon: Icons.terminal_rounded,
-                label: 'Using ${chat.tool!}',
-                children: const [Text('Running on the connected Hermes host')],
-              ),
-            if (chat.toolActivities.isNotEmpty)
-              ProfileLiveToolActivity(activities: chat.toolActivities),
-          ],
-          activityTabs: [
-            if (chat.todos.isNotEmpty)
-              ProfileActivityTab(
-                id: 'tasks',
-                label:
-                    'Tasks ${chat.todos.where((todo) => todo.status == GatewayTodoStatus.completed).length}/${chat.todos.length}',
-                child: ProfileTodoPanel(todos: chat.todos, embedded: true),
-              ),
-            if (chat.subagents.isNotEmpty)
-              ProfileActivityTab(
-                id: 'agents',
-                label:
-                    'Agents ${chat.subagents.where((agent) => !agent.isTerminal).length}/${chat.subagents.length}',
-                onSelected: () => unawaited(controller.refreshSubagents(chat)),
-                child: ProfileSubagentPanel(
-                  key: ValueKey(('subagents', chat.key)),
-                  controller: controller,
-                  chat: chat,
-                  embedded: true,
+  Widget _chat(ProfileChat chat, BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => Column(
+      children: [
+        Expanded(
+          child: ProfileTranscript(
+            key: ValueKey((
+              chat.key,
+              _activeFindResult(chat)?.page.offset,
+              _activeFindResult(chat)?.rowId,
+            )),
+            chat: chat,
+            controller: controller,
+            messageBuilder: (message) => _answer(
+              chat,
+              message,
+              allowSavedActions: _activeFindResult(chat) == null,
+            ),
+            nearbyMessages: _activeFindResult(chat)?.page.rows,
+            focusedMessageId: _activeFindResult(chat)?.rowId,
+            onBackToLatest: _activeFindResult(chat) == null
+                ? null
+                : _backToLatest,
+            beforeActivity: [
+              if (chat.streaming.isNotEmpty)
+                ProfileMessage(
+                  message: {'role': 'assistant', 'content': chat.streaming},
+                  streaming: true,
                 ),
-              ),
-            if (chat.sessionControl?.goal != null ||
-                chat.sessionControl?.loop != null ||
-                chat.sessionControl?.heartbeat != null ||
-                chat.processes.isNotEmpty)
-              ProfileActivityTab(
-                id: 'work',
-                label: 'Work',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (chat.sessionControl?.goal != null)
-                      ProfileGoalPanel(
-                        key: ValueKey(('goal', chat.key)),
-                        controller: controller,
-                        chat: chat,
-                      ),
-                    if (chat.sessionControl?.loop != null ||
-                        chat.sessionControl?.heartbeat != null ||
-                        chat.processes.isNotEmpty)
-                      ProfileBackgroundWorkPanel(
-                        key: ValueKey(('background', chat.key)),
-                        controller: controller,
-                        chat: chat,
-                      ),
+            ],
+            liveToolCount: chat.toolActivities.length,
+            currentActivity: [
+              if (chat.tool != null &&
+                  !chat.toolActivities.any((activity) => !activity.isTerminal))
+                ProfileTranscriptDisclosure(
+                  icon: Icons.terminal_rounded,
+                  label: 'Using ${chat.tool!}',
+                  children: const [
+                    Text('Running on the connected Hermes host'),
                   ],
                 ),
-              ),
-          ],
-          activityThinking: chat.reasoning.isEmpty
-              ? null
-              : ProfileReasoningDisclosure(
-                  text: chat.reasoning,
-                  running: chat.busy,
+              if (chat.toolActivities.isNotEmpty)
+                ProfileLiveToolActivity(activities: chat.toolActivities),
+            ],
+            activityTabs: [
+              if (chat.todos.isNotEmpty)
+                ProfileActivityTab(
+                  id: 'tasks',
+                  label:
+                      'Tasks ${chat.todos.where((todo) => todo.status == GatewayTodoStatus.completed).length}/${chat.todos.length}',
+                  child: ProfileTodoPanel(todos: chat.todos, embedded: true),
                 ),
-          tail: [
-            if (chat.error != null)
-              Text(
-                chat.error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            if (chat.status == ProfileTurnStatus.reconnecting)
-              TextButton(
-                onPressed: () =>
-                    _run(() => controller.reconnect(chat.key.workspace)),
-                child: const Text('Reconnect and check history'),
-              ),
-            if (chat.approval != null)
-              Builder(
-                builder: (context) {
-                  final approval = GatewayApprovalRequest.fromEventData(
-                    chat.approval!,
-                  );
-                  return Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Approval needed'),
-                          SelectableText(
-                            chat.approval!['command']?.toString() ??
-                                chat.approval!['description']?.toString() ??
-                                'The agent needs permission to continue.',
-                          ),
-                          Wrap(
-                            spacing: 8,
-                            children: [
-                              for (final choice in approval.choices)
-                                choice == GatewayApprovalChoice.deny
-                                    ? OutlinedButton(
-                                        onPressed: chat.approvalResponding
-                                            ? null
-                                            : () => _run(
-                                                () => controller.approve(
-                                                  chat,
-                                                  choice.wireValue,
-                                                ),
-                                              ),
-                                        child: const Text('Deny'),
-                                      )
-                                    : FilledButton(
-                                        onPressed: chat.approvalResponding
-                                            ? null
-                                            : () => _run(
-                                                () => controller.approve(
-                                                  chat,
-                                                  choice.wireValue,
-                                                ),
-                                              ),
-                                        child: Text(switch (choice) {
-                                          GatewayApprovalChoice.once =>
-                                            'Allow once',
-                                          GatewayApprovalChoice.session =>
-                                            'Allow for session',
-                                          GatewayApprovalChoice.always =>
-                                            'Always allow',
-                                          GatewayApprovalChoice.deny => 'Deny',
-                                        }),
-                                      ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            if (chat.sensitivePrompt != null)
-              Builder(
-                builder: (context) {
-                  final request = chat.sensitivePrompt!;
-                  return GatewaySensitivePromptPanel(
-                    key: ValueKey((chat.key, request.kind, request.requestId)),
-                    request: request,
-                    enabled:
-                        !chat.sensitivePromptResponding &&
-                        chat.status != ProfileTurnStatus.reconnecting,
-                    onRespond: (value) => controller.respondSensitivePrompt(
-                      chat,
-                      value,
-                      expectedRequest: request,
-                    ),
-                  );
-                },
-              ),
-            for (final output in chat.commandOutput.where(
-              (output) => output.trim() != 'Steering message queued.',
-            ))
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: SelectableText(output),
-              ),
-            for (final delivery in chat.sideQuestionDeliveries)
-              SideQuestionDeliveryCard(
-                key: ValueKey((
-                  chat.key,
-                  delivery.kind,
-                  delivery.taskId,
-                  delivery.state,
-                )),
-                delivery: delivery,
-              ),
-            if (chat.pendingQuestion != null) _questionPanel(chat),
-          ],
-        ),
-      ),
-      if (!chat.commandRunning)
-        SlashCommandSuggestions(
-          key: ValueKey(chat.key),
-          controller: controller,
-          chat: chat,
-          composer: _composer,
-        ),
-      if (chat.commandRunning) const LinearProgressIndicator(),
-      ProfileActivityStatus(
-        key: const ValueKey('profile-activity-status'),
-        chat: chat,
-      ),
-      ProfileQueuedMessages(
-        key: ValueKey(('queued-messages', chat.key)),
-        chat: chat,
-        onOpenActions: _hasMessageActions(chat)
-            ? () => _showBusyActions(chat, context)
-            : null,
-      ),
-      SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-          child: DecoratedBox(
-            key: const ValueKey('conversation-composer'),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: Theme.of(context).colorScheme.outlineVariant,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 20,
-                  offset: const Offset(0, 6),
+              if (chat.subagents.isNotEmpty)
+                ProfileActivityTab(
+                  id: 'agents',
+                  label:
+                      'Agents ${chat.subagents.where((agent) => !agent.isTerminal).length}/${chat.subagents.length}',
+                  onSelected: () =>
+                      unawaited(controller.refreshSubagents(chat)),
+                  child: ProfileSubagentPanel(
+                    key: ValueKey(('subagents', chat.key)),
+                    controller: controller,
+                    chat: chat,
+                    embedded: true,
+                  ),
                 ),
-              ],
-            ),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(6),
+              if (chat.sessionControl?.goal != null ||
+                  chat.sessionControl?.loop != null ||
+                  chat.sessionControl?.heartbeat != null ||
+                  chat.processes.isNotEmpty)
+                ProfileActivityTab(
+                  id: 'work',
+                  label: 'Work',
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (chat.attachments.isNotEmpty)
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              for (final file in chat.attachments)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                  ),
-                                  child: InputChip(
-                                    avatar: file.error == null
-                                        ? null
-                                        : Tooltip(
-                                            message: file.error!,
-                                            child: const Icon(
-                                              Icons.warning_amber_rounded,
-                                              size: 18,
-                                            ),
-                                          ),
-                                    label: ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        maxWidth: 180,
-                                      ),
-                                      child: Text(
-                                        file.name,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    onDeleted:
-                                        !controller.canRemoveAttachment(
-                                              chat,
-                                              file,
-                                            ) ||
-                                            chat.changingAnswer ||
-                                            chat.commandRunning ||
-                                            controller.switching
-                                        ? null
-                                        : () => _run(
-                                            () => controller.removeAttachment(
-                                              chat,
-                                              file,
-                                            ),
-                                          ),
-                                  ),
-                                ),
-                            ],
-                          ),
+                      if (chat.sessionControl?.goal != null)
+                        ProfileGoalPanel(
+                          key: ValueKey(('goal', chat.key)),
+                          controller: controller,
+                          chat: chat,
                         ),
-                      TextField(
-                        key: const Key('profile-message-composer'),
-                        controller: _composer,
-                        enabled: !chat.commandRunning,
-                        minLines: 1,
-                        maxLines: 5,
-                        keyboardType: TextInputType.multiline,
-                        textInputAction: TextInputAction.newline,
-                        onChanged: (value) {
-                          unawaited(
-                            controller.updateDraft(chat, value).catchError((_) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'This draft could not be saved on the device.',
-                                    ),
-                                  ),
-                                );
-                              }
-                            }),
-                          );
-                          setState(() {});
-                        },
-                        decoration: InputDecoration(
-                          isDense: true,
-                          hintMaxLines: 1,
-                          hintText: chat.busy
-                              ? 'Draft your next message'
-                              : 'Message Hermes or type /',
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          filled: false,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 12,
-                          ),
+                      if (chat.sessionControl?.loop != null ||
+                          chat.sessionControl?.heartbeat != null ||
+                          chat.processes.isNotEmpty)
+                        ProfileBackgroundWorkPanel(
+                          key: ValueKey(('background', chat.key)),
+                          controller: controller,
+                          chat: chat,
                         ),
-                      ),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          IconButton(
-                            tooltip: 'Attach file',
-                            style: IconButton.styleFrom(
-                              minimumSize: const Size(48, 48),
-                            ),
-                            icon: const Icon(Icons.add),
-                            onPressed:
-                                !controller.canAddAttachment(chat) ||
-                                    chat.changingAnswer ||
-                                    chat.commandRunning ||
-                                    controller.switching ||
-                                    _launchingCamera
-                                ? null
-                                : () => _run(() async {
-                                    final target = chat.key;
-                                    final choice =
-                                        await showModalBottomSheet<
-                                          _AttachmentChoice
-                                        >(
-                                          context: context,
-                                          showDragHandle: true,
-                                          builder: (context) => SafeArea(
-                                            child: Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                ListTile(
-                                                  leading: const Icon(
-                                                    Icons.camera_alt_outlined,
-                                                  ),
-                                                  title: const Text('Camera'),
-                                                  enabled:
-                                                      widget.onCapturePhoto !=
-                                                      null,
-                                                  onTap:
-                                                      widget.onCapturePhoto ==
-                                                          null
-                                                      ? null
-                                                      : () => Navigator.pop(
-                                                          context,
-                                                          _AttachmentChoice
-                                                              .camera,
-                                                        ),
-                                                ),
-                                                ListTile(
-                                                  leading: const Icon(
-                                                    Icons
-                                                        .photo_library_outlined,
-                                                  ),
-                                                  title: const Text('Photos'),
-                                                  onTap: () => Navigator.pop(
-                                                    context,
-                                                    _AttachmentChoice.photos,
-                                                  ),
-                                                ),
-                                                ListTile(
-                                                  leading: const Icon(
-                                                    Icons
-                                                        .insert_drive_file_outlined,
-                                                  ),
-                                                  title: const Text('Files'),
-                                                  onTap: () => Navigator.pop(
-                                                    context,
-                                                    _AttachmentChoice.files,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        );
-                                    if (choice == null) {
-                                      return;
-                                    }
-                                    if (choice == _AttachmentChoice.camera) {
-                                      if (_launchingCamera) {
-                                        return;
-                                      }
-                                      setState(() => _launchingCamera = true);
-                                      try {
-                                        await widget.onCapturePhoto!(target);
-                                      } finally {
-                                        if (mounted) {
-                                          setState(
-                                            () => _launchingCamera = false,
-                                          );
-                                        }
-                                      }
-                                      return;
-                                    }
-                                    final type =
-                                        choice == _AttachmentChoice.photos
-                                        ? FileType.image
-                                        : FileType.any;
-                                    final result = await FilePicker.platform
-                                        .pickFiles(type: type);
-                                    final file = result?.files.single;
-                                    if (file?.path != null) {
-                                      await controller.addAttachment(
-                                        chat,
-                                        file!.path!,
-                                        file.name,
-                                      );
-                                    }
-                                  }),
-                          ),
-                          Expanded(
-                            child: Align(
-                              alignment: Alignment.centerRight,
-                              child: ChatIntelligenceButton(
-                                model: chat.model ?? 'Model',
-                                reasoningEffort:
-                                    chat.reasoningEffort ?? 'default',
-                                loading:
-                                    _loadingIntelligence == chat.key ||
-                                    chat.changingIntelligence,
-                                onPressed:
-                                    chat.busy ||
-                                        chat.changingAnswer ||
-                                        chat.commandRunning ||
-                                        controller.switching ||
-                                        chat.changingIntelligence ||
-                                        _loadingIntelligence != null
-                                    ? null
-                                    : () => _run(
-                                        () =>
-                                            _chooseIntelligence(chat, context),
-                                      ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          if (_hasMessageActions(chat))
-                            IconButton(
-                              tooltip: 'Message actions',
-                              icon: Badge(
-                                isLabelVisible: chat.queuedPrompts.isNotEmpty,
-                                label: Text('${chat.queuedPrompts.length}'),
-                                child: const Icon(Icons.more_horiz),
-                              ),
-                              onPressed: () => _showBusyActions(chat, context),
-                            ),
-                          Semantics(
-                            container: true,
-                            hint:
-                                chat.queuedPrompts.isNotEmpty ||
-                                    (chat.busy &&
-                                        (chat.draft.trim().isNotEmpty ||
-                                            chat.attachments.isNotEmpty) &&
-                                        !chat.draft.trimLeft().startsWith('/'))
-                                ? 'Long press for message actions'
-                                : null,
-                            child: GestureDetector(
-                              onLongPress:
-                                  chat.queuedPrompts.isNotEmpty ||
-                                      (chat.busy &&
-                                          (chat.draft.trim().isNotEmpty ||
-                                              chat.attachments.isNotEmpty) &&
-                                          !chat.draft.trimLeft().startsWith(
-                                            '/',
-                                          ))
-                                  ? () => _showBusyActions(chat, context)
-                                  : null,
-                              child: IconButton.filled(
-                                style: IconButton.styleFrom(
-                                  minimumSize: const Size(48, 48),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                                tooltip:
-                                    chat.busy &&
-                                        !chat.draft.trimLeft().startsWith('/')
-                                    ? 'Stop'
-                                    : 'Send',
-                                icon: Icon(
-                                  chat.busy &&
-                                          !chat.draft.trimLeft().startsWith('/')
-                                      ? Icons.stop
-                                      : Icons.arrow_upward,
-                                ),
-                                onPressed:
-                                    controller.switching ||
-                                        chat.changingAnswer ||
-                                        chat.commandRunning ||
-                                        chat.changingIntelligence ||
-                                        (!chat.busy &&
-                                            chat.draft.trim().isEmpty &&
-                                            chat.attachments.isEmpty)
-                                    ? null
-                                    : () => _run(
-                                        () =>
-                                            chat.busy &&
-                                                !chat.draft
-                                                    .trimLeft()
-                                                    .startsWith('/')
-                                            ? controller.stop(chat)
-                                            : controller.send(chat),
-                                      ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                 ),
-                Positioned(
-                  top: -4,
-                  left: 24,
-                  right: 24,
-                  child: ContextFuse(occupancy: chat.context),
+            ],
+            activityThinking: chat.reasoning.isEmpty
+                ? null
+                : ProfileReasoningDisclosure(
+                    text: chat.reasoning,
+                    running: chat.busy,
+                  ),
+            tail: [
+              if (chat.error != null)
+                Text(
+                  chat.error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              if (chat.status == ProfileTurnStatus.reconnecting)
+                TextButton(
+                  onPressed: () =>
+                      _run(() => controller.reconnect(chat.key.workspace)),
+                  child: const Text('Reconnect and check history'),
+                ),
+              if (chat.approval != null)
+                Builder(
+                  builder: (context) {
+                    final approval = GatewayApprovalRequest.fromEventData(
+                      chat.approval!,
+                    );
+                    return Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Approval needed'),
+                            SelectableText(
+                              chat.approval!['command']?.toString() ??
+                                  chat.approval!['description']?.toString() ??
+                                  'The agent needs permission to continue.',
+                            ),
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                for (final choice in approval.choices)
+                                  choice == GatewayApprovalChoice.deny
+                                      ? OutlinedButton(
+                                          onPressed: chat.approvalResponding
+                                              ? null
+                                              : () => _run(
+                                                  () => controller.approve(
+                                                    chat,
+                                                    choice.wireValue,
+                                                  ),
+                                                ),
+                                          child: const Text('Deny'),
+                                        )
+                                      : FilledButton(
+                                          onPressed: chat.approvalResponding
+                                              ? null
+                                              : () => _run(
+                                                  () => controller.approve(
+                                                    chat,
+                                                    choice.wireValue,
+                                                  ),
+                                                ),
+                                          child: Text(switch (choice) {
+                                            GatewayApprovalChoice.once =>
+                                              'Allow once',
+                                            GatewayApprovalChoice.session =>
+                                              'Allow for session',
+                                            GatewayApprovalChoice.always =>
+                                              'Always allow',
+                                            GatewayApprovalChoice.deny =>
+                                              'Deny',
+                                          }),
+                                        ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              if (chat.sensitivePrompt != null)
+                Builder(
+                  builder: (context) {
+                    final request = chat.sensitivePrompt!;
+                    return GatewaySensitivePromptPanel(
+                      key: ValueKey((
+                        chat.key,
+                        request.kind,
+                        request.requestId,
+                      )),
+                      request: request,
+                      enabled:
+                          !chat.sensitivePromptResponding &&
+                          chat.status != ProfileTurnStatus.reconnecting,
+                      onRespond: (value) => controller.respondSensitivePrompt(
+                        chat,
+                        value,
+                        expectedRequest: request,
+                      ),
+                    );
+                  },
+                ),
+              for (final output in chat.commandOutput.where(
+                (output) => output.trim() != 'Steering message queued.',
+              ))
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: SelectableText(output),
+                ),
+              for (final delivery in chat.sideQuestionDeliveries)
+                SideQuestionDeliveryCard(
+                  key: ValueKey((
+                    chat.key,
+                    delivery.kind,
+                    delivery.taskId,
+                    delivery.state,
+                  )),
+                  delivery: delivery,
+                ),
+              if (chat.pendingQuestion != null) _questionPanel(chat),
+            ],
+          ),
+        ),
+        ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: constraints.maxHeight * .8),
+          child: SingleChildScrollView(
+            reverse: true,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!chat.commandRunning && chat.editingQueuedPrompt == null)
+                  SlashCommandSuggestions(
+                    key: ValueKey(chat.key),
+                    controller: controller,
+                    chat: chat,
+                    composer: _composer,
+                  ),
+                if (chat.commandRunning) const LinearProgressIndicator(),
+                ProfileActivityStatus(
+                  key: const ValueKey('profile-activity-status'),
+                  chat: chat,
+                ),
+                ProfileQueuedMessages(
+                  key: ValueKey(('queued-messages', chat.key)),
+                  chat: chat,
+                  onOpenActions: _hasMessageActions(chat)
+                      ? () => _showBusyActions(chat, context)
+                      : null,
+                  onEdit:
+                      chat.queueMutating || chat.queueDraining || chat.steering
+                      ? null
+                      : (prompt) => _beginQueuedEdit(chat, prompt),
+                  onDelete: chat.queueMutating || chat.steering
+                      ? null
+                      : (prompt) => _deleteQueuedPrompt(chat, prompt),
+                ),
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+                    child: DecoratedBox(
+                      key: const ValueKey('conversation-composer'),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 20,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (chat.editingQueuedPrompt != null)
+                                  Row(
+                                    children: [
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          'Editing queued message',
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.labelMedium,
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed:
+                                            chat.queueMutating || chat.steering
+                                            ? null
+                                            : () => _run(
+                                                () => controller
+                                                    .cancelQueuedPromptEdit(
+                                                      chat,
+                                                    ),
+                                              ),
+                                        child: const Text('Cancel'),
+                                      ),
+                                    ],
+                                  ),
+                                if ((chat.editingQueuedPrompt?.attachments ??
+                                        chat.attachments)
+                                    .isNotEmpty)
+                                  SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      children: [
+                                        for (final file
+                                            in chat
+                                                    .editingQueuedPrompt
+                                                    ?.attachments ??
+                                                chat.attachments)
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 4,
+                                            ),
+                                            child: InputChip(
+                                              avatar: file.error == null
+                                                  ? null
+                                                  : Tooltip(
+                                                      message: file.error!,
+                                                      child: const Icon(
+                                                        Icons
+                                                            .warning_amber_rounded,
+                                                        size: 18,
+                                                      ),
+                                                    ),
+                                              label: ConstrainedBox(
+                                                constraints:
+                                                    const BoxConstraints(
+                                                      maxWidth: 180,
+                                                    ),
+                                                child: Text(
+                                                  file.name,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              onDeleted:
+                                                  chat.editingQueuedPrompt !=
+                                                          null ||
+                                                      !controller
+                                                          .canRemoveAttachment(
+                                                            chat,
+                                                            file,
+                                                          ) ||
+                                                      chat.changingAnswer ||
+                                                      chat.commandRunning ||
+                                                      controller.switching
+                                                  ? null
+                                                  : () => _run(
+                                                      () => controller
+                                                          .removeAttachment(
+                                                            chat,
+                                                            file,
+                                                          ),
+                                                    ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                TextField(
+                                  key: const Key('profile-message-composer'),
+                                  controller: _composer,
+                                  focusNode: _composerFocus,
+                                  enabled:
+                                      !chat.commandRunning &&
+                                      !(chat.editingQueuedPrompt != null &&
+                                          (chat.queueMutating ||
+                                              chat.steering)),
+                                  minLines: 1,
+                                  maxLines: 5,
+                                  keyboardType: TextInputType.multiline,
+                                  textInputAction: TextInputAction.newline,
+                                  onChanged: (value) {
+                                    if (chat.editingQueuedPrompt != null) {
+                                      _queuedEditErrors.remove(chat.key);
+                                      controller.updateQueuedPromptEdit(
+                                        chat,
+                                        value,
+                                      );
+                                      return;
+                                    }
+                                    unawaited(
+                                      controller
+                                          .updateDraft(chat, value)
+                                          .catchError((_) {
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'This draft could not be saved on the device.',
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                          }),
+                                    );
+                                    setState(() {});
+                                  },
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    hintMaxLines: 1,
+                                    hintText: chat.editingQueuedPrompt != null
+                                        ? 'Edit queued message'
+                                        : chat.busy
+                                        ? 'Draft your next message'
+                                        : 'Message Hermes or type /',
+                                    border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                    filled: false,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                ),
+                                if (chat.editingQueuedPrompt != null)
+                                  _queuedEditActions(chat)
+                                else
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      IconButton(
+                                        tooltip: 'Attach file',
+                                        style: IconButton.styleFrom(
+                                          minimumSize: const Size(48, 48),
+                                        ),
+                                        icon: const Icon(Icons.add),
+                                        onPressed:
+                                            !controller.canAddAttachment(
+                                                  chat,
+                                                ) ||
+                                                chat.changingAnswer ||
+                                                chat.commandRunning ||
+                                                controller.switching ||
+                                                _launchingCamera
+                                            ? null
+                                            : () => _run(() async {
+                                                final target = chat.key;
+                                                final choice = await showModalBottomSheet<_AttachmentChoice>(
+                                                  context: context,
+                                                  showDragHandle: true,
+                                                  builder: (context) => SafeArea(
+                                                    child: Column(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        ListTile(
+                                                          leading: const Icon(
+                                                            Icons
+                                                                .camera_alt_outlined,
+                                                          ),
+                                                          title: const Text(
+                                                            'Camera',
+                                                          ),
+                                                          enabled:
+                                                              widget
+                                                                  .onCapturePhoto !=
+                                                              null,
+                                                          onTap:
+                                                              widget.onCapturePhoto ==
+                                                                  null
+                                                              ? null
+                                                              : () => Navigator.pop(
+                                                                  context,
+                                                                  _AttachmentChoice
+                                                                      .camera,
+                                                                ),
+                                                        ),
+                                                        ListTile(
+                                                          leading: const Icon(
+                                                            Icons
+                                                                .photo_library_outlined,
+                                                          ),
+                                                          title: const Text(
+                                                            'Photos',
+                                                          ),
+                                                          onTap: () =>
+                                                              Navigator.pop(
+                                                                context,
+                                                                _AttachmentChoice
+                                                                    .photos,
+                                                              ),
+                                                        ),
+                                                        ListTile(
+                                                          leading: const Icon(
+                                                            Icons
+                                                                .insert_drive_file_outlined,
+                                                          ),
+                                                          title: const Text(
+                                                            'Files',
+                                                          ),
+                                                          onTap: () =>
+                                                              Navigator.pop(
+                                                                context,
+                                                                _AttachmentChoice
+                                                                    .files,
+                                                              ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                );
+                                                if (choice == null) {
+                                                  return;
+                                                }
+                                                if (choice ==
+                                                    _AttachmentChoice.camera) {
+                                                  if (_launchingCamera) {
+                                                    return;
+                                                  }
+                                                  setState(
+                                                    () =>
+                                                        _launchingCamera = true,
+                                                  );
+                                                  try {
+                                                    await widget
+                                                        .onCapturePhoto!(
+                                                      target,
+                                                    );
+                                                  } finally {
+                                                    if (mounted) {
+                                                      setState(
+                                                        () => _launchingCamera =
+                                                            false,
+                                                      );
+                                                    }
+                                                  }
+                                                  return;
+                                                }
+                                                final type =
+                                                    choice ==
+                                                        _AttachmentChoice.photos
+                                                    ? FileType.image
+                                                    : FileType.any;
+                                                final result = await FilePicker
+                                                    .platform
+                                                    .pickFiles(type: type);
+                                                final file =
+                                                    result?.files.single;
+                                                if (file?.path != null) {
+                                                  await controller
+                                                      .addAttachment(
+                                                        chat,
+                                                        file!.path!,
+                                                        file.name,
+                                                      );
+                                                }
+                                              }),
+                                      ),
+                                      Expanded(
+                                        child: Align(
+                                          alignment: Alignment.centerRight,
+                                          child: ChatIntelligenceButton(
+                                            model: chat.model ?? 'Model',
+                                            reasoningEffort:
+                                                chat.reasoningEffort ??
+                                                'default',
+                                            loading:
+                                                _loadingIntelligence ==
+                                                    chat.key ||
+                                                chat.changingIntelligence,
+                                            onPressed:
+                                                chat.busy ||
+                                                    chat.changingAnswer ||
+                                                    chat.commandRunning ||
+                                                    controller.switching ||
+                                                    chat.changingIntelligence ||
+                                                    _loadingIntelligence != null
+                                                ? null
+                                                : () => _run(
+                                                    () => _chooseIntelligence(
+                                                      chat,
+                                                      context,
+                                                    ),
+                                                  ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      if (_hasMessageActions(chat))
+                                        IconButton(
+                                          tooltip: 'Message actions',
+                                          icon: Badge(
+                                            isLabelVisible:
+                                                chat.queuedPrompts.isNotEmpty,
+                                            label: Text(
+                                              '${chat.queuedPrompts.length}',
+                                            ),
+                                            child: const Icon(Icons.more_horiz),
+                                          ),
+                                          onPressed: () =>
+                                              _showBusyActions(chat, context),
+                                        ),
+                                      Semantics(
+                                        container: true,
+                                        hint:
+                                            chat.queuedPrompts.isNotEmpty ||
+                                                (chat.busy &&
+                                                    (chat.draft
+                                                            .trim()
+                                                            .isNotEmpty ||
+                                                        chat
+                                                            .attachments
+                                                            .isNotEmpty) &&
+                                                    !chat.draft
+                                                        .trimLeft()
+                                                        .startsWith('/'))
+                                            ? 'Long press for message actions'
+                                            : null,
+                                        child: GestureDetector(
+                                          onLongPress:
+                                              chat.queuedPrompts.isNotEmpty ||
+                                                  (chat.busy &&
+                                                      (chat.draft
+                                                              .trim()
+                                                              .isNotEmpty ||
+                                                          chat
+                                                              .attachments
+                                                              .isNotEmpty) &&
+                                                      !chat.draft
+                                                          .trimLeft()
+                                                          .startsWith('/'))
+                                              ? () => _showBusyActions(
+                                                  chat,
+                                                  context,
+                                                )
+                                              : null,
+                                          child: IconButton.filled(
+                                            style: IconButton.styleFrom(
+                                              minimumSize: const Size(48, 48),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
+                                              ),
+                                            ),
+                                            tooltip:
+                                                chat.busy &&
+                                                    !chat.draft
+                                                        .trimLeft()
+                                                        .startsWith('/')
+                                                ? 'Stop'
+                                                : 'Send',
+                                            icon: Icon(
+                                              chat.busy &&
+                                                      !chat.draft
+                                                          .trimLeft()
+                                                          .startsWith('/')
+                                                  ? Icons.stop
+                                                  : Icons.arrow_upward,
+                                            ),
+                                            onPressed:
+                                                controller.switching ||
+                                                    chat.changingAnswer ||
+                                                    chat.commandRunning ||
+                                                    chat.changingIntelligence ||
+                                                    (!chat.busy &&
+                                                        chat.draft
+                                                            .trim()
+                                                            .isEmpty &&
+                                                        chat
+                                                            .attachments
+                                                            .isEmpty)
+                                                ? null
+                                                : () => _run(
+                                                    () =>
+                                                        chat.busy &&
+                                                            !chat.draft
+                                                                .trimLeft()
+                                                                .startsWith('/')
+                                                        ? controller.stop(chat)
+                                                        : controller.send(chat),
+                                                  ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Positioned(
+                            top: -4,
+                            left: 24,
+                            right: 24,
+                            child: ContextFuse(occupancy: chat.context),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
         ),
-      ),
-    ],
+      ],
+    ),
   );
 
   Future<void> _chooseIntelligence(
@@ -1276,6 +1432,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       );
 
   bool _hasMessageActions(ProfileChat chat) =>
+      chat.editingQueuedPrompt == null &&
       !controller.switching &&
       !chat.commandRunning &&
       !chat.changingAnswer &&
@@ -1287,76 +1444,149 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               (chat.draft.trim().isNotEmpty || chat.attachments.isNotEmpty) &&
               !chat.draft.trimLeft().startsWith('/')));
 
-  Future<void> _showQueuedPromptActions(
+  Future<void> _beginQueuedEdit(ProfileChat chat, QueuedPromptDraft prompt) =>
+      _run(() async {
+        _queuedEditErrors.remove(chat.key);
+        await controller.beginQueuedPromptEdit(chat, prompt);
+        if (mounted && controller.current?.chat == chat) {
+          _composerFocus.requestFocus();
+        }
+      });
+
+  Future<void> _runQueuedEdit(
     ProfileChat chat,
-    int index,
+    Future<void> Function() action,
+  ) async {
+    setState(() => _queuedEditErrors.remove(chat.key));
+    try {
+      await action();
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _queuedEditErrors[chat.key] = switch (error) {
+            StateError error => error.message.toString(),
+            FormatException error => error.message,
+            _ => error.toString(),
+          },
+        );
+      }
+    }
+  }
+
+  Widget _queuedEditActions(ProfileChat chat) {
+    final text = chat.queuedEditText.trim();
+    final prompt = chat.editingQueuedPrompt!;
+    final saving = chat.queueMutating || chat.steering || controller.switching;
+    final valid =
+        !text.startsWith('/') &&
+        (text.isNotEmpty || prompt.attachments.isNotEmpty);
+    final canSteer =
+        valid &&
+        text.isNotEmpty &&
+        prompt.attachments.isEmpty &&
+        {
+          ProfileTurnStatus.running,
+          ProfileTurnStatus.attention,
+        }.contains(chat.status);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_queuedEditErrors[chat.key] case final error?)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                error,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          if (prompt.attachments.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                'Steer supports text only.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: saving || !canSteer
+                      ? null
+                      : () => _runQueuedEdit(chat, () async {
+                          final accepted = await controller
+                              .steerQueuedPromptEdit(chat);
+                          if (!accepted) {
+                            throw StateError(
+                              'Hermes rejected the steering message.',
+                            );
+                          }
+                        }),
+                  icon: const Icon(Icons.alt_route, size: 18),
+                  label: const Text('Steer'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: saving || !valid
+                      ? null
+                      : () => _runQueuedEdit(
+                          chat,
+                          () => controller.saveQueuedPromptEdit(chat),
+                        ),
+                  icon: const Icon(Icons.keyboard_return, size: 18),
+                  label: Text(saving ? 'Saving...' : 'Queue'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteQueuedPrompt(
+    ProfileChat chat,
     QueuedPromptDraft prompt,
   ) async {
-    final action = await showDialog<String>(
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('Queued message'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, 'edit'),
-            child: const Text('Edit'),
+      builder: (context) => AlertDialog(
+        title: const Text('Delete queued instruction?'),
+        scrollable: true,
+        content: Text(
+          [
+            'Are you sure you want to delete this instruction?',
+            prompt.text,
+            ...prompt.attachments.map((attachment) => attachment.name),
+          ].where((part) => part.isNotEmpty).join('\n\n'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
           ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, 'delete'),
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(context, true),
             child: const Text('Delete'),
           ),
         ],
       ),
     );
-    if (!mounted) return;
-    if (action == 'edit') {
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => QueuedPromptEditor(
-          prompt: prompt,
-          onSave: (text) => controller.editQueuedPrompt(
-            chat,
-            index,
-            text,
-            expectedPrompt: prompt,
-          ),
+    if (confirmed == true && mounted) {
+      await _run(
+        () => controller.removeQueuedPrompt(
+          chat,
+          chat.queuedPrompts.indexOf(prompt),
+          expectedPrompt: prompt,
         ),
       );
-    } else if (action == 'delete') {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Delete queued message?'),
-          scrollable: true,
-          content: Text(
-            [
-              'This permanently removes the queued message and its attachments. This cannot be undone.',
-              prompt.text,
-              ...prompt.attachments.map((attachment) => attachment.name),
-            ].where((part) => part.isNotEmpty).join('\n\n'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed == true && mounted) {
-        await _run(
-          () => controller.removeQueuedPrompt(
-            chat,
-            index,
-            expectedPrompt: prompt,
-          ),
-        );
-      }
     }
   }
 
@@ -1451,11 +1681,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                           ? null
                           : () async {
                               Navigator.pop(sheetContext);
-                              await _showQueuedPromptActions(
-                                chat,
-                                entry.key,
-                                entry.value,
-                              );
+                              await _beginQueuedEdit(chat, entry.value);
                             },
                     ),
                   ),
