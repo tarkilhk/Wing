@@ -3987,6 +3987,53 @@ class ProfileWorkspaceController extends ChangeNotifier {
     await _drainQueuedPrompts(chat);
   }
 
+  Future<void> editQueuedPrompt(
+    ProfileChat chat,
+    int index,
+    String rawText, {
+    required QueuedPromptDraft expectedPrompt,
+  }) async {
+    _owned(chat);
+    if (chat._replacingExpiredRuntime ||
+        chat.queueDraining ||
+        chat.queueMutating ||
+        index < 0 ||
+        index >= chat.queuedPrompts.length ||
+        !identical(chat.queuedPrompts[index], expectedPrompt)) {
+      throw StateError('This queued message has changed. Reopen the queue.');
+    }
+    final text = rawText.trim();
+    if (text.startsWith('/') ||
+        (text.isEmpty && expectedPrompt.attachments.isEmpty)) {
+      throw StateError(
+        'Enter a message or keep an attachment. Slash commands cannot be queued.',
+      );
+    }
+    chat.queueMutating = true;
+    chat.queuedPrompts[index] = QueuedPromptDraft(
+      text: text,
+      attachments: expectedPrompt.attachments,
+    );
+    _changed();
+    try {
+      await _persistQueueMutation(chat);
+    } catch (_) {
+      chat.queuedPrompts[index] = expectedPrompt;
+      chat.queuePaused = true;
+      _changed();
+      try {
+        await _persistQueueMutation(chat);
+      } catch (_) {
+        chat.error = 'Queue paused. Unsent messages could not be saved.';
+      }
+      rethrow;
+    } finally {
+      chat.queueMutating = false;
+      _changed();
+    }
+    await _drainQueuedPrompts(chat);
+  }
+
   Future<void> removeQueuedPrompt(
     ProfileChat chat,
     int index, {

@@ -7,6 +7,8 @@ import '../services/profile_workspace_controller.dart';
 import '../services/remote_files_client.dart';
 import '../widgets/profile_message.dart';
 import '../widgets/profile_queued_messages.dart';
+import '../widgets/queued_prompt_editor.dart';
+import '../models/queued_prompt_draft.dart';
 import '../models/answer_versions.dart';
 import '../models/chat_output.dart';
 import '../widgets/answer_actions.dart';
@@ -1231,6 +1233,79 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               (chat.draft.trim().isNotEmpty || chat.attachments.isNotEmpty) &&
               !chat.draft.trimLeft().startsWith('/')));
 
+  Future<void> _showQueuedPromptActions(
+    ProfileChat chat,
+    int index,
+    QueuedPromptDraft prompt,
+  ) async {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Queued message'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'edit'),
+            child: const Text('Edit'),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'delete'),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'edit') {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => QueuedPromptEditor(
+          prompt: prompt,
+          onSave: (text) => controller.editQueuedPrompt(
+            chat,
+            index,
+            text,
+            expectedPrompt: prompt,
+          ),
+        ),
+      );
+    } else if (action == 'delete') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Delete queued message?'),
+          scrollable: true,
+          content: Text(
+            [
+              'This permanently removes the queued message and its attachments. This cannot be undone.',
+              prompt.text,
+              ...prompt.attachments.map((attachment) => attachment.name),
+            ].where((part) => part.isNotEmpty).join('\n\n'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true && mounted) {
+        await _run(
+          () => controller.removeQueuedPrompt(
+            chat,
+            index,
+            expectedPrompt: prompt,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _showBusyActions(ProfileChat chat, BuildContext context) async {
     if (!_hasMessageActions(chat)) return;
     final text = chat.draft.trim();
@@ -1307,9 +1382,9 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 if (chat.queuedPrompts.isNotEmpty)
                   ...chat.queuedPrompts.asMap().entries.map(
                     (entry) => ListTile(
-                      leading: const Icon(Icons.delete_outline),
+                      leading: const Icon(Icons.keyboard_return),
                       title: Text(
-                        'Remove queued: ${entry.value.text.isEmpty ? 'Attachment' : entry.value.text}',
+                        'Queued: ${entry.value.text.isEmpty ? 'Attachment' : entry.value.text}',
                       ),
                       subtitle: entry.value.attachments.isEmpty
                           ? null
@@ -1321,16 +1396,12 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                       onTap: chat.queueDraining || chat.queueMutating
                           ? null
                           : () async {
-                              await _run(
-                                () => controller.removeQueuedPrompt(
-                                  chat,
-                                  entry.key,
-                                  expectedPrompt: entry.value,
-                                ),
+                              Navigator.pop(sheetContext);
+                              await _showQueuedPromptActions(
+                                chat,
+                                entry.key,
+                                entry.value,
                               );
-                              if (sheetContext.mounted) {
-                                Navigator.pop(sheetContext);
-                              }
                             },
                     ),
                   ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/answer_versions.dart';
 import '../models/review_notice.dart';
 import 'profile_review_notice_card.dart';
+import 'profile_transcript_disclosure.dart';
 
 /// Shared disclosure for saved tool calls and current execution details.
 class ProfileActivitySection extends StatelessWidget {
@@ -17,19 +18,12 @@ class ProfileActivitySection extends StatelessWidget {
   final bool initiallyExpanded;
 
   @override
-  Widget build(BuildContext context) => ListTileTheme.merge(
-    minLeadingWidth: 24,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-    child: ExpansionTile(
-      initiallyExpanded: initiallyExpanded,
-      maintainState: true,
-      shape: const Border(),
-      collapsedShape: const Border(),
-      leading: const Icon(Icons.bolt_rounded, size: 20),
-      title: const Text('Activity'),
-      subtitle: subtitle,
-      children: children,
-    ),
+  Widget build(BuildContext context) => ProfileTranscriptDisclosure(
+    label: 'Activity',
+    icon: Icons.bolt_rounded,
+    summary: subtitle,
+    initiallyExpanded: initiallyExpanded,
+    children: children,
   );
 }
 
@@ -72,39 +66,36 @@ class ProfileToolActivitySection extends StatelessWidget {
         groups.any(
           (group) => group.any((message) => message['id'] == expandedMessageId),
         );
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: ProfileActivitySection(
-        initiallyExpanded: expanded,
-        subtitle: Text(
-          [
-            if (count > 0) '$count tool ${count == 1 ? 'call' : 'calls'}',
-            if (reviews > 0) '$reviews ${reviews == 1 ? 'review' : 'reviews'}',
-          ].join(' · '),
-        ),
-        children: [
-          for (final group in groups)
-            if (reviewMessageText(group.last) case final review?)
-              ProfileReviewNoticeRow(
-                key: group.last['id'] == expandedMessageId
-                    ? focusedMessageKey
-                    : null,
-                text: review,
-              )
-            else
-              ProfileToolActivity(
-                messages: group,
-                initiallyExpanded: group.any(
-                  (message) =>
-                      expandedMessageId != null &&
-                      message['id'] == expandedMessageId,
-                ),
-                focusedMessageId: expandedMessageId,
-                focusedMessageKey: focusedMessageKey,
-              ),
-          ...currentActivity,
-        ],
+    return ProfileActivitySection(
+      initiallyExpanded: expanded,
+      subtitle: Text(
+        [
+          if (count > 0) '$count tool ${count == 1 ? 'call' : 'calls'}',
+          if (reviews > 0) '$reviews ${reviews == 1 ? 'review' : 'reviews'}',
+        ].join(' · '),
       ),
+      children: [
+        for (final group in groups)
+          if (reviewMessageText(group.last) case final review?)
+            ProfileReviewNoticeRow(
+              key: group.last['id'] == expandedMessageId
+                  ? focusedMessageKey
+                  : null,
+              text: review,
+            )
+          else
+            ProfileToolActivity(
+              messages: group,
+              initiallyExpanded: group.any(
+                (message) =>
+                    expandedMessageId != null &&
+                    message['id'] == expandedMessageId,
+              ),
+              focusedMessageId: expandedMessageId,
+              focusedMessageKey: focusedMessageKey,
+            ),
+        ...currentActivity,
+      ],
     );
   }
 }

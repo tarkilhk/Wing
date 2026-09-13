@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/gateway_activity.dart';
 import '../models/gateway_todo.dart';
+import 'profile_transcript_disclosure.dart';
 
 class ProfileLiveToolActivity extends StatelessWidget {
   final List<GatewayToolActivity> activities;
@@ -101,13 +102,11 @@ class ProfileReasoningDisclosure extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => ExpansionTile(
+  Widget build(BuildContext context) => ProfileTranscriptDisclosure(
     key: const ValueKey('reasoning-disclosure'),
-    maintainState: true,
-    leading: Icon(running ? Icons.pending_outlined : Icons.psychology_outlined),
-    title: Text(running ? 'Thinking' : 'Thought'),
-    childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-    expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+    label: running ? 'Thinking' : 'Thought',
+    icon: running ? Icons.pending_outlined : Icons.psychology_outlined,
+    childrenPadding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
     children: [SelectableText(text)],
   );
 }

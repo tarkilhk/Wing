@@ -411,6 +411,71 @@ void main() {
     },
   );
 
+  test(
+    'editing keeps queue order, attachments and the separate draft on disk',
+    () async {
+      final file = await attachment('edit.txt');
+      chat.draft = 'Original';
+      chat.attachments.add(file);
+      await controller.queuePrompt(chat, 'Original');
+      await controller.queuePrompt(chat, 'Second');
+      await controller.updateDraft(chat, 'Separate draft');
+      await controller.editQueuedPrompt(
+        chat,
+        0,
+        'Updated',
+        expectedPrompt: chat.queuedPrompts.first,
+      );
+      expect(queuedTexts(), ['Updated', 'Second']);
+      expect(chat.queuedPrompts.first.attachments, [same(file)]);
+      expect(await File(file.cachedPath).exists(), isTrue);
+      final snapshot = (await saved())!;
+      expect(snapshot.text, 'Separate draft');
+      expect(snapshot.queuedPrompts.map((prompt) => prompt.text), [
+        'Updated',
+        'Second',
+      ]);
+      expect(
+        snapshot.queuedPrompts.first.attachments.single.cachedPath,
+        file.cachedPath,
+      );
+    },
+  );
+
+  test(
+    'failed queued edit restores the saved original and pauses the queue',
+    () async {
+      await controller.queuePrompt(chat, 'Original');
+      final original = chat.queuedPrompts.single;
+      draftStore.failNextWrite = true;
+      await expectLater(
+        controller.editQueuedPrompt(
+          chat,
+          0,
+          'Updated',
+          expectedPrompt: original,
+        ),
+        throwsStateError,
+      );
+      expect(chat.queuedPrompts.single, same(original));
+      expect(chat.queuePaused, isTrue);
+      expect(chat.queueMutating, isFalse);
+      expect((await saved())!.queuedPrompts.single.text, 'Original');
+    },
+  );
+
+  test('stale queued edit cannot overwrite another entry', () async {
+    await controller.queuePrompt(chat, 'Same');
+    await controller.queuePrompt(chat, 'Same');
+    final original = chat.queuedPrompts.first;
+    await controller.removeQueuedPrompt(chat, 0, expectedPrompt: original);
+    await expectLater(
+      controller.editQueuedPrompt(chat, 0, 'Updated', expectedPrompt: original),
+      throwsStateError,
+    );
+    expect(queuedTexts(), ['Same']);
+  });
+
   test('duplicate queued text is removed by entry identity', () async {
     await controller.queuePrompt(chat, 'Same');
     await controller.queuePrompt(chat, 'Same');

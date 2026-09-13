@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.31.20+2205] - 2026-09-14
+
+### Changed
+
+- Show Activity and Thought as compact metadata with lighter text, small icons and inline chevrons. Keep tool counts on the same line and remove excess padding between messages.
+- Offer Edit and Delete for queued messages. Editing preserves attachments, queue order and the separate composer draft; deleting requires confirmation.
+
+### Fixed
+
+- Reject stale queued-message edits and restore the original message if saving fails.
+
 ## [2.31.19+2204] - 2026-09-14
 
 ### Fixed
