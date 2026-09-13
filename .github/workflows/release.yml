@@ -39,6 +39,8 @@ jobs:
         with:
           flutter-version: '3.44.0'
           channel: 'stable'
+          cache: true
+          pub-cache: false # The dedicated dependency cache below owns pub packages.
 
       - name: Cache Flutter dependencies
         uses: actions/cache@v4

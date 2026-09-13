@@ -277,3 +277,30 @@ This was a source/configuration transition, not an unchanged-build timing, and
 was not used to claim a release-speed improvement. The sub-30-second source-edit
 APK target remains unmet. Phone hot-reload validation requires approval to
 replace the installed release app with the verified development APK.
+
+## Final committed-build validation
+
+Commit d4a77c0 passed the complete PR quality workflow after correcting two
+checks. The Android identity contract now sees an explicit ordinary Dev resource
+default before the guarded Personal override. The administration navigation test
+scrolls to Diagnostics, which moved below the viewport in the preceding feature
+commit. The nine affected tests passed locally; no check was disabled.
+
+The committed Personal development build took 109.93 seconds after the source
+and configuration transition. An unchanged repeat took 75.44 seconds. The same
+small title edit took 99.43 seconds with a 25-second Gradle JFR recording during
+part of that run; restoring the source and rebuilding without that recording
+took 76.73 seconds. All APK identity and signature checks passed. These later
+results prevent treating the earlier 61-second measurements as a reliable bound.
+The real source was restored, and no APK was installed on the phone.
+
+The short trace caught Gradle waiting for its Flutter child process, followed
+by file traversal and ZIP compression. It does not establish another dominant,
+safely removable Gradle phase. The source-edit APK target is still unmet.
+Evidence is in build/performance/committed-*.
+
+CI logs also showed roughly 54-62 seconds repeatedly spent setting up the same
+Flutter SDK. Both workflows now enable the action's SDK cache, with its pub
+cache disabled because the existing dedicated dependency cache owns that work.
+The first run must populate the SDK cache; a speedup is not yet measured.
+[Flutter action cache inputs](https://github.com/subosito/flutter-action/blob/v2/action.yaml).
