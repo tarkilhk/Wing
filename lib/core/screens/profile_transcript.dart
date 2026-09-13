@@ -10,6 +10,8 @@ class ProfileTranscript extends StatefulWidget {
   final ProfileWorkspaceController controller;
   final Widget Function(Map<String, dynamic>) messageBuilder;
   final List<Widget> tail;
+  final List<Widget> beforeActivity;
+  final List<Widget> currentActivity;
   final List<Map<String, dynamic>>? nearbyMessages;
   final int? focusedMessageId;
   final VoidCallback? onBackToLatest;
@@ -19,6 +21,8 @@ class ProfileTranscript extends StatefulWidget {
     required this.controller,
     required this.messageBuilder,
     required this.tail,
+    this.beforeActivity = const [],
+    this.currentActivity = const [],
     this.nearbyMessages,
     this.focusedMessageId,
     this.onBackToLatest,
@@ -188,8 +192,20 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   Widget build(BuildContext context) {
     if (widget.nearbyMessages != null) return _nearbyMessages(context);
     final chat = widget.chat;
-    final tail = widget.tail.reversed.toList();
     final rows = groupTranscriptSections(chat.messages).reversed.toList();
+    // Join adjacent saved calls and live work without crossing visible prose
+    // or hiding the latest review's standalone detail button.
+    final joinCurrentActivity =
+        widget.beforeActivity.isEmpty && rows.isNotEmpty && rows.first.isTool;
+    final tail = [
+      ...widget.beforeActivity,
+      if (widget.currentActivity.isNotEmpty && !joinCurrentActivity)
+        ProfileActivitySection(
+          key: ValueKey(('activity', chat.key)),
+          children: widget.currentActivity,
+        ),
+      ...widget.tail,
+    ].reversed.toList();
     final activeIds = chat.messages
         .where((r) => r['id'] != null)
         .map((r) => r['id'])
@@ -264,6 +280,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                           groups: section.groups,
                           showLatestReview:
                               rowIndex == 0 && chat.streaming.isEmpty,
+                          currentActivity: rowIndex == 0 && joinCurrentActivity
+                              ? widget.currentActivity
+                              : const [],
                         )
                       : widget.messageBuilder(row),
                 );

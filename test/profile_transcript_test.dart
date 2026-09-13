@@ -173,7 +173,7 @@ void main() {
     chat.messages = [tool(1), tool(2), row(3)];
     chat.nextHistoryOffset = null;
     await show(tester);
-    await tester.tap(find.text('Tool activity'));
+    await tester.tap(find.text('Activity'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('2 tool results'));
     await tester.pumpAndSettle();
@@ -214,13 +214,13 @@ void main() {
     ];
     chat.nextHistoryOffset = null;
     await show(tester);
-    expect(find.text('Tool activity'), findsOneWidget);
+    expect(find.text('Activity'), findsOneWidget);
     expect(find.text('3 tool calls'), findsOneWidget);
     expect(find.text('read_file'), findsNothing);
     expect(find.text('2 tool results'), findsNothing);
     expect(find.text('Message 5'), findsOneWidget);
 
-    await tester.tap(find.text('Tool activity'));
+    await tester.tap(find.text('Activity'));
     await tester.pumpAndSettle();
     expect(find.text('read_file'), findsOneWidget);
     expect(find.text('2 tool results'), findsOneWidget);
@@ -229,18 +229,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Read output'), findsOneWidget);
     expect(find.text('Patch output'), findsNothing);
-    await tester.tap(find.text('Tool activity'));
+    await tester.tap(find.text('Activity'));
     await tester.pumpAndSettle();
     expect(find.text('Read output'), findsNothing);
     expect(find.text('Message 5'), findsOneWidget);
 
-    await tester.tap(find.text('Tool activity'));
+    await tester.tap(find.text('Activity'));
     await tester.pumpAndSettle();
     expect(find.text('Read output'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     chat.historyScrollOffset = 0;
     await show(tester);
-    expect(find.text('Tool activity'), findsOneWidget);
+    expect(find.text('Activity'), findsOneWidget);
     expect(find.text('read_file'), findsNothing);
   });
 
@@ -258,7 +258,7 @@ void main() {
     ];
     chat.nextHistoryOffset = null;
     await show(tester);
-    expect(find.text('Tool activity'), findsNWidgets(2));
+    expect(find.text('Activity'), findsNWidgets(2));
     expect(find.text('30 tool calls'), findsOneWidget);
     expect(find.text('1 tool call'), findsOneWidget);
     expect(find.text('Tool result'), findsNothing);
@@ -277,7 +277,7 @@ void main() {
 
     await show(tester);
 
-    expect(find.text('Tool activity'), findsOneWidget);
+    expect(find.text('Activity'), findsOneWidget);
     expect(find.text('Unsaved tool output'), findsNothing);
   });
 

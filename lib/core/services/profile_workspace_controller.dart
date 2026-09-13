@@ -943,8 +943,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
           : refreshed.length;
       // The page limit counts raw rows. A running turn can fill it with tool
       // calls and empty assistant rows, hiding the conversation on reopen.
-      // Include the latest visible user prompt before offering older history.
-      while (chat.nextHistoryOffset != null &&
+      // Backfill such a page to its prompt; ordinary dialogue stays paginated.
+      final needsConversationContext = chat.messages.any(
+        (row) => row['role'] == 'tool',
+      );
+      while (needsConversationContext &&
+          chat.nextHistoryOffset != null &&
           !chat.messages.any(
             (row) => isAnswerPrompt(row) && !isHiddenAnswerMessage(row),
           )) {

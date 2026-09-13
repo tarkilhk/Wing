@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.31.17+2202] - 2026-09-14
+
+### Fixed
+
+- Group adjacent saved tool calls and current work inside one Activity disclosure, with tool details still accessible.
+- Load back to the latest user prompt when tool calls fill the first history page after reopening a chat.
+
 ## [2.31.16+2201] - 2026-09-14
 
 ### Fixed

@@ -269,17 +269,17 @@ void main() {
       chat.reasoning = 'Current private reasoning';
 
       await show(tester);
-      expect(find.text('Activity'), findsOneWidget);
+      expect(find.text('Activity'), findsNWidgets(2));
       expect(find.text('Current tool activity'), findsNothing);
       expect(find.text('Current private reasoning'), findsNothing);
-      expect(find.text('Tool activity'), findsOneWidget);
+      expect(find.text('Activity'), findsNWidgets(2));
       expect(find.text('Visible saved reply'), findsOneWidget);
       expect(
-        tester.getTopLeft(find.text('Activity')).dx,
-        closeTo(tester.getTopLeft(find.text('Tool activity')).dx, 0.1),
+        tester.getTopLeft(find.text('Activity').first).dx,
+        closeTo(tester.getTopLeft(find.text('Activity').last).dx, 0.1),
       );
 
-      await tester.tap(find.text('Activity'));
+      await tester.tap(find.text('Activity').first);
       await tester.pumpAndSettle();
       expect(find.text('Current tool activity'), findsOneWidget);
       expect(find.text('Thought'), findsOneWidget);
@@ -291,10 +291,10 @@ void main() {
       await tester.pump();
       expect(find.text('Current tool activity'), findsOneWidget);
 
-      await tester.tap(find.text('Activity'));
+      await tester.tap(find.text('Activity').first);
       await tester.pumpAndSettle();
       expect(find.text('Current tool activity'), findsNothing);
-      expect(find.text('Tool activity'), findsOneWidget);
+      expect(find.text('Activity'), findsNWidgets(2));
       expect(find.text('Visible saved reply'), findsOneWidget);
     },
   );
@@ -320,11 +320,11 @@ void main() {
         {'id': 4, 'role': 'assistant', 'content': 'Here is the answer.'},
       ]);
       await show(tester);
-      expect(find.text('Tool activity'), findsOneWidget);
+      expect(find.text('Activity'), findsOneWidget);
       expect(find.text('2 tool results'), findsNothing);
       expect(find.text('Private tool detail A'), findsNothing);
       expect(find.text('Here is the answer.'), findsOneWidget);
-      await tester.tap(find.text('Tool activity'));
+      await tester.tap(find.text('Activity'));
       await tester.pumpAndSettle();
       expect(find.text('2 tool results'), findsOneWidget);
       expect(find.text('Private tool detail A'), findsNothing);

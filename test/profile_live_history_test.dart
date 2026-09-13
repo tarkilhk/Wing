@@ -13,6 +13,7 @@ import 'support/profile_history_fixture.dart';
 class _ToolHistoryFixture extends ProfileHistoryFixture {
   int toolCount = 36;
   bool includeConversation = true;
+  bool includeLatestCommentary = false;
 
   @override
   List<Map<String, dynamic>> historyRows(String profile, String id) => [
@@ -30,6 +31,8 @@ class _ToolHistoryFixture extends ProfileHistoryFixture {
         'content': 'Tool result $i',
       },
     ],
+    if (includeLatestCommentary)
+      {'id': 2000, 'role': 'assistant', 'content': 'Checking one more source'},
   ];
 }
 
@@ -89,6 +92,13 @@ void main() {
     await controller.loadOlderMessages(chat);
     expect(chat.messages.first['id'], 545);
     expect(chat.messages.map((row) => row['id']).toSet(), hasLength(150));
+  });
+
+  test('commentary among tool calls still loads their user prompt', () async {
+    host.includeLatestCommentary = true;
+    final chat = await open();
+    expect(chat.messages.any((row) => row['id'] == 621), isTrue);
+    expect(chat.messages.last['content'], 'Checking one more source');
   });
 
   test(

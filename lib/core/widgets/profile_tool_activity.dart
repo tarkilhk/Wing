@@ -2,6 +2,36 @@ import 'package:flutter/material.dart';
 import '../models/review_notice.dart';
 import 'profile_review_notice_card.dart';
 
+/// Shared disclosure for saved tool calls and current execution details.
+class ProfileActivitySection extends StatelessWidget {
+  const ProfileActivitySection({
+    super.key,
+    required this.children,
+    this.subtitle,
+    this.initiallyExpanded = false,
+  });
+
+  final List<Widget> children;
+  final Widget? subtitle;
+  final bool initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) => ListTileTheme.merge(
+    minLeadingWidth: 24,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+    child: ExpansionTile(
+      initiallyExpanded: initiallyExpanded,
+      maintainState: true,
+      shape: const Border(),
+      collapsedShape: const Border(),
+      leading: const Icon(Icons.bolt_rounded, size: 20),
+      title: const Text('Activity'),
+      subtitle: subtitle,
+      children: children,
+    ),
+  );
+}
+
 /// One collapsed section containing the existing tool result cards.
 class ProfileToolActivitySection extends StatelessWidget {
   const ProfileToolActivitySection({
@@ -10,11 +40,13 @@ class ProfileToolActivitySection extends StatelessWidget {
     this.expandedMessageId,
     this.focusedMessageKey,
     this.showLatestReview = false,
+    this.currentActivity = const [],
   });
   final List<List<Map<String, dynamic>>> groups;
   final int? expandedMessageId;
   final GlobalKey? focusedMessageKey;
   final bool showLatestReview;
+  final List<Widget> currentActivity;
 
   @override
   Widget build(BuildContext context) {
@@ -41,18 +73,8 @@ class ProfileToolActivitySection extends StatelessWidget {
         );
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: ExpansionTile(
+      child: ProfileActivitySection(
         initiallyExpanded: expanded,
-        maintainState: true,
-        minTileHeight: 48,
-        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-        shape: const Border(),
-        collapsedShape: const Border(),
-        leading: Icon(
-          count == 0 ? Icons.psychology_outlined : Icons.terminal_rounded,
-          size: 18,
-        ),
-        title: Text(reviews == 0 ? 'Tool activity' : 'Activity'),
         subtitle: Text(
           [
             if (count > 0) '$count tool ${count == 1 ? 'call' : 'calls'}',
@@ -79,6 +101,7 @@ class ProfileToolActivitySection extends StatelessWidget {
                 focusedMessageId: expandedMessageId,
                 focusedMessageKey: focusedMessageKey,
               ),
+          ...currentActivity,
         ],
       ),
     );
