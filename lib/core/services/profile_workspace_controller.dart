@@ -200,6 +200,17 @@ class ProfileChat {
     ProfileTurnStatus.reconnecting,
     ProfileTurnStatus.settling,
   }.contains(status);
+
+  /// Background work can outlive the parent turn without blocking its composer.
+  ProfileLiveActivityState? get activityState {
+    if (status == ProfileTurnStatus.attention) {
+      return ProfileLiveActivityState.needsInput;
+    }
+    if (busy || subagents.any((item) => !item.isTerminal)) {
+      return ProfileLiveActivityState.running;
+    }
+    return null;
+  }
 }
 
 class ProfileWorkspaceData {
@@ -342,7 +353,35 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Iterable<ProfileChat> get activity => _resources.values
       .expand((r) => r.chats.values)
       .where((chat) => chat.status != ProfileTurnStatus.idle);
-  List<ProfileLiveActivity> get liveActivity => _liveActivity;
+  List<ProfileLiveActivity> get liveActivity {
+    // Live events can report work before the global active-session snapshot.
+    // Merge by the owned chat identity so both sources produce one row.
+    final items = {
+      for (final item in _liveActivity)
+        ProfileSessionKey(item.workspace, item.sessionId): item,
+    };
+    for (final resource in _resources.values) {
+      for (final chat in resource.chats.values) {
+        final state = chat.activityState;
+        if (state == null) continue;
+        final reported = items[chat.key];
+        items[chat.key] = ProfileLiveActivity(
+          workspace: chat.key.workspace,
+          runtimeId: chat.runtimeId,
+          sessionId: chat.key.sessionId,
+          title: chat.title,
+          lastActive: chat.lastActive,
+          state: state,
+          sideTasksRunning: reported?.sideTasksRunning ?? 0,
+        );
+      }
+    }
+    return List.unmodifiable(
+      items.values.toList()
+        ..sort((a, b) => b.lastActive.compareTo(a.lastActive)),
+    );
+  }
+
   Map<String, String> get activityProfileErrors => _activityProfileErrors;
   bool get switching => pendingProfile != null;
   String get _journalKey => 'profile_pending_v2_$connectionIdentity';

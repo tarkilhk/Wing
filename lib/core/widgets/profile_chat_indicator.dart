@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/profile_live_activity.dart';
 import '../services/profile_workspace_controller.dart';
 import '../theme/hermes_theme.dart';
 
@@ -12,7 +13,11 @@ class ProfileChatIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = HermesTokens.of(context);
-    final status = chat?.status;
+    final status =
+        chat?.activityState == ProfileLiveActivityState.running &&
+            chat?.status != ProfileTurnStatus.reconnecting
+        ? ProfileTurnStatus.running
+        : chat?.status;
     final (label, color, icon, spinning) = switch (status) {
       ProfileTurnStatus.attention => (
         'Input needed',

@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.31.12+2197] - 2026-09-13
+
+### Fixed
+
+- Keep chats visible in Activities and show the menu spinner while their subagents are still working after the main turn ends.
+
 ## [2.31.11+2196] - 2026-09-13
 
 ### Fixed
