@@ -71,6 +71,7 @@ class Host {
   bool expiredResumeWasDelayed = false;
   Map<String, dynamic>? inflight;
   Map<String, dynamic>? todoState;
+  List<Map<String, dynamic>>? historyMessages;
   Completer<void>? projectDelay;
   bool wrongProjectOwner = false;
   Map<String, dynamic> clarifyResult = {'status': 'ok'};
@@ -113,11 +114,13 @@ class Host {
             'limit': 50,
             'offset': 0,
             'order': 'latest',
-            'returned': 1,
+            'returned': historyMessages?.length ?? 1,
           },
-          'messages': [
-            {'id': 1, 'role': 'assistant', 'content': '$name completed'},
-          ],
+          'messages':
+              historyMessages ??
+              [
+                {'id': 1, 'role': 'assistant', 'content': '$name completed'},
+              ],
         };
       },
       delete: (endpoint, query) async {
@@ -1066,6 +1069,125 @@ void main() {
       );
       await controller.selectProject(controller.current!.selectedProject);
       expect(controller.current!.projectSessionsError, isNull);
+    },
+  );
+
+  test(
+    'unsolicited message starts settle as separate turns without clearing composer state',
+    () async {
+      final chat = await controller.createChat();
+      final attachment = AttachmentDraft(
+        id: 'kept-attachment',
+        cachedPath: '/tmp/kept.txt',
+        name: 'kept.txt',
+        byteLength: 4,
+        mediaType: 'text/plain',
+        kind: AttachmentDraftKind.genericFile,
+      );
+      chat
+        ..messages = [
+          {'id': 1, 'role': 'user', 'content': 'Keep this turn'},
+        ]
+        ..draft = 'Keep this draft'
+        ..attachments.add(attachment)
+        ..queuedPrompts.add(QueuedPromptDraft(text: 'Keep this queued prompt'))
+        ..queuePaused = true
+        ..model = 'known-model'
+        ..provider = 'known-provider'
+        ..reasoningEffort = 'high'
+        ..status = ProfileTurnStatus.completed;
+
+      host.event('a', 'message.start');
+      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.draft, 'Keep this draft');
+      expect(chat.attachments, [same(attachment)]);
+      expect(chat.queuedPrompts.single.text, 'Keep this queued prompt');
+      expect(chat.model, 'known-model');
+      expect(chat.provider, 'known-provider');
+      expect(chat.reasoningEffort, 'high');
+      expect(chat.messages.single['content'], 'Keep this turn');
+
+      host.event('a', 'message.delta', {'text': 'First'});
+      host.event('a', 'message.start');
+      expect(chat.streaming, 'First');
+      host.event('a', 'message.delta', {'text': ' loop reply'});
+      host.historyMessages = [
+        {'id': 1, 'role': 'user', 'content': 'Keep this turn'},
+        {'id': 2, 'role': 'assistant', 'content': 'First loop reply'},
+      ];
+      host.event('a', 'message.complete');
+      await Future<void>.delayed(Duration.zero);
+      expect(chat.status, ProfileTurnStatus.completed);
+      expect(chat.streaming, isEmpty);
+
+      host.event('a', 'message.start');
+      expect(chat.status, ProfileTurnStatus.running);
+      host.event('a', 'message.delta', {'text': 'Second loop reply'});
+      host.historyMessages = [
+        {'id': 1, 'role': 'user', 'content': 'Keep this turn'},
+        {'id': 2, 'role': 'assistant', 'content': 'First loop reply'},
+        {'id': 3, 'role': 'assistant', 'content': 'Second loop reply'},
+      ];
+      host.event('a', 'message.complete');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(chat.status, ProfileTurnStatus.completed);
+      expect(chat.streaming, isEmpty);
+      expect(chat.historyError, isNull);
+      expect(
+        chat.messages
+            .where((message) => message['role'] == 'assistant')
+            .map((message) => message['content']),
+        ['First loop reply', 'Second loop reply'],
+      );
+      expect(chat.draft, 'Keep this draft');
+      expect(chat.attachments, [same(attachment)]);
+      expect(chat.queuedPrompts.single.text, 'Keep this queued prompt');
+      expect(chat.queuePaused, isTrue);
+    },
+  );
+
+  test(
+    'unsolicited message start survives an older turn settling history refresh',
+    () async {
+      final chat = await controller.createChat();
+      chat.status = ProfileTurnStatus.completed;
+      host.delays['a'] = Completer<void>();
+      host.historyMessages = [
+        {'id': 1, 'role': 'assistant', 'content': 'First reply'},
+      ];
+
+      host.event('a', 'message.start');
+      host.event('a', 'message.delta', {'text': 'First reply'});
+      host.event('a', 'message.complete');
+      expect(chat.status, ProfileTurnStatus.settling);
+
+      host.event('a', 'message.start');
+      host.event('a', 'reasoning.delta', {'text': 'Second reasoning'});
+      host.event('a', 'message.delta', {'text': 'Second reply'});
+      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.streaming, 'Second reply');
+      expect(chat.reasoning, 'Second reasoning');
+
+      host.delays['a']!.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.streaming, 'Second reply');
+      expect(chat.reasoning, 'Second reasoning');
+
+      host.historyMessages = [
+        {'id': 1, 'role': 'assistant', 'content': 'First reply'},
+        {'id': 2, 'role': 'assistant', 'content': 'Second reply'},
+      ];
+      host.event('a', 'message.complete');
+      await Future<void>.delayed(Duration.zero);
+      expect(chat.status, ProfileTurnStatus.completed);
+      expect(chat.streaming, isEmpty);
+      expect(chat.historyError, isNull);
+      expect(chat.messages.map((message) => message['content']), [
+        'First reply',
+        'Second reply',
+      ]);
     },
   );
 

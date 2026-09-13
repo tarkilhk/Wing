@@ -157,6 +157,7 @@ class ProfileChat {
   bool _replacingExpiredRuntime = false;
   int _attachmentPreparations = 0;
   bool _submissionInFlight = false;
+  int _turnGeneration = 0;
   Completer<void>? _replacementCompletion;
   Future<void>? _draftWrites;
   ProfileTurnStatus status = ProfileTurnStatus.idle;
@@ -4239,6 +4240,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
         if (event.data['usage'] is Map) {
           _updateContext(chat, event.data['usage'] as Map);
         }
+      case 'message.start':
+        if (!chat.busy || chat.status == ProfileTurnStatus.settling) {
+          chat._turnGeneration++;
+          chat.historyGeneration++;
+          chat.historyLoading = false;
+          chat.status = ProfileTurnStatus.running;
+          chat.error = null;
+          chat.streaming = '';
+          chat.reasoning = '';
+          chat.reasoningVerbose = false;
+          chat.tool = null;
+          chat.toolActivities.clear();
+        }
       case 'message.delta':
         chat.streaming += event.data['text']?.toString() ?? '';
       case 'message.interim':
@@ -4388,6 +4402,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileChat chat,
     Map<String, dynamic> completion,
   ) async {
+    final turnGeneration = chat._turnGeneration;
+    bool isCurrentTurn() => chat._turnGeneration == turnGeneration;
     chat.status = ProfileTurnStatus.settling;
     final failed = completion['status'] == 'error';
     final cancelled = completion['status'] == 'interrupted';
@@ -4412,13 +4428,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat.error = failure;
     try {
       await refreshHistory(chat);
+      if (!isCurrentTurn()) return;
       if (chat.historyError != null) throw StateError('History refresh failed');
       chat.toolActivities.clear();
       chat.reasoning = '';
       chat.reasoningVerbose = false;
       if (!switching) await _refreshSessions(resource);
+      if (!isCurrentTurn()) return;
       try {
         resource.projects = await resource.gateway.projects();
+        if (!isCurrentTurn()) return;
         final selectedId = resource.selectedProject?['id'];
         if (selectedId != null) {
           resource.selectedProject =
@@ -4434,7 +4453,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       final project = resource.selectedProject;
       if (project != null) await _loadProject(resource, project);
+      if (!isCurrentTurn()) return;
     } catch (_) {
+      if (!isCurrentTurn()) return;
       chat.error =
           failure ??
           'Turn finished. History refresh failed; reconnect to reload.';
@@ -4449,6 +4470,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       await _persistDraft(chat);
     }
     await _journal();
+    if (!isCurrentTurn()) return;
     if (failed || cancelled || chat.queuedPrompts.isEmpty || chat.queuePaused) {
       _notify(chat, failed, eventId: _notificationEventId(completion));
     }

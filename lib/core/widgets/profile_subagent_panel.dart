@@ -25,7 +25,7 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
   @override
   void initState() {
     super.initState();
-    if (widget.chat.subagents.isEmpty) {
+    if (widget.initiallyExpanded || widget.chat.subagents.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
     }
   }
@@ -34,7 +34,7 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
   void didUpdateWidget(ProfileSubagentPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.chat, widget.chat) &&
-        widget.chat.subagents.isEmpty) {
+        (widget.initiallyExpanded || widget.chat.subagents.isEmpty)) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
     }
   }
@@ -58,6 +58,9 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
       return ExpansionTile(
         key: ValueKey(('subagents', chat.key)),
         initiallyExpanded: widget.initiallyExpanded,
+        onExpansionChanged: (expanded) {
+          if (expanded) _refresh();
+        },
         minTileHeight: 48,
         shape: const Border(),
         collapsedShape: const Border(),

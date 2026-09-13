@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:hermes_android/core/models/answer_versions.dart';
@@ -176,6 +179,89 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('a missing staged file restores as removable without sending', (
+    tester,
+  ) async {
+    await harness.launch(tester);
+    await tester.tap(find.byKey(const ValueKey('chat-chat-0')));
+    await _settle(tester);
+    final original = harness.controller.current!.chat!;
+    const draftText = 'Keep this draft when its staged file disappears';
+    const fileName = 'missing-staged-roadmap.txt';
+    await harness.controller.updateDraft(original, draftText);
+
+    final temporary = await getTemporaryDirectory();
+    final source = File(
+      '${temporary.path}/roadmap-source-'
+      '${DateTime.now().microsecondsSinceEpoch}.txt',
+    );
+    await source.writeAsString('temporary attachment');
+    addTearDown(() async {
+      if (await source.exists()) await source.delete();
+    });
+    await harness.controller.addAttachment(original, source.path, fileName);
+    final staged = File(original.attachments.single.cachedPath).absolute;
+    final support = (await getApplicationSupportDirectory()).absolute;
+    expect(staged.path, isNot(source.absolute.path));
+    expect(
+      staged.parent.path,
+      '${support.path}${Platform.pathSeparator}attachment_drafts',
+      reason: 'Only the production-owned staged copy may be removed.',
+    );
+    expect(await staged.exists(), isTrue);
+    await staged.delete();
+    expect(await staged.exists(), isFalse);
+
+    final key = original.key;
+    final connection = harness.controller.connection;
+    final identity = harness.controller.connectionIdentity;
+    await tester.pumpWidget(const SizedBox.shrink());
+    final restoredController = ProfileWorkspaceController(
+      connection: connection,
+      connectionIdentity: identity,
+      preferences: harness.preferences,
+      gatewayFactory: harness.fixture.gateway,
+    );
+    addTearDown(restoredController.dispose);
+    await restoredController.initialize();
+    await restoredController.openSession(key);
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: restoredController)),
+    );
+    await _settle(tester);
+
+    final restored = restoredController.current!.chat!;
+    expect(restored.draft, draftText);
+    expect(restored.attachments.single.name, fileName);
+    expect(restored.attachments.single.error, contains('no longer available'));
+    expect(find.text(fileName), findsOneWidget);
+    expect(
+      find.byTooltip(
+        'This staged file is no longer available. Remove it and attach it again.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'A staged attachment is no longer available. Your draft text was kept.',
+      ),
+      findsOneWidget,
+    );
+
+    final submitsBefore = harness.fixture.calls
+        .where((call) => call.$2 == 'prompt.submit')
+        .length;
+    await tester.tap(find.byTooltip('Send'));
+    await _settle(tester);
+    expect(
+      harness.fixture.calls.where((call) => call.$2 == 'prompt.submit'),
+      hasLength(submitsBefore),
+    );
+    expect(restored.draft, draftText);
+    expect(restored.attachments.single.name, fileName);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('activity approvals and queued work keep their chat owner', (
     tester,

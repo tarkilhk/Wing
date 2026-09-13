@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.31.10+2195] - 2026-09-13
+
+### Fixed
+
+- Refresh subagent controls when opening an existing roster so Steer appears when the server supports it.
+- Keep replies from server-started turns separate and refresh their saved history when they finish.
+
 ## [2.31.9+2194] - 2026-09-13
 
 ### Fixed

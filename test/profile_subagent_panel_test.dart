@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_android/core/models/gateway_insight.dart';
 import 'package:hermes_android/core/models/hermes_profile.dart';
 import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
 import 'package:hermes_android/core/services/profile_gateway.dart';
@@ -171,6 +172,34 @@ void main() {
     Navigator.of(tester.element(find.byType(TextField))).pop();
     await tester.pumpAndSettle();
   });
+
+  testWidgets(
+    'populated event roster refreshes authoritative steering capability',
+    (tester) async {
+      chat.subagents = [
+        GatewaySubagentActivity.fromGatewayEvent('subagent.start', {
+          'subagent_id': 'child-1',
+          'goal': 'Inspect the release',
+          'status': 'running',
+          'model': 'test-model',
+        })!,
+      ];
+      expect(chat.subagents.single.acceptingSteer, isFalse);
+
+      await showPanel(tester);
+
+      expect(fixture.listCalls, 1);
+      expect(chat.subagents.single.acceptingSteer, isTrue);
+      await tester.ensureVisible(find.text('Inspect the release'));
+      await tester.tap(find.text('Inspect the release'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Steer'), findsOneWidget);
+
+      Navigator.of(tester.element(find.text('Steer'))).pop();
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets('tail polling stops after three failures and Retry restarts it', (
     tester,
