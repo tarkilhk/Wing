@@ -1,25 +1,27 @@
-# Transcript display types
+# Transcript display projection
 
-Verified against the installed official Hermes Desktop source at NousResearch/hermes-agent commit `e16f686706b1e0d5334fd1ae82190058d2a19694` on 2026-09-14.
+Audited against the installed official Hermes Desktop source at NousResearch/hermes-agent commit `e16f686706b1e0d5334fd1ae82190058d2a19694` on 2026-09-14. The source files below have no local changes against that commit.
 
-Android previously rendered `async_delegation_complete` rows as ordinary user bubbles. Hermes uses the user role for model-facing deliveries as well as human messages, so the role alone does not determine presentation.
+The 2.31.19 fix covered hydration display types but missed the separate user renderer. Hermes stores background-process and agent deliveries with the `user` role, so role and `display_kind` alone are insufficient. Android now ports Desktop's exact delivery-envelope branches as well.
 
-The client now follows Desktop's [`hydration.ts`](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/apps/desktop/src/lib/chat-messages/hydration.ts) display projection:
-
-| `display_kind` | Presentation |
+| Desktop source / condition | Android presentation |
 | --- | --- |
-| `hidden` | No transcript row |
-| `async_delegation_complete` | Compact completion notice, optional count from `display_metadata.task_count`, result disclosure |
-| `model_switch` | Model changed |
-| `auto_continue` | Resumed interrupted turn |
-| `personality_switch` | Personality changed |
+| `hydration.ts`: `hidden` | No transcript row or search result |
+| `hydration.ts`: `async_delegation_complete` | Compact completion notice and collapsed result; no preamble, goals or transcript footer |
+| `hydration.ts`: `model_switch`, `auto_continue`, `personality_switch` | Compact timeline labels |
+| `user-message.tsx`: complete `[IMPORTANT: Background process ...]` envelope | Headline with collapsed Output; no human bubble, Copy or Edit controls |
+| `user-message.tsx`: `Message from` with optional robot/handle, or legacy `[Message from agent '...']` | Attributed notice with collapsed message; no human controls |
+| `assistant-message.tsx`: first settled reply following an agent delivery | Replied to sender, with collapsed reply; streaming content remains visible |
+| shared `skill-scaffold.ts`: single or bundled skill activation | Original slash invocation and instruction, without the skill body/runtime note |
+| `hydration.ts`: attached context and context warnings | User prose with missing references restored once; expanded model context removed |
+| `system-message.tsx`: `review:`, `steer:`, `slash:` | Existing review/steering rows and compact slash-command status |
+| `system-message.tsx`: other system text | Compact status text without assistant-style header or Copy control |
+| Gateway history: user `[System:` marker | Existing hidden-marker behavior retained |
 
-Classification uses `display_kind`, not keyword matching against user content. The existing gateway-compatible `[System:` hidden-marker rule and steering/review presentation are retained. Unknown or missing types keep their ordinary presentation.
+Source references: [hydration](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/apps/desktop/src/lib/chat-messages/hydration.ts), [user renderer](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/apps/desktop/src/components/assistant-ui/thread/user-message.tsx), [assistant renderer](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/apps/desktop/src/components/assistant-ui/thread/assistant-message.tsx), [system renderer](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/apps/desktop/src/components/assistant-ui/thread/system-message.tsx), [skill projection](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/apps/shared/src/skill-scaffold.ts).
 
-The delegation disclosure follows Desktop's producer-boundary parser and [`async-report.test.ts`](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/apps/desktop/src/lib/async-report.test.ts). It extracts result/error bodies, handles batch task boundaries and cron output, and removes transcript-path footers. It never shows the delivery preamble or task goals. A malformed envelope has no result disclosure. Untyped user text is not parsed as a delegation event.
+These are producer-envelope matches copied from Desktop, not a broad technical-keyword filter. Quoted envelopes and ordinary technical discussion remain visible. Untyped delegation text retains Desktop's normal fallback. Unknown future backend formats are not silently discarded.
 
-Both saved and refreshed history use the same renderer. Find in chat searches the projected notice/result instead of its internal delivery payload. Raw history, durable IDs, pagination offsets and model context remain intact. Existing typed-prompt checks keep timeline events out of Edit and regeneration prompt selection.
+Find in chat shares delivery and skill projection, preserving useful output while removing wrappers. Raw history, durable row IDs, pagination and user ordinal counts stay intact. Edit and regeneration reject injected deliveries before submitting a prompt. Tool calls/results and reasoning continue to use their existing collapsed activity/disclosure paths; the notification audit does not replace those specialized renderers or add sidecar answer hydration.
 
-Regression coverage is in `test/internal_message_visibility_test.dart`: the screenshot's payload, history refresh, hidden-row grouping, display metadata as REST JSON or decoded maps, result boundaries, ordinary technical text and regeneration selection. This verifies the client against fixtures; it does not change the Hermes backend.
-
-Validation passed: 66 affected transcript, search, answer, steering and activity tests, followed by 19 display/search tests covering the final phone/tablet layouts and search attribution. Targeted Dart analysis of the four changed production files and regression test reports no issues. The owner's request to test affected areas applies; the preceding release's full-suite verification is retained without another local full-suite or dependency-update run. There are no dependency changes.
+Regression fixtures in `test/internal_message_visibility_test.dart` cover the reported process envelope, current/legacy agent formats, single/bundled skills, Desktop negative cases, phone/tablet widths, expanded output, search, saved history refresh, hidden rows and assistant reply boundaries. `test/answer_versions_test.dart` verifies that edit/regeneration cannot submit an internal delivery. Existing steering, review, activity, search and saved-answer tests cover the retained branches. This is a client projection fix; the backend is unchanged.

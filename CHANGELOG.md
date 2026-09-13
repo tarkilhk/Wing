@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.31.23+2208] - 2026-09-14
+
+### Fixed
+
+- Render background-process completions and agent deliveries as compact notices with collapsed details, following Hermes Desktop's exact envelope rules.
+- Collapse settled agent replies and reduce expanded skill instructions to the original slash invocation.
+- Apply the same display projection to chat search, and prevent internal deliveries from being edited or replayed as human prompts.
+- Render system and slash-command status without a full message bubble.
+
 ## [2.31.22+2207] - 2026-09-14
 
 ### Changed

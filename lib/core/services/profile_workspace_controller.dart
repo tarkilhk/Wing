@@ -2974,6 +2974,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
         );
       }
       final prompt = users[target.userOrdinal];
+      if (!isHumanAnswerPrompt(prompt)) {
+        throw StateError('An internal delivery cannot be replayed as a prompt');
+      }
       final rowId = prompt['row_id'];
       if (rowId is! int || rowId <= 0) {
         throw StateError(
@@ -3033,7 +3036,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         switching) {
       return false;
     }
-    if (!isAnswerPrompt(selected) || selectedId == null) {
+    if (!isHumanAnswerPrompt(selected) || selectedId == null) {
       throw StateError('Wait for this message to be saved');
     }
     chat.changingAnswer = true;
@@ -3054,7 +3057,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         (message) => answerMessageId(message) == selectedId,
       );
       if (targetIndex < 0 ||
-          !isAnswerPrompt(history[targetIndex]) ||
+          !isHumanAnswerPrompt(history[targetIndex]) ||
           answerMessageText(history[targetIndex]) !=
               answerMessageText(selected)) {
         throw StateError(

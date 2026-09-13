@@ -1,3 +1,6 @@
+import 'skill_invocation.dart';
+import 'user_message_delivery.dart';
+
 /// Text projection for gateway display messages and stored multimodal content.
 String answerMessageText(Map<String, dynamic> message) {
   final value = message['content'] ?? message['text'];
@@ -38,6 +41,8 @@ String answerMessageDisplayText(Map<String, dynamic> message) {
   final value =
       message['display_content'] ?? message['content'] ?? message['text'];
   final text = _answerText(value, displayImages: true);
+  final invocation = skillInvocationText(text);
+  if (invocation != null) return invocation;
   final marker = RegExp(
     r'(?:^|\n)--- Attached Context ---\s*\n',
   ).firstMatch(text);
@@ -111,6 +116,12 @@ bool isAnswerPrompt(Map<String, dynamic> message) =>
     message['role'] == 'user' &&
     message['display_kind'] == null &&
     isBranchMessage(message);
+
+/// Keep durable user ordinals intact, but never edit or replay a delivery.
+bool isHumanAnswerPrompt(Map<String, dynamic> message) =>
+    isAnswerPrompt(message) &&
+    !isHiddenAnswerMessage(message) &&
+    userMessageDelivery(answerMessageDisplayText(message)) == null;
 
 int? answerMessageId(Map<String, dynamic> message) =>
     (message['row_id'] ?? message['id']) as int?;

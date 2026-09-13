@@ -11,6 +11,7 @@ import '../widgets/profile_queued_messages.dart';
 import '../widgets/queued_prompt_editor.dart';
 import '../models/queued_prompt_draft.dart';
 import '../models/answer_versions.dart';
+import '../models/transcript_notice.dart';
 import '../models/chat_output.dart';
 import '../widgets/answer_actions.dart';
 import '../models/gateway_clarify.dart';
@@ -450,9 +451,32 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   }) {
     if (isHiddenAnswerMessage(message)) return const SizedBox.shrink();
     final reasoning = profileMessageReasoning(message);
+    final displayedHistory = _activeFindResult(chat)?.page.rows ?? chat.messages;
+    final sender = interAgentReplySender(
+      displayedHistory,
+      displayedHistory.indexOf(message),
+    );
+    if (sender != null) {
+      return AnchoredExpansionTile(
+        key: ValueKey(('agent-reply', answerMessageId(message))),
+        title: Text(
+          'Replied to $sender',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        subtitle: const Text('Show reply'),
+        shape: const Border(),
+        children: [
+          if (reasoning.isNotEmpty) ProfileReasoningDisclosure(text: reasoning),
+          ProfileMessage(
+            message: message,
+            onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
+          ),
+        ],
+      );
+    }
     final savedPrompt =
         allowSavedActions &&
-        isAnswerPrompt(message) &&
+        isHumanAnswerPrompt(message) &&
         answerMessageId(message) != null;
     final savedAnswer =
         allowSavedActions &&

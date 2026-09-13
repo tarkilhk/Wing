@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_android/core/models/answer_versions.dart';
 import 'package:hermes_android/core/models/transcript_notice.dart';
+import 'package:hermes_android/core/models/skill_invocation.dart';
 import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
 import 'package:hermes_android/core/services/profile_workspace_controller.dart';
 import 'package:hermes_android/core/widgets/profile_message.dart';
@@ -31,6 +32,13 @@ Map<String, dynamic> _notice() => {
   'display_metadata': {'task_count': 3},
 };
 
+const _processEnvelope =
+    '[IMPORTANT: Background process proc_0c3ef9a5dfb0 completed normally (exit code 0).\nCommand: env -u ANTHROPIC_API_KEY claude --print\nOutput:\n]';
+const _agentEnvelope =
+    'Message from 🤖 Hermes (@hermes): Private agent instructions';
+const _skillEnvelope =
+    '[IMPORTANT: The user has invoked the "work" skill, indicating they want you to follow its instructions.\nThe full skill content is loaded below.]\nPrivate skill body\nThe user has provided the following instruction alongside the skill invocation: fix the leak\n\n[Runtime note: private]';
+
 class _NoticeHistory extends ProfileHistoryFixture {
   @override
   List<Map<String, dynamic>> historyRows(String profile, String id) => [
@@ -43,10 +51,31 @@ class _NoticeHistory extends ProfileHistoryFixture {
       'content': 'Private hidden instructions',
       'display_kind': 'hidden',
     },
+    {'id': 5, 'role': 'user', 'content': _processEnvelope},
+    {'id': 6, 'role': 'user', 'content': _agentEnvelope},
+    {'id': 7, 'role': 'assistant', 'content': 'Private agent reply'},
+    {'id': 8, 'role': 'user', 'content': _skillEnvelope},
   ];
 }
 
 void main() {
+  testWidgets('process completion never exposes its delivery envelope', (
+    tester,
+  ) async {
+    const envelope =
+        '[IMPORTANT: Background process proc_0c3ef9a5dfb0 '
+        'completed normally (exit code 0).\n'
+        'Command: env -u ANTHROPIC_API_KEY claude --print\nOutput:\n]';
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ProfileMessage(message: {'role': 'user', 'content': envelope}),
+        ),
+      ),
+    );
+    expect(find.text(envelope), findsNothing);
+    expect(find.byTooltip('Copy message'), findsNothing);
+  });
   for (final width in [360.0, 900.0]) {
     testWidgets('typed delegation is a notice at width $width', (tester) async {
       tester.view.physicalSize = Size(width, 760);
@@ -75,6 +104,9 @@ void main() {
   testWidgets(
     'saved history and refresh preserve notices and hide scaffolding',
     (tester) async {
+      tester.view.physicalSize = const Size(900, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       SharedPreferences.setMockInitialValues({});
       final host = _NoticeHistory();
       final controller = ProfileWorkspaceController(
@@ -103,8 +135,17 @@ void main() {
         expect(find.text('3 background agents finished'), findsOneWidget);
         expect(find.byKey(const ValueKey('edit-message-3')), findsNothing);
         expect(find.byKey(const ValueKey('edit-message-1')), findsOneWidget);
+        expect(find.byKey(const ValueKey('edit-message-5')), findsNothing);
+        expect(find.byKey(const ValueKey('edit-message-6')), findsNothing);
+        expect(find.byKey(const ValueKey('answer-actions-7')), findsNothing);
+        expect(find.text('Private agent reply'), findsNothing);
+        expect(find.text('Replied to Hermes'), findsOneWidget);
+        expect(find.text(_processEnvelope), findsNothing);
+        expect(find.text(_agentEnvelope), findsNothing);
+        expect(find.text(_skillEnvelope), findsNothing);
+        expect(find.text('/work fix the leak'), findsOneWidget);
         // Retain server history and IDs for paging/rewind; filter only the view.
-        expect(chat.messages.map((row) => row['id']), [1, 2, 3, 4]);
+        expect(chat.messages.map((row) => row['id']), [1, 2, 3, 4, 5, 6, 7, 8]);
         await controller.refreshHistory(chat);
         await tester.pumpAndSettle();
       }
@@ -127,14 +168,202 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'Private');
+    await tester.enterText(find.byType(TextField), 'Private hidden');
     await tester.pump();
     expect(find.textContaining('Private instructions'), findsNothing);
-    expect(find.textContaining('Private hidden'), findsNothing);
+    expect(find.text('Private hidden instructions'), findsNothing);
     expect(find.text('View in chat'), findsNothing);
     await tester.enterText(find.byType(TextField), 'First useful result');
     await tester.pump();
     expect(find.textContaining('First useful result'), findsWidgets);
+    expect(find.text('1 matching message'), findsOneWidget);
+    expect(find.text('system'), findsOneWidget);
+  });
+
+  for (final width in [360.0, 900.0]) {
+    for (final envelope in [
+      _processEnvelope,
+      _agentEnvelope,
+      "[Message from agent 'legacy'] Delivered text",
+    ]) {
+      testWidgets('delivery at $width: ${envelope.substring(0, 30)}', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(width, 760);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final row = {'role': 'user', 'content': envelope};
+        final delivery = transcriptUserDelivery(row)!;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(body: ProfileMessage(message: row)),
+          ),
+        );
+        expect(find.text(envelope), findsNothing);
+        expect(find.text(delivery.headline), findsOneWidget);
+        expect(find.text(delivery.detail), findsNothing);
+        expect(find.byTooltip('Copy message'), findsNothing);
+        expect(isHumanAnswerPrompt(row), isFalse);
+        await tester.tap(find.text(delivery.disclosure));
+        await tester.pumpAndSettle();
+        expect(find.text(delivery.detail), findsOneWidget);
+        expect(find.text(envelope), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  test('Desktop envelope matching preserves ordinary technical discussion', () {
+    for (final text in [
+      'Why did this happen?\n$_processEnvelope',
+      '```\n$_processEnvelope\n```',
+      '[IMPORTANT: Background process unfinished',
+      '[IMPORTANT: read the docs]',
+      'I got a Message from 🤖 Hermes: earlier',
+      'can you explain what Message from means?',
+    ]) {
+      final row = {'role': 'user', 'content': text};
+      expect(transcriptNoticeKind(row), isNull);
+      expect(isHumanAnswerPrompt(row), isTrue);
+      expect(answerMessageDisplayText(row), text);
+    }
+    for (final text in [_processEnvelope, _agentEnvelope]) {
+      expect(
+        transcriptNoticeKind({'role': 'assistant', 'content': text}),
+        isNull,
+      );
+    }
+    expect(
+      transcriptNoticeResult({
+        'role': 'user',
+        'text': _processEnvelope.replaceAll('\n', '\r\n'),
+      }),
+      'Command: env -u ANTHROPIC_API_KEY claude --print\r\nOutput:',
+    );
+    expect(
+      transcriptUserDelivery({
+        'role': 'user',
+        'content': 'wire payload',
+        'display_content': _agentEnvelope,
+      })?.headline,
+      'Message from Hermes',
+    );
+    expect(
+      transcriptNoticeResult({
+        'role': 'user',
+        'content': '[IMPORTANT: Background process 1 finished]',
+      }),
+      isNull,
+    );
+    for (final text in [
+      'Message from Turquoise: ready',
+      'Message from 🤖 Dev: line one\nline two',
+      "[Message from agent 'legacy'] ping",
+    ]) {
+      expect(
+        transcriptNoticeKind({'role': 'user', 'content': text}),
+        'agent_message',
+      );
+    }
+  });
+
+  test('skill scaffold matches Desktop single and bundle projection', () {
+    expect(skillInvocationText(_skillEnvelope), '/work fix the leak');
+    expect(
+      skillInvocationText(
+        _skillEnvelope.replaceFirst('fix the leak', 'fix\n\nthe leak'),
+      ),
+      '/work fix the leak',
+    );
+    expect(
+      skillInvocationText(
+        '[IMPORTANT: The user has invoked the "work" skill.\nThe full skill content is loaded below.]\nPrivate body',
+      ),
+      '/work',
+    );
+    expect(
+      skillInvocationText(
+        '[IMPORTANT: The user has invoked the "/clean /work" stacked skill bundle, loading 2 skills together.]\n\nUser instruction: ship it\n\n[Loaded as part of the stacked skill invocation "clean".]\nPrivate body',
+      ),
+      '/clean /work ship it',
+    );
+    expect(skillInvocationText('[IMPORTANT: read the docs]'), isNull);
+    expect(
+      answerMessageDisplayText({
+        'role': 'assistant',
+        'content': _skillEnvelope,
+      }),
+      _skillEnvelope,
+    );
+  });
+
+  test('agent reply classification stops at the next human or assistant', () {
+    final messages = <Map<String, dynamic>>[
+      {'role': 'user', 'content': _agentEnvelope},
+      {'role': 'system', 'content': 'status'},
+      {'role': 'assistant', 'content': 'Reply'},
+      {'role': 'assistant', 'content': 'Another answer'},
+      {'role': 'user', 'content': 'Human prompt'},
+      {'role': 'assistant', 'content': 'Human answer'},
+    ];
+    expect(interAgentReplySender(messages, 2), 'Hermes');
+    expect(interAgentReplySender(messages, 3), isNull);
+    expect(interAgentReplySender(messages, 5), isNull);
+    // Untyped deliveries retain their durable ordinal for existing history APIs.
+    expect(AnswerTarget.at(messages, 5)!.userOrdinal, 1);
+  });
+
+  testWidgets('system status is compact and strips the slash protocol marker', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ProfileMessage(
+            message: {
+              'role': 'system',
+              'content': 'slash:/model\nModel changed',
+            },
+          ),
+        ),
+      ),
+    );
+    expect(find.text('/model · Model changed'), findsOneWidget);
+    expect(find.text('System'), findsNothing);
+    expect(find.byTooltip('Copy message'), findsNothing);
+  });
+
+  testWidgets('search projects deliveries and skills without their wrappers', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChatFindSheet(
+          loadHistory: (_) async => ProfileHistoryPage(
+            'chat',
+            _NoticeHistory().historyRows('default', 'chat'),
+            0,
+            500,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    for (final query in [
+      'IMPORTANT',
+      'Private skill body',
+      'Runtime note',
+      '(@hermes)',
+    ]) {
+      await tester.enterText(find.byType(TextField), query);
+      await tester.pump();
+      expect(find.text('View in chat'), findsNothing);
+    }
+    await tester.enterText(
+      find.byType(TextField),
+      'Private agent instructions',
+    );
+    await tester.pump();
     expect(find.text('1 matching message'), findsOneWidget);
     expect(find.text('system'), findsOneWidget);
   });

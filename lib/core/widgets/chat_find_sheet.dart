@@ -107,6 +107,7 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
     if (notice != null) {
       return [notice, ?transcriptNoticeResult(row)].join('\n\n');
     }
+    if (row['role'] == 'user') return answerMessageDisplayText(row);
     final content = row['content'] ?? row['text'] ?? row['message'];
     return content is String ? content : content?.toString() ?? '';
   }

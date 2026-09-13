@@ -216,6 +216,33 @@ void main() {
   });
   tearDown(() => controller.dispose());
 
+  for (final delivery in [
+    '[IMPORTANT: Background process 1 completed normally (exit code 0).\nCommand: private\nOutput:\n]',
+    'Message from 🤖 Hermes: private delivery',
+  ]) {
+    test(
+      'internal delivery cannot be edited or replayed: ${delivery.substring(0, 20)}',
+      () async {
+        host.history('a', 'original')[0]['text'] = delivery;
+        await controller.refreshHistory(original);
+        await expectLater(
+          controller.editSavedPrompt(
+            original,
+            original.messages.first,
+            'replacement',
+          ),
+          throwsStateError,
+        );
+        await expectLater(
+          controller.branchAnswer(original, 2, regenerate: true),
+          throwsStateError,
+        );
+        expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
+        expect(host.history('a', 'original').first['text'], delivery);
+      },
+    );
+  }
+
   test('stored multimodal rows use the gateway text projection', () {
     expect(
       answerMessageText({

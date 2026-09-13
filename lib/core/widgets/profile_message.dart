@@ -48,6 +48,7 @@ class ProfileMessage extends StatelessWidget {
     final notice = transcriptNoticeText(message);
     if (notice != null) {
       final result = transcriptNoticeResult(message);
+      final delivery = transcriptUserDelivery(message);
       final label = Text(
         notice,
         style: theme.textTheme.bodySmall?.copyWith(
@@ -61,15 +62,25 @@ class ProfileMessage extends StatelessWidget {
             : AnchoredExpansionTile(
                 key: ValueKey(('transcript-notice', message['id'])),
                 title: label,
-                subtitle: const Text('View result'),
+                subtitle: Text(delivery?.disclosure ?? 'View result'),
                 shape: const Border(),
                 children: [
                   Padding(
                     padding: const EdgeInsets.all(12),
-                    child: MarkdownMessageContent(
-                      data: result,
-                      onOpenRemoteFile: onOpenRemoteFile,
-                    ),
+                    child: delivery != null
+                        ? SelectableText(
+                            result,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontFamily:
+                                  delivery.kind == 'process_notification'
+                                  ? 'monospace'
+                                  : null,
+                            ),
+                          )
+                        : MarkdownMessageContent(
+                            data: result,
+                            onOpenRemoteFile: onOpenRemoteFile,
+                          ),
                   ),
                 ],
               ),
@@ -115,6 +126,23 @@ class ProfileMessage extends StatelessWidget {
         ? answerMessageDisplayText(message)
         : (message['display_content'] ?? message['content'] ?? '').toString();
     if (content.isEmpty) return const SizedBox.shrink();
+    if (role == 'system') {
+      final slash = RegExp(r'^slash:(/[^\n]+)\n([\s\S]*)$').firstMatch(content);
+      final text = slash == null
+          ? content
+          : '${slash.group(1)!.trim()} · ${slash.group(2)!.trim()}';
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        child: Center(
+          child: SelectableText(
+            text,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      );
+    }
     if (role == 'tool') {
       return ProfileToolActivity(messages: [message]);
     }
