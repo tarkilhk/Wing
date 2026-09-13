@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'anchored_expansion_tile.dart';
 
 /// Quiet metadata header for optional details between conversation messages.
 class ProfileTranscriptDisclosure extends StatefulWidget {
@@ -34,7 +35,7 @@ class _ProfileTranscriptDisclosureState
     return ListTileTheme.merge(
       minVerticalPadding: 0,
       horizontalTitleGap: 0,
-      child: ExpansionTile(
+      child: AnchoredExpansionTile(
         initiallyExpanded: widget.initiallyExpanded,
         maintainState: true,
         minTileHeight: 28,

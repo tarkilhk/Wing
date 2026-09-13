@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/profile_workspace_controller.dart';
+import '../utils/expansion_scroll_controller.dart';
+import '../widgets/anchored_expansion_tile.dart';
 import '../widgets/profile_tool_activity.dart';
 
 /// Reversed layout opens at the newest row. Older pages grow at the far end;
@@ -35,7 +37,7 @@ class ProfileTranscript extends StatefulWidget {
 }
 
 class _ProfileTranscriptState extends State<ProfileTranscript> {
-  late final _scroll = ScrollController(
+  late final _scroll = ExpansionScrollController(
     initialScrollOffset: widget.nearbyMessages == null
         ? widget.chat.historyScrollOffset
         : 0,
@@ -98,6 +100,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   }
 
   Future<void> _latest() async {
+    _scroll.releaseExpansionAnchor();
     _jumping = true;
     if (MediaQuery.disableAnimationsOf(context)) {
       _scroll.jumpTo(0);
@@ -117,7 +120,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     super.didUpdateWidget(oldWidget);
     if (widget.nearbyMessages != null) return;
     if (!_scroll.hasClients) return;
-    final atBottom = _scroll.offset <= 24 || _jumping;
+    final atBottom =
+        !_scroll.hasExpansionAnchor && (_scroll.offset <= 24 || _jumping);
     final newest = widget.chat.messages.lastOrNull?['id'];
     final segmentChanged = _segment != widget.chat.historySessionId;
     if (!atBottom &&
@@ -164,7 +168,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         if (box is RenderBox && box.hasSize && top != null) {
           final delta = box.localToGlobal(Offset.zero).dy - top;
           if (delta.abs() > 0.5) {
-            _scroll.jumpTo(
+            _scroll.restoreReaderOffset(
               (_scroll.offset - delta).clamp(
                 0.0,
                 _scroll.position.maxScrollExtent,
@@ -236,62 +240,83 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       key: _viewport,
       fit: StackFit.expand,
       children: [
-        NotificationListener<ScrollNotification>(
+        NotificationListener<ExpansionAnchorNotification>(
           onNotification: (event) {
-            if (event.depth != 0) return false;
-            if (event is ScrollStartNotification && event.dragDetails != null ||
-                event is ScrollUpdateNotification &&
-                    event.dragDetails != null) {
-              _gestureGeneration++;
-              _jumping = false;
-            }
-            widget.chat.historyScrollOffset = event.metrics.pixels;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _updateJump();
-            });
-            if ((event is ScrollUpdateNotification ||
-                    event is ScrollEndNotification) &&
-                event.metrics.extentAfter < 180 &&
-                event.metrics.pixels > 0 &&
-                !chat.historyLoading &&
-                chat.historyError == null) {
-              unawaited(widget.controller.loadOlderMessages(chat));
-            }
-            return false;
+            ++_layoutGeneration;
+            _jumping = false;
+            _scroll.anchorExpansion(event.anchor);
+            return true;
           },
-          child: ListView.builder(
-            key: const ValueKey('profile-transcript'),
-            controller: _scroll,
-            reverse: true,
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            findChildIndexCallback: (key) => indices[key],
-            itemCount: tail.length + rows.length + 1,
-            itemBuilder: (_, index) {
-              if (index < tail.length) return tail[index];
-              final rowIndex = index - tail.length;
-              if (rowIndex < rows.length) {
-                final section = rows[rowIndex];
-                final row = section.messages.last;
-                return KeyedSubtree(
-                  key: keys[rowIndex],
-                  child: section.isActivity
-                      ? ProfileToolActivitySection(
-                          groups: section.groups,
-                          showLatestReview:
-                              rowIndex == 0 && chat.streaming.isEmpty,
-                          currentActivity: rowIndex == 0 && joinCurrentActivity
-                              ? widget.currentActivity
-                              : const [],
-                        )
-                      : widget.messageBuilder(row),
-                );
+          child: NotificationListener<ScrollMetricsNotification>(
+            onNotification: (event) {
+              if (event.depth == 0) {
+                widget.chat.historyScrollOffset = event.metrics.pixels;
+                _updateJump();
               }
-              return KeyedSubtree(
-                key: const ValueKey('history-edge'),
-                child: _historyEdge(chat),
-              );
+              return false;
             },
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (event) {
+                if (event.depth != 0) return false;
+                if (event is ScrollStartNotification &&
+                        event.dragDetails != null ||
+                    event is ScrollUpdateNotification &&
+                        event.dragDetails != null) {
+                  _gestureGeneration++;
+                  _jumping = false;
+                  _scroll.releaseExpansionAnchor();
+                }
+                widget.chat.historyScrollOffset = event.metrics.pixels;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _updateJump();
+                });
+                if ((event is ScrollUpdateNotification ||
+                        event is ScrollEndNotification) &&
+                    event.metrics.extentAfter < 180 &&
+                    event.metrics.pixels > 0 &&
+                    !chat.historyLoading &&
+                    chat.historyError == null) {
+                  unawaited(widget.controller.loadOlderMessages(chat));
+                }
+                return false;
+              },
+              child: ListView.builder(
+                key: const ValueKey('profile-transcript'),
+                controller: _scroll,
+                reverse: true,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                findChildIndexCallback: (key) => indices[key],
+                itemCount: tail.length + rows.length + 1,
+                itemBuilder: (_, index) {
+                  if (index < tail.length) return tail[index];
+                  final rowIndex = index - tail.length;
+                  if (rowIndex < rows.length) {
+                    final section = rows[rowIndex];
+                    final row = section.messages.last;
+                    return KeyedSubtree(
+                      key: keys[rowIndex],
+                      child: section.isActivity
+                          ? ProfileToolActivitySection(
+                              groups: section.groups,
+                              showLatestReview:
+                                  rowIndex == 0 && chat.streaming.isEmpty,
+                              currentActivity:
+                                  rowIndex == 0 && joinCurrentActivity
+                                  ? widget.currentActivity
+                                  : const [],
+                            )
+                          : widget.messageBuilder(row),
+                    );
+                  }
+                  return KeyedSubtree(
+                    key: const ValueKey('history-edge'),
+                    child: _historyEdge(chat),
+                  );
+                },
+              ),
+            ),
           ),
         ),
         Positioned(

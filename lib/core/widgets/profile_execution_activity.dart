@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'anchored_expansion_tile.dart';
 
 import '../models/gateway_activity.dart';
 import '../models/gateway_todo.dart';
@@ -10,7 +11,7 @@ class ProfileLiveToolActivity extends StatelessWidget {
   const ProfileLiveToolActivity({super.key, required this.activities});
 
   @override
-  Widget build(BuildContext context) => ExpansionTile(
+  Widget build(BuildContext context) => AnchoredExpansionTile(
     key: const ValueKey('live-tool-activity'),
     initiallyExpanded: false,
     maintainState: true,
@@ -21,7 +22,7 @@ class ProfileLiveToolActivity extends StatelessWidget {
     ),
     children: [
       for (final activity in activities)
-        ExpansionTile(
+        AnchoredExpansionTile(
           key: ValueKey(('live-tool', activity.toolId ?? activity.name)),
           leading: Icon(
             activity.isFailed
@@ -63,7 +64,7 @@ class ProfileTodoPanel extends StatelessWidget {
     final completed = todos
         .where((todo) => todo.status == GatewayTodoStatus.completed)
         .length;
-    return ExpansionTile(
+    return AnchoredExpansionTile(
       key: const ValueKey('server-todos'),
       maintainState: true,
       leading: const Icon(Icons.checklist_rounded, size: 18),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'anchored_expansion_tile.dart';
 
 import '../models/gateway_process.dart';
 import '../models/session_control.dart';
@@ -167,7 +168,7 @@ class _ProfileBackgroundWorkPanelState
           chat.sessionControlLoading ||
           chat.sessionControlWorking;
       final refreshing = chat.sessionControlLoading || chat.processesLoading;
-      return ExpansionTile(
+      return AnchoredExpansionTile(
         key: ValueKey(('background-work', chat.key)),
         initiallyExpanded: widget.initiallyExpanded,
         minTileHeight: 48,
@@ -441,7 +442,7 @@ class _ProcessTile extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => ExpansionTile(
+  Widget build(BuildContext context) => AnchoredExpansionTile(
     key: ValueKey(('process', process.id)),
     minTileHeight: 44,
     tilePadding: EdgeInsets.zero,

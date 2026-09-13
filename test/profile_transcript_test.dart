@@ -2,17 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hermes_android/core/models/gateway_sensitive_prompt.dart';
+import 'package:hermes_android/core/models/gateway_activity.dart';
+import 'package:hermes_android/core/widgets/profile_execution_activity.dart';
 import 'package:hermes_android/core/screens/profile_transcript.dart';
 import 'package:hermes_android/core/services/profile_workspace_controller.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_history_fixture.dart';
 
-void main() {
+void main({Future<void> Function(WidgetTester, String)? capture}) {
   late ProfileWorkspaceController controller;
   late ProfileHistoryFixture host;
   late ProfileChat chat;
   var tailHeight = 0.0;
   var reducedMotion = false;
+  List<Widget> currentActivity = [];
+  List<Widget> extraTail = [];
   final list = find.byKey(const ValueKey('profile-transcript'));
   final jump = find.byKey(const ValueKey('jump-to-latest'));
 
@@ -41,13 +45,17 @@ void main() {
     await controller.refreshHistory(chat);
     tailHeight = 0;
     reducedMotion = false;
+    currentActivity = [];
+    extraTail = [];
   });
   tearDown(() => controller.dispose());
 
   Future<void> show(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(360, 760);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
+    if (tester.binding is AutomatedTestWidgetsFlutterBinding) {
+      tester.view.physicalSize = const Size(360, 760);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+    }
     await tester.pumpWidget(
       MaterialApp(
         builder: (context, child) => MediaQuery(
@@ -68,7 +76,11 @@ void main() {
                 height: 60 + (m['id'] as int) % 3 * 20,
                 child: Text(m['content'].toString()),
               ),
-              tail: [if (tailHeight > 0) SizedBox(height: tailHeight)],
+              currentActivity: currentActivity,
+              tail: [
+                if (tailHeight > 0) SizedBox(height: tailHeight),
+                ...extraTail,
+              ],
             ),
           ),
         ),
@@ -92,6 +104,20 @@ void main() {
       final y = tester.getTopLeft(find.byWidget(w)).dy;
       return y > 150 && y < 400;
     }).first;
+  }
+
+  Future<void> toggleInPlace(WidgetTester tester, Finder header) async {
+    final before = tester.getTopLeft(header).dy;
+    await tester.tapAt(
+      Offset(tester.getRect(list).right - 32, tester.getCenter(header).dy),
+    );
+    for (var frame = 0; frame < 20; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(tester.takeException(), isNull);
+      expect(tester.getTopLeft(header).dy, closeTo(before, 1));
+    }
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(header).dy, closeTo(before, 1));
   }
 
   testWidgets(
@@ -175,6 +201,11 @@ void main() {
     await show(tester);
     await tester.tap(find.text('Activity'));
     await tester.pumpAndSettle();
+    await Scrollable.ensureVisible(
+      tester.element(find.text('2 tool results')),
+      alignment: 0.3,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('2 tool results'));
     await tester.pumpAndSettle();
     expect(find.text('Output 1'), findsOneWidget);
@@ -185,6 +216,99 @@ void main() {
     await publish(tester);
     expect(find.text('Output 1'), findsOneWidget);
     expect(find.text('Output 4'), findsOneWidget);
+  });
+
+  testWidgets('expanding long tool output keeps its header in place', (
+    tester,
+  ) async {
+    chat.messages = [
+      ...List.generate(20, row),
+      {
+        'id': 100,
+        'role': 'tool',
+        'tool_name': 'Long output',
+        'content': List.generate(100, (i) => 'Output line $i').join('\n'),
+      },
+    ];
+    chat.nextHistoryOffset = null;
+    await show(tester);
+    final activity = find.text('Activity');
+    await toggleInPlace(tester, activity);
+    final header = find.text('Long output');
+    await tester.ensureVisible(header);
+    await tester.pumpAndSettle();
+    await capture?.call(tester, 'tool-before-expansion');
+    await toggleInPlace(tester, header);
+    expect(find.text(chat.messages.last['content'] as String), findsOneWidget);
+    await capture?.call(tester, 'tool-after-expansion');
+    await toggleInPlace(tester, header);
+    await toggleInPlace(tester, header);
+    final beforeDrag = tester.getTopLeft(header).dy;
+    await tester.drag(list, const Offset(0, -200));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(header).dy, lessThan(beforeDrag - 100));
+    await tester.tap(jump);
+    await tester.pumpAndSettle();
+    expect(chat.historyScrollOffset, closeTo(0, 1));
+  });
+
+  testWidgets(
+    'nested live tool details and reasoning expand without movement',
+    (tester) async {
+      chat.messages = List.generate(20, row);
+      chat.nextHistoryOffset = null;
+      currentActivity = [
+        ProfileLiveToolActivity(
+          activities: [
+            GatewayToolActivity(
+              name: 'delegate_task',
+              phase: GatewayToolActivityPhase.completed,
+              arguments: List.generate(100, (i) => 'Argument $i').join('\n'),
+              result: 'Result starts here',
+            ),
+          ],
+        ),
+      ];
+      extraTail = [ProfileReasoningDisclosure(text: 'Reasoning line\n' * 100)];
+      await show(tester);
+      await toggleInPlace(tester, find.text('Activity'));
+      final current = find.text('Current tool activity');
+      await tester.ensureVisible(current);
+      await tester.pumpAndSettle();
+      await toggleInPlace(tester, current);
+      final tool = find.text('Delegate task');
+      await tester.ensureVisible(tool);
+      await tester.pumpAndSettle();
+      await toggleInPlace(tester, tool);
+      expect(find.text('Result starts here'), findsOneWidget);
+      await capture?.call(tester, 'nested-tool-after-expansion');
+      chat.streaming = 'Concurrent streaming update';
+      final beforeRefresh = tester.getTopLeft(tool).dy;
+      await publish(tester);
+      expect(tester.getTopLeft(tool).dy, closeTo(beforeRefresh, 1));
+      await toggleInPlace(tester, tool);
+      expect(find.text('Result starts here'), findsNothing);
+      await tester.tap(jump);
+      await tester.pumpAndSettle();
+      final thought = find.text('Thought');
+      await tester.ensureVisible(thought);
+      await tester.pumpAndSettle();
+      await toggleInPlace(tester, thought);
+    },
+  );
+
+  testWidgets('a short conversation keeps the expansion header in place', (
+    tester,
+  ) async {
+    chat.messages = [row(1)];
+    chat.nextHistoryOffset = null;
+    extraTail = [const ProfileReasoningDisclosure(text: 'A short thought')];
+    await show(tester);
+    final thought = find.text('Thought');
+    await toggleInPlace(tester, thought);
+    expect(find.text('A short thought'), findsOneWidget);
+    await toggleInPlace(tester, thought);
+    expect(chat.historyScrollOffset, closeTo(0, 1));
   });
 
   testWidgets('empty assistant rows leave existing tool cards in one section', (

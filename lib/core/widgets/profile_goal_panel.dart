@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'anchored_expansion_tile.dart';
 
 import '../models/session_control.dart';
 import '../services/profile_workspace_controller.dart';
@@ -252,7 +253,7 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
       final goal = snapshot?.goal;
       final working = chat.sessionControlLoading || chat.sessionControlWorking;
       final error = chat.sessionControlError;
-      return ExpansionTile(
+      return AnchoredExpansionTile(
         key: ValueKey(('goal', chat.key)),
         initiallyExpanded: widget.initiallyExpanded,
         minTileHeight: 48,

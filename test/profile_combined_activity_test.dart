@@ -59,6 +59,11 @@ void main() {
     await tester.pump();
     expect(find.text('67 tool results'), findsOneWidget);
     expect(find.text('Current tool activity'), findsOneWidget);
+    await Scrollable.ensureVisible(
+      tester.element(find.text('67 tool results')),
+      alignment: 0.3,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('67 tool results'));
     await tester.pumpAndSettle();
     expect(find.text('Result 2'), findsOneWidget);

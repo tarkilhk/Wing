@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'anchored_expansion_tile.dart';
 
 import '../models/gateway_insight.dart';
 import '../services/profile_workspace_controller.dart';
@@ -55,7 +56,7 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
     listenable: widget.controller,
     builder: (context, _) {
       final chat = widget.chat;
-      return ExpansionTile(
+      return AnchoredExpansionTile(
         key: ValueKey(('subagents', chat.key)),
         initiallyExpanded: widget.initiallyExpanded,
         onExpansionChanged: (expanded) {

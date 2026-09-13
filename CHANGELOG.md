@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.31.21+2206] - 2026-09-14
+
+### Fixed
+
+- Keep expandable transcript headers in place while details open or close, including nested tool calls and short conversations.
+- Preserve manual scrolling and the Latest action while transcript content changes.
+- Show one centered steering acknowledgement without a duplicate queued message.
+
 ## [2.31.20+2205] - 2026-09-14
 
 ### Changed

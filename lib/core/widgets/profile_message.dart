@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'anchored_expansion_tile.dart';
 import 'package:flutter/services.dart';
 
 import '../models/answer_versions.dart';
@@ -57,7 +58,7 @@ class ProfileMessage extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
         child: result == null
             ? Center(child: label)
-            : ExpansionTile(
+            : AnchoredExpansionTile(
                 key: ValueKey(('transcript-notice', message['id'])),
                 title: label,
                 subtitle: const Text('View result'),

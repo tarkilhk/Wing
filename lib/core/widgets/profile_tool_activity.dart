@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'anchored_expansion_tile.dart';
 import '../models/answer_versions.dart';
 import '../models/review_notice.dart';
 import 'profile_review_notice_card.dart';
@@ -158,7 +159,7 @@ class ProfileToolActivity extends StatelessWidget {
         color: colors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(14),
         clipBehavior: Clip.antiAlias,
-        child: ExpansionTile(
+        child: AnchoredExpansionTile(
           initiallyExpanded: initiallyExpanded,
           minTileHeight: 48,
           tilePadding: const EdgeInsets.symmetric(horizontal: 12),

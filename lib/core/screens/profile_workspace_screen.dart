@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../services/profile_workspace_controller.dart';
 import '../services/remote_files_client.dart';
 import '../widgets/profile_message.dart';
+import '../widgets/anchored_expansion_tile.dart';
 import '../widgets/profile_queued_messages.dart';
 import '../widgets/queued_prompt_editor.dart';
 import '../models/queued_prompt_draft.dart';
@@ -655,7 +656,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           currentActivity: [
             if (chat.tool != null &&
                 !chat.toolActivities.any((activity) => !activity.isTerminal))
-              ExpansionTile(
+              AnchoredExpansionTile(
                 minTileHeight: 48,
                 shape: const Border(),
                 collapsedShape: const Border(),
@@ -787,7 +788,9 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   );
                 },
               ),
-            for (final output in chat.commandOutput)
+            for (final output in chat.commandOutput.where(
+              (output) => output.trim() != 'Steering message queued.',
+            ))
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: SelectableText(output),

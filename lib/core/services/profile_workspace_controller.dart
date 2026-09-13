@@ -3635,7 +3635,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
         if (!await steer(chat, argument)) {
           throw StateError('Hermes rejected the steering message.');
         }
-        chat.commandOutput.add('Steering message queued.');
       default:
         return false;
     }

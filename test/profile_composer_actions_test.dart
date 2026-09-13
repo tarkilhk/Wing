@@ -28,9 +28,15 @@ class _ComposerActionsFixture extends ProfileActionsFixture {
       scope: scope,
       discover: base.discover,
       get: base.read,
-      rpc: (method, params) => method == 'session.steer'
-          ? steerReply?.future ?? Future.value(steerResult)
-          : base.call(method, params),
+      rpc: (method, params) => switch (method) {
+        'session.steer' => steerReply?.future ?? Future.value(steerResult),
+        'commands.catalog' => Future.value({
+          'pairs': [
+            ['/steer', 'Steer the current turn'],
+          ],
+        }),
+        _ => base.call(method, params),
+      },
     );
   }
 }
@@ -171,6 +177,35 @@ void main() {
     expect(find.text('steered'), findsOneWidget);
     expect(find.text('Focus on the failing test'), findsOneWidget);
     expect(find.byIcon(Icons.explore_outlined), findsOneWidget);
+  });
+
+  testWidgets('slash steer shows only its centered confirmation', (tester) async {
+    final chat = await show(
+      tester,
+      status: ProfileTurnStatus.running,
+      draft: '/steer Keep the data clean',
+    );
+    await controller.send(chat);
+    await pumpFrames(tester);
+    expect(chat.error, isNull);
+    expect(chat.commandOutput, isEmpty);
+    expect(find.text('steered'), findsOneWidget);
+    expect(find.text('Keep the data clean'), findsOneWidget);
+    expect(find.text('Steering message queued.'), findsNothing);
+  });
+
+  testWidgets('stale steering command output is hidden', (tester) async {
+    final chat = await show(tester, status: ProfileTurnStatus.running);
+    chat.commandOutput.addAll([
+      'Steering message queued.',
+      'Keep this command result',
+    ]);
+    await controller.steer(chat, 'Keep the data clean');
+    await pumpFrames(tester);
+    expect(find.text('Steering message queued.'), findsNothing);
+    expect(find.text('Keep this command result'), findsOneWidget);
+    expect(find.text('steered'), findsOneWidget);
+    expect(find.text('Keep the data clean'), findsOneWidget);
   });
 
   testWidgets('Message actions queues an attachment-only draft by filename', (

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'anchored_expansion_tile.dart';
 
 import '../services/profile_gateway.dart';
 
@@ -148,7 +149,7 @@ class _UsageDetails extends StatelessWidget {
         ...rows,
         const Text('Unreported costs are not included.'),
         if (models is List && models.whereType<Map>().isNotEmpty)
-          ExpansionTile(
+          AnchoredExpansionTile(
             tilePadding: EdgeInsets.zero,
             title: const Text('Models (includes auxiliary calls)'),
             children: [
