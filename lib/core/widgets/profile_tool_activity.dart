@@ -26,7 +26,7 @@ class ProfileToolActivitySection extends StatelessWidget {
         initiallyExpanded: expanded,
         maintainState: true,
         minTileHeight: 48,
-        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
         shape: const Border(),
         collapsedShape: const Border(),
         leading: const Icon(Icons.terminal_rounded, size: 18),

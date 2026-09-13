@@ -24,6 +24,8 @@ class CommandHost extends Host {
   final List<String> backgroundTaskIds = ['background-task-1'];
   FutureOr<Map<String, dynamic>> Function(Map<String, dynamic>)?
   backgroundRespond;
+  Completer<void>? sensitiveResponseDelay;
+  Object? sensitiveResponseError;
   Map<String, dynamic> catalog(String profile) => {
     'pairs': [
       ['/$profile-skill', 'Profile $profile skill'],
@@ -64,6 +66,11 @@ class CommandHost extends Host {
       },
       rpc: (method, params) async {
         commandCalls.add((method, params));
+        if (method == 'secret.respond') {
+          await sensitiveResponseDelay?.future;
+          final error = sensitiveResponseError;
+          if (error != null) throw error;
+        }
         if (method == 'commands.catalog') return catalog(scope.profileName);
         if (method == 'config.set' && params['key'] == 'yolo') {
           yolo = params['value']!.toString();
@@ -205,6 +212,258 @@ void main() {
       );
     },
   );
+
+  test(
+    'skill dispatch resumes after its secret preflight is cancelled',
+    () async {
+      final reply = Completer<Map<String, dynamic>>();
+      host.respond = (_, _) => reply.future;
+      chat.draft = '/a-skill needs setup';
+
+      final sending = controller.send(chat);
+      await Future<void>.delayed(Duration.zero);
+      host.event('a', 'secret.request', {
+        'request_id': 'skill-secret',
+        'env_var': 'FIXTURE_TOKEN',
+        'prompt': 'Optional fixture token',
+      });
+      final request = chat.sensitivePrompt!;
+      expect(chat.status, ProfileTurnStatus.attention);
+
+      await controller.respondSensitivePrompt(
+        chat,
+        '',
+        expectedRequest: request,
+      );
+      reply.complete({
+        'type': 'skill',
+        'message': 'Expanded skill prompt after skipped setup',
+        'display': '/a-skill needs setup',
+      });
+      await sending;
+
+      final submissions = host.commandCalls
+          .where((call) => call.$1 == 'prompt.submit')
+          .toList();
+      expect(submissions, hasLength(1));
+      expect(
+        submissions.single.$2['text'],
+        'Expanded skill prompt after skipped setup',
+      );
+      expect(chat.messages.single['display_content'], '/a-skill needs setup');
+      expect(chat.draft, isEmpty);
+      expect(chat.status, ProfileTurnStatus.running);
+    },
+  );
+
+  test(
+    'late secret response acknowledgement does not block the expanded skill prompt',
+    () async {
+      final dispatch = Completer<Map<String, dynamic>>();
+      host.respond = (_, _) => dispatch.future;
+      host.sensitiveResponseDelay = Completer<void>();
+      chat.draft = '/a-skill delayed cancel';
+
+      final sending = controller.send(chat);
+      await Future<void>.delayed(Duration.zero);
+      host.event('a', 'secret.request', {
+        'request_id': 'delayed-secret',
+        'env_var': 'FIXTURE_TOKEN',
+      });
+      final request = chat.sensitivePrompt!;
+      final cancelling = controller.respondSensitivePrompt(
+        chat,
+        '',
+        expectedRequest: request,
+      );
+      dispatch.complete({
+        'type': 'skill',
+        'message': 'Expanded while cancel acknowledgement is pending',
+      });
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
+        hasLength(1),
+      );
+      expect(chat.status, ProfileTurnStatus.running);
+      host.sensitiveResponseDelay!.complete();
+      await cancelling;
+      await sending;
+      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.sensitivePrompt, isNull);
+    },
+  );
+
+  test(
+    'secret request during prompt acknowledgement remains a live turn',
+    () async {
+      host.respond = (_, _) async => {
+        'type': 'skill',
+        'message': 'Expanded prompt',
+      };
+      host.promptSubmitStarted = Completer<void>();
+      host.promptSubmitDelay = Completer<void>();
+      chat.draft = '/a-skill live prompt secret';
+
+      final sending = controller.send(chat);
+      await host.promptSubmitStarted!.future;
+      host.event('a', 'secret.request', {
+        'request_id': 'live-turn-secret',
+        'env_var': 'FIXTURE_TOKEN',
+      });
+      final request = chat.sensitivePrompt!;
+      expect(chat.status, ProfileTurnStatus.attention);
+      await controller.respondSensitivePrompt(
+        chat,
+        '',
+        expectedRequest: request,
+      );
+      expect(chat.status, ProfileTurnStatus.running);
+
+      host.promptSubmitDelay!.complete();
+      await sending;
+      expect(
+        host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
+        hasLength(1),
+      );
+      expect(chat.status, ProfileTurnStatus.running);
+    },
+  );
+
+  test(
+    'failed preflight secret response can be retried before skill submit',
+    () async {
+      final dispatch = Completer<Map<String, dynamic>>();
+      host.respond = (_, _) => dispatch.future;
+      host.sensitiveResponseError = TimeoutException('retry response');
+      chat.draft = '/a-skill retry secret';
+
+      final sending = controller.send(chat);
+      await Future<void>.delayed(Duration.zero);
+      host.event('a', 'secret.request', {
+        'request_id': 'retry-secret',
+        'env_var': 'FIXTURE_TOKEN',
+      });
+      final request = chat.sensitivePrompt!;
+      await expectLater(
+        controller.respondSensitivePrompt(chat, '', expectedRequest: request),
+        throwsA(isA<TimeoutException>()),
+      );
+      expect(chat.status, ProfileTurnStatus.attention);
+      expect(chat.sensitivePrompt, same(request));
+
+      host.sensitiveResponseError = null;
+      await controller.respondSensitivePrompt(
+        chat,
+        '',
+        expectedRequest: request,
+      );
+      dispatch.complete({
+        'type': 'skill',
+        'message': 'Expanded after secret retry',
+      });
+      await sending;
+
+      expect(
+        host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
+        hasLength(1),
+      );
+      expect(chat.status, ProfileTurnStatus.running);
+    },
+  );
+
+  test(
+    'replacement preflight request keeps the original return state',
+    () async {
+      final dispatch = Completer<Map<String, dynamic>>();
+      host.respond = (_, _) => dispatch.future;
+      chat
+        ..draft = '/a-skill replacement secret'
+        ..status = ProfileTurnStatus.completed;
+
+      final sending = controller.send(chat);
+      await Future<void>.delayed(Duration.zero);
+      host.event('a', 'secret.request', {
+        'request_id': 'first-secret',
+        'env_var': 'FIRST_TOKEN',
+      });
+      host.event('a', 'secret.request', {
+        'request_id': 'replacement-secret',
+        'env_var': 'SECOND_TOKEN',
+      });
+      final replacement = chat.sensitivePrompt!;
+      await controller.respondSensitivePrompt(
+        chat,
+        '',
+        expectedRequest: replacement,
+      );
+      expect(chat.status, ProfileTurnStatus.completed);
+
+      dispatch.complete({
+        'type': 'skill',
+        'message': 'Expanded after replacement secret',
+      });
+      await sending;
+      expect(
+        host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
+        hasLength(1),
+      );
+      expect(chat.status, ProfileTurnStatus.running);
+    },
+  );
+
+  test(
+    'sensitive preflight expiry releases every stock request kind',
+    () async {
+      const cases = [
+        ('sudo.request', 'sudo.expire'),
+        ('secret.request', 'secret.expire'),
+        ('vault.unlock.request', 'vault.unlock.expire'),
+        ('vault.save_login.request', 'vault.save_login.expire'),
+        ('vault.code.request', 'vault.code.expire'),
+      ];
+
+      for (var index = 0; index < cases.length; index++) {
+        final dispatch = Completer<Map<String, dynamic>>();
+        host.respond = (_, _) => dispatch.future;
+        chat
+          ..draft = '/a-skill expiring request $index'
+          ..status = ProfileTurnStatus.completed;
+        final sending = controller.send(chat);
+        await Future<void>.delayed(Duration.zero);
+        final requestId = 'expiring-$index';
+        host.event('a', cases[index].$1, {'request_id': requestId});
+        expect(chat.status, ProfileTurnStatus.attention);
+
+        host.event('a', cases[index].$2, {'request_id': requestId});
+        expect(chat.sensitivePrompt, isNull);
+        expect(chat.status, ProfileTurnStatus.completed);
+        dispatch.complete({
+          'type': 'skill',
+          'message': 'Expanded after expiry $index',
+        });
+        await sending;
+        expect(chat.status, ProfileTurnStatus.running);
+      }
+
+      expect(
+        host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
+        hasLength(cases.length),
+      );
+    },
+  );
+
+  test('sensitive expiry during an active turn stays running', () async {
+    chat.status = ProfileTurnStatus.running;
+    host.event('a', 'secret.request', {'request_id': 'active-secret-expiry'});
+    expect(chat.status, ProfileTurnStatus.attention);
+
+    host.event('a', 'secret.expire', {'request_id': 'active-secret-expiry'});
+
+    expect(chat.sensitivePrompt, isNull);
+    expect(chat.status, ProfileTurnStatus.running);
+  });
 
   test('duplicate taps do not execute a command twice', () async {
     final reply = Completer<Map<String, dynamic>>();

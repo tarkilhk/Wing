@@ -130,6 +130,9 @@ class ProfileChat {
   String? error;
   bool changingAnswer = false;
   bool commandRunning = false;
+  bool _commandDispatchPending = false;
+  GatewaySensitivePromptRequest? _commandPreflightSensitivePrompt;
+  ProfileTurnStatus? _commandPreflightReturnStatus;
   final List<String> commandOutput = [];
   final List<SideQuestionDelivery> sideQuestionDeliveries = [];
   Map<String, dynamic>? approval;
@@ -3196,25 +3199,30 @@ class ProfileWorkspaceController extends ChangeNotifier {
           );
         }
         Map<String, dynamic> result;
+        chat._commandDispatchPending = true;
         try {
-          result = await resource.gateway.call('command.dispatch', {
-            'session_id': chat.runtimeId,
-            'name': name,
-            'arg': argument,
-          });
-        } on JsonRpcError catch (e) {
-          // This exact refusal means dispatch did not execute anything. Never
-          // retry a timeout or a command failure through another execution path.
-          if (e.code != 4018 ||
-              !e.message.startsWith(
-                'not a quick/plugin/bundle/skill command:',
-              )) {
-            rethrow;
+          try {
+            result = await resource.gateway.call('command.dispatch', {
+              'session_id': chat.runtimeId,
+              'name': name,
+              'arg': argument,
+            });
+          } on JsonRpcError catch (e) {
+            // This exact refusal means dispatch did not execute anything. Never
+            // retry a timeout or a command failure through another execution path.
+            if (e.code != 4018 ||
+                !e.message.startsWith(
+                  'not a quick/plugin/bundle/skill command:',
+                )) {
+              rethrow;
+            }
+            result = await resource.gateway.call('slash.exec', {
+              'session_id': chat.runtimeId,
+              'command': '/$name${argument.isEmpty ? '' : ' $argument'}',
+            });
           }
-          result = await resource.gateway.call('slash.exec', {
-            'session_id': chat.runtimeId,
-            'command': '/$name${argument.isEmpty ? '' : ' $argument'}',
-          });
+        } finally {
+          chat._commandDispatchPending = false;
         }
         final type = result['type'];
         if (type == 'alias') {
@@ -4077,7 +4085,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final responseValue = request.kind == GatewaySensitivePromptKind.vaultCode
         ? value.replaceAll(RegExp(r'[\s-]'), '')
         : value;
+    final commandPreflight = identical(
+      chat._commandPreflightSensitivePrompt,
+      request,
+    );
+    final commandReturnStatus = chat._commandPreflightReturnStatus;
     chat.sensitivePromptResponding = true;
+    if (commandPreflight &&
+        chat.status == ProfileTurnStatus.attention &&
+        chat.approval == null &&
+        chat.clarification == null) {
+      chat.status = commandReturnStatus ?? ProfileTurnStatus.idle;
+    }
     _changed();
     try {
       await resource.gateway.call(method, {
@@ -4088,6 +4107,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
       final missingPending = _isMissingSensitivePrompt(error, request.kind);
       if (identical(chat.sensitivePrompt, request)) {
         chat.sensitivePromptResponding = false;
+        if (commandPreflight &&
+            !missingPending &&
+            chat.status == commandReturnStatus) {
+          chat.status = ProfileTurnStatus.attention;
+        }
         if (chat.runtimeId != runtime || missingPending) {
           chat.sensitivePrompt = null;
           if (chat.status == ProfileTurnStatus.attention &&
@@ -4098,6 +4122,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
         _changed();
       }
+      if (identical(chat._commandPreflightSensitivePrompt, request) &&
+          (missingPending ||
+              chat.runtimeId != runtime ||
+              !identical(chat.sensitivePrompt, request))) {
+        chat._commandPreflightSensitivePrompt = null;
+        chat._commandPreflightReturnStatus = null;
+      }
       if (missingPending) return;
       rethrow;
     }
@@ -4107,10 +4138,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat.sensitivePromptResponding = false;
     if (chat.runtimeId != runtime) {
       chat.sensitivePrompt = null;
+      if (identical(chat._commandPreflightSensitivePrompt, request)) {
+        chat._commandPreflightSensitivePrompt = null;
+        chat._commandPreflightReturnStatus = null;
+      }
       _changed();
       return;
     }
     chat.sensitivePrompt = null;
+    if (identical(chat._commandPreflightSensitivePrompt, request)) {
+      chat._commandPreflightSensitivePrompt = null;
+      chat._commandPreflightReturnStatus = null;
+    }
     if (chat.status == ProfileTurnStatus.attention &&
         chat.approval == null &&
         chat.clarification == null) {
@@ -4350,17 +4389,31 @@ class ProfileWorkspaceController extends ChangeNotifier {
           data: event.data,
         );
         if (request != null) {
+          final commandReturnStatus =
+              chat._commandPreflightSensitivePrompt != null
+              ? chat._commandPreflightReturnStatus
+              : chat.status;
+          chat._commandPreflightSensitivePrompt = chat._commandDispatchPending
+              ? request
+              : null;
+          chat._commandPreflightReturnStatus = chat._commandDispatchPending
+              ? commandReturnStatus
+              : null;
           chat.sensitivePrompt = request;
           chat.sensitivePromptResponding = false;
           chat.status = ProfileTurnStatus.attention;
           _notify(chat, true, eventId: _notificationEventId(event.data));
         }
+      case 'sudo.expire':
+      case 'secret.expire':
       case 'vault.unlock.expire':
       case 'vault.save_login.expire':
       case 'vault.code.expire':
         final request = chat.sensitivePrompt;
         final requestId = event.data['request_id']?.toString().trim() ?? '';
         final kind = switch (event.type) {
+          'sudo.expire' => GatewaySensitivePromptKind.sudo,
+          'secret.expire' => GatewaySensitivePromptKind.secret,
           'vault.unlock.expire' => GatewaySensitivePromptKind.vaultUnlock,
           'vault.save_login.expire' =>
             GatewaySensitivePromptKind.vaultSaveLogin,
@@ -4369,12 +4422,23 @@ class ProfileWorkspaceController extends ChangeNotifier {
         if (requestId.isNotEmpty &&
             request?.kind == kind &&
             request?.requestId == requestId) {
+          final commandPreflight = identical(
+            chat._commandPreflightSensitivePrompt,
+            request,
+          );
+          final commandReturnStatus = chat._commandPreflightReturnStatus;
           chat.sensitivePrompt = null;
           chat.sensitivePromptResponding = false;
+          if (identical(chat._commandPreflightSensitivePrompt, request)) {
+            chat._commandPreflightSensitivePrompt = null;
+            chat._commandPreflightReturnStatus = null;
+          }
           if (chat.status == ProfileTurnStatus.attention &&
               chat.approval == null &&
               chat.clarification == null) {
-            chat.status = ProfileTurnStatus.running;
+            chat.status = commandPreflight
+                ? commandReturnStatus ?? ProfileTurnStatus.idle
+                : ProfileTurnStatus.running;
           }
         }
       case 'message.complete':
@@ -4416,6 +4480,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat.clarification = null;
     chat.sensitivePrompt = null;
     chat.sensitivePromptResponding = false;
+    chat._commandPreflightSensitivePrompt = null;
+    chat._commandPreflightReturnStatus = null;
     final finalText = completion['text']?.toString() ?? chat.streaming;
     if (finalText.isNotEmpty) {
       chat.messages.add({

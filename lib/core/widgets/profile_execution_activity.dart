@@ -11,7 +11,7 @@ class ProfileLiveToolActivity extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ExpansionTile(
     key: const ValueKey('live-tool-activity'),
-    initiallyExpanded: activities.any((activity) => !activity.isTerminal),
+    initiallyExpanded: false,
     maintainState: true,
     leading: const Icon(Icons.terminal_rounded, size: 18),
     title: const Text('Current tool activity'),

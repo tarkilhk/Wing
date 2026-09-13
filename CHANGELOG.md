@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.31.11+2196] - 2026-09-13
+
+### Fixed
+
+- Continue a skill's message after cancelling or timing out its secret setup instead of leaving the chat stuck working.
+- Group live tool activity, subagents, thinking, tasks and background work under one aligned Activity section that expands only when tapped.
+
 ## [2.31.10+2195] - 2026-09-13
 
 ### Fixed

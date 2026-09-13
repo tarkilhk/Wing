@@ -177,6 +177,51 @@ void main() {
     expect(find.text('Checked the contract.'), findsOneWidget);
   });
 
+  testWidgets(
+    'running tool activity stays collapsed through draft rebuilds until tapped',
+    (tester) async {
+      final tool = GatewayToolActivity.fromGatewayEvent('tool.start', {
+        'tool_id': 'tool-running',
+        'name': 'search_files',
+        'args': {'query': 'gateway'},
+      })!;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StatefulBuilder(
+            builder: (context, setState) => Scaffold(
+              body: Column(
+                children: [
+                  TextField(
+                    key: const ValueKey('draft'),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  ProfileLiveToolActivity(activities: [tool]),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Search files'), findsNothing);
+      await tester.enterText(find.byKey(const ValueKey('draft')), 'typing');
+      await tester.pump();
+      expect(find.text('Search files'), findsNothing);
+
+      await tester.tap(find.text('Current tool activity'));
+      await tester.pumpAndSettle();
+      expect(find.text('Search files'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('draft')),
+        'typing more',
+      );
+      await tester.pump();
+      expect(find.text('Search files'), findsOneWidget);
+    },
+  );
+
   test('reads verified historical reasoning fields', () {
     expect(
       profileMessageReasoning({

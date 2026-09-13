@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
+import 'package:hermes_android/core/models/gateway_activity.dart';
 import 'package:hermes_android/core/services/profile_workspace_controller.dart';
 import 'package:hermes_android/core/theme/hermes_theme.dart';
 import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
@@ -243,6 +244,58 @@ void main() {
         ...rows.skip(1),
       ]);
       expect(extended.first.last['id'], 3);
+    },
+  );
+
+  testWidgets(
+    'current execution stays in one collapsed Activity section per chat',
+    (tester) async {
+      final chat = await controller.createChat();
+      chat.messages.addAll([
+        {
+          'id': 1,
+          'role': 'tool',
+          'tool_name': 'Saved read',
+          'content': 'Saved tool result',
+        },
+        {'id': 2, 'role': 'assistant', 'content': 'Visible saved reply'},
+      ]);
+      chat.toolActivities.add(
+        const GatewayToolActivity(
+          name: 'terminal',
+          phase: GatewayToolActivityPhase.running,
+        ),
+      );
+      chat.reasoning = 'Current private reasoning';
+
+      await show(tester);
+      expect(find.text('Activity'), findsOneWidget);
+      expect(find.text('Current tool activity'), findsNothing);
+      expect(find.text('Current private reasoning'), findsNothing);
+      expect(find.text('Tool activity'), findsOneWidget);
+      expect(find.text('Visible saved reply'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Activity')).dx,
+        closeTo(tester.getTopLeft(find.text('Tool activity')).dx, 0.1),
+      );
+
+      await tester.tap(find.text('Activity'));
+      await tester.pumpAndSettle();
+      expect(find.text('Current tool activity'), findsOneWidget);
+      expect(find.text('Thought'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const Key('profile-message-composer')),
+        'Typing must not collapse current activity',
+      );
+      await tester.pump();
+      expect(find.text('Current tool activity'), findsOneWidget);
+
+      await tester.tap(find.text('Activity'));
+      await tester.pumpAndSettle();
+      expect(find.text('Current tool activity'), findsNothing);
+      expect(find.text('Tool activity'), findsOneWidget);
+      expect(find.text('Visible saved reply'), findsOneWidget);
     },
   );
 

@@ -622,6 +622,17 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     );
   }
 
+  bool _hasCurrentActivity(ProfileChat chat) =>
+      chat.tool != null ||
+      chat.toolActivities.isNotEmpty ||
+      chat.todos.isNotEmpty ||
+      chat.sessionControl?.goal != null ||
+      chat.subagents.isNotEmpty ||
+      chat.sessionControl?.loop != null ||
+      chat.sessionControl?.heartbeat != null ||
+      chat.processes.isNotEmpty ||
+      chat.reasoning.isNotEmpty;
+
   Widget _chat(ProfileChat chat, BuildContext context) => Column(
     children: [
       if (chat.busy || chat.error != null)
@@ -669,47 +680,58 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 message: {'role': 'assistant', 'content': chat.streaming},
                 streaming: true,
               ),
-            if (chat.tool != null &&
-                !chat.toolActivities.any((activity) => !activity.isTerminal))
-              ExpansionTile(
-                minTileHeight: 48,
-                shape: const Border(),
-                collapsedShape: const Border(),
-                leading: const Icon(Icons.terminal, size: 20),
-                title: Text(
-                  'Using ${chat.tool!}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                children: const [Text('Running on the connected Hermes host')],
-              ),
-            if (chat.toolActivities.isNotEmpty)
-              ProfileLiveToolActivity(activities: chat.toolActivities),
-            if (chat.todos.isNotEmpty) ProfileTodoPanel(todos: chat.todos),
-            if (chat.sessionControl?.goal != null)
-              ProfileGoalPanel(
-                key: ValueKey(('goal', chat.key)),
-                controller: controller,
-                chat: chat,
-              ),
-            if (chat.subagents.isNotEmpty)
-              ProfileSubagentPanel(
-                key: ValueKey(('subagents', chat.key)),
-                controller: controller,
-                chat: chat,
-              ),
-            if (chat.sessionControl?.loop != null ||
-                chat.sessionControl?.heartbeat != null ||
-                chat.processes.isNotEmpty)
-              ProfileBackgroundWorkPanel(
-                key: ValueKey(('background', chat.key)),
-                controller: controller,
-                chat: chat,
-              ),
-            if (chat.reasoning.isNotEmpty)
-              ProfileReasoningDisclosure(
-                text: chat.reasoning,
-                running: chat.busy,
+            if (_hasCurrentActivity(chat))
+              _ProfileActivitySection(
+                key: ValueKey(('activity', chat.key)),
+                children: [
+                  if (chat.tool != null &&
+                      !chat.toolActivities.any(
+                        (activity) => !activity.isTerminal,
+                      ))
+                    ExpansionTile(
+                      minTileHeight: 48,
+                      shape: const Border(),
+                      collapsedShape: const Border(),
+                      leading: const Icon(Icons.terminal, size: 20),
+                      title: Text(
+                        'Using ${chat.tool!}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      children: const [
+                        Text('Running on the connected Hermes host'),
+                      ],
+                    ),
+                  if (chat.toolActivities.isNotEmpty)
+                    ProfileLiveToolActivity(activities: chat.toolActivities),
+                  if (chat.todos.isNotEmpty)
+                    ProfileTodoPanel(todos: chat.todos),
+                  if (chat.sessionControl?.goal != null)
+                    ProfileGoalPanel(
+                      key: ValueKey(('goal', chat.key)),
+                      controller: controller,
+                      chat: chat,
+                    ),
+                  if (chat.subagents.isNotEmpty)
+                    ProfileSubagentPanel(
+                      key: ValueKey(('subagents', chat.key)),
+                      controller: controller,
+                      chat: chat,
+                    ),
+                  if (chat.sessionControl?.loop != null ||
+                      chat.sessionControl?.heartbeat != null ||
+                      chat.processes.isNotEmpty)
+                    ProfileBackgroundWorkPanel(
+                      key: ValueKey(('background', chat.key)),
+                      controller: controller,
+                      chat: chat,
+                    ),
+                  if (chat.reasoning.isNotEmpty)
+                    ProfileReasoningDisclosure(
+                      text: chat.reasoning,
+                      running: chat.busy,
+                    ),
+                ],
               ),
             for (final notice in chat.reviewNotices)
               ProfileReviewNoticeCard(notice: notice),
@@ -1561,4 +1583,26 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     if (path == null || path.isEmpty) return;
     await controller.createProject(name, path);
   }
+}
+
+class _ProfileActivitySection extends StatelessWidget {
+  final List<Widget> children;
+
+  const _ProfileActivitySection({super.key, required this.children});
+
+  @override
+  Widget build(BuildContext context) => ListTileTheme.merge(
+    minLeadingWidth: 24,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+    child: ExpansionTile(
+      key: const ValueKey('profile-current-activity'),
+      initiallyExpanded: false,
+      maintainState: true,
+      shape: const Border(),
+      collapsedShape: const Border(),
+      leading: const Icon(Icons.bolt_rounded, size: 20),
+      title: const Text('Activity'),
+      children: children,
+    ),
+  );
 }
