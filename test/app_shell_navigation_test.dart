@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
+import 'package:hermes_android/core/screens/workspace_overview_content.dart';
 import 'package:hermes_android/core/services/profile_workspace_controller.dart';
 import 'package:hermes_android/core/services/connection_manager.dart';
 import 'package:hermes_android/core/widgets/app_drawer.dart';
@@ -87,6 +88,15 @@ void main() {
       expect(controller.visible, isTrue);
       await navigate(tester, AppDestination.administration);
       expect(find.text('Connection and selected profile'), findsOneWidget);
+      // Administration grows beyond the viewport as profile controls are added.
+      await tester.scrollUntilVisible(
+        find.text('Diagnostics'),
+        300,
+        scrollable: find.descendant(
+          of: find.byType(HermesAdministrationContent),
+          matching: find.byType(Scrollable),
+        ),
+      );
       expect(find.text('Diagnostics'), findsOneWidget);
       expect(controller.current!.chat, same(chat));
       await navigate(tester, AppDestination.chats);

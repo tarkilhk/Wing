@@ -82,8 +82,9 @@ android {
            applicationIdSuffix = ".dev"
            versionNameSuffix = "-dev"
            manifestPlaceholders["appLabel"] = if (personalDevelopment) "Hermes Personal Dev" else "Hermes Agent Dev"
-           resValue("string", "hermes_application_id", if (personalDevelopment) "com.tarkilhk.hermes.android" else "com.hermesagent.hermes_android.dev")
+           resValue("string", "hermes_application_id", "com.hermesagent.hermes_android.dev")
            if (personalDevelopment) {
+               resValue("string", "hermes_application_id", "com.tarkilhk.hermes.android")
                signingConfig = signingConfigs.getByName("release")
            }
        }
