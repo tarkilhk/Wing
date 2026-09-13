@@ -73,7 +73,10 @@ void main() {
     () async {
       host.event('a', 'tool.generating', {'name': 'search_files'});
       expect(chat.tool, 'search_files');
-      expect(chat.toolActivities, isEmpty);
+      expect(
+        chat.toolActivities.single.phase,
+        GatewayToolActivityPhase.generating,
+      );
 
       host.event('a', 'tool.start', {
         'tool_id': 'tool-1',

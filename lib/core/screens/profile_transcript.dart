@@ -259,8 +259,12 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                 final row = section.messages.last;
                 return KeyedSubtree(
                   key: keys[rowIndex],
-                  child: section.isTool
-                      ? ProfileToolActivitySection(groups: section.groups)
+                  child: section.isActivity
+                      ? ProfileToolActivitySection(
+                          groups: section.groups,
+                          showLatestReview:
+                              rowIndex == 0 && chat.streaming.isEmpty,
+                        )
                       : widget.messageBuilder(row),
                 );
               }
@@ -351,7 +355,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (final section in sections)
-                  if (section.isTool)
+                  if (section.isActivity)
                     ProfileToolActivitySection(
                       groups: section.groups,
                       expandedMessageId: targetId,

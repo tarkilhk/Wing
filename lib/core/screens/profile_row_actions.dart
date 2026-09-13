@@ -1,7 +1,70 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../models/hermes_profile.dart';
 import '../services/profile_workspace_controller.dart';
 import '../services/profile_gateway.dart';
+import '../services/composer_draft_store.dart';
+
+Future<void> showSavedDraftActions(
+  BuildContext context,
+  ProfileWorkspaceController controller,
+  WorkspaceScope owner,
+  ComposerDraftSummary draft,
+  String title,
+) async {
+  final action = await _choose(context, title, owner.profileName, [
+    ('edit', 'Continue editing', Icons.edit_outlined, true),
+    ('delete', 'Discard draft', Icons.delete_outline, true),
+  ]);
+  if (action == null || !context.mounted) return;
+  if (action == 'edit') {
+    await controller.openSavedDraft(owner, draft.sessionId);
+    return;
+  }
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Discard draft?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, maxLines: 3, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 16),
+          const Text(
+            'This removes the draft and its queued messages. Sent messages stay in the chat.',
+          ),
+          if (draft.submissionUncertain) ...[
+            const SizedBox(height: 12),
+            const Text(
+              'Delivery was uncertain. Discarding will not cancel a message already received by Hermes.',
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+            foregroundColor: Theme.of(context).colorScheme.onError,
+          ),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Discard'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+  final messenger = ScaffoldMessenger.of(context);
+  await controller.discardSavedDraft(owner, draft);
+  if (messenger.mounted) {
+    messenger.showSnackBar(const SnackBar(content: Text('Draft discarded')));
+  }
+}
 
 Future<String?> _choose(
   BuildContext context,

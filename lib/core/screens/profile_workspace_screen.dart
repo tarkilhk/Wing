@@ -16,14 +16,13 @@ import '../widgets/gateway_sensitive_prompt_panel.dart';
 import '../widgets/gateway_clarify_dialog.dart';
 import '../widgets/chat_find_sheet.dart';
 import '../theme/profile_workspace_theme.dart';
-import '../widgets/profile_chat_indicator.dart';
+import '../widgets/profile_activity_status.dart';
 import '../widgets/chat_intelligence_picker.dart';
 import '../widgets/context_fuse.dart';
 import '../widgets/profile_execution_activity.dart';
 import '../widgets/profile_subagent_panel.dart';
 import '../widgets/profile_goal_panel.dart';
 import '../widgets/profile_background_work_panel.dart';
-import '../widgets/profile_review_notice_card.dart';
 import '../widgets/project_folder_picker.dart';
 import '../widgets/slash_command_suggestions.dart';
 import '../widgets/side_question_delivery_card.dart';
@@ -636,26 +635,6 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   Widget _chat(ProfileChat chat, BuildContext context) => Column(
     children: [
-      if (chat.busy || chat.error != null)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Row(
-            children: [
-              ProfileChatIndicator(chat: chat, row: const {}),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _status(chat),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
       Expanded(
         child: ProfileTranscript(
           key: ValueKey((
@@ -734,8 +713,6 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     ),
                 ],
               ),
-            for (final notice in chat.reviewNotices)
-              ProfileReviewNoticeCard(notice: notice),
             if (chat.error != null)
               Text(
                 chat.error!,
@@ -853,6 +830,10 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           composer: _composer,
         ),
       if (chat.commandRunning) const LinearProgressIndicator(),
+      ProfileActivityStatus(
+        key: const ValueKey('profile-activity-status'),
+        chat: chat,
+      ),
       ProfileQueuedMessages(
         key: ValueKey(('queued-messages', chat.key)),
         chat: chat,
@@ -1524,24 +1505,6 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       ),
     ),
   );
-
-  String _status(ProfileChat chat) => switch (chat.status) {
-    ProfileTurnStatus.idle => 'Ready',
-    ProfileTurnStatus.submitting => 'Sending message…',
-    ProfileTurnStatus.running =>
-      chat.tool != null
-          ? 'Using ${chat.tool}'
-          : chat.streaming.isEmpty
-          ? 'Hermes is working…'
-          : 'Writing response…',
-    ProfileTurnStatus.attention =>
-      chat.approval != null ? 'Approval needed' : 'Your reply is needed',
-    ProfileTurnStatus.reconnecting => 'Connection lost · checking this chat',
-    ProfileTurnStatus.settling => 'Updating history…',
-    ProfileTurnStatus.completed => 'Response complete',
-    ProfileTurnStatus.cancelled => 'Stopped',
-    ProfileTurnStatus.failed => 'Something went wrong',
-  };
 
   Future<String?> _textDialog(String title, String label) async {
     var input = '';

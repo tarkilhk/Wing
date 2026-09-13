@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.31.16+2201] - 2026-09-14
+
+### Fixed
+
+- Replace the persistent review card with a tappable memory icon that opens review details. Older reviews fold into Activity as the conversation continues.
+- Keep received reviews in their conversation position during history refresh without affecting pagination.
+
+### Changed
+
+- Keep live activity at the bottom of the chat, above queued messages and the composer. Show current thinking, writing, tool progress, subagent activity and input waits.
+- Keep status fresh across overlapping tools, new turns and reconnections.
+- Add an actions menu to saved drafts for opening or discarding a draft and its queued messages while preserving sent messages.
+
 ## [2.31.13+2198] - 2026-09-14
 
 ### Fixed

@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 
 import '../models/answer_versions.dart';
 import '../models/chat_output.dart';
+import '../models/review_notice.dart';
 import '../services/web_preview.dart';
 import 'markdown_message_content.dart';
 import 'profile_tool_activity.dart';
+import 'profile_review_notice_card.dart';
 
 /// Remote content is display-only. Links require a tap, and images never fetch
 /// automatically or resolve a remote host path against the phone's filesystem.
@@ -40,6 +42,8 @@ class ProfileMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final role = message['role']?.toString() ?? '';
+    final review = reviewMessageText(message);
+    if (review != null) return ProfileReviewNoticeRow(text: review);
     final steering = steeringMessageText(message);
     if (steering != null) {
       final style = theme.textTheme.bodySmall?.copyWith(

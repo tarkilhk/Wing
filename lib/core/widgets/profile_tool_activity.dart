@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../models/review_notice.dart';
+import 'profile_review_notice_card.dart';
 
 /// One collapsed section containing the existing tool result cards.
 class ProfileToolActivitySection extends StatelessWidget {
@@ -7,14 +9,31 @@ class ProfileToolActivitySection extends StatelessWidget {
     required this.groups,
     this.expandedMessageId,
     this.focusedMessageKey,
+    this.showLatestReview = false,
   });
   final List<List<Map<String, dynamic>>> groups;
   final int? expandedMessageId;
   final GlobalKey? focusedMessageKey;
+  final bool showLatestReview;
 
   @override
   Widget build(BuildContext context) {
-    final count = groups.fold(0, (total, group) => total + group.length);
+    final latestReview = reviewMessageText(groups.last.last);
+    if (showLatestReview && latestReview != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (groups.length > 1)
+            ProfileToolActivitySection(
+              groups: groups.sublist(0, groups.length - 1),
+            ),
+          ProfileReviewNoticeRow(text: latestReview),
+        ],
+      );
+    }
+    final rows = groups.expand((group) => group);
+    final count = rows.where((row) => row['role'] == 'tool').length;
+    final reviews = rows.where((row) => reviewMessageText(row) != null).length;
     final expanded =
         expandedMessageId != null &&
         groups.any(
@@ -29,21 +48,37 @@ class ProfileToolActivitySection extends StatelessWidget {
         tilePadding: const EdgeInsets.symmetric(horizontal: 16),
         shape: const Border(),
         collapsedShape: const Border(),
-        leading: const Icon(Icons.terminal_rounded, size: 18),
-        title: const Text('Tool activity'),
-        subtitle: Text('$count tool ${count == 1 ? 'call' : 'calls'}'),
+        leading: Icon(
+          count == 0 ? Icons.psychology_outlined : Icons.terminal_rounded,
+          size: 18,
+        ),
+        title: Text(reviews == 0 ? 'Tool activity' : 'Activity'),
+        subtitle: Text(
+          [
+            if (count > 0) '$count tool ${count == 1 ? 'call' : 'calls'}',
+            if (reviews > 0) '$reviews ${reviews == 1 ? 'review' : 'reviews'}',
+          ].join(' · '),
+        ),
         children: [
           for (final group in groups)
-            ProfileToolActivity(
-              messages: group,
-              initiallyExpanded: group.any(
-                (message) =>
-                    expandedMessageId != null &&
-                    message['id'] == expandedMessageId,
+            if (reviewMessageText(group.last) case final review?)
+              ProfileReviewNoticeRow(
+                key: group.last['id'] == expandedMessageId
+                    ? focusedMessageKey
+                    : null,
+                text: review,
+              )
+            else
+              ProfileToolActivity(
+                messages: group,
+                initiallyExpanded: group.any(
+                  (message) =>
+                      expandedMessageId != null &&
+                      message['id'] == expandedMessageId,
+                ),
+                focusedMessageId: expandedMessageId,
+                focusedMessageKey: focusedMessageKey,
               ),
-              focusedMessageId: expandedMessageId,
-              focusedMessageKey: focusedMessageKey,
-            ),
         ],
       ),
     );
@@ -57,6 +92,7 @@ class ProfileTranscriptSection {
   Iterable<Map<String, dynamic>> get messages =>
       groups.expand((group) => group);
   bool get isTool => groups.last.last['role'] == 'tool';
+  bool get isActivity => isTool || reviewMessageText(groups.last.last) != null;
 }
 
 /// Empty assistant rows can separate tool cards without displaying anything.
@@ -71,7 +107,8 @@ List<ProfileTranscriptSection> groupTranscriptSections(
         (row['display_content'] ?? row['content'] ?? '').toString().isEmpty) {
       continue;
     }
-    if (row['role'] == 'tool' && sections.isNotEmpty && sections.last.isTool) {
+    final activity = row['role'] == 'tool' || reviewMessageText(row) != null;
+    if (activity && sections.isNotEmpty && sections.last.isActivity) {
       sections.last.groups.add(group);
     } else {
       sections.add(ProfileTranscriptSection([group]));

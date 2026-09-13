@@ -15,6 +15,7 @@ import '../models/gateway_process.dart';
 import '../models/gateway_todo.dart';
 import '../models/profile_live_activity.dart';
 import '../models/queued_prompt_draft.dart';
+import '../models/review_notice.dart';
 import '../models/session_control.dart';
 import '../models/side_question_delivery.dart';
 import '../models/slash_command.dart';
@@ -80,7 +81,11 @@ enum ProfileTurnStatus {
   failed,
 }
 
+enum ProfileMainActivity { working, thinking, writing, tool }
+
 class ProfileChat {
+  ProfileMainActivity mainActivity = ProfileMainActivity.working;
+  GatewayToolActivity? mainToolActivity;
   ContextOccupancy? context;
   int contextGeneration = 0;
   ProfileSessionKey key;
@@ -445,6 +450,62 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       final destination = await createChat(owner: owner);
       await recoverDraft(key, destination);
+    } finally {
+      _openingSavedDraft = false;
+    }
+  }
+
+  Future<void> discardSavedDraft(
+    WorkspaceScope owner,
+    ComposerDraftSummary draft,
+  ) async {
+    final key = ProfileSessionKey(owner, draft.sessionId);
+    if (!owns(key)) throw ArgumentError('Wrong connection settings or host');
+    if (_openingSavedDraft) {
+      throw StateError('Wait for the saved draft action to finish.');
+    }
+    final chat = _resources[owner]?.chats[draft.sessionId];
+    void checkAvailable() {
+      if (_closed || switching || current?.scope != owner) {
+        throw StateError('Profile changed. Open the draft actions again.');
+      }
+      if (chat != null &&
+          (chat.busy ||
+              chat == current?.chat ||
+              chat.queueMutating ||
+              chat.queueDraining ||
+              chat._attachmentPreparations > 0 ||
+              chat._replacingExpiredRuntime ||
+              chat._submissionInFlight)) {
+        throw StateError('This draft is in use. Close the chat and try again.');
+      }
+    }
+
+    checkAvailable();
+    _openingSavedDraft = true;
+    try {
+      await chat?._draftWrites;
+      checkAvailable();
+      final currentDraft = _drafts
+          .summaries(profileName: owner.profileName)
+          .where((value) => value.sessionId == draft.sessionId)
+          .firstOrNull;
+      if (currentDraft == null) return;
+      if (currentDraft != draft) {
+        throw StateError(
+          'The draft changed. Open its actions again to review it.',
+        );
+      }
+      await _clearStoredDraft(owner, draft.sessionId);
+      if (chat != null) {
+        chat.draft = '';
+        chat.draftSubmissionUncertain = false;
+        chat.attachments.clear();
+        chat.queuedPrompts.clear();
+        chat.queuePaused = false;
+        chat.draftRestored = true;
+      }
+      _changed();
     } finally {
       _openingSavedDraft = false;
     }
@@ -868,12 +929,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
       final prefix = anchor > 0
           ? chat.messages.take(anchor).toList()
           : <Map<String, dynamic>>[];
-      chat.messages = [...prefix, ...page.rows];
+      final refreshed = [
+        ...prefix.where((row) => !isLocalReviewMessage(row)),
+        ...page.rows,
+      ];
+      chat.messages = chat.historySessionId == page.sessionId
+          ? retainReviewMessages(chat.messages, refreshed)
+          : refreshed;
       chat.toolActivities.removeWhere((activity) => activity.isTerminal);
       chat.historySessionId = page.sessionId;
       chat.nextHistoryOffset = page.nextOffset == null
           ? null
-          : chat.messages.length;
+          : refreshed.length;
       unawaited(refreshContext(chat));
     } catch (_) {
       if (!_closed && chat.historyGeneration == generation) {
@@ -2852,6 +2919,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<bool> _regenerate(ProfileChat chat, AnswerTarget target) async {
     final resource = _owned(chat);
     chat.status = ProfileTurnStatus.submitting;
+    chat.mainActivity = ProfileMainActivity.working;
+    chat.tool = null;
+    chat.mainToolActivity = null;
     _changed();
     var submitted = false;
     var rejected = false;
@@ -2965,6 +3035,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
       ];
       chat.streaming = '';
       chat.status = ProfileTurnStatus.running;
+      chat.mainActivity = ProfileMainActivity.working;
+      chat.mainToolActivity = null;
+      chat.tool = null;
       submitted = true;
       _changed();
       await resource.gateway.call('prompt.submit', {
@@ -3644,6 +3717,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat._submissionInFlight = true;
     chat.lastActive = DateTime.now().millisecondsSinceEpoch / 1000;
     chat.status = ProfileTurnStatus.submitting;
+    chat.mainActivity = ProfileMainActivity.working;
+    chat.tool = null;
+    chat.mainToolActivity = null;
     chat.error = null;
     chat.reasoning = '';
     chat.reasoningVerbose = false;
@@ -4227,13 +4303,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     return error.message.toLowerCase().contains('no pending $field request');
   }
 
-  void _upsertToolActivity(
+  GatewayToolActivity? _upsertToolActivity(
     ProfileChat chat,
     String eventType,
     Map<String, dynamic> data,
   ) {
     final update = GatewayToolActivity.fromGatewayEvent(eventType, data);
-    if (update == null) return;
+    if (update == null) return null;
     var index = update.toolId == null
         ? -1
         : chat.toolActivities.indexWhere(
@@ -4244,10 +4320,22 @@ class ProfileWorkspaceController extends ChangeNotifier {
         (activity) => activity.name == update.name && !activity.isTerminal,
       );
     }
+    if (index < 0 && eventType == 'tool.start') {
+      // The preparation event can arrive before a tool-call ID is assigned.
+      index = chat.toolActivities.lastIndexWhere(
+        (activity) =>
+            activity.toolId == null &&
+            activity.name == update.name &&
+            activity.phase == GatewayToolActivityPhase.generating,
+      );
+    }
     if (index < 0) {
       chat.toolActivities.add(update);
+      return update;
     } else {
-      chat.toolActivities[index] = chat.toolActivities[index].merge(update);
+      return chat.toolActivities[index] = chat.toolActivities[index].merge(
+        update,
+      );
     }
   }
 
@@ -4336,6 +4424,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
       case 'message.start':
         if (!chat.busy || chat.status == ProfileTurnStatus.settling) {
+          chat.mainActivity = ProfileMainActivity.working;
+          chat.mainToolActivity = null;
           chat._turnGeneration++;
           chat.historyGeneration++;
           chat.historyLoading = false;
@@ -4349,6 +4439,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
       case 'message.delta':
         chat.streaming += event.data['text']?.toString() ?? '';
+        if ((event.data['text']?.toString() ?? '').isNotEmpty) {
+          chat.mainActivity = ProfileMainActivity.writing;
+        }
       case 'message.interim':
         final text = event.data['text']?.toString() ?? chat.streaming;
         if (text.isNotEmpty) {
@@ -4361,19 +4454,36 @@ class ProfileWorkspaceController extends ChangeNotifier {
         chat.streaming = '';
         chat.reasoning = '';
         chat.reasoningVerbose = false;
+        chat.mainActivity = ProfileMainActivity.working;
       case 'tool.generating':
-        chat.tool = event.data['name']?.toString() ?? 'Preparing tool';
       case 'tool.start':
-        chat.tool =
-            event.data['name']?.toString() ??
-            event.data['tool']?.toString() ??
-            'Working';
-        _upsertToolActivity(chat, event.type, event.data);
       case 'tool.progress':
-        _upsertToolActivity(chat, event.type, event.data);
+        chat.mainActivity = ProfileMainActivity.tool;
+        chat.mainToolActivity = _upsertToolActivity(
+          chat,
+          event.type,
+          event.data,
+        );
+        chat.tool = chat.mainToolActivity?.name;
       case 'tool.complete':
         _upsertToolActivity(chat, event.type, event.data);
-        chat.tool = null;
+        // Keep the most recently reported tool while it is still running.
+        // Completion of a different parallel call must not replace its detail.
+        if (!chat.toolActivities.any(
+          (activity) =>
+              identical(activity, chat.mainToolActivity) &&
+              !activity.isTerminal,
+        )) {
+          chat.mainToolActivity = chat.toolActivities
+              .where((activity) => !activity.isTerminal)
+              .lastOrNull;
+        }
+        chat.tool = chat.mainToolActivity?.name;
+        if (chat.mainActivity == ProfileMainActivity.tool) {
+          chat.mainActivity = chat.tool == null
+              ? ProfileMainActivity.working
+              : ProfileMainActivity.tool;
+        }
       case 'todo.updated':
         _applyTodoSnapshot(chat, event.data);
       case 'subagent.spawn_requested':
@@ -4392,6 +4502,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
         if (update != null) {
           chat.reasoning = update.applyTo(chat.reasoning);
           chat.reasoningVerbose = update.verbose;
+          if (event.type == 'reasoning.delta') {
+            chat.mainActivity = ProfileMainActivity.thinking;
+          }
         }
       case 'review.summary':
         final notice = event.data['text'] is String
@@ -4402,8 +4515,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
               (existing) => existing.identity == notice.identity,
             )) {
           chat.reviewNotices.add(notice);
+          chat.messages.add({
+            'id': 'review-${notice.identity}',
+            'role': 'system',
+            'content': 'review:${normalizeReviewText(notice.text)}',
+            '_review_notice': notice.identity,
+            'timestamp': event.data['timestamp'] is num
+                ? event.data['timestamp']
+                : DateTime.now().millisecondsSinceEpoch / 1000,
+          });
           if (chat.reviewNotices.length > _maxReviewNotices) {
-            chat.reviewNotices.removeAt(0);
+            final removed = chat.reviewNotices.removeAt(0);
+            chat.messages.removeWhere(
+              (row) => row['_review_notice'] == removed.identity,
+            );
           }
         }
       case 'btw.complete':
@@ -4702,6 +4827,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat.reasoning = '';
       chat.reasoningVerbose = false;
       chat.reviewNotices.clear();
+      chat.messages.removeWhere(isLocalReviewMessage);
       chat.todos = [];
       chat.todoRevision = null;
       chat.subagents = [];
@@ -4729,6 +4855,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat.sideQuestionDeliveries.clear();
     }
     chat.runtimeId = runtime;
+    // Resume snapshots contain accumulated text, not the current execution
+    // phase. Wait for a fresh event before claiming it is writing or using a tool.
+    chat.mainActivity = ProfileMainActivity.working;
+    chat.tool = null;
+    chat.mainToolActivity = null;
     _hydrateIntelligence(chat, result);
     _applyTodoSnapshot(chat, result['todo_state']);
     final inflight = result['inflight'] as Map?;

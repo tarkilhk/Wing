@@ -440,7 +440,14 @@ void main() {
     harness.fixture.deliverReview('personal', chat.runtimeId);
     await tester.pump();
     expect(find.text('Hermes review'), findsOneWidget);
+    expect(find.text('Roadmap review needs a human check.'), findsNothing);
+    await tester.tap(find.text('Hermes review'));
+    await _settle(tester);
     expect(find.text('Roadmap review needs a human check.'), findsOneWidget);
+    Navigator.of(
+      tester.element(find.text('Roadmap review needs a human check.')),
+    ).pop();
+    await _settle(tester);
 
     final transcript = find.byKey(const ValueKey('profile-transcript'));
     await tester.drag(transcript, const Offset(0, 550));

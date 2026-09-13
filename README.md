@@ -22,7 +22,7 @@ The current connection flow opens `ProfileWorkspaceScreen`, which owns the drawe
 - Chat-menu supervision of subagents, goal details and background work. Supported controls include targeted subagent Steer/Interrupt, goal Pause/Resume/Clear, loop/heartbeat controls and background-process Stop. Goal criteria can be added, removed or cleared; actions wait for server acknowledgement.
 - Projects with creation, rename, server appearance and delete controls. Project creation can explicitly discover repository roots configured on the Hermes host or accept a manual absolute path. Recent and pinned chats, paginated unread filtering, Running/Needs input Activity filters, full-text conversation search, Find within the current chat with recent-first results, Search older messages and View in chat, and an option to include automated chats are also available.
 - Rename, pin/unpin, explicit read/unread, archive/unarchive, delete and move-to-project actions with server-side constraints. Successfully opening an unread chat marks it read on Hermes; failed reads and manual unread choices stay protected.
-- Streaming conversations, horizontally scrollable tables, selectable fenced code with copy/wrap controls, expandable tool activity, server todo snapshots, collapsed reasoning and Stop. Existing `review.summary` events appear as transient review notices. Tapped web images open in a zoomable preview with a browser fallback. Completed Mermaid blocks offer an offline diagram view with zoom and source access.
+- Streaming conversations, horizontally scrollable tables, selectable fenced code with copy/wrap controls, expandable tool activity, server todo snapshots, collapsed reasoning and Stop. Review summaries open from a memory icon and fold into Activity as the conversation continues. Tapped web images open in a zoomable preview with a browser fallback. Completed Mermaid blocks offer an offline diagram view with zoom and source access.
 - A thin context fuse displays server-reported usage, with estimated/unknown states and live updates.
 - Per-chat model and reasoning selection, with searchable, expandable technical-provider groups. Server session settings take precedence over former local model overrides.
 - Unsent text and staged attachments survive app restart, scoped to their original connection/profile/chat. An uncertain send retains its draft for checking against server history; it is never resent automatically.
@@ -55,12 +55,12 @@ The app's current slash/profile contracts are documented in [slash command suppo
 
 ## Version and application identity
 
-Source version on 2026-09-14 is `2.31.13+2198` in [pubspec.yaml](pubspec.yaml). This is the checked-out version, not a claim that a matching public release has been published. Each release is recorded in the [changelog](CHANGELOG.md), with semantic versions and an increasing Android build number.
+Source version on 2026-09-14 is `2.31.16+2201` in [pubspec.yaml](pubspec.yaml). This is the checked-out version, not a claim that a matching public release has been published. Each release is recorded in the [changelog](CHANGELOG.md), with semantic versions and an increasing Android build number.
 
 - Personal release package: `com.tarkilhk.hermes.android`, labelled Hermes Personal.
 - Development package: `com.hermesagent.hermes_android.dev`.
 - The inherited upstream package is separate and is not this fork's release identity.
-- ABI-split codes derive from the base build number; the current ARM64 split uses `21982`.
+- ABI-split codes derive from the base build number; the current ARM64 split uses `22012`.
 
 The [release plan](docs/ANDROID_RELEASE_PLAN.md) and [build configuration](android/app/build.gradle.kts) document identity, signing and version-code rules. App settings displays this client's installed version/build and links to this fork's changelog and published releases, separately from the backend version.
 

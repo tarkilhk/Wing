@@ -334,29 +334,64 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           (preview.isNotEmpty || draft.attachmentCount > 0))
         queueLabel,
     ];
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      child: Material(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        clipBehavior: Clip.antiAlias,
-        child: ListTile(
-          key: ValueKey('saved-draft-${draft.sessionId}'),
-          leading: const Icon(Icons.edit_note_outlined),
-          title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
-          subtitle: Text(
-            details.isEmpty ? 'Not yet sent' : details.join(' · '),
+    return Builder(
+      builder: (rowContext) {
+        void actions() => unawaited(
+          _run(
+            () => showSavedDraftActions(
+              rowContext,
+              controller,
+              resource.scope,
+              draft,
+              title,
+            ),
           ),
-          onTap: controller.switching
-              ? null
-              : () => _run(
-                  () => controller.openSavedDraft(
-                    resource.scope,
-                    draft.sessionId,
-                  ),
+        );
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+          child: Material(
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(16),
+            clipBehavior: Clip.antiAlias,
+            child: GestureDetector(
+              onSecondaryTap: controller.switching ? null : actions,
+              child: ListTile(
+                key: ValueKey('saved-draft-${draft.sessionId}'),
+                contentPadding: const EdgeInsets.only(left: 14, right: 0),
+                leading: const Icon(Icons.edit_note_outlined, size: 22),
+                title: Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 15),
                 ),
-        ),
-      ),
+                subtitle: Text(
+                  details.isEmpty
+                      ? 'Draft · Tap to continue'
+                      : details.join(' · '),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                trailing: IconButton(
+                  tooltip: 'Draft actions',
+                  icon: const Icon(Icons.more_horiz, size: 18),
+                  onPressed: controller.switching ? null : actions,
+                ),
+                onLongPress: controller.switching ? null : actions,
+                onTap: controller.switching
+                    ? null
+                    : () => _run(
+                        () => controller.openSavedDraft(
+                          resource.scope,
+                          draft.sessionId,
+                        ),
+                      ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

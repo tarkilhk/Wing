@@ -1,43 +1,48 @@
 import 'package:flutter/material.dart';
 
-import '../models/gateway_insight.dart';
+/// Review details stay available without occupying the conversation column.
+class ProfileReviewNoticeRow extends StatelessWidget {
+  final String text;
 
-class ProfileReviewNoticeCard extends StatelessWidget {
-  final GatewayNotice notice;
-
-  const ProfileReviewNoticeCard({super.key, required this.notice});
+  const ProfileReviewNoticeRow({super.key, required this.text});
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Card(
-      color: colors.tertiaryContainer.withValues(alpha: 0.45),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.fact_check_outlined,
-                  size: 18,
-                  color: colors.onTertiaryContainer,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    notice.title,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: colors.onTertiaryContainer,
+    return TextButton.icon(
+      style: TextButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        foregroundColor: colors.tertiary,
+      ),
+      icon: const Icon(Icons.psychology_outlined, size: 18),
+      label: const Text('Hermes review'),
+      onPressed: () => showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * .7,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Hermes review',
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    SelectableText(text),
+                  ],
                 ),
-              ],
+              ),
             ),
-            const SizedBox(height: 8),
-            SelectableText(notice.text),
-          ],
+          ),
         ),
       ),
     );

@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:ui' show PointerDeviceKind;
 
+import 'package:flutter/gestures.dart' show kSecondaryMouseButton;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_android/core/models/hermes_profile.dart';
@@ -93,6 +95,211 @@ class _ColdDraftHost {
 }
 
 void main() {
+  testWidgets('right click offers editing on a narrow screen with large text', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final host = _ColdDraftHost()..creates = 1;
+    final store = ComposerDraftStore(
+      preferences,
+      connectionIdentity: 'verified-host-auth',
+    );
+    await store.write(
+      profileName: 'default',
+      sessionId: 'orphan-draft',
+      text:
+          'A long draft preview that should wrap without hiding its actions on a small phone',
+      attachments: const [],
+    );
+    final controller = ProfileWorkspaceController(
+      connection: SavedConnection(
+        id: 'host',
+        label: 'Host',
+        host: 'localhost',
+        port: 1,
+        apiKey: '',
+      ),
+      connectionIdentity: 'verified-host-auth',
+      preferences: preferences,
+      gatewayFactory: host.gateway,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: ProfileWorkspaceScreen(controller: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final row = find.byKey(const ValueKey('saved-draft-orphan-draft'));
+    await tester.tap(
+      row,
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Continue editing'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Continue editing'));
+    await tester.pumpAndSettle();
+    expect(controller.current!.chat!.draft, startsWith('A long draft preview'));
+    expect(host.creates, 2);
+    expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  test(
+    'discard clears cached drafts and refuses stale or active work',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final controller = ProfileWorkspaceController(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Host',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        connectionIdentity: 'verified-host-auth',
+        preferences: preferences,
+        gatewayFactory: _ColdDraftHost().gateway,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      final chat = await controller.createChat();
+      await controller.updateDraft(chat, 'Original');
+      final owner = chat.key.workspace;
+      final original = controller.savedDrafts(owner).single;
+      await expectLater(
+        controller.discardSavedDraft(owner, original),
+        throwsStateError,
+      );
+      controller.current!.selectedSession = null;
+      await controller.updateDraft(chat, 'Newer text');
+      await expectLater(
+        controller.discardSavedDraft(owner, original),
+        throwsStateError,
+      );
+      expect((await controller.savedDraft(chat.key))!.text, 'Newer text');
+      chat.status = ProfileTurnStatus.running;
+      await expectLater(
+        controller.discardSavedDraft(
+          owner,
+          controller.savedDrafts(owner).single,
+        ),
+        throwsStateError,
+      );
+      chat.status = ProfileTurnStatus.idle;
+      await controller.discardSavedDraft(
+        owner,
+        controller.savedDrafts(owner).single,
+      );
+      expect(chat.draft, isEmpty);
+      expect(chat.queuedPrompts, isEmpty);
+      expect(await controller.savedDraft(chat.key), isNull);
+    },
+  );
+
+  testWidgets('draft actions discard only the chosen draft across restart', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final store = ComposerDraftStore(
+      preferences,
+      connectionIdentity: 'verified-host-auth',
+    );
+    for (final profile in ['default', 'other']) {
+      for (final id in ['orphan-draft', 'keep-draft']) {
+        await store.write(
+          profileName: profile,
+          sessionId: id,
+          text: '$profile $id',
+          attachments: const [],
+        );
+      }
+    }
+    final host = _ColdDraftHost();
+    ProfileWorkspaceController buildController() => ProfileWorkspaceController(
+      connection: SavedConnection(
+        id: 'host',
+        label: 'Host',
+        host: 'localhost',
+        port: 1,
+        apiKey: '',
+      ),
+      connectionIdentity: 'verified-host-auth',
+      preferences: preferences,
+      gatewayFactory: host.gateway,
+    );
+    var controller = buildController();
+    await controller.initialize();
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    final row = find.byKey(const ValueKey('saved-draft-orphan-draft'));
+    await tester.tap(
+      find.descendant(of: row, matching: find.byTooltip('Draft actions')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Continue editing'), findsOneWidget);
+    await tester.tap(find.text('Discard draft'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(
+      await store.read(profileName: 'default', sessionId: 'orphan-draft'),
+      isNotNull,
+    );
+    await tester.longPress(row);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Discard draft'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Discard'));
+    await tester.pumpAndSettle();
+    expect(row, findsNothing);
+    expect(
+      await store.read(profileName: 'default', sessionId: 'orphan-draft'),
+      isNull,
+    );
+    expect(
+      await store.read(profileName: 'other', sessionId: 'orphan-draft'),
+      isNotNull,
+    );
+    expect(
+      await store.read(profileName: 'default', sessionId: 'keep-draft'),
+      isNotNull,
+    );
+    expect(
+      host.calls.where(
+        (call) => call.$1 == 'session.delete' || call.$1 == 'prompt.submit',
+      ),
+      isEmpty,
+    );
+    await tester.pumpWidget(const SizedBox());
+    controller.dispose();
+    controller = buildController();
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    expect(row, findsNothing);
+    expect(find.text('default keep-draft'), findsOneWidget);
+  });
+
   testWidgets(
     'ordinary Chats startup double tap recovers an unlisted draft once',
     (tester) async {

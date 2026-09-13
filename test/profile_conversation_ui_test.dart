@@ -361,6 +361,7 @@ void main() {
         final chat = controller.current!.chat!;
         chat.status = ProfileTurnStatus.running;
         chat.streaming = 'A partial response';
+        chat.mainActivity = ProfileMainActivity.writing;
         await show(tester);
         expect(find.text('Writing response…'), findsOneWidget);
         expect(find.byTooltip('Stop'), findsOneWidget);

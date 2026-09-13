@@ -80,12 +80,23 @@ original profile and saved chat. Web links continue through the browser preview;
 unsupported URI schemes are rejected. This does not add a filesystem browser or
 scan a conversation before opening its linked file.
 
-T14 restores display of the existing `review.summary` event. The current chat
-shows a distinct Hermes review card using the existing bounded notice parser.
+T14 displays the existing `review.summary` event as a typed `review:` system row
+in the conversation. A memory icon labelled Hermes review opens the full received
+text in a scrollable sheet. As newer messages arrive, the row folds into Activity
+alongside adjacent tool results instead of following the conversation as a large
+card. Opening the sheet does not approve or discard pending memory changes.
+
 Only string text is accepted, duplicates are suppressed, and the newest 20
-reviews remain in memory. Same-runtime reconnect retains received reviews;
-runtime replacement or app restart clears them. No recovery API or local review
-database is introduced.
+reviews remain in memory. Same-runtime history refresh retains their positions
+relative to surrounding messages without counting them in server paging offsets.
+Runtime replacement or app restart clears them. The gateway sends summary text,
+not a skill-file diff; no recovery API or local review database is introduced.
+
+Desktop source inspected at `e16f686706b1e0d5334fd1ae82190058d2a19694` uses the
+same typed transcript row in `apps/desktop/src/app/session/hooks/use-message-stream/
+gateway-event/status.ts` and a memory icon in
+`apps/desktop/src/components/assistant-ui/thread/system-message.tsx`. Android's
+detail sheet and Activity folding adapt that behavior to the owner's phone UX.
 
 The T12/R08/R09 attention control also recognizes live sensitive requests while
 reading older history. Input needed returns to the latest content without
