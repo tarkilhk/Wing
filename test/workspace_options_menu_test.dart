@@ -8,7 +8,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_android/core/theme/hermes_theme.dart';
 import 'package:hermes_android/core/widgets/workspace_options_menu.dart';
 
+class _OptionsReviewBinding extends AutomatedTestWidgetsFlutterBinding {
+  @override
+  bool get disableShadows => false;
+}
+
 void main() {
+  _OptionsReviewBinding();
   setUpAll(() async {
     const root = String.fromEnvironment('PREVIEW_FONT_ROOT');
     if (root.isNotEmpty) {
