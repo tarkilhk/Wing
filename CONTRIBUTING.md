@@ -26,7 +26,7 @@ On Windows with the repository's toolchain layout, use the guarded launcher:
 ./scripts/invoke-flutter.ps1 -ToolchainRoot '<toolchain-root>' -FlutterArguments @('build', 'apk', '--debug')
 ```
 
-That root contains `flutter`, `jdk-17` and `android-sdk`. The launcher reports SDK-cache access failures promptly instead of entering Flutter's bootstrap retry loop. The [local build notes](docs/LOCAL_BUILD_SETUP.md) retain the maintainer's machine-specific setup; their paths are not prerequisites for contributors.
+That root contains `flutter`, `jdk-17` and `android-sdk`. The launcher reports SDK-cache access failures promptly instead of entering Flutter's bootstrap retry loop. The [Windows build workflow](docs/LOCAL_BUILD_SETUP.md) covers incremental builds, Personal development builds and hot reload.
 
 Run tests and Android builds sequentially. Do not remove another process's locks. Reuse build caches for ordinary iteration, and use a separate workspace for independent work. Existing local changes belong to their author; keep them intact.
 
@@ -50,7 +50,7 @@ Keep connection/profile/chat ownership intact. Preserve newer composer text duri
 
 Run analysis and relevant tests, then the full suite before a release. Tests under `integration_test/` and opt-in live tests may create chats, change profile settings or use providers. Read each test's environment flags and cleanup behavior before running it against an explicitly authorized server. Ordinary `flutter test` does not replace device or live-server acceptance.
 
-A useful change description explains the user-visible result, its boundaries, tests run and remaining limits. Update the user guide when behavior changes; keep dated evidence labelled rather than rewriting it as a current result. Check new Markdown links from their file's directory.
+A useful change description explains the user-visible result, its boundaries, tests run and remaining limits. Update the relevant guide when behavior changes. Put revision-specific test results in the PR or issue, and keep generated logs/captures out of current instructions. Check new Markdown links from their file's directory.
 
 ## Reporting problems and provenance
 

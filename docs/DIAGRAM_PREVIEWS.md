@@ -5,7 +5,7 @@ one viewer for that diagram, with pinch zoom, light/dark appearance and
 **Show source** for selecting or copying the original code. Back returns to
 the same chat. Streaming and unfinished blocks retain their source view.
 
-Since 2.23.0, completed `svg` blocks offer **Open SVG**, and SVG output files
+Completed `svg` blocks offer **Open SVG**, and SVG output files
 use the same viewer after downloading through their original chat connection.
 The source toggle retains the SVG text and copy control. Web SVG links keep
 their explicit browser fallback; they are not fetched automatically.
@@ -16,12 +16,11 @@ WebView at a synthetic HTTPS origin. No server connection, authenticated URL,
 credential or remote rendering service is involved. The view is disposed on
 close; it does not persist conversation state.
 
-This implements Mermaid and SVG portions of T04/D12. Other diagram formats retain
+Other diagram formats retain
 the existing selectable source fallback. Mermaid is limited to 50,000 source
 characters and 500 edges. Embedded media, links and custom configuration
 directives are disabled. Parse failures show a readable error with source still
-available. This is a diagram viewer, not the separately planned F07 interactive
-HTML preview.
+available. This is a diagram viewer, separate from the [interactive HTML viewer](OPENING_OUTPUT_FILES.md#html-and-diagram-sandbox).
 
 The native view has no JavaScript interface to app functions. It denies file,
 content and network loading, external navigation, windows, downloads and device
@@ -61,38 +60,8 @@ copy its standalone browser bundle and licenses, update the hash/version here,
 and rerun the browser, Flutter and native build checks. Do not replace the
 bundle with a CDN URL.
 
-## Verification
+## Verification after an update
 
-The seven focused Flutter checks pass, covering existing Markdown reading,
-deferred platform-view creation, exact source delivery, source switching,
-size/streaming fallback and return navigation at 320px and 200% text size.
-`node scripts/test-diagram-preview.mjs` exercises the actual bundled renderer
-in an isolated headless Chrome profile using synthetic diagrams. Set
-`CHROME_PATH` when Chrome is installed elsewhere. The harness uses Playwright
-Core as a development-only tool. Install it with
-`npm install --prefix build/diagram-vendor --no-save --ignore-scripts playwright-core@1.58.2`,
-or set `PLAYWRIGHT_CORE_PATH` to an existing installation.
+Run `node scripts/test-diagram-preview.mjs` against the actual bundled renderer. Set `CHROME_PATH` for a nonstandard Chrome location. The harness uses development-only Playwright Core; install it with `npm install --prefix build/diagram-vendor --no-save --ignore-scripts playwright-core@1.58.2` or set `PLAYWRIGHT_CORE_PATH` to an existing installation.
 
-The full suite passed 1,147 tests with four opt-in skips, and analysis is clean.
-Flutter's telemetry connection failed after the first clean analysis report;
-rerunning with `--suppress-analytics` exited successfully. This did not require
-an application change.
-
-The real browser checks passed for flowchart, sequence and pie rendering,
-visible labels, dark appearance, rejected links/configuration and parse errors.
-The synthetic flowchart screenshot was visually inspected. Signed Personal
-2.19.0 / 21682 passed native compilation and package/certificate checks,
-installed in place wirelessly and launched. Phone evidence covers version and
-process metadata; live WebView gestures remain a manual check.
-
-For 2.23.0, all 32 focused reading/diagram checks passed, the full suite passed
-1,169 tests with four opt-in skips, and the analyzer reported no issues.
-Browser fixtures verified SVG labels/shapes, script-disabled pixel output,
-blocked external images/styles, source/dimension limits and object-URL cleanup
-during successful, failed and replaced previews. The synthetic SVG screenshot
-was visually inspected. These checks remain separate from Android WebView
-gestures on the phone.
-
-Signed Personal 2.23.0 / 21722 passed native compilation and certificate/package
-checks, installed in place through wireless debugging, and launched successfully.
-The phone check verified installed version and process metadata.
+Check Mermaid labels/layout in light and dark, rejected links/configuration, parse errors and source fallback. Check SVG script/external-resource blocking, dimensions and object-URL cleanup after success, failure and replacement. Run the affected Flutter tests and native build, then inspect on-device zoom and Back. Host browser fixtures do not establish Android WebView behavior. See [Testing](TESTING.md).

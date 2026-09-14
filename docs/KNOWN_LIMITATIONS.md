@@ -14,7 +14,7 @@ Hermes runs accepted work on the server. The phone must be running and connected
 
 If Android closes after a normal send reaches Hermes but before its acknowledgement arrives, the retained draft can return without an uncertainty warning. Check server history before sending that draft again. The client does not automatically resend it. This affects the acknowledgement window; it does not mean every reconnect duplicates a message. Tracked in [issue #17](https://github.com/tarkilhk/hermes-android/issues/17).
 
-Pending sensitive requests, side tasks and synchronized answer-version recovery depend on server capabilities. See [Sensitive request recovery](SENSITIVE_REQUEST_RECOVERY.md), [Side-task recovery](SIDE_TASK_RECOVERY.md) and [Server chat relationships](SERVER_CHAT_RELATIONSHIPS.md). Client fixtures do not establish live-server support.
+Pending sensitive requests, side tasks and synchronized answer-version recovery depend on server capabilities. See [Sensitive input and side questions](SUPERVISION_AND_QUEUES.md#sensitive-input-and-approvals) and [Server chat relationships](SERVER_CHAT_RELATIONSHIPS.md). Client fixtures do not establish live-server support.
 
 ## Files and local storage
 
@@ -26,6 +26,6 @@ Drafts, queued prompts, staged files and settings are local. Conversation histor
 
 Bots, Cron/messaging/webhook administration, a general remote filesystem browser and an offline conversation archive are outside the selected scope. Some server administration operations depend on backend readiness or configuration; read the displayed result rather than assuming a control guarantees success.
 
-[Upstream bugs](UPSTREAM_HERMES_BUGS.md) records reproduced server issues. Dated QA records distinguish live server checks from fixtures and retain their original versions. Passing tests on one revision do not certify a later APK or a Play submission.
+[Upstream bugs](UPSTREAM_HERMES_BUGS.md) records reproduced server issues. The [testing guide](TESTING.md) distinguishes the recorded live baseline from fixtures. Passing tests on one revision do not certify a later APK or a Play submission.
 
 See [Bug tracker](BUG_TRACKER.md) for the current app and backend issue links.

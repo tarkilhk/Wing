@@ -1,62 +1,33 @@
-# Conversation actions and reading — 2026-09-12
+# Conversations and saved-answer actions
 
-This delivery continues D10-D13 and implements D15 from the selected delivery sequence. It reuses the existing conversation, branch, Markdown and gateway code, with no added dependencies or durable server-data store.
+## Drafts and sending
 
-## Conversation actions
+Draft text and staged files persist per connection identity, canonical profile and durable chat. Navigation and restart preserve unsent work. Missing local files must not erase the text. An accepted send clears only its submitted snapshot; newer typing and attachments stay in the composer.
 
-Saved user messages offer Edit with explicit confirmation that their turn and later history will be replaced. The client rechecks the saved row against current server history and submits the corrected text using the row-addressed truncate contract. It pauses queued follow-ups and preserves separately composed text and attachments. The dialog keeps the correction until acknowledgement; rejected/uncertain edits retain the text and show an error, with retry disabled while the chat reconnects.
+Restore server history and status before continuing work. Do not automatically resend after an uncertain acknowledgement. Normal sends still have a process-death window where a retained draft can return without an uncertainty warning; check history before resending. See [issue #17](https://github.com/tarkilhk/hermes-android/issues/17).
 
-Message actions adds a one-shot Fork when the conversation is idle and has a saved assistant boundary. It uses the existing server branch operation at the latest loaded saved answer and sends the text into that child. The original composer clears only after the send is acknowledged. This initial action accepts text only; ordinary Send/Stop behavior remains unchanged.
+Saved drafts remain discoverable when their chat is absent from a loaded server page. Recover to a new chat only after a confirmed missing-session result, not an ambiguous request failure. Move the draft in one durable storage operation, reset old upload receipts, pause queues and require explicit Send.
 
-Update for 2.18.0: regeneration remains server-backed. The phone-only answer index and carousel have been removed, with Parent chat navigation available from server metadata. A synchronized answer carousel remains selected but needs backend relationship metadata. See [server chat relationships](SERVER_CHAT_RELATIONSHIPS.md).
+The idle action is Send. Busy actions and accessible alternatives follow [Composer actions](COMPOSER_ACTION_GESTURE.md). [Queues](SUPERVISION_AND_QUEUES.md) remain separate from the current draft.
 
-## Side questions
+## Edit, regenerate and fork
 
-`/btw` records the server's task ID and displays a distinct side-question card in the owning chat. Completion updates the matching card even when several questions finish out of order. Results remain selectable, empty events are ignored, and a completion observed without its start still displays its question/result.
+Edit targets a saved user row by durable identity, verifies fresh history and confirms replacing that turn and later history. It preserves unrelated composer work and pauses queued follow-ups. Internal deliveries must not become editable human prompts.
 
-These are transient display records. No verified side-question recovery API was found. Version 2.25.0 extends the same card to `/bg` and `/background`, replacing the uncorrelated completion notice.
+Regenerate replaces the answer in the same chat. Branch/Fork creates a separate chat with an explicit boundary. Ordinary regenerated replacement and fork reopen work through existing APIs; synchronized older alternatives require a server relationship/persistence contract. Do not call invented answer-version methods or recreate a phone-only version database. See [Server chat relationships](SERVER_CHAT_RELATIONSHIPS.md).
 
-The 2026-09-12 follow-up source check verifies the missing client path in the
-installed backend at `tui_gateway/methods_prompt.py:916-1004`.
-`prompt.background {session_id,text}` replies with `{task_id}` and later emits
-`background.complete {task_id,text}` on the parent session. `/background` is an
-alias for the same operation. The backend binds the background thread to the
-parent profile. Unlike `btw.complete`, the completion does not repeat the
-original question, so the client should retain that question with the returned
-task ID while the view exists. Completion can race ahead of the acknowledgement;
-the acknowledgement must not turn a completed card back into a pending card.
+After compaction, branch validation compares source and child saved REST history using `include_compacted=true`, raw roles/text and expected row counts. The shorter RPC display history is not an adequate copy boundary. If copied history is missing, changed or extra, retain the created child and report the failed validation explicitly rather than hiding the partial outcome.
 
-Both commands retain the original prompt with the acknowledged task ID and
-display a running card. A matching completion replaces its status with the
-result even when other tasks finish first. Matching includes the task kind, so
-a side question cannot overwrite a background task with the same ID. An early
-completion remains completed when its later acknowledgement supplies the prompt.
-An empty background result is shown as "No response text was returned."
+## Attachments in history
 
-This contract is enough for identifiable live cards. It does not establish a
-durable child-chat link, task cancellation or recovery after reconnect. Those
-must not be inferred from the transient `bg_*` task ID.
+Images use `image.attach_bytes` with filename, base64 content and session receipt. Generic files use `file.attach`; its returned `ref_text` precedes the visible question in the normal prompt. Reuse this contract for queue submission.
 
-The 2.25.0 checks cover active-turn submission, owning profile, task-kind/ID
-collisions, completion before acknowledgement, empty results and preserved
-drafts when the server does not identify the task. All 30 focused checks pass;
-the full suite passes 1,182 tests with four opt-in skips, and analysis is clean.
-Dependency updates were reviewed and deferred because no new package is needed.
-Live gateway behavior remains separate from fixture verification.
+Saved user display removes generated expanded attachment context while preserving raw history and row identities. Restore missing references once, without expanding them again; assistant content is not subject to user-context stripping. An upload receipt proves staging, not that a model read the file. Automatic `@file` expansion can reject a staged path outside the workspace, matching the observed Desktop contract. Do not paste file bytes or rewrite the reference to conceal that backend boundary.
 
-## Reading and context
+## Model, context and reading
 
-- Wide Markdown tables use the renderer's horizontal scrolling rather than compressing columns to the phone width.
-- Code supports backtick and tilde fences, longer outer fences and incomplete streamed blocks. Copy preserves the code text; a single wrap/scroll toggle and 48-pixel controls remain usable at large text sizes.
-- Web images open on tap in a zoomable preview, with an external-browser fallback and normal Back navigation. Media/web links retain explicit external-app opening. Backend file downloads are separate D16 work.
-- A four-pixel context fuse sits between the composer text and model controls. Green, amber and red correspond to less than 65%, 65–84% and 85% or above. Tooltip/accessibility text gives usage and marks server estimates as approximate. Missing or unusable data displays an unknown neutral line.
+Choose models by the server's technical provider route and supported reasoning options. `/yolo` uses the current session's configuration and displays its returned state; it must not change global defaults.
 
-The fuse reads `session.context_breakdown {session_id}` after history refresh and model changes. `session.usage` supplies live updates through its `usage` payload; `session.info.usage` is handled too. Each chat owns its disposable snapshot, and a late request cannot replace a newer usage event. No token count or model limit is guessed on the phone. The server's percentage drives the line; used/max values describe it, without recomputing from category totals.
+The thin context ring beside the model selector uses server usage or a labelled estimate. Unknown is not zero. Warning thresholds are 65% and 85%. After cold resume, the lazy agent's ready event triggers a guarded `session.info`/breakdown refresh, without submitting a prompt or polling indefinitely.
 
-Rich diagram rendering remains incomplete: diagram fences currently provide readable/selectable source with copy/wrap controls. No external diagram-rendering service or browser engine was added. Audio/video-specific previews and authenticated backend media remain further D13/D16 work.
-
-## Verification
-
-Release source is Personal `2.1.5+2148`, ARM64 code `21482`. Static analysis reports no issues. The full suite passed 944 tests, with four opt-in integration skips. Signed-build and phone deployment results are recorded in the delivery sequence. Focused tests cover saved-row addressing, rejected edits, fork destination/draft preservation, side-question correlation, narrow-screen tables/code, image navigation/fallback, and scoped context updates including stale-response rejection.
-
-The [contract audit](research/MOBILE_DELIVERY_CONTRACTS_2026-09-11.md) records the pinned Desktop evidence. Live owner-gateway behavior remains unverified; mocks and source inspection do not establish deployed-server capability.
+Markdown, code and tables retain copying and horizontal overflow where appropriate. Long content supports bounded reading and return to latest. Find and tool progress are covered in [Execution and search](EXECUTION_FIND_AND_OUTPUTS.md); [output viewers](OPENING_OUTPUT_FILES.md) handle files. [Transcript projection](TRANSCRIPT_DISPLAY_TYPES.md) defines compact internal notices while preserving raw server history.

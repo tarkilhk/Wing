@@ -1,32 +1,43 @@
 # Feature guide
 
-For installation, start with [Getting started](GETTING_STARTED.md). See [Known limitations](KNOWN_LIMITATIONS.md) before relying on background delivery or recovery.
+Start with [Getting started](GETTING_STARTED.md) to install and connect. The controls below are reachable in the current profile workspace; individual operations depend on the connected server. Read [Known limitations](KNOWN_LIMITATIONS.md) before relying on recovery or background alerts.
 
+## Find your work
 
-These features are reachable in the profile workspace. Availability of individual operations depends on the connected Hermes server.
+Use the drawer for Chats, Activity, Connections, App settings and Hermes administration. Select a connection and profile without changing another client's selection. Chats includes recent projects, pins, search and paginated history. Filters cover unread and automated chats; Activity can filter Running and Needs input and reports unreachable profiles.
 
-- Saved connections in the shared app style, password setup, modern dashboard/gateway validation, profile discovery and client-local profile switching.
-- Drawer navigation, Activity discovery across profiles, reachable theme/accent/text-size and notification controls, and installed Android version/build in App settings. Hermes administration shows the selected connection/profile, description/SOUL editing, manual access/provider diagnostics, server-recorded profile usage and confirmed one-host backend updates with server progress and outcomes. Activity reports profiles it could not reach. PDF/audio/video outputs can be opened in installed Android viewers using authenticated downloads. Advanced connection settings support custom access-proxy headers stored with secure credentials. The Connections toolbar also opens selected-host backend updates with per-host progress and outcomes.
-- Separate profile-owned conversations and running work, with reconnect and server-history refresh.
-- Chat-menu supervision of subagents, goal details and background work. Supported controls include targeted subagent Steer/Interrupt, goal Pause/Resume/Clear, loop/heartbeat controls and background-process Stop. Goal criteria can be added, removed or cleared; actions wait for server acknowledgement.
-- Projects with creation, rename, server appearance and delete controls. Project creation can explicitly discover repository roots configured on the Hermes host or accept a manual absolute path. Recent and pinned chats, paginated unread filtering, Running/Needs input Activity filters, full-text conversation search, Find within the current chat with recent-first results, Search older messages and View in chat, and an option to include automated chats are also available.
-- Each project row has one ellipsis menu with New chat, Rename, Appearance and Delete. Project, chat and saved-draft menus open beside the ellipsis; long-press also opens the row's menu. Destructive actions retain their confirmation dialogs.
-- Workspace options groups chat filters with visible switches, project/archive actions and Refresh. All projects omits chat filters and uses its floating button for New project; the archive omits its own destination.
-- Rename, pin/unpin, explicit read/unread, archive/unarchive, delete and move-to-project actions with server-side constraints. Successfully opening an unread chat marks it read on Hermes; failed reads and manual unread choices stay protected.
-- Streaming conversations, horizontally scrollable tables, selectable fenced code with copy/wrap controls, expandable tool activity, server todo snapshots, collapsed reasoning and Stop. Review summaries open from a memory icon and fold into Activity as the conversation continues. Tapped web images open in a zoomable preview with a browser fallback. Completed Mermaid blocks offer an offline diagram view with zoom and source access.
-- A compact context ring beside the model selector displays server-reported usage, with estimated/unknown states and live updates.
-- Per-chat model and reasoning selection, with searchable, expandable technical-provider groups. Server session settings take precedence over former local model overrides.
-- Unsent text and staged attachments survive app restart, scoped to their original connection/profile/chat. A detected uncertain send retains its draft for checking against server history and is never resent automatically. Process death before acknowledgement has a known warning gap; see [Known limitations](KNOWN_LIMITATIONS.md).
-- Hold the composer arrow, slide to Queue, Steer, Stop or another available action, and release to run it once. A normal tap uses Send when idle and the configured busy action, initially Steer, during work. Queues support text and attachments; Steer accepts text only. Queue waits until the current message finishes submitting before taking a follow-up draft. Queues run in order while the client is connected, remain separate from the current draft, and pause after failed, stopped or uncertain sends. Queued items can be reviewed and removed.
-- Dynamic slash-command discovery, aliases, argument completion, skill dispatch, and dedicated current-session actions including steering and identifiable side-question and background-task cards with the original prompt and result.
-- Saved-message Edit/resend with history-replacement confirmation, one-shot idle Fork, Regenerate and Branch. Parent chat navigation uses existing Hermes metadata. Explicit synchronized answer versions remain deferred because their required API has not been verified on unmodified Hermes.
-- Per-chat Outputs shows recent file/link references first, with **Load older outputs** for earlier history. Direct Markdown links to result files use the same authenticated viewer. Failed batches keep the files already listed and offer retry. Authenticated file retrieval preserves host/profile/chat ownership, supports formatted Markdown/source, SVG and image previews and shares actual bytes through Android; downloads are capped at 32 MiB. PDFs have page controls and pinch zoom; downloaded audio/video has play/pause and seeking. Web links open a browser preview, and self-contained HTML files up to 1 MiB can open interactively in the app. Back returns to the chat.
-- Camera/Photos/Files attachment choices, clipboard image pasting through the Android keyboard or the composer's Paste menu, and reviewed Android sharing into a chosen connection/profile/chat. Pasted JPEG, PNG and WebP images are sanitized and saved as unsent attachments in the originating draft. Camera returns to the originating draft's review when that destination is still valid. Incoming shares survive restart before destination selection, preserve existing drafts and never send automatically. Launcher quick chat, server-advertised approvals and structured clarification remain. Sudo, secret and vault forms keep credentials out of drafts/history, and the jump control identifies their live input requests while the reader is viewing older messages.
-- Local completion/input notifications with independent device controls, optional chat titles, a test alert and original host/profile/chat routing, plus configuration restore from the connections screen.
-- Profile default model selection with provider groups and server-required confirmation. Administration also includes searchable skills, complete skill instructions, individual skill/toolset toggles, and toolset configuration status.
+The floating plus creates a chat, or a project in All projects. Row ellipsis menus keep actions beside their item. Projects support host-folder discovery, creation, rename, appearance and deletion. Chats support rename, pin, read/unread, archive, delete and move to project, subject to server/runtime checks. Opening a chat successfully marks it read on Hermes.
 
-The shell cleanup removed the unreachable legacy screens and navigation widgets, including the old chat UI, Spaces, Cron, Memory, Files and Skills screens. Shared service and contract code remains available where useful for later work; no stored user data was deleted. The [Android source inventory](research/HERMES_ANDROID_FEATURE_INVENTORY_2026-09-11.md) records the earlier baseline. [Shell delivery notes](APP_SHELL.md) describe this change and its limits.
+See [Navigation and projects](APP_SHELL.md) for search limits and ownership rules.
 
-A command appearing in the gateway catalog does not prove correct support for every client or session. Terminal-only, messaging-only and host-microphone commands have platform restrictions. `/yolo` now uses the session's reported state and the session-scoped configuration RPC, including during a running turn. See the [delivery sequence](DELIVERY_SEQUENCE.md) for verification limits.
+## Write and control a conversation
 
-Remote work and phone notification delivery are separate. The app refreshes the history and execution state supplied by the existing server. Local notifications require an active connection and currently have limited coverage of unopened chats. Firebase delivery is dropped. The archived server-patch experiments are not prerequisites for this app. Explicit synchronized answer versions and additional sensitive/side-task recovery remain deferred where the unmodified server lacks the required capability. [Emulator verification](EMULATOR_ROADMAP_VERIFICATION.md) records Android behavior against fixtures separately from actual server support.
+Replies stream into a readable transcript with selectable code, copying, tables, expandable tools, reasoning and server todo progress. A context ring beside the model selector shows server-reported or estimated usage. Model selection has search and collapsible technical-provider groups, with supported reasoning choices.
+
+Unsent text and staged files survive navigation and restart. Tap Send while idle. During work, the normal action defaults to Steer and can be changed to Queue or Stop in App settings. Hold the arrow, slide to an available action and release for a one-time alternative. Queue supports text/files; Steer is text-only. Hold a queued row to edit it. Queues remain separate from the draft and pause after stopped, failed or uncertain work.
+
+Type `/` for commands, skills and argument completion. Current-session YOLO reports the server's state. Side questions and background commands display their original question and received result. Saved-message Edit confirms history replacement; Regenerate replaces an answer in place, while Branch/Fork creates a separate chat. Parent chat uses server metadata. Shared older answer alternatives remain unavailable.
+
+See [Conversation actions](CONVERSATION_ACTIONS_AND_READING.md), [composer gesture](COMPOSER_ACTION_GESTURE.md) and [queues](SUPERVISION_AND_QUEUES.md).
+
+## Send attachments and use results
+
+Add Camera, Photos or Files, paste a supported clipboard image, or share content into Hermes from Android. Review the destination and content before adding it to a draft; Send is separate. Dictation uses the device's speech-recognition service to produce text for review.
+
+Find in chat starts with recent messages and can search older history. View in chat shows a result with nearby context; Back to latest returns to the conversation. Outputs lists recent file references and can load older ones.
+
+Authenticated viewers support Markdown/source, images, SVG, PDF pages/zoom and common audio/video playback. Completed Mermaid blocks open an offline diagram viewer. Web links use browser previews; self-contained HTML up to 1 MiB can open interactively. Downloads are capped at 32 MiB, and Save or share delivers actual bytes through Android. Old server references may no longer resolve.
+
+See [Sharing and capture](SHARING_AND_CAPTURE.md), [Find and Outputs](EXECUTION_FIND_AND_OUTPUTS.md) and [output viewers](OPENING_OUTPUT_FILES.md).
+
+## Supervise and administer
+
+Respond to supported approval scopes and structured clarification. Dedicated sudo, secret and vault forms keep sensitive values outside ordinary drafts/history. Inspect subagents and use supported targeted Steer/Interrupt. Goals expose details and Pause/Resume/Clear, criteria editing and Resume now; background work exposes supported loop, heartbeat and process controls.
+
+Administration separates Profile, Server and Health. It includes supported model defaults, SOUL/description, skills/toolsets, shared provider accounts and explicit overrides, MCP controls, profile lifecycle, settings, diagnostics, logs and usage. Unsupported writes are labelled, including individual memory edits and per-tool MCP changes. Eligible backend updates support deliberate single-host or selected-host actions with separate outcomes.
+
+App settings includes paired light/dark themes, accent/text preferences, installed version, offline privacy policy and local alert controls. Configuration export/import transfers connections, credentials and allowlisted preferences; it is not a full draft/app backup.
+
+See [Administration](ADMINISTRATION.md), [session controls](SESSION_CONTROLS.md), [subagents](SUBAGENT_SUPERVISION.md) and [notifications](BACKGROUND_NOTIFICATIONS.md).
+
+Accepted work continues on Hermes when the phone leaves. Local queues and alerts require a running, connected client. Firebase delivery, cold sensitive/side-task recovery and synchronized answer versions are not current features. The [product plan](PRODUCT_PLAN.md) separates selected work from exclusions.

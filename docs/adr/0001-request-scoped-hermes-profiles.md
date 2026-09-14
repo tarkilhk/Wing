@@ -3,6 +3,8 @@
 - Status: Accepted
 - Date: 2026-09-06
 
+Current qualification, 2026-09-15: the ownership decision remains accepted. The later [product scope](../PRODUCT_PLAN.md) supersedes this record's legacy-server fallback: the active workspace requires modern profile-aware contracts and fails visibly when they are unavailable. The context below describes the original decision baseline.
+
 ## Context
 
 Hermes Android currently binds its active Workspace to one `SavedConnection`. Its legacy “Switch profile” UI actually switches saved Android connections. Official Hermes profiles are different: each profile identifies an isolated `HERMES_HOME` with its own sessions, projects, configuration, and state.

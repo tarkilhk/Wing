@@ -2,7 +2,7 @@
 
 Tracks backend failures and contract gaps reproduced during Android acceptance. This records backend evidence and links to local tracking issues. Upstream reports are listed separately. No backend source changes are authorized by these entries.
 
-Last verified: 2026-09-14, local Hermes 0.21.2, installed source commit `e16f686706b1e0d5334fd1ae82190058d2a19694`, using the Android emulator and real model/browser execution. See the [acceptance ledger](QA_FINAL_FIVE_2026-09-14.md) and [source contract notes](REMAINING_CONTRACT_CHECKS_2026-09-14.md).
+Last verified: 2026-09-14, local Hermes 0.21.2, installed source commit `e16f686706b1e0d5334fd1ae82190058d2a19694`, using the Android emulator and real model/browser execution. See [Testing](TESTING.md) for the recorded acceptance baseline.
 
 | ID | Priority | Issue | Status | Upstream issue | Local issue |
 | --- | --- | --- | --- | --- | --- |
@@ -73,11 +73,10 @@ The actual HTTP handlers also passed with a real MCP subprocess and disposable
 profile. Broader validation: 202 passed, 36 skipped, and five failures reproduced
 unchanged on base. Ruff and the Windows footgun check passed.
 
-The PR is open and mergeable; the installed backend remains unchanged. Related
+At the recorded check, the PR was open and the installed backend was unchanged. Follow the linked PR for its current status. Related
 [issue #87761](https://github.com/NousResearch/hermes-agent/issues/87761) and
 [PR #87787](https://github.com/NousResearch/hermes-agent/pull/87787) address a
-running gateway service, which this reproduction does not require. No recurring
-monitor was created, per the user's later instruction.
+running gateway service, which this reproduction does not require.
 
 **Mobile impact:** Deleting a profile can return HTTP 500 after a connector has
 started because the backend still owns an open log handle.
@@ -91,7 +90,7 @@ a stdio MCP service, and enable/test it. Delete that profile through
 backend process tree releases the handle and permits filesystem cleanup. The
 same emulator lifecycle test deletes profiles without MCP handles successfully.
 
-**Evidence:** [Administration emulator acceptance](ADMINISTRATION_EMULATOR_ACCEPTANCE_2026-09-14.md),
+**Evidence:** [Administration acceptance](TESTING.md#recorded-live-baseline),
 local `build/admin-live-run2.log` and `build/admin-live-run2-backend.err.log`,
 backend revision `e16f686706b1e0d5334fd1ae82190058d2a19694`.
 
@@ -104,12 +103,4 @@ released processes/file handles without affecting another profile.
 - Shared older answer versions require server persistence that is absent from the current contract. Ordinary regeneration, durable replacement and separate forks passed. Track shared alternatives as a capability request if selected, not as HUP-001 through HUP-003.
 - External vault unlock requires a configured external password manager. The local environment has none; this is an untested prerequisite, not a reproduced defect.
 
-## Update record
-
-| Date | Change |
-| --- | --- |
-| 2026-09-14 | Created HUP-001 through HUP-003 from the completed local acceptance pass. No upstream issue has been filed, no fix claimed, and no backend source changed. |
-| 2026-09-14 | Added HUP-004 from native administration acceptance against the same installed backend revision. |
-| 2026-09-14 | Filed HUP-004 upstream as #110953 and proposed fix #110954 after current-main reproduction and regression validation; installed backend unchanged. |
-
-Local tracking issues were filed in this fork on 2026-09-15. See [Bug tracker](BUG_TRACKER.md). No additional upstream issue or backend fix was created by that documentation cleanup.
+Local tracking issues are indexed in [Bug tracker](BUG_TRACKER.md). The evidence above is dated; do not close a backend entry solely because a newer version exists.

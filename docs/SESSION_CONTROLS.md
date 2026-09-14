@@ -1,8 +1,8 @@
 # Session goals and background work
 
-D24's initial goal view and controls are implemented in 2.8.0. Open **Goal** from a chat's three-dot menu. Existing server goals also appear in the conversation. D25 adds **Background work** in 2.9.0 for heartbeat, loop and process controls. These controls use server-owned session state; they do not create a second goal scheduler on the phone.
+Open Goal or Background work from a chat's menu. These controls read and change server-owned goals, loops, heartbeats and processes; the phone does not run a second scheduler.
 
-Pause, Resume, Resume now and confirmed Clear wait for the server's reply. Resume continuations reuse prompt submission while preserving unsent composer text, attachments and queued messages. A newer, different server update prevents an outdated continuation from being submitted. Uncertain actions are not retried automatically. R13 adds criteria editing in 2.14.0: Add criterion, per-item Remove and Clear criteria reuse the same scoped session control path. Goal contracts and verification gates stay read-only.
+Pause, Resume, Resume now and confirmed Clear wait for the server's reply. Resume continuations reuse prompt submission while preserving unsent composer text, attachments and queued messages. A newer, different server update prevents an outdated continuation from being submitted. Uncertain actions are not retried automatically. Criteria editing offers Add criterion, per-item Remove and Clear criteria reuse the same scoped session control path. Goal contracts and verification gates stay read-only.
 
 ## Verified contracts
 
@@ -39,14 +39,4 @@ A targeted stop uses `process.kill {session_id:<parent runtime>,process_id:<row 
 
 All reads and actions belong to the original profile gateway and parent runtime. Newer server events must survive older reads. A control acknowledgement must be handled without erasing unsent text, attachments or queued messages. No failed or uncertain action is retried automatically. Goal/loop continuation uses the existing prompt submission path.
 
-This work does not reopen the deferred Cron, bots, messaging or webhook administration scope. Live-server and phone verification will be recorded after implementation.
-
-## Verification
-
-The 2.8.0 goal snapshot passed 1,042 tests with four opt-in skips and a clean analyzer. Checks cover reopened/ready-event hydration, late reads, event/action races, exact action routing, preserved composer state, continuation failures, malformed responses, the chat-menu entry and large-text layout. Signed Personal 2.8.0 / 21572 passed package/certificate checks, installed in place wirelessly and launched on the owner's phone. Phone evidence is package/process metadata; no live goal was changed during fixture checks.
-
-The 2.9.0 D25 snapshot passed 1,057 tests with four opt-in skips and a clean analyzer. Checks cover exact session/process routing, kill acknowledgement variants, duplicate actions, late reads, transient dismissal, partial refresh failure, chat-menu navigation and large-text controls. Signed Personal 2.9.0 / 21582 passed package/certificate checks. Installation is pending because the authorized wireless endpoint refused the connection; the last verified phone installation remains 2.8.0. No live loop, heartbeat or process has been stopped during development checks.
-
-The 2.14.0 criteria snapshot passed 1,109 tests with four opt-in skips and a clean analyzer. Fifteen focused goal/controller checks cover exact scoped criteria requests, failed-add draft retention, cancellation, stale removal/clear confirmations, disposed dialog parents, continuation guards and 320-pixel layout at 200% text. Background controls from 2.9.0 are included in the verified 2.12.0 phone installation; the older pending-deployment paragraph above is historical. No live goal or criteria were changed during development verification.
-
-Deployment on 2026-09-12: Personal 2.14.0 / 21632 passed signing/package checks, installed in place over wireless debugging and launched. Phone checks verify version/process metadata; live goal changes remain untested.
+This work does not reopen the deferred Cron, bots, messaging or webhook administration scope. See [Testing](TESTING.md) for recorded live acceptance. Non-default profile loops retain the [HUP-002 scope mismatch](UPSTREAM_HERMES_BUGS.md#hup-002-non-default-profile-loop-commandcontrol-mismatch).

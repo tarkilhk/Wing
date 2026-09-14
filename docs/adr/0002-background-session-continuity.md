@@ -3,6 +3,8 @@
 - Status: Accepted
 - Date: 2026-09-06
 
+Current qualification, 2026-09-15: the lifetime/ownership decision remains accepted. It does not guarantee process-death recovery or notification delivery. Use [local notification limits](../BACKGROUND_NOTIFICATIONS.md) and [current storage/recovery scope](../PRODUCT_PLAN.md) for those boundaries; no separate durable work database or Firebase sender is selected.
+
 ## Context
 
 Changing the visible profile is a navigation and data-scope action. It is not an instruction to stop work. Hermes Android already has an application-level turn controller designed to retain coordinators, sockets, and recovery authority above screen lifetimes. Official Hermes Desktop likewise permits background profile sockets and sessions to keep streaming concurrently.

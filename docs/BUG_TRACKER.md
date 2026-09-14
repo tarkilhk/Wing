@@ -1,6 +1,6 @@
 # Bug tracker
 
-GitHub issues were enabled for this fork on 15 September 2026. These issues track the defects and reliability gaps documented in the current release review and backend acceptance records. Older dated reports also contain already completed fixes and unimplemented capabilities; those are not reopened as current defects.
+These issues track documented client defects and backend reliability gaps. Status below was recorded on 15 September 2026; each linked issue is the current source of truth. Completed historical fixes and unimplemented capabilities are not reopened as new defects.
 
 | ID | GitHub issue | Status at this cleanup |
 | --- | --- | --- |
@@ -18,4 +18,4 @@ The credential redirect and queued attachment fixes passed regression tests in t
 
 Backend issues are tracked here for their effect on Android. HUP-004 also has an existing upstream report and proposed fix; this cleanup did not post to upstream or modify the installed backend. See [Upstream Hermes bugs](UPSTREAM_HERMES_BUGS.md) for recorded versions and closure criteria.
 
-[Known limitations](KNOWN_LIMITATIONS.md) gives user-facing workarounds. [The cleanup record](DOCUMENTATION_CLEANUP_2026-09-15.md) lists completed documentation and privacy work. Missing Play hosting/declarations are release tasks, not additional runtime bugs.
+[Known limitations](KNOWN_LIMITATIONS.md) gives user-facing workarounds. Missing Play hosting/declarations are release tasks, not additional runtime bugs.

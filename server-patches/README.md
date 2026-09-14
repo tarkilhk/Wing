@@ -1,13 +1,10 @@
-# Rejected backend experiments
+# Historical backend experiments
 
-**Do not apply these patches.** The owner explicitly prohibits Hermes backend
-modifications. Preparing these experiments and proposing deployment was an agent
-scope error. They were not applied to the owner's backend. They are retained only
-as historical research, not as product requirements or a deployment procedure.
-
-These changes run on Hermes, separately from the Android APK. They target
-`NousResearch/hermes-agent` commit
-`8d79c2ff57bba4b07e5b37ed90387b16541aef53`.
+Do not apply these patches as Android setup. This fork targets existing Hermes
+APIs; the [product scope](../docs/PRODUCT_PLAN.md) excludes backend modifications.
+These experiments target Hermes revision
+`8d79c2ff57bba4b07e5b37ed90387b16541aef53` and are not current requirements or
+evidence of support on an installed server. An APK update does not apply them.
 
 | Patch | Purpose |
 | --- | --- |
@@ -18,27 +15,8 @@ These changes run on Hermes, separately from the Android APK. They target
 | 0005 | Persist explicit answer-version relationships and resolve current rows |
 | 0006 | Recover live-session side tasks and expose running counts to Activity |
 
-Their original tests applied the files in numerical order to an isolated source
-copy. An APK upgrade does not apply any of them. Future client work must use
-existing APIs in the unmodified Hermes backend.
-
-The exact six repository artifacts applied sequentially to a fresh copy of the
-pinned source and passed 106 combined tests on 2026-09-12. That verifies the patch
-series, not deployment to the owner's server. The installed backend was unchanged
-during this validation.
-
-Patch 0003 additionally needs the owner's Firebase project and trusted server
-credentials. It stores installations per profile while reading Firebase setup
-from the process's host configuration. See
-[background notification setup](../docs/BACKGROUND_NOTIFICATIONS.md).
-
-Patch 0004 restores only unanswered, unexpired requests still owned by a live
-server session. Patch 0006's task list also lasts only for that live session.
-Neither recreates work after the server itself restarts. Patch 0005 stores its
-explicit relationships in the server database and validates the canonical
-question before reusing them. See [request recovery](../docs/SENSITIVE_REQUEST_RECOVERY.md),
-[answer versions](../docs/ANSWER_VERSIONS.md) and
-[side-task recovery](../docs/SIDE_TASK_RECOVERY.md).
-
-These patches do not add a remote TUI process restart API. That operation needs
-an explicit external supervisor; the messaging-gateway restart route is different.
+Current boundaries are documented in [local notifications](../docs/BACKGROUND_NOTIFICATIONS.md),
+[pending input and side questions](../docs/SUPERVISION_AND_QUEUES.md),
+[server relationships](../docs/SERVER_CHAT_RELATIONSHIPS.md) and
+[connections/updates](../docs/CONNECTION_DIAGNOSTICS_AND_VERSIONS.md).
+Historical patch validation does not establish live acceptance of those features.

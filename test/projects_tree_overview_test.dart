@@ -1,10 +1,7 @@
 /// Contract tests for the `projects.tree` overview RPC.
 ///
-/// Phase 0 of `docs/ANDROID_DAILY_DRIVER_ROADMAP.md` specifies the Projects
-/// layer as wrapping `projects.list/create/update/archive/delete/set_active/
-/// tree/project_sessions`. `tree` was the last method of that family with no
-/// Android reader, and it is the only one that answers the two questions the
-/// Projects pane actually asks on entry:
+/// The server-owned project structure described in `docs/APP_SHELL.md` uses
+/// `projects.tree` to answer two overview questions:
 ///
 /// - *what does each project contain* — repo/lane structure and counts, with
 ///   a few preview chats, without paying for every session row;
@@ -14,7 +11,7 @@
 ///
 /// `projects.list` cannot answer either: it returns the projects database
 /// records only, so it knows nothing about chats. Deriving the grouping on
-/// device instead is exactly the mistake the roadmap forbids — the server owns
+/// device would create a competing project model; the server owns
 /// it in `tui_gateway/project_tree.py`, and two implementations would disagree.
 ///
 /// The payload mirrors that builder:

@@ -6,15 +6,17 @@ responses are synthetic.
 
 ## Run
 
+From the repository root, using a Python environment for development dependencies:
+
 ```bash
-python -m pip install -r requirements.txt
-python fake_gateway.py --host 127.0.0.1 --port 18642 --api-key test-key
+python -m pip install -r tools/fake_gateway/requirements.txt
+python tools/fake_gateway/fake_gateway.py --host 127.0.0.1 --port 18642 --api-key test-key
 ```
 
 In another terminal:
 
 ```bash
-python test_fake_gateway.py
+python tools/fake_gateway/test_fake_gateway.py
 ```
 
 ## Deterministic disconnect scenarios

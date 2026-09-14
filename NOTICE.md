@@ -7,5 +7,3 @@ Upstream identifies Hermes Android as MIT. This fork retains that license identi
 Inherited contributors include CarlosReyesPena, CristianGCiocoi, AI-Guru, grunjol, louquillio, sternbergm and the upstream maintainer. The [changelog](CHANGELOG.md) and Git history retain their work and attribution.
 
 Vendored diagram assets retain [Mermaid's license](android/app/src/main/assets/diagrams/MERMAID-LICENSE) and [DOMPurify's license](android/app/src/main/assets/diagrams/DOMPURIFY-LICENSE). These apply to their respective components.
-
-The [archived F-Droid recipe](docs/archive/README.md) is historical upstream distribution material, not a current submission for this fork.

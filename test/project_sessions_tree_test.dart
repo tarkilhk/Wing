@@ -1,10 +1,9 @@
 /// Contract tests for the `projects.project_sessions` drill-in RPC.
 ///
-/// Phase 0 of `docs/ANDROID_DAILY_DRIVER_ROADMAP.md` requires the Projects
-/// layer to wrap the native `projects.*` family, including
-/// `project_sessions` — the call that answers "which chats live in this
-/// project", grouped the way the server already groups them (project → repo →
-/// lane). Android must read that grouping rather than invent a second one, or
+/// `docs/APP_SHELL.md` keeps project membership server-owned.
+/// `project_sessions` answers which chats live in this project, grouped the
+/// way the server already groups them (project → repo → lane).
+/// Android must read that grouping rather than invent a second one, or
 /// the phone and the desktop will disagree about where a chat belongs.
 ///
 /// The payload shape mirrors `tui_gateway/project_tree.py`:

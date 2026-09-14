@@ -1,9 +1,0 @@
-# Conversation board correction
-
-Built-in image-generation edit. The first conversation result used a light composer on the narrow dark screen and overly large context rings. This targeted correction supplies the final conversation reference.
-
-Use case: precise-object-edit, UI mockup. Edit this exact Studio conversation design board. Preserve all text, overall layout, three screen sizes, keyboards, controls, and typography. Make ONLY these visual corrections:
-1. In the THIRD rightmost narrow-phone DARK screen, change the erroneously white composer and white attachment row to the exact dark composer/attachment colors used by the middle screen. Draft text becomes #E8F2EC, secondary and disabled model text #A9BEB3, border #334C40, panel #182621, Stop fill #A6E3CB with dark stop glyph. Its model selector must match the middle dark screen. Absolutely no white or light-background composer elements on the third dark phone.
-2. In ALL THREE composer control rows, reduce the context ring between microphone and model selector to a restrained 16-18dp visual diameter, SMALLER THAN THE MICROPHONE ICON HEIGHT. Keep its existing center position and surrounding reserved space. It is a very THIN 1dp muted full circumference with a 2.5dp green/mint 35% arc, empty center, no text. This ring is not a loading spinner. Do NOT alter the separate status spinner above the queued row.
-3. In ALL Activity components, remove the decorative circular node at the end of the vertical guide; retain the simple hairline and existing tool row. In the THIRD screen remove the enclosing rectangular border around the collapsed Activity header so it is borderless like the others. Preserve collapsed versus expanded states and all text.
-Everything else unchanged. No new boxes, controls, no fuse, no status or text edits. Same high-resolution board.

@@ -4,7 +4,7 @@ Hermes Android connects to a server you operate or have permission to use. You n
 
 ## Compatibility
 
-The recorded [administration device checks](ADMINISTRATION_EMULATOR_ACCEPTANCE_2026-09-14.md) used unmodified Hermes revision `e16f686706b1e0d5334fd1ae82190058d2a19694`. This is a tested reference, not a minimum-version promise. Earlier source research used `d15ed4445207dda418b984e8bda0f68f48b8c6f3`. Capabilities can differ between installations; the Android app probes the server before saving a connection.
+The recorded [live acceptance baseline](TESTING.md#recorded-live-baseline) used unmodified Hermes revision `e16f686706b1e0d5334fd1ae82190058d2a19694`. This is a tested reference, not a minimum-version promise. Earlier source research used `d15ed4445207dda418b984e8bda0f68f48b8c6f3`. Capabilities can differ between installations; the Android app probes the server before saving a connection.
 
 The setup below follows the [official dashboard guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/web-dashboard), checked on 15 September 2026. It was documentation-checked, not reinstalled against a fresh host during this cleanup. A functioning browser dashboard alone does not prove that authenticated chat WebSockets work.
 
@@ -59,7 +59,7 @@ Open Connections, add a connection, and enter:
 | Dashboard path prefix | Leave blank unless your proxy serves the dashboard below a path |
 | Explicit Desktop Gateway URL | Leave blank when the dashboard serves `/api/ws`; use the actual gateway URL only for a separate deployment |
 
-Keep path prefixes in their dedicated field. Under advanced settings, custom access headers can supply access-proxy credentials. Use proxy-authenticated mode only if your deployment provides that authentication. See [Advanced connection headers](ADVANCED_CONNECTION_HEADERS.md).
+Keep path prefixes in their dedicated field. Under advanced settings, custom access headers can supply access-proxy credentials. Use proxy-authenticated mode only if your deployment provides that authentication. See [Access headers](CONNECTION_DIAGNOSTICS_AND_VERSIONS.md#access-headers).
 
 Save checks profile discovery, the gateway connection and session listing before accepting the connection. Select the intended profile, create a chat, send a short message, then leave and reopen it to verify saved history.
 

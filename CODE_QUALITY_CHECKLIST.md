@@ -1,42 +1,40 @@
-# Code Quality Checklist — Pre-release Review Process
+# Release checklist
 
-This checklist must be completed before every release PR. Mark each item as passed, noted, or not applicable in the release PR description.
+Complete this for a fixed release candidate. Record passed, failed or not applicable with a reason in the release PR. Use the [release guide](docs/ANDROID_RELEASE_PLAN.md) for identity/signing and [Testing](docs/TESTING.md) for live-server prerequisites.
 
-## Analysis
-- [ ] `flutter analyze` — zero errors, warnings reviewed and noted
-- [ ] `flutter pub outdated` — key dependencies checked and update decisions recorded
-- [ ] `flutter test` — test suite passes
-- [ ] `flutter build apk --release --split-per-abi` — clean release build
+## Automated checks
 
-## Architecture
-- [ ] State management is consistent for each screen or feature (Riverpod / `setState` usage is intentional)
-- [ ] No orphaned imports, dead code, or unused assets
-- [ ] Network calls have visible error handling paths
-- [ ] `StatefulWidget` resources are disposed correctly (`TextEditingController`, `ScrollController`, timers, streams, WebSockets)
-- [ ] WebSocket and streaming lifecycles connect, cancel, and dispose cleanly
+- [ ] `flutter analyze --fatal-infos` passes.
+- [ ] `flutter test` passes; opt-in skips and their coverage limits are recorded.
+- [ ] `flutter pub outdated` has been reviewed and update decisions recorded.
+- [ ] The intended signed release artifact builds and passes package, version, certificate and non-debuggable checks.
 
-## UX
-- [ ] Error states are visible to the user, not silent failures
-- [ ] Loading indicators are shown where network calls or long-running actions happen
-- [ ] Layout is responsive on phone and tablet breakpoints
-- [ ] Dark mode follows the system setting unless the user explicitly overrides it
-- [ ] Forms validate required fields and prevent empty submissions
+## Behavior and ownership
 
-## Security
-- [ ] No API keys, access tokens, or local secrets are committed
-- [ ] User-provided hosts and URLs are validated or normalised before use
-- [ ] Sensitive values are masked in logs, screenshots, and release notes
+- [ ] State management and resource lifetimes remain consistent; controllers, timers, streams and sockets are released by their owner.
+- [ ] No dead imports or unused assets were introduced.
+- [ ] Errors, loading, partial results and uncertain writes remain visible and actionable.
+- [ ] Connection/profile/chat ownership survives navigation, late responses and reconnect.
+- [ ] Newer draft text/files survive asynchronous sends and queue actions.
+- [ ] Light/dark, narrow/wider layouts, enlarged text, keyboard insets and touch targets work for changed screens.
+- [ ] Forms validate input and guard duplicate submissions.
 
-## Release
-- [ ] Version bumped in `pubspec.yaml`
-- [ ] `CHANGELOG.md` updated, or release notes drafted if the changelog is intentionally deferred
-- [ ] CI/CD builds a clean APK, or the local build command and output path are recorded
-- [ ] Release PR links to this checklist and includes any exceptions
+## Security and release documents
 
-## Manual smoke testing
-- [ ] Connect to a Hermes Gateway API Server
-- [ ] Browse sessions
-- [ ] Send a message and receive a streamed response
-- [ ] Open Chats, Activity, Connections, App settings and Hermes administration through the drawer
-- [ ] Confirm settings navigation preserves the open chat and draft; selecting a profile does not switch another client
-- [ ] Verify behaviour on at least one phone-sized layout and one wider/tablet layout
+- [ ] No credentials, signing material or private evidence is committed; logs and release notes are redacted.
+- [ ] User-supplied URLs/hosts are validated and authenticated redirect restrictions remain intact.
+- [ ] Version and base code agree across pubspec, workflows and release identity assertions.
+- [ ] Changelog records product changes; guides and store text match the candidate.
+- [ ] Privacy policy and any Play disclosures match the actual artifact's configuration.
+- [ ] Relevant licenses and attribution remain included.
+
+## Manual smoke test
+
+- [ ] Connect to a compatible dashboard/Desktop Gateway and browse chats.
+- [ ] Send a message, receive a streamed reply, and reopen saved history.
+- [ ] Search and delete a disposable test chat.
+- [ ] Open Chats, Activity, Connections, App settings and Hermes administration through the drawer.
+- [ ] Navigate while preserving the chat/draft; switching profile leaves another client's selection unchanged.
+- [ ] Check interruption/recovery, attachments, queue submission and an output viewer.
+- [ ] Check local notification posting and target routing, recording background-delivery limits.
+- [ ] Record the tested phone/emulator and any unverified server/device scenario.

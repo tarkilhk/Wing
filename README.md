@@ -53,7 +53,7 @@ flutter build apk --debug
 
 On Windows, use the guarded launcher described in [Contributing](CONTRIBUTING.md). Run tests and Android builds sequentially. Live-server tests are opt-in and can create or change server data; read their prerequisites first.
 
-[Contributing](CONTRIBUTING.md) covers setup, source paths and checks. [Release instructions](docs/ANDROID_RELEASE_PLAN.md) cover package identity, signing and distribution. The [documentation index](docs/README.md) separates user guides, current contracts and historical records.
+[Contributing](CONTRIBUTING.md) covers setup, source paths and checks. [Release instructions](docs/ANDROID_RELEASE_PLAN.md) cover package identity, signing and distribution. The [documentation index](docs/README.md) indexes user guides, technical contracts and release instructions.
 
 ## Version and application identity
 

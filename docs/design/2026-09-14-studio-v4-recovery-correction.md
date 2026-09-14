@@ -1,5 +1,0 @@
-# Recovery board scope correction
-
-Built-in image-generation edit. The generated Health header incorrectly inherited the editor-style connection/profile subtitle. The final board corrects that header to connection only.
-
-Use case: precise-object-edit / UI mockup. Edit this exact Studio recovery board with ONE targeted correction. In the LEFTMOST "Health / Profile missing" phone ONLY, the subtitle directly beneath "Administration" currently says "Home / Personal". Replace that subtitle with a compact server selector: small server-outline icon, exact text "Home", small down chevron. There must be NO "Personal" in this common header. Keep "Personal" under the lower "Selected profile" section exactly as it is. The top header identifies only the server, because Runtime is independent of the missing selected profile. Keep all other content, two other phones, theme, positions, titles, actions, typography, keyboard and outside-board annotations unchanged. Do not introduce any extra row or move the tabs. Match the existing dark Studio style. Preserve the entire board and original resolution.

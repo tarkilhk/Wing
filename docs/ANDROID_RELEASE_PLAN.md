@@ -71,5 +71,3 @@ Publish [PRIVACY.md](../PRIVACY.md) at a public URL and enter that URL in Play C
 ## Moving settings between packages
 
 Android isolates storage by package ID. The encrypted configuration export/import can transfer connections, credentials and allowlisted preferences. It does not transfer every appearance setting, profile selection, draft, queue or recovery journal. Keep the old app until the new one works, and review unsent work before uninstalling. Hermes retains server conversation data independently.
-
-The [historical release record](archive/ANDROID_RELEASE_PLAN_2026-09-06.md) preserves earlier device versions, paths and setup decisions. It is not a current release procedure.
