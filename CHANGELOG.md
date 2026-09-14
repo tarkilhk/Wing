@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.36.14+2231] - 2026-09-15
+
+### Changed
+- Replace the full-width New chat shelf with a compact floating plus button.
+- Extend the chat list into the freed space, with scroll padding so the final row can clear the button.
+
 ## [2.36.13+2230] - 2026-09-15
 
 ### Fixed
