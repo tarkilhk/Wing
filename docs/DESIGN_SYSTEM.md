@@ -15,6 +15,19 @@ The [product plan](PRODUCT_PLAN.md) owns functionality. This document owns the a
 - Administration uses the owner-selected Profile / Server / Health tabs. Classify each operation by audited ownership. The selected connection stays visible, and profile selection applies only to profile-owned settings or explicitly scoped health results. See the [resolved administration handoff](design/2026-09-14-administration-handoff.md) for the complete proposed P0/P1 map and the [revision 4 boards](design/2026-09-14-studio-v4-administration.md) for visual proposals. Research coordination is complete; detailed layouts and mixed-priority splits are not fresh owner approvals, and memory/MCP write limitations remain unresolved.
 - Shared provider accounts belong under Server / Providers. Profile keeps model/provider choices, inherited-access information and any explicit profile-specific credential override. MCP stays profile-owned. A shared account reached from Profile opens its Server detail. Hermes supports [shared provider-state inheritance](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/hermes_cli/auth.py#L773) and [shared credential-pool fallback](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/hermes_cli/auth.py#L893). Revision 4's provider-account placement is superseded; do not infer account ownership from the presence of a profile parameter.
 
+## App and notification identity
+
+The owner selected the Playful portrait: a winking woman with a simple dark bob,
+mint headphones and a messenger wing on the earcup. Keep the navy, cream and
+mint identity colors. The white messenger wing is the notification/status-bar
+mark and the optional Android themed launcher mark. The normal launcher uses
+the portrait. These brand colors do not replace Studio's screen tokens or the
+user's selected accent family.
+
+See the [icon assets and production record](design/2026-09-14-app-icon.md) for
+the approved reference, source assets, export command and validation evidence.
+Preserve the wink, simple hair masses and wing when making future exports.
+
 ## Layout and controls
 
 Keep hamburger navigation and projects scoped inside Chats. Use compact connection/profile text below the page title. Search stays below this scope. Projects, pins and recents use full-width rows, grouped where helpful, with thin separators.

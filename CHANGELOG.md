@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.36.6+2223] - 2026-09-14
+
+### Changed
+- Replace the gold H launcher icon with the selected Playful portrait in navy, cream and mint.
+- Use the matching messenger wing for notifications and Android themed icons.
+- Record the approved icon identity, source assets and repeatable export process in the design documentation.
+
 ## [2.36.5+2222] - 2026-09-14
 
 ### Fixed

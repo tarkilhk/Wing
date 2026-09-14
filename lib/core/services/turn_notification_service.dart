@@ -94,9 +94,7 @@ class PluginTurnNotificationSink implements TurnNotificationSink {
   }
 
   Future<void> _initializeOnce() async {
-    const androidSettings = AndroidInitializationSettings(
-      '@mipmap/ic_launcher',
-    );
+    const androidSettings = AndroidInitializationSettings('ic_stat_hermes');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,

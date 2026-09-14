@@ -4,6 +4,8 @@
 
 The [Studio design charter](DESIGN_SYSTEM.md) owns the selected design language for all UI work. It records the light/dark palette, compact controls, selected context ring, behavior-preservation rules and [administration ownership](design/2026-09-14-administration-handoff.md). The linked boards are design references, not evidence of implemented features.
 
+The [Playful app icon and wing identity](design/2026-09-14-app-icon.md) records the selected launcher portrait, notification symbol, production assets and export process.
+
 The [owner-selected product plan](PRODUCT_PLAN.md) is the current scope for this fork, recorded on 2026-09-11. It contains the accepted feature IDs, exclusions, work packages, progress, server-state policy and navigation decisions. Update it as work is delivered.
 
 The [repository README](../README.md) describes the current implementation and setup. A planned feature must not be listed there as available before its active user flow works.
