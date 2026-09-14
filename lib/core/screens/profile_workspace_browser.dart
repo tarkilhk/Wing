@@ -175,7 +175,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Material(
         color: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: HermesRadius.card),
         clipBehavior: Clip.antiAlias,
         child: ListTile(
           key: ValueKey('project-${project['id']}'),
@@ -244,7 +244,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           color: row['pinned'] == true
               ? Theme.of(context).colorScheme.surfaceContainerLow
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: HermesRadius.card,
           clipBehavior: Clip.antiAlias,
           child: ListTile(
             key: ValueKey('chat-${row['id']}'),
@@ -351,7 +351,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
           child: Material(
             color: Theme.of(context).colorScheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: HermesRadius.card,
             clipBehavior: Clip.antiAlias,
             child: GestureDetector(
               onSecondaryTap: controller.switching ? null : actions,
@@ -861,7 +861,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                                             : 1,
                                       ),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(6),
+                                        borderRadius: HermesRadius.control,
                                       ),
                                     ),
                                     child: Semantics(
@@ -900,6 +900,22 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                       ),
                     ),
                   ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: TextField(
+                    key: const ValueKey('workspace-search'),
+                    controller: _search,
+                    onChanged: _setQuery,
+                    decoration: InputDecoration(
+                      hintText: _view == 'projects'
+                          ? 'Search projects'
+                          : _unreadOnly
+                          ? 'Search loaded unread titles'
+                          : 'Search chats',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                    ),
+                  ),
                 ),
                 if (controller.error != null)
                   ListTile(
@@ -942,79 +958,25 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
             ),
           ),
         ),
-        bottomNavigationBar: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: colors.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: colors.outlineVariant),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _search,
-                        onChanged: _setQuery,
-                        decoration: InputDecoration(
-                          hintText: _view == 'projects'
-                              ? 'Search projects'
-                              : _unreadOnly
-                              ? 'Search loaded unread titles'
-                              : 'Search chats',
-                          prefixIcon: const Icon(Icons.search),
-                          filled: true,
-                          fillColor: Colors.transparent,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(18),
-                            borderSide: BorderSide.none,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(18),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 14,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 15,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                      ),
-                      onPressed: controller.switching || resource == null
-                          ? null
-                          : () => _run(() async {
-                              if (_view == 'projects') {
-                                await widget.newProject();
-                              } else {
-                                await controller.createChat();
-                              }
-                            }),
-                      icon: const Icon(Icons.add_rounded, size: 22),
-                      label: Text(_view == 'projects' ? 'Project' : 'New chat'),
-                    ),
-                  ],
-                ),
+        bottomNavigationBar: ColoredBox(
+          color: colors.surface,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: FilledButton.icon(
+                key: const ValueKey('workspace-new-chat'),
+                onPressed: controller.switching || resource == null
+                    ? null
+                    : () => _run(() async {
+                        if (_view == 'projects') {
+                          await widget.newProject();
+                        } else {
+                          await controller.createChat();
+                        }
+                      }),
+                icon: const Icon(Icons.add_rounded, size: 20),
+                label: Text(_view == 'projects' ? 'Project' : 'New chat'),
               ),
             ),
           ),

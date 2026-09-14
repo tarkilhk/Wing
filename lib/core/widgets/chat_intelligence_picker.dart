@@ -123,7 +123,6 @@ class ChatIntelligenceButton extends StatelessWidget {
     final tokens = HermesTokens.of(context);
     final modelLabel = compactChatModelLabel(model);
     final reasoningLabel = chatReasoningEffortLabel(reasoningEffort);
-    final value = '$modelLabel $reasoningLabel';
 
     return Semantics(
       label: 'Model $model, reasoning $reasoningLabel',
@@ -136,12 +135,12 @@ class ChatIntelligenceButton extends StatelessWidget {
         onPressed: onPressed,
         style: TextButton.styleFrom(
           foregroundColor: tokens.onSurface,
-          minimumSize: const Size(48, 44),
-          padding: const EdgeInsets.symmetric(horizontal: HermesSpacing.sm),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(HermesRadius.lg),
-            side: BorderSide(color: tokens.border),
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(
+            horizontal: HermesSpacing.sm,
+            vertical: 6,
           ),
+          shape: RoundedRectangleBorder(borderRadius: HermesRadius.control),
           backgroundColor: tokens.raised,
         ),
         child: Row(
@@ -153,17 +152,37 @@ class ChatIntelligenceButton extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 1.8),
               )
             else
-              Icon(Icons.psychology_outlined, size: 17, color: tokens.accent),
+              Icon(
+                Icons.psychology_outlined,
+                size: 17,
+                color: onPressed == null ? tokens.muted : tokens.accent,
+              ),
             const SizedBox(width: 6),
             Flexible(
-              child: Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: tokens.typography.label.copyWith(
-                  color: tokens.onSurface,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    modelLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: tokens.typography.label.copyWith(
+                      color: onPressed == null
+                          ? tokens.muted
+                          : tokens.onSurface,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    reasoningLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: tokens.typography.label.copyWith(
+                      color: tokens.muted,
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(width: 2),
@@ -384,7 +403,7 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
             decoration: const InputDecoration(
               hintText: 'Search models',
               prefixIcon: Icon(Icons.search_rounded),
-              border: OutlineInputBorder(),
+              border: OutlineInputBorder(borderRadius: HermesRadius.control),
               isDense: true,
             ),
             onChanged: (value) => setState(() => _modelQuery = value),

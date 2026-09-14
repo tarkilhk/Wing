@@ -42,7 +42,7 @@ internal class MediaPreviewChannel(
             ) {
                 result.error("media_preview_invalid", "This media could not be opened.", null)
             } else {
-                open(bytes, title, mimeType, result)
+                open(bytes, title, mimeType, call.argument<Map<String, Any>>("appearance").orEmpty(), result)
             }
         }
     }
@@ -58,6 +58,7 @@ internal class MediaPreviewChannel(
         bytes: ByteArray,
         title: String,
         mimeType: String,
+        appearance: Map<String, Any>,
         result: MethodChannel.Result,
     ) {
         try {
@@ -95,6 +96,11 @@ internal class MediaPreviewChannel(
                                     putExtra(MediaPreviewActivity.EXTRA_FILE_NAME, savedFile.name)
                                     putExtra(MediaPreviewActivity.EXTRA_TITLE, title)
                                     putExtra(MediaPreviewActivity.EXTRA_MIME_TYPE, mimeType)
+                                    for (key in listOf("dark", "surface", "text", "accent", "onAccent")) {
+                                        (appearance[key] as? Number)?.let {
+                                            putExtra("studio_$key", it.toInt())
+                                        }
+                                    }
                                 },
                             )
                             result.success(true)

@@ -232,8 +232,8 @@ private class MermaidDiagramView(
         .replace("\u2029", "\\u2029")
 
     private fun viewerUnavailableScript(): String {
-        val foreground = if (dark) "#edf0f5" else "#272b33"
-        val background = if (dark) "#111318" else "#ffffff"
+        val foreground = if (dark) "#E8F2EC" else "#172B27"
+        val background = if (dark) "#101917" else "#F4F7F6"
         return "document.documentElement.style.background='$background';" +
             "document.body.style.color='$foreground';" +
             "document.body.style.background='$background';" +
@@ -265,8 +265,8 @@ private class MermaidDiagramView(
         private const val HTML_FORMAT = "html"
         private const val ORIGIN = "https://hermes-diagrams.invalid"
         private const val ENTRY_URL = "$ORIGIN/index.html"
-        private val DARK_BACKGROUND = Color.rgb(17, 19, 24)
-        private val LIGHT_BACKGROUND = Color.WHITE
+        private val DARK_BACKGROUND = Color.rgb(16, 25, 23)
+        private val LIGHT_BACKGROUND = Color.rgb(244, 247, 246)
         private val ASSETS = mapOf(
             ENTRY_URL to Asset("index.html", "text/html"),
             "$ORIGIN/app.js" to Asset("app.js", "application/javascript"),

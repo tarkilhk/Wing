@@ -27,9 +27,10 @@ import '../widgets/gateway_sensitive_prompt_panel.dart';
 import '../widgets/gateway_clarify_dialog.dart';
 import '../widgets/chat_find_sheet.dart';
 import '../theme/profile_workspace_theme.dart';
+import '../theme/hermes_theme.dart';
 import '../widgets/profile_activity_status.dart';
 import '../widgets/chat_intelligence_picker.dart';
-import '../widgets/context_fuse.dart';
+import '../widgets/context_ring.dart';
 import '../widgets/profile_execution_activity.dart';
 import '../widgets/profile_subagent_panel.dart';
 import '../widgets/profile_goal_panel.dart';
@@ -955,24 +956,17 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 SafeArea(
                   top: false,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
                     child: DecoratedBox(
                       key: const ValueKey('conversation-composer'),
                       decoration: BoxDecoration(
                         color: Theme.of(
                           context,
                         ).colorScheme.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(24),
+                        borderRadius: HermesRadius.card,
                         border: Border.all(
                           color: Theme.of(context).colorScheme.outlineVariant,
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
-                            blurRadius: 20,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
                       ),
                       child: Stack(
                         clipBehavior: Clip.none,
@@ -994,6 +988,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                           ).textTheme.labelMedium,
                                         ),
                                       ),
+                                      ContextRing(occupancy: chat.context),
                                       TextButton(
                                         onPressed:
                                             chat.queueMutating || chat.steering
@@ -1295,6 +1290,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                 }
                                               }),
                                       ),
+                                      ContextRing(occupancy: chat.context),
                                       Expanded(
                                         child: Align(
                                           alignment: Alignment.centerRight,
@@ -1330,12 +1326,6 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                   ),
                               ],
                             ),
-                          ),
-                          Positioned(
-                            top: -4,
-                            left: 24,
-                            right: 24,
-                            child: ContextFuse(occupancy: chat.context),
                           ),
                         ],
                       ),
@@ -1820,7 +1810,11 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       key: _scaffoldKey,
       drawer: _drawer(),
       appBar: AppBar(
-        title: Text(_destination.label),
+        title: Text(
+          _destination == AppDestination.administration
+              ? 'Administration'
+              : _destination.label,
+        ),
         actions: [
           if (_destination != AppDestination.settings)
             IconButton(

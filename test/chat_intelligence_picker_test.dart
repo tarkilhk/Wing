@@ -57,7 +57,8 @@ void main() {
       ),
     );
 
-    expect(find.text('6 Astra High'), findsOneWidget);
+    expect(find.text('6 Astra'), findsOneWidget);
+    expect(find.text('High'), findsOneWidget);
     expect(
       find.bySemanticsLabel('Model gpt-6-astra, reasoning High'),
       findsOneWidget,

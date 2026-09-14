@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/hermes_theme.dart';
 
 import '../services/connection_manager.dart';
 import '../services/profile_gateway.dart';
@@ -212,15 +213,19 @@ class _DiagnosticRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = HermesTokens.of(context);
     final (icon, color) = switch (result.state) {
-      _DiagnosticState.ready => (Icons.check_circle_outline, Colors.green),
-      _DiagnosticState.failed => (Icons.error_outline, Colors.red),
-      _DiagnosticState.unknown => (Icons.help_outline, Colors.orange),
+      _DiagnosticState.ready => (Icons.check_circle_outline, tokens.success),
+      _DiagnosticState.failed => (Icons.error_outline, tokens.danger),
+      _DiagnosticState.unknown => (Icons.help_outline, tokens.warning),
       _DiagnosticState.checking => (
         Icons.sync,
         Theme.of(context).colorScheme.primary,
       ),
-      _DiagnosticState.notChecked => (Icons.remove_circle_outline, Colors.grey),
+      _DiagnosticState.notChecked => (
+        Icons.remove_circle_outline,
+        tokens.muted,
+      ),
     };
     return ListTile(
       contentPadding: EdgeInsets.zero,

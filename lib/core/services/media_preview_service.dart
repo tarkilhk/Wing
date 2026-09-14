@@ -23,11 +23,9 @@ class MediaPreviewService {
     RemoteFileDownload file, {
     required String title,
     String? mimeType,
+    Map<String, int>? appearance,
   }) async {
-    final resolved = resolveFileMimeType(
-      file.filename,
-      mimeType: mimeType,
-    );
+    final resolved = resolveFileMimeType(file.filename, mimeType: mimeType);
     if (resolved == null ||
         (!resolved.startsWith('audio/') && !resolved.startsWith('video/'))) {
       return false;
@@ -40,6 +38,7 @@ class MediaPreviewService {
             'bytes': file.bytes,
             'title': title,
             'mimeType': resolved,
+            'appearance': ?appearance,
           }) ??
           false;
     } on MissingPluginException {

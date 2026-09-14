@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'hermes_theme.dart';
 
 /// Shared appearance for the workspace, connection setup and app shell.
 enum WorkspaceAccent {
-  mint('Mint', Color(0xFFB5F4D7), Color(0xFF006C50)),
+  mint('Mint', Color(0xFFA6E3CB), Color(0xFF146B53)),
   iris('Iris', Color(0xFFD0BFFF), Color(0xFF6341A7)),
   glacier('Glacier', Color(0xFFA8D9FF), Color(0xFF14638E)),
   coral('Coral', Color(0xFFFFC3AE), Color(0xFF984728)),
@@ -23,76 +22,9 @@ ThemeData profileWorkspaceTheme(
   ThemeData base, {
   WorkspaceAccent accent = WorkspaceAccent.mint,
 }) {
-  final dark = base.brightness == Brightness.dark;
-  final ink = dark ? const Color(0xFFF1F4FA) : const Color(0xFF152133);
-  final canvas = dark ? const Color(0xFF0C1420) : const Color(0xFFF3F6FA);
-  final panel = dark ? const Color(0xFF172335) : Colors.white;
-  final muted = dark ? const Color(0xFFADBBCF) : const Color(0xFF516176);
-  final line = dark ? const Color(0xFF304057) : const Color(0xFFD5DDE8);
-  final mint = dark ? accent.dark : accent.light;
-  final scheme =
-      ColorScheme.fromSeed(
-        seedColor: accent.light,
-        brightness: base.brightness,
-      ).copyWith(
-        surface: canvas,
-        surfaceContainer: panel,
-        surfaceContainerLow: panel,
-        surfaceContainerHigh: panel,
-        onSurface: ink,
-        onSurfaceVariant: muted,
-        primary: mint,
-        onPrimary: dark ? const Color(0xFF142332) : Colors.white,
-        outlineVariant: line,
-      );
-  final tokens = HermesTokens.forBrightness(base.brightness).copyWith(
-    surface: canvas,
-    raised: panel,
-    onSurface: ink,
-    muted: muted,
-    border: line,
-    accent: mint,
-  );
-  return base.copyWith(
-    colorScheme: scheme,
-    scaffoldBackgroundColor: canvas,
-    textTheme: base.textTheme.apply(bodyColor: ink, displayColor: ink),
-    appBarTheme: base.appBarTheme.copyWith(
-      systemOverlayStyle: dark
-          ? SystemUiOverlayStyle.light
-          : SystemUiOverlayStyle.dark,
-      backgroundColor: canvas,
-      foregroundColor: ink,
-      surfaceTintColor: Colors.transparent,
-      centerTitle: false,
-    ),
-    popupMenuTheme: PopupMenuThemeData(
-      color: panel,
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: line),
-      ),
-    ),
-    dialogTheme: base.dialogTheme.copyWith(backgroundColor: panel),
-    cardTheme: base.cardTheme.copyWith(
-      color: panel,
-      shape: RoundedRectangleBorder(
-        borderRadius: HermesRadius.card,
-        side: BorderSide(color: line),
-      ),
-    ),
-    dividerTheme: base.dividerTheme.copyWith(color: line),
-    floatingActionButtonTheme: base.floatingActionButtonTheme.copyWith(
-      backgroundColor: mint,
-      foregroundColor: scheme.onPrimary,
-    ),
-    bottomSheetTheme: base.bottomSheetTheme.copyWith(backgroundColor: panel),
-    snackBarTheme: base.snackBarTheme.copyWith(
-      backgroundColor: panel,
-      contentTextStyle: base.textTheme.bodyMedium?.copyWith(color: ink),
-    ),
-    extensions: [tokens],
+  return hermesTheme(
+    base.brightness,
+    accent: base.brightness == Brightness.dark ? accent.dark : accent.light,
   );
 }
 

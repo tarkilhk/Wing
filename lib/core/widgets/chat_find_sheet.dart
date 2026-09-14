@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../theme/hermes_theme.dart';
 
 import '../models/answer_versions.dart';
 import '../models/transcript_notice.dart';
@@ -150,7 +151,9 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                     decoration: const InputDecoration(
                       labelText: 'Find in chat',
                       prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
+                      border: OutlineInputBorder(
+                        borderRadius: HermesRadius.control,
+                      ),
                     ),
                   ),
                 ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/hermes_theme.dart';
 
 import '../services/config_backup.dart';
 import '../services/config_backup_service.dart';
@@ -75,10 +76,12 @@ class _ExportPassphraseSheetState extends State<ExportPassphraseSheet> {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'The file contains your API keys and dashboard password, so it is '
             'encrypted. Without this passphrase the backup cannot be restored.',
-            style: TextStyle(color: Colors.grey),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 16),
           TextField(
@@ -88,7 +91,9 @@ class _ExportPassphraseSheetState extends State<ExportPassphraseSheet> {
             autofocus: true,
             decoration: InputDecoration(
               labelText: 'Passphrase',
-              border: const OutlineInputBorder(),
+              border: const OutlineInputBorder(
+                borderRadius: HermesRadius.control,
+              ),
               suffixIcon: IconButton(
                 icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
                 onPressed: () => setState(() => _obscure = !_obscure),
@@ -103,7 +108,7 @@ class _ExportPassphraseSheetState extends State<ExportPassphraseSheet> {
             obscureText: _obscure,
             decoration: const InputDecoration(
               labelText: 'Confirm passphrase',
-              border: OutlineInputBorder(),
+              border: OutlineInputBorder(borderRadius: HermesRadius.control),
             ),
             onSubmitted: (_) => _submit(),
           ),
@@ -191,7 +196,9 @@ class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
             autofocus: true,
             decoration: InputDecoration(
               labelText: 'Passphrase',
-              border: const OutlineInputBorder(),
+              border: const OutlineInputBorder(
+                borderRadius: HermesRadius.control,
+              ),
               suffixIcon: IconButton(
                 icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
                 onPressed: () => setState(() => _obscure = !_obscure),
@@ -398,10 +405,12 @@ class _ConfigBackupCardState extends State<ConfigBackupCard> {
               ],
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Save your connections and settings to an encrypted file, then '
               'restore them after reinstalling or on another device.',
-              style: TextStyle(color: Colors.grey),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 16),
             if (_busy)

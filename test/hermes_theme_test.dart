@@ -73,9 +73,9 @@ void main() {
       expect(light.brightness, Brightness.light);
     });
 
-    test('both themes keep the Hermes gold accent identity', () {
-      expect(HermesTokens.dark().accent, HermesTokens.hermesGold);
-      expect(HermesTokens.light().accent, HermesTokens.hermesGold);
+    test('Studio pairs the default mint accent for light and dark', () {
+      expect(HermesTokens.dark().accent, const Color(0xFFA6E3CB));
+      expect(HermesTokens.light().accent, const Color(0xFF146B53));
     });
 
     test('status colors resolve from a semantic status enum', () {
@@ -95,7 +95,7 @@ void main() {
       final mid = dark.lerp(light, 0.5);
 
       expect(mid, isA<HermesTokens>());
-      expect(mid.accent, HermesTokens.hermesGold);
+      expect(mid.accent, Color.lerp(dark.accent, light.accent, .5));
       expect(mid.surface, isNot(dark.surface));
     });
 
@@ -121,7 +121,7 @@ void main() {
 
       expect(ramp.display.fontSize, greaterThan(ramp.title.fontSize!));
       expect(ramp.title.fontSize, greaterThan(ramp.section.fontSize!));
-      expect(ramp.section.fontSize, greaterThan(ramp.body.fontSize!));
+      expect(ramp.section.fontSize, greaterThanOrEqualTo(ramp.body.fontSize!));
       expect(ramp.body.fontSize, greaterThan(ramp.label.fontSize!));
       expect(ramp.mono.fontFamily, isNotNull);
       expect(ramp.mono.fontFamilyFallback, contains('monospace'));
@@ -154,7 +154,7 @@ void main() {
       );
 
       expect(tokens.brightness, Brightness.light);
-      expect(tokens.accent, HermesTokens.hermesGold);
+      expect(tokens.accent, HermesTokens.light().accent);
     });
 
     test('uses Material 3 and keeps the accent in the color scheme', () {

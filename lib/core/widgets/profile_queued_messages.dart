@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/hermes_theme.dart';
 
 import '../services/profile_workspace_controller.dart';
 import '../models/queued_prompt_draft.dart';
@@ -55,13 +56,13 @@ class ProfileQueuedMessages extends StatelessWidget {
                     color: identical(prompt, chat.editingQueuedPrompt)
                         ? theme.colorScheme.surfaceContainerHighest
                         : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: HermesRadius.card,
                     child: InkWell(
                       onTap: onOpenActions,
                       onLongPress: onEdit == null
                           ? null
                           : () => onEdit!(prompt),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: HermesRadius.card,
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(minHeight: 48),
                         child: Padding(

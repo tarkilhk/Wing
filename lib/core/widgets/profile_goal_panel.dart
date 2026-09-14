@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/hermes_theme.dart';
 import 'profile_transcript_disclosure.dart';
 
 import '../models/session_control.dart';
@@ -418,7 +419,9 @@ class _AddCriterionDialogState extends State<_AddCriterionDialog> {
               hintText: 'What must be true before this goal is done?',
               errorText: _error,
               alignLabelWithHint: true,
-              border: const OutlineInputBorder(),
+              border: const OutlineInputBorder(
+                borderRadius: HermesRadius.control,
+              ),
             ),
             onChanged: (value) {
               widget.onDraftChanged(value);
