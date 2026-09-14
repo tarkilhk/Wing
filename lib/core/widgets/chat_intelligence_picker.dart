@@ -17,6 +17,46 @@ class ChatModelChoice {
   String get routeLabel => providerLabel?.trim().isNotEmpty == true
       ? providerLabel!.trim()
       : provider;
+
+  /// Shared model/options response for per-chat and profile-default pickers.
+  static List<ChatModelChoice> fromOptions(Map<String, dynamic> response) {
+    final choices = <ChatModelChoice>[];
+    final providers = response['providers'];
+    if (providers is! List || providers.any((row) => row is! Map)) {
+      throw const FormatException('Expected a list of records');
+    }
+    for (final row in providers) {
+      final provider = Map<String, dynamic>.from(row as Map);
+      final slug =
+          (provider['slug'] ?? provider['id'])?.toString().trim() ?? '';
+      final label =
+          (provider['name'] ?? provider['display_name'] ?? provider['title'])
+              ?.toString()
+              .trim();
+      final models = provider['models'];
+      if (slug.isEmpty || models is! List) continue;
+      for (final value in models) {
+        final model = value is String
+            ? value.trim()
+            : value is Map
+            ? (value['id'] ?? value['model'] ?? value['name'])
+                      ?.toString()
+                      .trim() ??
+                  ''
+            : '';
+        if (model.isNotEmpty) {
+          choices.add(
+            ChatModelChoice(
+              provider: slug,
+              model: model,
+              providerLabel: label?.isEmpty == true ? null : label,
+            ),
+          );
+        }
+      }
+    }
+    return choices;
+  }
 }
 
 /// The per-chat model and reasoning values chosen in the picker.

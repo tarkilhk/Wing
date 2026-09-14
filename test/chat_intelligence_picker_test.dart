@@ -4,6 +4,25 @@ import 'package:hermes_android/core/theme/hermes_theme.dart';
 import 'package:hermes_android/core/widgets/chat_intelligence_picker.dart';
 
 void main() {
+  test('model options reject malformed lists instead of partial choices', () {
+    for (final providers in <Object?>[
+      null,
+      <String, dynamic>{},
+      [
+        {
+          'slug': 'openai',
+          'models': ['gpt-6-astra'],
+        },
+        'invalid provider',
+      ],
+    ]) {
+      expect(
+        () => ChatModelChoice.fromOptions({'providers': providers}),
+        throwsFormatException,
+      );
+    }
+  });
+
   const choices = [
     ChatModelChoice(provider: 'openai', model: 'gpt-6-astra'),
     ChatModelChoice(provider: 'openai', model: 'gpt-5.6-luna'),

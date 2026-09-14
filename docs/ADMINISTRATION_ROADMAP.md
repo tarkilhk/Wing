@@ -171,3 +171,31 @@ First slice is implemented in source; release and emulator acceptance are pendin
   Back protection during a save, an initial default for an unconfigured profile, and keyboard layout on a small screen. Static analysis passed for all changed Dart files; the final model edge-case changes also passed targeted analysis.
 - No emulator UI result or production deployment is claimed for this slice.
   Another task has started emulator 5556; no second emulator was launched.
+
+## Main integration, 2026-09-14
+
+Reviewed the combined changes from `fa7436d` through `c5eab37`. Main already
+contained administration commit `1592bea`, followed by the build-workflow and
+composer queue-editing commits. The administration routes and captured gateway
+ownership remain compatible with those changes.
+
+The standards review found duplicate model-list parsing. Both pickers now use
+`ChatModelChoice.fromOptions`, preserving the original strict response validation.
+A regression rejects malformed provider lists rather than offering partial
+choices. The spec review found no missing first-slice requirements or scope creep.
+
+The source version is prepared as `2.33.0+2210`, with matching CI checks,
+release-identity assertions and a feature-only changelog covering administration
+and composer queue editing. This does not claim an APK build or deployment.
+
+- Full static analysis passed.
+- Full host test suite passed: 1,460 tests, six opt-in skips, zero failures,
+  in 3 minutes 34 seconds using two workers.
+- After the final parser validation correction, all 17 affected model-picker
+  tests passed, including the new malformed-response regression.
+- The integration run used no emulator or APK build. Earlier live-Hermes API
+  evidence remains recorded above; the host suite does not replace device QA.
+- Before pushing, rebased onto concurrent build-launcher commit `0107b38`.
+  It changed no Dart app code. Its PowerShell launcher checks also passed:
+  argument/exit-code forwarding, lock preservation, bounded busy-lock failure
+  and denied-write handling.

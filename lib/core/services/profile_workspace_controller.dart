@@ -3185,31 +3185,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }),
     ]);
     final defaults = results[0];
-    final choices = <ChatModelChoice>[];
-    for (final provider in ProfileGateway.records(results[1]['providers'])) {
-      final slug = (provider['slug'] ?? provider['id'])?.toString() ?? '';
-      final label =
-          (provider['name'] ?? provider['display_name'] ?? provider['title'])
-              ?.toString()
-              .trim();
-      if (slug.isEmpty || provider['models'] is! List) continue;
-      for (final value in provider['models'] as List) {
-        final model = value is String
-            ? value
-            : value is Map
-            ? (value['id'] ?? value['model'] ?? value['name'])?.toString()
-            : null;
-        if (model != null && model.trim().isNotEmpty) {
-          choices.add(
-            ChatModelChoice(
-              provider: slug,
-              model: model.trim(),
-              providerLabel: label?.isEmpty == true ? null : label,
-            ),
-          );
-        }
-      }
-    }
+    final choices = ChatModelChoice.fromOptions(results[1]);
     if (choices.isEmpty) {
       throw StateError('This profile returned no selectable models.');
     }
