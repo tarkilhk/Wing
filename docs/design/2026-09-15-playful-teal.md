@@ -71,3 +71,25 @@ The APK is `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` in
 `C:\Users\rober\Documents\Projects\hermes-android`. Its SHA-256 is
 `3f029a7dcba50e2c90210b48b52092aa786e65c398deddb7c463c7ae2a2907f8`.
 No public release, tag or APK publication was created.
+
+## Richer dark teal in 2.36.12
+
+The owner found dark Teal too pale and approved `#65C7BC`, replacing
+`#A6DDD6`. The light accent, other accents and background colors stay the same.
+The earlier renders show the paler color. Source commit `e050a85` was pushed
+to main with version `2.36.12+2229`, effective ARM64 code `22292`.
+
+Calculated contrast is 7.32:1 for button labels, 8.68:1 against the canvas,
+7.42:1 against panels and 5.19:1 against the selected tint. The owner explicitly
+requested no full test suite for this color-only change; no suite was run.
+The signed build uses a separate checkout at
+`C:\Users\rober\Documents\Projects\hermes-android-teal-e050a85` because another
+task was editing the usual release checkout. Those edits were preserved.
+
+The signed, non-debuggable ARM64 build passed the existing certificate check.
+`adb install -r` succeeded on the owner's Samsung SM-S918B. Android reports
+`2.36.12` / `22292` with the original first-install time unchanged. Cold launch
+returned `Status: ok` in 730 ms. No uninstall or data-clear operation was used.
+The APK is `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` in the
+isolated checkout above, with SHA-256
+`1ec614003c5409c3aa25609e04df0a7c6dde4a6422942910d08c849f3748c19e`.
