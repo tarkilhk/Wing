@@ -55,5 +55,5 @@ and quoted text. `test/internal_message_visibility_test.dart` checks restored
 history, repeated refresh, search and absent edit controls for the same reminder.
 The focused suite passed all 67 tests, and static analysis reported no issues.
 
-The complete 2.36.12 suite passed 1,637 tests with 10 skipped. Output is in
+The complete 2.36.13 suite passed 1,637 tests with 10 skipped. Output is in
 `build/task-snapshot-full-tests.log` in the persistent build checkout.
