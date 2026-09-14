@@ -59,6 +59,17 @@ class AdminToolSetupPage extends StatefulWidget {
 class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
   late final _profile = widget.profile;
   late final _base = 'tools/toolsets/${Uri.encodeComponent(widget.name)}';
+  // The current Hermes matrix also contains credential/setup-only rows.
+  // It does not expose a can-select flag; only these toolsets persist a choice.
+  bool get _canSelectProvider => const {
+    'web',
+    'stt',
+    'tts',
+    'image_gen',
+    'video_gen',
+    'browser',
+    'computer_use',
+  }.contains(widget.name);
   bool _busy = false;
   String? _notice;
   Future<void> _provider(
@@ -77,9 +88,20 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
       });
       final after = await _profile.read('$_base/config');
       final verified = capability == null
-          ? after['active_provider'] == row['name']
+          ? after['active_provider'] == row['name'] ||
+                administrationRows(after['providers'] ?? []).any(
+                  (candidate) =>
+                      candidate['name'] == row['name'] &&
+                      candidate['is_active'] == true,
+                )
           : after['active_${capability}_backend'] == row['web_backend'];
-      if (!verified) {
+      // Managed selections are saved before entitlement is available, so the
+      // readiness endpoint deliberately does not report them as active yet.
+      final needsAccount =
+          result['ok'] == true &&
+          result['provider'] == row['name'] &&
+          result['needs_nous_auth'] == true;
+      if (!verified && !needsAccount) {
         throw const AdministrationFailure(
           'Provider selection could not be confirmed.',
         );
@@ -87,7 +109,7 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
       refresh();
       if (mounted) {
         setState(
-          () => _notice = result['needs_nous_auth'] == true
+          () => _notice = needsAccount
               ? 'Selection saved. This provider still needs account access.'
               : 'Provider selection saved.',
         );
@@ -183,7 +205,7 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
                                       : () => _provider(row, refresh, cap),
                                   child: Text('Use for $cap'),
                                 ),
-                          ] else
+                          ] else if (_canSelectProvider)
                             TextButton(
                               onPressed: _busy
                                   ? null

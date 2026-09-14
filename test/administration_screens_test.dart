@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_android/core/screens/administration/admin_settings_page.dart';
 import 'package:hermes_android/core/screens/administration/admin_memory_page.dart';
 import 'package:hermes_android/core/screens/administration/admin_providers_page.dart';
+import 'package:hermes_android/core/screens/administration/admin_widgets.dart';
+import 'package:hermes_android/core/screens/administration/admin_tool_setup_page.dart';
 import 'package:hermes_android/core/theme/hermes_theme.dart';
 import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
 import 'support/administration_fixture.dart';
@@ -17,6 +19,115 @@ const _fields = [
   ),
 ];
 void main() {
+  testWidgets('managed provider selection explains required sign-in', (
+    tester,
+  ) async {
+    final fixture = AdministrationFixture();
+    fixture.override = (method, path, query, body) async {
+      if (path == 'profiles') {
+        return {
+          'profiles': [
+            {'name': 'personal'},
+          ],
+        };
+      }
+      if (method == 'PUT' && path == 'tools/toolsets/stt/provider') {
+        return {
+          'ok': true,
+          'provider': 'Nous Subscription',
+          'needs_nous_auth': true,
+        };
+      }
+      return {
+        'active_provider': null,
+        'providers': [
+          {
+            'name': 'Nous Subscription',
+            'status': 'needs_auth',
+            'requires_nous_auth': true,
+          },
+        ],
+      };
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: hermesTheme(Brightness.dark),
+        home: AdminToolSetupPage(
+          profile: fixture.server.profile('personal'),
+          name: 'stt',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Use provider'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Selection saved. This provider still needs account access.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('could not be confirmed'), findsNothing);
+  });
+  testWidgets(
+    'late operation refresh after leaving a page does not load or set state',
+    (tester) async {
+      late VoidCallback refresh;
+      var reads = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AdminLoad(
+              load: () async {
+                reads++;
+                return <String, dynamic>{};
+              },
+              builder: (_, _, reload) {
+                refresh = reload;
+                return const Text('Loaded');
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      refresh();
+      await tester.pumpAndSettle();
+      expect(reads, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'save confirmation stays above editor actions with the keyboard open',
+    (tester) async {
+      final fixture = AdministrationFixture();
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: hermesTheme(Brightness.dark),
+          home: AdminSettingsPage(
+            profile: fixture.server.profile('personal'),
+            title: 'Memory settings',
+            fields: _fields,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField), '2500');
+      await tester.pump();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      final footer = tester.getRect(find.widgetWithText(TextButton, 'Close'));
+      expect(footer.bottom, lessThanOrEqualTo(564));
+      expect(
+        tester.getRect(find.byType(SnackBar)).bottom,
+        lessThanOrEqualTo(footer.top),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'an externally changed field preserves the draft without overwriting it',
     (tester) async {

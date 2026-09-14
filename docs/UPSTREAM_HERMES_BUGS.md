@@ -9,6 +9,7 @@ Last verified: 2026-09-14, local Hermes 0.21.2, installed source commit `e16f686
 | HUP-001 | High | Browser and vault target different tabs | Open, reproduced | Not filed |
 | HUP-002 | Medium | Non-default profile loop command/control mismatch | Open, reproduced | Not filed |
 | HUP-003 | Medium | Global activity omits child-only work | Open, reproduced contract gap | Not filed |
+| HUP-004 | Medium | Windows profile deletion fails with an open MCP log handle | Open, reproduced | Not filed |
 
 Priorities reflect mobile impact. Close an entry only after its acceptance criteria pass against a recorded backend version. Add the upstream issue URL and fix commit when available; a newer version alone does not establish a fix.
 
@@ -60,6 +61,28 @@ Priorities reflect mobile impact. Close an entry only after its acceptance crite
 
 **Retest to close:** With an independent client that has never opened the parent, verify the ongoing parent/child appears across profiles, opens the correct chat, and disappears after all work and final rollup finish. Include reconnect while only the child is active.
 
+## HUP-004: Windows profile deletion fails after MCP activity
+
+**Mobile impact:** Deleting a profile can return HTTP 500 after a connector has
+started because the backend still owns an open log handle.
+
+**Reproduce:** In an isolated Hermes home on Windows, create a profile, configure
+a stdio MCP service, and enable/test it. Delete that profile through
+`DELETE /api/profiles/<name>` while the backend remains running.
+
+**Observed:** Hermes reports `[WinError 32]` for the profile's
+`logs/mcp-stderr.log`, and the deletion request fails. Stopping the owned QA
+backend process tree releases the handle and permits filesystem cleanup. The
+same emulator lifecycle test deletes profiles without MCP handles successfully.
+
+**Evidence:** [Administration emulator acceptance](ADMINISTRATION_EMULATOR_ACCEPTANCE_2026-09-14.md),
+local `build/admin-live-run2.log` and `build/admin-live-run2-backend.err.log`,
+backend revision `e16f686706b1e0d5334fd1ae82190058d2a19694`.
+
+**Retest to close:** Start/test a stdio connector in a disposable Windows profile,
+delete it while Hermes remains running, and verify successful deletion and
+released processes/file handles without affecting another profile.
+
 ## Related items that are not filed as bugs
 
 - Shared older answer versions require server persistence that is absent from the current contract. Ordinary regeneration, durable replacement and separate forks passed. Track shared alternatives as a capability request if selected, not as HUP-001 through HUP-003.
@@ -70,3 +93,4 @@ Priorities reflect mobile impact. Close an entry only after its acceptance crite
 | Date | Change |
 | --- | --- |
 | 2026-09-14 | Created HUP-001 through HUP-003 from the completed local acceptance pass. No upstream issue has been filed, no fix claimed, and no backend source changed. |
+| 2026-09-14 | Added HUP-004 from native administration acceptance against the same installed backend revision. |

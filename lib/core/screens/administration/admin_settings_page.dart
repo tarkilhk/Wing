@@ -413,6 +413,27 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
     child: AdminPage(
       title: widget.title,
       scope: _profile.label,
+      bottomNavigationBar: _loading || _saved == null
+          ? null
+          : SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: Row(
+                  children: [
+                    TextButton(
+                      onPressed: _saving ? null : _close,
+                      child: const Text('Close'),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: _saving || !_dirty ? null : _save,
+                      child: Text(_saving ? 'Saving…' : 'Save'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
       child: _loading
           ? const Center(child: CircularProgressIndicator())
           : _saved == null
@@ -443,25 +464,6 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                             padding: const EdgeInsets.only(bottom: 20),
                             child: _field(field),
                           ),
-                      ],
-                    ),
-                  ),
-                ),
-                SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-                    child: Row(
-                      children: [
-                        TextButton(
-                          onPressed: _saving ? null : _close,
-                          child: const Text('Close'),
-                        ),
-                        const Spacer(),
-                        FilledButton(
-                          onPressed: _saving || !_dirty ? null : _save,
-                          child: Text(_saving ? 'Saving…' : 'Save'),
-                        ),
                       ],
                     ),
                   ),

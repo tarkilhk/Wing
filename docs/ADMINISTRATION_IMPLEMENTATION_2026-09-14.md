@@ -126,6 +126,11 @@ Logs are local build artifacts: `build/administration-analyze.log` and
 
 ## Remaining release and backend acceptance
 
+The follow-up [emulator acceptance record](ADMINISTRATION_EMULATOR_ACCEPTANCE_2026-09-14.md)
+supersedes the initial host-only validation limits below. It records actual
+Android runs against the installed local Hermes backend, the resulting fixes,
+and operations still limited by backend or external-account requirements.
+
 - A08 memory mutation, A24 per-tool MCP mutation, A09 arbitrary-owner pool detail,
   and A28 exact retained-file sizes need the backend contracts described above.
 - Generic configuration and skill preflight/readback are not atomic concurrency
@@ -138,5 +143,6 @@ Logs are local build artifacts: `build/administration-analyze.log` and
 - Pending OAuth/action screens do not persist across Android process death.
   Reopening access and refreshing status is required; no saved pending session is
   silently restarted.
-- No APK deployment, production maintenance, backend source modification,
-  commit or push is part of this implementation.
+- This implementation was subsequently committed and pushed to main as
+  `d32cc83`. The follow-up acceptance run installs a test APK on a disposable
+  emulator. Installed backend source is unchanged.

@@ -10,12 +10,14 @@ class AdminPage extends StatelessWidget {
   final String scope;
   final Widget child;
   final List<Widget> actions;
+  final Widget? bottomNavigationBar;
   const AdminPage({
     super.key,
     required this.title,
     required this.scope,
     required this.child,
     this.actions = const [],
+    this.bottomNavigationBar,
   });
   @override
   Widget build(BuildContext context) => Theme(
@@ -23,6 +25,14 @@ class AdminPage extends StatelessWidget {
     child: Builder(
       builder: (context) => Scaffold(
         appBar: AppBar(title: Text(title), actions: actions),
+        bottomNavigationBar: bottomNavigationBar == null
+            ? null
+            : Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(context).bottom,
+                ),
+                child: bottomNavigationBar,
+              ),
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -124,6 +134,7 @@ class _AdminLoadState extends State<AdminLoad> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     final generation = ++_generation;
     setState(() {
       _loading = true;

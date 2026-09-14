@@ -290,6 +290,28 @@ class _AdminSkillEditorState extends State<AdminSkillEditor> {
     child: AdminPage(
       title: 'Edit ${widget.name}',
       scope: widget.profile.label,
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              TextButton(
+                onPressed: _busy ? null : _close,
+                child: const Text('Close'),
+              ),
+              const Spacer(),
+              FilledButton(
+                onPressed:
+                    _busy || _input.text == _saved || _input.text.trim().isEmpty
+                    ? null
+                    : _save,
+                child: Text(_busy ? 'Saving…' : 'Save'),
+              ),
+            ],
+          ),
+        ),
+      ),
       child: Column(
         children: [
           if (_error != null)
@@ -309,30 +331,6 @@ class _AdminSkillEditorState extends State<AdminSkillEditor> {
                 textAlignVertical: TextAlignVertical.top,
                 decoration: const InputDecoration(labelText: 'Instructions'),
                 onChanged: (_) => setState(() {}),
-              ),
-            ),
-          ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  TextButton(
-                    onPressed: _busy ? null : _close,
-                    child: const Text('Close'),
-                  ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed:
-                        _busy ||
-                            _input.text == _saved ||
-                            _input.text.trim().isEmpty
-                        ? null
-                        : _save,
-                    child: Text(_busy ? 'Saving…' : 'Save'),
-                  ),
-                ],
               ),
             ),
           ),
