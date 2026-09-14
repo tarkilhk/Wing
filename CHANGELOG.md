@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.34.1+2212] - 2026-09-14
+
+### Fixed
+
+- Show all staged images as matching thumbnails at the left of the composer, with a remove action, regardless of how they were added.
+- Validate pasted images from their bytes instead of rejecting generic provider MIME types. Explain when Android no longer grants access to a clipboard image.
+
 ## [2.34.0+2211] - 2026-09-14
 
 ### Added

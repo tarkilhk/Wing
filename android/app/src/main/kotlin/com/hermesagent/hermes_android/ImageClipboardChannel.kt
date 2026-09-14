@@ -51,8 +51,9 @@ class ImageClipboardChannel(messenger: BinaryMessenger, private val activity: Ac
     private fun readImage(uri: Uri, result: MethodChannel.Result) {
         executor.execute {
             try {
-                val mimeType = activity.contentResolver.getType(uri)
-                require(mimeType?.startsWith("image/") == true)
+                // Some clipboard providers report application/octet-stream for
+                // valid images. The draft service validates and decodes the
+                // actual bytes before accepting an image attachment.
                 val bytes = activity.contentResolver.openInputStream(uri)?.use { input ->
                     val output = ByteArrayOutputStream()
                     val buffer = ByteArray(8192)
@@ -68,10 +69,13 @@ class ImageClipboardChannel(messenger: BinaryMessenger, private val activity: Ac
                 }
                 activity.runOnUiThread { result.success(bytes) }
             } catch (error: Exception) {
-                val message = if (error.message == "too_large") {
-                    "The clipboard image exceeds the 64 MiB draft budget."
-                } else {
-                    "Unable to read the clipboard image. Copy a JPEG, PNG, or WebP image again."
+                val message = when {
+                    error is SecurityException ->
+                        "This clipboard image is no longer accessible. Copy it again, or insert it from your keyboard."
+                    error.message == "too_large" ->
+                        "The clipboard image exceeds the 64 MiB draft budget."
+                    else ->
+                        "Unable to read the clipboard image. Copy a JPEG, PNG, or WebP image again."
                 }
                 activity.runOnUiThread { result.error("image_unavailable", message, null) }
             }

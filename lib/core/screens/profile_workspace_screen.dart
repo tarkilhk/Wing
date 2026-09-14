@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../services/profile_workspace_controller.dart';
 import '../services/image_clipboard.dart';
 import '../widgets/image_paste_menu.dart';
+import '../widgets/composer_attachment_tile.dart';
 import '../services/remote_files_client.dart';
 import '../widgets/profile_message.dart';
 import '../widgets/profile_transcript_disclosure.dart';
@@ -982,63 +983,51 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                 if ((chat.editingQueuedPrompt?.attachments ??
                                         chat.attachments)
                                     .isNotEmpty)
-                                  SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: Row(
-                                      children: [
-                                        for (final file
-                                            in chat
-                                                    .editingQueuedPrompt
-                                                    ?.attachments ??
-                                                chat.attachments)
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 4,
-                                            ),
-                                            child: InputChip(
-                                              avatar: file.error == null
-                                                  ? null
-                                                  : Tooltip(
-                                                      message: file.error!,
-                                                      child: const Icon(
-                                                        Icons
-                                                            .warning_amber_rounded,
-                                                        size: 18,
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 6,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          for (final file
+                                              in chat
+                                                      .editingQueuedPrompt
+                                                      ?.attachments ??
+                                                  chat.attachments)
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 4,
+                                                  ),
+                                              child: ComposerAttachmentTile(
+                                                draft: file,
+                                                onRemove:
+                                                    chat.editingQueuedPrompt !=
+                                                            null ||
+                                                        !controller
+                                                            .canRemoveAttachment(
+                                                              chat,
+                                                              file,
+                                                            ) ||
+                                                        chat.changingAnswer ||
+                                                        chat.commandRunning ||
+                                                        controller.switching
+                                                    ? null
+                                                    : () => _run(
+                                                        () => controller
+                                                            .removeAttachment(
+                                                              chat,
+                                                              file,
+                                                            ),
                                                       ),
-                                                    ),
-                                              label: ConstrainedBox(
-                                                constraints:
-                                                    const BoxConstraints(
-                                                      maxWidth: 180,
-                                                    ),
-                                                child: Text(
-                                                  file.name,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
                                               ),
-                                              onDeleted:
-                                                  chat.editingQueuedPrompt !=
-                                                          null ||
-                                                      !controller
-                                                          .canRemoveAttachment(
-                                                            chat,
-                                                            file,
-                                                          ) ||
-                                                      chat.changingAnswer ||
-                                                      chat.commandRunning ||
-                                                      controller.switching
-                                                  ? null
-                                                  : () => _run(
-                                                      () => controller
-                                                          .removeAttachment(
-                                                            chat,
-                                                            file,
-                                                          ),
-                                                    ),
                                             ),
-                                          ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 TextField(

@@ -142,6 +142,36 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets(
+    'pasted and picked images share left-aligned removable thumbnails',
+    (tester) async {
+      await tester.runAsync(() async {
+        await controller.addPastedImage(chat, () async => png);
+        final picked = File('${cache.path}/picked.jpg');
+        await picked.writeAsBytes(
+          image.encodeJpg(image.Image(width: 4, height: 3)),
+        );
+        await controller.addAttachment(chat, picked.path, 'picked.jpg');
+      });
+      await show(tester);
+      final thumbnails = find.byKey(const ValueKey('composer-image-thumbnail'));
+      expect(thumbnails, findsNWidgets(2));
+      expect(find.text('Pasted image.png'), findsNothing);
+      expect(find.text('picked.jpg'), findsNothing);
+      final composer = tester.getRect(
+        find.byKey(const ValueKey('conversation-composer')),
+      );
+      final first = tester.getRect(thumbnails.first);
+      expect(first.left - composer.left, lessThan(24));
+      expect(first.width, inInclusiveRange(64, 96));
+      await tester.runAsync(() async {
+        await tester.tap(find.byTooltip('Remove Pasted image.png'));
+      });
+      await tester.pumpAndSettle();
+      expect(chat.attachments.single.name, 'picked.jpg');
+    },
+  );
+
   testWidgets('keyboard advertises image types and inserts into the draft', (
     tester,
   ) async {
@@ -173,7 +203,10 @@ void main() {
     });
     await tester.pumpAndSettle();
     expect(chat.attachments.single.isImage, isTrue);
-    expect(find.text('Pasted image.png'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('composer-image-thumbnail')),
+      findsOneWidget,
+    );
     expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
   });
 
