@@ -97,16 +97,18 @@ void main() {
     },
   );
 
-  testWidgets('project compose action creates a conversation directly', (
+  testWidgets('project menu creates a conversation in that project', (
     tester,
   ) async {
     await show(tester);
     final row = find.byKey(const ValueKey('project-p2'));
     await tester.tap(
-      find.descendant(of: row, matching: find.byTooltip('New conversation')),
+      find.descendant(of: row, matching: find.byTooltip('Project actions')),
     );
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('action-new')), findsNothing);
+    expect(find.byIcon(Icons.edit_square), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('project-action-new')));
+    await tester.pumpAndSettle();
     expect(
       host.calls.where((call) => call.$2 == 'session.create'),
       hasLength(1),
@@ -164,7 +166,7 @@ void main() {
     },
   );
 
-  testWidgets('large-text workspace and compose actions fit a narrow screen', (
+  testWidgets('large-text workspace and project actions fit a narrow screen', (
     tester,
   ) async {
     await show(tester, scale: 2);
@@ -172,7 +174,7 @@ void main() {
     final row = find.byKey(const ValueKey('project-p2'));
     final action = find.descendant(
       of: row,
-      matching: find.byTooltip('New conversation'),
+      matching: find.byTooltip('Project actions'),
     );
     final bounds = tester.getRect(action);
     expect(bounds.left, greaterThanOrEqualTo(0));
@@ -180,6 +182,8 @@ void main() {
     expect(bounds.bottom, lessThanOrEqualTo(800));
     expect(bounds.height, greaterThanOrEqualTo(48));
     await tester.tap(action);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('project-action-new')));
     await tester.pumpAndSettle();
     expect(controller.current!.chat!.projectId, 'p2');
     expect(tester.takeException(), isNull);
@@ -205,7 +209,7 @@ void main() {
       previousBottom = bounds.bottom;
       final action = find.descendant(
         of: row,
-        matching: find.byTooltip('New conversation'),
+        matching: find.byTooltip('Project actions'),
       );
       expect(tester.getSize(action).height, greaterThanOrEqualTo(48));
       final material = tester.widget<Material>(

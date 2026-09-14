@@ -1,11 +1,11 @@
 # Chats and automated runs
 
-Workspace options contains an **Include automated chats** checkbox, off by
+Workspace options contains an **Include automated chats** switch, off by
 default. The app remembers the setting per connection and applies it across
 profiles. There is no filter bar above the chat list.
 
-When unchecked, the app excludes exactly `cron`, `tool`, `subagent`, and
-`kanban`. Checking it includes all sources. Unknown and custom sources remain
+When off, the app excludes exactly `cron`, `tool`, `subagent`, and
+`kanban`. Turning it on includes all sources. Unknown and custom sources remain
 visible in either case. A parent session ID does not imply automation:
 ordinary conversation branches remain visible.
 
@@ -17,7 +17,7 @@ return to Chats through the local cache. Running turns are not interrupted.
 
 Project browsing applies the same visibility rule before paging its loaded
 members. The current Hermes project RPC itself excludes cron/kanban and scans
-at most 5,000 sessions. Enable the checkbox in the main profile list
+at most 5,000 sessions. Enable the switch in the main profile list
 to browse those runs. Activity continues to show background work.
 
 The classification follows Hermes's own

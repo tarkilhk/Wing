@@ -48,12 +48,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Workspace options'));
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.ancestor(
-        of: find.text('Unread only'),
-        matching: find.byType(CheckedPopupMenuItem<String>),
-      ),
-    );
+    await tester.tap(find.byKey(const ValueKey('workspace-option-unread')));
     await tester.pumpAndSettle();
     expect(find.text('No unread chats in loaded results'), findsOneWidget);
     expect(

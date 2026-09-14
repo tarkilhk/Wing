@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/hermes_theme.dart';
+import '../widgets/workspace_action_menu.dart';
 
 import '../services/profile_workspace_controller.dart';
 
@@ -51,48 +52,28 @@ Future<void> showProjectActions(
       ? 'Untitled project'
       : rawName;
 
-  final action = await showModalBottomSheet<_ProjectAction>(
-    context: context,
-    showDragHandle: true,
-    builder: (context) => SafeArea(
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
-              subtitle: Text(owner.profileName),
-            ),
-            ListTile(
-              key: const ValueKey('project-action-rename'),
-              leading: const Icon(Icons.edit_outlined),
-              title: const Text('Rename'),
-              onTap: () => Navigator.pop(context, _ProjectAction.rename),
-            ),
-            ListTile(
-              key: const ValueKey('project-action-appearance'),
-              leading: const Icon(Icons.palette_outlined),
-              title: const Text('Appearance'),
-              onTap: () => Navigator.pop(context, _ProjectAction.appearance),
-            ),
-            ListTile(
-              key: const ValueKey('project-action-delete'),
-              leading: Icon(
-                Icons.delete_outline,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              title: Text(
-                'Delete',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-              onTap: () => Navigator.pop(context, _ProjectAction.delete),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-  if (action == null || !context.mounted) return;
+  final choice =
+      await showWorkspaceActionMenu(context, name, owner.profileName, [
+        ('new', 'New chat', Icons.add_rounded, true),
+        ('rename', 'Rename', Icons.edit_outlined, true),
+        ('appearance', 'Appearance', Icons.palette_outlined, true),
+        ('delete', 'Delete', Icons.delete_outline, true),
+      ], keyPrefix: 'project-action');
+  if (choice == null || !context.mounted) return;
+  if (choice == 'new') {
+    final resource = controller.current;
+    if (resource == null || resource.scope != owner) {
+      throw StateError('Profile changed. Open the menu again.');
+    }
+    final target = resource.projects.firstWhere(
+      (project) => project['id'] == id,
+      orElse: () =>
+          throw StateError('Project is unavailable. Open the menu again.'),
+    );
+    await controller.createChat(inProject: target, owner: owner);
+    return;
+  }
+  final action = _ProjectAction.values.byName(choice);
 
   await showDialog<void>(
     context: context,

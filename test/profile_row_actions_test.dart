@@ -923,16 +923,16 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
-  testWidgets('project compose button opens a new chat in that project', (
-    tester,
-  ) async {
+  testWidgets('project menu opens a new chat in that project', (tester) async {
     await show(tester);
     await tester.tap(
       find.descendant(
         of: find.byKey(const ValueKey('project-p2')),
-        matching: find.byTooltip('New conversation'),
+        matching: find.byTooltip('Project actions'),
       ),
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('project-action-new')));
     await tester.pumpAndSettle();
     expect(controller.current!.chat!.projectId, 'p2');
     await tester.pumpWidget(const SizedBox.shrink());

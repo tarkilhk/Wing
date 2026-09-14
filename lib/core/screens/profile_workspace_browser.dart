@@ -10,6 +10,7 @@ import '../services/profile_gateway.dart';
 import '../theme/hermes_theme.dart';
 import '../theme/profile_workspace_theme.dart';
 import '../widgets/profile_chat_indicator.dart';
+import '../widgets/workspace_options_menu.dart';
 import 'profile_row_actions.dart';
 import 'profile_project_actions.dart';
 
@@ -37,6 +38,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   bool _unreadOnly = false;
   final _search = TextEditingController();
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  final _workspaceOptionsKey = GlobalKey();
   Timer? _searchDebounce;
   void _setQuery(String value) {
     _searchDebounce?.cancel();
@@ -197,36 +199,24 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
               : () => _run(
                   () => showProjectActions(rowContext, controller, project),
                 ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                tooltip: 'New conversation',
-                style: IconButton.styleFrom(
-                  minimumSize: const Size(48, 48),
-                  visualDensity: VisualDensity.standard,
-                ),
-                icon: const Icon(Icons.edit_square, size: 20),
-                onPressed: controller.switching
-                    ? null
-                    : () => _run(
-                        () => controller.createChat(
-                          inProject: project,
-                          owner: controller.current!.scope,
-                        ),
-                      ),
+          trailing: Builder(
+            builder: (buttonContext) => IconButton(
+              tooltip: 'Project actions',
+              style: IconButton.styleFrom(
+                minimumSize: const Size(48, 48),
+                visualDensity: VisualDensity.standard,
               ),
-              IconButton(
-                tooltip: 'Project actions',
-                icon: const Icon(Icons.more_horiz, size: 18),
-                onPressed: controller.switching
-                    ? null
-                    : () => _run(
-                        () =>
-                            showProjectActions(rowContext, controller, project),
+              icon: const Icon(Icons.more_horiz, size: 20),
+              onPressed: controller.switching
+                  ? null
+                  : () => _run(
+                      () => showProjectActions(
+                        buttonContext,
+                        controller,
+                        project,
                       ),
-              ),
-            ],
+                    ),
+            ),
           ),
         ),
       ),
@@ -289,16 +279,23 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Chat actions',
-                  icon: const Icon(Icons.more_horiz, size: 18),
-                  onPressed:
-                      controller.switching ||
-                          resource.mutatingSessions.contains(row['id'])
-                      ? null
-                      : () => _run(
-                          () => showChatActions(rowContext, controller, row),
-                        ),
+                Builder(
+                  builder: (buttonContext) => IconButton(
+                    tooltip: 'Chat actions',
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                      visualDensity: VisualDensity.standard,
+                    ),
+                    icon: const Icon(Icons.more_horiz, size: 20),
+                    onPressed:
+                        controller.switching ||
+                            resource.mutatingSessions.contains(row['id'])
+                        ? null
+                        : () => _run(
+                            () =>
+                                showChatActions(buttonContext, controller, row),
+                          ),
+                  ),
                 ),
               ],
             ),
@@ -336,10 +333,10 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     ];
     return Builder(
       builder: (rowContext) {
-        void actions() => unawaited(
+        void actions([BuildContext? anchor]) => unawaited(
           _run(
             () => showSavedDraftActions(
-              rowContext,
+              anchor ?? rowContext,
               controller,
               resource.scope,
               draft,
@@ -373,10 +370,18 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12),
                 ),
-                trailing: IconButton(
-                  tooltip: 'Draft actions',
-                  icon: const Icon(Icons.more_horiz, size: 18),
-                  onPressed: controller.switching ? null : actions,
+                trailing: Builder(
+                  builder: (buttonContext) => IconButton(
+                    tooltip: 'Draft actions',
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                      visualDensity: VisualDensity.standard,
+                    ),
+                    icon: const Icon(Icons.more_horiz, size: 20),
+                    onPressed: controller.switching
+                        ? null
+                        : () => actions(buttonContext),
+                  ),
                 ),
                 onLongPress: controller.switching ? null : actions,
                 onTap: controller.switching
@@ -652,9 +657,14 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         !_unreadOnly &&
         _view == 'home' &&
         resource?.archivedOnly != true;
-    final workspaceOptions = PopupMenuButton<String>(
+    final workspaceOptions = WorkspaceOptionsMenu(
+      key: _workspaceOptionsKey,
       enabled: resource != null && !controller.switching,
-      tooltip: 'Workspace options',
+      projectsOnly: _view == 'projects',
+      inProject: project != null,
+      archived: resource?.archivedOnly == true,
+      unreadOnly: _unreadOnly,
+      includeAutomated: controller.sessionVisibility == SessionVisibility.all,
       onSelected: (value) {
         if (value == 'unread') {
           _searchDebounce?.cancel();
@@ -691,7 +701,13 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         if (value == 'refresh') unawaited(_run(controller.refresh));
         if (value == 'project-actions' && project != null) {
           unawaited(
-            _run(() => showProjectActions(context, controller, project)),
+            _run(
+              () => showProjectActions(
+                _workspaceOptionsKey.currentContext!,
+                controller,
+                project,
+              ),
+            ),
           );
         }
         if (value == 'new-project') unawaited(_run(widget.newProject));
@@ -706,27 +722,6 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           unawaited(_run(() => controller.showArchived(true)));
         }
       },
-      itemBuilder: (_) => [
-        if (project == null && resource?.archivedOnly != true)
-          CheckedPopupMenuItem<String>(
-            value: 'unread',
-            checked: _unreadOnly,
-            child: const Text('Unread only'),
-          ),
-        CheckedPopupMenuItem<String>(
-          value: 'include-automated',
-          checked: controller.sessionVisibility == SessionVisibility.all,
-          child: const Text('Include automated chats'),
-        ),
-        const PopupMenuItem(value: 'refresh', child: Text('Refresh')),
-        if (project != null)
-          const PopupMenuItem(
-            value: 'project-actions',
-            child: Text('Project actions'),
-          ),
-        const PopupMenuItem(value: 'new-project', child: Text('New project')),
-        const PopupMenuItem(value: 'archived', child: Text('Archived chats')),
-      ],
     );
     return PopScope(
       canPop:

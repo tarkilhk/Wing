@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/hermes_profile.dart';
+import '../widgets/workspace_action_menu.dart';
 import '../services/profile_workspace_controller.dart';
 import '../services/profile_gateway.dart';
 import '../services/composer_draft_store.dart';
@@ -12,10 +13,11 @@ Future<void> showSavedDraftActions(
   ComposerDraftSummary draft,
   String title,
 ) async {
-  final action = await _choose(context, title, owner.profileName, [
-    ('edit', 'Continue editing', Icons.edit_outlined, true),
-    ('delete', 'Discard draft', Icons.delete_outline, true),
-  ]);
+  final action =
+      await showWorkspaceActionMenu(context, title, owner.profileName, [
+        ('edit', 'Continue editing', Icons.edit_outlined, true),
+        ('delete', 'Discard draft', Icons.delete_outline, true),
+      ]);
   if (action == null || !context.mounted) return;
   if (action == 'edit') {
     await controller.openSavedDraft(owner, draft.sessionId);
@@ -66,105 +68,6 @@ Future<void> showSavedDraftActions(
   }
 }
 
-Future<String?> _choose(
-  BuildContext context,
-  String title,
-  String scope,
-  List<(String, String, IconData, bool)> actions,
-) {
-  final theme = Theme.of(context);
-  final overlay =
-      Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
-  final box = context.findRenderObject()! as RenderBox;
-  final rect = box.localToGlobal(Offset.zero, ancestor: overlay) & box.size;
-  HapticFeedback.selectionClick();
-  return showMenu<String>(
-    context: context,
-    semanticLabel: 'Actions for $title in $scope',
-    requestFocus: true,
-    position: RelativeRect.fromRect(
-      rect.deflate(12),
-      Offset.zero & overlay.size,
-    ),
-    constraints: const BoxConstraints(minWidth: 260, maxWidth: 300),
-    elevation: 12,
-    shadowColor: Colors.black45,
-    menuPadding: const EdgeInsets.symmetric(vertical: 8),
-    popUpAnimationStyle: MediaQuery.disableAnimationsOf(context)
-        ? AnimationStyle.noAnimation
-        : const AnimationStyle(duration: Duration(milliseconds: 160)),
-    items: [
-      PopupMenuItem<String>(
-        enabled: false,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 4, bottom: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                scope,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      const PopupMenuDivider(height: 9),
-      for (final (id, label, icon, enabled) in actions) ...[
-        if (id == 'archive' || id == 'delete')
-          const PopupMenuDivider(height: 9),
-        PopupMenuItem<String>(
-          key: ValueKey('action-$id'),
-          value: id,
-          enabled: enabled,
-          height: 48,
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 19,
-                color: !enabled
-                    ? theme.disabledColor
-                    : id == 'delete'
-                    ? theme.colorScheme.error
-                    : theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: !enabled
-                        ? theme.disabledColor
-                        : id == 'delete'
-                        ? theme.colorScheme.error
-                        : theme.colorScheme.onSurface,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ],
-  );
-}
-
 Future<void> showChatActions(
   BuildContext context,
   ProfileWorkspaceController controller,
@@ -177,25 +80,30 @@ Future<void> showChatActions(
   final pinned = row['pinned'] == true;
   final archived = row['archived'] == true || resource.archivedOnly;
   final unread = row['unread'] == true;
-  final action = await _choose(context, title, resource.scope.profileName, [
-    ('rename', 'Rename', Icons.edit_outlined, true),
-    ('pin', pinned ? 'Unpin' : 'Pin', Icons.push_pin_outlined, true),
-    (
-      'unread',
-      unread ? 'Mark as read' : 'Mark as unread',
-      Icons.mark_email_unread_outlined,
-      true,
-    ),
-    ('copy', 'Copy ID', Icons.copy_outlined, true),
-    ('move', 'Move to project', Icons.drive_file_move_outlined, !busy),
-    (
-      'archive',
-      archived ? 'Unarchive' : 'Archive',
-      Icons.archive_outlined,
-      !busy,
-    ),
-    ('delete', 'Delete', Icons.delete_outline, !busy),
-  ]);
+  final action = await showWorkspaceActionMenu(
+    context,
+    title,
+    resource.scope.profileName,
+    [
+      ('rename', 'Rename', Icons.edit_outlined, true),
+      ('pin', pinned ? 'Unpin' : 'Pin', Icons.push_pin_outlined, true),
+      (
+        'unread',
+        unread ? 'Mark as read' : 'Mark as unread',
+        Icons.mark_email_unread_outlined,
+        true,
+      ),
+      ('copy', 'Copy ID', Icons.copy_outlined, true),
+      ('move', 'Move to project', Icons.drive_file_move_outlined, !busy),
+      (
+        'archive',
+        archived ? 'Unarchive' : 'Archive',
+        Icons.archive_outlined,
+        !busy,
+      ),
+      ('delete', 'Delete', Icons.delete_outline, !busy),
+    ],
+  );
   if (action == null || !context.mounted) return;
   if (action == 'copy') {
     await Clipboard.setData(ClipboardData(text: key.sessionId));

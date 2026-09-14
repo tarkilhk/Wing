@@ -237,6 +237,49 @@ void main() {
               await _capture(tester, '${brightness.name}-chats-$scale');
             }
 
+            final projectActions = find.descendant(
+              of: find.byKey(const ValueKey('project-p2')),
+              matching: find.byTooltip('Project actions'),
+            );
+            final anchor = tester.getRect(projectActions);
+            expect(anchor.size, const Size(48, 48));
+            expect(find.byIcon(Icons.edit_square), findsNothing);
+            await tester.tap(projectActions);
+            await tester.pumpAndSettle();
+            final menu = find
+                .ancestor(
+                  of: find.byKey(const ValueKey('project-action-new')),
+                  matching: find.byType(Material),
+                )
+                .first;
+            final menuRect = tester.getRect(menu);
+            expect(menuRect.width, lessThan(width - 16));
+            expect(menuRect.right, closeTo(anchor.right, 1));
+            expect(menuRect.top, closeTo(anchor.bottom + 4, 1));
+            expect(menuRect.bottom, lessThanOrEqualTo(792));
+            expect(find.byType(BottomSheet), findsNothing);
+            if (export) {
+              await _capture(tester, '${brightness.name}-project-menu-$scale');
+            }
+            await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+            await tester.pumpAndSettle();
+            expect(
+              find.byKey(const ValueKey('project-action-new')),
+              findsNothing,
+            );
+            await tester.longPress(find.byKey(const ValueKey('project-p2')));
+            await tester.pumpAndSettle();
+            expect(
+              find.byKey(const ValueKey('project-action-rename')),
+              findsOneWidget,
+            );
+            await tester.tapAt(const Offset(8, 8));
+            await tester.pumpAndSettle();
+            expect(
+              find.byKey(const ValueKey('project-action-new')),
+              findsNothing,
+            );
+
             final chat = await controller.createChat();
             await tester.pumpAndSettle();
             if (export) {

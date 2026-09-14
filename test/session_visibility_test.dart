@@ -292,29 +292,19 @@ void main() {
       expect(find.text('Include automated chats'), findsNothing);
       await tester.tap(find.byTooltip('Workspace options'));
       await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<CheckedPopupMenuItem<String>>(
-              find.byType(CheckedPopupMenuItem<String>),
-            )
-            .checked,
-        isFalse,
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+      await tester.tap(
+        find.byKey(const ValueKey('workspace-option-include-automated')),
       );
-      await tester.tap(find.byType(CheckedPopupMenuItem<String>));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('chat-project-tool')), findsOneWidget);
       expect(find.byKey(const ValueKey('chat-project-chat')), findsOneWidget);
       await tester.tap(find.byTooltip('Workspace options'));
       await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<CheckedPopupMenuItem<String>>(
-              find.byType(CheckedPopupMenuItem<String>),
-            )
-            .checked,
-        isTrue,
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+      await tester.tap(
+        find.byKey(const ValueKey('workspace-option-include-automated')),
       );
-      await tester.tap(find.byType(CheckedPopupMenuItem<String>));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('chat-project-tool')), findsNothing);
       expect(find.byKey(const ValueKey('chat-project-chat')), findsOneWidget);
