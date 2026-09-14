@@ -666,12 +666,31 @@ class ProfileGateway {
     }
     await requireProfile();
     // Stock workspace.move finds live agents by durable ID without checking
-    // profile ownership. Do not risk re-homing a colliding live session.
+    // profile ownership. Resolve the owner and reject colliding live sessions.
     final live = records((await call('session.active_list'))['sessions']);
     if (live.any((row) => row['session_key'] == id)) {
-      throw StateError(
-        'This chat is still open on Hermes. Close it before moving.',
-      );
+      final session = await resume(id);
+      final storedId = session['stored_session_id'] ?? session['session_key'];
+      if (storedId != id ||
+          session.containsKey('session_key') && session['session_key'] != id) {
+        throw const FormatException('Session response has a different chat');
+      }
+      final matching = records(
+        (await call('session.active_list'))['sessions'],
+      ).where((row) => row['session_key'] == id).toList();
+      if (matching.length != 1 ||
+          matching.single['id'] != session['session_id']) {
+        throw StateError(
+          'Hermes could not verify this chat\'s project owner. '
+          'Refresh and try moving again.',
+        );
+      }
+      if (matching.single['status'] != 'idle') {
+        throw StateError(
+          'This chat is working or waiting for input on Hermes. '
+          'Stop it or let it finish before moving.',
+        );
+      }
     }
     final result = await call('session.workspace.move', {
       'session_key': id,

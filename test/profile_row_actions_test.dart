@@ -590,13 +590,14 @@ void main() {
     },
   );
   test(
-    'failed moves and active durable IDs do not change local rows',
+    'failed moves and busy runtimes do not change local rows',
     () async {
       final project = controller.current!.projects.first;
       final before = Map<String, dynamic>.from(
         controller.current!.sessions.firstWhere((r) => r['id'] == 'newest'),
       );
       host.active = true;
+      host.activeStatus = 'working';
       await expectLater(
         controller.moveSessionToProject(key(), project),
         throwsStateError,
@@ -670,6 +671,223 @@ void main() {
     expect(host.moves.single.$2['cwd'], '/Mobile app');
     expect(tester.takeException(), isNull);
   });
+  testWidgets('move from Chats works for an idle open chat', (tester) async {
+    host.active = true;
+    host.reuseLiveResume = true;
+    await show(tester);
+    await menu(tester, 'newest');
+    await tester.tap(find.text('Move to project'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('move-project-p2')));
+    await tester.pumpAndSettle();
+
+    expect(host.moves, hasLength(1));
+    expect(host.moves.single.$2['cwd'], '/Mobile app');
+    await controller.selectProject(
+      controller.current!.projects.firstWhere((p) => p['id'] == 'p2'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('chat-newest')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('chat header moves an open chat and keeps its draft on reopen', (
+    tester,
+  ) async {
+    await tester.runAsync(() => controller.openSession(key()));
+    final chat = controller.current!.chat!;
+    await tester.runAsync(() => controller.updateDraft(chat, 'Unsent draft'));
+    await show(tester);
+    await tester.tap(find.byKey(const ValueKey('chat-project-picker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('move-project-p2')));
+    await tester.pumpAndSettle();
+
+    expect(host.moves, hasLength(1));
+    expect(host.closes, isEmpty);
+    expect(controller.chatProjectLabel(chat), 'Mobile app');
+    expect(chat.composerText, 'Unsent draft');
+    expect(find.textContaining('· Mobile app'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('chat-project-picker')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('move-project-p2')), findsNothing);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    controller.showList();
+    await tester.runAsync(() async {
+      await controller.refresh();
+      await controller.openSession(key());
+    });
+    await tester.pumpAndSettle();
+    expect(
+      controller.chatProjectLabel(controller.current!.chat!),
+      'Mobile app',
+    );
+    expect(controller.current!.chat!.composerText, 'Unsent draft');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('new chat header moves before sending the first message', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    host.activeSessionKey = 'new-chat';
+    host.resumeSessionId = 'new-chat';
+    final chat = await controller.createChat();
+    host.active = true;
+    await show(tester);
+    await tester.tap(find.byKey(const ValueKey('chat-project-picker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('move-project-p2')));
+    await tester.pumpAndSettle();
+
+    expect(host.moves.single.$2['session_key'], 'new-chat');
+    expect(host.changes['personal']!['new-chat']!['cwd'], '/Mobile app');
+    expect(controller.chatProjectLabel(chat), 'Mobile app');
+    expect(find.textContaining('· Mobile app'), findsOneWidget);
+    expect(host.closes, isEmpty);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'failed move stays visible and can be retried without duplicate writes',
+    (tester) async {
+      host.failMutation = true;
+      await show(tester);
+      await menu(tester, 'newest');
+      await tester.tap(find.text('Move to project'));
+      await tester.pumpAndSettle();
+      final destination = find.byKey(const ValueKey('move-project-p2'));
+      await tester.tap(destination);
+      await tester.pumpAndSettle();
+      expect(find.text('Move rejected'), findsOneWidget);
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(host.changes['personal']?['newest']?['cwd'], isNull);
+      host.failMutation = false;
+      host.mutationDelay = Completer<void>();
+      await tester.tap(destination);
+      await tester.pump();
+      await tester.tap(destination);
+      await tester.pump();
+      expect(host.moves, hasLength(2));
+      expect(tester.widget<ListTile>(destination).enabled, false);
+      host.mutationDelay!.complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('Moved to Mobile app'), findsOneWidget);
+      expect(host.changes['personal']!['newest']!['cwd'], '/Mobile app');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'project picker rejects a profile switch before choosing a destination',
+    (tester) async {
+      await show(tester);
+      await menu(tester, 'newest');
+      await tester.tap(find.text('Move to project'));
+      await tester.pumpAndSettle();
+      await controller.navigateProfile('work');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('move-project-p2')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Profile changed'), findsOneWidget);
+      expect(host.moves, isEmpty);
+      expect(controller.current!.sessions.single['cwd'], isNull);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  for (final status in ['working', 'waiting', 'starting', null]) {
+    test(
+      'move refuses runtime status $status after resolving ownership',
+      () async {
+        host.active = true;
+        host.activeStatus = status;
+        await expectLater(
+          controller.moveSessionToProject(
+            key(),
+            controller.current!.projects.first,
+          ),
+          throwsStateError,
+        );
+        expect(host.moves, isEmpty);
+        expect(host.closes, isEmpty);
+      },
+    );
+  }
+
+  test('move rechecks live state after scoped resume', () async {
+    host.active = true;
+    host.statusAfterResume = 'working';
+    await expectLater(
+      controller.moveSessionToProject(
+        key(),
+        controller.current!.projects.first,
+      ),
+      throwsStateError,
+    );
+    expect(host.moves, isEmpty);
+  });
+
+  test(
+    'move refuses another profile runtime with the same durable ID',
+    () async {
+      host.foreignActive = true;
+      await expectLater(
+        controller.moveSessionToProject(
+          key(),
+          controller.current!.projects.first,
+        ),
+        throwsStateError,
+      );
+      expect(host.moves, isEmpty);
+      expect(host.closes, isEmpty);
+      expect(host.foreignActive, true);
+    },
+  );
+
+  test('move refuses a resumed chat from a different profile', () async {
+    host.active = true;
+    host.resumeProfile = 'work';
+    await expectLater(
+      controller.moveSessionToProject(
+        key(),
+        controller.current!.projects.first,
+      ),
+      throwsFormatException,
+    );
+    expect(host.moves, isEmpty);
+  });
+
+  for (final response in [
+    {'session_key': 'another-chat'},
+    {'session_key': null},
+    {'stored_session_id': 'another-chat'},
+  ]) {
+    test('move refuses conflicting resume identity $response', () async {
+      host.active = true;
+      host.reuseLiveResume = true;
+      host.resumeOverrides = response;
+      await expectLater(
+        controller.moveSessionToProject(
+          key(),
+          controller.current!.projects.first,
+        ),
+        throwsFormatException,
+      );
+      expect(host.moves, isEmpty);
+    });
+  }
+
   testWidgets('delete confirmation cancel sends no request', (tester) async {
     await show(tester);
     await menu(tester, 'newest');

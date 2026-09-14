@@ -36,6 +36,7 @@ import '../widgets/project_folder_picker.dart';
 import '../widgets/slash_command_suggestions.dart';
 import '../widgets/side_question_delivery_card.dart';
 import 'profile_workspace_browser.dart';
+import 'profile_row_actions.dart';
 import 'profile_transcript.dart';
 import 'chat_outputs_screen.dart';
 import '../widgets/app_drawer.dart';
@@ -209,30 +210,55 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               tooltip: 'Back to sessions',
               onPressed: controller.showList,
             ),
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  chat.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                Row(
-                  children: [
-                    const Icon(Icons.folder_outlined, size: 14),
-                    const SizedBox(width: 5),
-                    Flexible(
-                      child: Text(
-                        '${controller.connection.label} · ${controller.chatProjectLabel(chat)}',
+            title: Tooltip(
+              message: 'Move to project',
+              child: InkWell(
+                key: const ValueKey('chat-project-picker'),
+                borderRadius: BorderRadius.circular(8),
+                onTap:
+                    controller.switching ||
+                        current!.mutatingSessions.contains(chat.key.sessionId)
+                    ? null
+                    : () => unawaited(
+                        _run(
+                          () => showChatProjectPicker(
+                            context,
+                            controller,
+                            chat.key,
+                            currentProjectId: chat.projectId,
+                          ),
+                        ),
+                      ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        chat.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelMedium,
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-                    ),
-                  ],
+                      Row(
+                        children: [
+                          const Icon(Icons.folder_outlined, size: 14),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              '${controller.connection.label} · ${controller.chatProjectLabel(chat)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelMedium,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
             ),
             actions: [
               Builder(

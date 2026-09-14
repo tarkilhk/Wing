@@ -12,6 +12,7 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
   final removed = <String, Set<String>>{};
   bool failMutation = false;
   bool active = false;
+  String activeSessionKey = 'newest';
   String? activeStatus = 'idle';
   String? statusAfterResume;
   String? resumeProfile;
@@ -65,7 +66,7 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
               if (active)
                 {
                   'id': 'runtime',
-                  'session_key': 'newest',
+                  'session_key': activeSessionKey,
                   'status': activeStatus,
                 },
               if (foreignActive)
@@ -77,7 +78,8 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
             ],
           };
         }
-        if (method == 'session.resume' && params['session_id'] == 'newest') {
+        if (method == 'session.resume' &&
+            params['session_id'] == activeSessionKey) {
           active = true;
           activeStatus = statusAfterResume ?? activeStatus;
           return {

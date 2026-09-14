@@ -61,7 +61,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('chat header shows gateway and project without a switcher', (
+  testWidgets('chat header opens project picker without switching profile', (
     tester,
   ) async {
     final chat = await controller.createChat(
@@ -86,6 +86,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.current!.chat, same(chat));
     expect(find.text('work'), findsNothing);
+    expect(find.text('Move to project'), findsOneWidget);
+    expect(find.byKey(const ValueKey('move-project-p2')), findsNothing);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Back to sessions'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('profile-work')), findsOneWidget);

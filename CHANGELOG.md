@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.35.0+2216] - 2026-09-14
+
+### Added
+
+- Tap the conversation title/project header to move the chat to a project, including before its first message.
+
+### Fixed
+
+- Allow idle open chats to move after verifying their profile and runtime ownership. Keep the conversation and unsent draft open.
+- Keep move failures visible in the project picker with retry, and block duplicate submissions.
+
 ## [2.34.4+2215] - 2026-09-14
 
 ### Fixed

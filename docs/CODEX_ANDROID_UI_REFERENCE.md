@@ -159,10 +159,23 @@ and reload the project tree and entered project. This does not move files or
 transfer the chat to another profile.
 
 The server's live-agent lookup is by durable ID without profile ownership.
-Android conservatively refuses any ID present in `session.active_list` and
-refuses known busy chats. This preflight is not atomic with the move; it cannot
+Android allows an idle open chat after scoped `session.resume` verifies its
+profile and durable identity, followed by a fresh `session.active_list` check
+that exactly one runtime has that durable ID and matches the resumed runtime.
+Working, waiting, unknown and colliding runtimes are refused. This preflight is
+not atomic with the move; it cannot
 eliminate an agent opening concurrently on the server. No backend patch or
 legacy assignment fallback was introduced.
+
+As of 2026-09-14, tapping the conversation title/project header opens the same
+picker as the Chats row menu, including before the first message. The picker
+waits for acknowledgement, blocks duplicate taps, and keeps errors visible for
+retry. Successful moves update the header and project membership while keeping
+the open runtime and unsent draft. Widget and controller tests in
+`test/profile_row_actions_test.dart` cover both entry points, project refresh,
+draft preservation, a phone-sized new chat, failed moves, cancellation and
+profile/runtime ownership. These fixture tests do not verify a deployed server
+or an installed phone build.
 
 ### Chat indicator legend
 

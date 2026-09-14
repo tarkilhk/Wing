@@ -207,71 +207,17 @@ Future<void> showChatActions(
     return;
   }
   if (action == 'move') {
-    final projects = resource.projects
-        .where(
-          (project) =>
-              project['isNoProject'] != true &&
-              ProfileGateway.projectDirectory(project).isNotEmpty &&
-              project['id'] != resource.selectedProject?['id'] &&
-              ProfileGateway.projectDirectory(project) != row['cwd'],
-        )
-        .toList();
-    final target = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Move to project'),
-        content: SizedBox(
-          width: 360,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Projects in ${resource.scope.profileName}. This changes the chat\'s working folder.',
-              ),
-              const SizedBox(height: 16),
-              if (projects.isEmpty)
-                const Text(
-                  'No other projects with a working folder are available.',
-                )
-              else
-                Flexible(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: projects.length,
-                    itemBuilder: (context, index) {
-                      final project = projects[index];
-                      return ListTile(
-                        key: ValueKey('move-project-${project['id']}'),
-                        leading: const Icon(Icons.folder_outlined),
-                        title: Text(project['name'] as String),
-                        subtitle: Text(
-                          ProfileGateway.projectDirectory(project),
-                        ),
-                        onTap: () => Navigator.pop(context, project),
-                      );
-                    },
-                  ),
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
+    await showChatProjectPicker(
+      context,
+      controller,
+      key,
+      currentProjectId:
+          resource.chats[key.sessionId]?.projectId ??
+          (resource.projectSessions.any((item) => item['id'] == key.sessionId)
+              ? (resource.selectedProject?['id'] as String?)
+              : null),
+      cwd: row['cwd'] as String?,
     );
-    if (target != null) {
-      final moved = await controller.moveSessionToProject(key, target);
-      if (moved && context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Moved to ${target['name']}')));
-      }
-    }
   } else if (action == 'rename') {
     var value = title;
     final result = await showDialog<String>(
@@ -333,6 +279,136 @@ Future<void> showChatActions(
         'unread' => {'unread': !unread},
         _ => throw StateError('Unknown action'),
       },
+    );
+  }
+}
+
+Future<void> showChatProjectPicker(
+  BuildContext context,
+  ProfileWorkspaceController controller,
+  ProfileSessionKey key, {
+  String? currentProjectId,
+  String? cwd,
+}) async {
+  final resource = controller.current;
+  if (resource == null || resource.scope != key.workspace) {
+    throw StateError('Profile changed. Open the project picker again.');
+  }
+  final projects = resource.projects
+      .where(
+        (project) =>
+            project['isNoProject'] != true &&
+            ProfileGateway.projectDirectory(project).isNotEmpty &&
+            project['id'] != currentProjectId &&
+            ProfileGateway.projectDirectory(project) != cwd,
+      )
+      .toList();
+  // A row can disappear when its project reloads after a successful move.
+  final messenger = ScaffoldMessenger.of(context);
+  var moving = false;
+  String? error;
+  final target = await showDialog<Map<String, dynamic>>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => PopScope(
+        canPop: !moving,
+        child: AlertDialog(
+          title: const Text('Move to project'),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Projects in ${resource.scope.profileName}. This changes the chat\'s working folder.',
+                ),
+                const SizedBox(height: 16),
+                if (error != null) ...[
+                  Text(
+                    error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (moving) ...[
+                  const LinearProgressIndicator(),
+                  const SizedBox(height: 12),
+                ],
+                if (projects.isEmpty)
+                  const Text(
+                    'No other projects with a working folder are available.',
+                  )
+                else
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: projects.length,
+                      itemBuilder: (context, index) {
+                        final project = projects[index];
+                        return ListTile(
+                          key: ValueKey('move-project-${project['id']}'),
+                          enabled: !moving,
+                          leading: const Icon(Icons.folder_outlined),
+                          title: Text(project['name'] as String),
+                          subtitle: Text(
+                            ProfileGateway.projectDirectory(project),
+                          ),
+                          onTap: moving
+                              ? null
+                              : () async {
+                                  setState(() {
+                                    moving = true;
+                                    error = null;
+                                  });
+                                  try {
+                                    final moved = await controller
+                                        .moveSessionToProject(key, project);
+                                    if (!context.mounted) return;
+                                    if (moved) {
+                                      Navigator.pop(context, project);
+                                    } else {
+                                      setState(() {
+                                        moving = false;
+                                        error =
+                                            'A change to this chat is already in progress. Try again.';
+                                      });
+                                    }
+                                  } catch (e) {
+                                    if (!context.mounted) return;
+                                    setState(() {
+                                      moving = false;
+                                      error = switch (e) {
+                                        StateError e => e.message.toString(),
+                                        FormatException e => e.message,
+                                        _ => 'Could not move this chat. $e',
+                                      };
+                                    });
+                                  }
+                                },
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: moving ? null : () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  if (target != null && messenger.mounted) {
+    messenger.showSnackBar(
+      SnackBar(content: Text('Moved to ${target['name']}')),
     );
   }
 }
