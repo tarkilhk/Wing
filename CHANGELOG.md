@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.34.4+2215] - 2026-09-14
+
+### Fixed
+
+- Recover saved chat titles after restarting the app, including pending chats in background profiles.
+- Refresh Activity titles from server metadata so recovered chats do not remain labelled "Restored chat".
+
 ## [2.34.3+2214] - 2026-09-14
 
 ### Fixed

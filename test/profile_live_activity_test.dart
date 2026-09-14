@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_android/core/models/hermes_profile.dart';
 import 'package:hermes_android/core/services/connection_manager.dart';
@@ -17,6 +19,7 @@ class ActivityHost {
   };
   final failedProfiles = <String>{};
   final profiles = ['a', 'b'];
+  bool resumedRunning = false;
 
   Future<ProfileDiscovery> discover() async => ProfileDiscovery(
     profiles: profiles.map((name) => HermesProfile(name: name)).toList(),
@@ -80,7 +83,7 @@ class ActivityHost {
           'session_id': '${scope.profileName}-runtime',
           'stored_session_id': 'same',
           'session_key': 'same',
-          'running': false,
+          'running': resumedRunning,
           'info': {'profile_name': scope.profileName},
         };
       }
@@ -93,9 +96,7 @@ void main() {
   late ActivityHost host;
   late ProfileWorkspaceController controller;
 
-  setUp(() async {
-    SharedPreferences.setMockInitialValues({});
-    host = ActivityHost();
+  Future<void> initialize() async {
     controller = ProfileWorkspaceController(
       connection: SavedConnection(
         id: 'host',
@@ -109,9 +110,78 @@ void main() {
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
+  }
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    host = ActivityHost();
+    await initialize();
   });
 
   tearDown(() => controller.dispose());
+
+  Future<void> restorePending(String profile) async {
+    final key = ProfileSessionKey(
+      WorkspaceScope(
+        connectionId: 'host',
+        connectionIdentity: 'activity-test',
+        profileName: profile,
+      ),
+      'same',
+    );
+    await (await SharedPreferences.getInstance()).setStringList(
+      'profile_pending_v2_activity-test',
+      [jsonEncode(key.toJson())],
+    );
+    controller.dispose();
+    host.resumedRunning = true;
+    await initialize();
+  }
+
+  test('recovered running chat keeps its saved title in Activity', () async {
+    await restorePending('a');
+    expect(controller.liveActivity.single.title, 'Known phone chat');
+    host.live.add({
+      'id': 'a-runtime',
+      'session_key': 'same',
+      'status': 'working',
+    });
+    await controller.refreshActivity();
+    expect(controller.liveActivity.single.title, 'Known phone chat');
+  });
+
+  test(
+    'recovery resolves a title in a profile whose list is not loaded',
+    () async {
+      host.saved['b'] = [
+        {'id': 'same', 'title': 'Background profile chat', 'profile': 'b'},
+      ];
+      await restorePending('b');
+      expect(controller.liveActivity.single.title, 'Background profile chat');
+      expect(controller.current!.scope.profileName, 'a');
+    },
+  );
+
+  test(
+    'failed title lookup preserves recovery and Activity refresh retries',
+    () async {
+      host.saved['b'] = [
+        {'id': 'same', 'title': 'Background profile chat', 'profile': 'b'},
+      ];
+      host.failedProfiles.add('b');
+      await restorePending('b');
+      expect(controller.liveActivity.single.title, 'Hermes session · same');
+      expect(controller.liveActivity.single.sessionId, 'same');
+      host.failedProfiles.clear();
+      host.live.add({
+        'id': 'b-runtime',
+        'session_key': 'same',
+        'status': 'working',
+      });
+      await controller.refreshActivity();
+      expect(controller.liveActivity.single.title, 'Background profile chat');
+    },
+  );
 
   test('discovers unopened live sessions without changing selection', () async {
     final selected = await controller.createChat();

@@ -125,7 +125,7 @@ void main() {
       controller.dispose();
       await initialize();
       final chat = controller.current!.chats['chat-0']!;
-      expect(chat.title, 'Restored chat');
+      expect(chat.title, 'personal chat 0');
       expectLatestConversation(chat);
     },
   );

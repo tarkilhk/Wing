@@ -788,6 +788,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
         String? title;
         if (localOwners.length == 1) {
           owner = localOwners.single.resource;
+          final metadataTitle = ownership
+              .where((result) => result.resource == owner)
+              .firstOrNull
+              ?.matches[sessionId]?['title'];
+          if (metadataTitle is String && metadataTitle.trim().isNotEmpty) {
+            localOwners.single.chat.title = metadataTitle.trim();
+          }
           title = localOwners.single.chat.title.trim();
         } else if (localOwners.isEmpty && allProfilesVerified) {
           final savedOwners = ownership
@@ -5318,6 +5325,38 @@ class ProfileWorkspaceController extends ChangeNotifier {
     return write;
   }
 
+  Future<String> _pendingChatTitle(
+    ProfileWorkspaceData resource,
+    String sessionId,
+  ) async {
+    final loaded = <Map<String, dynamic>>[
+      ...resource.searchResults,
+      ...resource.visibleSessions,
+      ...resource.sessions,
+    ].where((row) => row['id'] == sessionId);
+    for (final row in loaded) {
+      final title = row['title'];
+      if (title is String && title.trim().isNotEmpty) return title.trim();
+    }
+    try {
+      final matches = (await resource.gateway.search(
+        sessionId,
+        visibility: SessionVisibility.all,
+      )).where((row) => row['id'] == sessionId).toList();
+      if (matches.length == 1) {
+        final title = matches.single['title'];
+        if (title is String && title.trim().isNotEmpty) return title.trim();
+      }
+    } catch (_) {
+      // Metadata failure must not prevent recovering the running turn.
+      // Activity refresh can resolve the title when the profile is reachable.
+    }
+    final shortId = sessionId.length <= 8
+        ? sessionId
+        : sessionId.substring(0, 8);
+    return 'Hermes session · $shortId';
+  }
+
   Future<void> _restorePending() async {
     for (final raw in preferences.getStringList(_journalKey) ?? <String>[]) {
       try {
@@ -5340,11 +5379,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
           continue;
         }
         await resource.gateway.connect();
+        final title = await _pendingChatTitle(resource, key.sessionId);
         final result = await resource.gateway.resume(key.sessionId);
         final chat = ProfileChat(
           key: key,
           runtimeId: result['session_id'] as String,
-          title: 'Restored chat',
+          title: title,
         )..status = ProfileTurnStatus.reconnecting;
         _hydrate(chat, result);
         await _restoreDraft(chat);
