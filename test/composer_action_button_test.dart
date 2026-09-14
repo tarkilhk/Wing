@@ -13,6 +13,7 @@ void main() {
     ComposerAction primary = ComposerAction.steer,
     String? steerReason,
     double scale = 1,
+    bool reduceMotion = false,
   }) async {
     tester.view.physicalSize = const Size(360, 760);
     tester.view.devicePixelRatio = 1;
@@ -21,9 +22,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(scale)),
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(scale),
+            disableAnimations: reduceMotion,
+          ),
           child: child!,
         ),
         home: Scaffold(
@@ -73,6 +75,100 @@ void main() {
     );
   });
 
+  for (final action in [
+    ComposerAction.steer,
+    ComposerAction.queue,
+    ComposerAction.stop,
+  ]) {
+    testWidgets(
+      'up arrow animates to configured ${action.name} only while held',
+      (tester) async {
+        await show(tester, primary: action);
+        expect(
+          find.byKey(const ValueKey('composer-button-icon-send')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('composer-button-icon-${action.name}')),
+          findsNothing,
+        );
+        final gesture = await hold(tester, primary: action.label);
+        await tester.pump(const Duration(milliseconds: 110));
+        expect(
+          find.byKey(const ValueKey('composer-button-icon-send')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('composer-button-icon-${action.name}')),
+          findsOneWidget,
+        );
+        await tester.pump(const Duration(milliseconds: 140));
+        expect(
+          find.byKey(const ValueKey('composer-button-icon-send')),
+          findsNothing,
+        );
+        expect(selected, isEmpty);
+        await gesture.cancel();
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('composer-button-icon-send')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('composer-button-icon-${action.name}')),
+          findsNothing,
+        );
+        expect(selected, isEmpty);
+      },
+    );
+  }
+
+  testWidgets(
+    'sliding updates the button icon and release restores the arrow',
+    (tester) async {
+      await show(tester);
+      final gesture = await hold(tester);
+      await gesture.moveTo(
+        tester.getCenter(find.byKey(const ValueKey('composer-choice-queue'))),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('composer-button-icon-queue')),
+        findsOneWidget,
+      );
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(selected, [ComposerAction.queue]);
+      expect(
+        find.byKey(const ValueKey('composer-button-icon-send')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('reduced motion changes the held icon without animation', (
+    tester,
+  ) async {
+    await show(tester, reduceMotion: true);
+    final gesture = await hold(tester);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('composer-button-icon-steer')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('composer-button-icon-send')),
+      findsNothing,
+    );
+    await gesture.cancel();
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('composer-button-icon-send')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('holding in place commits steer only on release', (tester) async {
     await show(tester);
     final gesture = await hold(tester);
@@ -100,7 +196,9 @@ void main() {
         expect(choices[i].left, lessThan(button.center.dx));
         expect(choices[i].right, greaterThan(button.center.dx));
         expect(choices[i].bottom, lessThan(button.top));
-        if (i > 0) expect(choices[i].top, greaterThanOrEqualTo(choices[i - 1].bottom));
+        if (i > 0) {
+          expect(choices[i].top, greaterThanOrEqualTo(choices[i - 1].bottom));
+        }
       }
       await gesture.cancel();
       await tester.pump();

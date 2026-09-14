@@ -36,6 +36,7 @@ class ComposerActionButton extends StatefulWidget {
 class _ComposerActionButtonState extends State<ComposerActionButton>
     with WidgetsBindingObserver {
   final _anchorKey = GlobalKey();
+  final _iconAction = ValueNotifier(ComposerAction.send);
   OverlayEntry? _overlay;
   Rect _anchor = Rect.zero;
   Rect _choices = Rect.zero;
@@ -78,6 +79,7 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _close();
+    _iconAction.dispose();
     super.dispose();
   }
 
@@ -86,6 +88,7 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
     _overlay?.dispose();
     _overlay = null;
     _selected = null;
+    _iconAction.value = ComposerAction.send;
   }
 
   void _open(LongPressStartDetails details) {
@@ -124,6 +127,7 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
           InheritedTheme.captureAll(context, Builder(builder: _buildSelector)),
     );
     overlay.insert(_overlay!);
+    _iconAction.value = widget.primary;
     HapticFeedback.selectionClick();
   }
 
@@ -248,6 +252,7 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
     }
     if (_selected != next) {
       _selected = next;
+      _iconAction.value = next ?? ComposerAction.send;
       _overlay!.markNeedsBuild();
       HapticFeedback.selectionClick();
     }
@@ -288,7 +293,33 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
               ),
             ),
             tooltip: widget.primary.label,
-            icon: Icon(composerActionIcon(widget.primary)),
+            icon: ValueListenableBuilder<ComposerAction>(
+              valueListenable: _iconAction,
+              builder: (context, action, _) => AnimatedSwitcher(
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: Tween<double>(begin: .65, end: 1).animate(animation),
+                    child: RotationTransition(
+                      turns: Tween<double>(
+                        begin: -.08,
+                        end: 0,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  ),
+                ),
+                child: Icon(
+                  composerActionIcon(action),
+                  key: ValueKey('composer-button-icon-${action.name}'),
+                ),
+              ),
+            ),
             onPressed: _enabled(widget.primary)
                 ? () => widget.onSelected(widget.primary)
                 : null,

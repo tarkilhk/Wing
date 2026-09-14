@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.36.1+2218] - 2026-09-14
+
+### Changed
+
+- Keep the composer up arrow visible at rest. Animate it into the configured action when held, follow the highlighted choice while sliding, and return to the arrow on release or cancellation.
+- Respect reduced-motion settings by switching icons without animation.
+
 ## [2.36.0+2217] - 2026-09-14
 
 ### Changed

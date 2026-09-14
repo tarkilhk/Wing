@@ -6,6 +6,10 @@ Stop as the busy composer's primary action and opened a sheet on long press.
 - A tap uses Steer while a turn is working. Hermes administration offers Steer,
   Queue, or Stop as the default for this device. Idle chats and slash commands
   use Send.
+- The resting button always shows the up arrow. Holding animates it into the
+  configured action, and sliding updates it to the highlighted choice. It
+  returns to the arrow on release or cancellation. Reduced-motion settings
+  switch icons immediately.
 - Hold the button to open a vertical icon selector above it. Keep the finger
   down, slide to a choice, and release to run that action once. Holding in
   place keeps the primary action selected. Slide outside to cancel.
