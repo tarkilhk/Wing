@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_android/core/theme/hermes_theme.dart';
+import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
 
 HermesTokens? _tokensFrom(ThemeData theme) => theme.extension<HermesTokens>();
 
@@ -73,10 +74,16 @@ void main() {
       expect(light.brightness, Brightness.light);
     });
 
-    test('Studio pairs the default mint accent for light and dark', () {
-      expect(HermesTokens.dark().accent, const Color(0xFFA6E3CB));
-      expect(HermesTokens.light().accent, const Color(0xFF146B53));
-    });
+    test(
+      'Studio pairs Teal across themes and preserves saved Mint choices',
+      () {
+        final savedAccent = WorkspaceAccent.fromName('mint');
+        expect(savedAccent.label, 'Teal');
+        expect(HermesTokens.dark().accent, savedAccent.dark);
+        expect(HermesTokens.light().accent, savedAccent.light);
+        expect(WorkspaceAccent.fromName(null), savedAccent);
+      },
+    );
 
     test('status colors resolve from a semantic status enum', () {
       final tokens = HermesTokens.dark();

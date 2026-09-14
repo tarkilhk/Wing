@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.36.11+2228] - 2026-09-15
+
+### Changed
+- Refine the default accent to Teal with navy-charcoal dark surfaces and a subtly warm light canvas, inspired by Playful.
+- Preserve saved Mint selections under the new Teal label and move Glacier toward a cooler blue to distinguish the two accents.
+- Keep the existing layouts, portrait artwork and semantic status colors.
+
 ## [2.36.10+2227] - 2026-09-15
 
 ### Fixed

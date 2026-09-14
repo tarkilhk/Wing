@@ -56,7 +56,7 @@ The app's current slash/profile contracts are documented in [slash command suppo
 
 ## Version and application identity
 
-Source version on 2026-09-15 is `2.36.10+2227` in [pubspec.yaml](pubspec.yaml). This is the checked-out version, not a claim that a matching public release has been published. Each release is recorded in the [changelog](CHANGELOG.md), with semantic versions and an increasing Android build number.
+Source version on 2026-09-15 is `2.36.11+2228` in [pubspec.yaml](pubspec.yaml). This is the checked-out version, not a claim that a matching public release has been published. Each release is recorded in the [changelog](CHANGELOG.md), with semantic versions and an increasing Android build number.
 
 - Personal release package: `com.tarkilhk.hermes.android`, labelled Hermes Personal.
 - Development package: `com.hermesagent.hermes_android.dev`.

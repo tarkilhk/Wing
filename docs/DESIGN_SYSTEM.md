@@ -83,22 +83,32 @@ Keep current warning thresholds unless separately changed: warning at 65%, dange
 
 ## Light and dark tokens
 
+On 15 September 2026, the owner approved refining the default around Playful
+and expressed a preference for teal. Teal replaces the displayed Mint option,
+with a deep teal light accent, soft teal-mint dark accent, navy-charcoal dark
+surfaces and a subtly warm light canvas. Keep the stored `mint` value so saved
+choices carry over. Glacier uses a cooler blue, `#285F9B` in light mode and
+`#ABC9FF` in dark mode, to distinguish it from Teal. Iris, Coral and Gold
+retain their accent colors.
+The portrait keeps its original navy, cream and mint artwork.
+See the [teal implementation and rendered review](design/2026-09-15-playful-teal.md).
+
 | Role | Light | Dark |
 | --- | --- | --- |
-| Canvas | `#F4F7F6` | `#101917` |
-| Panel / sheet / menu | `#FFFFFF` | `#182621` |
-| Primary text | `#172B27` | `#E8F2EC` |
-| Secondary text | `#586B64` | `#A9BEB3` |
-| Accent | `#146B53` | `#A6E3CB` |
-| Text on accent | `#FFFFFF` | `#10291F` |
-| Border / divider | `#D5E0DA` | `#334C40` |
-| Selected tint | `#E3F2EC` | `#234737` |
+| Canvas | `#F7F7F4` | `#101B24` |
+| Panel / sheet / menu | `#FFFFFF` | `#192934` |
+| Primary text | `#1B2D36` | `#EBF1F2` |
+| Secondary text | `#586970` | `#ADBDC4` |
+| Accent | `#126D70` | `#A6DDD6` |
+| Text on accent | `#FFFFFF` | `#102C32` |
+| Border / divider | `#D6E0E1` | `#344C58` |
+| Selected tint | `#E2F1EE` | `#20454A` |
 
-Dark uses charcoal with a restrained green undertone, elevated opaque panels and readable secondary text. Avoid washed-out disabled text, translucent stacked cards and saturated green page backgrounds. Menus, sheets, keyboard-adjacent chrome, previews and system bars must receive the same theme treatment.
+Dark uses charcoal with a restrained navy undertone, elevated opaque panels and readable secondary text. Avoid washed-out disabled text, translucent stacked cards and saturated page backgrounds. Menus, sheets, keyboard-adjacent chrome, previews and system bars must receive the same theme treatment.
 
-Calculated sRGB contrast for these exact token pairs: light body/canvas 13.80:1, light secondary/canvas 5.26:1, light button text/accent 6.45:1, dark body/canvas 15.63:1, dark secondary/panel 8.00:1 and dark button text/accent 10.65:1. These calculations cover those pairs only, not generated-image pixels, every state or a rendered app.
+Calculated sRGB contrast for these exact token pairs: light body/canvas 13.26:1, light secondary/canvas 5.33:1, light button text/accent 6.09:1, dark body/canvas 15.28:1, dark secondary/panel 7.71:1 and dark button text/accent 9.76:1. These calculations cover those pairs only, not generated-image pixels, every state or a rendered app.
 
-Use the chosen accent for primary actions, links, selected controls, model icon, switches and focus outlines. Stable project colors stay tied to existing project metadata. Keep Mint, Iris, Glacier, Coral and Gold as coherent paired light/dark accent families, with darker foreground accents in light mode and lighter foreground accents in dark mode. User accent choice must not recolor warning/error semantics or rewrite project identity.
+Use the chosen accent for primary actions, links, selected controls, model icon, switches and focus outlines. Stable project colors stay tied to existing project metadata. Keep Teal, Iris, Glacier, Coral and Gold as coherent paired light/dark accent families, with darker foreground accents in light mode and lighter foreground accents in dark mode. User accent choice must not recolor warning/error semantics or rewrite project identity.
 
 Pressed actions use a modest tonal shift, selected rows add a check or structural marker, keyboard focus uses a clear outline, and disabled controls use neutral surfaces with readable labels. Loading states keep their label and control width. Errors use a distinct semantic color plus icon and text; empty states use plain explanations and one relevant action. Validate these states in the rendered app. No accessibility claim is made from images alone.
 

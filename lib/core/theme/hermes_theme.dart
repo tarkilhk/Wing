@@ -170,12 +170,12 @@ class HermesTokens extends ThemeExtension<HermesTokens> {
   factory HermesTokens.dark() {
     return HermesTokens(
       brightness: Brightness.dark,
-      surface: const Color(0xFF101917),
-      raised: const Color(0xFF182621),
-      border: const Color(0xFF334C40),
-      onSurface: const Color(0xFFE8F2EC),
-      muted: const Color(0xFFA9BEB3),
-      accent: const Color(0xFFA6E3CB),
+      surface: const Color(0xFF101B24),
+      raised: const Color(0xFF192934),
+      border: const Color(0xFF344C58),
+      onSurface: const Color(0xFFEBF1F2),
+      muted: const Color(0xFFADBDC4),
+      accent: const Color(0xFFA6DDD6),
       success: const Color(0xFF4ADE80),
       warning: const Color(0xFFFBBF24),
       danger: const Color(0xFFF87171),
@@ -188,12 +188,12 @@ class HermesTokens extends ThemeExtension<HermesTokens> {
   factory HermesTokens.light() {
     return HermesTokens(
       brightness: Brightness.light,
-      surface: const Color(0xFFF4F7F6),
+      surface: const Color(0xFFF7F7F4),
       raised: const Color(0xFFFFFFFF),
-      border: const Color(0xFFD5E0DA),
-      onSurface: const Color(0xFF172B27),
-      muted: const Color(0xFF586B64),
-      accent: const Color(0xFF146B53),
+      border: const Color(0xFFD6E0E1),
+      onSurface: const Color(0xFF1B2D36),
+      muted: const Color(0xFF586970),
+      accent: const Color(0xFF126D70),
       success: const Color(0xFF15803D),
       warning: const Color(0xFFB45309),
       danger: const Color(0xFFB91C1C),
@@ -292,12 +292,12 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
     brightness,
   ).copyWith(accent: accent);
   final dark = brightness == Brightness.dark;
-  final onAccent = dark ? const Color(0xFF10291F) : Colors.white;
+  final onAccent = dark ? const Color(0xFF102C32) : Colors.white;
   final selected =
       accent == null || accent == HermesTokens.forBrightness(brightness).accent
       ? dark
-            ? const Color(0xFF234737)
-            : const Color(0xFFE3F2EC)
+            ? const Color(0xFF20454A)
+            : const Color(0xFFE2F1EE)
       : Color.alphaBlend(tokens.accent.withValues(alpha: .12), tokens.raised);
   final scheme =
       ColorScheme.fromSeed(
