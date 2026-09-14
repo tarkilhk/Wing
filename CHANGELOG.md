@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [2.36.15+2232] - 2026-09-15
 
 ### Fixed
 
@@ -14,6 +14,8 @@
 
 ### Changed
 
+- Group Workspace options into visible filter switches, project/archive actions and Refresh; omit actions that do not apply to the current view.
+- Anchor project, chat and draft menus beside their ellipsis controls with Studio styling. Replace the project row's compose pencil with New chat inside its menu.
 - Shorten the README, move the detailed feature inventory into docs, correct store claims and release instructions, and archive the inherited F-Droid recipe.
 
 ## [2.36.14+2231] - 2026-09-15
