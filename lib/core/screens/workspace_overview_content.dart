@@ -7,6 +7,7 @@ import '../widgets/backend_version_card.dart';
 import '../widgets/profile_editor_sheet.dart';
 import '../widgets/profile_default_model_sheet.dart';
 import '../widgets/profile_usage_panel.dart';
+import '../widgets/composer_action_settings.dart';
 import 'profile_capabilities_screen.dart';
 
 enum _ActivityFilter { all, running, needsInput }
@@ -268,6 +269,8 @@ class HermesAdministrationContent extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 12),
+        ComposerActionSettings(preferences: controller.preferences),
         if (controller.current != null) ...[
           const SizedBox(height: 12),
           Card(

@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../services/profile_workspace_controller.dart';
 import '../services/image_clipboard.dart';
 import '../widgets/image_paste_menu.dart';
+import '../models/composer_action.dart';
+import '../widgets/composer_action_button.dart';
 import '../widgets/composer_attachment_tile.dart';
 import '../services/remote_files_client.dart';
 import '../widgets/profile_message.dart';
@@ -1323,83 +1325,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                         ),
                                       ),
                                       const SizedBox(width: 6),
-                                      Semantics(
-                                        container: true,
-                                        hint: _hasMessageActions(chat)
-                                            ? 'Long press for message actions'
-                                            : null,
-                                        child: TooltipTheme(
-                                          data: TooltipTheme.of(context)
-                                              .copyWith(
-                                                triggerMode:
-                                                    _hasMessageActions(chat)
-                                                    ? TooltipTriggerMode.manual
-                                                    : TooltipTriggerMode
-                                                          .longPress,
-                                              ),
-                                          child: GestureDetector(
-                                            onLongPress:
-                                                _hasMessageActions(chat)
-                                                ? () => _showBusyActions(
-                                                    chat,
-                                                    context,
-                                                  )
-                                                : null,
-                                            child: IconButton.filled(
-                                              style: IconButton.styleFrom(
-                                                minimumSize: const Size(48, 48),
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(14),
-                                                ),
-                                              ),
-                                              tooltip:
-                                                  chat.busy &&
-                                                      !chat.draft
-                                                          .trimLeft()
-                                                          .startsWith('/')
-                                                  ? 'Stop'
-                                                  : 'Send',
-                                              icon: Icon(
-                                                chat.busy &&
-                                                        !chat.draft
-                                                            .trimLeft()
-                                                            .startsWith('/')
-                                                    ? Icons.stop
-                                                    : Icons.arrow_upward,
-                                              ),
-                                              onPressed:
-                                                  controller.switching ||
-                                                      chat.changingAnswer ||
-                                                      chat.commandRunning ||
-                                                      chat.changingIntelligence ||
-                                                      (!chat.busy &&
-                                                          chat.draft
-                                                              .trim()
-                                                              .isEmpty &&
-                                                          chat
-                                                              .attachments
-                                                              .isEmpty)
-                                                  ? null
-                                                  : () => _run(
-                                                      () =>
-                                                          chat.busy &&
-                                                              !chat.draft
-                                                                  .trimLeft()
-                                                                  .startsWith(
-                                                                    '/',
-                                                                  )
-                                                          ? controller.stop(
-                                                              chat,
-                                                            )
-                                                          : controller.send(
-                                                              chat,
-                                                            ),
-                                                    ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
+                                      _composerActionButton(chat),
                                     ],
                                   ),
                               ],
@@ -1480,6 +1406,95 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             answerMessageId(message) != null &&
             isBranchMessage(message),
       );
+
+  Map<ComposerAction, String?> _composerActions(ProfileChat chat) {
+    final text = chat.draft.trim();
+    final blocked =
+        controller.switching ||
+        chat.changingAnswer ||
+        chat.commandRunning ||
+        chat.changingIntelligence ||
+        chat.editingQueuedPrompt != null;
+    final hasDraft = text.isNotEmpty || chat.attachments.isNotEmpty;
+    final slash = text.startsWith('/');
+    return {
+      ComposerAction.send: !blocked && hasDraft && (!chat.busy || slash)
+          ? null
+          : 'Wait for the current turn',
+      ComposerAction.steer: blocked || chat.steering
+          ? 'Wait before steering'
+          : !{
+              ProfileTurnStatus.running,
+              ProfileTurnStatus.attention,
+            }.contains(chat.status)
+          ? 'Steer needs a running turn'
+          : chat.attachments.isNotEmpty
+          ? 'Steer supports text only'
+          : text.isEmpty || slash
+          ? 'Type a message to steer'
+          : null,
+      ComposerAction.stop: !blocked && chat.busy
+          ? null
+          : 'No running turn to stop',
+      ComposerAction.queue:
+          !blocked &&
+              chat.busy &&
+              hasDraft &&
+              !slash &&
+              !chat.queueMutating &&
+              !chat.queueDraining
+          ? null
+          : 'Queue a draft during a running turn',
+      ComposerAction.fork: !blocked && _canForkDraft(chat)
+          ? null
+          : 'Fork needs a completed saved answer and text',
+    };
+  }
+
+  Widget _composerActionButton(ProfileChat chat) => ComposerActionButton(
+    key: ValueKey(chat.key),
+    primary: chat.busy && !chat.draft.trimLeft().startsWith('/')
+        ? ComposerAction.fromPreference(
+            controller.preferences.getString(ComposerAction.preferenceKey),
+          )
+        : ComposerAction.send,
+    unavailable: _composerActions(chat),
+    onSelected: (action) => _performComposerAction(chat, action),
+  );
+
+  Future<void> _performComposerAction(
+    ProfileChat chat,
+    ComposerAction action,
+  ) async {
+    if (controller.current?.chat != chat ||
+        _composerActions(chat)[action] != null) {
+      return;
+    }
+    final text = chat.draft.trim();
+    switch (action) {
+      case ComposerAction.send:
+        await _run(() => controller.send(chat));
+      case ComposerAction.stop:
+        await _run(() => controller.stop(chat));
+      case ComposerAction.queue:
+        await _run(() => controller.queuePrompt(chat, text));
+      case ComposerAction.fork:
+        await _run(() async {
+          await controller.forkPrompt(chat, text);
+        });
+      case ComposerAction.steer:
+        final accepted = await _runValue(() => controller.steer(chat, text));
+        if (accepted == true && mounted && chat.draft.trim() == text) {
+          await _run(() => controller.updateDraft(chat, ''));
+        } else if (accepted == false && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Hermes rejected the steering message.'),
+            ),
+          );
+        }
+    }
+  }
 
   bool _hasMessageActions(ProfileChat chat) =>
       chat.editingQueuedPrompt == null &&
@@ -1748,26 +1763,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       ),
     );
     if (!mounted || action == null) return;
-    if (action == 'fork') {
-      await _run(() async {
-        await controller.forkPrompt(chat, text);
-      });
-    } else if (action == 'steer') {
-      final accepted = await _runValue(() => controller.steer(chat, text));
-      if (accepted == true && mounted && chat.draft.trim() == text) {
-        await controller.updateDraft(chat, '');
-      } else if (accepted == false && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Hermes rejected the steering message.'),
-          ),
-        );
-      }
-    } else if (action == 'queue') {
-      await _run(() async => controller.queuePrompt(chat, text));
-    } else if (action == 'stop') {
-      await _run(() => controller.stop(chat));
-    }
+    await _performComposerAction(chat, ComposerAction.values.byName(action));
   }
 
   Future<T?> _runValue<T>(Future<T> Function() action) async {

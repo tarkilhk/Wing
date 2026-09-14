@@ -355,30 +355,39 @@ void main() {
         await tester.pumpWidget(const SizedBox.shrink());
       },
     );
-    testWidgets(
-      'working status allows drafting but exposes Stop, not a queued send',
-      (tester) async {
-        final chat = controller.current!.chat!;
-        chat.status = ProfileTurnStatus.running;
-        chat.streaming = 'A partial response';
-        chat.mainActivity = ProfileMainActivity.writing;
-        await show(tester);
-        expect(find.text('Writing response…'), findsOneWidget);
-        expect(find.byTooltip('Stop'), findsOneWidget);
-        expect(find.byTooltip('Send'), findsNothing);
-        expect(find.text('Draft your next message'), findsOneWidget);
-        await tester.enterText(find.byType(TextField), 'For later');
-        await tester.tap(find.byTooltip('Stop'));
-        // Interrupt acknowledgement is not a terminal event. The truthful
-        // working spinner keeps animating until the runtime confirms stopping.
-        await tester.pump(const Duration(milliseconds: 300));
-        expect(host.calls.last.$2, 'session.interrupt');
-        expect(host.calls.last.$3['profile'], 'personal');
-        expect(chat.draft, 'For later');
-        expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
-        await tester.pumpWidget(const SizedBox.shrink());
-      },
-    );
+    testWidgets('working status allows drafting and holding to stop', (
+      tester,
+    ) async {
+      final chat = controller.current!.chat!;
+      chat.status = ProfileTurnStatus.running;
+      chat.streaming = 'A partial response';
+      chat.mainActivity = ProfileMainActivity.writing;
+      await show(tester);
+      expect(find.text('Writing response…'), findsOneWidget);
+      expect(find.byTooltip('Steer'), findsOneWidget);
+      expect(find.byTooltip('Send'), findsNothing);
+      expect(find.text('Draft your next message'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'For later');
+      await tester.pump();
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byTooltip('Steer')),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await gesture.moveTo(
+        tester.getCenter(find.byKey(const ValueKey('composer-choice-stop'))),
+      );
+      await gesture.up();
+      // Interrupt acknowledgement is not a terminal event. The truthful
+      // working spinner keeps animating until the runtime confirms stopping.
+      await tester.pump(const Duration(milliseconds: 300));
+      final interrupt = host.calls.singleWhere(
+        (call) => call.$2 == 'session.interrupt',
+      );
+      expect(interrupt.$3['profile'], 'personal');
+      expect(chat.draft, 'For later');
+      expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
     testWidgets('Latest returns to the tail without losing loaded pages', (
       tester,
     ) async {

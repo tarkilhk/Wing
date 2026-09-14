@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.36.0+2217] - 2026-09-14
+
+### Changed
+
+- Use Steer as the default action during active work, with a device preference in Hermes administration.
+- Hold the composer button to open a vertical selector, slide to Steer, Stop, Queue or Fork, then release to act. Slide away to cancel.
+- Keep unavailable actions visible with an explanation and provide screen reader actions without dragging.
+
 ## [2.35.0+2216] - 2026-09-14
 
 ### Added

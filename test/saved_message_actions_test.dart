@@ -212,13 +212,33 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.longPress(find.byTooltip('Send'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Fork into a new chat'), findsOneWidget);
-    expect(
-      find.text('Branch at the latest saved answer and send this message'),
-      findsOneWidget,
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byTooltip('Send')),
     );
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byKey(const ValueKey('composer-choice-fork')), findsOneWidget);
+    await gesture.moveTo(
+      tester.getCenter(find.byKey(const ValueKey('composer-choice-fork'))),
+    );
+    await tester.pump();
+    expect(find.text('Fork'), findsOneWidget);
+    expect(host.calls.where((call) => call.$1 == 'session.branch'), isEmpty);
+    await gesture.up();
+    await tester.runAsync(() async {
+      for (var i = 0; i < 100 && original.draft.isNotEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    await tester.pump();
+    expect(
+      host.calls.where((call) => call.$1 == 'session.branch'),
+      hasLength(1),
+    );
+    expect(
+      host.calls.where((call) => call.$1 == 'prompt.submit'),
+      hasLength(1),
+    );
+    expect(original.draft, isEmpty);
+    await tester.pumpWidget(const SizedBox());
   });
 }

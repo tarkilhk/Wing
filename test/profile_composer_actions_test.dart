@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hermes_android/core/models/attachment_draft.dart';
@@ -11,6 +15,8 @@ import 'package:hermes_android/core/services/profile_workspace_controller.dart';
 import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
+import 'package:hermes_android/core/models/composer_action.dart';
+import 'package:hermes_android/core/widgets/composer_action_button.dart';
 
 class _ComposerActionsFixture extends ProfileActionsFixture {
   Map<String, dynamic> steerResult = {'status': 'queued'};
@@ -65,6 +71,19 @@ void main() {
     }
   }
 
+  Future<void> choose(WidgetTester tester, String action) async {
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(ComposerActionButton)),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.moveTo(
+      tester.getCenter(find.byKey(ValueKey('composer-choice-$action'))),
+    );
+    await tester.pump();
+    await gesture.up();
+    await pumpFrames(tester, count: 4);
+  }
+
   Future<ProfileChat> show(
     WidgetTester tester, {
     double scale = 1,
@@ -85,15 +104,43 @@ void main() {
     tester.view.physicalSize = const Size(360, 760);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    if (const bool.fromEnvironment('CAPTURE_COMPOSER')) {
+      await tester.runAsync(() async {
+        const fonts = String.fromEnvironment('CAPTURE_FONT_DIR');
+        for (final font in {
+          'Roboto': 'roboto-regular.ttf',
+          'MaterialIcons': 'materialicons-regular.otf',
+        }.entries) {
+          final loader = FontLoader(font.key)
+            ..addFont(
+              File(
+                '$fonts/${font.value}',
+              ).readAsBytes().then((bytes) => bytes.buffer.asByteData()),
+            );
+          await loader.load();
+        }
+      });
+    }
     await tester.pumpWidget(
-      MaterialApp(
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(scale)),
-          child: child!,
+      RepaintBoundary(
+        key: const ValueKey('composer-preview'),
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: const bool.fromEnvironment('CAPTURE_COMPOSER')
+              ? ThemeData.dark().copyWith(
+                  textTheme: ThemeData.dark().textTheme.apply(
+                    fontFamily: 'Roboto',
+                  ),
+                )
+              : null,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
+          home: ProfileWorkspaceScreen(controller: controller),
         ),
-        home: ProfileWorkspaceScreen(controller: controller),
       ),
     );
     await pumpFrames(tester);
@@ -110,7 +157,6 @@ void main() {
       paused: true,
     );
     expect(find.byTooltip('Message actions'), findsNothing);
-    expect(find.byIcon(Icons.more_horiz), findsNothing);
     await tester.longPress(find.text('Keep this queued'));
     await pumpFrames(tester, count: 4);
     expect(chat.queuedPrompts.single.text, 'Keep this queued');
@@ -120,6 +166,7 @@ void main() {
     expect(find.text('Queue'), findsOneWidget);
     expect(find.text('Steer'), findsOneWidget);
     expect(find.byTooltip('Delete queued message'), findsOneWidget);
+    expect(find.byTooltip('Message actions'), findsNothing);
     expect(
       tester
           .widget<TextField>(find.byKey(const Key('profile-message-composer')))
@@ -129,12 +176,78 @@ void main() {
     );
   });
 
-  testWidgets('normal tap remains Stop when the turn is busy', (tester) async {
+  testWidgets('configured Stop remains a normal tap action', (tester) async {
+    await controller.preferences.setString(
+      ComposerAction.preferenceKey,
+      'stop',
+    );
     await show(tester, status: ProfileTurnStatus.running);
     await tester.tap(find.byTooltip('Stop'));
     await tester.pump();
     expect(fixture.calls.any((call) => call.$2 == 'session.interrupt'), isTrue);
     expect(find.text('Queue for the next turn'), findsNothing);
+  });
+
+  testWidgets('running draft exposes held selector with the keyboard open', (
+    tester,
+  ) async {
+    final chat = await show(
+      tester,
+      status: ProfileTurnStatus.running,
+      draft: 'Follow this direction',
+    );
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    await pumpFrames(tester, count: 4);
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byTooltip('Steer')),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    for (final action in ['steer', 'stop', 'queue', 'fork']) {
+      expect(find.byKey(ValueKey('composer-choice-$action')), findsOneWidget);
+    }
+    if (const bool.fromEnvironment('CAPTURE_COMPOSER')) {
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(const ValueKey('composer-preview')),
+      );
+      await tester.runAsync(() async {
+        final image = await boundary.toImage(pixelRatio: 2);
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        await File(
+          'build/composer-held-selector.png',
+        ).writeAsBytes(bytes!.buffer.asUint8List());
+        image.dispose();
+      });
+    }
+    expect(chat.draft, 'Follow this direction');
+    expect(
+      fixture.calls.any((call) => call.$2 == 'session.interrupt'),
+      isFalse,
+    );
+    await gesture.cancel();
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('configured Queue is used without changing future selections', (
+    tester,
+  ) async {
+    await controller.preferences.setString(
+      ComposerAction.preferenceKey,
+      'queue',
+    );
+    final chat = await show(
+      tester,
+      status: ProfileTurnStatus.running,
+      draft: 'Later',
+    );
+    await tester.tap(find.byTooltip('Queue'));
+    await pumpFrames(tester);
+    expect(chat.queuedPrompts.single.text, 'Later');
+    expect(chat.draft, isEmpty);
+    expect(
+      controller.preferences.getString(ComposerAction.preferenceKey),
+      'queue',
+    );
   });
 
   testWidgets('running chats allow choosing files for the next draft', (
@@ -149,7 +262,7 @@ void main() {
     await pumpFrames(tester);
   });
 
-  testWidgets('Message actions queues the draft and clears the composer', (
+  testWidgets('Held slide queues the draft and clears the composer', (
     tester,
   ) async {
     final chat = await show(
@@ -157,11 +270,12 @@ void main() {
       status: ProfileTurnStatus.running,
       draft: 'follow up after this turn',
     );
-    await tester.longPress(find.byTooltip('Stop'));
-    await pumpFrames(tester, count: 4);
-    expect(fixture.calls.any((call) => call.$2 == 'session.interrupt'), isFalse);
-    await tester.tap(find.text('Queue for the next turn'));
-    await pumpFrames(tester, count: 4);
+    await choose(tester, 'queue');
+    expect(
+      fixture.calls.any((call) => call.$2 == 'session.interrupt'),
+      isFalse,
+    );
+
     expect(chat.queuedPrompts.single.text, 'follow up after this turn');
     expect(chat.draft, isEmpty);
     final preview = find.text('follow up after this turn');
@@ -186,9 +300,7 @@ void main() {
       status: ProfileTurnStatus.running,
       draft: 'Focus on the failing test',
     );
-    await tester.longPress(find.byTooltip('Stop'));
-    await pumpFrames(tester, count: 4);
-    await tester.tap(find.text('Steer this turn'));
+    await tester.tap(find.byTooltip('Steer'));
     await pumpFrames(tester, count: 4);
     expect(chat.draft, isEmpty);
     expect(find.text('steered'), findsOneWidget);
@@ -227,7 +339,7 @@ void main() {
     expect(find.text('Keep the data clean'), findsOneWidget);
   });
 
-  testWidgets('Message actions queues an attachment-only draft by filename', (
+  testWidgets('Held slide queues an attachment-only draft by filename', (
     tester,
   ) async {
     final file = AttachmentDraft(
@@ -243,15 +355,12 @@ void main() {
       status: ProfileTurnStatus.running,
       attachments: [file],
     );
-    await tester.longPress(find.byTooltip('Stop'));
-    await pumpFrames(tester, count: 4);
-    await tester.tap(find.text('Queue for the next turn'));
-    await pumpFrames(tester, count: 4);
+    await choose(tester, 'queue');
     expect(chat.queuedPrompts.single.attachments, [same(file)]);
     expect(chat.attachments, isEmpty);
     expect(find.text('report.pdf'), findsOneWidget);
 
-    await tester.longPress(find.byTooltip('Stop'));
+    await tester.tap(find.text('report.pdf'));
     await pumpFrames(tester, count: 4);
     expect(find.text('Queued: Attachment'), findsOneWidget);
     expect(find.text('1 attachment: report.pdf'), findsOneWidget);
@@ -402,9 +511,7 @@ void main() {
       status: ProfileTurnStatus.running,
       draft: 'keep this if Hermes rejects it',
     );
-    await tester.longPress(find.byTooltip('Stop'));
-    await pumpFrames(tester, count: 4);
-    await tester.tap(find.text('Steer this turn'));
+    await tester.tap(find.byTooltip('Steer'));
     await pumpFrames(tester, count: 4);
     expect(chat.draft, 'keep this if Hermes rejects it');
     expect(find.text('steered'), findsNothing);
@@ -420,9 +527,7 @@ void main() {
       status: ProfileTurnStatus.running,
       draft: 'Check the timeout',
     );
-    await tester.longPress(find.byTooltip('Stop'));
-    await pumpFrames(tester, count: 4);
-    await tester.tap(find.text('Steer this turn'));
+    await tester.tap(find.byTooltip('Steer'));
     await pumpFrames(tester, count: 4);
     expect(find.text('steered'), findsNothing);
     await tester.enterText(
@@ -460,9 +565,7 @@ void main() {
       status: ProfileTurnStatus.running,
       draft: 'Keep this draft',
     );
-    await tester.longPress(find.byTooltip('Stop'));
-    await pumpFrames(tester, count: 4);
-    await tester.tap(find.text('Steer this turn'));
+    await tester.tap(find.byTooltip('Steer'));
     await pumpFrames(tester, count: 4);
     fixture.steerReply!.completeError(StateError('Connection lost'));
     await pumpFrames(tester, count: 4);
@@ -496,13 +599,27 @@ void main() {
     },
   );
 
-  testWidgets('large text scale keeps the actions sheet bounded', (
+  testWidgets('large text scale keeps the held selector bounded', (
     tester,
   ) async {
-    await show(tester, scale: 2.4, queued: ['first', 'second', 'third']);
-    await tester.longPress(find.byTooltip('Send'));
-    await tester.pumpAndSettle();
+    await show(
+      tester,
+      scale: 2.4,
+      status: ProfileTurnStatus.running,
+      draft: 'Steer me',
+    );
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    await pumpFrames(tester, count: 4);
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byTooltip('Steer')),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(
+      find.byKey(const ValueKey('composer-action-selector')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
-    expect(find.text('Queued: first'), findsOneWidget);
+    await gesture.cancel();
+    await tester.pump();
   });
 }
