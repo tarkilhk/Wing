@@ -13,6 +13,8 @@ import 'package:hermes_android/core/services/ws_client.dart';
 import 'package:hermes_android/core/widgets/answer_actions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/process_batch_fixture.dart';
+
 class AnswerHost {
   final gateways = <String, ProfileGateway>{};
   final histories = <String, List<Map<String, dynamic>>>{};
@@ -225,6 +227,7 @@ void main() {
   tearDown(() => controller.dispose());
 
   for (final delivery in [
+    processBatchEnvelope,
     '[IMPORTANT: Background process 1 completed normally (exit code 0).\nCommand: private\nOutput:\n]',
     'Message from 🤖 Hermes: private delivery',
   ]) {

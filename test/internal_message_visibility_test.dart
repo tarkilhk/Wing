@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_history_fixture.dart';
+import 'support/process_batch_fixture.dart';
 
 const _envelope =
     '[ASYNC DELEGATION BATCH COMPLETE — deleg_be8ac8e4]\n'
@@ -55,10 +56,44 @@ class _NoticeHistory extends ProfileHistoryFixture {
     {'id': 6, 'role': 'user', 'content': _agentEnvelope},
     {'id': 7, 'role': 'assistant', 'content': 'Private agent reply'},
     {'id': 8, 'role': 'user', 'content': _skillEnvelope},
+    {'id': 9, 'role': 'user', 'content': processBatchEnvelope},
   ];
 }
 
 void main() {
+  for (final width in [360.0, 900.0]) {
+    testWidgets('producer batch renders one compact notice at $width', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(width, 760);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ProfileMessage(
+                message: {'role': 'user', 'content': processBatchEnvelope},
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text(processBatchEnvelope), findsNothing);
+      expect(find.byTooltip('Copy message'), findsNothing);
+      expect(find.text('16 background processes completed'), findsOneWidget);
+      expect(find.textContaining('Action needed'), findsNothing);
+      await tester.tap(find.text('Output'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Action needed: check failed'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('[IMPORTANT:'), findsNothing);
+      expect(find.textContaining('Treat these results'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
   testWidgets('process completion never exposes its delivery envelope', (
     tester,
   ) async {
@@ -144,8 +179,21 @@ void main() {
         expect(find.text(_agentEnvelope), findsNothing);
         expect(find.text(_skillEnvelope), findsNothing);
         expect(find.text('/work fix the leak'), findsOneWidget);
+        expect(find.text(processBatchEnvelope), findsNothing);
+        expect(find.text('16 background processes completed'), findsOneWidget);
+        expect(find.byKey(const ValueKey('edit-message-9')), findsNothing);
         // Retain server history and IDs for paging/rewind; filter only the view.
-        expect(chat.messages.map((row) => row['id']), [1, 2, 3, 4, 5, 6, 7, 8]);
+        expect(chat.messages.map((row) => row['id']), [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+        ]);
         await controller.refreshHistory(chat);
         await tester.pumpAndSettle();
       }
@@ -354,6 +402,7 @@ void main() {
       'Private skill body',
       'Runtime note',
       '(@hermes)',
+      'Treat these results as one batch',
     ]) {
       await tester.enterText(find.byType(TextField), query);
       await tester.pump();
@@ -366,6 +415,13 @@ void main() {
     await tester.pump();
     expect(find.text('1 matching message'), findsOneWidget);
     expect(find.text('system'), findsOneWidget);
+    await tester.enterText(
+      find.byType(TextField),
+      'Action needed: check failed',
+    );
+    await tester.pump();
+    expect(find.text('1 matching message'), findsOneWidget);
+    expect(find.textContaining('Treat these results'), findsNothing);
   });
 
   test('hidden rows do not split tool groups or become prompts', () {

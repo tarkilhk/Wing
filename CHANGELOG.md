@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.36.3+2220] - 2026-09-14
+
+### Fixed
+- Render background-process batches as one compact notice with collapsed results. Validate the producer's batch structure and reuse Desktop's process parser, preserving failures without exposing internal response instructions.
+
 ## [2.36.2+2219] - 2026-09-14
 
 ### Fixed

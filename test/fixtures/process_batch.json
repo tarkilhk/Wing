@@ -1,0 +1,41 @@
+{
+  "source_commit": "e16f686706b1e0d5334fd1ae82190058d2a19694",
+  "producer": "tools/process_registry_notifications.py:ProcessNotificationBatch.render",
+  "batch": "[IMPORTANT: 16 background processes completed. Treat these results as one batch and give one consolidated response; preserve failures and actionable results.]\n\n[IMPORTANT: Background process proc_fixture_1 completed normally (exit code 0).\nCommand: check-step 1\nOutput:\nStep 1 passed [OK]\n\nMore output]\n\n[IMPORTANT: Background process proc_fixture_2 completed normally (exit code 0).\nCommand: check-step 2\nOutput:\nStep 2 passed [OK]\n\nMore output]\n\n[IMPORTANT: Background process proc_fixture_3 completed normally (exit code 0).\nCommand: check-step 3\nOutput:\nStep 3 passed [OK]\n\nMore output]\n\n[IMPORTANT: Background process proc_fixture_4 completed normally (exit code 0).\nCommand: check-step 4\nOutput:\nStep 4 passed [OK]\n\nMore output]\n\n[IMPORTANT: Background process proc_fixture_5 completed normally (exit code 0).\nCommand: check-step 5\nOutput:\nStep 5 passed [OK]\n\nMore output]\n\n[IMPORTANT: Background process proc_fixture_6 completed normally (exit code 0).\nCommand: check-step 6\nOutput:\nStep 6 passed [OK]\n\nMore output]\n\n[IMPORTANT: Background process proc_fixture_7 completed normally (exit code 0).\nCommand: check-step 7\nOutput:\nStep 7 passed [OK]\n\nMore output]\n\n[IMPORTANT: Background process proc_fixture_8 completed normally (exit code 0).\nCommand: check-step 8\nOutput:\nStep 8 passed [OK]\n\nMore output]\n\n[IMPORTANT: Background process proc_fixture_9 completed normally (exit code 0).\nCommand: check-step 9\nOutput:\nStep 9 passed [OK]\n\nMore output]\n\n[IMPORTANT: Background process proc_fixture_10 completed normally (exit code 0).\nCommand: check-step 10\nOutput:\nStep 10 passed [OK]\n\nMore output]\n\n[IMPORTANT: Background process proc_fixture_11 completed normally (exit code 0).\nCommand: check-step 11\nOutput:\nStep 11 passed [OK]\n\nMore output]\n\n[IMPORTANT: Background process proc_fixture_12 completed normally (exit code 0).\nCommand: check-step 12\nOutput:\nStep 12 passed [OK]\n\nMore output]\n\n[IMPORTANT: Background process proc_fixture_13 completed normally (exit code 0).\nCommand: check-step 13\nOutput:\nStep 13 passed [OK]\n\nMore output]\n\n[IMPORTANT: Background process proc_fixture_14 completed normally (exit code 0).\nCommand: check-step 14\nOutput:\nStep 14 passed [OK]\n\nMore output]\n\n[IMPORTANT: Background process proc_fixture_15 completed normally (exit code 0).\nCommand: check-step 15\nOutput:\nStep 15 passed [OK]\n\nMore output]\n\n[IMPORTANT: Background process proc_fixture_16 exited (exit code 1).\nCommand: check-step 16\nOutput:\nAction needed: check failed]",
+  "notices": [
+    "[IMPORTANT: Background process proc_fixture_1 completed normally (exit code 0).\nCommand: check-step 1\nOutput:\nStep 1 passed [OK]\n\nMore output]",
+    "[IMPORTANT: Background process proc_fixture_2 completed normally (exit code 0).\nCommand: check-step 2\nOutput:\nStep 2 passed [OK]\n\nMore output]",
+    "[IMPORTANT: Background process proc_fixture_3 completed normally (exit code 0).\nCommand: check-step 3\nOutput:\nStep 3 passed [OK]\n\nMore output]",
+    "[IMPORTANT: Background process proc_fixture_4 completed normally (exit code 0).\nCommand: check-step 4\nOutput:\nStep 4 passed [OK]\n\nMore output]",
+    "[IMPORTANT: Background process proc_fixture_5 completed normally (exit code 0).\nCommand: check-step 5\nOutput:\nStep 5 passed [OK]\n\nMore output]",
+    "[IMPORTANT: Background process proc_fixture_6 completed normally (exit code 0).\nCommand: check-step 6\nOutput:\nStep 6 passed [OK]\n\nMore output]",
+    "[IMPORTANT: Background process proc_fixture_7 completed normally (exit code 0).\nCommand: check-step 7\nOutput:\nStep 7 passed [OK]\n\nMore output]",
+    "[IMPORTANT: Background process proc_fixture_8 completed normally (exit code 0).\nCommand: check-step 8\nOutput:\nStep 8 passed [OK]\n\nMore output]",
+    "[IMPORTANT: Background process proc_fixture_9 completed normally (exit code 0).\nCommand: check-step 9\nOutput:\nStep 9 passed [OK]\n\nMore output]",
+    "[IMPORTANT: Background process proc_fixture_10 completed normally (exit code 0).\nCommand: check-step 10\nOutput:\nStep 10 passed [OK]\n\nMore output]",
+    "[IMPORTANT: Background process proc_fixture_11 completed normally (exit code 0).\nCommand: check-step 11\nOutput:\nStep 11 passed [OK]\n\nMore output]",
+    "[IMPORTANT: Background process proc_fixture_12 completed normally (exit code 0).\nCommand: check-step 12\nOutput:\nStep 12 passed [OK]\n\nMore output]",
+    "[IMPORTANT: Background process proc_fixture_13 completed normally (exit code 0).\nCommand: check-step 13\nOutput:\nStep 13 passed [OK]\n\nMore output]",
+    "[IMPORTANT: Background process proc_fixture_14 completed normally (exit code 0).\nCommand: check-step 14\nOutput:\nStep 14 passed [OK]\n\nMore output]",
+    "[IMPORTANT: Background process proc_fixture_15 completed normally (exit code 0).\nCommand: check-step 15\nOutput:\nStep 15 passed [OK]\n\nMore output]",
+    "[IMPORTANT: Background process proc_fixture_16 exited (exit code 1).\nCommand: check-step 16\nOutput:\nAction needed: check failed]"
+  ],
+  "outputs": [
+    "Step 1 passed [OK]\n\nMore output",
+    "Step 2 passed [OK]\n\nMore output",
+    "Step 3 passed [OK]\n\nMore output",
+    "Step 4 passed [OK]\n\nMore output",
+    "Step 5 passed [OK]\n\nMore output",
+    "Step 6 passed [OK]\n\nMore output",
+    "Step 7 passed [OK]\n\nMore output",
+    "Step 8 passed [OK]\n\nMore output",
+    "Step 9 passed [OK]\n\nMore output",
+    "Step 10 passed [OK]\n\nMore output",
+    "Step 11 passed [OK]\n\nMore output",
+    "Step 12 passed [OK]\n\nMore output",
+    "Step 13 passed [OK]\n\nMore output",
+    "Step 14 passed [OK]\n\nMore output",
+    "Step 15 passed [OK]\n\nMore output",
+    "Action needed: check failed"
+  ]
+}
