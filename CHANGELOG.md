@@ -16,6 +16,18 @@
 
 - Shorten the README, move the detailed feature inventory into docs, correct store claims and release instructions, and archive the inherited F-Droid recipe.
 
+## [2.36.14+2231] - 2026-09-15
+
+### Changed
+- Replace the full-width New chat shelf with a compact floating plus button.
+- Extend the chat list into the freed space, with scroll padding so the final row can clear the button.
+
+## [2.36.13+2230] - 2026-09-15
+
+### Fixed
+- Hide internal task-list reminders injected after context compression from the conversation, search and edit controls.
+- Preserve ordinary lists, quoted reminders, assistant text and durable history IDs.
+
 ## [2.36.12+2229] - 2026-09-15
 
 ### Changed
