@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_history_fixture.dart';
 import 'support/process_batch_fixture.dart';
+import 'task_snapshot_visibility_test.dart' show snapshot, snapshotHeader;
 
 const _envelope =
     '[ASYNC DELEGATION BATCH COMPLETE — deleg_be8ac8e4]\n'
@@ -57,6 +58,7 @@ class _NoticeHistory extends ProfileHistoryFixture {
     {'id': 7, 'role': 'assistant', 'content': 'Private agent reply'},
     {'id': 8, 'role': 'user', 'content': _skillEnvelope},
     {'id': 9, 'role': 'user', 'content': processBatchEnvelope},
+    {'id': 10, 'role': 'user', 'content': snapshot},
   ];
 }
 
@@ -182,6 +184,8 @@ void main() {
         expect(find.text(processBatchEnvelope), findsNothing);
         expect(find.text('16 background processes completed'), findsOneWidget);
         expect(find.byKey(const ValueKey('edit-message-9')), findsNothing);
+        expect(find.textContaining(snapshotHeader), findsNothing);
+        expect(find.byKey(const ValueKey('edit-message-10')), findsNothing);
         // Retain server history and IDs for paging/rewind; filter only the view.
         expect(chat.messages.map((row) => row['id']), [
           1,
@@ -193,6 +197,7 @@ void main() {
           7,
           8,
           9,
+          10,
         ]);
         await controller.refreshHistory(chat);
         await tester.pumpAndSettle();
@@ -220,6 +225,10 @@ void main() {
     await tester.pump();
     expect(find.textContaining('Private instructions'), findsNothing);
     expect(find.text('Private hidden instructions'), findsNothing);
+    expect(find.text('View in chat'), findsNothing);
+    await tester.enterText(find.byType(TextField), 'Quiesce processing');
+    await tester.pump();
+    expect(find.textContaining(snapshotHeader), findsNothing);
     expect(find.text('View in chat'), findsNothing);
     await tester.enterText(find.byType(TextField), 'First useful result');
     await tester.pump();

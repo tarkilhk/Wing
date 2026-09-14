@@ -1,7 +1,7 @@
 name: hermes_android
 description: "A mobile client for Hermes profiles, conversations and agent work."
 publish_to: 'none'
-version: 2.36.12+2229
+version: 2.36.13+2230
 
 environment:
   sdk: ^3.12.0
