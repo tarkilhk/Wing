@@ -1,5 +1,9 @@
 # Local Android build setup
 
+These are maintainer-specific machine and performance notes. Contributors should
+start with [Contributing](../CONTRIBUTING.md); no particular Windows username or
+checkout location is required. Dated paths below preserve their original context.
+
 The owner selected `C:\Users\rober\Documents\Projects\hermes-android` on
 2026-09-14. Build directly from this persistent checkout outside OneDrive with
 the existing `C:\Users\rober\Development\android-dev` toolchain. Keep `build/`,

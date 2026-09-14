@@ -171,6 +171,7 @@ class ProfileChat {
   bool _replacingExpiredRuntime = false;
   int _attachmentPreparations = 0;
   bool _submissionInFlight = false;
+  bool get sendingPrompt => _submissionInFlight;
   int _turnGeneration = 0;
   Completer<void>? _replacementCompletion;
   Future<void>? _draftWrites;
@@ -3971,6 +3972,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   Future<void> queuePrompt(ProfileChat chat, String rawText) async {
     _owned(chat);
+    if (chat.sendingPrompt) {
+      throw StateError(
+        'Wait for the current message to finish sending before queueing a follow-up.',
+      );
+    }
     if (chat._replacingExpiredRuntime ||
         chat.queueMutating ||
         chat.queueDraining) {

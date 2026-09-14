@@ -1,16 +1,18 @@
-Hermes Android connects to a Hermes Agent Gateway API Server over LAN, Wi-Fi, or a private Tailscale network. It provides a full chat experience with streaming responses, session browsing, per-chat model selection, voice dictation, and multi-attachment uploads.
+Continue conversations with your own Hermes Agent from an Android phone.
+
+Hermes Personal is an independent Android client. It requires a compatible Hermes dashboard and Desktop Gateway that you operate or have permission to use. It does not run a model on the phone or provide a hosted AI account. Your server and model provider may have their own costs.
 
 Features:
-• Unified Desktop Gateway JSON-RPC transport (same as Hermes Desktop)
-• Streaming responses with real-time tool progress cards
-• Per-chat model and thinking-effort selection
-• Up to 10 attachments per message (images and files, 16 MiB each)
-• Voice dictation with optional text-to-speech replies
-• Session search, rename, branch, and delete
-• Copy/Select, Read Aloud, Edit+Resend, Regenerate, Stop, Export
-• Memory, Cron Jobs, Skills, and Settings via the dashboard API
-• Background turn notifications (v2.0.1+)
-• Durable turn recovery across Android process-kill lifecycle events
-• Dark / light / system theme with gold Hermes branding
+- Streaming chats with per-chat model and reasoning choices
+- Profiles, projects, pinned chats, unread filters and conversation search
+- Tool activity, subagent and goal supervision where supported by the server
+- Durable unsent drafts, text/file follow-up queues and text-only steering
+- Photo/file attachments, reviewed Android shares and voice dictation into a draft
+- Output reading and sharing, including images, PDFs, Markdown and supported diagrams
+- Supported profile/server administration and device appearance settings
 
-Requires a running Hermes Agent gateway accessible from the device. No cloud account or subscription — you own the server.
+Local notifications require an active client connection and have limited coverage of unopened chats. Follow-up queues drain while the app is running and connected. If Android closes during a send, check server history before resending a recovered draft.
+
+Use HTTPS or an encrypted private network for remote connections. Server capabilities determine which operations are available. There is no offline conversation archive, general remote filesystem browser or Cron/messaging administration.
+
+Read the setup guide and privacy policy in the project repository. The privacy policy is also available offline in App settings.

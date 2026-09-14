@@ -1,5 +1,9 @@
 # Supervision and queues — 2026-09-12
 
+Current controls use the [held-slide composer selector](COMPOSER_ACTION_GESTURE.md).
+The initial delivery below predates that interaction. Queue now waits for an
+in-flight submission to finish before taking its draft or attachments.
+
 This delivery covers D05, D07, D08 and D09 from the selected product plan. D06 approval controls shipped with the conversation foundations. Desktop contract evidence and backend gaps are recorded in [mobile delivery checks](research/MOBILE_DELIVERY_CONTRACTS_2026-09-11.md).
 
 ## Delivered behavior

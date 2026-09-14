@@ -1,5 +1,9 @@
 # Conversation foundations — 2026-09-11
 
+Current caveat: a normal send interrupted by process death before acknowledgement can
+restore text without an uncertainty warning. Check server history before resending.
+See [Known limitations](KNOWN_LIMITATIONS.md). The following delivery evidence is dated.
+
 First feature delivery after the app shell: D01–D04, plus the small D06 approval improvements and D08 device switches. Full Activity and sensitive requests remain separate work. The owner authorized implementation in priority order, inexpensive agents for bounded tasks, and regular commits and pushes to `main`.
 
 ## Changes

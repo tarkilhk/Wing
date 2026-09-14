@@ -1,15 +1,15 @@
 # Upstream Hermes bugs
 
-Tracks backend failures and contract gaps reproduced during Android acceptance. This is a repository tracker, not a record of issues filed with upstream maintainers. No backend source changes are authorized by these entries.
+Tracks backend failures and contract gaps reproduced during Android acceptance. This records backend evidence and links to local tracking issues. Upstream reports are listed separately. No backend source changes are authorized by these entries.
 
 Last verified: 2026-09-14, local Hermes 0.21.2, installed source commit `e16f686706b1e0d5334fd1ae82190058d2a19694`, using the Android emulator and real model/browser execution. See the [acceptance ledger](QA_FINAL_FIVE_2026-09-14.md) and [source contract notes](REMAINING_CONTRACT_CHECKS_2026-09-14.md).
 
-| ID | Priority | Issue | Status | Upstream issue |
-| --- | --- | --- | --- | --- |
-| HUP-001 | High | Browser and vault target different tabs | Open, reproduced | Not filed |
-| HUP-002 | Medium | Non-default profile loop command/control mismatch | Open, reproduced | Not filed |
-| HUP-003 | Medium | Global activity omits child-only work | Open, reproduced contract gap | Not filed |
-| HUP-004 | Medium | Windows profile deletion fails with an open MCP log handle | Open, fix proposed | [Issue #110953](https://github.com/NousResearch/hermes-agent/issues/110953), [PR #110954](https://github.com/NousResearch/hermes-agent/pull/110954) |
+| ID | Priority | Issue | Status | Upstream issue | Local issue |
+| --- | --- | --- | --- | --- | --- |
+| HUP-001 | High | Browser and vault target different tabs | Open, reproduced | Not filed | [#19](https://github.com/tarkilhk/hermes-android/issues/19) |
+| HUP-002 | Medium | Non-default profile loop command/control mismatch | Open, reproduced | Not filed | [#20](https://github.com/tarkilhk/hermes-android/issues/20) |
+| HUP-003 | Medium | Global activity omits child-only work | Open, reproduced contract gap | Not filed | [#21](https://github.com/tarkilhk/hermes-android/issues/21) |
+| HUP-004 | Medium | Windows profile deletion fails with an open MCP log handle | Open, fix proposed | [Issue #110953](https://github.com/NousResearch/hermes-agent/issues/110953), [PR #110954](https://github.com/NousResearch/hermes-agent/pull/110954) | [#22](https://github.com/tarkilhk/hermes-android/issues/22) |
 
 Priorities reflect mobile impact. Close an entry only after its acceptance criteria pass against a recorded backend version. Add the upstream issue URL and fix commit when available; a newer version alone does not establish a fix.
 
@@ -111,3 +111,5 @@ released processes/file handles without affecting another profile.
 | 2026-09-14 | Created HUP-001 through HUP-003 from the completed local acceptance pass. No upstream issue has been filed, no fix claimed, and no backend source changed. |
 | 2026-09-14 | Added HUP-004 from native administration acceptance against the same installed backend revision. |
 | 2026-09-14 | Filed HUP-004 upstream as #110953 and proposed fix #110954 after current-main reproduction and regression validation; installed backend unchanged. |
+
+Local tracking issues were filed in this fork on 2026-09-15. See [Bug tracker](BUG_TRACKER.md). No additional upstream issue or backend fix was created by that documentation cleanup.

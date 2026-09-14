@@ -201,6 +201,8 @@ Full official source inspected under the existing local Hermes checkout:
 
 ## Notification findings
 
+Historical diagnosis from 2.32.0. The connected-app reconciliation described below shipped in 2.34.2; see [local alert QA](LOCAL_ALERT_QA_2026-09-14.md) for passing checks and remaining delivery limits.
+
 On the installed 2.32.0 client, a read-only phone check confirmed notification
 permission granted and the Hermes channel enabled at default importance. The
 reported symptom is occasional alerts, with most expected alerts missing.

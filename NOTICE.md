@@ -1,16 +1,11 @@
-# Attribution and status
+# Attribution and license
 
-This repository is a community derivative of
-[rusty4444/hermes-android](https://github.com/rusty4444/hermes-android).
+Hermes Personal is the `tarkilhk/hermes-android` fork of [rusty4444/hermes-android](https://github.com/rusty4444/hermes-android). It is maintained independently and is not an official Hermes Agent, Nous Research or upstream Hermes Android release.
 
-The Remote Gateway additions are maintained independently and are not an
-official Hermes Agent, Nous Research, or upstream Hermes Android release.
+Upstream identifies Hermes Android as MIT. This fork retains that license identification and the attribution to its original authors. Preserve applicable copyright and permission notices when redistributing.
 
-The upstream snapshot used for this work did not contain a license file. This
-repository does not add a license grant for upstream code. Copyright and other
-rights remain with their respective authors. The repository is published as a
-GitHub fork to preserve source history and attribution.
+Inherited contributors include CarlosReyesPena, CristianGCiocoi, AI-Guru, grunjol, louquillio, sternbergm and the upstream maintainer. The [changelog](CHANGELOG.md) and Git history retain their work and attribution.
 
-Synthetic fixture credentials are test data only. No private gateway
-credentials, release signing keys, device profiles, or operator logs are part
-of the public source tree.
+Vendored diagram assets retain [Mermaid's license](android/app/src/main/assets/diagrams/MERMAID-LICENSE) and [DOMPurify's license](android/app/src/main/assets/diagrams/DOMPURIFY-LICENSE). These apply to their respective components.
+
+The [archived F-Droid recipe](docs/archive/README.md) is historical upstream distribution material, not a current submission for this fork.

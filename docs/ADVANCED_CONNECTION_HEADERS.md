@@ -22,10 +22,10 @@ and Desktop gateway paths share these headers. The WebSocket handshake uses the
 same captured connection values. Hermes still supplies its own session cookie,
 token and JSON content type.
 
-Requests with custom headers reject redirects. Configure the final address
-directly; this avoids forwarding proxy secrets to another origin. Ordinary
-connections keep their existing behavior. No separate proxy service or broad
-administration screen is introduced.
+All dashboard HTTP requests reject redirects, including ordinary session-token
+and password-authenticated requests without custom headers. Configure the final
+address directly; credentials must not follow a redirect to another origin.
+The WebSocket custom-header guard remains in place.
 
 ## Contract evidence
 
@@ -36,8 +36,9 @@ keep/replace/remove behavior using its existing credential storage.
 
 The installed Dart SDK's `WebSocket.connect` adds caller headers to a regular
 HTTP request without disabling redirects. Its HTTP redirect implementation
-copies custom headers. The Android HTTP client and the narrow WebSocket custom
-client therefore disable redirect following when custom headers are present.
+copies custom headers. The original HTTP and WebSocket guards disabled redirects when custom headers
+were present. The 15 September correction applies the HTTP guard to every
+dashboard request so Hermes session-token headers receive the same protection.
 
 Verification for 2.15.0: 1,124 tests passed, four opt-in skips, clean analyzer. Focused checks cover secure rollback/persistence, connection identities, form validation and retained edits, encrypted backup, token/password/proxy authentication, WebSocket tickets, and real HTTP/WebSocket redirects. The WebSocket redirect regression was confirmed failing without the guard and passing with it. No live proxy credentials or backend settings were changed.
 

@@ -9,6 +9,7 @@ import '../services/background_push_service.dart';
 import '../widgets/text_size_settings_card.dart';
 import '../widgets/installed_app_version_card.dart';
 import '../widgets/composer_action_settings.dart';
+import 'privacy_policy_screen.dart';
 
 /// Existing device preferences, shared by connected and disconnected navigation.
 class AppSettingsContent extends StatefulWidget {
@@ -95,6 +96,19 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
           child: Text('Appearance and notifications for this device.'),
         ),
         const InstalledAppVersionCard(),
+        const SizedBox(height: 12),
+        Card(
+          child: ListTile(
+            key: const ValueKey('privacy-policy'),
+            leading: const Icon(Icons.privacy_tip_outlined),
+            title: const Text('Privacy policy'),
+            subtitle: const Text('Data use, storage and your choices.'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+            ),
+          ),
+        ),
         const SizedBox(height: 12),
         Card(
           child: Padding(

@@ -1429,13 +1429,14 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       ComposerAction.stop: !blocked && chat.busy
           ? null
           : 'No running turn to stop',
-      ComposerAction.queue:
-          !blocked &&
-              chat.busy &&
-              hasDraft &&
-              !slash &&
-              !chat.queueMutating &&
-              !chat.queueDraining
+      ComposerAction.queue: chat.sendingPrompt
+          ? 'Wait for the current message to finish sending'
+          : !blocked &&
+                chat.busy &&
+                hasDraft &&
+                !slash &&
+                !chat.queueMutating &&
+                !chat.queueDraining
           ? null
           : 'Queue a draft during a running turn',
       ComposerAction.fork: !blocked && _canForkDraft(chat)

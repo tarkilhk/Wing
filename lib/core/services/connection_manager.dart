@@ -1168,9 +1168,9 @@ class DashboardClient {
          '${useHttps ? 'https' : 'http'}://$host:$port',
          pathPrefix,
        ),
-       _http = gatewayHeaders.isEmpty
-           ? httpClient ?? http.Client()
-           : _NoRedirectClient(httpClient ?? http.Client());
+       // The app's session-token header is a credential even when the user
+       // has not configured custom proxy headers. Never redirect either.
+       _http = _NoRedirectClient(httpClient ?? http.Client());
 
   Map<String, String> get _jsonHeaders => {
     ..._gatewayHeaders,

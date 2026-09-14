@@ -3,7 +3,7 @@
 Owner direction, 2026-09-14. This replaces the earlier W02 proposal that kept
 Stop as the busy composer's primary action and opened a sheet on long press.
 
-- A tap uses Steer while a turn is working. Hermes administration offers Steer,
+- A tap uses Steer while a turn is working. App settings offers Steer,
   Queue, or Stop as the default for this device. Idle chats and slash commands
   use Send.
 - The resting button always shows the up arrow. Holding animates it into the
@@ -19,6 +19,8 @@ Stop as the busy composer's primary action and opened a sheet on long press.
 - Unavailable choices stay visible and dimmed. Moving onto one shows why it
   cannot run. Releasing there does nothing. Empty text and attachments cannot
   be steered; Stop remains reachable through the gesture.
+- Queue waits for the current send to finish submitting before moving the draft
+  or attachments. The unavailable reason explains the wait; typing remains possible.
 - Fork requires text and a completed saved answer. It branches at that answer
   and submits the draft in the child chat. It is unavailable during a turn.
 - Pointer cancellation, navigation, app backgrounding, geometry changes, and

@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Stop dashboard HTTP redirects from forwarding session credentials to another endpoint.
+- Prevent Queue from taking attachments while a normal send is awaiting acknowledgement.
+
+### Added
+
+- Offline privacy policy accessible from App settings.
+- First-connection guide, contributor instructions, known limitations and Play Data safety inventory.
+
+### Changed
+
+- Shorten the README, move the detailed feature inventory into docs, correct store claims and release instructions, and archive the inherited F-Droid recipe.
+
 ## [2.36.12+2229] - 2026-09-15
 
 ### Changed

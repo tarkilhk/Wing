@@ -2,6 +2,20 @@
 
 ## Start here
 
+| I want to... | Read |
+| --- | --- |
+| Install and connect the app | [Getting started](GETTING_STARTED.md) |
+| Learn the current controls and features | [Feature guide](FEATURES.md) |
+| Understand reliability and backend limits | [Known limitations](KNOWN_LIMITATIONS.md) |
+| Understand storage, dictation and deletion | [Privacy policy](../PRIVACY.md) |
+| Build or contribute | [Contributing](../CONTRIBUTING.md) |
+| Prepare an APK or Play release | [Release guide](ANDROID_RELEASE_PLAN.md) and [Data safety inventory](PLAY_DATA_SAFETY.md) |
+| Report or track a problem | [Security and support](../SECURITY.md) and [Bug tracker](BUG_TRACKER.md) |
+
+The user guides describe current behavior. Feature contracts explain ownership and server dependencies. Dated delivery, QA and research records preserve what was known at their stated revision; their test counts and deployment paths are historical evidence.
+
+## Product and design
+
 The [Studio design charter](DESIGN_SYSTEM.md) owns the selected design language for all UI work. It records the light/dark palette, compact controls, selected context ring, behavior-preservation rules and [administration ownership](design/2026-09-14-administration-handoff.md). The linked boards are design references, not evidence of implemented features.
 
 The [Playful app icon and wing identity](design/2026-09-14-app-icon.md) records the selected launcher portrait, notification symbol, production assets and export process.
@@ -64,6 +78,8 @@ The inventories describe their inspection dates and source commits. Do not silen
 
 ## Current implementation contracts
 
+Read these with the user guides and their dated follow-ups. Their original delivery test counts are not results for the latest checkout.
+
 - [Studio implementation and complete component audit](design/2026-09-14-studio-implementation.md), shared light/dark control themes, the context ring, preserved interactions and rendered review.
 
 - [App shell](APP_SHELL.md), navigation, cleanup boundary and verification.
@@ -89,9 +105,12 @@ The inventories describe their inspection dates and source commits. Do not silen
 - [Side-task recovery](SIDE_TASK_RECOVERY.md), the rejected snapshot experiment and limits of unmodified Hermes.
 - [Session visibility](SESSION_VISIBILITY.md).
 - [Profile switching design](PROFILE_SWITCHING_DESIGN.md) and [implementation specification](PROFILE_SWITCHING_IMPLEMENTATION_SPEC.md), read with their original baselines.
-- [Request-scoped profiles ADR](adr/0001-request-scoped-hermes-profiles.md) and [background continuity ADR](adr/0002-background-session-continuity.md). These preserve ownership rules and do not authorize a separate local task database. The current product plan separately commits to a later background-notification milestone under M01/W07.
+- [Request-scoped profiles ADR](adr/0001-request-scoped-hermes-profiles.md) and [background continuity ADR](adr/0002-background-session-continuity.md). These preserve ownership rules and do not authorize a separate local task database. Firebase delivery was subsequently dropped; use [Background notifications](BACKGROUND_NOTIFICATIONS.md) for the current local-alert scope.
 
 ## Build, distribution and verification
+
+- [Release and privacy cleanup](DOCUMENTATION_CLEANUP_2026-09-15.md), changes from the public-readiness review and remaining decisions.
+- [Inherited distribution archive](archive/README.md), retired F-Droid metadata and historical release instructions.
 
 - [Live phone acceptance, 2026-09-12](LIVE_PHONE_ACCEPTANCE_2026-09-12.md), installed 2.31.1 checks and their remaining live limits.
 - [Roadmap emulator verification](EMULATOR_ROADMAP_VERIFICATION.md), actual Android UI checks, synthetic server scenarios and remaining device/server acceptance checks.
