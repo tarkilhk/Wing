@@ -1,6 +1,6 @@
 # Playful inside the app
 
-Generated on 2026-09-15 at the owner's request to mock all five uses of the approved Playful identity. After reviewing the boards, the owner approved all five placements for implementation. They are now implemented in the app source. This record does not claim phone deployment.
+Generated on 2026-09-15 at the owner's request to mock all five uses of the approved Playful identity. After reviewing the boards, the owner approved all five placements for implementation. They are implemented and deployed to the owner's phone in Personal 2.36.8, as verified below.
 
 ## Boards
 
@@ -46,7 +46,15 @@ The owner requested committing and pushing to main, then updating their phone. T
 
 The full suite completed with 1,629 passes, 10 environment-dependent skips and five failures. Two image tests needed to scope their no-image assertion to remote message content, the release identity test needed the new version, and two first-connection tests needed to scroll until their lazily built target appeared with the test font. After these corrections, all 62 checks across the four affected suites passed. The initial focused portrait and navigation checks also passed as recorded above.
 
-Static analysis reported no issues. The dependency review found available upgrades; this UI release keeps the existing lockfile. Architecture, error/loading behavior and shared state lifecycles are preserved. The existing local image is the only newly bundled asset. No network behavior or credentials changed. Phone-sized, wide, light/dark and enlarged-text layouts were checked. Live gateway send/stream smoke tests were not repeated for this portrait-only update. Signed build and installation evidence will follow after completion.
+Static analysis reported no issues. The dependency review found available upgrades; this UI release keeps the existing lockfile. Architecture, error/loading behavior and shared state lifecycles are preserved. The existing local image is the only newly bundled asset. No network behavior or credentials changed. Phone-sized, wide, light/dark and enlarged-text layouts were checked. Live gateway send/stream smoke tests were not repeated for this portrait-only update.
+
+## Verified phone deployment
+
+- Source commit `162880f` was pushed to `origin/main`. The clean persistent checkout at `C:\Users\rober\Documents\Projects\hermes-android` was fast-forwarded to that commit for the build. The unrelated notification wording edit remains outside the release.
+- `scripts/build-personal-release.ps1 -ToolchainRoot C:/Users/rober/Development/android-dev` produced a non-debuggable signed ARM64 APK using the existing key and the script's default settings, with Android shrinking disabled. The pinned certificate SHA-256 matched `0d57b85f1a0038c8c52eada7dbdd4f518464f3fcb510a295f3d15864169d8b99`.
+- `adb install -r` succeeded on the owner's Samsung SM-S918B. Android reports version `2.36.8` and effective code `22252`. The original first-install time remains `2026-09-06 22:10:26`; no uninstall or data-clear operation was used.
+- Cold launch returned `Status: ok` and opened the Personal main activity in 926 ms. The actual UI render evidence above covers the five portrait placements.
+- The APK is `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` in the persistent checkout. Its SHA-256 is `944cbb7a576ba14bd72de798b6e914f13567941d2d71fa8ec1bbc19e9ef1c05b`. No public release, tag or APK publication was created.
 
 ## Reading the mockups
 
