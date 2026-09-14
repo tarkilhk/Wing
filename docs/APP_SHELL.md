@@ -17,7 +17,7 @@ Profile selection remains local to this client's navigation. No navigation actio
 
 Android Back opens the left menu from every primary destination, including Connections. Back while the menu is open exits the app. Menu destinations do not form a Back history, and Back from Chats never exposes Connections.
 
-Pages, dialogs and sheets opened above a destination retain their normal Back behavior. Each Back dismisses the topmost view until the original destination is reached, then opens the menu. Project and filtered chat views retain their existing navigation back to Chats, and Back still cancels an active queued-message edit. The conversation toolbar's Back to sessions button continues to open the chat list.
+Pages, dialogs and sheets opened above a destination retain their normal Back behavior. Each Back dismisses the topmost view until the original destination is reached, then opens the menu. A conversation is above the chat list: Android Back and the toolbar's Back to sessions button both return to that list, preserving the draft. Back from the root list opens the menu, then exits. Project and filtered chat views retain their existing navigation back to Chats, and Back still cancels an active queued-message edit.
 
 ### Personal 2.36.7 validation and deployment
 

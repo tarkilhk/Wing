@@ -270,7 +270,9 @@ void main() {
 
   for (final openChat in [false, true]) {
     testWidgets(
-      'Back opens the menu from ${openChat ? 'a conversation' : 'Chats'}, then exits',
+      openChat
+          ? 'Back returns from a conversation to Chats, then opens the menu and exits'
+          : 'Back opens the menu from Chats, then exits',
       (tester) async {
         final chat = openChat ? await controller.createChat() : null;
         chat?.draft = 'Still here';
@@ -298,11 +300,25 @@ void main() {
         );
         await tester.pumpAndSettle();
 
+        if (openChat) {
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          expect(find.byType(AppDrawer), findsNothing);
+          expect(find.byTooltip('Back to sessions'), findsNothing);
+          expect(controller.current!.chat, isNull);
+          expect(find.text('Connections underneath'), findsNothing);
+          expect(chat!.draft, 'Still here');
+          expect(
+            platformCalls.where((call) => call.method == 'SystemNavigator.pop'),
+            isEmpty,
+          );
+        }
+
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
         expect(find.byType(AppDrawer), findsOneWidget);
         expect(find.text('Connections underneath'), findsNothing);
-        expect(controller.current!.chat, same(chat));
+        expect(controller.current!.chat, isNull);
         expect(
           platformCalls.where((call) => call.method == 'SystemNavigator.pop'),
           isEmpty,
@@ -315,7 +331,7 @@ void main() {
           hasLength(1),
         );
         expect(find.text('Connections underneath'), findsNothing);
-        expect(controller.current!.chat, same(chat));
+        expect(controller.current!.chat, isNull);
         expect(chat?.draft, openChat ? 'Still here' : null);
       },
     );

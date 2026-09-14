@@ -203,7 +203,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             } else if (chat.editingQueuedPrompt != null) {
               unawaited(_run(() => controller.cancelQueuedPromptEdit(chat)));
             } else {
-              _scaffoldKey.currentState?.openDrawer();
+              controller.showList();
             }
           }
         },

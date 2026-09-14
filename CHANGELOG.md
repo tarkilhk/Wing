@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.36.10+2227] - 2026-09-15
+
+### Fixed
+- Android Back from a conversation returns to the chat list and preserves the draft. Further Back presses open the menu, then exit.
+- Correct the navigation regression test to require the chat-list step before opening the menu.
+
 ## [2.36.9+2226] - 2026-09-15
 
 ### Changed
