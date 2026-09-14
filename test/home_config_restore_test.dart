@@ -154,7 +154,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.byType(ProfileWorkspaceScreen), findsOneWidget);
-    expect(find.byTooltip('New chat'), findsOneWidget);
+    expect(
+      tester
+          .widget<FloatingActionButton>(
+            find.byKey(const ValueKey('workspace-new-chat')),
+          )
+          .tooltip,
+      'New chat',
+    );
     for (final destination in ['Recents', 'Projects']) {
       expect(find.text(destination), findsWidgets);
     }
