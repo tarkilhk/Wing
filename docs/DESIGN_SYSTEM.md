@@ -1,0 +1,90 @@
+# Hermes design system
+
+Studio is the owner's selected design language, recorded on 14 September 2026. The owner approved the direction and authorized its implementation on a separate branch, with existing behavior preserved and any further behavioral change requiring their decision. This charter and the accompanying design artifacts are shared on main. Their publication does not deliver the revamp.
+
+The [product plan](PRODUCT_PLAN.md) owns functionality. This document owns the appearance of all new and existing UI. Written owner decisions take precedence over generated images. Existing behavior remains the reference for interactions. Earlier Folio and Instrument proposals are unselected.
+
+## Owner decisions
+
+- Use Studio's restrained sans typography, grouped lists and small rectangular controls.
+- Keep search at the top of Chats. Put New chat at the bottom for reach on large phones.
+- Preserve the refined Activity and tool-call presentation and interaction. Restyle cautiously without rebuilding its information structure.
+- Use the compact context ring beside the model selector, confirmed by the owner after comparing it with the fuse. Do not allocate a row to token-count text or retain the fuse alongside it.
+- Keep familiar model/reasoning selection and Queue, Steer and Fork flows.
+- Design dark mode fully and use coherent accents throughout.
+- Administration uses the owner-selected Profile / Server / Health tabs. Classify each operation by audited ownership. The selected connection stays visible, and profile selection applies only to profile-owned settings or explicitly scoped health results. See the [resolved administration handoff](design/2026-09-14-administration-handoff.md) for the complete proposed P0/P1 map and the [revision 4 boards](design/2026-09-14-studio-v4-administration.md) for visual proposals. Research coordination is complete; detailed layouts and mixed-priority splits are not fresh owner approvals, and memory/MCP write limitations remain unresolved.
+- Shared provider accounts belong under Server / Providers. Profile keeps model/provider choices, inherited-access information and any explicit profile-specific credential override. MCP stays profile-owned. A shared account reached from Profile opens its Server detail. Hermes supports [shared provider-state inheritance](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/hermes_cli/auth.py#L773) and [shared credential-pool fallback](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/hermes_cli/auth.py#L893). Revision 4's provider-account placement is superseded; do not infer account ownership from the presence of a profile parameter.
+
+## Layout and controls
+
+Keep hamburger navigation and projects scoped inside Chats. Use compact connection/profile text below the page title. Search stays below this scope. Projects, pins and recents use full-width rows, grouped where helpful, with thin separators.
+
+Place New chat in a shallow opaque shelf above the Android gesture area, with 16 dp horizontal insets. Use a slim rectangular button and no additional rounded dock around it. Reserve scroll padding so the shelf never covers the final chat. Respect keyboard and system insets.
+
+Use 16 dp page gutters, a 4 dp spacing grid, 6 dp action corners, 8 dp group/composer corners, 24-28 sp page titles, 16 sp body text and 12-13 sp metadata. Primary action paint can be about 40 dp high inside a minimum 48 dp touch area. Text scaling must allow rows and controls to grow. Keep established compact activity density; improve touch areas without adding visible card padding.
+
+## Conversation preservation
+
+Keep the existing Activity disclosure, tool counts, Tools/Tasks/Agents/Work tabs when available, thinking disclosure, nested tool rows, guide line, selection, expansion state, scroll anchoring and copyable details. Do not add extra outer cards, timeline dots or permanent rows simply because the raster mockup draws them. Use the current component geometry as the baseline and apply color/type/border refinements. Approvals and questions remain outside collapsible tool results.
+
+Keep activity status and queued-message controls above the composer. Preserve the two-row composer: draft first, then attachment/capture controls, the compact model/reasoning selector and Send/Stop. Preserve existing voice states and attachment options.
+
+The model/reasoning selector opens Intelligence. Model selection retains search and collapsible groups by actual technical provider route. Selecting a model returns to Intelligence; Apply confirms the selection for this chat. Keep existing busy/loading/disabled rules and full route identifiers in the picker.
+
+Ordinary Send/Stop and Enter behavior stays unchanged. Preserve the message-actions entry points present in the implementation baseline, including long-press. Do not restore controls removed by later approved UX work. Fork, Steer and Queue remain one-shot choices with current eligibility rules, never persistent composer modes. Preserve queued-message review, edit, delete and pause/resume behavior. Do not show unavailable actions as usable in a running chat.
+
+## Context indicator, selected ring
+
+The owner selected the ring after reviewing the tradeoff. It keeps context usage localized beside the model selector and leaves the composer border clear. The fuse uses less literal space, but the ring separates capacity from task progress more clearly.
+
+Use a 16-18 dp ring with a thin muted full track and a thicker accent arc proportional to actual occupancy. Keep the center empty in the normal known state. Avoid glow, rotation and continuous animation. Tap opens compact usage details with used/max, percentage and estimate qualification. Preserve an accessible usage description. The ring needs an independent accessible touch target and must not intercept model selection or shrink Send/Stop targets. Check narrow phones and long model names before fixing the exact geometry.
+
+Keep current warning thresholds unless separately changed: warning at 65%, danger at 85%. For unknown occupancy, show a neutral broken track without a usage arc and label details and accessibility state as unknown, never 0%. The percentage remains server-derived. The fuse shown in revision 2 is superseded; do not display both indicators.
+
+## Light and dark tokens
+
+| Role | Light | Dark |
+| --- | --- | --- |
+| Canvas | `#F4F7F6` | `#101917` |
+| Panel / sheet / menu | `#FFFFFF` | `#182621` |
+| Primary text | `#172B27` | `#E8F2EC` |
+| Secondary text | `#586B64` | `#A9BEB3` |
+| Accent | `#146B53` | `#A6E3CB` |
+| Text on accent | `#FFFFFF` | `#10291F` |
+| Border / divider | `#D5E0DA` | `#334C40` |
+| Selected tint | `#E3F2EC` | `#234737` |
+
+Dark uses charcoal with a restrained green undertone, elevated opaque panels and readable secondary text. Avoid washed-out disabled text, translucent stacked cards and saturated green page backgrounds. Menus, sheets, keyboard-adjacent chrome, previews and system bars must receive the same theme treatment.
+
+Calculated sRGB contrast for these exact token pairs: light body/canvas 13.80:1, light secondary/canvas 5.26:1, light button text/accent 6.45:1, dark body/canvas 15.63:1, dark secondary/panel 8.00:1 and dark button text/accent 10.65:1. These calculations cover those pairs only, not generated-image pixels, every state or a rendered app.
+
+Use the chosen accent for primary actions, links, selected controls, model icon, switches and focus outlines. Stable project colors stay tied to existing project metadata. Keep Mint, Iris, Glacier, Coral and Gold as coherent paired light/dark accent families, with darker foreground accents in light mode and lighter foreground accents in dark mode. User accent choice must not recolor warning/error semantics or rewrite project identity.
+
+Pressed actions use a modest tonal shift, selected rows add a check or structural marker, keyboard focus uses a clear outline, and disabled controls use neutral surfaces with readable labels. Loading states keep their label and control width. Errors use a distinct semantic color plus icon and text; empty states use plain explanations and one relevant action. Validate these states in the rendered app. No accessibility claim is made from images alone.
+
+## References and review status
+
+- [Revision 3 conversation, administration and form review](design/2026-09-14-studio-v3-review.md), including the selected ring, keyboard-open layouts and larger-text study.
+- [Audited administration navigation handoff](design/2026-09-14-administration-handoff.md). Research confirmed the map and resolved the coordination questions. Its Profile / Server / Health structure supersedes the single-page administration layout in revision 3.
+- [Revision 4 administration boards and state contract](design/2026-09-14-studio-v4-administration.md), including light/dark roots, contextual recovery and intended-versus-current memory/MCP editors.
+- [Revision 2 theme board](design/images/studio-v2-themes.png).
+- [Revision 2 controls and context alternatives](design/images/studio-v2-controls.png).
+- [Original Studio board](design/images/studio-v1.png), superseded where it conflicts with the owner decisions above.
+- [Exploration and selection history](design/2026-09-14-exploration.md).
+- [Exact revision 2 image-generation prompts](design/2026-09-14-studio-v2-prompts.md), using the built-in image-generation tool.
+
+The design direction is approved for implementation. Generated imagery may vary from exact dimensions, colors and source component details; this written preservation contract takes precedence. The publication of these documents changes no app source or behavior.
+
+### Implementation verification
+
+1. Composer under real constraints: keyboard open, multiline drafts, long model names, attachments, voice capture, queued-message editing and narrow screens. Preserve existing actions while checking room for the ring.
+2. Drawer and connection/profile switching: clear active destination and scope, with consistent selection and accent treatment.
+3. Dense settings and administration: apply Studio to forms, disclosures, toggles and primary/secondary/destructive actions without wasting vertical space. Include Connections and its repair flow.
+4. Attention and recovery states: distinguish approvals, questions, reconnecting, uncertain submission, failure, loading and empty results. Keep the action needed to continue visible.
+5. Reading and output details: long Markdown, code, tables, file rows and previews should share readable typography and accents. Preserve existing Activity/tool geometry and behavior.
+
+Use light/dark pairs and enlarged-text examples in verification. Inspect drawer/scope switching, repair/attention states, reading/output details and composer states in the rendered UI. A generated larger-text study does not substitute for layout verification.
+
+Audit every screen, dialog, sheet, menu, form and custom control for legacy styling. Standard widgets must inherit Studio component themes; custom decorations must consume the shared tokens. Keep intentional geometry exceptions for the refined activity/tool presentation and content-specific previews. Record the audit and validation evidence with the implementation. Backend contracts, persistence, state transitions, shortcuts and eligibility rules remain unchanged unless the owner approves a specific behavior change.
+
+Board corrections for future work: Activity must keep the existing borderless outer disclosure and density despite the image's surrounding outline. The controls board's Coral swatch is an accent option, not a redefinition of status color. Its model names are placeholders, and model/send sheets belong to the active conversation despite simplified background titles in the image.

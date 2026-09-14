@@ -31,7 +31,7 @@ patch experiments are not evidence of support in the installed backend.
 5. Keep existing tap/Enter behavior. Alternative send actions must be one-shot choices and must not silently change the default.
 6. Show the backend's actual technical provider route when choosing a model. Group by routes such as OpenCode, OpenAI subscription and Anthropic subscription, not merely by the company that trained the model.
 7. Use a left hamburger drawer for the agreed destinations. Do not build permanent bottom navigation from the previous proposal.
-8. Prefer current profile-workspace appearance throughout, including saved connections and future settings. Existing functionality is reusable code, not a requirement to retain old screens.
+8. Use the owner-selected [Studio design charter](DESIGN_SYSTEM.md) throughout, including saved connections and future settings. Apply its compact controls, paired light/dark themes and behavior-preservation rules to existing and new UI. Existing functionality is reusable code, not a requirement to retain old styling.
 
 ## Navigation and initial administration flow
 
