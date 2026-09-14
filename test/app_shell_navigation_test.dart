@@ -87,19 +87,11 @@ void main() {
       expect(find.text('Keep this unsent'), findsOneWidget);
       expect(controller.visible, isTrue);
       await navigate(tester, AppDestination.administration);
-      expect(find.text('Profile'), findsOneWidget);
+      expect(find.byType(HermesAdministrationContent), findsOneWidget);
+      expect(find.text('Defaults'), findsOneWidget);
       await tester.tap(find.text('Health'));
       await tester.pumpAndSettle();
-      // Administration grows beyond the viewport as profile controls are added.
-      await tester.scrollUntilVisible(
-        find.text('Diagnostics'),
-        300,
-        scrollable: find.descendant(
-          of: find.byType(HermesAdministrationContent),
-          matching: find.byType(Scrollable),
-        ),
-      );
-      expect(find.text('Diagnostics'), findsOneWidget);
+      expect(find.text('Selected profile'), findsOneWidget);
       expect(controller.current!.chat, same(chat));
       await navigate(tester, AppDestination.chats);
       expect(find.text('Keep this unsent'), findsOneWidget);
@@ -149,7 +141,7 @@ void main() {
     await show(tester);
     await navigate(tester, AppDestination.administration);
     final owner = controller.current!.scope.profileName;
-    await tester.tap(find.byTooltip('Edit selected profile'));
+    await tester.tap(find.text('Identity'));
     await tester.pumpAndSettle();
     expect(find.text('Edit profile'), findsOneWidget);
     final read = fixture.calls
@@ -185,9 +177,8 @@ void main() {
     expect(find.text('Theme'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await navigate(tester, AppDestination.administration);
-    expect(find.text('Profile'), findsOneWidget);
-    await tester.tap(find.text('Health'));
-    await tester.pumpAndSettle();
+    expect(find.byType(HermesAdministrationContent), findsOneWidget);
+    expect(find.text('Defaults'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

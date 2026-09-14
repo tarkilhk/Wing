@@ -12,6 +12,8 @@ The approved [delivery sequence](DELIVERY_SEQUENCE.md) tracks implementation in 
 
 The [administration roadmap](ADMINISTRATION_ROADMAP.md) ranks the broader mobile
 administration scope selected on 2026-09-14 and records each implementation slice.
+The [administration implementation record](ADMINISTRATION_IMPLEMENTATION_2026-09-14.md)
+maps the expanded screens to that scope, tests and remaining backend contracts.
 
 The [implemented-feature QA sweep](QA_SWEEP_2026-09-13.md) records coverage,
 failures, fixes and retests. The [final real-backend acceptance results](QA_REMAINING_ACCEPTANCE_2026-09-14.md)

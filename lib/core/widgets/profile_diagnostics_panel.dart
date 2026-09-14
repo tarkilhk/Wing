@@ -9,12 +9,16 @@ class ProfileDiagnosticsPanel extends StatefulWidget {
   final ProfileWorkspaceData workspace;
   final String connectionLabel;
   final VoidCallback onManageConnections;
+  final VoidCallback? onReviewProviderAccess;
+  final VoidCallback? onReviewConnectors;
 
   const ProfileDiagnosticsPanel({
     super.key,
     required this.workspace,
     required this.connectionLabel,
     required this.onManageConnections,
+    this.onReviewProviderAccess,
+    this.onReviewConnectors,
   });
 
   @override
@@ -196,6 +200,16 @@ class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
                   onPressed: widget.onManageConnections,
                   child: const Text('Manage connections'),
                 ),
+                if (widget.onReviewProviderAccess != null)
+                  TextButton(
+                    onPressed: widget.onReviewProviderAccess,
+                    child: const Text('Review provider access'),
+                  ),
+                if (widget.onReviewConnectors != null)
+                  TextButton(
+                    onPressed: widget.onReviewConnectors,
+                    child: const Text('Review MCP connectors'),
+                  ),
               ],
             ),
           ],

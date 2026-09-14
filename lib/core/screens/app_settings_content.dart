@@ -7,6 +7,7 @@ import '../services/turn_notification_service.dart';
 import '../services/background_push_service.dart';
 import '../widgets/text_size_settings_card.dart';
 import '../widgets/installed_app_version_card.dart';
+import '../widgets/composer_action_settings.dart';
 
 /// Existing device preferences, shared by connected and disconnected navigation.
 class AppSettingsContent extends StatefulWidget {
@@ -156,6 +157,8 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
           preferences: widget.preferences,
           onChanged: (_) => widget.onChanged(),
         ),
+        const SizedBox(height: 12),
+        ComposerActionSettings(preferences: widget.preferences),
         if (widget.enableNotifications != null) ...[
           const SizedBox(height: 12),
           Card(

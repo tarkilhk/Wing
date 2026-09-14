@@ -1436,19 +1436,33 @@ class DashboardClient {
     return _decodeMapResponse(res);
   }
 
-  Future<void> apiDelete(String endpoint, {bool retried = false}) async {
+  Future<void> apiDelete(
+    String endpoint, {
+    Map<String, dynamic>? body,
+    bool retried = false,
+  }) async {
+    await apiDeleteResult(endpoint, body: body, retried: retried);
+  }
+
+  Future<Map<String, dynamic>> apiDeleteResult(
+    String endpoint, {
+    Map<String, dynamic>? body,
+    bool retried = false,
+  }) async {
     final headers = await _authHeaders();
     final res = await _http.delete(
       Uri.parse('$_baseUrl/api/$endpoint'),
       headers: headers,
+      body: body == null ? null : jsonEncode(body),
     );
     if (res.statusCode == 401 && !retried) {
       _resetAuth();
-      return apiDelete(endpoint, retried: true);
+      return apiDeleteResult(endpoint, body: body, retried: true);
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('HTTP ${res.statusCode}');
     }
+    return _decodeMapResponse(res);
   }
 
   Future<Map<String, dynamic>> apiPatch(

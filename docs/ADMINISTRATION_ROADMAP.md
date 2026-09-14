@@ -11,7 +11,95 @@ The checklist below assigns implementation priority to those administration
 features. Existing connection, conversation and device-preference features are
 listed for context, not proposed again as new work.
 
+Implementation update, 2026-09-14: the expanded Studio Profile / Server / Health
+screens are now in Flutter source. See the
+[implementation and validation record](ADMINISTRATION_IMPLEMENTATION_2026-09-14.md)
+for current per-feature coverage, tested states and explicit backend gaps. The
+historical first-slice notes below do not supersede that record. Android release
+acceptance and the listed unsupported backend operations are not claimed complete.
+
+## Selected administration design
+
+On 2026-09-14 the user selected prototype C, with **Profile**, **Server** and
+**Health** tabs. Preserve this ownership split when building. This records a
+design decision; it does not claim the expanded administration is implemented.
+
+- **Profile:** configuration owned by the selected profile. Defaults, SOUL,
+  memories and profile capability settings belong here when the backend confirms
+  that scope.
+- **Server:** configuration owned by the selected server, including shared
+  installations and credentials where those are server-owned. Managing the
+  server's profile collection belongs here; editing an individual profile's
+  configuration belongs under Profile.
+- **Health:** diagnostics, logs, readiness and usage. Show the scope of each
+  result explicitly. Profile-specific usage needs an explicit profile selection;
+  a Health tab does not turn scoped measurements into server-wide measurements.
+  Recovery links lead to the editor in its owning tab.
+
+Classify individual operations, not whole feature names. A shared installation
+and a profile-specific enablement setting can belong to different tabs. Verify
+actual backend read/write behavior before placing provider accounts, MCP,
+plugins, memory controls, voice and other potentially mixed-scope settings.
+The prototype's sample scope labels are not backend evidence.
+
+Provider-account clarification after the owner's single-login observation:
+the [source recheck](research/PROVIDER_CREDENTIAL_SOURCE_RECHECK_2026-09-14.md)
+confirms that named profiles inherit shared root credentials unless overridden.
+Shared provider accounts belong under Server / Providers. Profile retains model
+choices, effective-access information and explicit credential overrides. MCP
+remains profile-owned. A profile parameter proves a targeting option, not that
+the effective account is owned by that profile. See the corrected
+[design map](design/2026-09-14-administration-handoff.md).
+
+The selected server remains visible across all tabs. Show the profile selector
+for profile configuration and explicitly scoped health views. Changing a profile
+must not change the target of server-owned writes. Capture the owning server and,
+where applicable, canonical profile identity when opening an editor; switching
+selection or receiving a late response must not redirect a save or overwrite the
+new selection's state. Server and Health remain usable without a loaded profile
+where their underlying operations permit it.
+
+Build approach:
+
+1. Map each P0/P1 operation to its supported endpoint, actual ownership, affected
+   clients and completion/readback behavior. Split mixed P1/P2 rows into concrete
+   subfeatures before treating their P2 portions as implementation scope.
+2. Build the three-tab shell using existing Android styling. Rehome the existing
+   model, profile, capability, diagnostics and usage flows before adding features.
+   Reuse authenticated transport with explicit server/profile administration
+   interfaces; do not force server operations through a selected-profile context.
+3. Finish missing P0 work, then deliver P1 in working slices: memory and skill
+   correction, capability recovery, profile lifecycle and operational controls,
+   followed by the remaining selected P1 features.
+4. Verify scope isolation across two profiles and two servers, selection changes
+   during reads/saves, unsupported controls, rejected writes and actual background
+   action results. Validate working slices against disposable backend fixtures
+   and on a phone or emulator.
+
+Keep tab roots short. Use categorized rows and drill-downs, with short editors
+in sheets and longer inventories/editors on dedicated screens. Search results
+must identify scope and navigate to the owning editor. Do not duplicate a setting
+under multiple tabs merely to make it easier to find.
+
 ## Priority and feature checklist
+
+The [2026-09-14 local-server scope audit](research/ADMINISTRATION_SCOPE_AUDIT_2026-09-14.md)
+maps every P0/P1 row to its backend contract, records 39 sanitized live GET
+observations across three profiles and proposes explicit splits for mixed P1/P2
+rows. It is research evidence, not implementation acceptance.
+
+The corrected credential-source recheck places shared provider accounts under
+Server and explicit profile overrides under Profile. MCP configuration and most
+agent-plugin operations belong under Profile. Legacy endpoints without a profile
+selector often use the dashboard's launch profile; they are not necessarily
+server-wide. Server contains shared providers, connection/runtime administration
+and the profile collection. Health labels runtime and selected-profile results separately.
+
+Before claiming the corresponding features complete, resolve memory edit
+conflicts caused by positional IDs, verify toolset readiness across different
+credential scopes, and account for APIs missing arbitrary-profile support.
+The audit also documents whole-map MCP writes and shared background-action names.
+These gaps do not block the three-tab shell or independent supported features.
 
 P0 supports frequent phone work or unblocks a task. P1 is useful recovery or
 occasional administration. P2 is advanced, account-dependent or less frequent.
@@ -48,7 +136,7 @@ features are listed to make the exclusions explicit.
 | A26 | MCP catalog install, import and raw configuration | P2 | Occasional setup; raw JSON is secondary to guided choices. |
 | A27 | Backend plugin inventory/status, enable/disable/install/remove/update | P1/P2 | Useful for capabilities. Desktop UI plugins cannot automatically supply Android screens. |
 | A28 | Memory enablement, budgets and retained-file status | P1 | Control retained information with small, explicit settings. |
-| A29 | Memory provider selection/configuration/OAuth/reset | P2 | Some current endpoints are global, not profile-scoped. Do not label global writes as selected-profile writes. |
+| A29 | Memory provider selection/configuration/OAuth/reset | P2 | Scope varies by operation. Legacy memory status/reset targets the launch home, while some provider-config routes accept a profile. See the scope audit; do not label launch-home writes as selected-profile writes. |
 | A30 | Curator status/pause/resume/run-now | P2 | Occasional learning maintenance; explain effects before running it. |
 | A31 | Context engine and compression thresholds/targets/protected recent messages | P1/P2 | Relevant to long chats, but default settings should suffice for most use. |
 | A32 | Approval mode/timeout, command allowlist and MCP reload confirmation | P1 | Adjust backend safety policy deliberately. Existing per-chat YOLO is separate. |

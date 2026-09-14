@@ -1868,6 +1868,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 }),
               ),
               _ => HermesAdministrationContent(
+                key: ValueKey(controller.connectionIdentity),
                 controller: controller,
                 onConnections: () =>
                     _selectDestination(AppDestination.connections),
