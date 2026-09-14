@@ -89,14 +89,84 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('context-ring-details')));
     await tester.pumpAndSettle();
-    expect(
-      find.text('Approximately 800 of 1000 tokens, 80 percent used'),
-      findsOneWidget,
-    );
-    await tester.tap(find.text('Close'));
-    await tester.pumpAndSettle();
+    expect(find.text('≈ 800 / 1,000 tokens'), findsOneWidget);
+    expect(find.text('80%'), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('context-ring-details')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('context-usage-popover')), findsNothing);
   });
+
+  testWidgets(
+    'context popover stays anchored without dismissing the keyboard',
+    (tester) async {
+      tester.view.physicalSize = const Size(412, 823);
+      tester.view.devicePixelRatio = 1;
+      tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+      addTearDown(tester.view.reset);
+      final focus = FocusNode();
+      addTearDown(focus.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: hermesTheme(Brightness.dark),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomLeft,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(focusNode: focus),
+                  const Row(
+                    children: [
+                      SizedBox(width: 60),
+                      ContextRing(
+                        occupancy: ContextOccupancy(
+                          used: 94090,
+                          max: 272000,
+                          percent: 35,
+                          estimated: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.showKeyboard(find.byType(TextField));
+      await tester.pump();
+      expect(tester.testTextInput.isVisible, isTrue);
+      await tester.tap(find.byKey(const ValueKey('context-ring-details')));
+      await tester.pumpAndSettle();
+      final card = find.byKey(const ValueKey('context-usage-popover'));
+      final ring = tester.getRect(
+        find.byKey(const ValueKey('context-ring-paint')),
+      );
+      final bounds = tester.getRect(card);
+      expect(bounds.left, closeTo(ring.left, .1));
+      expect(bounds.bottom, closeTo(ring.top - 8, .1));
+      expect(bounds.width, lessThanOrEqualTo(260));
+      expect(bounds.height, lessThan(120));
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(focus.hasFocus, isTrue);
+      expect(tester.testTextInput.isVisible, isTrue);
+      await tester.tap(find.text('≈ 94,090 / 272,000 tokens'));
+      await tester.pumpAndSettle();
+      expect(card, findsOneWidget);
+      expect(focus.hasFocus, isTrue);
+      await tester.tapAt(
+        tester.getTopLeft(find.byType(TextField)) + const Offset(8, 8),
+      );
+      await tester.pumpAndSettle();
+      expect(card, findsNothing);
+      expect(focus.hasFocus, isTrue);
+      expect(tester.testTextInput.isVisible, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'occupancy keeps the existing warning thresholds in both themes',

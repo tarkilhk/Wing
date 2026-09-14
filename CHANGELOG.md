@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.36.4+2221] - 2026-09-14
+
+### Changed
+- Make the Intelligence sheet fit its content, with a compact header and two-column reasoning choices.
+- Show context usage in a small animated card anchored above the context ring, preserving composer focus and the keyboard.
+
 ## [2.36.3+2220] - 2026-09-14
 
 ### Fixed

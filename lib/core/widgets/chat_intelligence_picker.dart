@@ -266,14 +266,26 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final availableHeight = MediaQuery.sizeOf(context).height * 0.86;
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: availableHeight.clamp(420, 720)),
-      child: AnimatedSwitcher(
-        duration: HermesMotion.standard,
-        switchInCurve: HermesMotion.curve,
-        switchOutCurve: HermesMotion.curve,
-        child: _choosingModel ? _buildModelPage() : _buildReasoningPage(),
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final availableHeight = MediaQuery.sizeOf(context).height * 0.86 - keyboard;
+    return Padding(
+      padding: EdgeInsets.only(bottom: keyboard),
+      child: SafeArea(
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: availableHeight.clamp(0, 720)),
+          child: AnimatedSize(
+            duration: HermesMotion.standard,
+            alignment: Alignment.bottomCenter,
+            curve: HermesMotion.curve,
+            child: AnimatedSwitcher(
+              duration: HermesMotion.standard,
+              switchInCurve: HermesMotion.curve,
+              switchOutCurve: HermesMotion.curve,
+              child: _choosingModel ? _buildModelPage() : _buildReasoningPage(),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -284,13 +296,10 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
       key: const ValueKey('reasoning-page'),
       mainAxisSize: MainAxisSize.min,
       children: [
-        _SheetHeader(
-          title: 'Intelligence',
-          subtitle: 'Model and reasoning for this chat',
-          onClose: widget.onCancel,
-        ),
-        Expanded(
+        _SheetHeader(title: 'Intelligence', onClose: widget.onCancel),
+        Flexible(
           child: ListView(
+            shrinkWrap: true,
             padding: const EdgeInsets.fromLTRB(
               HermesSpacing.sm,
               0,
@@ -310,46 +319,65 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
                   style: tokens.typography.label.copyWith(color: tokens.muted),
                 ),
               ),
-              for (final entry in chatReasoningEffortLabels.entries)
-                _PickerTile(
-                  key: Key('reasoning-${entry.key}'),
-                  title: entry.value,
-                  selected: entry.key == _selectedEffort,
-                  onTap: () => setState(() => _selectedEffort = entry.key),
+              LayoutBuilder(
+                builder: (context, constraints) => Wrap(
+                  spacing: HermesSpacing.sm,
+                  runSpacing: HermesSpacing.xs,
+                  children: [
+                    for (final entry in chatReasoningEffortLabels.entries)
+                      SizedBox(
+                        width: (constraints.maxWidth - HermesSpacing.sm) / 2,
+                        child: _PickerTile(
+                          key: Key('reasoning-${entry.key}'),
+                          title: entry.value,
+                          selected: entry.key == _selectedEffort,
+                          onTap: () =>
+                              setState(() => _selectedEffort = entry.key),
+                        ),
+                      ),
+                  ],
                 ),
-              const Divider(height: HermesSpacing.xl),
+              ),
+              const Divider(height: HermesSpacing.md),
               ListTile(
                 key: const Key('choose-chat-model'),
+                dense: true,
+                minTileHeight: 56,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: HermesSpacing.sm,
                 ),
                 title: Text(
-                  'Model',
-                  style: tokens.typography.section.copyWith(
+                  _selectedChoice.model,
+                  style: tokens.typography.body.copyWith(
                     color: tokens.onSurface,
                   ),
                 ),
                 subtitle: Text(
-                  '${_selectedChoice.model}  •  ${_selectedChoice.provider}',
+                  _selectedChoice.routeLabel,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => setState(() => _choosingModel = true),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  HermesSpacing.sm,
-                  0,
-                  HermesSpacing.sm,
-                  HermesSpacing.sm,
+              if (_selectedChoice.model != widget.defaultModel ||
+                  (widget.defaultProvider != null &&
+                      _selectedChoice.provider != widget.defaultProvider))
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    HermesSpacing.sm,
+                    0,
+                    HermesSpacing.sm,
+                    HermesSpacing.sm,
+                  ),
+                  child: Text(
+                    'Profile default: ${widget.defaultModel}'
+                    '${widget.defaultProvider == null ? '' : ' • ${widget.defaultProvider}'}',
+                    style: tokens.typography.label.copyWith(
+                      color: tokens.muted,
+                    ),
+                  ),
                 ),
-                child: Text(
-                  'Profile default: ${widget.defaultModel}'
-                  '${widget.defaultProvider == null ? '' : ' • ${widget.defaultProvider}'}',
-                  style: tokens.typography.label.copyWith(color: tokens.muted),
-                ),
-              ),
             ],
           ),
         ),
@@ -387,7 +415,6 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
       children: [
         _SheetHeader(
           title: 'Model',
-          subtitle: 'Available for this profile',
           onBack: () => setState(() => _choosingModel = false),
           onClose: widget.onCancel,
         ),
@@ -459,16 +486,10 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
 
 class _SheetHeader extends StatelessWidget {
   final String title;
-  final String subtitle;
   final VoidCallback? onBack;
   final VoidCallback onClose;
 
-  const _SheetHeader({
-    required this.title,
-    required this.subtitle,
-    required this.onClose,
-    this.onBack,
-  });
+  const _SheetHeader({required this.title, required this.onClose, this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -476,39 +497,31 @@ class _SheetHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         HermesSpacing.sm,
-        HermesSpacing.xs,
+        0,
         HermesSpacing.sm,
-        HermesSpacing.sm,
+        0,
       ),
       child: Row(
         children: [
-          SizedBox(
-            width: 48,
-            child: onBack == null
-                ? null
-                : IconButton(
-                    key: const Key('intelligence-back'),
-                    onPressed: onBack,
-                    icon: const Icon(Icons.arrow_back_rounded),
-                    tooltip: 'Back to reasoning',
-                  ),
-          ),
+          if (onBack != null)
+            SizedBox(
+              width: 48,
+              child: IconButton(
+                key: const Key('intelligence-back'),
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: 'Back to reasoning',
+              ),
+            ),
           Expanded(
-            child: Column(
-              children: [
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: tokens.typography.title.copyWith(
-                    color: tokens.onSurface,
-                  ),
+            child: Padding(
+              padding: const EdgeInsets.only(left: HermesSpacing.sm),
+              child: Text(
+                title,
+                style: tokens.typography.section.copyWith(
+                  color: tokens.onSurface,
                 ),
-                Text(
-                  subtitle,
-                  textAlign: TextAlign.center,
-                  style: tokens.typography.label.copyWith(color: tokens.muted),
-                ),
-              ],
+              ),
             ),
           ),
           SizedBox(
@@ -541,11 +554,14 @@ class _PickerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = HermesTokens.of(context);
     return ListTile(
+      dense: true,
+      minTileHeight: 48,
+      minVerticalPadding: HermesSpacing.xs,
       contentPadding: const EdgeInsets.symmetric(horizontal: HermesSpacing.sm),
       shape: RoundedRectangleBorder(borderRadius: HermesRadius.card),
       selected: selected,
       selectedTileColor: tokens.accent.withValues(alpha: 0.1),
-      title: Text(title),
+      title: Text(title, style: tokens.typography.body),
       trailing: selected
           ? Icon(Icons.check_rounded, color: tokens.accent)
           : const SizedBox(width: 24),
@@ -572,13 +588,14 @@ class _SheetActions extends StatelessWidget {
         HermesSpacing.lg,
         HermesSpacing.sm,
         HermesSpacing.lg,
-        HermesSpacing.md,
+        HermesSpacing.sm,
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
+      child: OverflowBar(
+        alignment: MainAxisAlignment.end,
+        spacing: HermesSpacing.sm,
+        overflowSpacing: HermesSpacing.xs,
         children: [
           TextButton(onPressed: onCancel, child: const Text('Cancel')),
-          const SizedBox(width: HermesSpacing.sm),
           FilledButton(onPressed: onApply, child: const Text('Apply')),
         ],
       ),
