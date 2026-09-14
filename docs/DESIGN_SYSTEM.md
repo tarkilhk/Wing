@@ -85,7 +85,7 @@ Keep current warning thresholds unless separately changed: warning at 65%, dange
 
 On 15 September 2026, the owner approved refining the default around Playful
 and expressed a preference for teal. Teal replaces the displayed Mint option,
-with a deep teal light accent, soft teal-mint dark accent, navy-charcoal dark
+with a deep teal light accent, richer teal dark accent, navy-charcoal dark
 surfaces and a subtly warm light canvas. Keep the stored `mint` value so saved
 choices carry over. Glacier uses a cooler blue, `#285F9B` in light mode and
 `#ABC9FF` in dark mode, to distinguish it from Teal. Iris, Coral and Gold
@@ -99,14 +99,17 @@ See the [teal implementation and rendered review](design/2026-09-15-playful-teal
 | Panel / sheet / menu | `#FFFFFF` | `#192934` |
 | Primary text | `#1B2D36` | `#EBF1F2` |
 | Secondary text | `#586970` | `#ADBDC4` |
-| Accent | `#126D70` | `#A6DDD6` |
+| Accent | `#126D70` | `#65C7BC` |
 | Text on accent | `#FFFFFF` | `#102C32` |
 | Border / divider | `#D6E0E1` | `#344C58` |
 | Selected tint | `#E2F1EE` | `#20454A` |
 
 Dark uses charcoal with a restrained navy undertone, elevated opaque panels and readable secondary text. Avoid washed-out disabled text, translucent stacked cards and saturated page backgrounds. Menus, sheets, keyboard-adjacent chrome, previews and system bars must receive the same theme treatment.
 
-Calculated sRGB contrast for these exact token pairs: light body/canvas 13.26:1, light secondary/canvas 5.33:1, light button text/accent 6.09:1, dark body/canvas 15.28:1, dark secondary/panel 7.71:1 and dark button text/accent 9.76:1. These calculations cover those pairs only, not generated-image pixels, every state or a rendered app.
+The owner found the initial dark teal too pale and approved deepening it to
+`#65C7BC` in 2.36.12. Keep the existing light accent and navy-charcoal surfaces.
+
+Calculated sRGB contrast for these exact token pairs: light body/canvas 13.26:1, light secondary/canvas 5.33:1, light button text/accent 6.09:1, dark body/canvas 15.28:1, dark secondary/panel 7.71:1 and dark button text/accent 7.32:1. These calculations cover those pairs only, not generated-image pixels, every state or a rendered app.
 
 Use the chosen accent for primary actions, links, selected controls, model icon, switches and focus outlines. Stable project colors stay tied to existing project metadata. Keep Teal, Iris, Glacier, Coral and Gold as coherent paired light/dark accent families, with darker foreground accents in light mode and lighter foreground accents in dark mode. User accent choice must not recolor warning/error semantics or rewrite project identity.
 

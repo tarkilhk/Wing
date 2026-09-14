@@ -4,7 +4,7 @@ import 'hermes_theme.dart';
 /// Shared appearance for the workspace, connection setup and app shell.
 enum WorkspaceAccent {
   // Keep the persisted name so existing Mint selections become the new Teal.
-  mint('Teal', Color(0xFFA6DDD6), Color(0xFF126D70)),
+  mint('Teal', Color(0xFF65C7BC), Color(0xFF126D70)),
   iris('Iris', Color(0xFFD0BFFF), Color(0xFF6341A7)),
   glacier('Glacier', Color(0xFFABC9FF), Color(0xFF285F9B)),
   coral('Coral', Color(0xFFFFC3AE), Color(0xFF984728)),

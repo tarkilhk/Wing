@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.36.12+2229] - 2026-09-15
+
+### Changed
+- Deepen the dark-mode Teal accent from pale mint to a richer teal, keeping the existing backgrounds, light theme and other accents.
+
 ## [2.36.11+2228] - 2026-09-15
 
 ### Changed

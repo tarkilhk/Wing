@@ -175,7 +175,7 @@ class HermesTokens extends ThemeExtension<HermesTokens> {
       border: const Color(0xFF344C58),
       onSurface: const Color(0xFFEBF1F2),
       muted: const Color(0xFFADBDC4),
-      accent: const Color(0xFFA6DDD6),
+      accent: const Color(0xFF65C7BC),
       success: const Color(0xFF4ADE80),
       warning: const Color(0xFFFBBF24),
       danger: const Color(0xFFF87171),
