@@ -1,0 +1,72 @@
+# Upstream Hermes bugs
+
+Tracks backend failures and contract gaps reproduced during Android acceptance. This is a repository tracker, not a record of issues filed with upstream maintainers. No backend source changes are authorized by these entries.
+
+Last verified: 2026-09-14, local Hermes 0.21.2, installed source commit `e16f686706b1e0d5334fd1ae82190058d2a19694`, using the Android emulator and real model/browser execution. See the [acceptance ledger](QA_FINAL_FIVE_2026-09-14.md) and [source contract notes](REMAINING_CONTRACT_CHECKS_2026-09-14.md).
+
+| ID | Priority | Issue | Status | Upstream issue |
+| --- | --- | --- | --- | --- |
+| HUP-001 | High | Browser and vault target different tabs | Open, reproduced | Not filed |
+| HUP-002 | Medium | Non-default profile loop command/control mismatch | Open, reproduced | Not filed |
+| HUP-003 | Medium | Global activity omits child-only work | Open, reproduced contract gap | Not filed |
+
+Priorities reflect mobile impact. Close an entry only after its acceptance criteria pass against a recorded backend version. Add the upstream issue URL and fix commit when available; a newer version alone does not establish a fix.
+
+## HUP-001: Browser and vault target different tabs
+
+**Mobile impact:** Android receives working save-login forms, but Hermes associates the saved login with the wrong site and cannot fill the intended page. Verification-code submit/cancel remains unverified.
+
+**Reproduce:** In a disposable profile, serve the [dummy login/code page](../integration_test/fixtures/vault/index.html) on loopback port 51165. Have Hermes call `browser_exec` with `new_tab("http://127.0.0.1:51165/"); wait_for_load(); print(page_info())`, omitting the `session` argument. Then call `browser_vault_save_login`, cancel once, and request it again to submit dummy values. Check the saved record's origin and fill result. An earlier run also called `browser_vault_enter_code` without a handle.
+
+**Expected:** Browser navigation, vault origin detection and secret filling address the same page. The saved origin is `http://127.0.0.1:51165`; the code field triggers Android's code form.
+
+**Observed:** The browser call succeeds on the fixture. Save cancellation returns `save_declined`. Submission saves an item with origin `chrome://new-tab-page` and a fill error stating that no login fields were found. Code entry returns `no_code_field`. Omitting the named browser session reproduces the mismatch, so that argument does not explain it by itself. The internal tab-selection root cause is still unproven.
+
+**Evidence:** Session `20260914_162154_249a06` confirms the default-session reproduction; `20260914_161737_e11b8f` contains the OTP failure. Local captures: `build/qa-vault-final-readback.json`, `build/qa-vault-final-20260914.log`. These captures are ignored, machine-local artifacts; the findings above and committed test/fixture remain available after a clean clone.
+
+**Fix direction:** Investigate backend browser/vault target selection and supervisor binding. Do not assume an Android form change can select the correct backend tab.
+
+**Retest to close:** Run the vault case in [the native driver](../integration_test/remaining_product_live_test.dart). Verify correct origin, successful password/code filling, save and code cancellation, no secret leakage into history/drafts, and removal of the dummy record. Check both default and named browser sessions if upstream claims support for both. Existing save/cancel success does not satisfy the remaining fill/code checks.
+
+## HUP-002: Non-default profile loop command/control mismatch
+
+**Mobile impact:** A loop starts in a non-default Hermes profile, but Android's structured controls cannot see or manage that same loop.
+
+**Reproduce:** Create a disposable chat in `android-qa-a`. Use `command.dispatch` for `/loop 30s Reply exactly LOOP_SCOPE_CHECK --times 2`, then `/loop status`. Read that chat's structured session controls. Stop the owned loop through `/loop stop` afterward.
+
+**Expected:** Start, status, pause, resume and stop refer to the same loop in the selected profile/session.
+
+**Observed:** Command output reports `Loop set` and `Loop (active, every 30s, 0/2 runs, due now)`, while structured controls contain no loop. `/loop stop` succeeds and subsequent status reports `No loop set`. Source inspection points to different profile scoping in command and structured-control paths.
+
+**Evidence:** The `nondefault loop command and controls address the same local work` case in [the native driver](../integration_test/remaining_product_live_test.dart); local capture `build/qa-remaining-native-20260914.log`. The recorded result is `backend_limited`, not successful control acceptance.
+
+**Fix direction:** Align backend loop lookup and mutation scope across command and structured APIs.
+
+**Retest to close:** Start a finite loop in a non-default profile; verify structured status sees it, pause/resume/stop work, and a second profile is unaffected. Read back the stopped state. Default-profile success alone does not close this entry.
+
+## HUP-003: Global activity omits child-only work
+
+**Mobile impact:** Activity can miss ongoing work when a parent chat is idle but a delegated child is still running, unless that client has already opened the parent and loaded its child roster.
+
+**Reproduce:** Start one real background child from a disposable parent chat and allow the parent to become idle while the child continues. Compare the loaded parent's child roster with `session.active_list` and Activity in an independent client that has never opened that parent.
+
+**Expected:** Global activity provides enough server-owned information to discover that the parent still has active child work across profiles.
+
+**Observed:** The open chat sees one active child. The global parent row is idle with no child count, and the independent client's Activity omits it. After child completion and the parent's final rollup, the loaded Activity state clears correctly.
+
+**Evidence:** The `unopened parent with actual child work is compared with global status` case in [the native driver](../integration_test/remaining_product_live_test.dart); local capture `build/qa-remaining-native-retest-20260914.log`. Recorded fields: `parent_status: idle`, `server_child_count: null`, `active_children_in_open_chat: 1`, `unopened_parent_visible: false`.
+
+**Fix direction:** Expose child-only ongoing work through the global backend activity contract. Avoid a client workaround that opens every historical chat to discover its children. This is a missing contract capability; upstream intent has not been established.
+
+**Retest to close:** With an independent client that has never opened the parent, verify the ongoing parent/child appears across profiles, opens the correct chat, and disappears after all work and final rollup finish. Include reconnect while only the child is active.
+
+## Related items that are not filed as bugs
+
+- Shared older answer versions require server persistence that is absent from the current contract. Ordinary regeneration, durable replacement and separate forks passed. Track shared alternatives as a capability request if selected, not as HUP-001 through HUP-003.
+- External vault unlock requires a configured external password manager. The local environment has none; this is an untested prerequisite, not a reproduced defect.
+
+## Update record
+
+| Date | Change |
+| --- | --- |
+| 2026-09-14 | Created HUP-001 through HUP-003 from the completed local acceptance pass. No upstream issue has been filed, no fix claimed, and no backend source changed. |

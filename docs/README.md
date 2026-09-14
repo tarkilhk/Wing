@@ -18,6 +18,8 @@ failures, fixes and retests. The [final real-backend acceptance results](QA_REMA
 record completed checks and the remaining backend/environment limits separately
 from subsequent feature releases.
 
+[Upstream Hermes bugs](UPSTREAM_HERMES_BUGS.md) tracks reproduced backend failures and contract gaps, their upstream reporting status, and the checks needed to close them.
+
 [Background notifications](BACKGROUND_NOTIFICATIONS.md) records existing Android
 notification paths and backend gaps. Firebase delivery is dropped. Current
 missing-alert findings are tracked in the administration roadmap.

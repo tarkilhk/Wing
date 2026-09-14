@@ -2,6 +2,8 @@
 
 This pass uses the actual local Hermes dashboard/gateway and configured model. Native interaction runs on the single existing Android emulator. Backend source is unchanged. Work is limited to disposable QA profiles, chats, an empty Git repository and dummy vault data.
 
+Ongoing backend follow-up is tracked in [Upstream Hermes bugs](UPSTREAM_HERMES_BUGS.md), with stable IDs, reproduction evidence and closure criteria.
+
 ## Results
 
 | Item | Result and evidence | Remaining boundary |
