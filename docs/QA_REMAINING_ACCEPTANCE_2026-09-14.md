@@ -5,6 +5,10 @@ Hermes and disposable data. No backend code, database repair, global settings
 or credential changes are part of this work. Feature releases proceed in
 separate tasks; QA changes stay outside their release commits.
 
+## Latest follow-up
+
+The [final five-item local acceptance pass](QA_FINAL_FIVE_2026-09-14.md) supersedes the older vault-prerequisite status below. Browser execution now succeeds and the actual save/cancel form works. A reproduced browser/vault tab mismatch still blocks correct filling and OTP acceptance. Session and Always approval scope checks now pass, including profile isolation and saved Deny evidence. The follow-up also verifies regeneration/fork persistence and confirms the child-only/global-status and non-default loop limitations.
+
 ## Completed baseline
 
 2.31.11 passed 1,343 tests with four opt-in skips and clean analysis. Seven
@@ -31,8 +35,8 @@ This verifies transport only; it does not substitute for native playback/zoom.
 
 The finite batch is complete. R01–R05 and R07 passed. R08 proved usable file
 contents and durable reopen, but automatic reference expansion still encounters
-the backend workspace restriction described below. R06 could not reach a vault
-form because the configured local browser runtime failed. Neither limitation is
+the backend workspace restriction described below. At the time of this earlier batch, R06 could not reach a vault
+form because the configured local browser runtime failed. See the follow-up above for the current result. Neither limitation is
 reported as a passing test or an Android fix.
 
 | Case | Required real acceptance | Status |
