@@ -314,15 +314,16 @@ class HermesAppState extends State<HermesApp> with WidgetsBindingObserver {
                     id: TurnNotificationService.notificationIdFor(
                       eventId == null ? payload : 'push-event:$eventId',
                     ),
-                    title:
-                        '${chat.key.workspace.profileName}: ${needsInput ? 'Needs attention' : 'Chat finished'}',
+                    title: needsInput
+                        ? 'Needs your attention'
+                        : 'Finished working',
                     body:
                         widget.connManager.prefs.getBool(
                               notificationTitlesKey,
                             ) ==
                             true
                         ? chat.title
-                        : 'Open Hermes to view this chat.',
+                        : 'Tap to open the chat.',
                     payload: payload,
                     channel: TurnNotificationService.turnChannel,
                   ),

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.36.9+2226] - 2026-09-15
+
+### Changed
+- Remove profile names from notification headings, including the internal `default` label.
+- Use "Finished working" and "Needs your attention", with the chat title underneath when alert previews are enabled.
+- Use "Tap to open the chat" when chat titles are hidden.
+
 ## [2.36.8+2225] - 2026-09-15
 
 ### Changed
