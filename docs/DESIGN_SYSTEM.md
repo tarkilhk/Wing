@@ -28,6 +28,15 @@ See the [icon assets and production record](design/2026-09-14-app-icon.md) for
 the approved reference, source assets, export command and validation evidence.
 Preserve the wink, simple hair masses and wing when making future exports.
 
+On 15 September 2026, the owner approved all five
+[in-app Playful placements](design/2026-09-15-playful-placements.md): 48 dp in
+the drawer header and installed-app version card, 104 dp above the empty chat
+greeting, 112 dp on first connection, and 24 dp replacing the assistant's H
+badge. Use the shared `PlayfulPortrait` widget and original palette in both
+themes. Treat the portrait as decorative beside existing labels. Preserve
+the author row and message width. The empty greeting yields to messages,
+history loading or errors, and active work; keep it scrollable on short screens.
+
 ## Layout and controls
 
 Keep hamburger navigation and projects scoped inside Chats. Use compact connection/profile text below the page title. Search stays below this scope. Projects, pins and recents use full-width rows, grouped where helpful, with thin separators.

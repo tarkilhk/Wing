@@ -28,6 +28,7 @@ import 'core/services/background_push_service.dart';
 import 'core/theme/hermes_theme.dart';
 import 'core/theme/profile_workspace_theme.dart';
 import 'core/widgets/app_drawer.dart';
+import 'core/widgets/playful_portrait.dart';
 import 'core/screens/app_settings_content.dart';
 import 'core/widgets/config_backup_card.dart';
 import 'core/widgets/gateway_headers_editor.dart';
@@ -1138,10 +1139,8 @@ class HomeScreenState extends State<HomeScreen> {
                               vertical: 64,
                             ),
                             children: [
-                              Icon(
-                                Icons.dns_outlined,
-                                size: 48,
-                                color: Theme.of(context).colorScheme.primary,
+                              const Center(
+                                child: PlayfulPortrait(size: 112),
                               ),
                               const SizedBox(height: 24),
                               Text(

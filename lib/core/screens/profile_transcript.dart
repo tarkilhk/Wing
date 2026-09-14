@@ -6,6 +6,7 @@ import '../utils/expansion_scroll_controller.dart';
 import '../widgets/anchored_expansion_tile.dart';
 import '../widgets/profile_tool_activity.dart';
 import '../widgets/profile_activity_tabs.dart';
+import '../widgets/playful_portrait.dart';
 
 /// Reversed layout opens at the newest row. Older pages grow at the far end;
 /// a visible durable row anchors the viewport when streaming changes the tail.
@@ -224,6 +225,14 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         ),
       ...widget.tail,
     ].reversed.toList();
+    final showWelcome =
+        chat.messages.isEmpty &&
+        !chat.historyLoading &&
+        chat.historyError == null &&
+        chat.nextHistoryOffset == null &&
+        chat.streaming.isEmpty &&
+        !chat.busy &&
+        tail.isEmpty;
     final activeIds = chat.messages
         .where((r) => r['id'] != null)
         .map((r) => r['id'])
@@ -294,51 +303,83 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                 }
                 return false;
               },
-              child: ListView.builder(
-                key: const ValueKey('profile-transcript'),
-                controller: _scroll,
-                reverse: true,
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                findChildIndexCallback: (key) => indices[key],
-                itemCount: tail.length + rows.length + 1,
-                itemBuilder: (_, index) {
-                  if (index < tail.length) return tail[index];
-                  final rowIndex = index - tail.length;
-                  if (rowIndex < rows.length) {
-                    final section = rows[rowIndex];
-                    final row = section.messages.last;
+              child: LayoutBuilder(
+                builder: (_, constraints) => ListView.builder(
+                  key: const ValueKey('profile-transcript'),
+                  controller: _scroll,
+                  reverse: true,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  findChildIndexCallback: (key) => indices[key],
+                  itemCount: tail.length + rows.length + 1,
+                  itemBuilder: (_, index) {
+                    if (index < tail.length) return tail[index];
+                    final rowIndex = index - tail.length;
+                    if (rowIndex < rows.length) {
+                      final section = rows[rowIndex];
+                      final row = section.messages.last;
+                      return KeyedSubtree(
+                        key: keys[rowIndex],
+                        child: section.isActivity
+                            ? ProfileToolActivitySection(
+                                groups: section.groups,
+                                showLatestReview:
+                                    rowIndex == 0 && chat.streaming.isEmpty,
+                                tabs: rowIndex == 0 && joinCurrentActivity
+                                    ? widget.activityTabs
+                                    : const [],
+                                thinking: rowIndex == 0 && joinCurrentActivity
+                                    ? widget.activityThinking
+                                    : null,
+                                liveToolCount:
+                                    rowIndex == 0 && joinCurrentActivity
+                                    ? widget.liveToolCount
+                                    : 0,
+                                currentActivity:
+                                    rowIndex == 0 && joinCurrentActivity
+                                    ? widget.currentActivity
+                                    : const [],
+                              )
+                            : widget.messageBuilder(row),
+                      );
+                    }
                     return KeyedSubtree(
-                      key: keys[rowIndex],
-                      child: section.isActivity
-                          ? ProfileToolActivitySection(
-                              groups: section.groups,
-                              showLatestReview:
-                                  rowIndex == 0 && chat.streaming.isEmpty,
-                              tabs: rowIndex == 0 && joinCurrentActivity
-                                  ? widget.activityTabs
-                                  : const [],
-                              thinking: rowIndex == 0 && joinCurrentActivity
-                                  ? widget.activityThinking
-                                  : null,
-                              liveToolCount:
-                                  rowIndex == 0 && joinCurrentActivity
-                                  ? widget.liveToolCount
-                                  : 0,
-                              currentActivity:
-                                  rowIndex == 0 && joinCurrentActivity
-                                  ? widget.currentActivity
-                                  : const [],
+                      key: const ValueKey('history-edge'),
+                      child: showWelcome
+                          ? ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minHeight: (constraints.maxHeight - 16).clamp(
+                                  0.0,
+                                  double.infinity,
+                                ),
+                              ),
+                              child: Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: HermesSpacing.xl,
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const PlayfulPortrait(size: 104),
+                                      const SizedBox(height: HermesSpacing.lg),
+                                      Text(
+                                        'Start a conversation',
+                                        textAlign: TextAlign.center,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleMedium,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             )
-                          : widget.messageBuilder(row),
+                          : _historyEdge(chat),
                     );
-                  }
-                  return KeyedSubtree(
-                    key: const ValueKey('history-edge'),
-                    child: _historyEdge(chat),
-                  );
-                },
+                  },
+                ),
               ),
             ),
           ),

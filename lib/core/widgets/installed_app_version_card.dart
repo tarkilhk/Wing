@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../services/web_preview.dart';
+import 'playful_portrait.dart';
 
 const _changelogUrl =
     'https://github.com/tarkilhk/hermes-android/blob/main/CHANGELOG.md';
@@ -70,7 +71,7 @@ class _InstalledAppVersionCardState extends State<InstalledAppVersionCard> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.phone_android),
+                leading: const PlayfulPortrait(),
                 title: Text(
                   info.appName.trim().isEmpty ? 'Android app' : info.appName,
                 ),

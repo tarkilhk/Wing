@@ -4,6 +4,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hermes_android/core/widgets/profile_message.dart';
+import 'package:hermes_android/core/widgets/markdown_message_content.dart';
 import 'package:hermes_android/core/widgets/markdown_code_block.dart';
 import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
 import 'package:hermes_android/core/services/connection_manager.dart';
@@ -135,7 +136,13 @@ void main() {
       tester,
       '![Remote image](https://example.com/image.png)\n\n[Host file](file:///private/file)',
     );
-    expect(find.byType(Image), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(MarkdownMessageContent),
+        matching: find.byType(Image),
+      ),
+      findsNothing,
+    );
     expect(find.text('Remote image'), findsOneWidget);
     final markdown = tester.widget<MarkdownBody>(find.byType(MarkdownBody));
     markdown.onTapLink!('Host file', 'file:///private/file', '');

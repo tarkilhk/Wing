@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/hermes_theme.dart';
+import 'playful_portrait.dart';
 
 enum AppDestination {
   chats('Chats', Icons.chat_bubble_outline),
@@ -41,20 +42,28 @@ class AppDrawer extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Text(
-                    'Hermes',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    [
-                      connectionLabel ?? 'Your mobile workspace',
-                      ?profileLabel,
-                    ].join(' · '),
-                    style: TextStyle(color: colors.onSurfaceVariant),
+                  const PlayfulPortrait(),
+                  const SizedBox(width: HermesSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Hermes',
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          [
+                            connectionLabel ?? 'Your mobile workspace',
+                            ?profileLabel,
+                          ].join(' · '),
+                          style: TextStyle(color: colors.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),

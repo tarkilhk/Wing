@@ -15,6 +15,8 @@ import 'package:hermes_android/core/theme/hermes_theme.dart';
 import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
 import 'package:hermes_android/core/widgets/chat_intelligence_picker.dart';
 import 'package:hermes_android/core/widgets/compact_switch.dart';
+import 'package:hermes_android/core/widgets/playful_portrait.dart';
+import 'package:hermes_android/main.dart';
 import 'support/profile_browser_fixture.dart';
 
 const _export = bool.fromEnvironment('STUDIO_REVIEW');
@@ -28,6 +30,15 @@ class _StudioReviewBinding extends AutomatedTestWidgetsFlutterBinding {
 Future<void> _capture(WidgetTester tester, String name) async {
   expect(tester.takeException(), isNull, reason: name);
   if (!_export) return;
+  // Asset decoding runs outside the test clock. Finish it before exporting.
+  final imageWidgets = tester.widgetList<Image>(find.byType(Image)).toList();
+  final context = tester.element(find.byKey(_frame));
+  await tester.runAsync(() async {
+    await Future.wait(
+      imageWidgets.map((image) => precacheImage(image.image, context)),
+    );
+  });
+  await tester.pumpAndSettle();
   final boundary = tester.renderObject<RenderRepaintBoundary>(
     find.byKey(_frame),
   );
@@ -74,6 +85,57 @@ void main() {
   });
 
   for (final brightness in Brightness.values) {
+    testWidgets('${brightness.name} first connection keeps setup reachable', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      final manager = await ConnectionManager.create(
+        await SharedPreferences.getInstance(),
+      );
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      for (final viewport in [(360.0, 1.0), (320.0, 2.0)]) {
+        await tester.binding.setSurfaceSize(Size(viewport.$1, 800));
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: _frame,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: hermesTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(viewport.$2)),
+                child: child!,
+              ),
+              home: HomeScreen(connManager: manager),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(PlayfulPortrait), findsOneWidget);
+        expect(find.text('Connect to Hermes'), findsOneWidget);
+        await _capture(
+          tester,
+          '${brightness.name}-first-connection-${viewport.$2}',
+        );
+        await tester.scrollUntilVisible(
+          find.text('Restore configuration'),
+          200,
+          scrollable: find
+              .descendant(
+                of: find.byType(HomeScreen),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Restore configuration').hitTestable(),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      }
+    });
     for (final accent in WorkspaceAccent.values) {
       test(
         'readable text and actions for ${brightness.name} ${accent.name}',
@@ -176,6 +238,10 @@ void main() {
             }
 
             final chat = await controller.createChat();
+            await tester.pumpAndSettle();
+            if (export) {
+              await _capture(tester, '${brightness.name}-empty-chat-$scale');
+            }
             chat.title = 'A quieter workspace';
             chat.model = 'provider/a-very-long-model-route-for-small-screens';
             chat.reasoningEffort = 'high';

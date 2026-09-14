@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.36.8+2225] - 2026-09-15
+
+### Changed
+- Add the approved Playful portrait to the navigation drawer, empty chat greeting, app settings version card, first connection screen and assistant reply badges.
+- Keep the identity colors in light and dark themes, with a shared portrait widget for future changes.
+- Keep the empty greeting scrollable on short screens and hide it when messages, history loading, errors or active work appear.
+
 ## [2.36.7+2224] - 2026-09-15
 
 ### Changed

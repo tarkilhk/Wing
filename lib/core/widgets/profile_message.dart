@@ -11,6 +11,7 @@ import '../services/web_preview.dart';
 import 'markdown_message_content.dart';
 import 'profile_tool_activity.dart';
 import 'profile_review_notice_card.dart';
+import 'playful_portrait.dart';
 
 /// Remote content is display-only. Links require a tap, and images never fetch
 /// automatically or resolve a remote host path against the phone's filesystem.
@@ -160,23 +161,26 @@ class ProfileMessage extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 2),
               child: Row(
                 children: [
-                  Container(
-                    width: 24,
-                    height: 24,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
-                      borderRadius: HermesRadius.card,
-                    ),
-                    child: Text(
-                      role == 'assistant' ? 'H' : 'S',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: theme.colorScheme.onPrimaryContainer,
+                  if (role == 'assistant')
+                    const PlayfulPortrait(size: 24)
+                  else
+                    Container(
+                      width: 24,
+                      height: 24,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer,
+                        borderRadius: HermesRadius.card,
+                      ),
+                      child: Text(
+                        'S',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
                       ),
                     ),
-                  ),
                   const SizedBox(width: 8),
                   Text(
                     role == 'assistant' ? 'Hermes' : 'System',

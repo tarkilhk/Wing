@@ -5,6 +5,7 @@ import 'package:hermes_android/core/models/gateway_sensitive_prompt.dart';
 import 'package:hermes_android/core/models/gateway_activity.dart';
 import 'package:hermes_android/core/widgets/profile_execution_activity.dart';
 import 'package:hermes_android/core/screens/profile_transcript.dart';
+import 'package:hermes_android/core/widgets/playful_portrait.dart';
 import 'package:hermes_android/core/services/profile_workspace_controller.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_history_fixture.dart';
@@ -94,6 +95,58 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   }
+
+  testWidgets('empty greeting yields to messages and history states', (
+    tester,
+  ) async {
+    chat.messages.clear();
+    chat.nextHistoryOffset = null;
+    await show(tester);
+    expect(find.byType(PlayfulPortrait), findsOneWidget);
+    expect(find.text('Start a conversation'), findsOneWidget);
+
+    chat.historyLoading = true;
+    controller.clearSearch();
+    await tester.pump();
+    expect(find.byType(PlayfulPortrait), findsNothing);
+    expect(find.text('Loading history…'), findsOneWidget);
+
+    chat.historyLoading = false;
+    chat.historyError = 'History unavailable';
+    await publish(tester);
+    expect(find.byType(PlayfulPortrait), findsNothing);
+    expect(find.text('Refresh history'), findsOneWidget);
+
+    chat.historyError = null;
+    extraTail = [const Text('Live work')];
+    await publish(tester);
+    expect(find.byType(PlayfulPortrait), findsNothing);
+    expect(find.text('Live work'), findsOneWidget);
+
+    extraTail = [];
+    chat.messages = [row(500)];
+    await publish(tester);
+    expect(find.byType(PlayfulPortrait), findsNothing);
+    expect(find.text('Message 500'), findsOneWidget);
+  });
+
+  testWidgets('empty greeting scrolls within a short transcript viewport', (
+    tester,
+  ) async {
+    chat.messages.clear();
+    chat.nextHistoryOffset = null;
+    await show(tester);
+    tester.view.physicalSize = const Size(320, 140);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(PlayfulPortrait), findsOneWidget);
+    final position = tester
+        .state<ScrollableState>(
+          find.descendant(of: list, matching: find.byType(Scrollable)),
+        )
+        .position;
+    expect(position.maxScrollExtent, greaterThan(0));
+  });
 
   Finder visibleRow(WidgetTester tester) {
     return find.byWidgetPredicate((w) {
