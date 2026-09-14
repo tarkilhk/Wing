@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../models/provider_access.dart';
 import '../../services/administration_repository.dart';
 import 'admin_widgets.dart';
 
@@ -19,7 +20,16 @@ class AdminProvidersPage extends StatefulWidget {
 class _AdminProvidersPageState extends State<AdminProvidersPage> {
   late final _profile = widget.profile;
   String _query = '';
+  String _filter = 'All';
   bool _busy = false;
+
+  Future<Map<String, dynamic>> _profileSelections() async {
+    try {
+      return await _profile.server.read('profiles');
+    } catch (_) {
+      return {'unavailable': true};
+    }
+  }
 
   Future<void> _disconnect(
     Map<String, dynamic> row,
@@ -71,11 +81,43 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
         final results = await Future.wait([
           _profile.read('providers/oauth'),
           _profile.read('env'),
+          _profileSelections(),
         ]);
-        return {'providers': results[0]['providers'], 'env': results[1]};
+        return {
+          'providers': results[0]['providers'],
+          'env': results[1],
+          'selections': results[2],
+          'checkedAt': DateTime.now(),
+        };
       },
       builder: (context, data, refresh) {
-        final providers = administrationRows(data['providers']);
+        final providers =
+            administrationRows(
+              data['providers'],
+            ).map((row) => ProviderAccess(row)).toList()..sort((a, b) {
+              final order = a.sortOrder.compareTo(b.sortOrder);
+              return order != 0 ? order : a.name.compareTo(b.name);
+            });
+        final selections = data['selections'] as Map;
+        final profiles = selections['profiles'] is List
+            ? administrationRows(selections['profiles'])
+            : <Map<String, dynamic>>[];
+        final connected = providers
+            .where((p) => p.state == ProviderAccessState.connected)
+            .length;
+        final attention = providers.where((p) => p.needsAttention).length;
+        final visible = providers
+            .where(
+              (p) =>
+                  '${p.name} ${p.id} ${p.status['source_label'] ?? ''}'
+                      .toLowerCase()
+                      .contains(_query.toLowerCase()) &&
+                  (_filter == 'All' ||
+                      (_filter == 'Connected' &&
+                          p.state == ProviderAccessState.connected) ||
+                      (_filter == 'Needs attention' && p.needsAttention)),
+            )
+            .toList();
         final env = data['env'] as Map;
         final keys = env.entries.where(
           (e) =>
@@ -92,8 +134,8 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
           children: [
             AdminNotice(
               widget.shared
-                  ? 'Manage shared access for profiles that inherit these accounts.'
-                  : 'Access available to this profile may come from shared accounts or external tools. Adding a credential here creates an explicit profile override.',
+                  ? 'Shared sign-ins for profiles on this server.'
+                  : 'This profile can use shared sign-ins or its own credentials.',
             ),
             if (!widget.shared)
               TextButton(
@@ -121,80 +163,75 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
               ),
               onChanged: (v) => setState(() => _query = v),
             ),
-            TextButton(
-              onPressed: _busy ? null : refresh,
-              child: const Text('Refresh access'),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final (label, count) in [
+                  ('All', providers.length),
+                  ('Connected', connected),
+                  ('Needs attention', attention),
+                ])
+                  ChoiceChip(
+                    label: Text('$label ($count)'),
+                    selected: _filter == label,
+                    onSelected: (_) => setState(() => _filter = label),
+                  ),
+              ],
             ),
-            const AdminNotice(
-              'Per-account pool details are unavailable for an independently selected owner on this server. Status below describes effective provider access.',
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              children: [
+                TextButton.icon(
+                  onPressed: _busy ? null : refresh,
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Refresh access'),
+                ),
+                Text(
+                  'Checked ${TimeOfDay.fromDateTime(data['checkedAt'] as DateTime).format(context)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ),
-            for (final row in providers.where(
-              (r) =>
-                  '${r['name']}'.toLowerCase().contains(_query.toLowerCase()),
-            ))
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: Text(
+                'Several providers can be connected at once. Status reflects stored credentials.',
+              ),
+            ),
+            if (selections['profiles'] is! List)
+              const AdminNotice(
+                'Profile selections could not be loaded. Refresh to retry.',
+              ),
+            if (visible.isEmpty)
+              const AdminNotice('No providers match this view.'),
+            for (final access in visible)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: AdminGroup(
-                  children: [
-                    ListTile(
-                      title: Text('${row['name']}'),
-                      subtitle: Text(
-                        '${(row['status'] as Map?)?['logged_in'] == true ? 'Account available' : 'Sign-in may be needed'}${(row['status'] as Map?)?['source_label'] is String ? ' · ${(row['status'] as Map)['source_label']}' : ''}',
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Wrap(
-                        spacing: 8,
-                        children: [
-                          if (row['flow'] == 'device_code')
-                            TextButton(
-                              onPressed: _busy
-                                  ? null
-                                  : () async {
-                                      await adminPush(
-                                        context,
-                                        AdminProviderSignIn(
-                                          profile: _profile,
-                                          provider: row,
-                                          shared: widget.shared,
-                                        ),
-                                      );
-                                      refresh();
-                                    },
-                              child: Text(
-                                widget.shared
-                                    ? 'Sign in / reconnect'
-                                    : 'Add profile sign-in',
-                              ),
-                            ),
-                          if (row['flow'] == 'external')
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              child: Text(
-                                'Sign-in is managed by an external tool on the server.',
-                              ),
-                            ),
-                          if (row['disconnectable'] == true)
-                            TextButton(
-                              onPressed: _busy
-                                  ? null
-                                  : () => _disconnect(row, refresh),
-                              child: Text(
-                                widget.shared
-                                    ? 'Disconnect'
-                                    : 'Remove profile account',
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    if (row['disconnect_hint'] is String)
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text(row['disconnect_hint'] as String),
-                      ),
+                child: _ProviderCard(
+                  access: access,
+                  selectedBy: [
+                    for (final profile in profiles)
+                      if (profile['provider'] == access.id &&
+                          (widget.shared || profile['name'] == _profile.name))
+                        '${profile['display_name'] is String && (profile['display_name'] as String).isNotEmpty ? profile['display_name'] : profile['name']}',
                   ],
+                  shared: widget.shared,
+                  busy: _busy,
+                  disconnect: () => _disconnect(access.row, refresh),
+                  signIn: () async {
+                    await adminPush(
+                      context,
+                      AdminProviderSignIn(
+                        profile: _profile,
+                        provider: access.row,
+                        shared: widget.shared,
+                      ),
+                    );
+                    refresh();
+                  },
                 ),
               ),
             const SizedBox(height: 12),
@@ -238,6 +275,166 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
       },
     ),
   );
+}
+
+class _ProviderCard extends StatelessWidget {
+  final ProviderAccess access;
+  final List<String> selectedBy;
+  final bool shared;
+  final bool busy;
+  final VoidCallback signIn;
+  final VoidCallback disconnect;
+  const _ProviderCard({
+    required this.access,
+    required this.selectedBy,
+    required this.shared,
+    required this.busy,
+    required this.signIn,
+    required this.disconnect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final color = access.needsAttention
+        ? colors.error
+        : access.state == ProviderAccessState.connected
+        ? colors.primary
+        : colors.onSurfaceVariant;
+    final icon = switch (access.state) {
+      ProviderAccessState.connected => Icons.check_circle_outline,
+      ProviderAccessState.expired => Icons.schedule,
+      ProviderAccessState.signedOut => Icons.link_off,
+      ProviderAccessState.external => Icons.open_in_new,
+      ProviderAccessState.unknown => Icons.help_outline,
+    };
+    String date(DateTime value) {
+      final local = value.toLocal();
+      return '${MaterialLocalizations.of(context).formatMediumDate(local)}, ${TimeOfDay.fromDateTime(local).format(context)}';
+    }
+
+    return Card(
+      key: ValueKey('provider-${access.id}'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(access.name, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: .12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: color, size: 18),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      access.label,
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(access.detail),
+            if (selectedBy.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Default provider for: ${selectedBy.join(', ')}',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              if (shared)
+                const Text('These profiles may have their own credentials.'),
+            ],
+            if (access.hasCredential)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  access.expiresAt == null
+                      ? 'Token expiry not reported'
+                      : '${access.state == ProviderAccessState.expired ? 'Expired' : 'Expires'} ${date(access.expiresAt!)}',
+                ),
+              ),
+            if (access.row['flow'] == 'device_code' ||
+                (access.row['disconnectable'] == true && access.hasCredential))
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    if (access.row['flow'] == 'device_code')
+                      TextButton.icon(
+                        onPressed: busy ? null : signIn,
+                        icon: Icon(
+                          access.hasCredential ? Icons.refresh : Icons.login,
+                          size: 18,
+                        ),
+                        label: Text(
+                          shared ? access.signInLabel : 'Add profile sign-in',
+                        ),
+                      ),
+                    if (access.row['disconnectable'] == true &&
+                        access.hasCredential)
+                      TextButton(
+                        onPressed: busy ? null : disconnect,
+                        child: Text(
+                          shared ? 'Disconnect' : 'Remove profile account',
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              expandedCrossAxisAlignment: CrossAxisAlignment.start,
+              title: Text(
+                access.external
+                    ? 'Source and sign-in help'
+                    : 'Connection details',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              children: [
+                if (access.status['source_label'] is String)
+                  Text('Source: ${access.status['source_label']}'),
+                if (access.lastRefresh != null)
+                  Text('Last token refresh: ${date(access.lastRefresh!)}'),
+                if (access.canRefresh && access.hasCredential)
+                  const Text(
+                    'Refresh token stored. Renewal has not been verified.',
+                  ),
+                if (access.external) ...[
+                  const Text(
+                    'Manage sign-in with the provider\'s tool on the server.',
+                  ),
+                  if (access.row['cli_command'] is String)
+                    SelectableText(access.row['cli_command'] as String),
+                ],
+                if (access.row['disconnect_hint'] is String)
+                  Text(access.row['disconnect_hint'] as String),
+                const Text(
+                  'Individual accounts and live usage are unavailable from this server view.',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class AdminSecretPage extends StatefulWidget {
