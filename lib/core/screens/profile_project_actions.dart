@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/hermes_theme.dart';
 
 import '../services/profile_workspace_controller.dart';
 
@@ -46,7 +47,9 @@ Future<void> showProjectActions(
   final id = captured['id']?.toString().trim() ?? '';
   if (id.isEmpty) return;
   final rawName = captured['name']?.toString().trim();
-  final name = rawName == null || rawName.isEmpty ? 'Untitled project' : rawName;
+  final name = rawName == null || rawName.isEmpty
+      ? 'Untitled project'
+      : rawName;
 
   final action = await showModalBottomSheet<_ProjectAction>(
     context: context,
@@ -99,7 +102,11 @@ Future<void> showProjectActions(
       initialColor: captured['color']?.toString() ?? '',
       initialIcon: captured['icon']?.toString() ?? '',
       submit: (name, color, icon) => switch (action) {
-        _ProjectAction.rename => controller.updateProject(owner, id, name: name),
+        _ProjectAction.rename => controller.updateProject(
+          owner,
+          id,
+          name: name,
+        ),
         _ProjectAction.appearance => controller.updateProject(
           owner,
           id,
@@ -127,18 +134,15 @@ Widget projectAvatar(
     height: size,
     decoration: BoxDecoration(
       color: color.withValues(alpha: 0.16),
-      borderRadius: BorderRadius.circular(size * 0.28),
+      borderRadius: HermesRadius.control,
     ),
     alignment: Alignment.center,
     child: Icon(icon, size: (size * 0.55).clamp(16.0, 24.0), color: color),
   );
 }
 
-typedef _ProjectSubmit = Future<void> Function(
-  String name,
-  String color,
-  String icon,
-);
+typedef _ProjectSubmit =
+    Future<void> Function(String name, String color, String icon);
 
 class _ProjectDialog extends StatefulWidget {
   const _ProjectDialog({
@@ -191,7 +195,8 @@ class _ProjectDialogState extends State<_ProjectDialog> {
       setState(() {
         _submitting = false;
         final message = error is StateError ? error.message.toString() : '';
-        _error = message.startsWith('Profile changed.') ||
+        _error =
+            message.startsWith('Profile changed.') ||
                 message.startsWith('Project is unavailable.')
             ? message
             : 'The project change was not acknowledged. Check the connection and try again.';

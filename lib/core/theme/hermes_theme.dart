@@ -2,13 +2,13 @@
 ///
 /// One typed token layer that every screen consumes, so spacing, radius,
 /// motion, semantic status colors, and the typography ramp are decided once
-/// instead of per screen. See `docs/ANDROID_DAILY_DRIVER_ROADMAP.md`
-/// ("Interface overhaul") for the product rationale.
+/// instead of per screen. See `docs/DESIGN_SYSTEM.md` for the Studio charter.
 library;
 
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// The 4dp spacing grid shared by every Hermes surface.
 abstract final class HermesSpacing {
@@ -22,11 +22,12 @@ abstract final class HermesSpacing {
 
 /// Corner radii, growing from small controls to full sheets.
 abstract final class HermesRadius {
-  static const double sm = 8;
-  static const double md = 12;
-  static const double lg = 16;
-  static const double xl = 24;
+  static const double sm = 6;
+  static const double md = 8;
+  static const double lg = 10;
+  static const double xl = 12;
 
+  static const BorderRadius control = BorderRadius.all(Radius.circular(sm));
   static const BorderRadius card = BorderRadius.all(Radius.circular(md));
   static const BorderRadius sheet = BorderRadius.vertical(
     top: Radius.circular(xl),
@@ -64,6 +65,8 @@ enum HermesStatus {
 ///
 /// [mono] owns code, file paths, and terminal output; everything else is prose.
 class HermesTypography {
+  static const String sans = 'Roboto';
+
   final TextStyle display;
   final TextStyle title;
   final TextStyle section;
@@ -83,24 +86,28 @@ class HermesTypography {
   static HermesTypography ramp(Brightness brightness) {
     return const HermesTypography(
       display: TextStyle(
+        fontFamily: sans,
         fontSize: 28,
         height: 1.2,
         fontWeight: FontWeight.w600,
         letterSpacing: -0.4,
       ),
       title: TextStyle(
-        fontSize: 20,
+        fontFamily: sans,
+        fontSize: 24,
         height: 1.25,
         fontWeight: FontWeight.w600,
         letterSpacing: -0.2,
       ),
       section: TextStyle(
+        fontFamily: sans,
         fontSize: 16,
         height: 1.3,
         fontWeight: FontWeight.w600,
       ),
-      body: TextStyle(fontSize: 14, height: 1.45),
+      body: TextStyle(fontFamily: sans, fontSize: 16, height: 1.45),
       label: TextStyle(
+        fontFamily: sans,
         fontSize: 12,
         height: 1.3,
         fontWeight: FontWeight.w500,
@@ -121,7 +128,7 @@ class HermesTypography {
       titleLarge: title.copyWith(color: onSurface),
       titleMedium: section.copyWith(color: onSurface),
       bodyMedium: body.copyWith(color: onSurface),
-      bodySmall: body.copyWith(color: muted),
+      bodySmall: label.copyWith(color: muted),
       labelMedium: label.copyWith(color: muted),
     );
   }
@@ -130,9 +137,6 @@ class HermesTypography {
 /// The Hermes design tokens, carried on [ThemeData.extensions].
 @immutable
 class HermesTokens extends ThemeExtension<HermesTokens> {
-  /// The Hermes brand accent, identical in both themes.
-  static const Color hermesGold = Color(0xFFD4AF37);
-
   final Brightness brightness;
   final Color surface;
   final Color raised;
@@ -166,12 +170,12 @@ class HermesTokens extends ThemeExtension<HermesTokens> {
   factory HermesTokens.dark() {
     return HermesTokens(
       brightness: Brightness.dark,
-      surface: const Color(0xFF0E0E10),
-      raised: const Color(0xFF1A1A1D),
-      border: const Color(0xFF2A2A2F),
-      onSurface: const Color(0xFFF2F2F3),
-      muted: const Color(0xFFA3A3AA),
-      accent: hermesGold,
+      surface: const Color(0xFF101917),
+      raised: const Color(0xFF182621),
+      border: const Color(0xFF334C40),
+      onSurface: const Color(0xFFE8F2EC),
+      muted: const Color(0xFFA9BEB3),
+      accent: const Color(0xFFA6E3CB),
       success: const Color(0xFF4ADE80),
       warning: const Color(0xFFFBBF24),
       danger: const Color(0xFFF87171),
@@ -184,12 +188,12 @@ class HermesTokens extends ThemeExtension<HermesTokens> {
   factory HermesTokens.light() {
     return HermesTokens(
       brightness: Brightness.light,
-      surface: const Color(0xFFFAFAFA),
+      surface: const Color(0xFFF4F7F6),
       raised: const Color(0xFFFFFFFF),
-      border: const Color(0xFFE2E2E5),
-      onSurface: const Color(0xFF17171A),
-      muted: const Color(0xFF5F5F68),
-      accent: hermesGold,
+      border: const Color(0xFFD5E0DA),
+      onSurface: const Color(0xFF172B27),
+      muted: const Color(0xFF586B64),
+      accent: const Color(0xFF146B53),
       success: const Color(0xFF15803D),
       warning: const Color(0xFFB45309),
       danger: const Color(0xFFB91C1C),
@@ -283,27 +287,87 @@ class HermesTokens extends ThemeExtension<HermesTokens> {
 }
 
 /// Builds the Hermes [ThemeData] for one brightness, tokens attached.
-ThemeData hermesTheme(Brightness brightness) {
-  final tokens = HermesTokens.forBrightness(brightness);
+ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
+  final tokens = HermesTokens.forBrightness(
+    brightness,
+  ).copyWith(accent: accent);
+  final dark = brightness == Brightness.dark;
+  final onAccent = dark ? const Color(0xFF10291F) : Colors.white;
+  final selected =
+      accent == null || accent == HermesTokens.forBrightness(brightness).accent
+      ? dark
+            ? const Color(0xFF234737)
+            : const Color(0xFFE3F2EC)
+      : Color.alphaBlend(tokens.accent.withValues(alpha: .12), tokens.raised);
   final scheme =
       ColorScheme.fromSeed(
-        seedColor: HermesTokens.hermesGold,
+        seedColor: tokens.accent,
         brightness: brightness,
       ).copyWith(
         surface: tokens.surface,
+        surfaceContainerLowest: tokens.raised,
+        surfaceContainerLow: tokens.raised,
+        surfaceContainer: tokens.raised,
+        surfaceContainerHigh: tokens.raised,
+        surfaceContainerHighest: selected,
         onSurface: tokens.onSurface,
+        onSurfaceVariant: tokens.muted,
+        primary: tokens.accent,
+        onPrimary: onAccent,
+        primaryContainer: selected,
+        onPrimaryContainer: tokens.onSurface,
+        secondary: tokens.accent,
+        onSecondary: onAccent,
+        secondaryContainer: selected,
+        onSecondaryContainer: tokens.onSurface,
         error: tokens.danger,
+        outline: tokens.muted,
         outlineVariant: tokens.border,
       );
 
   final base = ThemeData(
     colorScheme: scheme,
+    fontFamily: HermesTypography.sans,
     brightness: brightness,
     useMaterial3: true,
   );
 
+  const actionShape = RoundedRectangleBorder(
+    borderRadius: HermesRadius.control,
+  );
+  final panelShape = RoundedRectangleBorder(
+    borderRadius: HermesRadius.card,
+    side: BorderSide(color: tokens.border),
+  );
+  final disabled = WidgetStateProperty.resolveWith<Color?>(
+    (states) => states.contains(WidgetState.disabled) ? tokens.muted : null,
+  );
+  final focusBorder = WidgetStateProperty.resolveWith<BorderSide?>(
+    (states) => states.contains(WidgetState.focused)
+        ? BorderSide(color: tokens.onSurface, width: 2)
+        : null,
+  );
+  final action = TextButton.styleFrom(
+    minimumSize: const Size(48, 40),
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+    shape: actionShape,
+    tapTargetSize: MaterialTapTargetSize.padded,
+    textStyle: const TextStyle(
+      fontFamily: HermesTypography.sans,
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
+    ),
+  );
+  final fieldBorder = OutlineInputBorder(
+    borderRadius: HermesRadius.control,
+    borderSide: BorderSide(color: tokens.border),
+  );
+
   return base.copyWith(
     scaffoldBackgroundColor: tokens.surface,
+    canvasColor: tokens.raised,
+    disabledColor: tokens.muted,
+    focusColor: tokens.accent.withValues(alpha: .18),
     textTheme: tokens.typography.applyTo(
       base.textTheme,
       tokens.onSurface,
@@ -314,7 +378,222 @@ ThemeData hermesTheme(Brightness brightness) {
       foregroundColor: tokens.onSurface,
       elevation: 0,
       scrolledUnderElevation: 0,
-      centerTitle: true,
+      surfaceTintColor: Colors.transparent,
+      centerTitle: false,
+      systemOverlayStyle:
+          (dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
+              .copyWith(
+                statusBarColor: Colors.transparent,
+                systemNavigationBarColor: tokens.surface,
+                systemNavigationBarDividerColor: tokens.surface,
+              ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: action.copyWith(
+        side: focusBorder,
+        foregroundColor: disabled,
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) =>
+              states.contains(WidgetState.disabled) ? tokens.border : null,
+        ),
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: action.copyWith(
+        elevation: const WidgetStatePropertyAll(0),
+        side: focusBorder,
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) =>
+              states.contains(WidgetState.disabled) ? tokens.muted : onAccent,
+        ),
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? tokens.border
+              : tokens.accent,
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: action.copyWith(
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? tokens.muted
+              : tokens.accent,
+        ),
+        side: WidgetStateProperty.resolveWith(
+          (states) => BorderSide(
+            color: states.contains(WidgetState.focused)
+                ? tokens.accent
+                : tokens.border,
+            width: states.contains(WidgetState.focused) ? 2 : 1,
+          ),
+        ),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: action.copyWith(
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? tokens.muted
+              : tokens.accent,
+        ),
+        side: focusBorder,
+      ),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        shape: actionShape,
+        disabledForegroundColor: tokens.muted,
+      ).copyWith(side: focusBorder),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: tokens.raised,
+      border: fieldBorder,
+      enabledBorder: fieldBorder,
+      disabledBorder: fieldBorder,
+      focusedBorder: fieldBorder.copyWith(
+        borderSide: BorderSide(color: tokens.accent, width: 2),
+      ),
+      errorBorder: fieldBorder.copyWith(
+        borderSide: BorderSide(color: tokens.danger),
+      ),
+      focusedErrorBorder: fieldBorder.copyWith(
+        borderSide: BorderSide(color: tokens.danger, width: 2),
+      ),
+      labelStyle: TextStyle(
+        fontFamily: HermesTypography.sans,
+        color: tokens.muted,
+      ),
+      hintStyle: TextStyle(
+        fontFamily: HermesTypography.sans,
+        color: tokens.muted,
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    ),
+    chipTheme: ChipThemeData(
+      shape: actionShape,
+      side: BorderSide(color: tokens.border),
+      backgroundColor: tokens.raised,
+      selectedColor: selected,
+      disabledColor: tokens.border,
+      checkmarkColor: tokens.accent,
+      labelStyle: TextStyle(
+        fontFamily: HermesTypography.sans,
+        color: tokens.onSurface,
+        fontSize: 13,
+      ),
+      secondaryLabelStyle: TextStyle(
+        fontFamily: HermesTypography.sans,
+        color: tokens.onSurface,
+        fontSize: 13,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: action.copyWith(
+        foregroundColor: WidgetStatePropertyAll(tokens.onSurface),
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) =>
+              states.contains(WidgetState.selected) ? selected : tokens.raised,
+        ),
+        side: WidgetStatePropertyAll(BorderSide(color: tokens.border)),
+      ),
+    ),
+    listTileTheme: ListTileThemeData(
+      iconColor: tokens.muted,
+      textColor: tokens.onSurface,
+      selectedColor: tokens.accent,
+      selectedTileColor: selected,
+      shape: actionShape,
+    ),
+    tabBarTheme: TabBarThemeData(
+      labelColor: tokens.accent,
+      unselectedLabelColor: tokens.muted,
+      indicatorColor: tokens.accent,
+      dividerColor: tokens.border,
+    ),
+    drawerTheme: DrawerThemeData(
+      backgroundColor: tokens.raised,
+      surfaceTintColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: tokens.raised,
+      surfaceTintColor: Colors.transparent,
+      shape: panelShape,
+      labelTextStyle: WidgetStatePropertyAll(
+        TextStyle(
+          fontFamily: HermesTypography.sans,
+          color: tokens.onSurface,
+          fontSize: 14,
+        ),
+      ),
+    ),
+    menuTheme: MenuThemeData(
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(tokens.raised),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        shape: WidgetStatePropertyAll(panelShape),
+      ),
+    ),
+    dropdownMenuTheme: DropdownMenuThemeData(
+      textStyle: TextStyle(
+        fontFamily: HermesTypography.sans,
+        color: tokens.onSurface,
+        fontSize: 16,
+      ),
+      menuStyle: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(tokens.raised),
+        shape: WidgetStatePropertyAll(panelShape),
+      ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: tokens.raised,
+      surfaceTintColor: Colors.transparent,
+      shape: panelShape,
+    ),
+    tooltipTheme: TooltipThemeData(
+      decoration: BoxDecoration(
+        color: tokens.raised,
+        borderRadius: HermesRadius.control,
+        border: Border.all(color: tokens.border),
+      ),
+      textStyle: TextStyle(
+        fontFamily: HermesTypography.sans,
+        color: tokens.onSurface,
+        fontSize: 12,
+      ),
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith(
+        (states) =>
+            !states.contains(WidgetState.disabled) &&
+                states.contains(WidgetState.selected)
+            ? onAccent
+            : tokens.muted,
+      ),
+      trackColor: WidgetStateProperty.resolveWith(
+        (states) =>
+            !states.contains(WidgetState.disabled) &&
+                states.contains(WidgetState.selected)
+            ? tokens.accent
+            : tokens.border,
+      ),
+    ),
+    checkboxTheme: CheckboxThemeData(
+      checkColor: WidgetStatePropertyAll(onAccent),
+    ),
+    progressIndicatorTheme: ProgressIndicatorThemeData(
+      color: tokens.accent,
+      linearTrackColor: tokens.border,
+      circularTrackColor: tokens.border,
+    ),
+    textSelectionTheme: TextSelectionThemeData(
+      cursorColor: tokens.accent,
+      selectionColor: tokens.accent.withValues(alpha: .25),
+      selectionHandleColor: tokens.accent,
     ),
     cardTheme: CardThemeData(
       color: tokens.raised,
@@ -332,10 +611,13 @@ ThemeData hermesTheme(Brightness brightness) {
     ),
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: tokens.accent,
-      foregroundColor: Colors.black,
+      foregroundColor: onAccent,
+      shape: actionShape,
+      elevation: 0,
     ),
     bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: tokens.raised,
+      surfaceTintColor: Colors.transparent,
       shape: const RoundedRectangleBorder(borderRadius: HermesRadius.sheet),
     ),
     snackBarTheme: SnackBarThemeData(
@@ -344,6 +626,9 @@ ThemeData hermesTheme(Brightness brightness) {
         color: tokens.onSurface,
       ),
       behavior: SnackBarBehavior.floating,
+      actionTextColor: tokens.accent,
+      disabledActionTextColor: tokens.muted,
+      shape: panelShape,
     ),
     extensions: <ThemeExtension<dynamic>>[tokens],
   );

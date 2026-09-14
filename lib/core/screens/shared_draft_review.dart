@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/hermes_theme.dart';
 
 import '../services/android_share_intent_service.dart';
 import '../services/attachment_draft_service.dart';
@@ -311,7 +312,9 @@ class _SharedDraftReviewState extends State<_SharedDraftReview> {
                       isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Profile',
-                        border: OutlineInputBorder(),
+                        border: OutlineInputBorder(
+                          borderRadius: HermesRadius.control,
+                        ),
                       ),
                       items: [
                         for (final profile in profiles)

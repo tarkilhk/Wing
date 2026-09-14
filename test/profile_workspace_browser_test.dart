@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hermes_android/core/services/connection_manager.dart';
 import 'package:hermes_android/core/services/profile_workspace_controller.dart';
 import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/widgets/context_fuse.dart';
+import 'package:hermes_android/core/widgets/context_ring.dart';
 import 'support/profile_browser_fixture.dart';
 
 void main() {
@@ -37,29 +37,33 @@ void main() {
     );
   }
 
-  testWidgets('context fuse overlays the composer top edge without a row', (
-    tester,
-  ) async {
-    await controller.createChat();
-    await show(tester);
-    await tester.pumpAndSettle();
-    final composer = tester.getRect(
-      find.byKey(const ValueKey('conversation-composer')),
-    );
-    final fuse = tester.getRect(find.byType(ContextFuse));
-    expect(fuse.center.dy, closeTo(composer.top, .1));
-    expect(fuse.left, closeTo(composer.left + 24, .1));
-    expect(fuse.right, closeTo(composer.right - 24, .1));
-    expect(
-      find.ancestor(
-        of: find.byType(ContextFuse),
-        matching: find.byType(Positioned),
-      ),
-      findsOneWidget,
-    );
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+  testWidgets(
+    'context ring has its own target beside the model inside the composer',
+    (tester) async {
+      await controller.createChat();
+      await show(tester);
+      await tester.pumpAndSettle();
+      final composer = tester.getRect(
+        find.byKey(const ValueKey('conversation-composer')),
+      );
+      final ring = tester.getRect(
+        find.byKey(const ValueKey('context-ring-details')),
+      );
+      final model = tester.getRect(
+        find.byKey(const Key('chat-intelligence-button')),
+      );
+      final send = tester.getRect(find.byTooltip('Send'));
+      expect(ring.height, greaterThanOrEqualTo(48));
+      expect(ring.width, greaterThanOrEqualTo(48));
+      expect(composer.contains(ring.topLeft), isTrue);
+      expect(composer.contains(ring.bottomRight), isTrue);
+      expect(ring.right, lessThanOrEqualTo(model.left));
+      expect(model.right, lessThanOrEqualTo(send.left));
+      expect(find.byType(ContextRing), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets('chat header opens project picker without switching profile', (
     tester,

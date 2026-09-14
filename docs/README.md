@@ -54,6 +54,8 @@ The inventories describe their inspection dates and source commits. Do not silen
 
 ## Current implementation contracts
 
+- [Studio implementation and complete component audit](design/2026-09-14-studio-implementation.md), shared light/dark control themes, the context ring, preserved interactions and rendered review.
+
 - [App shell](APP_SHELL.md), navigation, cleanup boundary and verification.
 - [Conversation foundations](CONVERSATION_FOUNDATIONS.md), durable drafts, server refresh, provider selection, session YOLO and approval controls.
 - [Supervision and queues](SUPERVISION_AND_QUEUES.md), cross-profile Activity, sensitive responses, notification controls and client-owned follow-up queues.

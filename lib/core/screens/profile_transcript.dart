@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../theme/hermes_theme.dart';
 import '../services/profile_workspace_controller.dart';
 import '../utils/expansion_scroll_controller.dart';
 import '../widgets/anchored_expansion_tile.dart';
@@ -440,7 +441,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                                 color: Theme.of(context).colorScheme.primary,
                                 width: 2,
                               ),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: HermesRadius.card,
                             )
                           : null,
                       child: widget.messageBuilder(section.messages.last),

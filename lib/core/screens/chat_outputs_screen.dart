@@ -301,10 +301,18 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                       );
                     }
                   case _FileAction.play:
+                    final theme = Theme.of(previewContext);
                     final opened = await widget.mediaPreview.open(
                       file,
                       title: output.label,
                       mimeType: preview.mimeType,
+                      appearance: {
+                        'dark': theme.brightness == Brightness.dark ? 1 : 0,
+                        'surface': theme.colorScheme.surface.toARGB32(),
+                        'text': theme.colorScheme.onSurface.toARGB32(),
+                        'accent': theme.colorScheme.primary.toARGB32(),
+                        'onAccent': theme.colorScheme.onPrimary.toARGB32(),
+                      },
                     );
                     if (!opened && previewContext.mounted) {
                       ScaffoldMessenger.of(previewContext).showSnackBar(

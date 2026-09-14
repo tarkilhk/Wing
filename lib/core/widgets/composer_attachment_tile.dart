@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../theme/hermes_theme.dart';
 
 import '../models/attachment_draft.dart';
 
@@ -39,7 +40,7 @@ class ComposerAttachmentTile extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: HermesRadius.card,
             child: Image.file(
               File(draft.cachedPath),
               cacheWidth: 256,
@@ -60,11 +61,11 @@ class ComposerAttachmentTile extends StatelessWidget {
                 onPressed: onRemove,
                 icon: Container(
                   padding: const EdgeInsets.all(3),
-                  decoration: const BoxDecoration(
-                    color: Colors.black87,
-                    shape: BoxShape.circle,
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainerHigh,
+                    borderRadius: HermesRadius.control,
                   ),
-                  child: const Icon(Icons.close, color: Colors.white, size: 16),
+                  child: Icon(Icons.close, color: colors.onSurface, size: 16),
                 ),
               ),
             ),

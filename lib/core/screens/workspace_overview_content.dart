@@ -221,116 +221,173 @@ class HermesAdministrationContent extends StatelessWidget {
     final profile = controller.discovery?.named(
       controller.current?.scope.profileName,
     );
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(4, 0, 4, 16),
-          child: Text('Connection and selected profile'),
+    return _AdministrationTabs(
+      connection: ListTile(
+        leading: const Icon(Icons.dns_outlined),
+        title: Text(controller.connection.label),
+        subtitle: Text(
+          '${controller.connection.host}:${controller.connection.dashboardPort}',
         ),
-        Card(
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.dns_outlined),
-                title: Text(controller.connection.label),
-                subtitle: Text(
-                  '${controller.connection.host}:${controller.connection.dashboardPort}',
-                ),
+      ),
+      pages: [
+        ListView(
+          key: const PageStorageKey('administration-profile'),
+          padding: const EdgeInsets.all(16),
+          children: [
+            Card(
+              child: Column(
+                children: [
+                  if (profile != null) ...[
+                    ListTile(
+                      leading: const Icon(Icons.person_outline),
+                      title: Text(profile.label),
+                      subtitle: Text(profile.description ?? profile.name),
+                      trailing: IconButton(
+                        tooltip: 'Edit selected profile',
+                        icon: const Icon(Icons.edit_outlined),
+                        onPressed: controller.switching
+                            ? null
+                            : () => _editProfile(context),
+                      ),
+                    ),
+                    ListTile(
+                      title: const Text('Default model'),
+                      subtitle: Text(profile.model ?? 'Not configured'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: controller.switching
+                          ? null
+                          : () => _editDefaultModel(context),
+                    ),
+                    if (profile.provider != null)
+                      ListTile(
+                        title: const Text('Default provider'),
+                        subtitle: Text(profile.provider!),
+                      ),
+                  ],
+                ],
               ),
-              if (profile != null) ...[
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.person_outline),
-                  title: Text(profile.label),
-                  subtitle: Text(profile.description ?? profile.name),
-                  trailing: IconButton(
-                    tooltip: 'Edit selected profile',
-                    icon: const Icon(Icons.edit_outlined),
-                    onPressed: controller.switching
-                        ? null
-                        : () => _editProfile(context),
+            ),
+            const SizedBox(height: 12),
+            ComposerActionSettings(preferences: controller.preferences),
+            if (controller.current != null) ...[
+              const SizedBox(height: 12),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.extension_outlined),
+                  title: const Text('Skills and tools'),
+                  subtitle: const Text(
+                    'Inspect capabilities and manage what this profile can use',
                   ),
-                ),
-                ListTile(
-                  title: const Text('Default model'),
-                  subtitle: Text(profile.model ?? 'Not configured'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: controller.switching
                       ? null
-                      : () => _editDefaultModel(context),
+                      : () {
+                          final gateway = controller.current!.gateway;
+                          final label = controller.connection.label;
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => ProfileCapabilitiesScreen(
+                                gateway: gateway,
+                                connectionLabel: label,
+                              ),
+                            ),
+                          );
+                        },
                 ),
-                if (profile.provider != null)
-                  ListTile(
-                    title: const Text('Provider'),
-                    subtitle: Text(profile.provider!),
-                  ),
+              ),
+            ],
+          ],
+        ),
+        ListView(
+          key: const PageStorageKey('administration-server'),
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (onConnections != null)
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.settings_ethernet),
+                  title: const Text('Manage connections'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: onConnections,
+                ),
+              ),
+            if (controller.current != null) ...[
+              const SizedBox(height: 12),
+              BackendVersionCard(
+                key: ValueKey(controller.current!.gateway),
+                gateway: controller.current!.gateway,
+                connectionLabel: controller.connection.label,
+              ),
+            ],
+          ],
+        ),
+        ListView(
+          key: const PageStorageKey('administration-health'),
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (controller.current != null) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'Selected profile · ${profile?.label ?? controller.current!.scope.profileName}',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ),
+              ProfileUsagePanel(
+                key: ValueKey(controller.current!.gateway),
+                capturedProfileGateway: controller.current!.gateway,
+                connectionLabel: controller.connection.label,
+              ),
+              if (onConnections != null) ...[
+                const SizedBox(height: 12),
+                ProfileDiagnosticsPanel(
+                  key: ValueKey(controller.current!.scope),
+                  workspace: controller.current!,
+                  connectionLabel: controller.connection.label,
+                  onManageConnections: onConnections!,
+                ),
               ],
             ],
-          ),
+          ],
         ),
-        const SizedBox(height: 12),
-        ComposerActionSettings(preferences: controller.preferences),
-        if (controller.current != null) ...[
-          const SizedBox(height: 12),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.extension_outlined),
-              title: const Text('Skills and tools'),
-              subtitle: const Text(
-                'Inspect capabilities and manage what this profile can use',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: controller.switching
-                  ? null
-                  : () {
-                      final gateway = controller.current!.gateway;
-                      final label = controller.connection.label;
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => ProfileCapabilitiesScreen(
-                            gateway: gateway,
-                            connectionLabel: label,
-                          ),
-                        ),
-                      );
-                    },
-            ),
-          ),
-          const SizedBox(height: 12),
-          BackendVersionCard(
-            key: ValueKey(controller.current!.gateway),
-            gateway: controller.current!.gateway,
-            connectionLabel: controller.connection.label,
-          ),
-          const SizedBox(height: 12),
-          ProfileUsagePanel(
-            key: ValueKey(controller.current!.gateway),
-            capturedProfileGateway: controller.current!.gateway,
-            connectionLabel: controller.connection.label,
-          ),
-        ],
-        if (controller.current != null && onConnections != null) ...[
-          const SizedBox(height: 12),
-          ProfileDiagnosticsPanel(
-            key: ValueKey(controller.current!.scope),
-            workspace: controller.current!,
-            connectionLabel: controller.connection.label,
-            onManageConnections: onConnections!,
-          ),
-        ],
-        if (controller.current == null && onConnections != null) ...[
-          const SizedBox(height: 12),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.settings_ethernet),
-              title: const Text('Manage connections'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: onConnections,
-            ),
-          ),
-        ],
       ],
     );
   }
+}
+
+/// Keep all existing panels mounted so changing tabs preserves their loaded
+/// results, disclosure state and pending operations.
+class _AdministrationTabs extends StatefulWidget {
+  const _AdministrationTabs({required this.connection, required this.pages});
+  final Widget connection;
+  final List<Widget> pages;
+
+  @override
+  State<_AdministrationTabs> createState() => _AdministrationTabsState();
+}
+
+class _AdministrationTabsState extends State<_AdministrationTabs> {
+  int _selected = 0;
+
+  @override
+  Widget build(BuildContext context) => DefaultTabController(
+    length: 3,
+    child: Column(
+      children: [
+        widget.connection,
+        TabBar(
+          labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+          onTap: (index) => setState(() => _selected = index),
+          tabs: const [
+            Tab(text: 'Profile'),
+            Tab(text: 'Server'),
+            Tab(text: 'Health'),
+          ],
+        ),
+        Expanded(
+          child: IndexedStack(index: _selected, children: widget.pages),
+        ),
+      ],
+    ),
+  );
 }

@@ -44,6 +44,7 @@ class _MediaPreview extends MediaPreviewService {
     RemoteFileDownload file, {
     required String title,
     String? mimeType,
+    Map<String, int>? appearance,
   }) => play(file, title, mimeType);
 }
 

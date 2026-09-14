@@ -228,7 +228,10 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                 ),
                 child: Text(
                   'Sets the server default for this profile and applies to new sessions only. Running chats keep their current model.',
-                  style: tokens.typography.body.copyWith(color: tokens.muted),
+                  style: tokens.typography.body.copyWith(
+                    color: tokens.muted,
+                    fontSize: 14,
+                  ),
                 ),
               ),
               const SizedBox(height: HermesSpacing.sm),
@@ -243,7 +246,9 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                     decoration: const InputDecoration(
                       hintText: 'Search models',
                       prefixIcon: Icon(Icons.search_rounded),
-                      border: OutlineInputBorder(),
+                      border: OutlineInputBorder(
+                        borderRadius: HermesRadius.control,
+                      ),
                       isDense: true,
                     ),
                     onChanged: (value) => setState(() => _query = value),

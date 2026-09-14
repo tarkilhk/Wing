@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/hermes_theme.dart';
 import 'package:flutter/services.dart';
 
 import 'web_output_preview.dart';
@@ -90,12 +91,9 @@ class _MarkdownCodeBlockState extends State<MarkdownCodeBlock> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final background = isDark
-        ? const Color(0xFF141414)
-        : const Color(0xFFF2F2F2);
-    final header = isDark ? const Color(0xFF232323) : const Color(0xFFE4E4E4);
-    final foreground = isDark ? Colors.white70 : Colors.black87;
+    final background = theme.colorScheme.surfaceContainerLow;
+    final header = theme.colorScheme.surfaceContainerHighest;
+    final foreground = theme.colorScheme.onSurface;
     final language = widget.language?.toLowerCase();
     final diagramFormat = switch (language) {
       'mermaid' => WebOutputFormat.mermaid,
@@ -134,7 +132,7 @@ class _MarkdownCodeBlockState extends State<MarkdownCodeBlock> {
       margin: const EdgeInsets.symmetric(vertical: 6),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: HermesRadius.card,
         border: Border.all(
           color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
         ),

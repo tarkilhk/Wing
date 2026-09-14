@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../theme/hermes_theme.dart';
 
 import '../services/profile_gateway.dart';
 
@@ -327,7 +328,9 @@ class _ProfileEditorSheetState extends State<ProfileEditorSheet> {
                     labelText: 'Description',
                     hintText: 'What this profile is for',
                     alignLabelWithHint: true,
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(
+                      borderRadius: HermesRadius.control,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -341,7 +344,9 @@ class _ProfileEditorSheetState extends State<ProfileEditorSheet> {
                     labelText: 'SOUL',
                     hintText: 'Instructions that shape this profile',
                     alignLabelWithHint: true,
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(
+                      borderRadius: HermesRadius.control,
+                    ),
                   ),
                 ),
                 if (_notice case final notice?) ...[

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/hermes_theme.dart';
 
 enum AppDestination {
   chats('Chats', Icons.chat_bubble_outline),
@@ -33,7 +34,7 @@ class AppDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Drawer(
-      backgroundColor: colors.surface,
+      backgroundColor: colors.surfaceContainerLow,
       child: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
@@ -67,10 +68,10 @@ class AppDrawer extends StatelessWidget {
               ListTile(
                 key: ValueKey('nav-${destination.name}'),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: HermesRadius.control,
                 ),
                 selected: selected == destination,
-                selectedTileColor: colors.primary.withValues(alpha: 0.12),
+                selectedTileColor: colors.primaryContainer,
                 leading: Icon(destination.icon),
                 title: Text(destination.label),
                 enabled:

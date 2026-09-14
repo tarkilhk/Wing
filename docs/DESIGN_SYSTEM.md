@@ -23,6 +23,8 @@ Place New chat in a shallow opaque shelf above the Android gesture area, with 16
 
 Use 16 dp page gutters, a 4 dp spacing grid, 6 dp action corners, 8 dp group/composer corners, 24-28 sp page titles, 16 sp body text and 12-13 sp metadata. Primary action paint can be about 40 dp high inside a minimum 48 dp touch area. Text scaling must allow rows and controls to grow. Keep established compact activity density; improve touch areas without adding visible card padding.
 
+Use Android's Roboto sans typography explicitly across component themes and monospace for code. The [implementation audit and rendered review](design/2026-09-14-studio-implementation.md) records coverage, behavior preservation and justified density exceptions on the revamp branch.
+
 ## Conversation preservation
 
 Keep the existing Activity disclosure, tool counts, Tools/Tasks/Agents/Work tabs when available, thinking disclosure, nested tool rows, guide line, selection, expansion state, scroll anchoring and copyable details. Do not add extra outer cards, timeline dots or permanent rows simply because the raster mockup draws them. Use the current component geometry as the baseline and apply color/type/border refinements. Approvals and questions remain outside collapsible tool results.
@@ -32,6 +34,8 @@ Keep activity status and queued-message controls above the composer. Preserve th
 The model/reasoning selector opens Intelligence. Model selection retains search and collapsible groups by actual technical provider route. Selecting a model returns to Intelligence; Apply confirms the selection for this chat. Keep existing busy/loading/disabled rules and full route identifiers in the picker.
 
 Ordinary Send/Stop and Enter behavior stays unchanged. Preserve the message-actions entry points present in the implementation baseline, including long-press. Do not restore controls removed by later approved UX work. Fork, Steer and Queue remain one-shot choices with current eligibility rules, never persistent composer modes. Preserve queued-message review, edit, delete and pause/resume behavior. Do not show unavailable actions as usable in a running chat.
+
+The later owner-approved [held-slide composer actions](COMPOSER_ACTION_GESTURE.md) supersede the earlier busy-button interaction. Preserve the resting arrow, held-action animation, vertical selector, cancellation and accessibility behavior, and device default-action preference. Its existing geometry is an explicit exception to the general control-corner tokens. Preserve the Markdown scrollbar gutters and subtle thumb styling added alongside this work.
 
 ## Context indicator, selected ring
 

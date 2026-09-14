@@ -2,6 +2,12 @@ package com.hermesagent.hermes_android
 
 import android.app.Activity
 import android.graphics.Color
+import android.content.res.ColorStateList
+import android.content.res.Configuration
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.InsetDrawable
+import android.graphics.drawable.RippleDrawable
+import androidx.core.view.WindowInsetsControllerCompat
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -79,8 +85,19 @@ internal class MediaPreviewActivity : Activity() {
     }
 
     private fun buildLayout(rawTitle: String) {
+        val systemDark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        val dark = intent.getIntExtra("studio_dark", if (systemDark) 1 else 0) == 1
+        val canvas = intent.getIntExtra("studio_surface", Color.parseColor(if (dark) "#101917" else "#F4F7F6"))
+        val ink = intent.getIntExtra("studio_text", Color.parseColor(if (dark) "#E8F2EC" else "#172B27"))
+        val accent = intent.getIntExtra("studio_accent", Color.parseColor(if (dark) "#A6E3CB" else "#146B53"))
+        val onAccent = intent.getIntExtra("studio_onAccent", Color.parseColor(if (dark) "#10291F" else "#FFFFFF"))
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
+        }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            setBackgroundColor(canvas)
         }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(
@@ -97,11 +114,29 @@ internal class MediaPreviewActivity : Activity() {
             text = "Back"
             contentDescription = "Return to Outputs"
             minHeight = dp(48)
+            minWidth = dp(48)
+            isAllCaps = false
+            textSize = 14f
+            setTextColor(onAccent)
+            setPadding(dp(16), 0, dp(16), 0)
+            elevation = 0f
+            stateListAnimator = null
+            val face = GradientDrawable().apply {
+                setColor(accent)
+                cornerRadius = dp(6).toFloat()
+            }
+            background = RippleDrawable(
+                ColorStateList.valueOf((onAccent and 0x00ffffff) or 0x33000000),
+                InsetDrawable(face, 0, dp(4), 0, dp(4)),
+                null,
+            )
+            backgroundTintList = null
             setOnClickListener { finish() }
         })
         header.addView(TextView(this).apply {
             text = rawTitle.ifBlank { "Media preview" }.take(120)
             textSize = 20f
+            setTextColor(ink)
             maxLines = 2
             setPadding(dp(8), 0, 0, 0)
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))

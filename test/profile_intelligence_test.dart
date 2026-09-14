@@ -116,7 +116,8 @@ void main() {
       await tester.tap(find.byKey(const Key('reasoning-xhigh')));
       await tester.tap(find.text('Apply'));
       await tester.pumpAndSettle();
-      expect(find.text('5.6 Sol Extra High'), findsOneWidget);
+      expect(find.text('5.6 Sol'), findsOneWidget);
+      expect(find.text('Extra High'), findsOneWidget);
       expect(host.writes, hasLength(2));
       expect(tester.takeException(), isNull);
     },

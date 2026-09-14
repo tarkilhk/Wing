@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/hermes_theme.dart';
 import 'anchored_expansion_tile.dart';
 import 'package:flutter/services.dart';
 
@@ -165,7 +166,7 @@ class ProfileMessage extends StatelessWidget {
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: HermesRadius.card,
                     ),
                     child: Text(
                       role == 'assistant' ? 'H' : 'S',
@@ -205,12 +206,7 @@ class ProfileMessage extends StatelessWidget {
                   decoration: user
                       ? BoxDecoration(
                           color: theme.colorScheme.primaryContainer,
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(20),
-                            topRight: Radius.circular(20),
-                            bottomLeft: Radius.circular(20),
-                            bottomRight: Radius.circular(6),
-                          ),
+                          borderRadius: HermesRadius.card,
                         )
                       : null,
                   child: user

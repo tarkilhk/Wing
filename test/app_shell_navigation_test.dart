@@ -87,7 +87,9 @@ void main() {
       expect(find.text('Keep this unsent'), findsOneWidget);
       expect(controller.visible, isTrue);
       await navigate(tester, AppDestination.administration);
-      expect(find.text('Connection and selected profile'), findsOneWidget);
+      expect(find.text('Profile'), findsOneWidget);
+      await tester.tap(find.text('Health'));
+      await tester.pumpAndSettle();
       // Administration grows beyond the viewport as profile controls are added.
       await tester.scrollUntilVisible(
         find.text('Diagnostics'),
@@ -183,7 +185,9 @@ void main() {
     expect(find.text('Theme'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await navigate(tester, AppDestination.administration);
-    expect(find.text('Connection and selected profile'), findsOneWidget);
+    expect(find.text('Profile'), findsOneWidget);
+    await tester.tap(find.text('Health'));
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 
