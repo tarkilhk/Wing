@@ -41,7 +41,7 @@ history loading or errors, and active work; keep it scrollable on short screens.
 
 Keep hamburger navigation and projects scoped inside Chats. Use compact connection/profile text below the page title. Search stays below this scope. Projects, pins and recents use full-width rows, grouped where helpful, with thin separators.
 
-Place New chat in a shallow opaque shelf above the Android gesture area, with 16 dp horizontal insets. Use a slim rectangular button and no additional rounded dock around it. Reserve scroll padding so the shelf never covers the final chat. Respect keyboard and system insets.
+On 15 September 2026, the owner replaced the full-width New chat shelf with a 56 dp floating button at the bottom right. Show only a plus, with a New chat tooltip and accessibility label. Use the shared action corners and accent colors, subtle elevation and 16 dp edge spacing above the system gesture area. Extend the chat list through the space released by the shelf, with enough trailing scroll padding to move the final row above the button. Respect keyboard and system insets. The same browser control retains its New project action in All projects.
 
 Use 16 dp page gutters, a 4 dp spacing grid, 6 dp action corners, 8 dp group/composer corners, 24-28 sp page titles, 16 sp body text and 12-13 sp metadata. Primary action paint can be about 40 dp high inside a minimum 48 dp touch area. Text scaling must allow rows and controls to grow. Keep established compact activity density; improve touch areas without adding visible card padding.
 
