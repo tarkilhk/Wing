@@ -348,6 +348,8 @@ class _SharedDraftReviewState extends State<_SharedDraftReview> {
                                   .profileName ==
                               _profileName)
                             RadioListTile<String>(
+                              minTileHeight: 48,
+                              minVerticalPadding: 8,
                               key: const Key('share-destination-recover'),
                               value: _recoverDraft,
                               enabled: !_working,
@@ -357,6 +359,8 @@ class _SharedDraftReviewState extends State<_SharedDraftReview> {
                               ),
                             ),
                           RadioListTile<String>(
+                            minTileHeight: 48,
+                            minVerticalPadding: 8,
                             key: Key('share-destination-new'),
                             value: _newChat,
                             enabled: !_working,
@@ -369,6 +373,8 @@ class _SharedDraftReviewState extends State<_SharedDraftReview> {
                           ),
                           for (final session in visibleSessions)
                             RadioListTile<String>(
+                              minTileHeight: 48,
+                              minVerticalPadding: 8,
                               key: ValueKey(
                                 'share-destination-${session['id']}',
                               ),

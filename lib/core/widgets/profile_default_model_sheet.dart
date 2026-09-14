@@ -325,6 +325,8 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                                 children: [
                                   for (final choice in entry.value)
                                     RadioListTile<String>(
+                                      minTileHeight: 48,
+                                      minVerticalPadding: 8,
                                       key: Key(
                                         'profile-model-${choice.provider}-${choice.model}',
                                       ),

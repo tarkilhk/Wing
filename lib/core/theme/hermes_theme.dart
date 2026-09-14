@@ -502,6 +502,16 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
       ),
     ),
     listTileTheme: ListTileThemeData(
+      titleTextStyle: TextStyle(
+        fontFamily: HermesTypography.sans,
+        fontSize: 16,
+        color: tokens.onSurface,
+      ),
+      subtitleTextStyle: TextStyle(
+        fontFamily: HermesTypography.sans,
+        fontSize: 13,
+        color: tokens.muted,
+      ),
       iconColor: tokens.muted,
       textColor: tokens.onSurface,
       selectedColor: tokens.accent,
@@ -584,6 +594,16 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
     ),
     checkboxTheme: CheckboxThemeData(
       checkColor: WidgetStatePropertyAll(onAccent),
+    ),
+    radioTheme: RadioThemeData(
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      fillColor: WidgetStateProperty.resolveWith(
+        (states) =>
+            !states.contains(WidgetState.disabled) &&
+                states.contains(WidgetState.selected)
+            ? tokens.accent
+            : tokens.muted,
+      ),
     ),
     progressIndicatorTheme: ProgressIndicatorThemeData(
       color: tokens.accent,

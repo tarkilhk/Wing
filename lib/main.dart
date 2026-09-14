@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'core/widgets/compact_switch.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/services/android_launch_intent_service.dart';
@@ -1505,7 +1506,7 @@ class _AddDialogState extends State<_AddDialog> {
                   autocorrect: false,
                 ),
                 const SizedBox(height: 8),
-                SwitchListTile(
+                CompactSwitchListTile(
                   value: _dashboardProxied,
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Dashboard behind proxy'),

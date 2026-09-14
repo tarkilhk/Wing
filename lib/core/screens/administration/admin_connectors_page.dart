@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../widgets/compact_switch.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/administration_repository.dart';
 import '../../widgets/backend_version_card.dart';
@@ -76,11 +77,15 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
               children: [
                 for (final row in rows)
                   ListTile(
+                    minTileHeight: 56,
+                    minVerticalPadding: 4,
+                    horizontalTitleGap: 12,
                     title: Text('${row['name']}'),
                     subtitle: Text(
                       '${row['transport'] ?? 'Configured connector'}',
                     ),
-                    trailing: Switch(
+                    trailing: CompactSwitch(
+                      semanticLabel: 'Enable ${row['name']}',
                       value: row['enabled'] != false,
                       onChanged: _busy ? null : (v) => _toggle(row, v, refresh),
                     ),
@@ -483,7 +488,7 @@ class _AdminPluginsPageState extends State<AdminPluginsPage> {
             AdminGroup(
               children: [
                 for (final row in rows)
-                  SwitchListTile(
+                  CompactSwitchListTile(
                     title: Text('${row['name']}'),
                     subtitle: Text(
                       '${row['source']} · ${row['status']}\n${row['description'] ?? ''}',

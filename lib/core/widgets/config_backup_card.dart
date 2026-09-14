@@ -215,6 +215,8 @@ class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 RadioListTile<ConfigImportMode>(
+                  minTileHeight: 48,
+                  minVerticalPadding: 8,
                   key: Key('import_mode_merge'),
                   value: ConfigImportMode.merge,
                   title: Text('Merge'),
@@ -225,6 +227,8 @@ class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
                   contentPadding: EdgeInsets.zero,
                 ),
                 RadioListTile<ConfigImportMode>(
+                  minTileHeight: 48,
+                  minVerticalPadding: 8,
                   key: Key('import_mode_replace'),
                   value: ConfigImportMode.replace,
                   title: Text('Replace'),

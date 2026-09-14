@@ -14,6 +14,7 @@ import 'package:hermes_android/core/services/profile_workspace_controller.dart';
 import 'package:hermes_android/core/theme/hermes_theme.dart';
 import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
 import 'package:hermes_android/core/widgets/chat_intelligence_picker.dart';
+import 'package:hermes_android/core/widgets/compact_switch.dart';
 import 'support/profile_browser_fixture.dart';
 
 const _export = bool.fromEnvironment('STUDIO_REVIEW');
@@ -287,6 +288,13 @@ void main() {
                   matching: find.byType(Scrollable),
                 ),
               );
+              await Scrollable.ensureVisible(
+                tester.element(
+                  find.byKey(const ValueKey('nav-administration')),
+                ),
+                alignment: .5,
+              );
+              await tester.pumpAndSettle();
               await tester.tap(
                 find.byKey(const ValueKey('nav-administration')),
               );
@@ -297,7 +305,7 @@ void main() {
                 '${brightness.name}-administration-profile$adminSuffix',
               );
               for (final tab in ['Server', 'Health', 'Profile']) {
-                await tester.tap(find.text(tab));
+                await tester.tap(find.widgetWithText(Tab, tab));
                 await tester.pumpAndSettle();
                 await _capture(
                   tester,
@@ -425,7 +433,7 @@ void main() {
                     selected: const {0},
                     onSelectionChanged: (_) {},
                   ),
-                  SwitchListTile(
+                  CompactSwitchListTile(
                     value: true,
                     onChanged: (_) {},
                     title: const Text('Enabled preference'),

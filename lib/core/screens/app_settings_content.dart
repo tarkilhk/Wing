@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/compact_switch.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -164,7 +165,7 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
           Card(
             child: Column(
               children: [
-                SwitchListTile(
+                CompactSwitchListTile(
                   title: const Text('Completed work'),
                   value:
                       widget.preferences.getBool(completionNotificationsKey) ??
@@ -172,7 +173,7 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                   onChanged: (value) =>
                       _save(completionNotificationsKey, value),
                 ),
-                SwitchListTile(
+                CompactSwitchListTile(
                   title: const Text('Needs attention'),
                   subtitle: const Text(
                     'Questions, approvals and failed turns.',
@@ -182,7 +183,7 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                       true,
                   onChanged: (value) => _save(attentionNotificationsKey, value),
                 ),
-                SwitchListTile(
+                CompactSwitchListTile(
                   title: const Text('Show chat titles in alerts'),
                   subtitle: const Text(
                     'Allow notification previews to include the chat title.',

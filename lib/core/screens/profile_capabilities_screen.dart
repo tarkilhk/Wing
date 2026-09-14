@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/profile_gateway.dart';
+import '../widgets/compact_switch.dart';
 
 enum _CapabilityKind { skills, tools }
 
@@ -173,6 +174,13 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final metadataStyle = theme.textTheme.bodySmall?.copyWith(
+      fontSize: 13,
+      fontWeight: FontWeight.w400,
+      letterSpacing: 0,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     final rows = _rows
         .where(
           (row) =>
@@ -203,9 +211,10 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                   '${widget.connectionLabel} · ${_gateway.scope.profileName}',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                const SizedBox(height: 8),
-                const Text(
+                const SizedBox(height: 4),
+                Text(
                   'Changes are saved on Hermes and affect other clients using this profile.',
+                  style: metadataStyle,
                 ),
                 const SizedBox(height: 12),
                 SegmentedButton<_CapabilityKind>(
@@ -279,23 +288,27 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                       final tools = row['tools'];
                       return ExpansionTile(
                         key: ValueKey((_kind, name)),
-                        title: Text(title),
-                        subtitle: Text(
-                          _skills
-                              ? '${row['category'] ?? 'Skill'} · ${row['provenance'] ?? 'Installed'}'
-                              : '${row['configured'] == true ? 'Configured' : 'Setup needed'}${row['platform_label'] == null ? '' : ' · ${row['platform_label']}'}',
-                        ),
-                        trailing: Switch(
-                          value: row['enabled'] == true,
-                          onChanged: _loading || _saving
-                              ? null
-                              : (value) => _toggle(row, value),
-                        ),
+                        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+                        minTileHeight: 56,
                         childrenPadding: const EdgeInsets.fromLTRB(
                           16,
                           0,
                           16,
-                          16,
+                          12,
+                        ),
+                        title: Text(title, style: theme.textTheme.bodyLarge),
+                        subtitle: Text(
+                          _skills
+                              ? '${row['category'] ?? 'Skill'} · ${row['provenance'] ?? 'Installed'}'
+                              : '${row['configured'] == true ? 'Configured' : 'Setup needed'}${row['platform_label'] == null ? '' : ' · ${row['platform_label']}'}',
+                          style: metadataStyle,
+                        ),
+                        trailing: CompactSwitch(
+                          semanticLabel: 'Enable $title',
+                          value: row['enabled'] == true,
+                          onChanged: _loading || _saving
+                              ? null
+                              : (value) => _toggle(row, value),
                         ),
                         expandedCrossAxisAlignment: CrossAxisAlignment.start,
                         children: [

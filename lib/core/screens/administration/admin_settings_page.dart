@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/compact_switch.dart';
 import '../../services/administration_repository.dart';
 import 'admin_widgets.dart';
 
@@ -324,7 +325,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
   Widget _field(AdminField field) {
     final value = _values[field.key];
     if (field.kind == AdminFieldKind.toggle) {
-      return SwitchListTile.adaptive(
+      return CompactSwitchListTile(
         contentPadding: EdgeInsets.zero,
         title: Text(field.label),
         subtitle: field.help.isEmpty ? null : Text(field.help),

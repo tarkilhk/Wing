@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hermes_android/core/widgets/compact_switch.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -36,7 +37,10 @@ void main() {
         ),
       ),
     );
-    final completion = find.widgetWithText(SwitchListTile, 'Completed work');
+    final completion = find.widgetWithText(
+      CompactSwitchListTile,
+      'Completed work',
+    );
     await tester.scrollUntilVisible(completion, 300);
     await tester.drag(find.byType(Scrollable).first, const Offset(0, -160));
     await tester.pumpAndSettle();
@@ -45,19 +49,19 @@ void main() {
     expect(preferences.getBool(completionNotificationsKey), isFalse);
     expect(
       tester
-          .widget<SwitchListTile>(
-            find.widgetWithText(SwitchListTile, 'Needs attention'),
+          .widget<CompactSwitchListTile>(
+            find.widgetWithText(CompactSwitchListTile, 'Needs attention'),
           )
           .value,
       isTrue,
     );
     expect(permissionRequests, 0);
     final previews = find.widgetWithText(
-      SwitchListTile,
+      CompactSwitchListTile,
       'Show chat titles in alerts',
     );
     await tester.scrollUntilVisible(previews, 250);
-    expect(tester.widget<SwitchListTile>(previews).value, isFalse);
+    expect(tester.widget<CompactSwitchListTile>(previews).value, isFalse);
     await tester.tap(previews);
     await tester.pumpAndSettle();
     expect(preferences.getBool(notificationTitlesKey), isTrue);

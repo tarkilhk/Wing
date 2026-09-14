@@ -25,6 +25,20 @@ Use 16 dp page gutters, a 4 dp spacing grid, 6 dp action corners, 8 dp group/com
 
 Use Android's Roboto sans typography explicitly across component themes and monospace for code. The [implementation audit and rendered review](design/2026-09-14-studio-implementation.md) records coverage, behavior preservation and justified density exceptions on the revamp branch.
 
+## Selection controls
+
+The Skills and tools screenshot prompted the owner's request for smaller controls and tighter rows. Its on/off controls are switches. Use switches for independent enabled states, radios for one choice in a group, and checkboxes for multiple selections. Keep these meanings when restyling them.
+
+Use `CompactSwitch` for standalone switches and `CompactSwitchListTile` for settings where the whole row toggles. The Material switch face draws at 75% size, about 39 × 24 dp, within an unscaled 48 × 48 dp touch and accessibility target. Keep native keyboard, focus and drag behavior. Do not shrink the hit target with the artwork. Radios retain their standard 20 dp indicator and padded touch target.
+
+Use 16 dp outer page gutters, a 12 dp label-to-control gap, and one shared trailing control column. Do not add another page gutter to rows already inside an inset form. Simple switch rows have a 48 dp minimum height and 4 dp vertical padding; two-line capability disclosures have a 56 dp minimum. Radio-choice rows use a 48 dp minimum and 8 dp vertical padding. These are minimums, not fixed heights. Let wrapped labels, descriptions and enlarged text increase the row height. Keep 16 sp labels and 13 sp muted metadata, with no extra blank line between them.
+
+Selected controls use the active accent family in both themes. Off and disabled controls use neutral track and thumb colors. Thumb position, radio dots and checkmarks must still identify the state without relying only on color. Retain visible keyboard focus and disable writes while a save is pending. Keep the last confirmed value after a failed save.
+
+A standalone switch needs a label identifying the affected setting. A setting row exposes one merged label, state and toggle action. Where tapping the row opens details, as in Skills and tools or MCP connectors, retain separate disclosure and switch actions. Toggling must not open details, and opening details must not change the setting.
+
+Check light and dark themes, selected and disabled states, long names at 320 dp width and 200% text, touch-target edges, keyboard activation, and screen-reader state before shipping control changes.
+
 ## Conversation preservation
 
 Keep the existing Activity disclosure, tool counts, Tools/Tasks/Agents/Work tabs when available, thinking disclosure, nested tool rows, guide line, selection, expansion state, scroll anchoring and copyable details. Do not add extra outer cards, timeline dots or permanent rows simply because the raster mockup draws them. Use the current component geometry as the baseline and apply color/type/border refinements. Approvals and questions remain outside collapsible tool results.

@@ -73,6 +73,8 @@ class _TextSizeSettingsCardState extends State<TextSizeSettingsCard> {
                     children: [
                       for (final preference in TextSizePreference.values)
                         RadioListTile<TextSizePreference>(
+                          minTileHeight: 48,
+                          minVerticalPadding: 8,
                           value: preference,
                           title: Text(preference.label),
                           subtitle: Text(preference.description),

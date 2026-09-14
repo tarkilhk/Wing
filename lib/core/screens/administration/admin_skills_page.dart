@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/compact_switch.dart';
 import '../../services/administration_repository.dart';
 import 'admin_widgets.dart';
 import 'admin_operations_page.dart';
@@ -31,7 +32,8 @@ class _AdminSkillLibraryPageState extends State<AdminSkillLibraryPage> {
               ),
               onChanged: (v) => setState(() => _query = v.toLowerCase()),
             ),
-            SwitchListTile(
+            CompactSwitchListTile(
+              contentPadding: EdgeInsets.zero,
               title: const Text('Order by recorded usage'),
               value: _usageOrder,
               onChanged: (v) => setState(() => _usageOrder = v),
