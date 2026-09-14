@@ -63,6 +63,12 @@ Priorities reflect mobile impact. Close an entry only after its acceptance crite
 
 ## HUP-004: Windows profile deletion fails after MCP activity
 
+**Upstream check, 2026-09-14:** Our MCP reproduction has not been filed upstream.
+[Issue #87761](https://github.com/NousResearch/hermes-agent/issues/87761) reports
+related Windows profile deletion failures from gateway-held files. Its scheduled
+gateway trigger differs from this MCP log-handle reproduction; it is not yet a
+confirmed duplicate or fix for HUP-004.
+
 **Mobile impact:** Deleting a profile can return HTTP 500 after a connector has
 started because the backend still owns an open log handle.
 

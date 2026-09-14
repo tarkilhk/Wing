@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.36.5+2222] - 2026-09-14
+
+### Fixed
+- Keep administration editor actions accessible above the keyboard and save confirmations.
+- Ignore refresh callbacks after leaving an administration page.
+- Explain managed provider selections that still need account access, verify composed browser selections, and remove provider switches from setup-only integrations.
+
+### Changed
+- Show clearer provider connection and token-expiry status.
+- Use compact selection controls and tighter settings rows while retaining full touch targets.
+- Add repeatable administration acceptance against an Android emulator and the real local Hermes backend.
+
 ## [2.36.4+2221] - 2026-09-14
 
 ### Changed
