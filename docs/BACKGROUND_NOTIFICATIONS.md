@@ -2,9 +2,11 @@
 
 Current decision, 2026-09-14: **Firebase delivery is dropped**, not an outstanding
 milestone. The older proposal below is historical research. Existing local alerts
-remain selected; sparse real alerts are being investigated. Permission/channel
-checks passed, but live-event coverage currently depends on loaded chats. See
-[current findings](ADMINISTRATION_ROADMAP.md#notification-findings).
+remain selected. Version 2.34.2 adds status checks for unopened chats when the
+connected app receives a general session-change event. Loaded chats keep their
+direct completion/input event handling. See the
+[local alert coverage and validation](LOCAL_ALERT_QA_2026-09-14.md) for the
+verified scope and delivery limits.
 
 Owner correction, 2026-09-12: **No Hermes backend modifications.** Any patch
 contracts or deployment instructions described below are rejected experiments,

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.34.2+2213] - 2026-09-14
+
+### Fixed
+
+- Receive local alerts for observed completion and input requests in unopened chats, including work started by another client in a different Hermes profile, while the app remains connected.
+- Avoid duplicate alerts for opened chats and false completion alerts after failed status reads or disappearing sessions.
+
 ## [2.34.1+2212] - 2026-09-14
 
 ### Fixed

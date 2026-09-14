@@ -260,6 +260,15 @@ class ProfileWorkspaceData {
       selectedProject == null ? sessions : projectSessions;
 }
 
+enum _NotificationActivity { running, waiting, idle }
+
+class _NotificationSession {
+  final ProfileChat chat;
+  final _NotificationActivity activity;
+
+  const _NotificationSession(this.chat, this.activity);
+}
+
 typedef ProfileGatewayFactory = ProfileGateway Function(WorkspaceScope scope);
 typedef ProfileAttention =
     Future<void> Function(ProfileChat chat, bool needsInput, [String? eventId]);
@@ -300,6 +309,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
   bool activityLoaded = false;
   int activityAvailableProfiles = 0;
   int _activityGeneration = 0;
+  Map<String, _NotificationSession>? _notificationSnapshot;
+  Future<void>? _notificationReconciliation;
+  bool _notificationReconcileAgain = false;
   SessionVisibility _sessionVisibility = SessionVisibility.chats;
   SessionVisibility get sessionVisibility => _sessionVisibility;
   String get _visibilityKey => 'session_visibility_v1_$connectionIdentity';
@@ -531,6 +543,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       resource.gateway.onEvent = (event) => _event(resource, event);
       resource.gateway.onConnectionChanged = (connected) {
         if (!connected && !_closed) {
+          _notificationSnapshot = null;
           for (final chat in resource.chats.values.where((c) => c.busy)) {
             chat.sensitivePromptResponding = false;
             chat.status = ProfileTurnStatus.reconnecting;
@@ -567,6 +580,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
       ).resolveInitial(connectionIdentity, discovery!);
       await switchProfile(initial.name);
       await _restorePending();
+      if (onAttention != null && current != null) {
+        await _scheduleNotificationReconciliation(current!);
+      }
     } catch (e) {
       error = e.toString();
       _changed();
@@ -4586,6 +4602,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   void _event(ProfileWorkspaceData resource, StreamEvent event) {
     if (_closed) return;
+    if (event.type == 'sessions.changed') {
+      unawaited(_scheduleNotificationReconciliation(resource));
+      return;
+    }
     final chat = resource.chats.values
         .where((c) => c.runtimeId == event.sessionId)
         .firstOrNull;
@@ -4950,6 +4970,160 @@ class ProfileWorkspaceController extends ChangeNotifier {
       unawaited(callback(chat, attention, eventId).catchError((Object _) {}));
     }
   }
+
+  Future<void> _scheduleNotificationReconciliation(
+    ProfileWorkspaceData resource,
+  ) {
+    if (_closed || onAttention == null) return Future<void>.value();
+    if (_notificationReconciliation != null) {
+      _notificationReconcileAgain = true;
+      return _notificationReconciliation!;
+    }
+    _notificationReconciliation =
+        (() async {
+          do {
+            _notificationReconcileAgain = false;
+            await _reconcileNotificationActivity(resource);
+          } while (_notificationReconcileAgain && !_closed);
+        })().whenComplete(() {
+          _notificationReconciliation = null;
+        });
+    return _notificationReconciliation!;
+  }
+
+  Future<void> _reconcileNotificationActivity(
+    ProfileWorkspaceData source,
+  ) async {
+    if (_closed || onAttention == null) return;
+    try {
+      final profiles = await source.gateway.discover();
+      final response = await source.gateway.call('session.active_list');
+      if (response['sessions'] is! List) {
+        throw const FormatException('Missing active sessions');
+      }
+      final rows = <Map<String, dynamic>>[];
+      for (final row in ProfileGateway.records(response['sessions'])) {
+        final runtimeId = row['id'];
+        final sessionId = row['session_key'];
+        final status = row['status'];
+        final lastActive = row['last_active'];
+        final sideTasks = row['side_tasks_running'];
+        if (runtimeId is! String ||
+            runtimeId.isEmpty ||
+            sessionId is! String ||
+            sessionId.isEmpty ||
+            status is! String ||
+            (lastActive != null && lastActive is! num) ||
+            (sideTasks != null && (sideTasks is! int || sideTasks < 0))) {
+          throw const FormatException('Invalid active session');
+        }
+        if (_hasLoadedNotificationChat(runtimeId, sessionId)) continue;
+        final tracked = _notificationSnapshot?[runtimeId];
+        final relevant =
+            status == 'waiting' ||
+            status == 'starting' ||
+            status == 'working' ||
+            (sideTasks is int && sideTasks > 0) ||
+            status == 'idle' &&
+                tracked != null &&
+                tracked.chat.key.sessionId == sessionId;
+        if (!relevant) continue;
+        rows.add(row);
+      }
+
+      final sessionIds = rows
+          .map((row) => row['session_key'] as String)
+          .toSet();
+      final ownership = await Future.wait(
+        profiles.profiles.map((profile) async {
+          final resource = _resource(profile.name);
+          final matches = <String, Map<String, dynamic>>{};
+          for (final sessionId in sessionIds) {
+            final exact = (await resource.gateway.search(
+              sessionId,
+              visibility: SessionVisibility.all,
+            )).where((row) => row['id'] == sessionId).toList();
+            if (exact.length > 1) {
+              throw const FormatException('Ambiguous session metadata');
+            }
+            if (exact.length == 1) matches[sessionId] = exact.single;
+          }
+          return (resource: resource, matches: matches);
+        }),
+      );
+      if (_closed) return;
+
+      final next = <String, _NotificationSession>{};
+      for (final row in rows) {
+        final runtimeId = row['id'] as String;
+        final sessionId = row['session_key'] as String;
+        ProfileChat? chat;
+        final savedOwners = ownership
+            .where((owner) => owner.matches.containsKey(sessionId))
+            .toList();
+        if (savedOwners.length == 1) {
+          final owner = savedOwners.single;
+          final rawTitle = owner.matches[sessionId]?['title'];
+          final title = rawTitle is String ? rawTitle.trim() : '';
+          chat = ProfileChat(
+            key: ProfileSessionKey(owner.resource.scope, sessionId),
+            runtimeId: runtimeId,
+            title: title.isEmpty ? 'Hermes session' : title,
+          );
+        }
+        if (chat == null) continue;
+        final status = row['status'] as String;
+        final sideTasks = row['side_tasks_running'] as int? ?? 0;
+        final activity = status == 'waiting'
+            ? _NotificationActivity.waiting
+            : status == 'starting' || status == 'working' || sideTasks > 0
+            ? _NotificationActivity.running
+            : status == 'idle'
+            ? _NotificationActivity.idle
+            : null;
+        if (activity == null) continue;
+        next[runtimeId] = _NotificationSession(chat, activity);
+      }
+
+      final previous = _notificationSnapshot;
+      _notificationSnapshot = {
+        for (final entry in next.entries)
+          if (entry.value.activity != _NotificationActivity.idle)
+            entry.key: entry.value,
+      };
+      if (previous == null) return;
+      for (final entry in next.entries) {
+        final before = previous[entry.key];
+        final after = entry.value;
+        if (before != null && before.chat.key != after.chat.key) continue;
+        if (_hasLoadedNotificationChat(
+          after.chat.runtimeId,
+          after.chat.key.sessionId,
+        )) {
+          continue;
+        }
+        if (after.activity == _NotificationActivity.waiting &&
+            before?.activity != _NotificationActivity.waiting) {
+          _notify(after.chat, true);
+        } else if (after.activity == _NotificationActivity.idle &&
+            before != null &&
+            before.activity != _NotificationActivity.idle) {
+          _notify(after.chat, false);
+        }
+      }
+    } catch (_) {
+      // A failed read cannot prove a transition. The next success is a baseline.
+      _notificationSnapshot = null;
+    }
+  }
+
+  bool _hasLoadedNotificationChat(String runtimeId, String sessionId) =>
+      _resources.values.any(
+        (resource) => resource.chats.values.any(
+          (chat) =>
+              chat.runtimeId == runtimeId && chat.key.sessionId == sessionId,
+        ),
+      );
 
   void _scheduleReconnect(ProfileWorkspaceData resource) {
     if (_closed ||
