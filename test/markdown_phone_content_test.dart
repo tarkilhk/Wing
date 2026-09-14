@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_android/core/widgets/markdown_code_block.dart';
 import 'package:hermes_android/core/widgets/profile_message.dart';
@@ -57,9 +58,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(scale)),
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(scale),
+              padding: const EdgeInsets.only(bottom: 34),
+            ),
             child: child!,
           ),
           home: const Scaffold(
@@ -88,6 +90,36 @@ void main() {
         horizontal.where((state) => state.position.maxScrollExtent > 0),
         hasLength(2),
       );
+      final markdown = find.byType(MarkdownBody);
+      final table = find.descendant(of: markdown, matching: find.byType(Table));
+      final tableScrollbar = find.descendant(
+        of: markdown,
+        matching: find.byType(Scrollbar),
+      );
+      final painters = tester
+          .widgetList<CustomPaint>(
+            find.descendant(
+              of: tableScrollbar,
+              matching: find.byType(CustomPaint),
+            ),
+          )
+          .map((widget) => widget.foregroundPainter)
+          .whereType<ScrollbarPainter>();
+      expect(painters, hasLength(1));
+      final painter = painters.single;
+      final gutter =
+          tester.getBottomLeft(tableScrollbar).dy -
+          tester.getBottomLeft(table).dy;
+      final thumbInset =
+          painter.padding.resolve(TextDirection.ltr).bottom +
+          painter.crossAxisMargin;
+      // Include a phone navigation inset above: the thumb must still fit
+      // entirely below the table, even at a large text size.
+      expect(thumbInset + painter.thickness, lessThan(gutter));
+      final tableScroll = horizontal.first;
+      await tester.drag(tableScrollbar, const Offset(-120, 0));
+      await tester.pumpAndSettle();
+      expect(tableScroll.position.pixels, greaterThan(0));
       expect(tester.takeException(), isNull);
       await tester.ensureVisible(find.byTooltip('Wrap lines'));
       await tester.tap(find.byTooltip('Wrap lines'));

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.36.2+2219] - 2026-09-14
+
+### Fixed
+
+- Keep table scrollbars below the last row, including on phones with a bottom navigation inset.
+- Use a thin, rounded, muted scrollbar with a dedicated gutter beneath Markdown tables.
+
 ## [2.36.1+2218] - 2026-09-14
 
 ### Changed

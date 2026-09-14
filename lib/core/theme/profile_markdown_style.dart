@@ -4,6 +4,15 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 // flutter_markdown merges its theme paragraph style into nested quotes. Flutter
 // typography defaults to inherit:false, which would discard quote formatting.
 ThemeData profileMarkdownTheme(ThemeData theme) => theme.copyWith(
+  scrollbarTheme: theme.scrollbarTheme.copyWith(
+    thickness: const WidgetStatePropertyAll(3),
+    radius: const Radius.circular(999),
+    thumbColor: WidgetStatePropertyAll(
+      theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.35),
+    ),
+    trackVisibility: const WidgetStatePropertyAll(false),
+    crossAxisMargin: 3,
+  ),
   typography: theme.typography.copyWith(
     englishLike: _inheritingProse(theme.typography.englishLike),
     dense: _inheritingProse(theme.typography.dense),
@@ -54,6 +63,8 @@ MarkdownStyleSheet profileMarkdownStyle(
     // crushing every column into the phone's width.
     tableColumnWidth: const IntrinsicColumnWidth(),
     tableScrollbarThumbVisibility: true,
+    // Reserve a gutter so the thumb never paints over the last row.
+    tablePadding: const EdgeInsets.only(bottom: 12),
     tableBorder: TableBorder.all(color: colors.outlineVariant),
     tableCellsPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
     horizontalRuleDecoration: BoxDecoration(

@@ -35,9 +35,7 @@ class MarkdownMessageContent extends StatelessWidget {
         } catch (error) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(fileOpenErrorMessage(error)),
-              ),
+              SnackBar(content: Text(fileOpenErrorMessage(error))),
             );
           }
           return;
@@ -87,28 +85,34 @@ class MarkdownMessageContent extends StatelessWidget {
           if (segment is MarkdownCodeBlock)
             segment
           else
-            Theme(
-              data: profileMarkdownTheme(theme),
-              child: MarkdownBody(
-                data: segment as String,
-                selectable: true,
-                onTapLink: (_, href, _) {
-                  if (href != null) _open(context, href);
-                },
-                sizedImageBuilder: (config) => OutlinedButton.icon(
-                  onPressed: () => _previewImage(
-                    context,
-                    config.uri.toString(),
-                    config.alt ?? 'Image',
+            // This is an inline viewport, not the screen edge. Otherwise the
+            // system bottom inset lifts table scrollbars into the last row.
+            MediaQuery.removePadding(
+              context: context,
+              removeBottom: true,
+              child: Theme(
+                data: profileMarkdownTheme(theme),
+                child: MarkdownBody(
+                  data: segment as String,
+                  selectable: true,
+                  onTapLink: (_, href, _) {
+                    if (href != null) _open(context, href);
+                  },
+                  sizedImageBuilder: (config) => OutlinedButton.icon(
+                    onPressed: () => _previewImage(
+                      context,
+                      config.uri.toString(),
+                      config.alt ?? 'Image',
+                    ),
+                    icon: const Icon(Icons.image_outlined),
+                    label: Text(
+                      config.alt ?? 'Open image link',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  icon: const Icon(Icons.image_outlined),
-                  label: Text(
-                    config.alt ?? 'Open image link',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  styleSheet: profileMarkdownStyle(theme),
                 ),
-                styleSheet: profileMarkdownStyle(theme),
               ),
             ),
       ],
