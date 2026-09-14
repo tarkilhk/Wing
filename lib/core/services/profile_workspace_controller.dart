@@ -2912,7 +2912,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _changed();
     try {
       // Address the saved row, even when only the newest history page is visible.
-      final history = await resource.gateway.fullHistory(source.runtimeId);
+      final history = regenerate
+          ? await resource.gateway.fullHistory(source.runtimeId)
+          : await resource.gateway.branchHistory(
+              source.key.sessionId,
+              throughRowId: selectedId,
+            );
       final targetIndex = history.indexWhere(
         (m) => answerMessageId(m) == selectedId,
       );
@@ -2937,11 +2942,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
           .take(targetIndex + 1)
           .where(isBranchMessage)
           .toList();
-      final count = await resource.gateway.branchCountThrough(
-        source.key.sessionId,
-        selectedId,
+      final result = await resource.gateway.branch(
+        source.runtimeId,
+        expected.length,
       );
-      final result = await resource.gateway.branch(source.runtimeId, count);
       final id = result['stored_session_id'];
       if (id is! String ||
           id.isEmpty ||
@@ -2975,7 +2979,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
         'profile': resource.scope.profileName,
         'parent_session_id': ?parent,
       });
-      final copied = child.messages.where(isBranchMessage).toList();
+      final copied = await resource.gateway.branchHistory(id);
+      child.messages = answerHistoryRows(copied);
       if (copied.length != expected.length ||
           List.generate(expected.length, (i) => i).any(
             (i) =>
@@ -2983,7 +2988,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
                 answerMessageText(copied[i]) != answerMessageText(expected[i]),
           )) {
         throw StateError(
-          'The gateway did not copy the requested answer boundary. The original is unchanged.',
+          'The fork was created, but its saved history does not match the selected answer. '
+          'It is available in Chats. The original is unchanged.',
         );
       }
       if (current == resource &&

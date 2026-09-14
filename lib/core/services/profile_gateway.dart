@@ -407,11 +407,16 @@ class ProfileGateway {
     );
   }
 
-  /// session.branch counts persisted user/assistant rows, including notices
-  /// omitted by session.history. Resolve the selected durable row before writing.
-  Future<int> branchCountThrough(String durableId, int rowId) async {
+  /// The persisted transcript that session.branch copies, including archived
+  /// turns and hidden notices. RPC history is a different, active projection.
+  /// Resolve [throughRowId] before writing, then verify the child through the
+  /// same REST representation instead of its projected RPC response.
+  Future<List<Map<String, dynamic>>> branchHistory(
+    String durableId, {
+    int? throughRowId,
+  }) async {
     var offset = 0;
-    var count = 0;
+    final messages = <Map<String, dynamic>>[];
     while (true) {
       final result =
           await read('sessions/${Uri.encodeComponent(durableId)}/messages', {
@@ -427,15 +432,16 @@ class ProfileGateway {
       }
       final rows = records(result['messages']);
       for (final row in rows) {
-        if (isBranchMessage(row)) count++;
-        if (row['id'] == rowId) {
+        if (isBranchMessage(row)) messages.add(row);
+        if (throughRowId != null && row['id'] == throughRowId) {
           if (row['role'] != 'assistant' || !isBranchMessage(row)) break;
-          return count;
+          return messages;
         }
       }
       if (rows.length < 500) break;
       offset += rows.length;
     }
+    if (throughRowId == null) return messages;
     throw StateError(
       'The selected answer is no longer saved. Reload before branching.',
     );

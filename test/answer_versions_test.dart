@@ -19,6 +19,8 @@ class AnswerHost {
   final parents = <String, String>{};
   final calls = <(String, Map<String, dynamic>)>[];
   Completer<void>? branchDelay;
+  void Function(List<Map<String, dynamic>>)? alterBranch;
+  List<Map<String, dynamic>>? branchReplyMessages;
   Completer<void>? submitDelay;
   Object? submitError;
   bool omitRowIds = false;
@@ -125,6 +127,7 @@ class AnswerHost {
               return {
                 'messages': history(profile, id)
                     .where(shown)
+                    .where((m) => m['compacted'] != true)
                     .map(
                       (m) => {
                         ...m,
@@ -146,7 +149,12 @@ class AnswerHost {
                     next * 1000 + i + 1;
               }
               parents[child] = id;
-              return {...session(child), 'parent': id};
+              alterBranch?.call(histories['$profile/$child']!);
+              return {
+                ...session(child),
+                'parent': id,
+                if (branchReplyMessages != null) 'messages': branchReplyMessages,
+              };
             case 'prompt.submit':
               await submitDelay?.future;
               if (submitError != null) throw submitError!;
@@ -421,6 +429,103 @@ void main() {}
     );
     expect(host.history('a', 'original').length, 6);
   });
+
+  test(
+    'fork opens after copying archived turns omitted by RPC history',
+    () async {
+      host.history('a', 'original').insertAll(0, [
+        {
+          'role': 'user',
+          'text': 'Archived prompt',
+          'row_id': 6,
+          'compacted': true,
+        },
+        {
+          'role': 'assistant',
+          'text': 'Archived answer',
+          'row_id': 7,
+          'compacted': true,
+        },
+      ]);
+      final child = (await controller.branchAnswer(original, 2))!;
+      expect(controller.current!.chat, same(child));
+      expect(child.messages.map(answerMessageText), [
+        'Archived prompt',
+        'Archived answer',
+        'Original prompt',
+        'Original answer',
+      ]);
+      expect(host.parents.length, 1);
+      expect(host.history('a', 'original').length, 7);
+    },
+  );
+
+  test('fork can target a saved archived answer', () async {
+    host.history('a', 'original')[2]['compacted'] = true;
+    final child = (await controller.branchAnswer(original, 2))!;
+    expect(controller.current!.chat, same(child));
+    expect(child.messages.map(answerMessageText), [
+      'Original prompt',
+      'Original answer',
+    ]);
+  });
+
+  test(
+    'fork verifies saved text instead of the RPC display projection',
+    () async {
+      host.branchReplyMessages = [
+        {'role': 'user', 'text': 'Projected prompt'},
+        {'role': 'assistant', 'text': 'Original answer'},
+      ];
+      final child = (await controller.branchAnswer(original, 2))!;
+      expect(controller.current!.chat, same(child));
+      expect(child.messages.map(answerMessageText), [
+        'Original prompt',
+        'Original answer',
+      ]);
+    },
+  );
+
+  for (final fault in ['missing', 'extra', 'changed']) {
+    test(
+      'fork rejects $fault saved content and keeps the child reachable',
+      () async {
+        host.alterBranch = (rows) {
+          switch (fault) {
+            case 'missing':
+              rows.removeLast();
+            case 'extra':
+              rows.add({
+                'role': 'assistant',
+                'text': 'Later answer',
+                'row_id': 9999,
+              });
+            case 'changed':
+              rows.last['text'] = 'Different answer';
+          }
+        };
+        await expectLater(
+          controller.branchAnswer(original, 2),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains('The fork was created'),
+            ),
+          ),
+        );
+        expect(controller.current!.chat, same(original));
+        expect(controller.current!.chats, contains('child-1'));
+        expect(
+          controller.current!.sessions.any((row) => row['id'] == 'child-1'),
+          isTrue,
+        );
+        expect(host.parents.length, 1);
+        expect(host.history('a', 'original').length, 5);
+        expect(original.changingAnswer, isFalse);
+      },
+    );
+  }
 
   test(
     'resolves saved fork boundaries beyond the first history page',

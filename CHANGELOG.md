@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.34.3+2214] - 2026-09-14
+
+### Fixed
+
+- Open valid forks of compacted conversations without incorrectly reporting that the answer boundary was not copied.
+- Validate forks against their complete saved history and clarify when a created fork fails validation but remains available in Chats.
+
 ## [2.34.2+2213] - 2026-09-14
 
 ### Fixed
