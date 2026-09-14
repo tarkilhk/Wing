@@ -1254,99 +1254,80 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                         ),
                                       ),
                                       const SizedBox(width: 6),
-                                      if (_hasMessageActions(chat))
-                                        IconButton(
-                                          tooltip: 'Message actions',
-                                          icon: Badge(
-                                            isLabelVisible:
-                                                chat.queuedPrompts.isNotEmpty,
-                                            label: Text(
-                                              '${chat.queuedPrompts.length}',
-                                            ),
-                                            child: const Icon(Icons.more_horiz),
-                                          ),
-                                          onPressed: () =>
-                                              _showBusyActions(chat, context),
-                                        ),
                                       Semantics(
                                         container: true,
-                                        hint:
-                                            chat.queuedPrompts.isNotEmpty ||
-                                                (chat.busy &&
-                                                    (chat.draft
-                                                            .trim()
-                                                            .isNotEmpty ||
-                                                        chat
-                                                            .attachments
-                                                            .isNotEmpty) &&
-                                                    !chat.draft
-                                                        .trimLeft()
-                                                        .startsWith('/'))
+                                        hint: _hasMessageActions(chat)
                                             ? 'Long press for message actions'
                                             : null,
-                                        child: GestureDetector(
-                                          onLongPress:
-                                              chat.queuedPrompts.isNotEmpty ||
-                                                  (chat.busy &&
-                                                      (chat.draft
-                                                              .trim()
-                                                              .isNotEmpty ||
-                                                          chat
-                                                              .attachments
-                                                              .isNotEmpty) &&
-                                                      !chat.draft
-                                                          .trimLeft()
-                                                          .startsWith('/'))
-                                              ? () => _showBusyActions(
-                                                  chat,
-                                                  context,
-                                                )
-                                              : null,
-                                          child: IconButton.filled(
-                                            style: IconButton.styleFrom(
-                                              minimumSize: const Size(48, 48),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(14),
+                                        child: TooltipTheme(
+                                          data: TooltipTheme.of(context)
+                                              .copyWith(
+                                                triggerMode:
+                                                    _hasMessageActions(chat)
+                                                    ? TooltipTriggerMode.manual
+                                                    : TooltipTriggerMode
+                                                          .longPress,
                                               ),
-                                            ),
-                                            tooltip:
-                                                chat.busy &&
-                                                    !chat.draft
-                                                        .trimLeft()
-                                                        .startsWith('/')
-                                                ? 'Stop'
-                                                : 'Send',
-                                            icon: Icon(
-                                              chat.busy &&
+                                          child: GestureDetector(
+                                            onLongPress:
+                                                _hasMessageActions(chat)
+                                                ? () => _showBusyActions(
+                                                    chat,
+                                                    context,
+                                                  )
+                                                : null,
+                                            child: IconButton.filled(
+                                              style: IconButton.styleFrom(
+                                                minimumSize: const Size(48, 48),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(14),
+                                                ),
+                                              ),
+                                              tooltip:
+                                                  chat.busy &&
                                                       !chat.draft
                                                           .trimLeft()
                                                           .startsWith('/')
-                                                  ? Icons.stop
-                                                  : Icons.arrow_upward,
+                                                  ? 'Stop'
+                                                  : 'Send',
+                                              icon: Icon(
+                                                chat.busy &&
+                                                        !chat.draft
+                                                            .trimLeft()
+                                                            .startsWith('/')
+                                                    ? Icons.stop
+                                                    : Icons.arrow_upward,
+                                              ),
+                                              onPressed:
+                                                  controller.switching ||
+                                                      chat.changingAnswer ||
+                                                      chat.commandRunning ||
+                                                      chat.changingIntelligence ||
+                                                      (!chat.busy &&
+                                                          chat.draft
+                                                              .trim()
+                                                              .isEmpty &&
+                                                          chat
+                                                              .attachments
+                                                              .isEmpty)
+                                                  ? null
+                                                  : () => _run(
+                                                      () =>
+                                                          chat.busy &&
+                                                              !chat.draft
+                                                                  .trimLeft()
+                                                                  .startsWith(
+                                                                    '/',
+                                                                  )
+                                                          ? controller.stop(
+                                                              chat,
+                                                            )
+                                                          : controller.send(
+                                                              chat,
+                                                            ),
+                                                    ),
                                             ),
-                                            onPressed:
-                                                controller.switching ||
-                                                    chat.changingAnswer ||
-                                                    chat.commandRunning ||
-                                                    chat.changingIntelligence ||
-                                                    (!chat.busy &&
-                                                        chat.draft
-                                                            .trim()
-                                                            .isEmpty &&
-                                                        chat
-                                                            .attachments
-                                                            .isEmpty)
-                                                ? null
-                                                : () => _run(
-                                                    () =>
-                                                        chat.busy &&
-                                                            !chat.draft
-                                                                .trimLeft()
-                                                                .startsWith('/')
-                                                        ? controller.stop(chat)
-                                                        : controller.send(chat),
-                                                  ),
                                           ),
                                         ),
                                       ),

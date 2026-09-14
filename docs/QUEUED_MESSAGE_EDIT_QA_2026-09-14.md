@@ -1,5 +1,21 @@
 # Queued message editing verification
 
+## Follow-up: remove the composer queue button
+
+The three-dot button and queue-count badge were removed at the owner's request.
+Long press still edits the selected queued instruction. Long press on Send/Stop
+opens the other message actions, including draft queueing, steering and forking.
+Its tooltip no longer consumes that gesture. Normal Stop taps remain covered.
+
+Verification: 53 unit/widget tests and all seven Android queue scenarios pass;
+static analysis is clean. The Android run checks the missing button and native
+Send/Stop long press before checking queue editing with the real keyboard.
+The first device attempt lacked the integration screenshot plugin after a cached
+release build. Regenerating the test plugin registry fixed the test environment.
+Final logs are `build/queue-button-removal-tests.log`,
+`build/queue-button-removal-analysis.log`, and, in the persistent build checkout,
+`build/queue-button-removal-emulator-final.log`.
+
 Verified on 2026-09-14 using the production conversation screen and workspace
 controller. Long press opens the queued instruction in the composer. Queue
 updates its existing position; Steer sends it into the running turn and removes

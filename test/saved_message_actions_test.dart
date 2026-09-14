@@ -212,7 +212,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Message actions'));
+    await tester.longPress(find.byTooltip('Send'));
     await tester.pumpAndSettle();
 
     expect(find.text('Fork into a new chat'), findsOneWidget);

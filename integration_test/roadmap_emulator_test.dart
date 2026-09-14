@@ -286,7 +286,7 @@ void main() {
       'Queue this after the synthetic turn',
     );
     await tester.pump();
-    await tester.tap(find.byTooltip('Message actions'));
+    await tester.longPress(find.byTooltip('Stop'));
     await _settle(tester);
     await tester.tap(find.text('Queue for the next turn'));
     await _settle(tester);
@@ -294,7 +294,7 @@ void main() {
       chat.queuedPrompts.single.text,
       'Queue this after the synthetic turn',
     );
-    expect(find.byTooltip('Message actions'), findsOneWidget);
+    expect(find.byTooltip('Message actions'), findsNothing);
 
     harness.fixture.requestApproval('personal', chat.runtimeId);
     await tester.pump();
@@ -941,7 +941,7 @@ void main() {
     final submitsBeforeFork = harness.fixture.answerActionRequests
         .where((request) => request.$1 == 'prompt.submit')
         .length;
-    await tester.tap(find.byTooltip('Message actions'));
+    await tester.longPress(find.byTooltip('Send'));
     await _settle(tester);
     await tester.tap(find.text('Fork into a new chat'));
     await _pumpUntil(tester, () => harness.controller.current!.chat != source);

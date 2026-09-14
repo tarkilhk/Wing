@@ -180,6 +180,13 @@ void main() {
       final bufferedFile = await file('draft-notes.txt');
       chat.attachments.add(bufferedFile);
       await launch(tester);
+      expect(find.byTooltip('Message actions'), findsNothing);
+      expect(find.byIcon(Icons.more_horiz), findsNothing);
+      await tester.longPress(find.byTooltip('Stop'));
+      await frames(tester);
+      expect(find.text('Queue for the next turn'), findsOneWidget);
+      Navigator.of(tester.element(find.text('Queue for the next turn'))).pop();
+      await frames(tester);
       await edit(tester, 'Review the layout');
       // No synthetic viewInsets: this is the real Android IME after focus.
       final keyboardDeadline = DateTime.now().add(const Duration(seconds: 10));

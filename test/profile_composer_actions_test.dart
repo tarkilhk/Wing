@@ -109,6 +109,8 @@ void main() {
       draft: 'My draft',
       paused: true,
     );
+    expect(find.byTooltip('Message actions'), findsNothing);
+    expect(find.byIcon(Icons.more_horiz), findsNothing);
     await tester.longPress(find.text('Keep this queued'));
     await pumpFrames(tester, count: 4);
     expect(chat.queuedPrompts.single.text, 'Keep this queued');
@@ -155,8 +157,9 @@ void main() {
       status: ProfileTurnStatus.running,
       draft: 'follow up after this turn',
     );
-    await tester.tap(find.byTooltip('Message actions'));
+    await tester.longPress(find.byTooltip('Stop'));
     await pumpFrames(tester, count: 4);
+    expect(fixture.calls.any((call) => call.$2 == 'session.interrupt'), isFalse);
     await tester.tap(find.text('Queue for the next turn'));
     await pumpFrames(tester, count: 4);
     expect(chat.queuedPrompts.single.text, 'follow up after this turn');
@@ -183,7 +186,7 @@ void main() {
       status: ProfileTurnStatus.running,
       draft: 'Focus on the failing test',
     );
-    await tester.tap(find.byTooltip('Message actions'));
+    await tester.longPress(find.byTooltip('Stop'));
     await pumpFrames(tester, count: 4);
     await tester.tap(find.text('Steer this turn'));
     await pumpFrames(tester, count: 4);
@@ -240,7 +243,7 @@ void main() {
       status: ProfileTurnStatus.running,
       attachments: [file],
     );
-    await tester.tap(find.byTooltip('Message actions'));
+    await tester.longPress(find.byTooltip('Stop'));
     await pumpFrames(tester, count: 4);
     await tester.tap(find.text('Queue for the next turn'));
     await pumpFrames(tester, count: 4);
@@ -248,7 +251,7 @@ void main() {
     expect(chat.attachments, isEmpty);
     expect(find.text('report.pdf'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Message actions'));
+    await tester.longPress(find.byTooltip('Stop'));
     await pumpFrames(tester, count: 4);
     expect(find.text('Queued: Attachment'), findsOneWidget);
     expect(find.text('1 attachment: report.pdf'), findsOneWidget);
@@ -399,7 +402,7 @@ void main() {
       status: ProfileTurnStatus.running,
       draft: 'keep this if Hermes rejects it',
     );
-    await tester.tap(find.byTooltip('Message actions'));
+    await tester.longPress(find.byTooltip('Stop'));
     await pumpFrames(tester, count: 4);
     await tester.tap(find.text('Steer this turn'));
     await pumpFrames(tester, count: 4);
@@ -417,7 +420,7 @@ void main() {
       status: ProfileTurnStatus.running,
       draft: 'Check the timeout',
     );
-    await tester.tap(find.byTooltip('Message actions'));
+    await tester.longPress(find.byTooltip('Stop'));
     await pumpFrames(tester, count: 4);
     await tester.tap(find.text('Steer this turn'));
     await pumpFrames(tester, count: 4);
@@ -457,7 +460,7 @@ void main() {
       status: ProfileTurnStatus.running,
       draft: 'Keep this draft',
     );
-    await tester.tap(find.byTooltip('Message actions'));
+    await tester.longPress(find.byTooltip('Stop'));
     await pumpFrames(tester, count: 4);
     await tester.tap(find.text('Steer this turn'));
     await pumpFrames(tester, count: 4);
@@ -497,7 +500,7 @@ void main() {
     tester,
   ) async {
     await show(tester, scale: 2.4, queued: ['first', 'second', 'third']);
-    await tester.tap(find.byTooltip('Message actions'));
+    await tester.longPress(find.byTooltip('Send'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('Queued: first'), findsOneWidget);
