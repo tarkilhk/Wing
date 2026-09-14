@@ -45,3 +45,29 @@ drawer/settings/administration, and preservation of saved Mint selections.
 The shared contrast checks require at least 4.5:1 for body text on the canvas,
 panel and selected tint, button text on its accent, and accent text on panels.
 `flutter analyze --no-pub` reported no issues.
+
+## Personal 2.36.11 release
+
+Source commit `b440afe` was pushed to main for the owner's requested phone
+deployment. The release uses `2.36.11+2228`, with effective ARM64 code `22282`.
+The clean persistent release checkout contains that commit; unrelated work in
+the task checkout is excluded.
+
+The owner requested focused validation for this color change and stopped the
+additional full-suite run. The 73 focused checks and rendered review above
+remain the completed validation. Static analysis on the committed release
+also finished with no issues. The existing dependency lockfile is unchanged
+from the earlier same-day dependency review. No network, lifecycle, navigation
+or form behavior changed, and live gateway smoke tests were not repeated.
+
+The existing personal release script built a non-debuggable ARM64 APK using
+the pinned signing certificate and default settings with Android shrinking
+disabled. `adb install -r` succeeded on the owner's Samsung SM-S918B. Android
+reports `2.36.11` / `22282`; the original first-install time remains
+`2026-09-06 22:10:26`. No uninstall or data-clear operation was used. Cold
+launch returned `Status: ok` and opened the Personal main activity in 1,096 ms.
+
+The APK is `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` in
+`C:\Users\rober\Documents\Projects\hermes-android`. Its SHA-256 is
+`3f029a7dcba50e2c90210b48b52092aa786e65c398deddb7c463c7ae2a2907f8`.
+No public release, tag or APK publication was created.
