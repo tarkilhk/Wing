@@ -110,5 +110,4 @@ released processes/file handles without affecting another profile.
 | --- | --- |
 | 2026-09-14 | Created HUP-001 through HUP-003 from the completed local acceptance pass. No upstream issue has been filed, no fix claimed, and no backend source changed. |
 | 2026-09-14 | Added HUP-004 from native administration acceptance against the same installed backend revision. |
-
 | 2026-09-14 | Filed HUP-004 upstream as #110953 and proposed fix #110954 after current-main reproduction and regression validation; installed backend unchanged. |

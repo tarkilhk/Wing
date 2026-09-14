@@ -140,3 +140,22 @@ The initial host-only report is in
 
 Native screenshots: [Profile](design/admin-acceptance/profile.png) and
 [Behavior](design/admin-acceptance/behavior.png).
+
+
+## Phone deployment, 2026-09-14
+
+Personal 2.36.5+2222 was built from pushed release commit `552e865` with the
+existing signing identity. Release validation passed 1,623 host tests with 10
+skips, analysis, and the signed ARM64 release build. Dependency versions were
+reviewed with `flutter pub outdated`; the tested lockfile was retained.
+
+Installed in place on the connected Samsung SM-S918B using `adb install -r`.
+Package readback confirmed `com.tarkilhk.hermes.android`, version 2.36.5 and
+ARM64 version code 22222. Activity launch returned `Status: ok` and the package
+had a running process. App data was preserved. This was an installation and
+launch check; the detailed administration behavior checks above ran on the
+emulator with disposable backend data.
+
+The installed Hermes backend was not modified. Its MCP profile-deletion bug is
+tracked in [upstream issue #110953](https://github.com/NousResearch/hermes-agent/issues/110953)
+with the tested fix proposed in [PR #110954](https://github.com/NousResearch/hermes-agent/pull/110954).
