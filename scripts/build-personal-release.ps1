@@ -88,7 +88,8 @@ try {
     # Flutter 3.44 skips release-specific plugin regeneration with --no-pub.
     # Keep pub so the native plugin registry matches this build mode.
     $buildTimer = [Diagnostics.Stopwatch]::StartNew()
-    & $flutter build apk --target-platform android-arm64 --split-per-abi -t lib/main.dart @firebaseBuildArguments @androidBuildArguments
+    $flutterArguments = @('build', 'apk', '--target-platform', 'android-arm64', '--split-per-abi', '-t', 'lib/main.dart') + $firebaseBuildArguments + $androidBuildArguments
+    & (Join-Path $PSScriptRoot 'invoke-flutter.ps1') -ToolchainRoot $ToolchainRoot -FlutterArguments $flutterArguments
     if ($LASTEXITCODE -ne 0) { throw "Personal $buildMode build failed" }
     $buildTimer.Stop()
     Write-Output "Flutter build including dependency resolution: $([math]::Round($buildTimer.Elapsed.TotalSeconds, 1))s"

@@ -11,7 +11,7 @@ Push-Location (Split-Path $PSScriptRoot -Parent)
 try {
     Write-Output 'Open the installed Hermes Personal Dev app on the connected phone.'
     Write-Output 'Press r to hot reload Dart edits, R to restart the Dart app, or d to detach.'
-    & $flutter attach -d $DeviceId --app-id com.tarkilhk.hermes.android -t lib/main.dart
+    & (Join-Path $PSScriptRoot 'invoke-flutter.ps1') -ToolchainRoot $ToolchainRoot -FlutterArguments @('attach', '-d', $DeviceId, '--app-id', 'com.tarkilhk.hermes.android', '-t', 'lib/main.dart')
     if ($LASTEXITCODE -ne 0) { throw 'Could not attach to the Personal development app' }
 } finally {
     Pop-Location

@@ -17,6 +17,21 @@ AOT release compilation, icon tree shaking, and Android Lint. Add
 `-OptimizeAndroid` when producing the smaller fully optimized Android APK.
 The standard Flutter commands in CI retain full optimization.
 
+Use the guarded launcher for standalone Windows Flutter commands too:
+
+```powershell
+.\scripts\invoke-flutter.ps1 -ToolchainRoot 'C:\Users\rober\Development\android-dev' -FlutterArguments @('analyze', '--no-pub')
+.\scripts\invoke-flutter.ps1 -ToolchainRoot 'C:\Users\rober\Development\android-dev' -FlutterArguments @('test', '--no-pub')
+```
+
+The launcher checks write access to Flutter's SDK cache before starting the
+Windows batch file. Flutter's bootstrap retries a denied/busy lock without a
+sleep, which can leave a shell consuming CPU indefinitely. The guard reports
+access denied immediately and waits at most 30 seconds for a busy bootstrap
+lock. It neither deletes locks nor changes SDK permissions. Commands still need
+permission to write the SDK cache even when the SDK is already installed.
+The release and development-attach scripts use this guard automatically.
+
 Run tests before the release build, and keep one Android build active at a time.
 The personal script rejects overlapping invocations across checkouts with a
 named mutex. The shared Gradle settings also reject overlapping builds across

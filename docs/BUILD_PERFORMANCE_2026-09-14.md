@@ -1,5 +1,8 @@
 # Android build performance, 2026-09-14
 
+The [controlled follow-up](BUILD_PERFORMANCE_2026-09-14_FOLLOWUP.md) records
+45-46 second signed release edits, resource cleanup, and the Flutter launcher guard.
+
 The repeated wait comes from different work depending on what changed. A Dart
 edit reruns the Dart frontend and AOT compiler. An Android version-code change
 reruns resource processing, Android Lint, and R8 even when Dart is unchanged.
