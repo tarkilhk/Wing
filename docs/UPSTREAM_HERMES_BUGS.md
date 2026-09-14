@@ -9,7 +9,7 @@ Last verified: 2026-09-14, local Hermes 0.21.2, installed source commit `e16f686
 | HUP-001 | High | Browser and vault target different tabs | Open, reproduced | Not filed |
 | HUP-002 | Medium | Non-default profile loop command/control mismatch | Open, reproduced | Not filed |
 | HUP-003 | Medium | Global activity omits child-only work | Open, reproduced contract gap | Not filed |
-| HUP-004 | Medium | Windows profile deletion fails with an open MCP log handle | Open, reproduced | Not filed |
+| HUP-004 | Medium | Windows profile deletion fails with an open MCP log handle | Open, fix proposed | [Issue #110953](https://github.com/NousResearch/hermes-agent/issues/110953), [PR #110954](https://github.com/NousResearch/hermes-agent/pull/110954) |
 
 Priorities reflect mobile impact. Close an entry only after its acceptance criteria pass against a recorded backend version. Add the upstream issue URL and fix commit when available; a newer version alone does not establish a fix.
 
@@ -63,11 +63,21 @@ Priorities reflect mobile impact. Close an entry only after its acceptance crite
 
 ## HUP-004: Windows profile deletion fails after MCP activity
 
-**Upstream check, 2026-09-14:** Our MCP reproduction has not been filed upstream.
-[Issue #87761](https://github.com/NousResearch/hermes-agent/issues/87761) reports
-related Windows profile deletion failures from gateway-held files. Its scheduled
-gateway trigger differs from this MCP log-handle reproduction; it is not yet a
-confirmed duplicate or fix for HUP-004.
+**Upstream contribution, 2026-09-14:** Filed [issue #110953](https://github.com/NousResearch/hermes-agent/issues/110953)
+and [PR #110954](https://github.com/NousResearch/hermes-agent/pull/110954).
+The reproduction also fails on upstream main `62e5f466565ee56351e4483ead8e62f9e782f8b3`.
+Proposed fix `1f21bcc6c51fd03943dd19cfa6ac401374fcfa8e` stops this process's
+profile-scoped MCP resources and releases their cached stderr handles before
+deletion. Both regression tests were proven red on base and green with the fix.
+The actual HTTP handlers also passed with a real MCP subprocess and disposable
+profile. Broader validation: 202 passed, 36 skipped, and five failures reproduced
+unchanged on base. Ruff and the Windows footgun check passed.
+
+The PR is open and mergeable; the installed backend remains unchanged. Related
+[issue #87761](https://github.com/NousResearch/hermes-agent/issues/87761) and
+[PR #87787](https://github.com/NousResearch/hermes-agent/pull/87787) address a
+running gateway service, which this reproduction does not require. No recurring
+monitor was created, per the user's later instruction.
 
 **Mobile impact:** Deleting a profile can return HTTP 500 after a connector has
 started because the backend still owns an open log handle.
@@ -100,3 +110,5 @@ released processes/file handles without affecting another profile.
 | --- | --- |
 | 2026-09-14 | Created HUP-001 through HUP-003 from the completed local acceptance pass. No upstream issue has been filed, no fix claimed, and no backend source changed. |
 | 2026-09-14 | Added HUP-004 from native administration acceptance against the same installed backend revision. |
+
+| 2026-09-14 | Filed HUP-004 upstream as #110953 and proposed fix #110954 after current-main reproduction and regression validation; installed backend unchanged. |
