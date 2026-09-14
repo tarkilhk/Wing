@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -72,6 +73,114 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  List<MethodCall> recordPlatformCalls(WidgetTester tester) {
+    final calls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        calls.add(call);
+        return null;
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
+    });
+    return calls;
+  }
+
+  Future<void> expectMenuThenExit(WidgetTester tester) async {
+    final calls = recordPlatformCalls(tester);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(AppDrawer), findsOneWidget);
+    expect(
+      calls.where((call) => call.method == 'SystemNavigator.pop'),
+      isEmpty,
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(
+      calls.where((call) => call.method == 'SystemNavigator.pop'),
+      hasLength(1),
+    );
+  }
+
+  for (final destination in [
+    AppDestination.activity,
+    AppDestination.settings,
+    AppDestination.administration,
+  ]) {
+    testWidgets('${destination.label} Back opens the menu, then exits', (
+      tester,
+    ) async {
+      final chat = await controller.createChat();
+      chat.draft = 'Keep my draft';
+      await show(tester);
+      await navigate(tester, destination);
+      await expectMenuThenExit(tester);
+      expect(controller.current!.chat, same(chat));
+      expect(chat.draft, 'Keep my draft');
+      expect(controller.visible, isFalse);
+      expect(
+        tester.widget<AppDrawer>(find.byType(AppDrawer)).selected,
+        destination,
+      );
+    });
+  }
+
+  for (final destination in [
+    AppDestination.connections,
+    AppDestination.settings,
+  ]) {
+    testWidgets('Home ${destination.label} Back opens the menu, then exits', (
+      tester,
+    ) async {
+      final manager = await ConnectionManager.create(controller.preferences);
+      await tester.pumpWidget(
+        MaterialApp(home: HomeScreen(connManager: manager)),
+      );
+      await tester.pumpAndSettle();
+      await navigate(tester, destination);
+      await expectMenuThenExit(tester);
+      expect(
+        tester.widget<AppDrawer>(find.byType(AppDrawer)).selected,
+        destination,
+      );
+    });
+  }
+
+  testWidgets('administration detail pages unwind before opening the menu', (
+    tester,
+  ) async {
+    final calls = recordPlatformCalls(tester);
+    await show(tester);
+    await navigate(tester, AppDestination.administration);
+    await tester.ensureVisible(find.text('Behavior'));
+    await tester.tap(find.text('Behavior'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Execution'));
+    await tester.pumpAndSettle();
+    expect(find.text('Approval policy'), findsNothing);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Approval policy'), findsOneWidget);
+    expect(find.byType(AppDrawer), findsNothing);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Defaults'), findsOneWidget);
+    expect(find.byType(AppDrawer), findsNothing);
+    expect(
+      calls.where((call) => call.method == 'SystemNavigator.pop'),
+      isEmpty,
+    );
+    await expectMenuThenExit(tester);
+  });
+
   testWidgets(
     'settings and administration preserve the open chat and unsent draft',
     (tester) async {
@@ -83,6 +192,10 @@ void main() {
       expect(controller.visible, isFalse);
       expect(controller.current!.chat, same(chat));
       await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(AppDrawer), findsOneWidget);
+      expect(controller.visible, isFalse);
+      await tester.tap(find.byKey(const ValueKey('nav-chats')));
       await tester.pumpAndSettle();
       expect(find.text('Keep this unsent'), findsOneWidget);
       expect(controller.visible, isTrue);
@@ -155,18 +268,58 @@ void main() {
     );
   });
 
-  testWidgets('Back closes the drawer before leaving the chat', (tester) async {
-    final chat = await controller.createChat();
-    chat.draft = 'Still here';
-    await show(tester);
-    await tester.tap(find.byTooltip('Open navigation menu'));
-    await tester.pumpAndSettle();
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-    expect(find.byType(AppDrawer), findsNothing);
-    expect(controller.current!.chat, same(chat));
-    expect(find.text('Still here'), findsOneWidget);
-  });
+  for (final openChat in [false, true]) {
+    testWidgets(
+      'Back opens the menu from ${openChat ? 'a conversation' : 'Chats'}, then exits',
+      (tester) async {
+        final chat = openChat ? await controller.createChat() : null;
+        chat?.draft = 'Still here';
+        final platformCalls = <MethodCall>[];
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async => platformCalls.add(call),
+        );
+        addTearDown(() {
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          );
+        });
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(body: Text('Connections underneath')),
+          ),
+        );
+        final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => ProfileWorkspaceScreen(controller: controller),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.byType(AppDrawer), findsOneWidget);
+        expect(find.text('Connections underneath'), findsNothing);
+        expect(controller.current!.chat, same(chat));
+        expect(
+          platformCalls.where((call) => call.method == 'SystemNavigator.pop'),
+          isEmpty,
+        );
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(
+          platformCalls.where((call) => call.method == 'SystemNavigator.pop'),
+          hasLength(1),
+        );
+        expect(find.text('Connections underneath'), findsNothing);
+        expect(controller.current!.chat, same(chat));
+        expect(chat?.draft, openChat ? 'Still here' : null);
+      },
+    );
+  }
 
   testWidgets('drawer and settings fit a narrow device at large text size', (
     tester,
@@ -210,7 +363,8 @@ void main() {
     expect(find.text('Theme'), findsOneWidget);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.text('Connect to Hermes'), findsOneWidget);
+    expect(find.byType(AppDrawer), findsOneWidget);
+    expect(find.text('Theme'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

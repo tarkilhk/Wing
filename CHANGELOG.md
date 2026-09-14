@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.36.7+2224] - 2026-09-15
+
+### Changed
+- Android Back opens the left menu from Chats, Activity, Connections, App settings and Hermes administration. Back with the menu open exits the app.
+- Keep normal Back navigation through stacked detail pages, returning to their original screen before opening the menu.
+- Remove Connections from the Chats Back sequence while retaining its menu entry and preserving chat drafts.
+
 ## [2.36.6+2223] - 2026-09-14
 
 ### Changed

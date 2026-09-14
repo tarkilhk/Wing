@@ -5,13 +5,19 @@ Implementation slice W00, 2026-09-11. The owner requested navigation and cleanup
 ## Navigation
 
 - A shared left drawer exposes Chats and Activity, followed by Connections, App settings and Hermes administration below a divider. There is no bottom tab bar or intermediate More screen.
-- Chats retains the current profile selector, projects, search, archived chats, transcript and composer. Opening settings or administration preserves the selected chat and its current unsent draft. Android Back closes an open drawer before navigating away.
+- Chats retains the current profile selector, projects, search, archived chats, transcript and composer. Opening settings or administration preserves the selected chat and its current unsent draft.
 - Activity moves the existing controller-observed activity into a primary destination. It can open a chat in its original profile. It explicitly describes its limited coverage; server-wide activity discovery is still W01 work.
 - Connections uses the workspace theme, a simple list and the existing add/edit/test/restore flows. Username and password are visible in the main form; proxy overrides remain expandable. A device with no saved connection can reach setup and app settings.
 - App settings exposes existing theme, accent, text-size and notification-permission behavior. Appearance changes update the app shell. Firebase delivery, new notification categories and an update checker are not part of this slice.
 - Hermes administration has a read-only entry showing the selected connection/profile and discovered model/provider fields when supplied, plus Refresh and access to Connections. It does not add persona editing, provider administration or backend restart/update controls.
 
 Profile selection remains local to this client's navigation. No navigation action changes a global active profile or writes server configuration.
+
+### Back navigation, updated 2026-09-15
+
+Android Back opens the left menu from every primary destination, including Connections. Back while the menu is open exits the app. Menu destinations do not form a Back history, and Back from Chats never exposes Connections.
+
+Pages, dialogs and sheets opened above a destination retain their normal Back behavior. Each Back dismisses the topmost view until the original destination is reached, then opens the menu. Project and filtered chat views retain their existing navigation back to Chats, and Back still cancels an active queued-message edit. The conversation toolbar's Back to sessions button continues to open the chat list.
 
 ## Cleanup boundary
 

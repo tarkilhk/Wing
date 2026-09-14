@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'core/widgets/compact_switch.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1044,13 +1045,13 @@ class HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final connection = _connectionForExternalAction();
     return PopScope(
-      canPop: _destination == AppDestination.connections,
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
           if (_scaffoldKey.currentState?.isDrawerOpen == true) {
-            _scaffoldKey.currentState!.closeDrawer();
+            unawaited(SystemNavigator.pop());
           } else {
-            _selectDestination(AppDestination.connections);
+            _scaffoldKey.currentState?.openDrawer();
           }
         }
       },

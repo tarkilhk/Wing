@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/profile_workspace_controller.dart';
 import '../services/image_clipboard.dart';
@@ -197,10 +198,12 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop) {
-            if (chat.editingQueuedPrompt != null) {
+            if (_scaffoldKey.currentState?.isDrawerOpen == true) {
+              unawaited(SystemNavigator.pop());
+            } else if (chat.editingQueuedPrompt != null) {
               unawaited(_run(() => controller.cancelQueuedPromptEdit(chat)));
             } else {
-              _handleBack(controller.showList);
+              _scaffoldKey.currentState?.openDrawer();
             }
           }
         },
@@ -1769,11 +1772,11 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
   }
 
-  void _handleBack(VoidCallback navigateBack) {
+  void _handleBack() {
     if (_scaffoldKey.currentState?.isDrawerOpen == true) {
-      _scaffoldKey.currentState!.closeDrawer();
+      unawaited(SystemNavigator.pop());
     } else {
-      navigateBack();
+      _scaffoldKey.currentState?.openDrawer();
     }
   }
 
@@ -1804,7 +1807,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Widget _secondaryDestination(BuildContext context) => PopScope(
     canPop: false,
     onPopInvokedWithResult: (didPop, _) {
-      if (!didPop) _handleBack(() => _selectDestination(AppDestination.chats));
+      if (!didPop) _handleBack();
     },
     child: Scaffold(
       key: _scaffoldKey,

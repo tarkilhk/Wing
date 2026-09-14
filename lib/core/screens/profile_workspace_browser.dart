@@ -730,6 +730,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     );
     return PopScope(
       canPop:
+          widget.drawer == null &&
           project == null &&
           !_unreadOnly &&
           _view == 'home' &&
@@ -737,7 +738,9 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
           if (_scaffoldKey.currentState?.isDrawerOpen == true) {
-            _scaffoldKey.currentState!.closeDrawer();
+            unawaited(SystemNavigator.pop());
+          } else if (isWorkspaceHome && widget.drawer != null) {
+            _scaffoldKey.currentState?.openDrawer();
           } else {
             _back();
           }
