@@ -19,6 +19,14 @@ Android Back opens the left menu from every primary destination, including Conne
 
 Pages, dialogs and sheets opened above a destination retain their normal Back behavior. Each Back dismisses the topmost view until the original destination is reached, then opens the menu. Project and filtered chat views retain their existing navigation back to Chats, and Back still cancels an active queued-message edit. The conversation toolbar's Back to sessions button continues to open the chat list.
 
+### Personal 2.36.7 validation and deployment
+
+Source commit `6b58bfd` was pushed to `origin/main` on 2026-09-15. Full static analysis reported no issues; the full suite passed 1,630 tests with 10 environment-dependent skips. The clean persistent release checkout separately passed all 46 focused navigation, composer, browser and release-identity tests. These cover each menu destination, preserved drafts and two stacked Administration detail pages. Dependency status was checked; available upgrades were deferred to keep this navigation release on its existing dependencies.
+
+The existing personal release script built the signed, non-debuggable ARM64 APK in `C:\Users\rober\Documents\Projects\hermes-android`. Package `com.tarkilhk.hermes.android`, version `2.36.7`, code `22242` and the pinned Personal certificate all verified. The build retained the existing Android shrinking setting and reported the known plugin Kotlin migration warning.
+
+An in-place `adb install -r` succeeded on the owner's Samsung SM-S918B. Installed metadata confirmed the new version/code and unchanged first-install time, `2026-09-06 22:10:26`. Cold launch succeeded. A phone smoke check confirmed Hermes remained foreground after the first Android Back and left the foreground after the second; the app was then reopened successfully. Menu visibility and stacked-page order were verified by widget tests. The APK is `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` in the persistent checkout.
+
 ## Cleanup boundary
 
 Removed ten unreachable legacy screens: the old chat, session list, Workspace, workspace session list, Spaces, Cron, Files, Memory, Skills and broad Settings screens. Removed eighteen orphaned UI widgets that served those routes, including the old bottom-navigation shell and panes. Removed the unused legacy execution-controller allocation from the application entry point.
