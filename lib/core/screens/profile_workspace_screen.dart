@@ -4,6 +4,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../services/profile_workspace_controller.dart';
+import '../services/image_clipboard.dart';
+import '../widgets/image_paste_menu.dart';
 import '../services/remote_files_client.dart';
 import '../widgets/profile_message.dart';
 import '../widgets/profile_transcript_disclosure.dart';
@@ -79,6 +81,14 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   int? _findHistoryGeneration;
   int _findRequestGeneration = 0;
   bool _launchingCamera = false;
+
+  bool _canPasteImage(ProfileChat chat) =>
+      controller.canAddAttachment(chat) &&
+      chat.editingQueuedPrompt == null &&
+      !chat.changingAnswer &&
+      !chat.commandRunning &&
+      !controller.switching &&
+      !_launchingCamera;
   late AppDestination _destination;
 
   @override
@@ -1044,6 +1054,50 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                   maxLines: 5,
                                   keyboardType: TextInputType.multiline,
                                   textInputAction: TextInputAction.newline,
+                                  contentInsertionConfiguration:
+                                      _canPasteImage(chat)
+                                      ? ContentInsertionConfiguration(
+                                          allowedMimeTypes:
+                                              ImageClipboard.mimeTypes,
+                                          onContentInserted: (content) => _run(
+                                            () async {
+                                              if (!_canPasteImage(chat)) {
+                                                throw StateError(
+                                                  'Wait before adding another image.',
+                                                );
+                                              }
+                                              await controller.addPastedImage(
+                                                chat,
+                                                () =>
+                                                    ImageClipboard.keyboardImage(
+                                                      content,
+                                                    ),
+                                              );
+                                            },
+                                          ),
+                                        )
+                                      : null,
+                                  contextMenuBuilder: (context, editableText) {
+                                    if (!_canPasteImage(chat)) {
+                                      return AdaptiveTextSelectionToolbar.editableText(
+                                        editableTextState: editableText,
+                                      );
+                                    }
+                                    return ImagePasteMenu(
+                                      editableText: editableText,
+                                      onPasteImage: () => _run(() async {
+                                        if (!_canPasteImage(chat)) {
+                                          throw StateError(
+                                            'Wait before adding another image.',
+                                          );
+                                        }
+                                        await controller.addPastedImage(
+                                          chat,
+                                          ImageClipboard.readImage,
+                                        );
+                                      }),
+                                    );
+                                  },
                                   onChanged: (value) {
                                     if (chat.editingQueuedPrompt != null) {
                                       _queuedEditErrors.remove(chat.key);

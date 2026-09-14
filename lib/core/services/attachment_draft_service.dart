@@ -171,20 +171,43 @@ class AttachmentDraftService {
       _ensureRemoteSlot(existingDrafts);
     }
 
-    Uint8List? sourceBytes;
+    return prepareImageBytes(
+      bytes: await source.readAsBytes(),
+      displayName: displayName,
+      existingDrafts: existingDrafts,
+      mode: mode,
+    );
+  }
+
+  Future<AttachmentDraft> prepareImageBytes({
+    required Uint8List bytes,
+    required String displayName,
+    required Iterable<AttachmentDraft> existingDrafts,
+    required AttachmentDraftMode mode,
+  }) async {
+    if (bytes.isEmpty) {
+      throw const AttachmentDraftException('The image is empty or unreadable.');
+    }
+    if (bytes.length > maxRemoteAttachmentDraftBytes) {
+      throw const AttachmentDraftException(
+        'The image exceeds the 64 MiB draft budget.',
+      );
+    }
+    if (mode == AttachmentDraftMode.remoteGateway) {
+      _ensureRemoteSlot(existingDrafts);
+    }
+
     image_lib.Image? decoded;
     File? destination;
     var committed = false;
     try {
-      sourceBytes = await source.readAsBytes();
-      final format = _detectImageFormat(sourceBytes);
+      final format = _detectImageFormat(bytes);
       if (format == null) {
         throw const AttachmentDraftException(
           'Unsupported image format. Choose a JPEG, PNG, or WebP image.',
         );
       }
-      decoded = image_lib.decodeImage(sourceBytes);
-      sourceBytes = null;
+      decoded = image_lib.decodeImage(bytes);
       if (decoded == null) {
         throw const AttachmentDraftException(
           'The selected JPEG, PNG, or WebP image could not be decoded safely.',
@@ -239,7 +262,6 @@ class AttachmentDraftService {
         'Unable to sanitize this image. Choose a valid JPEG, PNG, or WebP image.',
       );
     } finally {
-      sourceBytes = null;
       decoded = null;
       if (!committed && destination != null) {
         await _deleteIfPresent(destination);

@@ -2512,30 +2512,55 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
-  Future<void> addAttachment(ProfileChat chat, String path, String name) async {
-    _owned(chat);
-    if (!canAddAttachment(chat)) {
-      throw StateError('Wait for the current turn');
-    }
-    chat._attachmentPreparations++;
-    AttachmentDraft? draft;
-    try {
+  Future<void> addAttachment(ProfileChat chat, String path, String name) {
+    return _addPreparedAttachment(chat, () {
       final image = RegExp(
         r'\.(png|jpe?g|webp)$',
         caseSensitive: false,
       ).hasMatch(name);
-      draft = image
-          ? await attachments.prepareImage(
+      return image
+          ? attachments.prepareImage(
               sourcePath: path,
               displayName: name,
               existingDrafts: chat.attachments,
               mode: AttachmentDraftMode.remoteGateway,
             )
-          : await attachments.prepareGenericFile(
+          : attachments.prepareGenericFile(
               sourcePath: path,
               displayName: name,
               existingDrafts: chat.attachments,
             );
+    });
+  }
+
+  /// Reserves the originating draft before reading the clipboard asynchronously.
+  Future<void> addPastedImage(
+    ProfileChat chat,
+    Future<Uint8List> Function() readImage,
+  ) {
+    return _addPreparedAttachment(chat, () async {
+      return attachments.prepareImageBytes(
+        bytes: await readImage(),
+        displayName: 'Pasted image',
+        existingDrafts: chat.attachments,
+        mode: AttachmentDraftMode.remoteGateway,
+      );
+    });
+  }
+
+  Future<void> _addPreparedAttachment(
+    ProfileChat chat,
+    Future<AttachmentDraft> Function() prepare,
+  ) async {
+    _owned(chat);
+    if (!canAddAttachment(chat)) {
+      throw StateError('Wait for the current turn');
+    }
+    chat._attachmentPreparations++;
+    _changed();
+    AttachmentDraft? draft;
+    try {
+      draft = await prepare();
       _owned(chat);
       if (chat._replacingExpiredRuntime ||
           chat.queueMutating ||

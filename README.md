@@ -30,7 +30,7 @@ The current connection flow opens `ProfileWorkspaceScreen`, which owns the drawe
 - Dynamic slash-command discovery, aliases, argument completion, skill dispatch, and dedicated current-session actions including steering and identifiable side-question and background-task cards with the original prompt and result.
 - Saved-message Edit/resend with history-replacement confirmation, one-shot idle Fork, Regenerate and Branch. Parent chat navigation uses existing Hermes metadata. Explicit synchronized answer versions remain deferred because their required API has not been verified on unmodified Hermes.
 - Per-chat Outputs shows recent file/link references first, with **Load older outputs** for earlier history. Direct Markdown links to result files use the same authenticated viewer. Failed batches keep the files already listed and offer retry. Authenticated file retrieval preserves host/profile/chat ownership, supports formatted Markdown/source, SVG and image previews and shares actual bytes through Android; downloads are capped at 32 MiB. PDFs have page controls and pinch zoom; downloaded audio/video has play/pause and seeking. Web links open a browser preview, and self-contained HTML files up to 1 MiB can open interactively in the app. Back returns to the chat.
-- Camera/Photos/Files attachment choices and reviewed Android sharing into a chosen connection/profile/chat. Camera returns to the originating draft's review when that destination is still valid. Incoming shares survive restart before destination selection, preserve existing drafts and never send automatically. Launcher quick chat, server-advertised approvals and structured clarification remain. Sudo, secret and vault forms keep credentials out of drafts/history, and the jump control identifies their live input requests while the reader is viewing older messages.
+- Camera/Photos/Files attachment choices, clipboard image pasting through the Android keyboard or the composer's Paste menu, and reviewed Android sharing into a chosen connection/profile/chat. Pasted JPEG, PNG and WebP images are sanitized and saved as unsent attachments in the originating draft. Camera returns to the originating draft's review when that destination is still valid. Incoming shares survive restart before destination selection, preserve existing drafts and never send automatically. Launcher quick chat, server-advertised approvals and structured clarification remain. Sudo, secret and vault forms keep credentials out of drafts/history, and the jump control identifies their live input requests while the reader is viewing older messages.
 - Local completion/input notifications with independent device controls, optional chat titles, a test alert and original host/profile/chat routing, plus configuration restore from the connections screen.
 - Profile default model selection with provider groups and server-required confirmation. Administration also includes searchable skills, complete skill instructions, individual skill/toolset toggles, and toolset configuration status.
 
@@ -56,12 +56,12 @@ The app's current slash/profile contracts are documented in [slash command suppo
 
 ## Version and application identity
 
-Source version on 2026-09-14 is `2.33.0+2210` in [pubspec.yaml](pubspec.yaml). This is the checked-out version, not a claim that a matching public release has been published. Each release is recorded in the [changelog](CHANGELOG.md), with semantic versions and an increasing Android build number.
+Source version on 2026-09-14 is `2.34.0+2211` in [pubspec.yaml](pubspec.yaml). This is the checked-out version, not a claim that a matching public release has been published. Each release is recorded in the [changelog](CHANGELOG.md), with semantic versions and an increasing Android build number.
 
 - Personal release package: `com.tarkilhk.hermes.android`, labelled Hermes Personal.
 - Development package: `com.hermesagent.hermes_android.dev`.
 - The inherited upstream package is separate and is not this fork's release identity.
-- ABI-split codes derive from the base build number; the current ARM64 split uses `22102`.
+- ABI-split codes derive from the base build number; the current ARM64 split uses `22112`.
 
 The [release plan](docs/ANDROID_RELEASE_PLAN.md) and [build configuration](android/app/build.gradle.kts) document identity, signing and version-code rules. App settings displays this client's installed version/build and links to this fork's changelog and published releases, separately from the backend version.
 

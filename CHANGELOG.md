@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.34.0+2211] - 2026-09-14
+
+### Added
+
+- Paste clipboard images through the Android keyboard's image insertion action or the message composer's Paste menu.
+- Save pasted JPEG, PNG and WebP images as sanitized, unsent attachments in their originating chat, preserving the existing draft text.
+
 ## [2.33.0+2210] - 2026-09-14
 
 ### Added

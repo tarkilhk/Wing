@@ -39,6 +39,7 @@ class MainActivity : FlutterActivity() {
     private var fileDeliveryChannel: MethodChannel? = null
     private var pdfPreviewChannel: PdfPreviewChannel? = null
     private var mediaPreviewChannel: MediaPreviewChannel? = null
+    private var imageClipboardChannel: ImageClipboardChannel? = null
     private var initialShareIntent: Intent? = null
     private var initialLaunchAction: String? = null
     @Volatile private var activityResumed = false
@@ -51,6 +52,10 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        imageClipboardChannel = ImageClipboardChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            this,
+        )
         pdfPreviewChannel = PdfPreviewChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             cacheDir,
@@ -222,6 +227,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        imageClipboardChannel?.dispose()
+        imageClipboardChannel = null
         mediaPreviewChannel?.closeAll()
         mediaPreviewChannel = null
         pdfPreviewChannel?.closeAll()
