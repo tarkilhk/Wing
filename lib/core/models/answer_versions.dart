@@ -110,7 +110,28 @@ bool isBranchMessage(Map<String, dynamic> message) =>
 bool isHiddenAnswerMessage(Map<String, dynamic> message) =>
     message['display_kind'] == 'hidden' ||
     (message['role'] == 'user' &&
-        answerMessageText(message).trimLeft().startsWith('[System:'));
+        (message['_todo_snapshot_synthetic'] == true ||
+            answerMessageText(message).trimLeft().startsWith('[System:') ||
+            _isTaskSnapshot(answerMessageDisplayText(message))));
+
+/// TodoStore.format_for_injection uses this stable header for standalone
+/// post-compression snapshots. Older history omits the synthetic flag. Match
+/// only that envelope at the start, never a task list or quoted marker alone.
+/// Keep stored rows intact so paging and rewind retain their server ordinals.
+bool _isTaskSnapshot(String text) {
+  const header =
+      '[Your active task list was preserved across context compression]';
+  text = text.trim().replaceAll('\r\n', '\n');
+  if (!text.startsWith('$header\n')) return false;
+  final body = text.substring(header.length + 1);
+  // Completed/cancelled parents can be retained above active descendants.
+  return const [
+    '- [>] ',
+    '- [ ] ',
+    '- [x] ',
+    '- [~] ',
+  ].any((marker) => body.startsWith(marker) && body.length > marker.length);
+}
 
 bool isAnswerPrompt(Map<String, dynamic> message) =>
     message['role'] == 'user' &&

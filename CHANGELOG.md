@@ -16,6 +16,12 @@
 
 - Shorten the README, move the detailed feature inventory into docs, correct store claims and release instructions, and archive the inherited F-Droid recipe.
 
+## [2.36.13+2230] - 2026-09-15
+
+### Fixed
+- Hide internal task-list reminders injected after context compression from the conversation, search and edit controls.
+- Preserve ordinary lists, quoted reminders, assistant text and durable history IDs.
+
 ## [2.36.12+2229] - 2026-09-15
 
 ### Changed
