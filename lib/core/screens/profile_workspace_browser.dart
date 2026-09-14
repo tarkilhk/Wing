@@ -948,7 +948,11 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                                   ),
                                   physics:
                                       const AlwaysScrollableScrollPhysics(),
-                                  padding: const EdgeInsets.only(bottom: 24),
+                                  padding: EdgeInsets.only(
+                                    bottom:
+                                        88 +
+                                        MediaQuery.paddingOf(context).bottom,
+                                  ),
                                   itemCount: rows.length,
                                   itemBuilder: (_, index) => rows[index],
                                 );
@@ -961,28 +965,26 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
             ),
           ),
         ),
-        bottomNavigationBar: ColoredBox(
-          color: colors.surface,
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-              child: FilledButton.icon(
-                key: const ValueKey('workspace-new-chat'),
-                onPressed: controller.switching || resource == null
-                    ? null
-                    : () => _run(() async {
-                        if (_view == 'projects') {
-                          await widget.newProject();
-                        } else {
-                          await controller.createChat();
-                        }
-                      }),
-                icon: const Icon(Icons.add_rounded, size: 20),
-                label: Text(_view == 'projects' ? 'Project' : 'New chat'),
-              ),
-            ),
-          ),
+        floatingActionButton: FloatingActionButton(
+          key: const ValueKey('workspace-new-chat'),
+          tooltip: _view == 'projects' ? 'New project' : 'New chat',
+          elevation: 2,
+          backgroundColor: controller.switching || resource == null
+              ? colors.surfaceContainerHighest
+              : null,
+          foregroundColor: controller.switching || resource == null
+              ? colors.onSurfaceVariant
+              : null,
+          onPressed: controller.switching || resource == null
+              ? null
+              : () => _run(() async {
+                  if (_view == 'projects') {
+                    await widget.newProject();
+                  } else {
+                    await controller.createChat();
+                  }
+                }),
+          child: const Icon(Icons.add_rounded),
         ),
       ),
     );
