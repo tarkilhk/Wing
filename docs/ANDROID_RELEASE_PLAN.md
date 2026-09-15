@@ -46,7 +46,7 @@ The build script's default Windows signing directory is `%LOCALAPPDATA%/Wing/sig
 
 The public certificate fingerprint is pinned in `android/wing-release-certificate.sha256`. Keep a protected, portable backup of the keystore and password; the DPAPI credential file alone cannot be moved to another Windows account or machine.
 
-CI signing uses `KEYSTORE_BASE64`, `STORE_PASSWORD`, `KEY_PASSWORD` and `KEY_ALIAS` in the repository secret store. Local Gradle signing also accepts repository-root `key.properties` or all four `WING_STORE_FILE`, `WING_STORE_PASSWORD`, `WING_KEY_ALIAS` and `WING_KEY_PASSWORD` environment variables. Never place values in source, release notes or logs.
+CI signing uses three repository secrets: `KEYSTORE_BASE64`, `STORE_PASSWORD`, and `KEY_PASSWORD`. `KEY_ALIAS` is a repository Actions variable. Local Gradle signing also accepts repository-root `key.properties` or all four `WING_STORE_FILE`, `WING_STORE_PASSWORD`, `WING_KEY_ALIAS` and `WING_KEY_PASSWORD` environment variables. Keep the keystore and passwords out of source, release notes and logs.
 
 Before installation, inspect the built artifact with Android build tools. Verify package, effective version code, non-debuggable status and the expected certificate. Test a signed release on a phone: connect, stream a reply, reopen history, switch profiles, interrupt and recover a send, attach/queue files, open an output and check notification routing.
 
@@ -95,18 +95,19 @@ The build job has read-only repository access; signing secrets are supplied only
 
 ### Configure signing once
 
-In GitHub **Settings → Secrets and variables → Actions**, add:
+In GitHub **Settings → Secrets and variables → Actions**, add these three entries under **Secrets**:
 
 | Secret | Value |
 | --- | --- |
 | `KEYSTORE_BASE64` | Base64 encoding of the intended Wing release keystore |
 | `STORE_PASSWORD` | Keystore password |
 | `KEY_PASSWORD` | Signing key password |
-| `KEY_ALIAS` | Signing key alias |
+
+Under **Variables**, add `KEY_ALIAS` with the signing key alias. The workflow reads it through `vars.KEY_ALIAS`.
 
 The certificate must match `android/wing-release-certificate.sha256`. Keep the private keystore and passwords out of commits and logs. Uploading secrets and pushing a real release tag are separate from preparing the source changes.
 
-A manual Release workflow run on `main` builds and verifies signed artifacts without publishing. It requires all signing secrets; manual runs on other branches are skipped. A manual run against a version tag follows the publishing path. No debug APK is substituted when signing is unavailable.
+A manual Release workflow run on `main` builds and verifies signed artifacts without publishing. It requires all three signing secrets and the alias variable; manual runs on other branches are skipped. A manual run against a version tag follows the publishing path. No debug APK is substituted when signing is unavailable.
 
 ### Downloads and failures
 

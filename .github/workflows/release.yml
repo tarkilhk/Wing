@@ -98,12 +98,12 @@ jobs:
           WING_STORE_FILE: ${{ runner.temp }}/wing-release.keystore
           WING_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           WING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          WING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          WING_KEY_ALIAS: ${{ vars.KEY_ALIAS }}
         run: |
           set -euo pipefail
           for name in KEYSTORE_BASE64 WING_STORE_PASSWORD WING_KEY_PASSWORD WING_KEY_ALIAS; do
             if [[ -z "${!name}" ]]; then
-              echo "Missing release secret: $name" >&2
+              echo "Missing release signing setting: $name" >&2
               exit 1
             fi
           done
