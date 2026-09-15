@@ -87,7 +87,7 @@ The tag starts [the Release workflow](../.github/workflows/release.yml):
 1. Confirm the tag matches the source version and its commit is on `main`.
 2. Run release-tool tests, Flutter analysis and Flutter tests.
 3. Build signed ARMv7, ARM64 and x86_64 APKs with the pinned toolchain.
-4. Verify every APK's package, architecture, effective version code, version name, non-debuggable status and expected signing certificate.
+4. Verify every APK's package, architecture, effective version code, version name, non-debuggable status and expected signing certificate using Android build-tools `36.0.0`.
 5. Package APKs, Dart symbols, changelog notes, source/certificate metadata and `SHA256SUMS`.
 6. In a separate job with `contents: write`, create a draft release, upload all assets, download them again and verify checksums, then publish automatically.
 
@@ -107,7 +107,13 @@ Under **Variables**, add `KEY_ALIAS` with the signing key alias. The workflow re
 
 The certificate must match `android/wing-release-certificate.sha256`. Keep the private keystore and passwords out of commits and logs. Uploading secrets and pushing a real release tag are separate from preparing the source changes.
 
-A manual Release workflow run on `main` builds and verifies signed artifacts without publishing. It requires all three signing secrets and the alias variable; manual runs on other branches are skipped. A manual run against a version tag follows the publishing path. No debug APK is substituted when signing is unavailable.
+A manual Release workflow run uses the workflow and release tooling on `main` to build and publish an existing version tag. Set the required `release_tag` input to the tag being retried:
+
+```sh
+gh workflow run release.yml --ref main -f release_tag=v1.0.0
+```
+
+This allows a workflow fix to retry an unpublished release while preserving the tag's exact application source. The workflow checks out tooling and source separately; `release.json` records both the source commit and workflow commit. Run release scripts from the source checkout root. Manual runs on other branches are skipped. Signing requires all three secrets and the alias variable.
 
 ### Downloads and failures
 

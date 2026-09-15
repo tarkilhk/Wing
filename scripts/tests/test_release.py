@@ -2,6 +2,7 @@ import contextlib
 import io
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -65,6 +66,13 @@ class ReleaseTest(unittest.TestCase):
     def test_prepare_dry_run_is_read_only(self):
         release.prepare("minor", True)
         self.assertEqual(release.git("status", "--porcelain"), "")
+
+    def test_external_tooling_checks_source_working_directory(self):
+        result = subprocess.run(
+            [sys.executable, str(Path(release.__file__).resolve()), "check", "--tag", "v2.36.15"],
+            cwd=self.root, text=True, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_empty_notes_do_not_modify_version(self):
         (self.root / "CHANGELOG.md").write_text("# Changelog\n\n## Unreleased\n\n### Fixed\n")
