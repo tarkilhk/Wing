@@ -88,6 +88,4 @@ The approved wordmark uses lowercase **wing**; the app name is **Wing**, or **Wi
 
 Found a client problem? [Open an issue](https://github.com/tarkilhk/wing/issues) with reproducible steps, following the [redaction guidance](SECURITY.md). The [privacy policy](PRIVACY.md) covers storage, server processing, dictation and deletion, and is available offline in App settings.
 
-Wing is an independently developed Android companion for Hermes Agent, built on the open-source work of [rusty4444](https://github.com/rusty4444) and the Hermes Android contributors. See [NOTICE.md](NOTICE.md) for credits and provenance.
-
-Licensed under [MIT](LICENSE). See [NOTICE.md](NOTICE.md) for attribution and third-party notices.
+Wing is an independently developed Android companion for Hermes Agent, built on the open-source work of [rusty4444](https://github.com/rusty4444) and the Hermes Android contributors. Licensed under [MIT](LICENSE). See [NOTICE.md](NOTICE.md) for credits and third-party notices.
