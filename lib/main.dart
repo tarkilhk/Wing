@@ -26,7 +26,8 @@ import 'core/services/profile_gateway.dart';
 import 'core/services/profiles_repository.dart';
 import 'core/models/hermes_profile.dart';
 import 'core/services/turn_notification_service.dart';
-import 'core/services/background_push_service.dart';
+import 'core/services/background_monitoring_service.dart';
+import 'core/services/notification_delivery_ledger.dart';
 import 'core/theme/wing_theme.dart';
 import 'core/theme/profile_workspace_theme.dart';
 import 'core/widgets/app_drawer.dart';
@@ -106,10 +107,9 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   final _notificationRoutes = <ProfileWorkspaceController, Route<void>>{};
   late final ProfileWorkspaceRegistry _profileControllers;
   late final PluginTurnNotificationSink _profileNotifications;
-  late final PushDeliveryLedger _notificationDeliveries;
+  late final NotificationDeliveryLedger _notificationDeliveries;
   late final Future<void> _notificationsReady;
-  Future<BackgroundPushService?>? _backgroundPushReady;
-  late final ValueNotifier<BackgroundPushState> _backgroundPushState;
+  late final BackgroundMonitoringService _backgroundMonitoring;
   ProfileSessionKey? _pendingNotificationKey;
   Future<void>? _pendingNotificationOpen;
   int _notificationOpenGeneration = 0;
@@ -134,10 +134,6 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     if (granted == false) {
       throw StateError('Notifications are disabled in Android settings.');
     }
-    await widget.connManager.prefs.setBool(
-      backgroundPushPermissionRequestedKey,
-      true,
-    );
     await _profileNotifications.show(
       const TurnNotification(
         id: 214600,
@@ -147,7 +143,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         channel: TurnNotificationService.turnChannel,
       ),
     );
-    unawaited(_syncBackgroundPush());
+    unawaited(_syncBackgroundMonitoring());
   }
 
   Future<void> openProfileNotification(String payload) async {
@@ -228,6 +224,9 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         builder: (_) => ProfileWorkspaceScreen(
           controller: controller,
           enableNotifications: enableProfileNotifications,
+          backgroundMonitoringState: _backgroundMonitoring.state,
+          openMonitoringBatterySettings:
+              _backgroundMonitoring.openBatterySettings,
           onConnections: openConnections,
           onPreferencesChanged: refreshPreferences,
         ),
@@ -275,17 +274,22 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         );
       },
     );
-    _notificationDeliveries = PushDeliveryLedger(widget.connManager.prefs);
-    _backgroundPushState = ValueNotifier(
-      wingFirebaseOptions() == null
-          ? BackgroundPushState.unavailableBuild
-          : BackgroundPushState.syncing,
+    _notificationDeliveries = NotificationDeliveryLedger(
+      widget.connManager.prefs,
+    );
+    _backgroundMonitoring = BackgroundMonitoringService(
+      preferences: widget.connManager.prefs,
+      hasConnections: () async =>
+          (await widget.connManager.loadConnectionsWithSecrets()).isNotEmpty,
+      notificationsEnabled: _profileNotifications.notificationsEnabled,
     );
     _notificationsReady =
         widget.startupExternalNavigationReady ??
         _profileNotifications.initialize().catchError((Object _) {});
     unawaited(
-      WidgetsBinding.instance.endOfFrame.then((_) => _syncBackgroundPush()),
+      WidgetsBinding.instance.endOfFrame.then(
+        (_) => _syncBackgroundMonitoring(),
+      ),
     );
     _profileControllers =
         widget.profileControllers ??
@@ -342,57 +346,19 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
 
   void refreshPreferences() {
     if (mounted) setState(() {});
-    unawaited(_syncBackgroundPush());
+    unawaited(_syncBackgroundMonitoring());
   }
 
-  Future<void> _syncBackgroundPush() async {
+  Future<void> _syncBackgroundMonitoring() async {
     if (_disposed) return;
-    try {
-      await (await _backgroundPush())?.sync();
-    } catch (_) {
-      if (!_disposed) {
-        _backgroundPushState.value = BackgroundPushState.unavailableServer;
-      }
-      // Registration failure must not interrupt local Wing use.
-    }
-  }
-
-  Future<BackgroundPushService?> _backgroundPush() {
-    if (wingFirebaseOptions() == null) return Future.value(null);
-    final existing = _backgroundPushReady;
-    if (existing != null) return existing;
-    final attempt = BackgroundPushService.create(
-      preferences: widget.connManager.prefs,
-      connectionManager: widget.connManager,
-      notifications: _profileNotifications,
-      deliveries: _notificationDeliveries,
-      onOpen: openProfileNotification,
-      state: _backgroundPushState,
-    );
-    _backgroundPushReady = attempt;
-    return attempt.catchError((Object error) {
-      if (identical(_backgroundPushReady, attempt)) {
-        _backgroundPushReady = null;
-      }
-      if (!_disposed) {
-        _backgroundPushState.value = BackgroundPushState.unavailableServer;
-      }
-      throw error;
-    });
-  }
-
-  Future<void> _unregisterBackgroundPush(SavedConnection connection) async {
-    try {
-      await (await _backgroundPush())?.unregisterConnection(connection);
-    } catch (_) {
-      // The server expires registrations that cannot be removed while offline.
-    }
+    await _notificationsReady;
+    if (!_disposed) await _backgroundMonitoring.sync();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      unawaited(_syncBackgroundPush());
+      unawaited(_syncBackgroundMonitoring());
     }
   }
 
@@ -442,9 +408,10 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         enableProfileNotifications: enableProfileNotifications,
         connManager: widget.connManager,
         onPreferencesChanged: refreshPreferences,
-        onConfigurationChanged: () => unawaited(_syncBackgroundPush()),
-        onConnectionInvalidated: _unregisterBackgroundPush,
-        backgroundPushState: _backgroundPushState,
+        onConfigurationChanged: () => unawaited(_syncBackgroundMonitoring()),
+        backgroundMonitoringState: _backgroundMonitoring.state,
+        openMonitoringBatterySettings:
+            _backgroundMonitoring.openBatterySettings,
         shareIntents: widget.shareIntents,
         launchIntents: widget.launchIntents,
         startupExternalNavigationReady: _notificationsReady,
@@ -457,20 +424,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   void dispose() {
     _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
-    final backgroundPush = _backgroundPushReady;
-    if (backgroundPush != null) {
-      unawaited(() async {
-        try {
-          await (await backgroundPush)?.dispose();
-        } catch (_) {
-          // A failed initialization has no live subscriptions to release.
-        } finally {
-          _backgroundPushState.dispose();
-        }
-      }());
-    } else {
-      _backgroundPushState.dispose();
-    }
+    _backgroundMonitoring.dispose();
     _profileControllers.dispose();
     super.dispose();
   }
@@ -483,9 +437,8 @@ class HomeScreen extends StatefulWidget {
   final ConnectionManager connManager;
   final VoidCallback? onPreferencesChanged;
   final VoidCallback? onConfigurationChanged;
-  final Future<void> Function(SavedConnection connection)?
-  onConnectionInvalidated;
-  final ValueListenable<BackgroundPushState>? backgroundPushState;
+  final ValueListenable<BackgroundMonitoringState>? backgroundMonitoringState;
+  final Future<void> Function()? openMonitoringBatterySettings;
   final AndroidShareIntentService? shareIntents;
   final AndroidLaunchIntentService? launchIntents;
   final Future<void>? startupExternalNavigationReady;
@@ -506,8 +459,8 @@ class HomeScreen extends StatefulWidget {
     required this.connManager,
     this.onPreferencesChanged,
     this.onConfigurationChanged,
-    this.onConnectionInvalidated,
-    this.backgroundPushState,
+    this.backgroundMonitoringState,
+    this.openMonitoringBatterySettings,
     this.shareIntents,
     this.launchIntents,
     this.startupExternalNavigationReady,
@@ -925,6 +878,8 @@ class HomeScreenState extends State<HomeScreen> {
               ? null
               : (key) => widget.shareIntents!.capturePhoto(key.toJson()),
           enableNotifications: widget.enableProfileNotifications,
+          backgroundMonitoringState: widget.backgroundMonitoringState,
+          openMonitoringBatterySettings: widget.openMonitoringBatterySettings,
           initialDestination: sharedPayload != null || initialQuickChat
               ? AppDestination.chats
               : destination,
@@ -986,10 +941,6 @@ class HomeScreenState extends State<HomeScreen> {
                   ),
                 );
               } else {
-                final unregister = widget.onConnectionInvalidated?.call(
-                  existing,
-                );
-                if (unregister != null) unawaited(unregister);
                 await widget.connManager.updateConnection(
                   existing.id,
                   label,
@@ -1036,8 +987,6 @@ class HomeScreenState extends State<HomeScreen> {
           onSelected: (v) async {
             if (v == 'delete') {
               try {
-                final unregister = widget.onConnectionInvalidated?.call(conn);
-                if (unregister != null) unawaited(unregister);
                 await widget.connManager.deleteConnection(conn.id);
                 if (mounted) _refresh();
               } on CredentialStorageException {
@@ -1132,7 +1081,9 @@ class HomeScreenState extends State<HomeScreen> {
             ? AppSettingsContent(
                 preferences: widget.connManager.prefs,
                 enableNotifications: widget.enableProfileNotifications,
-                backgroundPushState: widget.backgroundPushState,
+                backgroundMonitoringState: widget.backgroundMonitoringState,
+                openMonitoringBatterySettings:
+                    widget.openMonitoringBatterySettings,
                 onChanged: () {
                   setState(() {});
                   widget.onPreferencesChanged?.call();

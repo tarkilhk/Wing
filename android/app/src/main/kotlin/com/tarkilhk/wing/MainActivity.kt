@@ -2,6 +2,7 @@ package com.tarkilhk.wing
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
@@ -44,14 +45,26 @@ class MainActivity : FlutterActivity() {
     private var initialLaunchAction: String? = null
     @Volatile private var activityResumed = false
 
+    override fun provideFlutterEngine(context: Context): FlutterEngine? = MonitoringRuntime.engine
+
+    override fun shouldDestroyEngineWithHost(): Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        val retainedEngine = MonitoringRuntime.engine != null
         initialShareIntent = intent.takeIf(::isShareIntent)
         initialLaunchAction = launchActionFor(intent)
         super.onCreate(savedInstanceState)
+        if (retainedEngine) {
+            // Dart startup has already run. Deliver taps/shares to its existing listeners.
+            initialShareIntent = null
+            initialLaunchAction = null
+            onNewIntent(intent)
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MonitoringRuntime.attach(this, flutterEngine)
         imageClipboardChannel = ImageClipboardChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             this,
@@ -227,6 +240,12 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        shareChannel?.setMethodCallHandler(null)
+        shareChannel = null
+        launchChannel?.setMethodCallHandler(null)
+        launchChannel = null
+        fileDeliveryChannel?.setMethodCallHandler(null)
+        fileDeliveryChannel = null
         imageClipboardChannel?.dispose()
         imageClipboardChannel = null
         mediaPreviewChannel?.closeAll()
@@ -234,6 +253,7 @@ class MainActivity : FlutterActivity() {
         pdfPreviewChannel?.closeAll()
         pdfPreviewChannel = null
         super.onDestroy()
+        MonitoringRuntime.detach(isChangingConfigurations)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -251,6 +271,7 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
+        MonitoringRuntime.activityVisible = true
         intakeExecutor.execute {
             try {
                 reconcilePendingCameraOnResume()
@@ -262,6 +283,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onPause() {
         activityResumed = false
+        MonitoringRuntime.activityVisible = false
         super.onPause()
     }
 

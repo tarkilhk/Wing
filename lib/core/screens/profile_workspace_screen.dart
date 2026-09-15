@@ -4,6 +4,8 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
+import '../services/background_monitoring_service.dart';
 import 'package:flutter/services.dart';
 
 import '../services/profile_workspace_controller.dart';
@@ -57,6 +59,8 @@ class ProfileWorkspaceScreen extends StatefulWidget {
   final ProfileWorkspaceController controller;
   final bool initialQuickChat;
   final Future<void> Function()? enableNotifications;
+  final ValueListenable<BackgroundMonitoringState>? backgroundMonitoringState;
+  final Future<void> Function()? openMonitoringBatterySettings;
   final VoidCallback? onConnections;
   final VoidCallback? onPreferencesChanged;
   final Future<void> Function(ProfileSessionKey)? onCapturePhoto;
@@ -66,6 +70,8 @@ class ProfileWorkspaceScreen extends StatefulWidget {
     required this.controller,
     this.initialQuickChat = false,
     this.enableNotifications,
+    this.backgroundMonitoringState,
+    this.openMonitoringBatterySettings,
     this.onConnections,
     this.onPreferencesChanged,
     this.onCapturePhoto,
@@ -1850,6 +1856,9 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               AppDestination.settings => AppSettingsContent(
                 preferences: controller.preferences,
                 enableNotifications: widget.enableNotifications,
+                backgroundMonitoringState: widget.backgroundMonitoringState,
+                openMonitoringBatterySettings:
+                    widget.openMonitoringBatterySettings,
                 onChanged: () {
                   setState(() {});
                   widget.onPreferencesChanged?.call();

@@ -18,7 +18,7 @@ Keep logs and generated captures under ignored `build/`. Record source revision,
 | Saved history and branches | `test/answer_sync_acceptance_live_test.dart`, `test/profile_live_history_test.dart`, `integration_test/answer_branch_live_test.dart` |
 | Sensitive input, goals and projects | `integration_test/backend_acceptance_live_test.dart` and its profile-specific companion drivers |
 | Vault, approvals, loops and child-only work | `integration_test/remaining_product_live_test.dart` |
-| Notifications | `test/profile_notification_live_test.dart`, `test/profile_notification_coverage_test.dart`, `integration_test/profile_notification_test.dart` |
+| Notifications | `test/profile_notification_live_test.dart`, `test/profile_notification_coverage_test.dart`, `integration_test/profile_notification_test.dart`, `tools/qa/check_background_monitoring.py` |
 | Slash profile scope | `test/slash_profile_live_contract_test.dart`, `integration_test/slash_commands_live_test.dart` |
 | Design renders | `test/studio_layout_test.dart`, `test/studio_controls_test.dart`, `test/studio_layout_regressions_test.dart`, `test/administration_navigation_test.dart` |
 
@@ -58,6 +58,6 @@ The 13–14 September 2026 acceptance used local Hermes 0.21.2 at `e16f686706b1e
 | Supervision | Goals and default-profile controls passed. Non-default loop scope and unopened child-only Activity reproduced backend gaps. |
 | Native files | Real downloaded PDF/image/SVG zoom and WAV/MP3/MP4/WebM playback, seek, pause/return and invalid-format recovery passed. Device codecs/speakers and native HTML behavior need their own coverage. |
 | Mobile intake | Samsung picker/camera/share review and recovery checks passed; real image/text contents were checked. Remote file contents and reopen passed via tool read, while automatic `@file` expansion still rejected an out-of-workspace path. |
-| Notifications | Local posting and routing checks passed. Snapshot/event gaps and Android background lifecycle still limit delivery. |
+| Notifications | Local posting/routing plus foreground-service lifecycle checks cover Home, activity destruction/recreation, Doze with battery exemption and stop/restart. Server event gaps and process termination still limit delivery. |
 
 Backend reproductions and closure criteria are retained in [Upstream Hermes bugs](UPSTREAM_HERMES_BUGS.md). App reliability gaps are linked from [Known limitations](KNOWN_LIMITATIONS.md) and the [bug tracker](BUG_TRACKER.md). Retest a reproduced limitation when its relevant contract changes; do not relabel it as a pass to produce an all-green report.

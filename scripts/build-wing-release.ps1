@@ -1,7 +1,6 @@
 param(
     [Parameter(Mandatory = $true)][string]$ToolchainRoot,
     [string]$SigningDirectory = (Join-Path $env:LOCALAPPDATA 'Wing\signing'),
-    [string]$FirebaseOptionsFile,
     # Enable R8/code and resource shrinking for a smaller distribution APK.
     # Wing iteration still uses Flutter's release AOT compiler without it.
     [switch]$OptimizeAndroid,
@@ -21,11 +20,6 @@ $keytool = Join-Path $ToolchainRoot 'jdk-17\bin\keytool.exe'
 $flutter = Join-Path $ToolchainRoot 'flutter\bin\flutter.bat'
 $sdk = Join-Path $ToolchainRoot 'android-sdk'
 $buildTools = Join-Path $sdk 'build-tools\36.0.0'
-$firebaseBuildArguments = @()
-if ($FirebaseOptionsFile) {
-    $firebaseOptionsPath = (Resolve-Path -LiteralPath $FirebaseOptionsFile -ErrorAction Stop).Path
-    $firebaseBuildArguments = @("--dart-define-from-file=$firebaseOptionsPath")
-}
 foreach ($required in @($keytool, $flutter, (Join-Path $buildTools 'apksigner.bat'))) {
     if (!(Test-Path -LiteralPath $required)) { throw 'Required release tool is missing' }
 }
@@ -88,7 +82,7 @@ try {
     # Flutter 3.44 skips release-specific plugin regeneration with --no-pub.
     # Keep pub so the native plugin registry matches this build mode.
     $buildTimer = [Diagnostics.Stopwatch]::StartNew()
-    $flutterArguments = @('build', 'apk', '--target-platform', 'android-arm64', '--split-per-abi', '-t', 'lib/main.dart') + $firebaseBuildArguments + $androidBuildArguments
+    $flutterArguments = @('build', 'apk', '--target-platform', 'android-arm64', '--split-per-abi', '-t', 'lib/main.dart') + $androidBuildArguments
     & (Join-Path $PSScriptRoot 'invoke-flutter.ps1') -ToolchainRoot $ToolchainRoot -FlutterArguments $flutterArguments
     if ($LASTEXITCODE -ne 0) { throw "Wing $buildMode build failed" }
     $buildTimer.Stop()

@@ -65,7 +65,7 @@ void main() {
     await tester.tap(previews);
     await tester.pumpAndSettle();
     expect(preferences.getBool(notificationTitlesKey), isTrue);
-    final permission = find.text('Enable and test notifications');
+    final permission = find.text('Test notification');
     await tester.scrollUntilVisible(permission, 250);
     await tester.tap(permission);
     await tester.pumpAndSettle();

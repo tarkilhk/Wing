@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/profile_workspace_theme.dart';
 import '../services/turn_notification_service.dart';
-import '../services/background_push_service.dart';
+import '../services/background_monitoring_service.dart';
 import '../services/device_preference.dart';
 import '../widgets/studio_error.dart';
 import '../widgets/text_size_settings_card.dart';
@@ -20,13 +20,15 @@ class AppSettingsContent extends StatefulWidget {
     required this.preferences,
     required this.onChanged,
     this.enableNotifications,
-    this.backgroundPushState,
+    this.backgroundMonitoringState,
+    this.openMonitoringBatterySettings,
   });
 
   final SharedPreferences preferences;
   final VoidCallback onChanged;
   final Future<void> Function()? enableNotifications;
-  final ValueListenable<BackgroundPushState>? backgroundPushState;
+  final ValueListenable<BackgroundMonitoringState>? backgroundMonitoringState;
+  final Future<void> Function()? openMonitoringBatterySettings;
 
   @override
   State<AppSettingsContent> createState() => _AppSettingsContentState();
@@ -219,52 +221,63 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                 ),
                 CompactSwitchListTile(
                   title: const Text('Show chat titles in alerts'),
-                  subtitle: const Text(
-                    'Allow notification previews to include the chat title.',
-                  ),
                   value: _confirmed[notificationTitlesKey] as bool? ?? false,
                   onChanged: _saving
                       ? null
                       : (value) => _save(notificationTitlesKey, value),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  child: widget.backgroundPushState == null
-                      ? const SizedBox.shrink()
-                      : ValueListenableBuilder<BackgroundPushState>(
-                          valueListenable: widget.backgroundPushState!,
-                          builder: (_, state, _) => Text(switch (state) {
-                            BackgroundPushState.configured =>
-                              'Background alerts are configured for supported Hermes profiles.',
-                            BackgroundPushState.disabled =>
-                              'Background alerts are off on this device.',
-                            BackgroundPushState.noConnections =>
-                              'Add a connection to configure background alerts.',
-                            BackgroundPushState.permissionRequired =>
-                              'Enable Android notifications to receive background alerts.',
-                            BackgroundPushState.syncing =>
-                              'Checking background alert delivery…',
-                            BackgroundPushState.unavailableBuild =>
-                              'This build has no background-alert setup. Local alerts still work while connected.',
-                            BackgroundPushState.unavailableServer =>
-                              'One or more connections could not configure background alerts. Check the connection and retry.',
-                          }),
-                        ),
-                ),
-                if (widget.backgroundPushState != null)
-                  ValueListenableBuilder<BackgroundPushState>(
-                    valueListenable: widget.backgroundPushState!,
-                    builder: (_, state, _) =>
-                        state == BackgroundPushState.unavailableServer
-                        ? Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: widget.onChanged,
-                              child: const Text('Retry'),
+                if (widget.backgroundMonitoringState != null) ...[
+                  ValueListenableBuilder<BackgroundMonitoringState>(
+                    valueListenable: widget.backgroundMonitoringState!,
+                    builder: (_, state, _) {
+                      if (state !=
+                              BackgroundMonitoringState.batteryRestricted &&
+                          state != BackgroundMonitoringState.failed) {
+                        return const SizedBox.shrink();
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              state ==
+                                      BackgroundMonitoringState
+                                          .batteryRestricted
+                                  ? 'Notifications may be delayed.'
+                                  : 'Notifications paused.',
                             ),
-                          )
-                        : const SizedBox.shrink(),
+                            if (state ==
+                                    BackgroundMonitoringState
+                                        .batteryRestricted &&
+                                widget.openMonitoringBatterySettings != null)
+                              TextButton(
+                                onPressed: () async {
+                                  try {
+                                    await widget
+                                        .openMonitoringBatterySettings!();
+                                  } catch (_) {
+                                    if (context.mounted) {
+                                      showStudioError(
+                                        context,
+                                        'Could not open battery settings.',
+                                      );
+                                    }
+                                  }
+                                },
+                                child: const Text('Allow background activity'),
+                              ),
+                            if (state == BackgroundMonitoringState.failed)
+                              TextButton(
+                                onPressed: widget.onChanged,
+                                child: const Text('Retry'),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
+                ],
               ],
             ),
           ),
@@ -272,10 +285,16 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
           Card(
             child: ListTile(
               leading: const Icon(Icons.notifications_outlined),
-              title: const Text('Enable and test notifications'),
-              subtitle: const Text(
-                'Request Android permission and send a test alert.',
-              ),
+              title: widget.backgroundMonitoringState == null
+                  ? const Text('Test notification')
+                  : ValueListenableBuilder<BackgroundMonitoringState>(
+                      valueListenable: widget.backgroundMonitoringState!,
+                      builder: (_, state, _) => Text(
+                        state == BackgroundMonitoringState.permissionRequired
+                            ? 'Enable notifications'
+                            : 'Test notification',
+                      ),
+                    ),
               trailing: _requesting
                   ? const SizedBox.square(
                       dimension: 20,

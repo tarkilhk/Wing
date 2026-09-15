@@ -44,4 +44,4 @@ The Connections toolbar provides Backup configuration and Restore configuration,
 
 See [Administration](ADMINISTRATION.md), [session controls](SESSION_CONTROLS.md), [subagents](SUBAGENT_SUPERVISION.md) and [notifications](BACKGROUND_NOTIFICATIONS.md).
 
-Accepted work continues on Hermes when the phone leaves. Local queues and alerts require a running, connected client. Firebase delivery, cold sensitive/side-task recovery and synchronized answer versions are not current features. The [product plan](PRODUCT_PLAN.md) separates selected work from exclusions.
+Accepted work continues on Hermes when the phone leaves. Background monitoring retains the connected client outside the visible app, with an ongoing notification and an optional battery exemption for screen-off delivery. Local queues and alerts still stop if Android terminates the process. Firebase delivery, cold sensitive/side-task recovery and synchronized answer versions are not current features. The [product plan](PRODUCT_PLAN.md) separates selected work from exclusions.

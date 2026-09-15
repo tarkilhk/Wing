@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-09-06
 
-Current qualification, 2026-09-15: the lifetime/ownership decision remains accepted. It does not guarantee process-death recovery or notification delivery. Use [local notification limits](../BACKGROUND_NOTIFICATIONS.md) and [current storage/recovery scope](../PRODUCT_PLAN.md) for those boundaries; no separate durable work database or Firebase sender is selected.
+Current qualification, 2026-09-16: the lifetime/ownership decision remains accepted. It does not guarantee process-death recovery or notification delivery. Android foreground monitoring now retains the same engine across activity destruction; process termination still requires reopening Wing. Use [background notification limits](../BACKGROUND_NOTIFICATIONS.md) and [current storage/recovery scope](../PRODUCT_PLAN.md) for those boundaries; no separate durable work database or Firebase sender is selected.
 
 ## Context
 

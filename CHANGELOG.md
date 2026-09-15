@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## [1.0.1] - 2026-09-16
+
+- Keep notifications available outside Wing with automatic background monitoring, without Firebase.
+- Simplify notification settings and show an action only when delivery needs attention.
+
 ## [1.0.0] - 2026-09-16
 
 First release of Wing, an independent Android client for a self-hosted Hermes server. The app uses `com.tarkilhk.wing` and starts with separate local data from the inherited Hermes application.

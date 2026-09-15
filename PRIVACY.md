@@ -18,9 +18,9 @@ The maintainer does not operate a relay for these conversations. The app has no 
 
 ## Notifications and other services
 
-Standard builds create notifications locally from connected sessions. Notifications can include chat titles only if you enable that option. Android may display them on your lock screen according to your system settings. Local alerts are not a guarantee of delivery after Android suspends or closes the app.
+Wing creates notifications locally from connected Hermes sessions. Notifications can include chat titles only if you enable that option. Android may display them on your lock screen according to your system settings.
 
-Firebase messaging code remains in the source but is not initialized in a standard build without Firebase build configuration. A separately configured build can send a device messaging token, an installation identifier and notification preferences to its configured Firebase service and Hermes server. This policy's standard-build description must not be used to describe such a build without updating its disclosures.
+Background monitoring keeps these authenticated connections running with an ongoing notification and a partial wake lock. It uses additional battery; settings offer an Android battery-optimization exemption for screen-off delivery. Monitoring starts automatically when a saved connection exists, Android notifications are allowed and at least one alert category is enabled. Disabling both alert categories in app settings stops monitoring. Force-stop, process termination and network loss can interrupt alerts. Wing does not use Firebase or transmit device push tokens to a push provider.
 
 Remote images displayed in messages can contact the image host. Opening a web link contacts that website through your browser. Opening or sharing a downloaded file with another app gives that app the file you selected. Those websites and apps apply their own policies. Self-contained HTML and diagram previews restrict external network access.
 

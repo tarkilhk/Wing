@@ -10,7 +10,7 @@ Some dashboard requests still lack a transport deadline. A host that accepts a c
 
 ## Leaving the app and recovering work
 
-Hermes runs accepted work on the server. The phone must be running and connected to drain its unsent follow-up queue or generate local alerts. Unopened chats have limited notification coverage, and Android can suspend background connections. Firebase delivery is outside the selected release scope.
+Hermes runs accepted work on the server. The phone must be running and connected to drain its unsent follow-up queue or generate local alerts. Foreground monitoring keeps the app engine and opened connections alive outside the activity; screen-off delivery requires allowing background battery use. Unopened chats still have limited event coverage. Force-stop, process termination, reboot and connectivity loss can interrupt monitoring. See [background notifications](BACKGROUND_NOTIFICATIONS.md).
 
 If Android closes after a normal send reaches Hermes but before its acknowledgement arrives, the retained draft can return without an uncertainty warning. Check server history before sending that draft again. The client does not automatically resend it. This affects the acknowledgement window; it does not mean every reconnect duplicates a message. Tracked in [issue #17](https://github.com/tarkilhk/wing/issues/17).
 
