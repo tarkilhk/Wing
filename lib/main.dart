@@ -30,7 +30,7 @@ import 'core/services/background_push_service.dart';
 import 'core/theme/wing_theme.dart';
 import 'core/theme/profile_workspace_theme.dart';
 import 'core/widgets/app_drawer.dart';
-import 'core/widgets/playful_portrait.dart';
+import 'core/widgets/wing_welcome.dart';
 import 'core/screens/app_settings_content.dart';
 import 'core/widgets/config_backup_card.dart';
 import 'core/widgets/gateway_headers_editor.dart';
@@ -1105,7 +1105,10 @@ class HomeScreenState extends State<HomeScreen> {
           onSelected: _selectDestination,
         ),
         appBar: AppBar(
-          title: Text(_destination.label),
+          title:
+              _connections.isEmpty && _destination == AppDestination.connections
+              ? null
+              : Text(_destination.label),
           actions: [
             if (_destination == AppDestination.connections &&
                 _connections.isNotEmpty)
@@ -1169,40 +1172,9 @@ class HomeScreenState extends State<HomeScreen> {
                     ),
                   Expanded(
                     child: _connections.isEmpty
-                        ? ListView(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 32,
-                              vertical: 64,
-                            ),
-                            children: [
-                              const Center(child: PlayfulPortrait(size: 112)),
-                              const SizedBox(height: 24),
-                              Text(
-                                'Connect to Hermes',
-                                textAlign: TextAlign.center,
-                                style: Theme.of(
-                                  context,
-                                ).textTheme.headlineSmall,
-                              ),
-                              const SizedBox(height: 12),
-                              const Text(
-                                'Add your server to open profiles and conversations.',
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 24),
-                              FilledButton.icon(
-                                onPressed: _showAddDialog,
-                                icon: const Icon(Icons.add),
-                                label: const Text('Add connection'),
-                              ),
-                              const SizedBox(height: 12),
-                              OutlinedButton.icon(
-                                key: const Key('home_restore_config_button'),
-                                onPressed: _showRestoreConfig,
-                                icon: const Icon(Icons.settings_backup_restore),
-                                label: const Text('Restore configuration'),
-                              ),
-                            ],
+                        ? WingWelcome(
+                            onConnect: _showAddDialog,
+                            onRestore: _showRestoreConfig,
                           )
                         : Align(
                             alignment: Alignment.topCenter,

@@ -9,6 +9,7 @@
 
 ### Changed
 
+- Add the approved navy portrait splash and light/dark Wing welcome screens, with a scalable wordmark and an offline connection guide. Preserve connection setup, restore, drawer navigation and short-screen scrolling.
 - Move repository, release, changelog and support links to `tarkilhk/wing` following the GitHub repository rename.
 - Rename the app to Wing, with Wing Dev for development builds. Preserve package IDs, signing configuration and saved data compatibility.
 - Adopt the approved lowercase wing wordmark with compact pointed feather accents and a matching decorative feather system. Save the selected board and naming rules in the design framework.

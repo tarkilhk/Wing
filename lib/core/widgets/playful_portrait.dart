@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 
 /// Shared app identity. Adjacent text supplies the accessible name.
 class PlayfulPortrait extends StatelessWidget {
-  const PlayfulPortrait({super.key, this.size = 48});
+  const PlayfulPortrait({super.key, this.size = 48, this.circular = false});
 
   final double size;
+  final bool circular;
 
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
     child: ClipRRect(
       // Brand artwork keeps its launcher silhouette, independent of controls.
-      borderRadius: BorderRadius.circular(size * .22),
+      borderRadius: BorderRadius.circular(size * (circular ? .5 : .22)),
       child: Image.asset(
         'assets/icon/icon.png',
         width: size,

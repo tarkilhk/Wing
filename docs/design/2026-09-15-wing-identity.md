@@ -43,9 +43,11 @@ brand-card and banner copy. Retain the comma in the tagline.
 The checked-in [board](images/wing-identity-board.png) is the approved raster
 design reference. The [final refinement prompt](2026-09-15-wing-identity-prompt.md)
 records its generation direction. Earlier experimental boards are unselected.
-The board does not identify a verified font family or provide editable vector
-wordmark masters. Preserve its drawn letterforms when preparing future assets;
-do not substitute a guessed font. Production screens keep Studio typography.
+The board does not identify a verified font family. The
+[WingWordmark](../../lib/core/widgets/wing_wordmark.dart) widget now provides
+scalable drawn lettering and feather paths for the approved arrival screens.
+Preserve this lettering rather than substituting a guessed font. Other
+production screen text keeps Studio typography.
 
 This change adopts the name and saves the visual framework. It does not insert
 the entire board into the app or replace existing launcher artwork. Generated

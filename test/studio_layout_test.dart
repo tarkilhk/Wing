@@ -113,7 +113,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.byType(PlayfulPortrait), findsOneWidget);
-        expect(find.text('Connect to Hermes'), findsOneWidget);
+        expect(find.text('Your agent, with you'), findsOneWidget);
         await _capture(
           tester,
           '${brightness.name}-first-connection-${viewport.$2}',

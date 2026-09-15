@@ -359,7 +359,7 @@ void main() {
       MaterialApp(home: HomeScreen(connManager: manager)),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Connect to Hermes'), findsOneWidget);
+    expect(find.text('Your agent, with you'), findsOneWidget);
     await tester.tap(find.byTooltip('Open navigation menu'));
     await tester.pumpAndSettle();
     for (final destination in [

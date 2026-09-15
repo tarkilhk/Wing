@@ -43,6 +43,15 @@ themes. Treat the portrait as decorative beside existing labels. Preserve
 the author row and message width. The empty greeting yields to messages,
 history loading or errors, and active work; keep it scrollable on short screens.
 
+The owner approved the [Wing arrival screens](design/2026-09-15-wing-arrival.md)
+on 15 September 2026. First connection now uses a 144 dp circular portrait,
+the scalable lowercase wordmark and the tagline, with Connect your agent,
+Restore configuration and an offline Connection guide. This supersedes the
+112 dp first-connection placement above. Keep the existing drawer reachable.
+Use Studio screen and action tokens in both themes; preserve text scaling and
+scrolling on short screens. Native launch uses the portrait on brand navy,
+without a timed hold, extra loading route or a network-readiness requirement.
+
 ## Layout and controls
 
 Keep hamburger navigation and projects scoped inside Chats. Use compact connection/profile text below the page title. Search stays below this scope. Projects, pins and recents use full-width rows, grouped where helpful, with thin separators.
