@@ -5,26 +5,48 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing version tag to build and publish
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
 
 jobs:
   build:
     name: Build and verify APK
-    if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       PUB_CACHE: ${{ github.workspace }}/.pub-cache
+      RELEASE_TOOLS: ${{ github.workspace }}/release-tools/scripts
+    defaults:
+      run:
+        working-directory: source
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Checkout workflow tooling
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.sha }}
+          path: release-tools
+          persist-credentials: false
+
+      - name: Checkout release source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ inputs.release_tag || github.ref_name }}
+          path: source
           fetch-depth: 0
           persist-credentials: false
 
@@ -34,13 +56,16 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Install pinned Android verification tools
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;36.0.0"'
+
       - name: Cache Gradle dependencies and task outputs
         uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
         with:
           cache-read-only: true
 
       - name: Set up Flutter
-        uses: ./.github/actions/setup-flutter
+        uses: ./release-tools/.github/actions/setup-flutter
         with:
           flutter-version: '3.44.0'
           channel: 'stable'
@@ -51,7 +76,7 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ github.workspace }}/.pub-cache
-          key: flutter-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          key: flutter-${{ runner.os }}-${{ hashFiles('source/pubspec.lock') }}
           restore-keys: flutter-${{ runner.os }}-
 
       - name: Install dependencies
@@ -73,18 +98,15 @@ jobs:
           PY
 
       - name: Test release tooling
-        run: python3 -m unittest discover -s scripts/tests -v
+        run: python3 -m unittest discover -s "$RELEASE_TOOLS/tests" -v
 
       - name: Verify source version
-        run: python3 scripts/release.py check
+        run: python3 "$RELEASE_TOOLS/release.py" check
 
       - name: Verify release tag and source
-        if: github.ref_type == 'tag'
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           git merge-base --is-ancestor HEAD origin/main
-          python3 scripts/release.py check --tag "$RELEASE_TAG"
+          python3 "$RELEASE_TOOLS/release.py" check --tag "$RELEASE_TAG"
 
       - name: Static analysis
         run: flutter analyze --no-pub --fatal-infos
@@ -117,19 +139,20 @@ jobs:
         run: rm -f "$RUNNER_TEMP/wing-release.keystore"
 
       - name: Verify release APKs
-        run: python3 scripts/verify_release_apks.py
+        run: python3 "$RELEASE_TOOLS/verify_release_apks.py"
 
       - name: Package release assets
         run: |
           python3 - <<'PYTHON'
           import hashlib
           import json
+          import os
           from pathlib import Path
           import shutil
           import subprocess
           import sys
           import tarfile
-          sys.path.insert(0, "scripts")
+          sys.path.insert(0, os.environ["RELEASE_TOOLS"])
           from release import current_version, release_notes, release_tag
 
           version, build = current_version()
@@ -149,6 +172,7 @@ jobs:
               "android_build_number": build,
               "tag": tag,
               "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+              "workflow_commit": os.environ["GITHUB_SHA"],
               "package": "com.tarkilhk.wing",
               "certificate_sha256": Path("android/wing-release-certificate.sha256").read_text().strip(),
               "verification": "All APKs passed package, version, non-debuggable and signing certificate checks",
@@ -165,14 +189,13 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-assets
-          path: release-assets/
+          path: source/release-assets/
           if-no-files-found: error
           retention-days: 30
 
   publish:
     name: Publish verified APKs
     needs: build
-    if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -180,7 +203,6 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      RELEASE_TAG: ${{ github.ref_name }}
     steps:
       - name: Download verified release assets
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

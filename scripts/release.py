@@ -9,7 +9,9 @@ import subprocess
 import sys
 
 
-ROOT = Path(__file__).resolve().parents[1]
+# Run from the source checkout root. CI may load tooling from a newer workflow
+# revision while building an existing immutable source tag.
+ROOT = Path.cwd()
 SEMVER = r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
 VERSION = re.compile(rf"^version: ({SEMVER})\+([1-9][0-9]*)$", re.M)
 TAG = re.compile(rf"v{SEMVER}")

@@ -56,6 +56,8 @@ class VerifyApksTest(unittest.TestCase):
             return output
         if self.unsigned:
             raise subprocess.CalledProcessError(1, args, "DOES NOT VERIFY")
+        if Path(args[0]).parent.name == "37.0.0":
+            return f"V2 Signer: certificate SHA-256 digest: {self.certificate}\n"
         return f"Signer #1 certificate SHA-256 digest: {self.certificate}\n"
 
     def verify(self):
@@ -63,6 +65,10 @@ class VerifyApksTest(unittest.TestCase):
             verify_release_apks.verify()
 
     def test_accepts_complete_signed_release(self):
+        self.verify()
+
+    def test_newer_installed_sdk_does_not_break_valid_certificates(self):
+        (self.root / "sdk/build-tools/37.0.0").mkdir()
         self.verify()
 
     def test_rejects_wrong_metadata_on_non_arm64_split(self):

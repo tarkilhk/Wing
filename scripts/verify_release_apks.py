@@ -19,9 +19,11 @@ def verify():
     if actual != expected:
         raise ValueError(f"Expected exactly {sorted(expected)}, found {sorted(actual)}")
     sdk = Path(os.environ["ANDROID_HOME"])
-    versions = [path for path in (sdk / "build-tools").iterdir()
-                if re.fullmatch(r"\d+\.\d+\.\d+", path.name)]
-    build_tools = max(versions, key=lambda path: tuple(map(int, path.name.split("."))))
+    # apksigner 37 changed its certificate report format. Verification uses
+    # the explicit toolchain contract instead of the runner's newest install.
+    build_tools = sdk / "build-tools/36.0.0"
+    if not build_tools.is_dir():
+        raise ValueError("Install Android build-tools;36.0.0 before verifying APKs")
     certificate = (ROOT / "android/wing-release-certificate.sha256").read_text().strip().lower()
     if not re.fullmatch(r"[0-9a-f]{64}", certificate):
         raise ValueError("Invalid pinned signing certificate")
