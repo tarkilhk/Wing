@@ -188,7 +188,7 @@ void main() {
       final gesture = await hold(tester);
       final button = tester.getRect(find.byTooltip('Steer'));
       final choices = [
-        for (final name in ['stop', 'queue', 'fork', 'steer'])
+        for (final name in ['stop', 'fork', 'queue', 'steer'])
           tester.getRect(find.byKey(ValueKey('composer-choice-$name'))),
       ];
       for (var i = 0; i < choices.length; i++) {

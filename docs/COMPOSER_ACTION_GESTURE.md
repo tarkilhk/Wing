@@ -13,9 +13,10 @@ Stop as the busy composer's primary action and opened a sheet on long press.
 - Hold the button to open a vertical icon selector above it. Keep the finger
   down, slide to a choice, and release to run that action once. Holding in
   place keeps the primary action selected. Slide outside to cancel.
-- The default sits at the bottom of the stack, closest to the button. Other choices are Stop, Queue, Fork, and
-  Steer, with Send replacing Steer while idle. Selecting an alternative never
-  changes the saved default.
+- The default sits at the bottom of the stack, closest to the button. With
+  Steer as the default, sliding upward visits Steer, Queue, Fork, then Stop.
+  Send replaces Steer while idle. Selecting an alternative never changes the
+  saved default.
 - Unavailable choices stay visible and dimmed. Moving onto one shows why it
   cannot run. Releasing there does nothing. Empty text and attachments cannot
   be steered; Stop remains reachable through the gesture.

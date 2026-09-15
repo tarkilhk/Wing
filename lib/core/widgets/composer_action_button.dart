@@ -102,8 +102,8 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
         anchorBox.size;
     _actions = [
       ComposerAction.stop,
-      ComposerAction.queue,
       ComposerAction.fork,
+      ComposerAction.queue,
       widget.primary == ComposerAction.send
           ? ComposerAction.send
           : ComposerAction.steer,
