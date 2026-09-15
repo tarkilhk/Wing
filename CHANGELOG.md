@@ -4,6 +4,7 @@
 
 - Allow APK builds to advance their internal build number while retaining the current release version.
 - Ask for notification permission on first launch with Android's native dialog, while keeping notification controls in App settings.
+- Attach photos taken inside a chat directly to that chat's draft without opening share review.
 - Keep notifications available outside Wing with automatic background monitoring, without Firebase.
 - Simplify notification settings and show an action only when delivery needs attention.
 

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wing/core/models/attachment_draft.dart';
 import 'package:wing/core/services/android_share_intent_service.dart';
+import 'package:wing/core/services/attachment_draft_service.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/composer_draft_store.dart';
 import 'package:wing/core/services/ws_client.dart';
@@ -31,6 +33,30 @@ class _Credentials implements CredentialStore {
   Future<void> write(String key, String value) async => values[key] = value;
 }
 
+class _CameraAttachments extends AttachmentDraftService {
+  bool fail = false;
+
+  @override
+  Future<AttachmentDraft> prepareImage({
+    required String sourcePath,
+    required String displayName,
+    required Iterable<AttachmentDraft> existingDrafts,
+    required AttachmentDraftMode mode,
+  }) async {
+    if (fail) throw const AttachmentDraftException('Photo could not be saved.');
+    return AttachmentDraft(
+      id: 'captured-photo',
+      cachedPath: '/cache/captured-photo.jpg',
+      name: displayName,
+      byteLength: 1,
+      mediaType: 'image/jpeg',
+      kind: AttachmentDraftKind.image,
+      sourceImageFormat: AttachmentImageFormat.jpeg,
+      sanitized: true,
+    );
+  }
+}
+
 Future<ConnectionManager> _manager() async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
@@ -41,11 +67,13 @@ ProfileWorkspaceController _controller(
   SavedConnection connection,
   SharedPreferences prefs, {
   Set<String> missingSessions = const {},
+  AttachmentDraftService? attachments,
 }) {
   final controller = ProfileWorkspaceController(
     connection: connection,
     connectionIdentity: 'home-share-${connection.id}',
     preferences: prefs,
+    attachmentService: attachments,
     gatewayFactory: (scope) => ProfileGateway(
       scope: scope,
       discover: () async => const ProfileDiscovery(
@@ -87,17 +115,20 @@ Future<void> _pumpHome(
   ConnectionManager manager,
   AndroidShareIntentService shareIntents, {
   Set<String> missingSessions = const {},
+  ProfileWorkspaceController? controller,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
       home: HomeScreen(
         connManager: manager,
         shareIntents: shareIntents,
-        profileController: (connection) => _controller(
-          connection,
-          manager.prefs,
-          missingSessions: missingSessions,
-        ),
+        profileController: (connection) =>
+            controller ??
+            _controller(
+              connection,
+              manager.prefs,
+              missingSessions: missingSessions,
+            ),
       ),
     ),
   );
@@ -285,7 +316,7 @@ void main() {
     expect(find.textContaining('could not be discarded'), findsOneWidget);
   });
 
-  testWidgets('camera review restores its original connection and saved chat', (
+  testWidgets('camera returns directly to its original connection and draft', (
     tester,
   ) async {
     final manager = await _manager();
@@ -313,15 +344,7 @@ void main() {
       find.text('Choose a connection for this shared draft'),
       findsNothing,
     );
-    expect(find.text('Connection: Work'), findsOneWidget);
-    expect(
-      tester
-          .widget<RadioGroup<String>>(find.byType(RadioGroup<String>))
-          .groupValue,
-      'original-chat',
-    );
-    await tester.tap(find.byKey(const Key('share-add-to-draft')));
-    await tester.pumpAndSettle();
+    expect(find.text('Add shared content'), findsNothing);
     final workspace = tester.widget<ProfileWorkspaceScreen>(
       find.byType(ProfileWorkspaceScreen),
     );
@@ -329,6 +352,102 @@ void main() {
     expect(workspace.controller.current!.chat!.draft, payload.text);
     expect(shares.pendingShare.value, isNull);
   });
+
+  for (final outcome in [
+    'saved',
+    'preparation failed',
+    'acknowledgement failed',
+  ]) {
+    testWidgets('photo taken inside a chat: $outcome', (tester) async {
+      final manager = await _manager();
+      await manager.saveConnection('Work', 'work.local', 8642, 'work-key');
+      final connection = manager.getConnections().single;
+      final attachments = _CameraAttachments()
+        ..fail = outcome == 'preparation failed';
+      final controller = _controller(
+        connection,
+        manager.prefs,
+        attachments: attachments,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      final chat = await controller.createChat();
+      await controller.updateDraft(chat, 'Existing draft');
+      await manager.prefs.setString('last_connection_id', connection.id);
+      final drafts = ComposerDraftStore(
+        manager.prefs,
+        connectionIdentity: controller.connectionIdentity,
+      );
+      final shares = AndroidShareIntentService();
+      addTearDown(shares.dispose);
+      final payload = AndroidSharePayload(
+        id: 'in-chat-photo',
+        files: const [
+          AndroidSharedFile(
+            path: '/intake/camera.jpg',
+            name: 'Camera photo.jpg',
+            mediaType: 'image/jpeg',
+            byteLength: 1,
+          ),
+        ],
+        target: chat.key.toJson(),
+      );
+      var acknowledgements = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            if (call.method == 'capturePhoto') {
+              expect((call.arguments as Map)['target'], chat.key.toJson());
+              shares.pendingShare.value = payload;
+            }
+            if (call.method == 'acknowledgeShare') {
+              acknowledgements++;
+              expect((call.arguments as Map)['id'], payload.id);
+              final saved = drafts.summaries(profileName: 'default').single;
+              expect(saved.sessionId, chat.key.sessionId);
+              expect(saved.text, 'Existing draft');
+              expect(saved.attachmentCount, 1);
+              if (outcome == 'acknowledgement failed') {
+                throw PlatformException(code: 'ack-failed');
+              }
+            }
+            return null;
+          });
+
+      await _pumpHome(tester, manager, shares, controller: controller);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Attach file'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Camera'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add shared content'), findsNothing);
+      expect(find.byType(ProfileWorkspaceScreen), findsOneWidget);
+      expect(controller.current!.chat, same(chat));
+      expect(chat.draft, 'Existing draft');
+      expect(chat.messages, isEmpty);
+      expect(acknowledgements, attachments.fail ? 0 : 1);
+      expect(chat.attachments, hasLength(attachments.fail ? 0 : 1));
+      expect(
+        shares.pendingShare.value,
+        outcome == 'saved' ? isNull : same(payload),
+      );
+      if (!attachments.fail) {
+        expect(
+          find.byKey(const ValueKey('composer-image-thumbnail')),
+          findsOneWidget,
+        );
+      }
+      if (outcome == 'acknowledgement failed') {
+        expect(find.textContaining('could not be cleared'), findsOneWidget);
+      }
+      if (attachments.fail) {
+        expect(
+          find.textContaining('still available to review'),
+          findsOneWidget,
+        );
+      }
+    });
+  }
 
   testWidgets('cold camera recovery keeps the saved text in its new draft', (
     tester,

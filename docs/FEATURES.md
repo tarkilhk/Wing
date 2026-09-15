@@ -24,7 +24,7 @@ See [Conversation actions](CONVERSATION_ACTIONS_AND_READING.md), [composer gestu
 
 ## Send attachments and use results
 
-Add Camera, Photos or Files, paste a supported clipboard image, or share content into Hermes from Android. Review the destination and content before adding it to a draft; Send is separate. Dictation uses the device's speech-recognition service to produce text for review.
+Add Camera, Photos or Files, paste a supported clipboard image, or share content into Hermes from Android. A photo taken with Camera inside a chat attaches directly to that chat's draft. External shares open a review to choose their destination and content; Send is separate. Dictation uses the device's speech-recognition service to produce text for review.
 
 Find in chat starts with recent messages and can search older history. View in chat shows a result with nearby context; Back to latest returns to the conversation. Outputs lists recent file references and can load older ones.
 

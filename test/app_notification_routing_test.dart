@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
@@ -167,8 +168,15 @@ void main() {
   });
 
   testWidgets(
-    'a cold notification tap defers recovered share review without discarding it',
+    'a cold notification tap defers camera intake until explicitly opened',
     (tester) async {
+      const channel = MethodChannel(AndroidShareIntentService.channelName);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (_) async => null);
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
       final harness = await _harness();
       final shares = AndroidShareIntentService();
       addTearDown(shares.dispose);
@@ -221,9 +229,16 @@ void main() {
 
       await _expectSinglePopReturnsHome(tester);
       await tester.tap(find.text('Review'));
-      await tester.pumpAndSettle();
-      expect(find.text('Add shared content'), findsOneWidget);
-      expect(shares.pendingShare.value, same(pending));
+      await _pumpNavigation(tester);
+      expect(find.text('Add shared content'), findsNothing);
+      expect(find.byType(ProfileWorkspaceScreen), findsOneWidget);
+      expect(harness.controller.current!.scope.profileName, 'b');
+      expect(
+        harness.controller.current!.chat!.key.sessionId,
+        'expired-camera-chat',
+      );
+      expect(harness.controller.current!.chat!.draft, pending.text);
+      expect(shares.pendingShare.value, isNull);
     },
   );
 

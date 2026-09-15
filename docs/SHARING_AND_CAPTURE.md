@@ -14,13 +14,13 @@ If clearing an incoming share fails after its conversation draft was saved, the 
 
 Photos and Files feed the same attachment path. Images receive the existing sanitization and file limits.
 
-Camera opens the phone's camera application through Android's capture intent. It writes to a single granted URI in private pending-intake storage and adds no camera permission or Flutter dependency. The originating connection identity, profile and chat are captured before launch. On return, the same review opens with that chat selected, including when it is outside the first history page. If ownership changed or the chat cannot be reopened, the photo remains available and review asks for a destination. Adding the photo preserves the existing draft; Send is still separate.
+Camera opens the phone's camera application through Android's capture intent. It writes to a single granted URI in private pending-intake storage and adds no camera permission or Flutter dependency. The originating connection identity, profile and chat are captured before launch. On return, the photo is added directly to that chat's draft, including when it is outside the first history page. The chat opens with the photo attached, preserving existing draft text and attachments; Send is still separate. Native intake is acknowledged only after the draft is saved. If attachment preparation or saving fails, the photo stays pending. If ownership changed or the chat cannot be reopened, the photo remains available and review asks for a destination.
 
 The capture descriptor is saved before launch. Successful nonempty output, up to 64 MiB, enters the existing durable intake queue. Cancellation removes only that capture. Recovery checks the descriptor when Hermes resumes, retains completed output and deduplicates by intake ID. URI grants are revoked on return. An active camera reserves queue capacity so another incoming share cannot consume its space.
 
 ## Interruption and recovery
 
-An interruption after saving the conversation draft but before acknowledging intake can offer the share again. Review remains mandatory and nothing sends automatically. A copy interrupted before native intake commits may need to be shared again.
+An interruption after saving the conversation draft but before acknowledging intake can offer the content again. External shares require review; camera captures with a verified originating chat attach directly to its draft. Nothing sends automatically. A copy interrupted before native intake commits may need to be shared again.
 
 A locally created chat can expire while Camera is open. Same-process return joins any reconnect and preserves the draft/settings. If the original session is confirmed missing after process death, New chat with recovered draft moves the existing draft in one storage write, preserves uncertainty, pauses queues and resets upload references. Staging failure retains that recovered draft and retries reuse the new chat. Missing files remain visible for removal or reattachment. Send stays explicit.
 

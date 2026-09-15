@@ -862,17 +862,23 @@ class HomeScreenState extends State<HomeScreen> {
       }
       if (initialChat == null) await controller.navigateProfile(profile);
       if (!mounted) return;
-      final applied = await reviewSharedDraft(
-        context,
-        controller,
-        sharedPayload,
-        initialChat: initialChat,
-        recoverableDraft: recoverableDraft,
-        destinationNotice: target != null && initialChat == null
-            ? 'The original chat could not be reopened. Choose a destination below.'
-            : null,
-      );
-      if (!mounted || !applied) return;
+      if (initialChat != null) {
+        // Camera already chose its destination when launched from the composer.
+        // Save the attachment before acknowledging its native intake copy.
+        await controller.stageSharedDraft(initialChat, sharedPayload);
+      } else {
+        final applied = await reviewSharedDraft(
+          context,
+          controller,
+          sharedPayload,
+          recoverableDraft: recoverableDraft,
+          destinationNotice: target != null
+              ? 'The original chat could not be reopened. Choose a destination below.'
+              : null,
+        );
+        if (!applied) return;
+      }
+      if (!mounted) return;
       final acknowledged = await widget.shareIntents!.acknowledgeShare(
         sharedPayload,
       );
