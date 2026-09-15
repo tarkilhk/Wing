@@ -4,9 +4,9 @@ Wing connects to a server you operate or have permission to use. You need Androi
 
 ## Compatibility
 
-The recorded [live acceptance baseline](TESTING.md#recorded-live-baseline) used unmodified Hermes revision `e16f686706b1e0d5334fd1ae82190058d2a19694`. This is a tested reference, not a minimum-version promise. Earlier source research used `d15ed4445207dda418b984e8bda0f68f48b8c6f3`. Capabilities can differ between installations; the Android app probes the server before saving a connection.
+The recorded [live acceptance baseline](TESTING.md#recorded-live-baseline) used unmodified Hermes revision `e16f686706b1e0d5334fd1ae82190058d2a19694`. This is a tested reference, not a minimum-version promise. Capabilities can differ between installations; Wing probes the server before saving a connection.
 
-The setup below follows the [official dashboard guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/web-dashboard), checked on 15 September 2026. It was documentation-checked, not reinstalled against a fresh host during this cleanup. A functioning browser dashboard alone does not prove that authenticated chat WebSockets work.
+The setup below follows the [official dashboard guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/web-dashboard), checked on 16 September 2026. A functioning browser dashboard alone does not prove that authenticated chat WebSockets work; the connection checks below verify that access separately.
 
 ## 1. Prepare the Hermes host
 
@@ -42,18 +42,15 @@ Keep the process running. From the phone's browser, open the dashboard address a
 
 ## 3. Install the Android app
 
-Wing opens with a navy portrait splash. With no saved connections, the welcome
-screen offers **Connect your agent**, **Restore configuration** and an offline
-**Connection guide**. Connect your agent opens the existing connection form;
-the drawer still provides device settings before a host is configured.
-
 Download an appropriate signed APK from [Wing's latest release](https://github.com/tarkilhk/wing/releases/latest). Use ARM64 for a compatible phone. Open the APK in Android and allow installation from that browser or file manager when prompted. Updates must use Wing's package and signing identity.
+
+Open Wing. The welcome screen offers **Connect your agent**, **Restore configuration** and an offline **Connection guide**. App settings are available from the drawer before connecting a server.
 
 For development builds, follow [Contributing](../CONTRIBUTING.md). A Play Store listing is not implied by the presence of store metadata in this repository.
 
 ## 4. Add your connection
 
-Open Connections, add a connection, and enter:
+Tap **Connect your agent** on the welcome screen, or add a connection from **Connections**, and enter:
 
 | Field | Example or meaning |
 | --- | --- |

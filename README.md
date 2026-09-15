@@ -75,7 +75,7 @@ For design contributions, see the [Wing identity and artwork](docs/design/2026-0
 The approved wordmark uses lowercase **wing**; the app name is **Wing**, or **Wing Dev** for development builds.
 
 - Release package: `com.tarkilhk.wing`.
-- Development package: `com.tarkilhk.wing.dev`.
+- Ordinary debug package: `com.tarkilhk.wing.dev`. Signed development builds can use the release package, as described in the [release guide](docs/ANDROID_RELEASE_PLAN.md#identity-and-versioning).
 - Wing uses a new application ID with separate local data. Backups and recovery journals from the previous identity are not migrated.
 - Repository: `tarkilhk/wing`.
 - Wing's package and signing identity are separate from the original Hermes Android client.

@@ -67,11 +67,11 @@ python3 scripts/release.py prepare patch
 | `minor` | New features | 1.1.0 |
 | `major` | Breaking changes | 2.0.0 |
 
-Every bump increments the Android base build number by one. The helper moves Unreleased notes into a dated release entry and leaves an empty Unreleased section for future work. It edits only `pubspec.yaml` and `CHANGELOG.md`; review and commit those changes through the normal PR/merge process. It refuses empty notes and repeated preparation without new notes. It does not build an APK locally.
+Every bump increments the Android base build number by one. The helper moves Unreleased notes into a dated release entry and leaves an empty Unreleased section for future work. It edits only `pubspec.yaml` and `CHANGELOG.md`. Review those changes and commit them to `main` using your permitted workflow. The repository owner can push directly; other contributors use a pull request. The helper refuses empty notes and repeated preparation without new notes. It does not build an APK locally.
 
-### Trigger CI after merging
+### Trigger CI from main
 
-Once the preparation is merged, update your local `main`, then:
+Once the preparation is on `origin/main`, update your local `main`, then:
 
 ```sh
 git switch main
@@ -138,7 +138,8 @@ Publish [PRIVACY.md](../PRIVACY.md) at a public URL and enter that URL in Play C
 ## Local data and backups
 
 Android isolates storage by package ID, so this identity starts with separate
-local data. Wing exports and imports `wing-config` backups in a
-`wing-config-encrypted` envelope. Backups from the previous identity are rejected;
+local data. Wing exports and imports `wing-config` backups. Providing a passphrase
+wraps the backup in a `wing-config-encrypted` envelope; leaving it blank produces
+readable JSON containing the saved credentials. Backups from the previous identity are rejected;
 connections and settings must be configured again. Recovery journals are not
 migrated. Hermes retains server conversation data independently.
