@@ -8,7 +8,7 @@ import '../models/composer_action.dart';
 
 IconData composerActionIcon(ComposerAction action) => switch (action) {
   ComposerAction.send => Icons.arrow_upward,
-  ComposerAction.steer => Icons.alt_route,
+  ComposerAction.steer => Icons.explore_outlined,
   ComposerAction.stop => Icons.stop,
   ComposerAction.queue => Icons.queue,
   ComposerAction.fork => Icons.fork_right,

@@ -10,6 +10,8 @@ Stop as the busy composer's primary action and opened a sheet on long press.
   configured action, and sliding updates it to the highlighted choice. It
   returns to the arrow on release or cancellation. Reduced-motion settings
   switch icons immediately.
+- Use the outlined compass (`Icons.explore_outlined`) for every steering icon,
+  including composer actions, settings, queue controls and transcript feedback.
 - Hold the button to open a vertical icon selector above it. Keep the finger
   down, slide to a choice, and release to run that action once. Holding in
   place keeps the primary action selected. Slide outside to cancel.

@@ -1576,7 +1576,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                             );
                           }
                         }),
-                  icon: const Icon(Icons.alt_route, size: 18),
+                  icon: const Icon(Icons.explore_outlined, size: 18),
                   label: const Text('Steer'),
                 ),
               ),
@@ -1668,7 +1668,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     chat.busy &&
                     chat.attachments.isEmpty) ...[
                   ListTile(
-                    leading: const Icon(Icons.alt_route),
+                    leading: const Icon(Icons.explore_outlined),
                     title: const Text('Steer this turn'),
                     subtitle: const Text(
                       'Send this text into the running turn',
