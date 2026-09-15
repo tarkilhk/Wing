@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_selection_tile.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -440,6 +441,16 @@ void main() {
               await tester.tap(find.byKey(const ValueKey('nav-settings')));
               await tester.pumpAndSettle();
               await _capture(tester, '${brightness.name}-settings$adminSuffix');
+              await tester.scrollUntilVisible(
+                find.text('Default action while working'),
+                200,
+                scrollable: find.byType(Scrollable).last,
+              );
+              await tester.pumpAndSettle();
+              await _capture(
+                tester,
+                '${brightness.name}-settings-actions$adminSuffix',
+              );
             }
             await tester.pumpWidget(const SizedBox.shrink());
           },
@@ -535,6 +546,7 @@ void main() {
                   ),
                   const SizedBox(height: 16),
                   SegmentedButton<int>(
+                    showSelectedIcon: false,
                     segments: const [
                       ButtonSegment(value: 0, label: Text('Skills')),
                       ButtonSegment(value: 1, label: Text('Tools')),
@@ -547,7 +559,7 @@ void main() {
                     onChanged: (_) {},
                     title: const Text('Enabled preference'),
                   ),
-                  CheckboxListTile(
+                  StudioSelectionTile(
                     value: true,
                     onChanged: (_) {},
                     title: const Text('Selected option'),

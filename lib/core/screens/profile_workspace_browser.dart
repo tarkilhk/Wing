@@ -848,40 +848,26 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                                             borderRadius: WingRadius.control,
                                           ),
                                         ).copyWith(
-                                          side: WidgetStateProperty.resolveWith((
-                                            states,
-                                          ) {
-                                            if (states.contains(
-                                              WidgetState.focused,
-                                            )) {
-                                              return BorderSide(
-                                                color: Theme.of(
-                                                  context,
-                                                ).colorScheme.primary,
-                                                width: 3,
-                                              );
-                                            }
-                                            return BorderSide(
-                                              color:
-                                                  profileAccent(
+                                          side: WidgetStateProperty.resolveWith(
+                                            (states) {
+                                              if (states.contains(
+                                                WidgetState.focused,
+                                              )) {
+                                                return BorderSide(
+                                                  color: Theme.of(
                                                     context,
-                                                    profile.name,
-                                                  ).withValues(
-                                                    alpha:
-                                                        resource
-                                                                ?.scope
-                                                                .profileName ==
-                                                            profile.name
-                                                        ? 1
-                                                        : 0.28,
-                                                  ),
-                                              width:
-                                                  resource?.scope.profileName ==
-                                                      profile.name
-                                                  ? 2
-                                                  : 1,
-                                            );
-                                          }),
+                                                  ).colorScheme.primary,
+                                                  width: 3,
+                                                );
+                                              }
+                                              return BorderSide(
+                                                color: profileAccent(
+                                                  context,
+                                                  profile.name,
+                                                ).withValues(alpha: 0.28),
+                                              );
+                                            },
+                                          ),
                                         ),
                                     child: Semantics(
                                       selected:

@@ -48,7 +48,7 @@ class ProfileChatIndicator extends StatelessWidget {
       ProfileTurnStatus.completed => (
         'Completed',
         tokens.success,
-        Icons.check_circle_outline,
+        Icons.flag_outlined,
         false,
       ),
       ProfileTurnStatus.cancelled => (
@@ -72,7 +72,7 @@ class ProfileChatIndicator extends StatelessWidget {
       _ when row['ended_at'] != null => (
         'Finished',
         tokens.success,
-        Icons.check_circle_outline,
+        Icons.flag_outlined,
         false,
       ),
       _ => ('', tokens.muted, Icons.circle_outlined, false),

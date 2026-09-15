@@ -170,11 +170,6 @@ class _ProfileActivityTabsState extends State<ProfileActivityTabs> {
                                         height: 1.25,
                                         fontWeight: FontWeight.w400,
                                         letterSpacing: 0,
-                                        decoration: tab.id == _selected
-                                            ? TextDecoration.underline
-                                            : TextDecoration.none,
-                                        decorationColor: colors.primary,
-                                        decorationThickness: 2,
                                         color: tab.id == _selected
                                             ? colors.primary
                                             : colors.onSurfaceVariant,

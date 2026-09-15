@@ -1,3 +1,4 @@
+import '../widgets/studio_task_marker.dart';
 import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -52,6 +53,7 @@ class _PrivacyPolicyScreenState extends State<PrivacyPolicyScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         return Markdown(
+          checkboxBuilder: (checked) => StudioTaskMarker(completed: checked),
           data: snapshot.data!,
           selectable: true,
           padding: const EdgeInsets.all(16),

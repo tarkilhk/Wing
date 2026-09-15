@@ -69,7 +69,7 @@ class AdminHealthContent extends StatelessWidget {
                   AdminRow(
                     title: 'Security audit',
                     subtitle: 'Inspect backend policy and configuration',
-                    icon: Icons.fact_check_outlined,
+                    icon: Icons.health_and_safety_outlined,
                     onTap: () => startAdminOperation(
                       context,
                       server,

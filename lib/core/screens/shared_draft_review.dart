@@ -1,3 +1,4 @@
+import '../widgets/studio_selection_tile.dart';
 import '../widgets/studio_select.dart';
 import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
@@ -336,7 +337,7 @@ class _SharedDraftReviewState extends State<_SharedDraftReview> {
                                   .workspace
                                   .profileName ==
                               _profileName)
-                            RadioListTile<String>(
+                            StudioRadioTile<String>(
                               minTileHeight: 48,
                               minVerticalPadding: 8,
                               key: const Key('share-destination-recover'),
@@ -347,7 +348,7 @@ class _SharedDraftReviewState extends State<_SharedDraftReview> {
                                 'New chat with recovered draft',
                               ),
                             ),
-                          RadioListTile<String>(
+                          StudioRadioTile<String>(
                             minTileHeight: 48,
                             minVerticalPadding: 8,
                             key: Key('share-destination-new'),
@@ -361,7 +362,7 @@ class _SharedDraftReviewState extends State<_SharedDraftReview> {
                             ),
                           ),
                           for (final session in visibleSessions)
-                            RadioListTile<String>(
+                            StudioRadioTile<String>(
                               minTileHeight: 48,
                               minVerticalPadding: 8,
                               key: ValueKey(

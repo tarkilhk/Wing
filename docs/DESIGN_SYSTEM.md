@@ -80,17 +80,21 @@ Use Android's Roboto sans typography explicitly across component themes and mono
 
 ## Selection controls
 
-The Skills and tools screenshot prompted the owner's request for smaller controls and tighter rows. Its on/off controls are switches. Use switches for independent enabled states, radios for one choice in a group, and checkboxes for multiple selections. Keep these meanings when restyling them.
+Selection uses the selected background tint throughout Wing. Chips, segmented buttons, dropdown entries, navigation rows, model/provider pickers, project appearance controls, and single/multiple-choice rows keep their original labels and artwork when selected. Do not draw ticks, checkmarks, radio dots, or selected-only borders over these options. This owner decision of 16 September 2026 supersedes the earlier visual selection markers.
 
-Use `CompactSwitch` for standalone switches and `CompactSwitchListTile` for settings where the whole row toggles. The Material switch face draws at 75% size, about 39 × 24 dp, within an unscaled 48 × 48 dp touch and accessibility target. Keep native keyboard, focus and drag behavior. Do not shrink the hit target with the artwork. Radios retain their standard 20 dp indicator and padded touch target.
+Use `StudioRadioTile` inside `RadioGroup` for one choice and `StudioSelectionTile` for multiple choices. Their whole row is the target and selected surface. Preserve checked/selected accessibility semantics, single versus multiple selection behavior, and keyboard navigation. Use `CompactSwitch` for independent on/off settings; its thumb position still expresses on/off. App-authored status and action icons also use tick-free symbols, with status text or accessibility labels retaining their meaning. Authored message and document content remains intact.
+
+Use `CompactSwitch` for standalone switches and `CompactSwitchListTile` for settings where the whole row toggles. The Material switch face draws at 75% size, about 39 × 24 dp, within an unscaled 48 × 48 dp touch and accessibility target. Keep native keyboard, focus and drag behavior. Do not shrink the hit target with the artwork.
 
 Use 16 dp outer page gutters, a 12 dp label-to-control gap, and one shared trailing control column. Do not add another page gutter to rows already inside an inset form. Simple switch rows have a 48 dp minimum height and 4 dp vertical padding; two-line capability disclosures have a 56 dp minimum. Radio-choice rows use a 48 dp minimum and 8 dp vertical padding. These are minimums, not fixed heights. Let wrapped labels, descriptions and enlarged text increase the row height. Keep 16 sp labels and 13 sp muted metadata, with no extra blank line between them.
 
-Selected controls use the active accent family in both themes. Off and disabled controls use neutral track and thumb colors. Thumb position, radio dots and checkmarks must still identify the state without relying only on color. Retain visible keyboard focus and disable writes while a save is pending. Keep the last confirmed value after a failed save.
+Selected controls use the active accent family in both themes. Off and disabled controls use neutral track and thumb colors. Expose selection to assistive technology even though its visual indication is the background alone. Retain visible keyboard focus and disable writes while a save is pending. Keep the last confirmed value after a failed save.
 
 A standalone switch needs a label identifying the affected setting. A setting row exposes one merged label, state and toggle action. Where tapping the row opens details, as in Skills and tools or MCP connectors, retain separate disclosure and switch actions. Toggling must not open details, and opening details must not change the setting.
 
 Check light and dark themes, selected and disabled states, long names at 320 dp width and 200% text, touch-target edges, keyboard activation, and screen-reader state before shipping control changes.
+
+The selection audit covers App settings and composer preferences; Activity filters and tabs; drawer and profile navigation; project colors and icons; administration provider filters, tool models and tab navigation; chat intelligence and profile-default models; shared-draft destinations; clarification choices; backup restore mode; backend-update targets; and Markdown task markers. Chips disable `showCheckmark`, segmented buttons disable `showSelectedIcon`, menu entries use selected fills, and row choices use the shared selection tiles. Markdown uses `StudioTaskMarker` for filled/empty task boxes. Status glyphs for completion, readiness and connected providers use flags, dots and links with their existing labels. `test/studio_selection_test.dart` guards app-owned tick icons and automatic control markers and exercises interaction and layout.
 
 ## Conversation preservation
 
@@ -144,7 +148,7 @@ Calculated sRGB contrast for these exact token pairs: light body/canvas 13.26:1,
 
 Use the chosen accent for primary actions, links, selected controls, model icon, switches and focus outlines. Stable project colors stay tied to existing project metadata. Keep Teal, Iris, Glacier, Coral and Gold as coherent paired light/dark accent families, with darker foreground accents in light mode and lighter foreground accents in dark mode. User accent choice must not recolor warning/error semantics or rewrite project identity.
 
-Pressed actions use a modest tonal shift, selected rows add a check or structural marker, keyboard focus uses a clear outline, and disabled controls use neutral surfaces with readable labels. Loading states keep their label and control width. Errors use a distinct semantic color plus icon and text; empty states use plain explanations and one relevant action. Validate these states in the rendered app. No accessibility claim is made from images alone.
+Pressed actions use a modest tonal shift, selected rows use the shared background tint, keyboard focus uses a clear outline, and disabled controls use neutral surfaces with readable labels. Loading states keep their label and control width. Errors use a distinct semantic color plus icon and text; empty states use plain explanations and one relevant action. Validate these states in the rendered app. No accessibility claim is made from images alone.
 
 Use `StudioSelect` for select-only form menus, `StudioActionLabel` for actions
 that can become pending, and `StudioError` (or `AdminNotice.error`) for failures.

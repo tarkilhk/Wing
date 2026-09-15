@@ -1,3 +1,4 @@
+import 'studio_selection_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -92,7 +93,7 @@ class _TextSizeSettingsCardState extends State<TextSizeSettingsCard> {
                     child: Column(
                       children: [
                         for (final preference in TextSizePreference.values)
-                          RadioListTile<TextSizePreference>(
+                          StudioRadioTile<TextSizePreference>(
                             contentPadding: EdgeInsets.zero,
                             minTileHeight: 48,
                             minVerticalPadding: 8,

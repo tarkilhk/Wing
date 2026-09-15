@@ -138,6 +138,7 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                   children: [
                     for (final mode in ['system', 'light', 'dark'])
                       ChoiceChip(
+                        showCheckmark: false,
                         key: ValueKey('theme-$mode'),
                         label: Text(
                           '${mode[0].toUpperCase()}${mode.substring(1)}',
@@ -162,6 +163,7 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                   children: [
                     for (final choice in WorkspaceAccent.values)
                       ChoiceChip(
+                        showCheckmark: false,
                         key: ValueKey('accent-${choice.name}'),
                         label: Text(choice.label),
                         selected: accent == choice,

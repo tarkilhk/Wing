@@ -486,7 +486,7 @@ ThemeData wingTheme(Brightness brightness, {Color? accent}) {
       backgroundColor: tokens.raised,
       selectedColor: selected,
       disabledColor: tokens.border,
-      checkmarkColor: tokens.accent,
+      showCheckmark: false,
       labelStyle: TextStyle(
         fontFamily: WingTypography.sans,
         color: tokens.onSurface,
@@ -500,6 +500,7 @@ ThemeData wingTheme(Brightness brightness, {Color? accent}) {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     ),
     segmentedButtonTheme: SegmentedButtonThemeData(
+      selectedIcon: const SizedBox.shrink(),
       style: action.copyWith(
         foregroundColor: WidgetStatePropertyAll(tokens.onSurface),
         backgroundColor: WidgetStateProperty.resolveWith(
@@ -529,7 +530,11 @@ ThemeData wingTheme(Brightness brightness, {Color? accent}) {
     tabBarTheme: TabBarThemeData(
       labelColor: tokens.accent,
       unselectedLabelColor: tokens.muted,
-      indicatorColor: tokens.accent,
+      indicator: BoxDecoration(
+        color: selected,
+        borderRadius: WingRadius.control,
+      ),
+      indicatorSize: TabBarIndicatorSize.tab,
       dividerColor: tokens.border,
     ),
     drawerTheme: DrawerThemeData(
@@ -602,7 +607,7 @@ ThemeData wingTheme(Brightness brightness, {Color? accent}) {
       ),
     ),
     checkboxTheme: CheckboxThemeData(
-      checkColor: WidgetStatePropertyAll(onAccent),
+      checkColor: const WidgetStatePropertyAll(Colors.transparent),
     ),
     radioTheme: RadioThemeData(
       materialTapTargetSize: MaterialTapTargetSize.padded,

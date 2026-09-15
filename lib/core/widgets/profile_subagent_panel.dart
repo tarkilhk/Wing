@@ -616,7 +616,7 @@ String _goal(GatewaySubagentActivity activity) =>
 IconData _statusIcon(GatewaySubagentStatus status) => switch (status) {
   GatewaySubagentStatus.queued => Icons.schedule_outlined,
   GatewaySubagentStatus.running => Icons.sync,
-  GatewaySubagentStatus.completed => Icons.check_circle_outline,
+  GatewaySubagentStatus.completed => Icons.flag_outlined,
   GatewaySubagentStatus.failed => Icons.error_outline,
   GatewaySubagentStatus.interrupted => Icons.stop_circle_outlined,
 };

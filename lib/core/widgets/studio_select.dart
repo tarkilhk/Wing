@@ -30,9 +30,13 @@ class StudioSelect<T> extends StatelessWidget {
           value: option.value,
           label: option.label,
           labelWidget: Text(option.label),
-          trailingIcon: option.value == value
-              ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary)
-              : null,
+          style: ButtonStyle(
+            backgroundColor: option.value == value
+                ? WidgetStatePropertyAll(
+                    Theme.of(context).colorScheme.primaryContainer,
+                  )
+                : null,
+          ),
         ),
     ],
   );

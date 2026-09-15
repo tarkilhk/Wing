@@ -222,6 +222,7 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                       ),
                       const SizedBox(height: 12),
                       SegmentedButton<_CapabilityKind>(
+                        showSelectedIcon: false,
                         segments: const [
                           ButtonSegment(
                             value: _CapabilityKind.skills,

@@ -140,6 +140,7 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
   }
 
   FilterChip _filterChip(_ActivityFilter filter, String label) => FilterChip(
+    showCheckmark: false,
     label: Text(label),
     selected: _filter == filter,
     onSelected: (selected) {

@@ -1,3 +1,4 @@
+import '../widgets/studio_selection_tile.dart';
 import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 
@@ -208,15 +209,13 @@ class _BackendUpdatesScreenState extends State<BackendUpdatesScreen> {
           ),
         for (var index = 0; index < _entries.length; index++) ...[
           const SizedBox(height: 8),
-          CheckboxListTile(
+          StudioSelectionTile(
             key: ValueKey(
               'backend-update-select-${_entries[index].connection.id}',
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 4),
             value: _selected.contains(index),
-            onChanged: _working
-                ? null
-                : (value) => _select(index, value ?? false),
+            onChanged: _working ? null : (value) => _select(index, value),
             title: Text(_entries[index].connection.label),
             subtitle: Text(_entries[index].endpoint),
           ),

@@ -22,6 +22,7 @@ class ComposerAttachmentTile extends StatelessWidget {
           );
     if (!draft.isImage) {
       return InputChip(
+        showCheckmark: false,
         avatar: error,
         label: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 180),

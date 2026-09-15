@@ -330,6 +330,10 @@ class _ChoiceButton extends StatelessWidget {
       tooltip: label,
       isSelected: selected,
       style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) =>
+              selected ? Theme.of(context).colorScheme.primaryContainer : null,
+        ),
         side: WidgetStateProperty.resolveWith((states) {
           final colors = Theme.of(context).colorScheme;
           if (states.contains(WidgetState.disabled)) {
@@ -338,7 +342,7 @@ class _ChoiceButton extends StatelessWidget {
           if (states.contains(WidgetState.focused)) {
             return BorderSide(color: colors.primary, width: 3);
           }
-          return selected ? BorderSide(color: colors.primary, width: 2) : null;
+          return null;
         }),
       ),
       onPressed: onPressed,

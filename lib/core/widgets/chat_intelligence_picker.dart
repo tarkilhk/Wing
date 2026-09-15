@@ -557,9 +557,6 @@ class _PickerTile extends StatelessWidget {
       selected: selected,
       selectedTileColor: tokens.accent.withValues(alpha: 0.1),
       title: Text(title, style: tokens.typography.body),
-      trailing: selected
-          ? Icon(Icons.check_rounded, color: tokens.accent)
-          : const SizedBox(width: 24),
       onTap: onTap,
     );
   }

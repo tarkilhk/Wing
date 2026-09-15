@@ -31,7 +31,7 @@ class ProfileLiveToolActivity extends StatelessWidget {
           icon: activity.isFailed
               ? Icons.error_outline
               : activity.isTerminal
-              ? Icons.check_circle_outline
+              ? Icons.flag_outlined
               : Icons.pending_outlined,
           label: activity.displayName,
           summary: Text(activity.statusLabel),
@@ -119,7 +119,7 @@ class ProfileTodoPanel extends StatelessWidget {
     }
     return ProfileTranscriptDisclosure(
       key: const ValueKey('server-todos'),
-      icon: Icons.checklist_rounded,
+      icon: Icons.format_list_bulleted,
       label: 'Tasks $completed/${todos.length}',
       children: children,
     );
@@ -128,7 +128,7 @@ class ProfileTodoPanel extends StatelessWidget {
   static IconData _todoIcon(GatewayTodoStatus status) => switch (status) {
     GatewayTodoStatus.pending => Icons.radio_button_unchecked,
     GatewayTodoStatus.inProgress => Icons.pending_outlined,
-    GatewayTodoStatus.completed => Icons.check_circle_outline,
+    GatewayTodoStatus.completed => Icons.flag_outlined,
     GatewayTodoStatus.cancelled => Icons.cancel_outlined,
   };
 }

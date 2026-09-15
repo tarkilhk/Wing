@@ -1,3 +1,5 @@
+import 'studio_task_marker.dart';
+import 'studio_selection_tile.dart';
 import 'studio_action_label.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
@@ -104,7 +106,7 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: selected && !_submitting
+        color: selected
             ? theme.colorScheme.primaryContainer
             : theme.colorScheme.surfaceContainer,
         shape: RoundedRectangleBorder(
@@ -113,16 +115,14 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
         ),
         clipBehavior: Clip.antiAlias,
         child: multiple
-            ? CheckboxListTile(
+            ? StudioSelectionTile(
                 key: Key('clarify-choice-$index'),
                 value: selected,
                 onChanged: _submitting ? null : (_) => _selectChoice(index),
                 title: title,
-                controlAffinity: ListTileControlAffinity.leading,
                 contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                horizontalTitleGap: 12,
               )
-            : RadioListTile<int>(
+            : StudioRadioTile<int>(
                 key: Key('clarify-choice-$index'),
                 value: index,
                 enabled: !_submitting,
@@ -156,6 +156,8 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
               Theme(
                 data: profileMarkdownTheme(theme),
                 child: MarkdownBody(
+                  checkboxBuilder: (checked) =>
+                      StudioTaskMarker(completed: checked),
                   data: request.question,
                   selectable: true,
                   sizedImageBuilder: (_) => const Text('[Image omitted]'),

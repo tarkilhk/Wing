@@ -340,15 +340,12 @@ class _AdminToolModelsPageState extends State<AdminToolModelsPage> {
             ),
           for (final model in administrationRows(data['models'] ?? []))
             ListTile(
-              selected: !_busy && data['current'] == model['id'],
+              selected: data['current'] == model['id'],
               enabled: !_busy,
               title: Text('${model['display'] ?? model['id']}'),
               subtitle: Text(
                 '${model['strengths'] ?? ''} ${model['price'] ?? ''}',
               ),
-              trailing: data['current'] == model['id']
-                  ? const Icon(Icons.check)
-                  : null,
               onTap: _busy
                   ? null
                   : () => _select(model['id'] as String, refresh),

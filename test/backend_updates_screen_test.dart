@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_selection_tile.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -282,8 +283,10 @@ void main() {
 }
 
 bool _selected(WidgetTester tester, String id) => tester
-    .widget<CheckboxListTile>(find.byKey(ValueKey('backend-update-select-$id')))
-    .value!;
+    .widget<StudioSelectionTile>(
+      find.byKey(ValueKey('backend-update-select-$id')),
+    )
+    .value;
 
 Future<void> _tapSelection(WidgetTester tester, String id) async {
   final key = ValueKey('backend-update-select-$id');

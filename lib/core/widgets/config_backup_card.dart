@@ -1,3 +1,4 @@
+import 'studio_selection_tile.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
@@ -210,7 +211,7 @@ class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
               child: const Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  RadioListTile<ConfigImportMode>(
+                  StudioRadioTile<ConfigImportMode>(
                     minTileHeight: 48,
                     minVerticalPadding: 8,
                     key: Key('import_mode_merge'),
@@ -222,7 +223,7 @@ class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
                     ),
                     contentPadding: EdgeInsets.zero,
                   ),
-                  RadioListTile<ConfigImportMode>(
+                  StudioRadioTile<ConfigImportMode>(
                     minTileHeight: 48,
                     minVerticalPadding: 8,
                     key: Key('import_mode_replace'),

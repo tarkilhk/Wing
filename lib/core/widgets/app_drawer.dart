@@ -90,23 +90,12 @@ class AppDrawer extends StatelessWidget {
                     ? Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Icon(destination.icon),
-                              if (selected == destination) ...[
-                                const SizedBox(width: 8),
-                                const Icon(Icons.check),
-                              ],
-                            ],
-                          ),
+                          Icon(destination.icon),
                           const SizedBox(height: 4),
                           Text(destination.label),
                         ],
                       )
                     : Text(destination.label),
-                trailing: !largeText && selected == destination
-                    ? const Icon(Icons.check)
-                    : null,
                 enabled:
                     hasConnection ||
                     destination == AppDestination.connections ||

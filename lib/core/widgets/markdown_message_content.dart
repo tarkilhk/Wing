@@ -1,3 +1,4 @@
+import 'studio_task_marker.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -94,6 +95,8 @@ class MarkdownMessageContent extends StatelessWidget {
               child: Theme(
                 data: profileMarkdownTheme(theme),
                 child: MarkdownBody(
+                  checkboxBuilder: (checked) =>
+                      StudioTaskMarker(completed: checked),
                   data: segment as String,
                   selectable: true,
                   onTapLink: (_, href, _) {

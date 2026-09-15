@@ -71,6 +71,7 @@ class _ComposerActionSettingsState extends State<ComposerActionSettings> {
               children: [
                 for (final action in ComposerAction.runningDefaults)
                   ChoiceChip(
+                    showCheckmark: false,
                     avatar: Icon(composerActionIcon(action), size: 18),
                     label: Text(action.label),
                     selected: action == _selected,

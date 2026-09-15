@@ -187,6 +187,7 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                   ('Needs attention', attention),
                 ])
                   ChoiceChip(
+                    showCheckmark: false,
                     label: Text('$label ($count)'),
                     selected: _filter == label,
                     onSelected: (_) => setState(() => _filter = label),
@@ -315,7 +316,7 @@ class _ProviderCard extends StatelessWidget {
         ? colors.primary
         : colors.onSurfaceVariant;
     final icon = switch (access.state) {
-      ProviderAccessState.connected => Icons.check_circle_outline,
+      ProviderAccessState.connected => Icons.link,
       ProviderAccessState.expired => Icons.schedule,
       ProviderAccessState.signedOut => Icons.link_off,
       ProviderAccessState.external => Icons.open_in_new,

@@ -1,3 +1,4 @@
+import 'studio_selection_tile.dart';
 import 'studio_action_label.dart';
 import 'studio_error.dart';
 import 'dart:async';
@@ -341,7 +342,7 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                                         subtitle: Text(entry.key),
                                         children: [
                                           for (final choice in entry.value)
-                                            RadioListTile<String>(
+                                            StudioRadioTile<String>(
                                               contentPadding: EdgeInsets.zero,
                                               minTileHeight: 48,
                                               minVerticalPadding: 8,

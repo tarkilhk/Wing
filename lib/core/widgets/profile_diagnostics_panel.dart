@@ -229,7 +229,7 @@ class _DiagnosticRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = WingTokens.of(context);
     final (icon, color) = switch (result.state) {
-      _DiagnosticState.ready => (Icons.check_circle_outline, tokens.success),
+      _DiagnosticState.ready => (Icons.circle, tokens.success),
       _DiagnosticState.failed => (Icons.error_outline, tokens.danger),
       _DiagnosticState.unknown => (Icons.help_outline, tokens.warning),
       _DiagnosticState.checking => (

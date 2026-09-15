@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_selection_tile.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -125,8 +126,8 @@ void main() {
     await tester.pump();
     expect(
       tester
-          .widget<RadioListTile<TextSizePreference>>(
-            find.byType(RadioListTile<TextSizePreference>).first,
+          .widget<StudioRadioTile<TextSizePreference>>(
+            find.byType(StudioRadioTile<TextSizePreference>).first,
           )
           .enabled,
       isFalse,
