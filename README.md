@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/design/images/wing-readme-hero.png" alt="Wing: Your agent, with you | An Android companion for Hermes Agent" width="1000">
+  <img src="docs/design/images/wing-readme-hero-clean.png" alt="Wing: Your agent, with you | An Android companion for Hermes Agent" width="1000">
 </p>
 
 <p align="center">
