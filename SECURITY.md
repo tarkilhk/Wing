@@ -1,6 +1,6 @@
 # Security and support
 
-Use [this fork's GitHub issues](https://github.com/tarkilhk/wing/issues) for reproducible client problems that can be described without disclosing sensitive data. For a vulnerability, use GitHub's private reporting option if it is available. Otherwise ask for a private contact route without posting exploit details or credentials. Do not send this fork's reports to an unrelated upstream issue tracker by default.
+Use [Wing's GitHub issues](https://github.com/tarkilhk/wing/issues) for reproducible client problems that can be described without disclosing sensitive data. For a vulnerability, use GitHub's private reporting option if it is available. Otherwise ask for a private contact route without posting exploit details or credentials. Report Wing issues here so its maintainers can investigate and coordinate any server-related findings.
 
 Before sharing logs, screenshots or diagnostics:
 

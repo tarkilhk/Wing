@@ -1,10 +1,10 @@
 # Attribution and license
 
-Wing is the `tarkilhk/wing` fork of [rusty4444](https://github.com/rusty4444)'s Android client. It is maintained independently and is not an official Hermes Agent, Nous Research or upstream client release.
+Wing is an independently developed Android companion for Hermes Agent, maintained in [`tarkilhk/wing`](https://github.com/tarkilhk/wing). It began with [rusty4444](https://github.com/rusty4444)'s open-source Android client and continues with its own design, features and releases. Wing is not an official Hermes Agent or Nous Research product.
 
-Upstream identifies its Android client as MIT. This fork retains that license identification and the attribution to its original authors. See [LICENSE](LICENSE) for the full license text. Preserve applicable copyright and permission notices when redistributing.
+The original Android client identifies its license as MIT. Wing continues under MIT and retains attribution to the original authors. See [LICENSE](LICENSE) for the full license text. Preserve applicable copyright and permission notices when redistributing.
 
-Inherited contributors include CarlosReyesPena, CristianGCiocoi, AI-Guru, grunjol, louquillio, sternbergm and the upstream maintainer. The [changelog](CHANGELOG.md) and Git history retain their work and attribution.
+Contributors to the original client include CarlosReyesPena, CristianGCiocoi, AI-Guru, grunjol, louquillio, sternbergm and rusty4444. The [changelog](CHANGELOG.md) and Git history retain their work and attribution.
 
 Vendored diagram assets retain [Mermaid's license](android/app/src/main/assets/diagrams/MERMAID-LICENSE) and [DOMPurify's license](android/app/src/main/assets/diagrams/DOMPURIFY-LICENSE). These apply to their respective components.
 

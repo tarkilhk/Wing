@@ -78,7 +78,7 @@ The approved wordmark uses lowercase **wing**; the app name is **Wing**, or **Wi
 - Development package: `com.tarkilhk.wing.dev`.
 - Wing uses a new application ID with separate local data. Backups and recovery journals from the previous identity are not migrated.
 - Repository: `tarkilhk/wing`.
-- The inherited upstream application has a separate package and signing identity.
+- Wing's package and signing identity are separate from the original Hermes Android client.
 
 [pubspec.yaml](pubspec.yaml) declares the source version. App settings shows the installed version. Source changes do not imply a published APK.
 
@@ -88,6 +88,6 @@ The approved wordmark uses lowercase **wing**; the app name is **Wing**, or **Wi
 
 Found a client problem? [Open an issue](https://github.com/tarkilhk/wing/issues) with reproducible steps, following the [redaction guidance](SECURITY.md). The [privacy policy](PRIVACY.md) covers storage, server processing, dictation and deletion, and is available offline in App settings.
 
-Wing is an independent fork of [rusty4444](https://github.com/rusty4444)'s Android client. Inherited contributors include CarlosReyesPena, CristianGCiocoi, AI-Guru, grunjol, louquillio and sternbergm. [NOTICE.md](NOTICE.md), the changelog and Git history preserve attribution.
+Wing is an independently developed Android companion for Hermes Agent, built on the open-source work of [rusty4444](https://github.com/rusty4444) and the Hermes Android contributors. See [NOTICE.md](NOTICE.md) for credits and provenance.
 
 Licensed under [MIT](LICENSE). See [NOTICE.md](NOTICE.md) for attribution and third-party notices.

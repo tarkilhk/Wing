@@ -2,7 +2,7 @@
 
 Effective date: 15 September 2026.
 
-This policy covers Wing, maintained in the `tarkilhk/wing` repository. It is an independent Android client for a Hermes server you choose. The app does not require an account with this fork's maintainer. Your Hermes host, model providers, and services used by your agent have their own data practices.
+This policy covers Wing, maintained in the `tarkilhk/wing` repository. It is an independent Android client for a Hermes server you choose. The app does not require an account with Wing's maintainer. Your Hermes host, model providers, and services used by your agent have their own data practices.
 
 ## Data the app handles
 
@@ -40,6 +40,6 @@ Configuration exports contain saved connections and credentials. A passphrase is
 
 ## Contact and policy changes
 
-For general privacy questions, contact the maintainer through [this fork's GitHub issues](https://github.com/tarkilhk/wing/issues). Do not post passwords, private server addresses, personal files or conversation contents publicly. Ask for a private contact route before sharing sensitive details.
+For general privacy questions, contact the maintainer through [Wing's GitHub issues](https://github.com/tarkilhk/wing/issues). Do not post passwords, private server addresses, personal files or conversation contents publicly. Ask for a private contact route before sharing sensitive details.
 
 The effective date above changes when this policy changes. The app bundles the policy so you can read it in App settings without connecting to a server. The repository contains the policy for the source version you are viewing; a different release or independently configured build may have different behavior.

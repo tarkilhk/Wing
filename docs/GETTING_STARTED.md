@@ -47,7 +47,7 @@ screen offers **Connect your agent**, **Restore configuration** and an offline
 **Connection guide**. Connect your agent opens the existing connection form;
 the drawer still provides device settings before a host is configured.
 
-Download an appropriate signed APK from [this fork's releases](https://github.com/tarkilhk/wing/releases), if one has been published. Use ARM64 for a compatible phone. Open the APK in Android and allow installation from that browser or file manager when prompted. Do not install an APK from an unrelated fork expecting it to update Wing.
+Download an appropriate signed APK from [Wing's latest release](https://github.com/tarkilhk/wing/releases/latest). Use ARM64 for a compatible phone. Open the APK in Android and allow installation from that browser or file manager when prompted. Updates must use Wing's package and signing identity.
 
 For development builds, follow [Contributing](../CONTRIBUTING.md). A Play Store listing is not implied by the presence of store metadata in this repository.
 

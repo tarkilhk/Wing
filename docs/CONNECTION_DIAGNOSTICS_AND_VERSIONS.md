@@ -14,7 +14,7 @@ Dashboard HTTP requests refuse redirects, including requests authenticated with 
 
 Diagnostics are manual authenticated checks of dashboard/session access, `setup.status` and `setup.runtime_check`. Results distinguish connection access, configured provider and resolved credentials. A resolved credential does not establish successful model inference.
 
-App settings reads the installed Android version/build through package metadata. Backend identity is reported separately. Releases and Changelog open this fork's pages; there is no automatic Android update polling or installation.
+App settings reads the installed Android version/build through package metadata. Backend identity is reported separately. Releases and Changelog open Wing's pages; there is no automatic Android update polling or installation.
 
 Health distinguishes the dashboard process's runtime profile from the selected profile. Use `profiles/active.current` for the runtime identity, not the sticky `active` selection. Missing runtime identity means unknown; unrelated server operations remain usable.
 

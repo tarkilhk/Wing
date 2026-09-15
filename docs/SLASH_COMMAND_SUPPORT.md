@@ -24,6 +24,6 @@ Catalog presence is not proof of mobile support. Terminal-only, messaging-only a
 
 Display-only output stays in client memory, outside saved model history, and leaves attachments in the composer. Skills starting a turn use the existing upload path. Cold side-task recovery remains limited as described in [Queues and pending input](SUPERVISION_AND_QUEUES.md).
 
-Modern profile-aware server handlers are required. Earlier patch experiments are historical and are not setup instructions for this fork. Do not modify a server to satisfy a client feature or infer current stock support from a patched test run.
+Modern profile-aware server handlers are required. Earlier patch experiments are historical and are not setup instructions for Wing. Do not modify a server to satisfy a client feature or infer current stock support from a patched test run.
 
 Regression coverage lives in `test/slash_commands_test.dart`. The opt-in `test/slash_profile_live_contract_test.dart` and `integration_test/slash_commands_live_test.dart` compare disposable skills across two profiles. Read their fixture prerequisites before using an authorized server; see [Testing](TESTING.md).

@@ -54,6 +54,6 @@ A useful change description explains the user-visible result, its boundaries, te
 
 ## Reporting problems and provenance
 
-Use [this fork's issues](https://github.com/tarkilhk/wing/issues) for reproducible client bugs. Include Android/client versions, backend revision if known, expected behavior and minimal steps. Follow [SECURITY.md](SECURITY.md) before attaching logs or screenshots.
+Use [Wing's issues](https://github.com/tarkilhk/wing/issues) for reproducible client bugs. Include Android/client versions, backend revision if known, expected behavior and minimal steps. Follow [SECURITY.md](SECURITY.md) before attaching logs or screenshots.
 
 Preserve existing MIT attribution and applicable third-party license notices. See [NOTICE.md](NOTICE.md). Record the license of any new third-party component.
