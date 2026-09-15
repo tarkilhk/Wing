@@ -1,5 +1,9 @@
 # Wing README hero
 
+Final punctuation edit: remove the terminal period after “Your agent, with you”.
+Preserve the comma and all other lettering and artwork. This supersedes the
+tagline punctuation in the original prompt below.
+
 Adaptation of the approved [identity board](images/wing-identity-board.png) for the repository README. The identity specification remains authoritative.
 
 Create a polished GitHub README hero banner adapted from the attached APPROVED Wing identity board. This image is the reference for exact artwork and brand style, not a request to create another board. Output one wide landscape banner, aspect ratio 3:1, ideally 1920x640. Flat deep navy background #0C304A, cream #FFF9EB and mint #C6EED5 artwork, crisp graphic edges, no texture or shadows.
