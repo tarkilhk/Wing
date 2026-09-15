@@ -6,7 +6,6 @@ import 'package:hermes_android/core/models/hermes_profile.dart';
 import 'package:hermes_android/core/services/connection_manager.dart';
 import 'package:hermes_android/core/services/profile_gateway.dart';
 import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/services/ws_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_workspace_controller_test.dart' show Host;
@@ -15,8 +14,8 @@ class SensitivePromptHost extends Host {
   Completer<void>? responseDelay;
   Object? responseError;
   String? resumedRuntime;
-  Object? pendingSensitive;
-  bool includePendingSensitive = true;
+  Object? openRequests = const [];
+  bool includeOpenRequests = true;
 
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
@@ -29,13 +28,7 @@ class SensitivePromptHost extends Host {
       get: base.read,
       rpc: (method, params) async {
         final response = base.call(method, params);
-        if ({
-          'sudo.respond',
-          'secret.respond',
-          'vault.unlock.respond',
-          'vault.save_login.respond',
-          'vault.code.respond',
-        }.contains(method)) {
+        if (method == 'request.answer') {
           await responseDelay?.future;
           final error = responseError;
           if (error != null) throw error;
@@ -45,13 +38,13 @@ class SensitivePromptHost extends Host {
           return {
             ...result,
             'session_id': resumedRuntime,
-            if (includePendingSensitive) 'pending_sensitive': pendingSensitive,
+            if (includeOpenRequests) 'open_requests': openRequests,
           };
         }
         if (method == 'session.resume') {
           return {
             ...result,
-            if (includePendingSensitive) 'pending_sensitive': pendingSensitive,
+            if (includeOpenRequests) 'open_requests': openRequests,
           };
         }
         return result;
@@ -96,15 +89,15 @@ void main() {
       chat.draft = 'composer marker';
       const cases = [
         (
-          event: 'sudo.request',
+          event: 'sudo',
           id: 'sudo-1',
-          method: 'sudo.respond',
+          method: 'request.answer',
           field: 'password',
         ),
         (
-          event: 'secret.request',
+          event: 'secret',
           id: 'secret-1',
-          method: 'secret.respond',
+          method: 'request.answer',
           field: 'value',
         ),
       ];
@@ -125,8 +118,8 @@ void main() {
 
         expect(host.calls.last.$2, value.method);
         expect(host.calls.last.$3, {
-          'request_id': value.id,
-          value.field: 'synthetic-secret',
+          'id': value.id,
+          'result': {'value': 'synthetic-secret'},
           'profile': 'a',
         });
         expect(chat.sensitivePrompt, isNull);
@@ -145,7 +138,7 @@ void main() {
   );
 
   test('cancel sends the official empty value', () async {
-    host.event('a', 'secret.request', {
+    host.event('a', 'secret', {
       'request_id': 'secret-cancel',
       'env_var': 'FIXTURE_TOKEN',
     });
@@ -154,8 +147,8 @@ void main() {
     await controller.respondSensitivePrompt(chat, '', expectedRequest: request);
 
     expect(host.calls.last.$3, {
-      'request_id': 'secret-cancel',
-      'value': '',
+      'id': 'secret-cancel',
+      'result': {'value': ''},
       'profile': 'a',
     });
   });
@@ -169,37 +162,37 @@ void main() {
       });
       final cases = [
         (
-          event: 'vault.unlock.request',
+          event: 'vault.unlock_prompt',
           data: <String, dynamic>{
             'request_id': 'unlock-1',
             'backend': 'onepassword',
             'display_name': '1Password',
           },
-          method: 'vault.unlock.respond',
+          method: 'request.answer',
           field: 'password',
           input: 'synthetic-password',
           output: 'synthetic-password',
         ),
         (
-          event: 'vault.code.request',
+          event: 'vault.code',
           data: <String, dynamic>{
             'request_id': 'code-1',
             'site': 'Example',
             'hint': 'Authenticator code',
           },
-          method: 'vault.code.respond',
+          method: 'request.answer',
           field: 'code',
           input: '123 456-78',
           output: '12345678',
         ),
         (
-          event: 'vault.save_login.request',
+          event: 'vault.save_login',
           data: <String, dynamic>{
             'request_id': 'save-1',
             'origin': 'https://example.test',
             'site': 'Example',
           },
-          method: 'vault.save_login.respond',
+          method: 'request.answer',
           field: 'login',
           input: login,
           output: login,
@@ -218,8 +211,8 @@ void main() {
 
         expect(host.calls.last.$2, value.method);
         expect(host.calls.last.$3, {
-          'request_id': value.data['request_id'],
-          value.field: value.output,
+          'id': value.data['request_id'],
+          'result': {'value': value.output},
           'profile': 'a',
         });
       }
@@ -237,20 +230,12 @@ void main() {
   test('vault cancel values are explicit empty strings', () async {
     const cases = [
       (
-        event: 'vault.unlock.request',
-        method: 'vault.unlock.respond',
+        event: 'vault.unlock_prompt',
+        method: 'request.answer',
         field: 'password',
       ),
-      (
-        event: 'vault.code.request',
-        method: 'vault.code.respond',
-        field: 'code',
-      ),
-      (
-        event: 'vault.save_login.request',
-        method: 'vault.save_login.respond',
-        field: 'login',
-      ),
+      (event: 'vault.code', method: 'request.answer', field: 'code'),
+      (event: 'vault.save_login', method: 'request.answer', field: 'login'),
     ];
 
     for (final value in cases) {
@@ -263,30 +248,42 @@ void main() {
       );
 
       expect(host.calls.last.$2, value.method);
-      expect(host.calls.last.$3[value.field], '');
+      expect(host.calls.last.$3['result'], {'value': ''});
     }
   });
 
   test('vault expiry clears only its matching request ID and kind', () {
-    host.event('a', 'vault.code.request', {
+    host.event('a', 'vault.code', {
       'request_id': 'current-code',
       'site': 'Example',
     });
 
-    host.event('a', 'vault.code.expire', {'request_id': 'older-code'});
+    host.event('a', 'request.cancel', {
+      'id': 'older-code',
+      'method': 'vault.code',
+      'reason': 'timeout',
+    });
     expect(chat.sensitivePrompt?.requestId, 'current-code');
 
-    host.event('a', 'vault.unlock.expire', {'request_id': 'current-code'});
+    host.event('a', 'request.cancel', {
+      'id': 'current-code',
+      'method': 'vault.unlock_prompt',
+      'reason': 'timeout',
+    });
     expect(chat.sensitivePrompt?.requestId, 'current-code');
 
-    host.event('a', 'vault.code.expire', {'request_id': 'current-code'});
+    host.event('a', 'request.cancel', {
+      'id': 'current-code',
+      'method': 'vault.code',
+      'reason': 'timeout',
+    });
     expect(chat.sensitivePrompt, isNull);
     expect(chat.sensitivePromptResponding, isFalse);
   });
 
   test('an older response cannot clear a newer pending request', () async {
     host.responseDelay = Completer<void>();
-    host.event('a', 'sudo.request', {'request_id': 'old'});
+    host.event('a', 'sudo', {'request_id': 'old'});
     final old = chat.sensitivePrompt!;
     final response = controller.respondSensitivePrompt(
       chat,
@@ -295,10 +292,7 @@ void main() {
     );
     await Future<void>.delayed(Duration.zero);
 
-    host.event('a', 'secret.request', {
-      'request_id': 'new',
-      'env_var': 'NEW_TOKEN',
-    });
+    host.event('a', 'secret', {'request_id': 'new', 'env_var': 'NEW_TOKEN'});
     host.responseDelay!.complete();
     await response;
 
@@ -307,7 +301,7 @@ void main() {
   });
 
   test('disconnect retains metadata but disables response state', () {
-    host.event('a', 'sudo.request', {'request_id': 'waiting'});
+    host.event('a', 'sudo', {'request_id': 'waiting'});
 
     host.gateways['a']!.onConnectionChanged!(false);
 
@@ -316,34 +310,144 @@ void main() {
     expect(chat.status, ProfileTurnStatus.reconnecting);
   });
 
-  test('resume authoritatively clears a request with explicit null', () async {
-    host.event('a', 'sudo.request', {'request_id': 'same-runtime'});
-
-    await controller.reconnect(chat.key.workspace);
-    expect(chat.sensitivePrompt, isNull);
-  });
-
   test(
-    'same-runtime resume preserves a request when the field is absent',
+    'resume restores a secure form from open_requests for its runtime',
     () async {
-      host.includePendingSensitive = false;
-      host.event('a', 'sudo.request', {'request_id': 'same-runtime'});
-
+      host.openRequests = [
+        {
+          'id': 'foreign',
+          'method': 'secret',
+          'params': {'session_id': 'other-runtime', 'env_var': 'WRONG_TOKEN'},
+        },
+        {
+          'id': 'recovered-secret',
+          'method': 'secret',
+          'params': {
+            'session_id': chat.runtimeId,
+            'env_var': 'FIXTURE_TOKEN',
+            'prompt': 'Enter the fixture token',
+          },
+        },
+      ];
       await controller.reconnect(chat.key.workspace);
-
-      expect(chat.sensitivePrompt?.requestId, 'same-runtime');
+      expect(chat.sensitivePrompt?.requestId, 'recovered-secret');
+      expect(chat.sensitivePrompt?.title, 'FIXTURE_TOKEN');
       expect(chat.status, ProfileTurnStatus.attention);
+      host.openRequests = [];
+      await controller.reconnect(chat.key.workspace);
+      expect(chat.sensitivePrompt, isNull);
     },
   );
 
   test(
-    'changed-runtime resume clears a request when the field is absent',
+    'a changed runtime cannot restore another runtime secure request',
     () async {
-      host.includePendingSensitive = false;
-      host.resumedRuntime = 'replacement-runtime';
-      host.event('a', 'sudo.request', {'request_id': 'old-runtime'});
-
+      host.event('a', 'sudo', {'request_id': 'old'});
+      host.openRequests = [
+        {
+          'id': 'old',
+          'method': 'sudo',
+          'params': {'session_id': chat.runtimeId},
+        },
+      ];
+      host.resumedRuntime = 'new-runtime';
       await controller.reconnect(chat.key.workspace);
+      expect(chat.sensitivePrompt, isNull);
+    },
+  );
+
+  test('partial session info retains a live secure request', () {
+    host.event('a', 'secret', {'request_id': 'live'});
+    host.event('a', 'session.info', {'model': 'fixture-model'});
+    expect(chat.sensitivePrompt?.requestId, 'live');
+  });
+
+  test('a snapshot during secure submission cannot strand the form', () async {
+    host.event('a', 'secret', {'request_id': 'answering'});
+    host.responseDelay = Completer<void>();
+    final response = controller.respondSensitivePrompt(
+      chat,
+      'synthetic-secret',
+      expectedRequest: chat.sensitivePrompt!,
+    );
+    host.event('a', 'session.info', {
+      'open_requests': [
+        {
+          'id': 'answering',
+          'method': 'secret',
+          'params': {'session_id': chat.runtimeId},
+        },
+      ],
+    });
+    host.responseDelay!.complete();
+    await response;
+    expect(chat.sensitivePrompt, isNull);
+    expect(chat.sensitivePromptResponding, isFalse);
+  });
+
+  test(
+    'session info updates open requests without resetting an in-flight answer',
+    () {
+      Map<String, dynamic> snapshot(String site) => {
+        'open_requests': [
+          {
+            'id': 'code',
+            'method': 'vault.code',
+            'params': {'session_id': chat.runtimeId, 'site': site},
+          },
+        ],
+      };
+      host.event('a', 'session.info', snapshot('Example'));
+      expect(chat.sensitivePrompt?.requestId, 'code');
+      chat.sensitivePromptResponding = true;
+      host.event('a', 'session.info', snapshot('Updated Example'));
+      expect(chat.sensitivePromptResponding, isTrue);
+      host.event('a', 'session.info', {'open_requests': [], 'running': false});
+      expect(chat.sensitivePrompt, isNull);
+      expect(chat.sensitivePromptResponding, isFalse);
+      expect(chat.status, ProfileTurnStatus.completed);
+    },
+  );
+
+  test(
+    'secure response data in snapshots is rejected without persisting it',
+    () async {
+      host.openRequests = [
+        {
+          'id': 'bad',
+          'method': 'secret',
+          'params': {
+            'session_id': chat.runtimeId,
+            'value': 'synthetic-secret-must-not-persist',
+          },
+        },
+      ];
+      await controller.reconnect(chat.key.workspace);
+      expect(chat.sensitivePrompt, isNull);
+      expect(
+        [
+          for (final key in preferences.getKeys()) preferences.get(key),
+        ].toString(),
+        isNot(contains('synthetic-secret-must-not-persist')),
+      );
+    },
+  );
+
+  test(
+    'an expired server request clears the secure form without retrying',
+    () async {
+      host.clarifyResult = {'status': 'expired'};
+      host.event('a', 'secret', {
+        'request_id': 'expired',
+        'env_var': 'FIXTURE_TOKEN',
+      });
+      final request = chat.sensitivePrompt!;
+
+      await controller.respondSensitivePrompt(
+        chat,
+        'synthetic-secret',
+        expectedRequest: request,
+      );
 
       expect(chat.sensitivePrompt, isNull);
       expect(chat.sensitivePromptResponding, isFalse);
@@ -351,130 +455,10 @@ void main() {
   );
 
   test(
-    'resume restores a valid request and clears it on replacement',
-    () async {
-      host.pendingSensitive = {
-        'type': 'secret.request',
-        'payload': {
-          'request_id': 'recovered-secret',
-          'env_var': 'FIXTURE_TOKEN',
-          'prompt': 'Enter the fixture token',
-        },
-      };
-      await controller.reconnect(chat.key.workspace);
-      expect(chat.sensitivePrompt?.requestId, 'recovered-secret');
-      expect(chat.sensitivePrompt?.title, 'FIXTURE_TOKEN');
-      expect(chat.status, ProfileTurnStatus.attention);
-
-      host.pendingSensitive = null;
-      host.resumedRuntime = 'replacement-runtime';
-      await controller.reconnect(chat.key.workspace);
-      expect(chat.sensitivePrompt, isNull);
-    },
-  );
-
-  test('session info replaces and clears the authoritative request', () {
-    host.event('a', 'session.info', {
-      'pending_sensitive': {
-        'type': 'vault.code.request',
-        'payload': {'request_id': 'code-1', 'site': 'Example'},
-      },
-    });
-    expect(chat.sensitivePrompt?.requestId, 'code-1');
-    expect(chat.status, ProfileTurnStatus.attention);
-
-    chat.sensitivePromptResponding = true;
-    host.event('a', 'session.info', {
-      'pending_sensitive': {
-        'type': 'vault.code.request',
-        'payload': {'request_id': 'code-1', 'site': 'Updated Example'},
-      },
-    });
-    expect(chat.sensitivePromptResponding, isTrue);
-
-    host.event('a', 'session.info', {
-      'pending_sensitive': null,
-      'running': false,
-    });
-    expect(chat.sensitivePrompt, isNull);
-    expect(chat.sensitivePromptResponding, isFalse);
-    expect(chat.status, ProfileTurnStatus.completed);
-  });
-
-  test('partial session info leaves a live request untouched', () {
-    host.event('a', 'secret.request', {
-      'request_id': 'live-secret',
-      'env_var': 'FIXTURE_TOKEN',
-    });
-
-    host.event('a', 'session.info', {'model': 'fixture-model'});
-
-    expect(chat.sensitivePrompt?.requestId, 'live-secret');
-    expect(chat.status, ProfileTurnStatus.attention);
-  });
-
-  test('session info keeps running after clearing resolved input', () {
-    host.event('a', 'sudo.request', {'request_id': 'resolved'});
-
-    host.event('a', 'session.info', {
-      'pending_sensitive': null,
-      'running': true,
-    });
-
-    expect(chat.sensitivePrompt, isNull);
-    expect(chat.status, ProfileTurnStatus.running);
-  });
-
-  test('malformed session info clears stale metadata without persistence', () {
-    host.event('a', 'secret.request', {
-      'request_id': 'stale',
-      'env_var': 'FIXTURE_TOKEN',
-    });
-    host.event('a', 'session.info', {
-      'pending_sensitive': {
-        'type': 'secret.request',
-        'payload': {
-          'request_id': 'bad',
-          'value': 'synthetic-secret-must-not-persist',
-        },
-      },
-    });
-
-    expect(chat.sensitivePrompt, isNull);
-    expect(
-      [
-        for (final key in preferences.getKeys()) preferences.get(key),
-      ].toString(),
-      isNot(contains('synthetic-secret-must-not-persist')),
-    );
-  });
-
-  test('the official missing-pending error expires the request', () async {
-    host.responseError = JsonRpcError(
-      'secret.respond',
-      'no pending value request',
-    );
-    host.event('a', 'secret.request', {
-      'request_id': 'expired',
-      'env_var': 'FIXTURE_TOKEN',
-    });
-    final request = chat.sensitivePrompt!;
-
-    await controller.respondSensitivePrompt(
-      chat,
-      'synthetic-secret',
-      expectedRequest: request,
-    );
-
-    expect(chat.sensitivePrompt, isNull);
-    expect(chat.sensitivePromptResponding, isFalse);
-  });
-
-  test(
     'a transport failure retains metadata without storing its error',
     () async {
       host.responseError = StateError('server echoed synthetic-secret');
-      host.event('a', 'secret.request', {
+      host.event('a', 'secret', {
         'request_id': 'retry',
         'env_var': 'FIXTURE_TOKEN',
       });

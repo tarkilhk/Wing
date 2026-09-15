@@ -2199,7 +2199,7 @@ void main() {
       }
     });
 
-    test('sends the official sudo.respond JSON-RPC method', () async {
+    test('answers a sudo server request with request.answer', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final requestSeen = Completer<Map<String, dynamic>>();
       final socketSubscription = server
@@ -2227,10 +2227,10 @@ void main() {
         );
         final request = await requestSeen.future;
 
-        expect(request['method'], 'sudo.respond');
+        expect(request['method'], 'request.answer');
         expect(request['params'], {
-          'request_id': 'sudo-request-123',
-          'password': 'synthetic-password',
+          'id': 'sudo-request-123',
+          'result': {'value': 'synthetic-password'},
         });
       } finally {
         client.close();
@@ -2239,7 +2239,7 @@ void main() {
       }
     });
 
-    test('sends the official secret.respond JSON-RPC method', () async {
+    test('answers a secret server request with request.answer', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final requestSeen = Completer<Map<String, dynamic>>();
       final socketSubscription = server
@@ -2267,10 +2267,10 @@ void main() {
         );
         final request = await requestSeen.future;
 
-        expect(request['method'], 'secret.respond');
+        expect(request['method'], 'request.answer');
         expect(request['params'], {
-          'request_id': 'secret-request-123',
-          'value': 'synthetic-secret',
+          'id': 'secret-request-123',
+          'result': {'value': 'synthetic-secret'},
         });
       } finally {
         client.close();

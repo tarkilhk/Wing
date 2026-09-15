@@ -4456,21 +4456,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     final resource = _owned(chat);
     final runtime = chat.runtimeId;
-    final method = switch (request!.kind) {
-      GatewaySensitivePromptKind.sudo => 'sudo.respond',
-      GatewaySensitivePromptKind.secret => 'secret.respond',
-      GatewaySensitivePromptKind.vaultUnlock => 'vault.unlock.respond',
-      GatewaySensitivePromptKind.vaultSaveLogin => 'vault.save_login.respond',
-      GatewaySensitivePromptKind.vaultCode => 'vault.code.respond',
-    };
-    final field = switch (request.kind) {
-      GatewaySensitivePromptKind.sudo => 'password',
-      GatewaySensitivePromptKind.secret => 'value',
-      GatewaySensitivePromptKind.vaultUnlock => 'password',
-      GatewaySensitivePromptKind.vaultSaveLogin => 'login',
-      GatewaySensitivePromptKind.vaultCode => 'code',
-    };
-    final responseValue = request.kind == GatewaySensitivePromptKind.vaultCode
+    final responseValue = request!.kind == GatewaySensitivePromptKind.vaultCode
         ? value.replaceAll(RegExp(r'[\s-]'), '')
         : value;
     final commandPreflight = identical(
@@ -4487,20 +4473,22 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     _changed();
     try {
-      await resource.gateway.call(method, {
-        'request_id': request.requestId,
-        field: responseValue,
+      final result = await resource.gateway.call('request.answer', {
+        'id': request.requestId,
+        'result': {'value': responseValue},
       });
+      if (result['status'] == 'expired' &&
+          identical(chat.sensitivePrompt, request)) {
+        chat.error =
+            'This secure input request expired. Ask Hermes to request it again.';
+      }
     } catch (error) {
-      final missingPending = _isMissingSensitivePrompt(error, request.kind);
       if (identical(chat.sensitivePrompt, request)) {
         chat.sensitivePromptResponding = false;
-        if (commandPreflight &&
-            !missingPending &&
-            chat.status == commandReturnStatus) {
+        if (commandPreflight && chat.status == commandReturnStatus) {
           chat.status = ProfileTurnStatus.attention;
         }
-        if (chat.runtimeId != runtime || missingPending) {
+        if (chat.runtimeId != runtime) {
           chat.sensitivePrompt = null;
           if (chat.status == ProfileTurnStatus.attention &&
               chat.approval == null &&
@@ -4511,13 +4499,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
         _changed();
       }
       if (identical(chat._commandPreflightSensitivePrompt, request) &&
-          (missingPending ||
-              chat.runtimeId != runtime ||
+          (chat.runtimeId != runtime ||
               !identical(chat.sensitivePrompt, request))) {
         chat._commandPreflightSensitivePrompt = null;
         chat._commandPreflightReturnStatus = null;
       }
-      if (missingPending) return;
       rethrow;
     }
     if (!identical(chat.sensitivePrompt, request)) {
@@ -4544,21 +4530,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat.status = ProfileTurnStatus.running;
     }
     _changed();
-  }
-
-  bool _isMissingSensitivePrompt(
-    Object error,
-    GatewaySensitivePromptKind kind,
-  ) {
-    if (error is! JsonRpcError) return false;
-    final field = switch (kind) {
-      GatewaySensitivePromptKind.sudo ||
-      GatewaySensitivePromptKind.vaultUnlock => 'password',
-      GatewaySensitivePromptKind.secret => 'value',
-      GatewaySensitivePromptKind.vaultSaveLogin => 'login',
-      GatewaySensitivePromptKind.vaultCode => 'code',
-    };
-    return error.message.toLowerCase().contains('no pending $field request');
   }
 
   GatewayToolActivity? _upsertToolActivity(
@@ -4646,11 +4617,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
         if (event.data.containsKey('side_tasks')) {
           _hydrateSideTasks(chat, event.data['side_tasks']);
         }
-        if (event.data.containsKey('pending_sensitive')) {
+        if (event.data.containsKey('open_requests')) {
           final wasSensitiveAttention =
               chat.status == ProfileTurnStatus.attention &&
               chat.sensitivePrompt != null;
-          _hydrateSensitivePrompt(chat, event.data['pending_sensitive']);
+          _hydrateSensitivePrompt(chat, event.data['open_requests']);
           if (chat.sensitivePrompt != null) {
             chat.status = ProfileTurnStatus.attention;
           } else if (wasSensitiveAttention &&
@@ -4825,18 +4796,47 @@ class ProfileWorkspaceController extends ChangeNotifier {
             chat.status = ProfileTurnStatus.running;
           }
         }
-      case 'sudo.request':
-      case 'secret.request':
-      case 'vault.unlock.request':
-      case 'vault.save_login.request':
-      case 'vault.code.request':
+        final request = chat.sensitivePrompt;
+        if (request != null &&
+            event.data['id'] == request.requestId &&
+            GatewaySensitivePromptRequest.kindForMethod(
+                  event.data['method'] as String?,
+                ) ==
+                request.kind) {
+          final commandPreflight = identical(
+            chat._commandPreflightSensitivePrompt,
+            request,
+          );
+          final commandReturnStatus = chat._commandPreflightReturnStatus;
+          chat.sensitivePrompt = null;
+          if (event.data['reason'] == 'timeout') {
+            chat.error =
+                'This secure input request expired. Ask Hermes to request it again.';
+          }
+          chat.sensitivePromptResponding = false;
+          if (identical(chat._commandPreflightSensitivePrompt, request)) {
+            chat._commandPreflightSensitivePrompt = null;
+            chat._commandPreflightReturnStatus = null;
+          }
+          if (chat.status == ProfileTurnStatus.attention &&
+              chat.approval == null &&
+              chat.clarification == null) {
+            chat.status = commandPreflight
+                ? commandReturnStatus ?? ProfileTurnStatus.idle
+                : ProfileTurnStatus.running;
+          }
+        }
+      case 'sudo':
+      case 'secret':
+      case 'vault.unlock_prompt':
+      case 'vault.save_login':
+      case 'vault.code':
         final request = GatewaySensitivePromptRequest.fromEventData(
           kind: switch (event.type) {
-            'sudo.request' => GatewaySensitivePromptKind.sudo,
-            'secret.request' => GatewaySensitivePromptKind.secret,
-            'vault.unlock.request' => GatewaySensitivePromptKind.vaultUnlock,
-            'vault.save_login.request' =>
-              GatewaySensitivePromptKind.vaultSaveLogin,
+            'sudo' => GatewaySensitivePromptKind.sudo,
+            'secret' => GatewaySensitivePromptKind.secret,
+            'vault.unlock_prompt' => GatewaySensitivePromptKind.vaultUnlock,
+            'vault.save_login' => GatewaySensitivePromptKind.vaultSaveLogin,
             _ => GatewaySensitivePromptKind.vaultCode,
           },
           data: event.data,
@@ -4856,43 +4856,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
           chat.sensitivePromptResponding = false;
           chat.status = ProfileTurnStatus.attention;
           _notify(chat, true, eventId: _notificationEventId(event.data));
-        }
-      case 'sudo.expire':
-      case 'secret.expire':
-      case 'vault.unlock.expire':
-      case 'vault.save_login.expire':
-      case 'vault.code.expire':
-        final request = chat.sensitivePrompt;
-        final requestId = event.data['request_id']?.toString().trim() ?? '';
-        final kind = switch (event.type) {
-          'sudo.expire' => GatewaySensitivePromptKind.sudo,
-          'secret.expire' => GatewaySensitivePromptKind.secret,
-          'vault.unlock.expire' => GatewaySensitivePromptKind.vaultUnlock,
-          'vault.save_login.expire' =>
-            GatewaySensitivePromptKind.vaultSaveLogin,
-          _ => GatewaySensitivePromptKind.vaultCode,
-        };
-        if (requestId.isNotEmpty &&
-            request?.kind == kind &&
-            request?.requestId == requestId) {
-          final commandPreflight = identical(
-            chat._commandPreflightSensitivePrompt,
-            request,
-          );
-          final commandReturnStatus = chat._commandPreflightReturnStatus;
-          chat.sensitivePrompt = null;
-          chat.sensitivePromptResponding = false;
-          if (identical(chat._commandPreflightSensitivePrompt, request)) {
-            chat._commandPreflightSensitivePrompt = null;
-            chat._commandPreflightReturnStatus = null;
-          }
-          if (chat.status == ProfileTurnStatus.attention &&
-              chat.approval == null &&
-              chat.clarification == null) {
-            chat.status = commandPreflight
-                ? commandReturnStatus ?? ProfileTurnStatus.idle
-                : ProfileTurnStatus.running;
-          }
         }
       case 'message.complete':
       case 'turn.end':
@@ -5312,9 +5275,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         break;
       }
     }
-    if (result.containsKey('pending_sensitive')) {
-      _hydrateSensitivePrompt(chat, result['pending_sensitive']);
-    }
+    _hydrateSensitivePrompt(chat, result['open_requests']);
     if (result.containsKey('side_tasks')) {
       _hydrateSideTasks(chat, result['side_tasks']);
     }
@@ -5341,10 +5302,25 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   void _hydrateSensitivePrompt(ProfileChat chat, Object? snapshot) {
     final previous = chat.sensitivePrompt;
-    final next = GatewaySensitivePromptRequest.fromPendingSnapshot(snapshot);
+    GatewaySensitivePromptRequest? next;
+    if (snapshot is List) {
+      for (final frame in snapshot) {
+        if (frame is! Map ||
+            frame['params'] is! Map ||
+            frame['params']['session_id'] != chat.runtimeId) {
+          continue;
+        }
+        next = GatewaySensitivePromptRequest.fromServerRequest(frame);
+        if (next != null) break;
+      }
+    }
     final sameRequest =
         previous?.kind == next?.kind && previous?.requestId == next?.requestId;
-    chat.sensitivePrompt = next;
+    // An outstanding response owns this exact model instance. Replacing it
+    // during a snapshot would prevent its completion from clearing the form.
+    chat.sensitivePrompt = sameRequest && chat.sensitivePromptResponding
+        ? previous
+        : next;
     if (!sameRequest) chat.sensitivePromptResponding = false;
   }
 

@@ -246,7 +246,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
               (project) => project['id'] == params['id'],
             );
             return {'projects': projects(scope.profileName), 'active_id': null};
-          case 'vault.unlock.respond':
+          case 'request.answer':
             sensitiveResponses.add(Map<String, dynamic>.from(params));
             return {'status': 'ok'};
           case 'subagent.list':
@@ -568,7 +568,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
   void requestVaultUnlock(String profile, String runtimeId) {
     gateways[profile]!.onEvent!(
       StreamEvent(
-        type: 'vault.unlock.request',
+        type: 'vault.unlock_prompt',
         sessionId: runtimeId,
         data: const {
           'request_id': 'roadmap-vault-unlock',

@@ -1155,10 +1155,11 @@ async def handle_rpc(
                         sensitive_future,
                     )
                     await ws.send_str(
-                        gateway_event(
-                            "sudo.request",
+                        server_request(
+                            "sudo",
+                            sensitive_request_id,
                             session_id,
-                            {"request_id": sensitive_request_id},
+                            {},
                         )
                     )
                     password = await sensitive_future
@@ -1176,11 +1177,11 @@ async def handle_rpc(
                         sensitive_future,
                     )
                     await ws.send_str(
-                        gateway_event(
-                            "secret.request",
+                        server_request(
+                            "secret",
+                            sensitive_request_id,
                             session_id,
                             {
-                                "request_id": sensitive_request_id,
                                 "env_var": "FIXTURE_API_TOKEN",
                                 "prompt": "Enter a synthetic test token",
                             },
@@ -1194,9 +1195,9 @@ async def handle_rpc(
                         )
                         await ws.send_str(
                             gateway_event(
-                                "secret.expire",
+                                "request.cancel",
                                 session_id,
-                                {"request_id": sensitive_request_id},
+                                {"id": sensitive_request_id, "method": "secret", "reason": "timeout"},
                             )
                         )
                         response_text = "Synthetic secret request expired."
@@ -1334,33 +1335,14 @@ async def handle_rpc(
         await ws.send_str(rpc_result(request_id, {"resolved": resolved}))
         return
 
-    if method in {"sudo.respond", "secret.respond"}:
-        prompt_request_id = str(params.get("request_id") or "")
-        expected_kind = "sudo" if method == "sudo.respond" else "secret"
-        value_key = "password" if expected_kind == "sudo" else "value"
-        entry = pending_sensitive_prompts.get(prompt_request_id)
-        if entry is None or entry[0] != expected_kind:
-            state.log(
-                {
-                    **log_record,
-                    "request_id": prompt_request_id,
-                    "provided": bool(params.get(value_key)),
-                    "status": "expired",
-                }
-            )
-            await ws.send_str(rpc_result(request_id, {"status": "expired"}))
-            return
-        _, _, prompt_future = entry
+    if method == "request.answer" and str(params.get("id") or "") in pending_sensitive_prompts:
+        prompt_request_id = str(params["id"])
+        _, _, prompt_future = pending_sensitive_prompts[prompt_request_id]
+        value = str((params.get("result") or {}).get("value") or "")
         if not prompt_future.done():
-            prompt_future.set_result(str(params.get(value_key) or ""))
-        state.log(
-            {
-                **log_record,
-                "request_id": prompt_request_id,
-                "provided": bool(params.get(value_key)),
-                "status": "ok",
-            }
-        )
+            prompt_future.set_result(value)
+        state.log({**log_record, "request_id": prompt_request_id,
+                   "provided": bool(value), "status": "ok"})
         await ws.send_str(rpc_result(request_id, {"status": "ok"}))
         return
 

@@ -68,7 +68,7 @@ class CommandHost extends Host {
       },
       rpc: (method, params) async {
         commandCalls.add((method, params));
-        if (method == 'secret.respond') {
+        if (method == 'request.answer') {
           await sensitiveResponseDelay?.future;
           final error = sensitiveResponseError;
           if (error != null) throw error;
@@ -224,7 +224,7 @@ void main() {
 
       final sending = controller.send(chat);
       await Future<void>.delayed(Duration.zero);
-      host.event('a', 'secret.request', {
+      host.event('a', 'secret', {
         'request_id': 'skill-secret',
         'env_var': 'FIXTURE_TOKEN',
         'prompt': 'Optional fixture token',
@@ -268,7 +268,7 @@ void main() {
 
       final sending = controller.send(chat);
       await Future<void>.delayed(Duration.zero);
-      host.event('a', 'secret.request', {
+      host.event('a', 'secret', {
         'request_id': 'delayed-secret',
         'env_var': 'FIXTURE_TOKEN',
       });
@@ -310,7 +310,7 @@ void main() {
 
       final sending = controller.send(chat);
       await host.promptSubmitStarted!.future;
-      host.event('a', 'secret.request', {
+      host.event('a', 'secret', {
         'request_id': 'live-turn-secret',
         'env_var': 'FIXTURE_TOKEN',
       });
@@ -343,7 +343,7 @@ void main() {
 
       final sending = controller.send(chat);
       await Future<void>.delayed(Duration.zero);
-      host.event('a', 'secret.request', {
+      host.event('a', 'secret', {
         'request_id': 'retry-secret',
         'env_var': 'FIXTURE_TOKEN',
       });
@@ -386,11 +386,11 @@ void main() {
 
       final sending = controller.send(chat);
       await Future<void>.delayed(Duration.zero);
-      host.event('a', 'secret.request', {
+      host.event('a', 'secret', {
         'request_id': 'first-secret',
         'env_var': 'FIRST_TOKEN',
       });
-      host.event('a', 'secret.request', {
+      host.event('a', 'secret', {
         'request_id': 'replacement-secret',
         'env_var': 'SECOND_TOKEN',
       });
@@ -419,11 +419,11 @@ void main() {
     'sensitive preflight expiry releases every stock request kind',
     () async {
       const cases = [
-        ('sudo.request', 'sudo.expire'),
-        ('secret.request', 'secret.expire'),
-        ('vault.unlock.request', 'vault.unlock.expire'),
-        ('vault.save_login.request', 'vault.save_login.expire'),
-        ('vault.code.request', 'vault.code.expire'),
+        'sudo',
+        'secret',
+        'vault.unlock_prompt',
+        'vault.save_login',
+        'vault.code',
       ];
 
       for (var index = 0; index < cases.length; index++) {
@@ -435,10 +435,14 @@ void main() {
         final sending = controller.send(chat);
         await Future<void>.delayed(Duration.zero);
         final requestId = 'expiring-$index';
-        host.event('a', cases[index].$1, {'request_id': requestId});
+        host.event('a', cases[index], {'request_id': requestId});
         expect(chat.status, ProfileTurnStatus.attention);
 
-        host.event('a', cases[index].$2, {'request_id': requestId});
+        host.event('a', 'request.cancel', {
+          'id': requestId,
+          'method': cases[index],
+          'reason': 'timeout',
+        });
         expect(chat.sensitivePrompt, isNull);
         expect(chat.status, ProfileTurnStatus.completed);
         dispatch.complete({
@@ -458,10 +462,14 @@ void main() {
 
   test('sensitive expiry during an active turn stays running', () async {
     chat.status = ProfileTurnStatus.running;
-    host.event('a', 'secret.request', {'request_id': 'active-secret-expiry'});
+    host.event('a', 'secret', {'request_id': 'active-secret-expiry'});
     expect(chat.status, ProfileTurnStatus.attention);
 
-    host.event('a', 'secret.expire', {'request_id': 'active-secret-expiry'});
+    host.event('a', 'request.cancel', {
+      'id': 'active-secret-expiry',
+      'method': 'secret',
+      'reason': 'timeout',
+    });
 
     expect(chat.sensitivePrompt, isNull);
     expect(chat.status, ProfileTurnStatus.running);

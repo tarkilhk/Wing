@@ -881,15 +881,15 @@ async def probe(base_url: str) -> None:
             assert sudo_prompt["accepted"] is True
             sudo_message = await ws.receive(timeout=5)
             sudo_payload = json.loads(sudo_message.data)
-            assert sudo_payload["params"]["type"] == "sudo.request"
-            sudo_request_id = sudo_payload["params"]["payload"]["request_id"]
+            assert sudo_payload["method"] == "sudo"
+            sudo_request_id = sudo_payload["id"]
             sudo_result = await rpc(
                 ws,
                 10,
-                "sudo.respond",
+                "request.answer",
                 {
-                    "request_id": sudo_request_id,
-                    "password": "fixture-sudo-password",
+                    "id": sudo_request_id,
+                    "result": {"value": "fixture-sudo-password"},
                 },
             )
             assert sudo_result["status"] == "ok"
@@ -921,16 +921,16 @@ async def probe(base_url: str) -> None:
             assert secret_prompt["accepted"] is True
             secret_message = await ws.receive(timeout=5)
             secret_payload = json.loads(secret_message.data)
-            assert secret_payload["params"]["type"] == "secret.request"
-            secret_request = secret_payload["params"]["payload"]
+            assert secret_payload["method"] == "secret"
+            secret_request = secret_payload["params"]
             assert secret_request["env_var"] == "FIXTURE_API_TOKEN"
             secret_result = await rpc(
                 ws,
                 12,
-                "secret.respond",
+                "request.answer",
                 {
-                    "request_id": secret_request["request_id"],
-                    "value": "fixture-secret-value",
+                    "id": secret_payload["id"],
+                    "result": {"value": "fixture-secret-value"},
                 },
             )
             assert secret_result["status"] == "ok"
@@ -962,8 +962,8 @@ async def probe(base_url: str) -> None:
             assert expiring_prompt["accepted"] is True
             expiring_request = await ws.receive(timeout=5)
             expiring_payload = json.loads(expiring_request.data)
-            assert expiring_payload["params"]["type"] == "secret.request"
-            expiring_request_id = expiring_payload["params"]["payload"]["request_id"]
+            assert expiring_payload["method"] == "secret"
+            expiring_request_id = expiring_payload["id"]
 
             expire_seen = False
             expire_turn_end = False
@@ -974,8 +974,8 @@ async def probe(base_url: str) -> None:
                 if payload.get("method") != "event":
                     continue
                 params = payload["params"]
-                if params["type"] == "secret.expire":
-                    assert params["payload"]["request_id"] == expiring_request_id
+                if params["type"] == "request.cancel":
+                    assert params["payload"]["id"] == expiring_request_id
                     expire_seen = True
                 if params["type"] == "turn.end":
                     expire_turn_end = True
@@ -984,10 +984,10 @@ async def probe(base_url: str) -> None:
             expired_result = await rpc(
                 ws,
                 14,
-                "secret.respond",
+                "request.answer",
                 {
-                    "request_id": expiring_request_id,
-                    "value": "late-secret-value",
+                    "id": expiring_request_id,
+                    "result": {"value": "late-secret-value"},
                 },
             )
             assert expired_result["status"] == "expired"
@@ -1399,11 +1399,9 @@ async def probe(base_url: str) -> None:
                     "session.interrupt",
                     "approval.request",
                     "approval.respond",
-                    "sudo.request",
-                    "sudo.respond",
-                    "secret.request",
-                    "secret.respond",
-                    "secret.expire",
+                    "sudo",
+                    "secret",
+                    "request.cancel",
                     "clarify",
                     "request.answer",
                     "clarify.lock",

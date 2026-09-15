@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:web_socket_channel/io.dart';
 
 import '../models/connection.dart';
+import '../models/gateway_sensitive_prompt.dart';
 
 final HttpClient _noRedirectWebSocketClient = _NoRedirectWebSocketHttpClient();
 
@@ -389,7 +390,8 @@ class WsClient {
 
       // Hermes asks the client directly using a server-owned string ID. These
       // frames are requests, not responses to our integer-ID RPC calls.
-      if (method == 'clarify' &&
+      if ((method == 'clarify' ||
+              GatewaySensitivePromptRequest.kindForMethod(method) != null) &&
           id is String &&
           id.isNotEmpty &&
           params is Map<String, dynamic>) {
@@ -397,7 +399,7 @@ class WsClient {
         if (sessionId is! String || sessionId.isEmpty) return;
         _dispatchEvent(
           StreamEvent(
-            type: 'clarify',
+            type: method!,
             sessionId: sessionId,
             data: {...params, 'request_id': id},
           ),
@@ -783,24 +785,14 @@ class WsClient {
     required String requestId,
     required String password,
   }) {
-    return _respondToSensitivePrompt(
-      method: 'sudo.respond',
-      requestId: requestId,
-      valueKey: 'password',
-      value: password,
-    );
+    return _respondToSensitivePrompt(requestId: requestId, value: password);
   }
 
   Future<void> respondToSecret({
     required String requestId,
     required String value,
   }) {
-    return _respondToSensitivePrompt(
-      method: 'secret.respond',
-      requestId: requestId,
-      valueKey: 'value',
-      value: value,
-    );
+    return _respondToSensitivePrompt(requestId: requestId, value: value);
   }
 
   Future<void> respondToClarify({
@@ -841,9 +833,7 @@ class WsClient {
   }
 
   Future<void> _respondToSensitivePrompt({
-    required String method,
     required String requestId,
-    required String valueKey,
     required String value,
   }) async {
     if (requestId.trim().isEmpty) {
@@ -853,14 +843,14 @@ class WsClient {
         'A Hermes request ID is required',
       );
     }
-    final response = await send(method, {
-      'request_id': requestId,
-      valueKey: value,
+    final response = await send('request.answer', {
+      'id': requestId,
+      'result': {'value': value},
     });
     final error = response['error'];
     if (error != null) {
       throw _gatewayResponseError(
-        method,
+        'request.answer',
         error,
         fallbackMessage: 'Gateway response failed',
       );

@@ -76,24 +76,25 @@ void main() {
 
     test('parses each authoritative pending-sensitive request family', () {
       const cases = [
-        ('sudo.request', 'sudo-1', GatewaySensitivePromptKind.sudo),
-        ('secret.request', 'secret-1', GatewaySensitivePromptKind.secret),
+        ('sudo', 'sudo-1', GatewaySensitivePromptKind.sudo),
+        ('secret', 'secret-1', GatewaySensitivePromptKind.secret),
         (
-          'vault.unlock.request',
+          'vault.unlock_prompt',
           'unlock-1',
           GatewaySensitivePromptKind.vaultUnlock,
         ),
         (
-          'vault.save_login.request',
+          'vault.save_login',
           'save-1',
           GatewaySensitivePromptKind.vaultSaveLogin,
         ),
-        ('vault.code.request', 'code-1', GatewaySensitivePromptKind.vaultCode),
+        ('vault.code', 'code-1', GatewaySensitivePromptKind.vaultCode),
       ];
       for (final value in cases) {
-        final request = GatewaySensitivePromptRequest.fromPendingSnapshot({
-          'type': value.$1,
-          'payload': {'request_id': value.$2},
+        final request = GatewaySensitivePromptRequest.fromServerRequest({
+          'id': value.$2,
+          'method': value.$1,
+          'params': {},
         });
         expect(request?.requestId, value.$2);
         expect(request?.kind, value.$3);
@@ -104,30 +105,23 @@ void main() {
       final malformed = <Object?>[
         null,
         const {},
-        const {
-          'type': 'unknown.request',
-          'payload': {'request_id': 'id'},
+        {'id': 'id', 'method': 'unknown', 'params': {}},
+        {'id': 'id', 'method': 'sudo', 'params': 'not-an-object'},
+        {'method': 'sudo', 'params': {}},
+        {'id': 7, 'method': 'sudo', 'params': {}},
+        {
+          'id': 'id',
+          'method': 'secret',
+          'params': {'prompt': 7},
         },
-        const {'type': 'sudo.request', 'payload': 'not-an-object'},
-        const {'type': 'sudo.request', 'payload': {}},
-        const {
-          'type': 'sudo.request',
-          'payload': {'request_id': 7},
-        },
-        const {
-          'type': 'secret.request',
-          'payload': {'request_id': 'id', 'prompt': 7},
-        },
-        const {
-          'type': 'sudo.request',
-          'payload': {'request_id': 'id', 'password': 'must-not-appear'},
+        {
+          'id': 'id',
+          'method': 'sudo',
+          'params': {'password': 'must-not-appear'},
         },
       ];
       for (final value in malformed) {
-        expect(
-          GatewaySensitivePromptRequest.fromPendingSnapshot(value),
-          isNull,
-        );
+        expect(GatewaySensitivePromptRequest.fromServerRequest(value), isNull);
       }
     });
   });

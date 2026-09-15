@@ -484,8 +484,8 @@ void main() {
     await _pumpUntil(tester, () => chat.sensitivePrompt == null);
     await _settle(tester);
     expect(harness.fixture.sensitiveResponses.single, {
-      'request_id': 'roadmap-vault-unlock',
-      'password': vaultPassword,
+      'id': 'roadmap-vault-unlock',
+      'result': {'value': vaultPassword},
       'profile': 'personal',
     });
     expect(find.text('Unlock Roadmap Vault'), findsNothing);
