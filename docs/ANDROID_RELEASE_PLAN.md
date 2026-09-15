@@ -16,7 +16,7 @@ Read the source version and base build number from [pubspec.yaml](../pubspec.yam
 
 `pubspec.yaml` is the version source. The release helper updates it and the changelog; workflows and tests do not need per-release edits. Stable tags use `v<major>.<minor>.<patch>`. Both the version and base build number must advance beyond earlier Wing tags. Published Wing tags and assets are never overwritten.
 
-Wing begins at `1.0.0`. The displayed version starts a new series while the Android build number continues increasing. `scripts/release-history-start` pins the Wing package-identity commit; only tags descended from that commit participate in version comparisons. Keep that boundary fixed. The older Hermes tags describe a different application and do not constrain Wing's version. The inherited `v1.0.0` tag must be archived as `upstream/v1.0.0` before the first Wing release can reuse its name; this is a one-time maintainer operation, and the helper still refuses all existing tag names.
+Wing begins at `1.0.0`. The displayed version starts a new series while the Android build number continues increasing. `scripts/release-history-start` pins the Wing package-identity commit; only tags descended from that commit participate in version comparisons. Keep that boundary fixed. The older Hermes tags describe a different application and do not constrain Wing's version. The inherited version tags were removed from this fork before the first Wing release, leaving `v1.0.0` available for Wing. Their source commits remain in Git history. The helper refuses all existing tag names.
 
 ## Validate one release candidate
 
