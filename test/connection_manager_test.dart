@@ -2279,7 +2279,7 @@ void main() {
       }
     });
 
-    test('sends the official clarify.respond JSON-RPC method', () async {
+    test('answers a single clarify request with request.answer', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final requestSeen = Completer<Map<String, dynamic>>();
       final socketSubscription = server
@@ -2307,10 +2307,10 @@ void main() {
         );
         final request = await requestSeen.future;
 
-        expect(request['method'], 'clarify.respond');
+        expect(request['method'], 'request.answer');
         expect(request['params'], {
-          'request_id': 'clarify-request-123',
-          'answer': 'Balanced',
+          'id': 'clarify-request-123',
+          'result': {'answer': 'Balanced'},
         });
       } finally {
         client.close();
@@ -2348,7 +2348,7 @@ void main() {
         );
         final request = await requestSeen.future;
 
-        expect(request['method'], 'clarify.respond');
+        expect(request['method'], 'clarify.lock');
         expect(request['params'], {
           'request_id': 'clarify-request-123',
           'question_id': 'q1',

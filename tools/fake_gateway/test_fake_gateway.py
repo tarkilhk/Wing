@@ -1004,22 +1004,22 @@ async def probe(base_url: str) -> None:
             assert clarify_prompt["accepted"] is True
             clarify_message = await ws.receive(timeout=5)
             clarify_payload = json.loads(clarify_message.data)
-            assert clarify_payload["params"]["type"] == "clarify.request"
-            clarify_request = clarify_payload["params"]["payload"]
+            assert clarify_payload["method"] == "clarify"
+            clarify_request = clarify_payload["params"]
             assert clarify_request["choices"] == [
                 "Compact",
                 "Balanced",
                 "Detailed",
             ]
-            assert "request_id" in clarify_request
+            assert isinstance(clarify_payload["id"], str)
 
             clarified = await rpc(
                 ws,
                 16,
-                "clarify.respond",
+                "request.answer",
                 {
-                    "request_id": clarify_request["request_id"],
-                    "answer": "Balanced",
+                    "id": clarify_payload["id"],
+                    "result": {"answer": "Balanced"},
                 },
             )
             assert clarified["status"] == "ok"
@@ -1051,17 +1051,17 @@ async def probe(base_url: str) -> None:
             assert multi_prompt["accepted"] is True
             multi_message = await ws.receive(timeout=5)
             multi_payload = json.loads(multi_message.data)
-            assert multi_payload["params"]["type"] == "clarify.request"
-            multi_request = multi_payload["params"]["payload"]
+            assert multi_payload["method"] == "clarify"
+            multi_request = multi_payload["params"]
             assert multi_request["multi_select"] is True
 
             multi_result = await rpc(
                 ws,
                 18,
-                "clarify.respond",
+                "request.answer",
                 {
-                    "request_id": multi_request["request_id"],
-                    "answer": "Compact, Detailed",
+                    "id": multi_payload["id"],
+                    "result": {"answer": "Compact, Detailed"},
                 },
             )
             assert multi_result["status"] == "ok"
@@ -1093,17 +1093,17 @@ async def probe(base_url: str) -> None:
             assert free_text_prompt["accepted"] is True
             free_text_message = await ws.receive(timeout=5)
             free_text_payload = json.loads(free_text_message.data)
-            assert free_text_payload["params"]["type"] == "clarify.request"
-            free_text_request = free_text_payload["params"]["payload"]
+            assert free_text_payload["method"] == "clarify"
+            free_text_request = free_text_payload["params"]
             assert "choices" not in free_text_request
 
             skipped = await rpc(
                 ws,
                 20,
-                "clarify.respond",
+                "request.answer",
                 {
-                    "request_id": free_text_request["request_id"],
-                    "answer": "",
+                    "id": free_text_payload["id"],
+                    "result": {"answer": ""},
                 },
             )
             assert skipped["status"] == "ok"
@@ -1135,8 +1135,8 @@ async def probe(base_url: str) -> None:
             assert batch_prompt["accepted"] is True
             batch_message = await ws.receive(timeout=5)
             batch_payload = json.loads(batch_message.data)
-            assert batch_payload["params"]["type"] == "clarify.request"
-            batch_request = batch_payload["params"]["payload"]
+            assert batch_payload["method"] == "clarify"
+            batch_request = batch_payload["params"]
             assert batch_request["questions"][0]["qid"] == "q1"
             assert batch_request["questions"][1]["qid"] == "q2"
             assert "question" not in batch_request
@@ -1144,9 +1144,9 @@ async def probe(base_url: str) -> None:
             q1_result = await rpc(
                 ws,
                 122,
-                "clarify.respond",
+                "clarify.lock",
                 {
-                    "request_id": batch_request["request_id"],
+                    "request_id": batch_payload["id"],
                     "question_id": "q1",
                     "answer": "Balanced",
                 },
@@ -1157,9 +1157,9 @@ async def probe(base_url: str) -> None:
             q2_result = await rpc(
                 ws,
                 123,
-                "clarify.respond",
+                "clarify.lock",
                 {
-                    "request_id": batch_request["request_id"],
+                    "request_id": batch_payload["id"],
                     "question_id": "q2",
                     "answer": "Voice, Notifications",
                 },
@@ -1186,10 +1186,10 @@ async def probe(base_url: str) -> None:
             late_clarify = await rpc(
                 ws,
                 21,
-                "clarify.respond",
+                "request.answer",
                 {
-                    "request_id": "clarify-expired",
-                    "answer": "Late answer",
+                    "id": "clarify-expired",
+                    "result": {"answer": "Late answer"},
                 },
             )
             assert late_clarify["status"] == "expired"
@@ -1404,8 +1404,9 @@ async def probe(base_url: str) -> None:
                     "secret.request",
                     "secret.respond",
                     "secret.expire",
-                    "clarify.request",
-                    "clarify.respond",
+                    "clarify",
+                    "request.answer",
+                    "clarify.lock",
                     "status.update",
                     "thinking.delta",
                     "tool.start",

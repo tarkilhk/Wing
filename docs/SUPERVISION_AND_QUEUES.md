@@ -26,6 +26,16 @@ Same-runtime reconnect retains a live form when optional response fields are omi
 
 Supported approvals expose the server's request details and scopes, including Deny, Allow once, Session and Always. Display acknowledged outcomes and effective state. Clarification supports multiple questions; it remains distinct from sensitive credentials.
 
+Clarification uses Hermes' server-initiated JSON-RPC `clarify` request. The app
+routes it by `params.session_id` and retains the frame's string `id`. Batch
+answers use `clarify.lock` with that ID and the supplied question ID; single
+answers use `request.answer`. Resume restores forms and locked answers from
+`open_requests`; `request.cancel` withdraws the matching form. This targets the
+[current server-request protocol](https://github.com/NousResearch/hermes-agent/blob/main/tui_gateway/server_requests.py),
+replacing the previous `clarify.request` / `clarify.respond` protocol.
+Tool-call arguments or a timeout result in chat do not establish that the
+request frame reached the app.
+
 ## Side questions
 
 `/btw`, `/bg` and `/background` retain the submitted question with their task kind and returned ID. An early completion must not be downgraded by a late acknowledgement. Show empty results explicitly and preserve existing cards on same-runtime reconnect when optional fields are absent.

@@ -82,7 +82,7 @@ void main() {
       'tool': 'read_file',
     });
     expect(label(), 'Thinking… · 1 subagent active');
-    host.event('a', 'clarify.request', {'question': 'Which city?'});
+    host.event('a', 'clarify', {'question': 'Which city?'});
     expect(label(), 'Waiting for your reply');
     host.event('a', 'approval.request', {'command': 'Check a file'});
     expect(label(), 'Waiting for your approval');
@@ -166,7 +166,7 @@ void main() {
     expect(find.text('Thinking…'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.byType(ShaderMask), findsOneWidget);
-    host.event('a', 'clarify.request', {'question': 'Which city?'});
+    host.event('a', 'clarify', {'question': 'Which city?'});
     await tester.pump();
     expect(find.text('Waiting for your reply'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);

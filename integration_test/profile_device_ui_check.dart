@@ -52,7 +52,7 @@ class DeviceFixture extends ProfileBrowserFixture {
       discover: base.discover,
       get: base.read,
       rpc: (method, params) async {
-        if (method != 'clarify.respond') return base.call(method, params);
+        if (method != 'clarify.lock') return base.call(method, params);
         if (params['profile'] != 'personal' ||
             params['session_id'] != 'runtime' ||
             params['request_id'] != 'device-question') {
@@ -116,7 +116,7 @@ class _DeviceCheckState extends State<DeviceCheck> {
     if (question) {
       fixture.active!.onEvent!(
         StreamEvent(
-          type: 'clarify.request',
+          type: 'clarify',
           sessionId: chat.runtimeId,
           data: {
             'request_id': 'device-question',

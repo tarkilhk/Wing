@@ -219,12 +219,7 @@ class WsClient {
     );
   }
 
-  WsClient._(
-    this.baseUrl,
-    this._token,
-    this._ticket,
-    this._gatewayHeaders,
-  );
+  WsClient._(this.baseUrl, this._token, this._ticket, this._gatewayHeaders);
 
   /// Connect to the WebSocket gateway.
   Future<void> connect() async {
@@ -391,6 +386,24 @@ class WsClient {
       final id = data['id'];
       final method = data['method'] as String?;
       final params = data['params'];
+
+      // Hermes asks the client directly using a server-owned string ID. These
+      // frames are requests, not responses to our integer-ID RPC calls.
+      if (method == 'clarify' &&
+          id is String &&
+          id.isNotEmpty &&
+          params is Map<String, dynamic>) {
+        final sessionId = params['session_id'];
+        if (sessionId is! String || sessionId.isEmpty) return;
+        _dispatchEvent(
+          StreamEvent(
+            type: 'clarify',
+            sessionId: sessionId,
+            data: {...params, 'request_id': id},
+          ),
+        );
+        return;
+      }
 
       // Server-pushed events have the JSON-RPC method `event` and carry their
       // actual type/session/payload inside params.
@@ -802,18 +815,25 @@ class WsClient {
         'A Hermes request ID is required',
       );
     }
-    final params = <String, dynamic>{
-      'request_id': requestId,
-      'answer': answer,
-    };
-    if (questionId != null && questionId.trim().isNotEmpty) {
-      params['question_id'] = questionId;
-    }
-    final response = await send('clarify.respond', params);
+    final batch = questionId != null && questionId.trim().isNotEmpty;
+    final method = batch ? 'clarify.lock' : 'request.answer';
+    final response = await send(
+      method,
+      batch
+          ? {
+              'request_id': requestId,
+              'question_id': questionId,
+              'answer': answer,
+            }
+          : {
+              'id': requestId,
+              'result': {'answer': answer},
+            },
+    );
     final error = response['error'];
     if (error != null) {
       throw _gatewayResponseError(
-        'clarify.respond',
+        method,
         error,
         fallbackMessage: 'Gateway clarification failed',
       );

@@ -4401,13 +4401,22 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     final question = chat.pendingQuestion;
     if (question == null) return;
-    final result = await resource.gateway.call('clarify.respond', {
-      'session_id': chat.runtimeId,
-      'request_id': question['request_id'],
-      'answer': answer,
-      if (question['question_id'] != null)
-        'question_id': question['question_id'],
-    });
+    final batch = question['question_id'] != null;
+    final result = await resource.gateway.call(
+      batch ? 'clarify.lock' : 'request.answer',
+      batch
+          ? {
+              'session_id': chat.runtimeId,
+              'request_id': question['request_id'],
+              'answer': answer,
+              'question_id': question['question_id'],
+            }
+          : {
+              'session_id': chat.runtimeId,
+              'id': question['request_id'],
+              'result': {'answer': answer},
+            },
+    );
     if (!identical(chat.clarification, request)) return;
     if (result['status'] == 'expired') {
       await reconnect(resource.scope);
@@ -4801,10 +4810,21 @@ class ProfileWorkspaceController extends ChangeNotifier {
         chat.approval = event.data;
         chat.status = ProfileTurnStatus.attention;
         _notify(chat, true, eventId: _notificationEventId(event.data));
-      case 'clarify.request':
+      case 'clarify':
         chat.clarification = event.data;
         chat.status = ProfileTurnStatus.attention;
         _notify(chat, true, eventId: _notificationEventId(event.data));
+      case 'request.cancel':
+        if (chat.clarification != null &&
+            event.data['method'] == 'clarify' &&
+            event.data['id'] == chat.clarification?['request_id']) {
+          chat.clarification = null;
+          if (chat.status == ProfileTurnStatus.attention &&
+              chat.approval == null &&
+              chat.sensitivePrompt == null) {
+            chat.status = ProfileTurnStatus.running;
+          }
+        }
       case 'sudo.request':
       case 'secret.request':
       case 'vault.unlock.request':
@@ -5274,9 +5294,24 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat.approval = result['pending_approval'] is Map
         ? Map<String, dynamic>.from(result['pending_approval'])
         : null;
-    chat.clarification = result['pending_clarify'] is Map
-        ? Map<String, dynamic>.from(result['pending_clarify'])
-        : null;
+    chat.clarification = null;
+    for (final request in ProfileGateway.records(
+      result['open_requests'] ?? const [],
+    )) {
+      final params = request['params'];
+      final id = request['id'];
+      if (request['method'] == 'clarify' &&
+          params is Map &&
+          params['session_id'] == runtime &&
+          id is String &&
+          id.isNotEmpty) {
+        chat.clarification = {
+          ...Map<String, dynamic>.from(params),
+          'request_id': id,
+        };
+        break;
+      }
+    }
     if (result.containsKey('pending_sensitive')) {
       _hydrateSensitivePrompt(chat, result['pending_sensitive']);
     }

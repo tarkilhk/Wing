@@ -197,7 +197,7 @@ void main() {
 
     host.gateways['a']!.onEvent!(
       StreamEvent(
-        type: 'clarify.request',
+        type: 'clarify',
         sessionId: loaded.runtimeId,
         data: const {'request_id': 'q1', 'question': 'Continue?'},
       ),

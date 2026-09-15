@@ -72,7 +72,16 @@ void main() {
 
       controller.showList();
       host.pending = {
-        'pending_clarify': {'request_id': 'q', 'question': 'Which result?'},
+        'open_requests': [
+          {
+            'id': 'q',
+            'method': 'clarify',
+            'params': {
+              'session_id': chat.runtimeId,
+              'question': 'Which result?',
+            },
+          },
+        ],
       };
       await controller.openSession(chat.key);
       expect(chat.approval, isNull);
@@ -101,6 +110,46 @@ void main() {
       await controller.reconnect(chat.key.workspace);
       expect(chat.status, ProfileTurnStatus.running);
       expect(host.calls.where((c) => c.$2 == 'prompt.submit'), hasLength(1));
+    },
+  );
+
+  test(
+    'resume restores unanswered batch questions from open_requests',
+    () async {
+      final chat = await controller.createChat();
+      host.pending = {
+        'open_requests': [
+          {
+            'id': 'foreign',
+            'method': 'clarify',
+            'params': {
+              'session_id': 'other-runtime',
+              'question': 'Wrong owner',
+            },
+          },
+          {
+            'id': 'batch-request',
+            'method': 'clarify',
+            'params': {
+              'session_id': chat.runtimeId,
+              'questions': [
+                {'qid': 'q0', 'question': 'Which room?'},
+                {'qid': 'q1', 'question': 'What budget?'},
+              ],
+              'answers': {'q0': 'Bedroom'},
+            },
+          },
+        ],
+      };
+      await controller.reconnect(chat.key.workspace);
+      expect(chat.status, ProfileTurnStatus.attention);
+      expect(chat.pendingQuestion!['question'], 'What budget?');
+      await controller.clarify(chat, '250');
+      final reply = host.calls.last;
+      expect(reply.$2, 'clarify.lock');
+      expect(reply.$3['request_id'], 'batch-request');
+      expect(reply.$3['question_id'], 'q1');
+      expect(reply.$3['answer'], '250');
     },
   );
 

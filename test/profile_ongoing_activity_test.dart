@@ -133,7 +133,7 @@ void main() {
     tester,
   ) async {
     startChild();
-    host.event('a', 'clarify.request', {'question': 'Which folder?'});
+    host.event('a', 'clarify', {'question': 'Which folder?'});
     expect(
       controller.liveActivity.single.state,
       ProfileLiveActivityState.needsInput,

@@ -588,6 +588,13 @@ def gateway_event(event_type: str, session_id: str, payload: dict) -> str:
     )
 
 
+def server_request(method: str, request_id: str, session_id: str, params: dict) -> str:
+    return json.dumps({
+        "jsonrpc": "2.0", "id": request_id, "method": method,
+        "params": {"session_id": session_id, **params},
+    }, ensure_ascii=False)
+
+
 def decode_data_url(data_url: str) -> bytes:
     header, separator, encoded = data_url.partition(",")
     if not separator or not header.startswith("data:") or ";base64" not in header:
@@ -1060,11 +1067,11 @@ async def handle_rpc(
                         clarify_future,
                     )
                     await ws.send_str(
-                        gateway_event(
-                            "clarify.request",
+                        server_request(
+                            "clarify",
+                            clarify_request_id,
                             session_id,
                             {
-                                "request_id": clarify_request_id,
                                 "questions": [
                                     {
                                         "qid": "q1",
@@ -1111,7 +1118,6 @@ async def handle_rpc(
                     is_multi = "multi" in text.lower()
                     is_free_text = "free text" in text.lower()
                     clarify_payload: dict[str, object] = {
-                        "request_id": clarify_request_id,
                         "question": (
                             "Which mobile interface should Hermes use?"
                             if not is_free_text
@@ -1127,8 +1133,9 @@ async def handle_rpc(
                     if is_multi:
                         clarify_payload["multi_select"] = True
                     await ws.send_str(
-                        gateway_event(
-                            "clarify.request",
+                        server_request(
+                            "clarify",
+                            clarify_request_id,
                             session_id,
                             clarify_payload,
                         )
@@ -1357,10 +1364,15 @@ async def handle_rpc(
         await ws.send_str(rpc_result(request_id, {"status": "ok"}))
         return
 
-    if method == "clarify.respond":
-        clarify_request_id = str(params.get("request_id") or "")
-        question_id = str(params.get("question_id") or "")
-        answer = str(params.get("answer") or "")
+    if method in {"clarify.lock", "request.answer"}:
+        locking = method == "clarify.lock"
+        clarify_request_id = str(params.get("request_id" if locking else "id") or "")
+        question_id = str(params.get("question_id") or "") if locking else ""
+        result = params.get("result") or {}
+        answer = str((params.get("answer") if locking else result.get("answer")) or "")
+        if locking and not question_id:
+            await ws.send_str(rpc_error(request_id, "question_id required", code=4002))
+            return
         batch = pending_batch_clarifications.get(clarify_request_id)
         if batch is not None:
             _, qids, answers, clarify_future = batch
@@ -1418,7 +1430,7 @@ async def handle_rpc(
             )
             await ws.send_str(rpc_result(request_id, {"status": "ok"}))
             return
-        entry = pending_clarifications.get(clarify_request_id)
+        entry = None if locking else pending_clarifications.get(clarify_request_id)
         if entry is None:
             state.log(
                 {

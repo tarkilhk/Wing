@@ -25,7 +25,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
       );
-      host.event('a', 'clarify.request', {
+      host.event('a', 'clarify', {
         'request_id': 'request',
         'questions': [
           {
@@ -42,11 +42,11 @@ void main() {
       expect(find.text('Reply'), findsNothing);
       await tester.tap(find.text('Quick review'));
       await tester.pump();
-      expect(host.calls.where((c) => c.$2 == 'clarify.respond'), isEmpty);
+      expect(host.calls.where((c) => c.$2 == 'clarify.lock'), isEmpty);
       await tester.ensureVisible(find.byKey(const Key('clarify-continue')));
       await tester.tap(find.byKey(const Key('clarify-continue')));
       await tester.pump();
-      expect(host.calls.last.$2, 'clarify.respond');
+      expect(host.calls.last.$2, 'clarify.lock');
       expect(host.calls.last.$3['question_id'], 'q0');
       expect(host.calls.last.$3['request_id'], 'request');
       expect(host.calls.last.$3['answer'], 'Quick review');

@@ -1,14 +1,13 @@
-/// A request-ID keyed clarification prompt emitted by Hermes.
+/// A clarification prompt keyed by Hermes' server-owned JSON-RPC request ID.
 ///
-/// Stock Hermes gateways emit clarification prompts in two wire shapes:
+/// The `clarify` server request accepts these params, plus `session_id`:
 ///
-/// * Flat (single question, legacy):
-///   `{"request_id": ..., "question": ..., "choices": [...], "multi_select": ...}`
-/// * Batch (current Hermes agent builds, even for a single question):
-///   `{"request_id": ..., "questions": [{"qid": ..., "question": ..., "choices": [...], "multi_select": ...}]}`
+/// * Single: `{"question": ..., "choices": [...], "multi_select": ...}`
+/// * Batch: `{"questions": [{"qid": ..., "question": ..., "choices": [...], "multi_select": ...}]}`
+/// The socket attaches the frame's `id` as `request_id` for the UI.
 ///
 /// Batch responses must echo the per-question `qid` back as `question_id` so
-/// the gateway can lock each answer independently.
+/// `clarify.lock` can lock each answer independently.
 class GatewayClarifyRequest {
   final String requestId;
 
@@ -29,7 +28,7 @@ class GatewayClarifyRequest {
 
   bool get hasChoices => choices.isNotEmpty;
 
-  /// Parses a `clarify.request` event payload into zero or more prompts.
+  /// Parses a normalized `clarify` request into zero or more prompts.
   ///
   /// Batch payloads expand to one prompt per question (each carrying its own
   /// `questionId`); flat payloads expand to a single prompt with no
@@ -53,9 +52,7 @@ class GatewayClarifyRequest {
           GatewayClarifyRequest(
             requestId: requestId,
             questionId: qid,
-            question: _normalizeQuestion(
-              rawQuestion['question']?.toString(),
-            ),
+            question: _normalizeQuestion(rawQuestion['question']?.toString()),
             choices: choices,
             multiSelect:
                 rawQuestion['multi_select'] == true && choices.isNotEmpty,
@@ -69,7 +66,7 @@ class GatewayClarifyRequest {
     return flat == null ? const [] : [flat];
   }
 
-  /// Parses the legacy flat single-question payload.
+  /// Parses the single-question request params with their attached request ID.
   static GatewayClarifyRequest? fromEventData(Map<String, dynamic> data) {
     final requestId = data['request_id']?.toString().trim() ?? '';
     if (requestId.isEmpty) return null;
@@ -106,7 +103,6 @@ class GatewayClarifyRequest {
 
   /// Identity key for queue de-duplication: two prompts are the same prompt
   /// only when both the gateway request id and the per-question id agree.
-  String get identityKey => questionId == null
-      ? requestId
-      : '$requestId::$questionId';
+  String get identityKey =>
+      questionId == null ? requestId : '$requestId::$questionId';
 }

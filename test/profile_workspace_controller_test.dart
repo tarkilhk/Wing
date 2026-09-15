@@ -160,7 +160,9 @@ class Host {
           }
           throw JsonRpcError('session.resume', 'session not found', code: 4007);
         }
-        if (method == 'clarify.respond') return clarifyResult;
+        if (method == 'clarify.lock' || method == 'request.answer') {
+          return clarifyResult;
+        }
         if (method == 'projects.tree') {
           return {
             'projects': [
@@ -911,7 +913,12 @@ void main() {
       controller.clarify(chat, 'old answer', expectedRequest: old),
       throwsStateError,
     );
-    expect(host.calls.where((call) => call.$2 == 'clarify.respond'), isEmpty);
+    expect(
+      host.calls.where(
+        (call) => {'clarify.lock', 'request.answer'}.contains(call.$2),
+      ),
+      isEmpty,
+    );
     expect(chat.clarification!['request_id'], 'new');
   });
 
@@ -1661,7 +1668,9 @@ void main() {
       };
       expect(chat.pendingQuestion!['question'], 'Which marker?');
       await controller.clarify(chat, 'marker');
-      expect(host.calls.last.$3['request_id'], 'single');
+      expect(host.calls.last.$2, 'request.answer');
+      expect(host.calls.last.$3['id'], 'single');
+      expect(host.calls.last.$3['result'], {'answer': 'marker'});
       expect(host.calls.last.$3.containsKey('question_id'), isFalse);
       expect(chat.clarification, isNull);
     },
@@ -1679,8 +1688,41 @@ void main() {
       expect(chat.clarification, isNull);
       expect(chat.status, ProfileTurnStatus.completed);
       expect(chat.error, contains('expired'));
-      expect(host.calls.where((c) => c.$2 == 'clarify.respond'), hasLength(1));
+      expect(host.calls.where((c) => c.$2 == 'request.answer'), hasLength(1));
       expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
     },
   );
+
+  test('server cancellation removes only the matching clarification', () async {
+    final chat = await controller.createChat();
+    host.event('a', 'clarify', {
+      'request_id': 'current-request',
+      'questions': [
+        {'qid': 'q0', 'question': 'Which room?'},
+      ],
+    });
+    host.event('a', 'request.cancel', {
+      'id': 'old-request',
+      'method': 'clarify',
+      'reason': 'timeout',
+    });
+    expect(chat.pendingQuestion!['question'], 'Which room?');
+    host.event('a', 'request.cancel', {
+      'id': 'current-request',
+      'method': 'clarify',
+      'reason': 'timeout',
+    });
+    expect(chat.pendingQuestion, isNull);
+    expect(chat.status, ProfileTurnStatus.running);
+    expect(
+      host.calls.where(
+        (call) => {
+          'clarify.lock',
+          'request.answer',
+          'prompt.submit',
+        }.contains(call.$2),
+      ),
+      isEmpty,
+    );
+  });
 }

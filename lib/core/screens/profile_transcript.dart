@@ -260,158 +260,175 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       for (var i = 0; i < keys.length; i++) keys[i]: tail.length + i,
       const ValueKey('history-edge'): tail.length + rows.length,
     };
-    return Stack(
-      key: _viewport,
-      fit: StackFit.expand,
-      children: [
-        NotificationListener<ExpansionAnchorNotification>(
+    final transcript = NotificationListener<ExpansionAnchorNotification>(
+      onNotification: (event) {
+        ++_layoutGeneration;
+        _jumping = false;
+        _scroll.anchorExpansion(event.anchor);
+        return true;
+      },
+      child: NotificationListener<ScrollMetricsNotification>(
+        onNotification: (event) {
+          if (event.depth == 0) {
+            widget.chat.historyScrollOffset = event.metrics.pixels;
+            _updateJump();
+          }
+          return false;
+        },
+        child: NotificationListener<ScrollNotification>(
           onNotification: (event) {
-            ++_layoutGeneration;
-            _jumping = false;
-            _scroll.anchorExpansion(event.anchor);
-            return true;
+            if (event.depth != 0) return false;
+            if (event is ScrollStartNotification && event.dragDetails != null ||
+                event is ScrollUpdateNotification &&
+                    event.dragDetails != null) {
+              _gestureGeneration++;
+              _jumping = false;
+              _scroll.releaseExpansionAnchor();
+            }
+            widget.chat.historyScrollOffset = event.metrics.pixels;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _updateJump();
+            });
+            if ((event is ScrollUpdateNotification ||
+                    event is ScrollEndNotification) &&
+                event.metrics.extentAfter < 180 &&
+                event.metrics.pixels > 0 &&
+                !chat.historyLoading &&
+                chat.historyError == null) {
+              unawaited(widget.controller.loadOlderMessages(chat));
+            }
+            return false;
           },
-          child: NotificationListener<ScrollMetricsNotification>(
-            onNotification: (event) {
-              if (event.depth == 0) {
-                widget.chat.historyScrollOffset = event.metrics.pixels;
-                _updateJump();
-              }
-              return false;
-            },
-            child: NotificationListener<ScrollNotification>(
-              onNotification: (event) {
-                if (event.depth != 0) return false;
-                if (event is ScrollStartNotification &&
-                        event.dragDetails != null ||
-                    event is ScrollUpdateNotification &&
-                        event.dragDetails != null) {
-                  _gestureGeneration++;
-                  _jumping = false;
-                  _scroll.releaseExpansionAnchor();
+          child: LayoutBuilder(
+            builder: (_, constraints) => ListView.builder(
+              key: const ValueKey('profile-transcript'),
+              controller: _scroll,
+              reverse: true,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              findChildIndexCallback: (key) => indices[key],
+              itemCount: tail.length + rows.length + 1,
+              itemBuilder: (_, index) {
+                if (index < tail.length) return tail[index];
+                final rowIndex = index - tail.length;
+                if (rowIndex < rows.length) {
+                  final section = rows[rowIndex];
+                  final row = section.messages.last;
+                  return KeyedSubtree(
+                    key: keys[rowIndex],
+                    child: section.isActivity
+                        ? ProfileToolActivitySection(
+                            groups: section.groups,
+                            showLatestReview:
+                                rowIndex == 0 && chat.streaming.isEmpty,
+                            tabs: rowIndex == 0 && joinCurrentActivity
+                                ? widget.activityTabs
+                                : const [],
+                            thinking: rowIndex == 0 && joinCurrentActivity
+                                ? widget.activityThinking
+                                : null,
+                            liveToolCount: rowIndex == 0 && joinCurrentActivity
+                                ? widget.liveToolCount
+                                : 0,
+                            currentActivity:
+                                rowIndex == 0 && joinCurrentActivity
+                                ? widget.currentActivity
+                                : const [],
+                          )
+                        : widget.messageBuilder(row),
+                  );
                 }
-                widget.chat.historyScrollOffset = event.metrics.pixels;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _updateJump();
-                });
-                if ((event is ScrollUpdateNotification ||
-                        event is ScrollEndNotification) &&
-                    event.metrics.extentAfter < 180 &&
-                    event.metrics.pixels > 0 &&
-                    !chat.historyLoading &&
-                    chat.historyError == null) {
-                  unawaited(widget.controller.loadOlderMessages(chat));
-                }
-                return false;
+                return KeyedSubtree(
+                  key: const ValueKey('history-edge'),
+                  child: showWelcome
+                      ? ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: (constraints.maxHeight - 16).clamp(
+                              0.0,
+                              double.infinity,
+                            ),
+                          ),
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: HermesSpacing.xl,
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const PlayfulPortrait(size: 104),
+                                  const SizedBox(height: HermesSpacing.lg),
+                                  Text(
+                                    'Start a conversation',
+                                    textAlign: TextAlign.center,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
+                      : _historyEdge(chat),
+                );
               },
-              child: LayoutBuilder(
-                builder: (_, constraints) => ListView.builder(
-                  key: const ValueKey('profile-transcript'),
-                  controller: _scroll,
-                  reverse: true,
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                  findChildIndexCallback: (key) => indices[key],
-                  itemCount: tail.length + rows.length + 1,
-                  itemBuilder: (_, index) {
-                    if (index < tail.length) return tail[index];
-                    final rowIndex = index - tail.length;
-                    if (rowIndex < rows.length) {
-                      final section = rows[rowIndex];
-                      final row = section.messages.last;
-                      return KeyedSubtree(
-                        key: keys[rowIndex],
-                        child: section.isActivity
-                            ? ProfileToolActivitySection(
-                                groups: section.groups,
-                                showLatestReview:
-                                    rowIndex == 0 && chat.streaming.isEmpty,
-                                tabs: rowIndex == 0 && joinCurrentActivity
-                                    ? widget.activityTabs
-                                    : const [],
-                                thinking: rowIndex == 0 && joinCurrentActivity
-                                    ? widget.activityThinking
-                                    : null,
-                                liveToolCount:
-                                    rowIndex == 0 && joinCurrentActivity
-                                    ? widget.liveToolCount
-                                    : 0,
-                                currentActivity:
-                                    rowIndex == 0 && joinCurrentActivity
-                                    ? widget.currentActivity
-                                    : const [],
-                              )
-                            : widget.messageBuilder(row),
-                      );
-                    }
-                    return KeyedSubtree(
-                      key: const ValueKey('history-edge'),
-                      child: showWelcome
-                          ? ConstrainedBox(
-                              constraints: BoxConstraints(
-                                minHeight: (constraints.maxHeight - 16).clamp(
-                                  0.0,
-                                  double.infinity,
-                                ),
-                              ),
-                              child: Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: HermesSpacing.xl,
-                                  ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const PlayfulPortrait(size: 104),
-                                      const SizedBox(height: HermesSpacing.lg),
-                                      Text(
-                                        'Start a conversation',
-                                        textAlign: TextAlign.center,
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.titleMedium,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            )
-                          : _historyEdge(chat),
-                    );
-                  },
-                ),
-              ),
             ),
           ),
         ),
-        Positioned(
-          bottom: 8,
-          left: 0,
-          right: 0,
-          child: ValueListenableBuilder<String?>(
-            valueListenable: _jumpLabel,
-            builder: (_, label, _) => label != null
-                ? Center(
-                    child: FilledButton.tonalIcon(
-                      key: const ValueKey('jump-to-latest'),
-                      onPressed: _latest,
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(48, 36),
-                        tapTargetSize: MaterialTapTargetSize.padded,
-                      ),
-                      icon: Icon(
-                        label == 'Input needed'
-                            ? Icons.question_answer_outlined
-                            : Icons.arrow_downward,
-                        size: 18,
-                      ),
-                      label: Text(label),
-                    ),
-                  )
-                : const SizedBox.shrink(),
+      ),
+    );
+    final navigation = ValueListenableBuilder<String?>(
+      valueListenable: _jumpLabel,
+      builder: (_, label, _) => label != null
+          ? Center(
+              child: FilledButton.tonalIcon(
+                key: const ValueKey('jump-to-latest'),
+                onPressed: _latest,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(48, 36),
+                  tapTargetSize: MaterialTapTargetSize.padded,
+                ),
+                icon: Icon(
+                  label == 'Input needed'
+                      ? Icons.question_answer_outlined
+                      : Icons.arrow_downward,
+                  size: 18,
+                ),
+                label: Text(label),
+              ),
+            )
+          : const SizedBox.shrink(),
+    );
+    final needsInput =
+        chat.approval != null ||
+        chat.pendingQuestion != null ||
+        chat.sensitivePrompt != null;
+    return Column(
+      children: [
+        Expanded(
+          child: Stack(
+            key: _viewport,
+            fit: StackFit.expand,
+            children: [
+              transcript,
+              if (!needsInput)
+                Positioned(bottom: 8, left: 0, right: 0, child: navigation),
+            ],
           ),
         ),
+        // A floating navigation button can intercept taps on form actions.
+        // Keep the transcript mounted while input gains its own navigation row.
+        if (needsInput)
+          ValueListenableBuilder<String?>(
+            valueListenable: _jumpLabel,
+            builder: (_, label, _) => label == null
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: navigation,
+                  ),
+          ),
       ],
     );
   }
