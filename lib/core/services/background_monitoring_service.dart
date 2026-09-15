@@ -9,7 +9,7 @@ import 'turn_notification_service.dart';
 enum BackgroundMonitoringState {
   unsupported,
   disabled,
-  noConnections,
+  idle,
   permissionRequired,
   waitingForApp,
   active,
@@ -24,16 +24,16 @@ class BackgroundMonitoringService {
     'com.tarkilhk.wing/background_monitoring',
   );
   final SharedPreferences preferences;
-  final Future<bool> Function() hasConnections;
+  final bool Function() hasActiveChats;
   final Future<bool?> Function() notificationsEnabled;
   final bool supported;
-  final state = ValueNotifier(BackgroundMonitoringState.disabled);
+  final state = ValueNotifier(BackgroundMonitoringState.idle);
   Future<void> _tail = Future.value();
   bool _disposed = false;
 
   BackgroundMonitoringService({
     required this.preferences,
-    required this.hasConnections,
+    required this.hasActiveChats,
     required this.notificationsEnabled,
     bool? supported,
   }) : supported =
@@ -55,17 +55,17 @@ class BackgroundMonitoringService {
       final enabled =
           (preferences.getBool(completionNotificationsKey) ?? true) ||
           (preferences.getBool(attentionNotificationsKey) ?? true);
-      final connections = await hasConnections();
+      final activeChats = hasActiveChats();
       final allowed = await notificationsEnabled() != false;
       if (_disposed) return;
-      if (!enabled || !connections || !allowed) {
+      if (!enabled || !activeChats || !allowed) {
         await channel.invokeMethod<void>('stop');
         if (_disposed) return;
         state.value = !enabled
             ? BackgroundMonitoringState.disabled
-            : !connections
-            ? BackgroundMonitoringState.noConnections
-            : BackgroundMonitoringState.permissionRequired;
+            : !allowed
+            ? BackgroundMonitoringState.permissionRequired
+            : BackgroundMonitoringState.idle;
         return;
       }
       final result = await channel.invokeMapMethod<String, dynamic>('start');

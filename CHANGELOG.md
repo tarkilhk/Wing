@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Run background monitoring only while chats are working; keep question and reply notifications when the service stops.
 - Use the approved Hermes caduceus for permanent connection monitoring and the wing for each chat notification, with separate monitoring grouping and recorded identity-board artwork.
 - Show sent images as capped, cropped previews with full-image zoom, and other attachments as file cards with names and extensions.
 - Show chat names, connection/profile context and expandable message previews in alerts, with simple update, input-needed and stopped-work wording. Previews default on and can be disabled; private lock-screen visibility follows Android settings.

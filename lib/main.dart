@@ -282,8 +282,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     );
     _backgroundMonitoring = BackgroundMonitoringService(
       preferences: widget.connManager.prefs,
-      hasConnections: () async =>
-          (await widget.connManager.loadConnectionsWithSecrets()).isNotEmpty,
+      hasActiveChats: () => _profileControllers.hasActiveChats,
       notificationsEnabled: _profileNotifications.notificationsEnabled,
     );
     _notificationsReady =
@@ -343,6 +342,11 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
             },
           ),
         );
+    _profileControllers.addListener(_monitoringActivityChanged);
+  }
+
+  void _monitoringActivityChanged() {
+    unawaited(_syncBackgroundMonitoring());
   }
 
   void refreshPreferences() {
@@ -445,6 +449,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   void dispose() {
     _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
+    _profileControllers.removeListener(_monitoringActivityChanged);
     _backgroundMonitoring.dispose();
     _profileControllers.dispose();
     super.dispose();

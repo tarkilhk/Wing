@@ -1,6 +1,8 @@
 // Keep the factory's named argument public without exposing mutable state.
 // ignore_for_file: prefer_initializing_formals
 
+import 'package:flutter/foundation.dart';
+
 import 'connection_manager.dart';
 import 'profile_connection_identity.dart';
 import 'profile_workspace_controller.dart';
@@ -13,11 +15,22 @@ typedef ProfileControllerFactory =
 
 /// Retained turns keep their original clients. Editing a connection creates a
 /// separate owner; it never retargets sockets, drafts, or pending recovery.
-class ProfileWorkspaceRegistry {
+class ProfileWorkspaceRegistry extends ChangeNotifier {
   final ProfileConnectionIdentity identities;
   final ProfileControllerFactory _create;
   final _controllers = <String, ProfileWorkspaceController>{};
   bool _closed = false;
+  bool _hasActiveChats = false;
+
+  bool get hasActiveChats => _hasActiveChats;
+
+  void _activityChanged() {
+    if (_closed) return;
+    final active = _controllers.values.any((owner) => owner.hasActiveChats);
+    if (active == _hasActiveChats) return;
+    _hasActiveChats = active;
+    notifyListeners();
+  }
 
   ProfileWorkspaceRegistry({
     required this.identities,
@@ -29,10 +42,13 @@ class ProfileWorkspaceRegistry {
   ) async {
     final identity = await identities.resolve(connection);
     if (_closed) throw StateError('Workspace registry is closed');
-    return _controllers.putIfAbsent(
-      identity,
-      () => _create(connection, identity),
-    );
+    final controller = _controllers.putIfAbsent(identity, () {
+      final owner = _create(connection, identity);
+      owner.addListener(_activityChanged);
+      return owner;
+    });
+    _activityChanged();
+    return controller;
   }
 
   Future<ProfileWorkspaceController> forSession(
@@ -46,11 +62,15 @@ class ProfileWorkspaceRegistry {
     return controller;
   }
 
+  @override
   void dispose() {
+    if (_closed) return;
     _closed = true;
     for (final controller in _controllers.values) {
+      controller.removeListener(_activityChanged);
       controller.dispose();
     }
     _controllers.clear();
+    super.dispose();
   }
 }

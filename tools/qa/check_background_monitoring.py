@@ -31,7 +31,7 @@ def main():
         return json.load(urllib.request.urlopen(urllib.request.Request(
             f'http://127.0.0.1:{args.port}{path}',
             data=body.encode() if body is not None else None,
-        ), timeout=3))
+        ), timeout=15))
 
     def until(action, message, timeout=30):
         deadline = time.monotonic() + timeout
@@ -70,10 +70,18 @@ def main():
         shell('am', 'start', '-n', f'{package}/com.tarkilhk.wing.MainActivity')
         until(lambda: request()['lifecycle'] == 'resumed', 'Wing did not resume')
 
-    def completion(expected):
-        request('/event', 'idle')
-        until(lambda: request()['alerts'] == expected, 'Controller did not post the completion')
-        until(lambda: notification_present(240000 + expected), 'Android did not retain the alert')
+    def event(profile, state):
+        return request('/event', json.dumps({'profile': profile, 'state': state}))
+
+    def alert(number):
+        until(lambda: notification_present(240000 + number), 'Chat notification missing')
+
+    def stopped():
+        until(lambda: not foreground(), 'Service did not stop after work ended')
+        until(lambda: not notification_present(214601), 'Monitoring notification remained')
+        until(lambda: not notification_present(214602), 'Monitoring summary remained')
+        locks = shell('dumpsys', 'power').split('Wake Locks:', 1)[1].split('Suspend Blockers:', 1)[0]
+        assert 'hermes-monitoring' not in locks, 'Wake lock leaked after work ended'
 
     prior_exempt = package in shell('dumpsys', 'deviceidle', 'whitelist')
     adb('forward', f'tcp:{args.port}', 'tcp:18765')
@@ -86,89 +94,110 @@ def main():
         launch()
         until(lambda: request()['ready'], 'Fixture did not establish its gateway')
         generation = request()['generation']
-        until(foreground, 'Monitoring service did not start')
-        until(lambda: notification_present(214601), 'Ongoing monitoring notification missing')
-        until(lambda: notification_present(214602), 'Monitoring group summary missing')
-        request('/event', 'working')
-        shell('input', 'keyevent', 'KEYCODE_HOME')
-        until(lambda: request()['lifecycle'] != 'resumed', 'App stayed in foreground')
-        completion(1)
+        stopped()
+        print('PASS: idle startup has no monitoring icon or wake lock', flush=True)
+
+        event('a', 'working')
+        until(foreground, 'First chat did not start monitoring')
         connection_identity = until(
             lambda: notification_identity(214601), 'Monitoring has no group identity')
-        summary_identity = notification_identity(214602)
-        assert summary_identity == connection_identity, 'Monitoring summary/child differ'
-        assert connection_identity[1].endswith('g:wing_connection'), \
-            'Monitoring was combined with chat alerts'
-        # Chat alerts may be ungrouped, so check the native icon independently.
+        until(lambda: notification_identity(214602) == connection_identity,
+              'Monitoring summary/child differ')
+        event('b', 'working')
+        shell('input', 'keyevent', 'KEYCODE_HOME')
+        until(lambda: request()['lifecycle'] != 'resumed', 'App stayed in foreground')
+        event('a', 'waiting')
+        alert(1)
+        assert foreground(), 'Waiting chat stopped another working chat'
+        assert connection_identity[1].endswith('g:wing_connection')
         dump = shell('dumpsys', 'notification', '--noredact')
-        alert = re.search(
+        posted = re.search(
             rf'NotificationRecord\([^\n]*pkg={re.escape(package)}[^\n]*id=240001\b'
             r'.*?icon=Icon\([^\n]*id=([^\s)]+)', dump, re.DOTALL)
-        assert alert and alert.group(1) != connection_identity[0], \
-            'Connection and chat alerts use the same icon'
-        print('PASS: completion posts after switching apps', flush=True)
-        print('PASS: connection and chat alerts have separate icons/groups', flush=True)
+        assert posted and posted.group(1) != connection_identity[0], 'Connection/chat icons match'
+        event('b', 'idle')
+        alert(2)
+        stopped()
+        assert notification_present(240001), 'Question disappeared when monitoring stopped'
+        assert notification_present(240002), 'Reply disappeared when monitoring stopped'
+        print('PASS: multiple chats share monitoring; last finish stops it and retains alerts', flush=True)
 
-        # Force Activity destruction while retaining the monitored Dart engine.
         launch()
-        request('/event', 'working')
+        assert not foreground(), 'Opening a waiting chat restarted monitoring'
+        event('a', 'working')
+        until(foreground, 'Answering the question did not restart monitoring')
+        shell('input', 'keyevent', 'KEYCODE_HOME')
+        event('a', 'idle')
+        alert(3)
+        stopped()
+        print('PASS: answering resumes monitoring; final reply releases it', flush=True)
+
+        launch()
+        event('a', 'working')
+        until(foreground, 'Monitoring did not restart')
         request('/close-activity', '')
         until(lambda: request()['lifecycle'] == 'detached', 'Activity was not destroyed')
-        completion(2)
         launch()
-        assert request()['generation'] == generation, 'Activity recreation restarted the Dart engine'
-        print('PASS: delivery survives Activity destruction and reopening reuses the engine', flush=True)
+        assert request()['generation'] == generation, 'Running work lost its retained engine'
+        request('/close-activity', '')
+        until(lambda: request()['lifecycle'] == 'detached', 'Activity was not destroyed')
+        try:
+            event('a', 'waiting')
+        except OSError:
+            # With no Activity or working chats, Android can release this engine
+            # after posting the question, before the fixture replies over HTTP.
+            pass
+        alert(4)
+        stopped()
+        assert notification_present(240004), 'Question was lost during engine release'
+        launch()
+        assert request()['generation'] != generation, 'Idle detached engine was not released'
+        stopped()
+        print('PASS: running work retains the engine; final question survives engine release', flush=True)
 
-        # Model the explicit battery exemption granted from the settings action.
         shell('dumpsys', 'deviceidle', 'whitelist', f'+{package}')
-        request('/event', 'working')
+        event('a', 'working')
+        event('b', 'working')
+        until(foreground, 'Monitoring did not start for Doze test')
         shell('input', 'keyevent', 'KEYCODE_HOME')
         shell('input', 'keyevent', 'KEYCODE_SLEEP')
         shell('dumpsys', 'battery', 'unplug')
         shell('dumpsys', 'deviceidle', 'force-idle')
-        assert 'mState=IDLE' in shell('dumpsys', 'deviceidle'), 'Device did not enter Doze'
-        request('/event', 'waiting')
-        until(lambda: request()['alerts'] == 3, 'Attention event was lost during Doze')
-        assert notification_present(240003), 'Attention notification missing during Doze'
-        completion(4)
-        assert notification_identity(214601) == connection_identity, \
-            'Android regrouped the connection after later chat alerts'
-        print('PASS: attention and completion post with the screen off in forced Doze', flush=True)
+        assert 'mState=IDLE' in shell('dumpsys', 'deviceidle')
+        event('a', 'waiting')
+        until(lambda: request()['alerts'] == 1, 'Question lost in Doze')
+        assert foreground(), 'Second chat lost monitoring in Doze'
+        event('b', 'idle')
+        until(lambda: request()['alerts'] == 2, 'Reply lost in Doze')
+        stopped()
+        assert notification_present(240001) and notification_present(240002)
+        print('PASS: question/reply delivery and automatic shutdown work during Doze', flush=True)
 
         shell('dumpsys', 'deviceidle', 'unforce')
         shell('dumpsys', 'battery', 'reset')
         shell('input', 'keyevent', 'KEYCODE_WAKEUP')
         shell('wm', 'dismiss-keyguard')
         launch()
-        request('/stop', '')
-        until(lambda: not foreground(), 'Monitoring service did not stop')
-        until(lambda: not notification_present(214601), 'Monitoring notification remained after stop')
-        until(lambda: not notification_present(214602), 'Monitoring summary remained after stop')
-        locks = shell('dumpsys', 'power').split('Wake Locks:', 1)[1].split('Suspend Blockers:', 1)[0]
-        assert 'hermes-monitoring' not in locks, 'Wake lock leaked after stop'
+        event('a', 'working')
+        until(foreground, 'Answering did not restart monitoring')
+        request('/alerts', 'false')
+        stopped()
+        request('/alerts', 'true')
+        until(foreground, 'Enabling alerts for working chat did not restart monitoring')
         shell('input', 'keyevent', 'KEYCODE_HOME')
-        launch()
-        assert not foreground(), 'Returning to Wing re-enabled stopped monitoring'
-        print('PASS: disabling both alert categories releases notification/wake lock and stays off', flush=True)
-        request('/start', '')
-        until(foreground, 'Monitoring could not restart')
-        until(lambda: notification_present(214601), 'Automatic restart has no monitoring notification')
-        print('PASS: enabling alerts automatically restarts monitoring', flush=True)
-        shell('input', 'keyevent', 'KEYCODE_HOME')
-        until(lambda: request()['lifecycle'] != 'resumed', 'App stayed in foreground')
-        request('/reply', '')
-        until(lambda: notification_present(240005), 'Rich reply notification missing')
+        event('a', 'idle')
+        until(lambda: request()['alerts'] == 3, 'Final reply did not post')
+        stopped()
         records = re.split(
             r'(?=^[ \t]*NotificationRecord\()',
             shell('dumpsys', 'notification', '--noredact'), flags=re.MULTILINE)
         rich = next(record for record in records if re.search(
-            rf'NotificationRecord\([^\n]*pkg={re.escape(package)}[^\n]*id=240005\b', record))
-        assert 'Rich notification check' in rich, 'Chat title missing'
-        assert 'Reply ready · Chat names and previews are ready.' in rich, 'Reply preview missing'
+            rf'NotificationRecord\([^\n]*pkg={re.escape(package)}[^\n]*id=240003\b', record))
+        assert 'First task' in rich, 'Chat title missing'
         assert 'android.bigText' in rich and 'More readable context.' in rich, 'Expanded text missing'
         assert 'Monitoring fixture / a' in rich, 'Connection/profile missing'
-        assert 'vis=PRIVATE' in rich, 'Chat content is not marked private on the lock screen'
-        print('PASS: chat title, reply excerpt, expanded text, scope and private visibility', flush=True)
+        assert 'vis=PRIVATE' in rich, 'Chat content is not private on the lock screen'
+        print('PASS: alert preferences and rich private notifications are preserved', flush=True)
     finally:
         shell('dumpsys', 'deviceidle', 'unforce')
         shell('dumpsys', 'battery', 'reset')

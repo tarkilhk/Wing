@@ -332,6 +332,33 @@ class ProfileWorkspaceController extends ChangeNotifier {
   int activityAvailableProfiles = 0;
   int _activityGeneration = 0;
   Map<String, _NotificationSession>? _notificationSnapshot;
+  Map<String, ProfileSessionKey> _backgroundChats = const {};
+  int _pendingNotifications = 0;
+  int _pendingCompletions = 0;
+
+  /// Retain live work until its final state and notification have been saved.
+  /// Failed snapshot reads do not prove previously active chats have finished.
+  bool get hasActiveChats =>
+      _pendingNotifications > 0 ||
+      _pendingCompletions > 0 ||
+      _resources.values.any(
+        (resource) => resource.chats.values.any((chat) {
+          final waiting =
+              chat.status == ProfileTurnStatus.attention ||
+              chat.status == ProfileTurnStatus.reconnecting &&
+                  (chat.approval != null ||
+                      chat.clarification != null ||
+                      chat.sensitivePrompt != null);
+          return (!waiting && (chat.busy || chat.commandRunning)) ||
+              chat.queueDraining ||
+              chat.subagents.any((task) => !task.isTerminal);
+        }),
+      ) ||
+      _backgroundChats.entries.any(
+        (entry) =>
+            !_hasLoadedNotificationChat(entry.key, entry.value.sessionId),
+      );
+
   Future<void>? _notificationReconciliation;
   bool _notificationReconcileAgain = false;
   SessionVisibility _sessionVisibility = SessionVisibility.chats;
@@ -4942,6 +4969,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileChat chat,
     Map<String, dynamic> completion,
   ) async {
+    _pendingCompletions++;
+    try {
+      await _settleTurn(resource, chat, completion);
+    } finally {
+      _pendingCompletions--;
+      _changed();
+    }
+  }
+
+  Future<void> _settleTurn(
+    ProfileWorkspaceData resource,
+    ProfileChat chat,
+    Map<String, dynamic> completion,
+  ) async {
     final turnGeneration = chat._turnGeneration;
     bool isCurrentTurn() => chat._turnGeneration == turnGeneration;
     chat.status = ProfileTurnStatus.settling;
@@ -5064,7 +5105,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (visible && current?.chat == chat) return;
     final callback = onAttention;
     if (callback != null) {
-      unawaited(callback(notification).catchError((Object _) {}));
+      _pendingNotifications++;
+      _changed();
+      unawaited(
+        Future<void>.sync(
+          () => callback(notification),
+        ).catchError((Object _) {}).whenComplete(() {
+          _pendingNotifications--;
+          _changed();
+        }),
+      );
     }
   }
 
@@ -5099,6 +5149,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         throw const FormatException('Missing active sessions');
       }
       final rows = <Map<String, dynamic>>[];
+      final workingRuntimes = <String>{};
       for (final row in ProfileGateway.records(response['sessions'])) {
         final runtimeId = row['id'];
         final sessionId = row['session_key'];
@@ -5113,6 +5164,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
             (lastActive != null && lastActive is! num) ||
             (sideTasks != null && (sideTasks is! int || sideTasks < 0))) {
           throw const FormatException('Invalid active session');
+        }
+        if (status == 'working' ||
+            status == 'starting' ||
+            (sideTasks is int && sideTasks > 0)) {
+          workingRuntimes.add(runtimeId);
         }
         if (_hasLoadedNotificationChat(runtimeId, sessionId)) continue;
         final tracked = _notificationSnapshot?[runtimeId];
@@ -5188,6 +5244,21 @@ class ProfileWorkspaceController extends ChangeNotifier {
           if (entry.value.activity != _NotificationActivity.idle)
             entry.key: entry.value,
       };
+      _backgroundChats = {
+        for (final entry in _notificationSnapshot!.entries)
+          if (workingRuntimes.contains(entry.key))
+            entry.key: entry.value.chat.key,
+        // An unknown state is not evidence that an unfinished chat is done.
+        for (final row in ProfileGateway.records(response['sessions']))
+          if (!{
+                'waiting',
+                'starting',
+                'working',
+                'idle',
+              }.contains(row['status']) &&
+              _backgroundChats[row['id']]?.sessionId == row['session_key'])
+            row['id'] as String: _backgroundChats[row['id']]!,
+      };
       if (previous == null) return;
       for (final entry in next.entries) {
         final before = previous[entry.key];
@@ -5211,6 +5282,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
     } catch (_) {
       // A failed read cannot prove a transition. The next success is a baseline.
       _notificationSnapshot = null;
+    } finally {
+      _changed();
     }
   }
 
@@ -5278,6 +5351,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         if (result != null) await _drainQueuedPrompts(chat);
       }
       await _journal();
+      await _scheduleNotificationReconciliation(resource);
       resource.reconnectAttempt = 0;
       resource.reconnectError = null;
     } catch (_) {

@@ -11,7 +11,7 @@ void main() {
   late SharedPreferences preferences;
   late BackgroundMonitoringService service;
   late List<String> calls;
-  late bool connected;
+  late bool activeChats;
   late bool allowed;
   late bool unrestricted;
   late bool running;
@@ -22,7 +22,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     preferences = await SharedPreferences.getInstance();
     calls = [];
-    connected = allowed = unrestricted = running = true;
+    activeChats = allowed = unrestricted = running = true;
     startGate = null;
     failure = null;
     binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -39,7 +39,7 @@ void main() {
     );
     service = BackgroundMonitoringService(
       preferences: preferences,
-      hasConnections: () async => connected,
+      hasActiveChats: () => activeChats,
       notificationsEnabled: () async => allowed,
       supported: true,
     );
@@ -52,6 +52,22 @@ void main() {
       null,
     );
   });
+
+  test(
+    'idle by default, starts with work, and stops after the last chat',
+    () async {
+      activeChats = false;
+      await service.sync();
+      expect(service.state.value, BackgroundMonitoringState.idle);
+      activeChats = true;
+      await service.sync();
+      expect(service.state.value, BackgroundMonitoringState.active);
+      activeChats = false;
+      await service.sync();
+      expect(service.state.value, BackgroundMonitoringState.idle);
+      expect(calls, ['stop', 'start', 'stop']);
+    },
+  );
 
   test('starts direct monitoring without Firebase configuration', () async {
     await service.sync();
@@ -76,16 +92,16 @@ void main() {
   );
 
   test(
-    'permission revocation and last connection removal stop monitoring',
+    'permission revocation and last active chat finishing stop monitoring',
     () async {
       await service.sync();
       allowed = false;
       await service.sync();
       expect(service.state.value, BackgroundMonitoringState.permissionRequired);
       allowed = true;
-      connected = false;
+      activeChats = false;
       await service.sync();
-      expect(service.state.value, BackgroundMonitoringState.noConnections);
+      expect(service.state.value, BackgroundMonitoringState.idle);
       expect(calls, ['start', 'stop', 'stop']);
     },
   );

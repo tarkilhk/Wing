@@ -19,7 +19,7 @@ import 'package:wing/main.dart';
 
 import '../test/profile_connection_identity_test.dart' show MemoryIdentityStore;
 import '../test/profile_notification_coverage_test.dart'
-    show NotificationCoverageHost, row;
+    show NotificationCoverageHost;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -72,51 +72,60 @@ void main() async {
       },
     ),
   );
+  final controller = await registry.forConnection(connection);
+  await controller.initialize();
+  final chats = <String, ProfileChat>{};
+  for (final profile in ['a', 'b']) {
+    await controller.switchProfile(profile);
+    chats[profile] = await controller.createChat()
+      ..title = profile == 'a' ? 'First task' : 'Second task';
+  }
+  await controller.switchProfile('a');
   runApp(WingApp(key: app, connManager: manager, profileControllers: registry));
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 18765);
   await for (final request in server) {
     try {
       if (request.method == 'POST' && request.uri.path == '/event') {
-        final status = await utf8.decoder.bind(request).join();
-        host.active = [
-          row(
-            'outside-runtime',
-            'outside',
-            status,
-            DateTime.now().millisecondsSinceEpoch / 1000,
-          ),
-        ];
-        host.changed();
-        await Future<void>.delayed(const Duration(milliseconds: 300));
-      }
-      if (request.method == 'POST' && request.uri.path == '/reply') {
-        final controller = await registry.forConnection(connection);
-        final chat = await controller.createChat();
-        chat.title = 'Rich notification check';
-        chat.status = ProfileTurnStatus.running;
-        host.gateways['a']!.onEvent!(
-          StreamEvent(
-            type: 'message.complete',
-            sessionId: chat.runtimeId,
-            data: {
-              'text':
-                  '**Chat names and previews are ready.** ${'More readable context. ' * 20}',
-            },
-          ),
-        );
+        final event =
+            jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+        final profile = event['profile'] as String;
+        final chat = chats[profile]!;
+        final state = event['state'] as String;
+        host.workingProfiles.remove(profile);
+        host.waitingProfiles.remove(profile);
+        if (state == 'working') host.workingProfiles.add(profile);
+        if (state == 'waiting') host.waitingProfiles.add(profile);
+        if (state == 'working') {
+          if (chat.pendingQuestion != null) {
+            await controller.clarify(chat, 'Continue');
+          } else {
+            chat.draft = 'Native fixture work';
+            await controller.send(chat);
+          }
+        } else {
+          host.gateways[profile]!.onEvent!(
+            StreamEvent(
+              type: state == 'waiting' ? 'clarify' : 'message.complete',
+              sessionId: chat.runtimeId,
+              data: state == 'waiting'
+                  ? {'request_id': 'question-$profile', 'question': 'Continue?'}
+                  : {
+                      'text':
+                          '**Reply ready.** ${'More readable context. ' * 20}',
+                    },
+            ),
+          );
+        }
         await Future<void>.delayed(const Duration(milliseconds: 300));
       }
       if (request.method == 'POST' && request.uri.path == '/close-activity') {
         await SystemNavigator.pop();
       }
-      if (request.method == 'POST' && request.uri.path == '/stop') {
-        await preferences.setBool(completionNotificationsKey, false);
-        await preferences.setBool(attentionNotificationsKey, false);
-        app.currentState!.refreshPreferences();
-      }
-      if (request.method == 'POST' && request.uri.path == '/start') {
-        await preferences.setBool(completionNotificationsKey, true);
-        await preferences.setBool(attentionNotificationsKey, true);
+      if (request.method == 'POST' && request.uri.path == '/alerts') {
+        final enabled =
+            jsonDecode(await utf8.decoder.bind(request).join()) as bool;
+        await preferences.setBool(completionNotificationsKey, enabled);
+        await preferences.setBool(attentionNotificationsKey, enabled);
         app.currentState!.refreshPreferences();
       }
       await preferences.reload();
@@ -126,6 +135,7 @@ void main() async {
           'generation': generation,
           'ready': host.gateways.containsKey('a'),
           'alerts': alerts,
+          'active': registry.hasActiveChats,
           'lifecycle': WidgetsBinding.instance.lifecycleState?.name,
           'enabled':
               (preferences.getBool(completionNotificationsKey) ?? true) ||

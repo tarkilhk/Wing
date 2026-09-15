@@ -19,6 +19,8 @@ class NotificationCoverageHost {
   List<Map<String, dynamic>> active = [];
   int activeReads = 0;
   bool activeFails = false;
+  final workingProfiles = <String>{};
+  final waitingProfiles = <String>{};
   final failedSearchProfiles = <String>{};
 
   Future<ProfileDiscovery> discover() async => ProfileDiscovery(
@@ -87,7 +89,21 @@ class NotificationCoverageHost {
               'session_id': '$sessionId-runtime',
               'stored_session_id': sessionId,
               'session_key': sessionId,
-              'running': false,
+              'running':
+                  method == 'session.resume' &&
+                  workingProfiles.contains(scope.profileName),
+              'open_requests': [
+                if (method == 'session.resume' &&
+                    waitingProfiles.contains(scope.profileName))
+                  {
+                    'id': 'question-${scope.profileName}',
+                    'method': 'clarify',
+                    'params': {
+                      'session_id': '$sessionId-runtime',
+                      'question': 'Continue?',
+                    },
+                  },
+              ],
               'info': {'profile_name': scope.profileName},
             };
           }
