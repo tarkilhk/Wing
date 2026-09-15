@@ -150,7 +150,7 @@ void main() {
 
     expect(
       MediaQuery.textScalerOf(
-        tester.element(find.text('Connect to Hermes')),
+        tester.element(find.text('Your agent, with you')),
       ).scale(10),
       16,
     );
@@ -162,7 +162,7 @@ void main() {
 
     expect(
       MediaQuery.textScalerOf(
-        tester.element(find.text('Connect to Hermes')),
+        tester.element(find.text('Your agent, with you')),
       ).scale(10),
       20.8,
     );

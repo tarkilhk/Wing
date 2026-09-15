@@ -333,7 +333,7 @@ void main() {
     final manager = await buildManager();
     await pumpHome(tester, manager);
 
-    expect(find.text('Connect to Hermes'), findsOneWidget);
+    expect(find.text('Your agent, with you'), findsOneWidget);
 
     // Simulate what a successful import does to storage, then let the screen
     // refresh the way the import flow asks it to.
@@ -352,7 +352,7 @@ void main() {
     state.refreshConnections();
     await tester.pumpAndSettle();
 
-    expect(find.text('Connect to Hermes'), findsNothing);
+    expect(find.text('Your agent, with you'), findsNothing);
     expect(find.text('Miniserver'), findsOneWidget);
   });
 
@@ -377,7 +377,7 @@ void main() {
     (tester) async {
       final manager = await buildManager();
       await pumpHome(tester, manager);
-      await tester.tap(find.text('Add connection'));
+      await tester.tap(find.text('Connect your agent'));
       await tester.pumpAndSettle();
       await tester.enterText(
         find.widgetWithText(TextField, 'Host'),
@@ -438,7 +438,7 @@ void main() {
     final manager = await buildManager();
     await pumpHome(tester, manager);
 
-    await tester.tap(find.text('Add connection'));
+    await tester.tap(find.text('Connect your agent'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Custom proxy and dashboard details'));
