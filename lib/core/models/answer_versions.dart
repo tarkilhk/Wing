@@ -112,7 +112,20 @@ bool isHiddenAnswerMessage(Map<String, dynamic> message) =>
     (message['role'] == 'user' &&
         (message['_todo_snapshot_synthetic'] == true ||
             answerMessageText(message).trimLeft().startsWith('[System:') ||
-            _isTaskSnapshot(answerMessageDisplayText(message))));
+            _isTaskSnapshot(answerMessageDisplayText(message)) ||
+            _isContinuationReminder(answerMessageDisplayText(message))));
+
+/// A compaction reminder repeats the active request for the agent. Recognize
+/// the complete standalone envelope, leaving quoted or partial markers visible.
+bool _isContinuationReminder(String text) {
+  const header =
+      '[STILL IN PROGRESS — this is the active request, restated after the '
+      'compaction boundary because it was not finished yet. Continue it; '
+      'do not start over.]';
+  text = text.trim().replaceAll('\r\n', '\n');
+  return text.startsWith('$header\n') &&
+      text.substring(header.length + 1).trim().isNotEmpty;
+}
 
 /// TodoStore.format_for_injection uses this stable header for standalone
 /// post-compression snapshots. Older history omits the synthetic flag. Match

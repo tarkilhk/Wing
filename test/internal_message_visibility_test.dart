@@ -40,6 +40,12 @@ const _agentEnvelope =
     'Message from 🤖 Hermes (@hermes): Private agent instructions';
 const _skillEnvelope =
     '[IMPORTANT: The user has invoked the "work" skill, indicating they want you to follow its instructions.\nThe full skill content is loaded below.]\nPrivate skill body\nThe user has provided the following instruction alongside the skill invocation: fix the leak\n\n[Runtime note: private]';
+const _continuationHeader =
+    '[STILL IN PROGRESS — this is the active request, restated after the '
+    'compaction boundary because it was not finished yet. Continue it; '
+    'do not start over.]';
+const _continuationEnvelope =
+    '$_continuationHeader\nPlease diagnose the browser/vault failure on this VM.';
 
 class _NoticeHistory extends ProfileHistoryFixture {
   @override
@@ -59,10 +65,85 @@ class _NoticeHistory extends ProfileHistoryFixture {
     {'id': 8, 'role': 'user', 'content': _skillEnvelope},
     {'id': 9, 'role': 'user', 'content': processBatchEnvelope},
     {'id': 10, 'role': 'user', 'content': snapshot},
+    {'id': 11, 'role': 'user', 'content': _continuationEnvelope},
   ];
 }
 
 void main() {
+  test('continuation reminders are hidden across message encodings', () {
+    for (final fields in <Map<String, dynamic>>[
+      {'content': _continuationEnvelope},
+      {'text': _continuationEnvelope},
+      {'content': _continuationEnvelope.replaceAll('\n', '\r\n')},
+      {'content': '  $_continuationEnvelope\n'},
+      {'content': 'wire payload', 'display_content': _continuationEnvelope},
+      {
+        'content': [
+          {'type': 'text', 'text': _continuationEnvelope},
+        ],
+      },
+    ]) {
+      final row = {'role': 'user', ...fields};
+      expect(isHiddenAnswerMessage(row), isTrue, reason: '$fields');
+      expect(isHumanAnswerPrompt(row), isFalse);
+      expect(isHiddenAnswerMessage(answerHistoryRows([row]).single), isTrue);
+      // Filtering must not change the stored history's rewind ordinals.
+      expect(isAnswerPrompt(row), isTrue);
+    }
+  });
+
+  test('quoted and ordinary progress messages remain visible', () {
+    for (final text in [
+      'Explain this:\n$_continuationEnvelope',
+      '```\n$_continuationEnvelope\n```',
+      '> $_continuationEnvelope',
+      '[STILL IN PROGRESS] Please continue my request.',
+      '[STILL IN PROGRESS — this is the active request',
+      _continuationHeader,
+    ]) {
+      final row = {'role': 'user', 'content': text};
+      expect(isHiddenAnswerMessage(row), isFalse, reason: text);
+      expect(isHumanAnswerPrompt(row), isTrue);
+      expect(answerMessageDisplayText(row), text);
+    }
+    expect(
+      isHiddenAnswerMessage({
+        'role': 'assistant',
+        'content': _continuationEnvelope,
+      }),
+      isFalse,
+    );
+    expect(
+      isHiddenAnswerMessage({
+        'role': 'user',
+        'content': _continuationEnvelope,
+        'display_content': 'Server-projected user text',
+      }),
+      isFalse,
+    );
+  });
+
+  testWidgets('continuation reminder never renders a chat bubble', (
+    tester,
+  ) async {
+    const row = {'role': 'user', 'content': _continuationEnvelope};
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: ProfileMessage(message: row)),
+      ),
+    );
+    expect(find.textContaining(_continuationHeader), findsNothing);
+    expect(find.byTooltip('Copy message'), findsNothing);
+    expect(answerMessageText(row), _continuationEnvelope);
+    final sections = groupTranscriptSections([
+      {'id': 1, 'role': 'tool', 'content': 'first'},
+      row,
+      {'id': 2, 'role': 'tool', 'content': 'second'},
+    ]);
+    expect(sections, hasLength(1));
+    expect(sections.single.messages.map((row) => row['id']), [1, 2]);
+  });
+
   for (final width in [360.0, 900.0]) {
     testWidgets('producer batch renders one compact notice at $width', (
       tester,
@@ -186,6 +267,8 @@ void main() {
         expect(find.byKey(const ValueKey('edit-message-9')), findsNothing);
         expect(find.textContaining(snapshotHeader), findsNothing);
         expect(find.byKey(const ValueKey('edit-message-10')), findsNothing);
+        expect(find.textContaining(_continuationHeader), findsNothing);
+        expect(find.byKey(const ValueKey('edit-message-11')), findsNothing);
         // Retain server history and IDs for paging/rewind; filter only the view.
         expect(chat.messages.map((row) => row['id']), [
           1,
@@ -198,6 +281,7 @@ void main() {
           8,
           9,
           10,
+          11,
         ]);
         await controller.refreshHistory(chat);
         await tester.pumpAndSettle();
@@ -229,6 +313,10 @@ void main() {
     await tester.enterText(find.byType(TextField), 'Quiesce processing');
     await tester.pump();
     expect(find.textContaining(snapshotHeader), findsNothing);
+    expect(find.text('View in chat'), findsNothing);
+    await tester.enterText(find.byType(TextField), 'browser/vault failure');
+    await tester.pump();
+    expect(find.textContaining(_continuationHeader), findsNothing);
     expect(find.text('View in chat'), findsNothing);
     await tester.enterText(find.byType(TextField), 'First useful result');
     await tester.pump();

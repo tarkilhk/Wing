@@ -14,6 +14,8 @@ See [Navigation and projects](APP_SHELL.md) for search limits and ownership rule
 
 Replies stream into a readable transcript with selectable code, copying, tables, expandable tools, reasoning and server todo progress. A context ring beside the model selector shows server-reported or estimated usage. Model selection has search and collapsible technical-provider groups, with supported reasoning choices.
 
+Internal task snapshots and compaction continuation reminders are filtered out of chat and Find in chat. Saved history stays intact, and quoted technical messages remain visible.
+
 Unsent text and staged files survive navigation and restart. Tap Send while idle. During work, the normal action defaults to Steer and can be changed to Queue or Stop in App settings. Hold the arrow, slide to an available action and release for a one-time alternative. Queue supports text/files; Steer is text-only. Hold a queued row to edit it. Queues remain separate from the draft and pause after stopped, failed or uncertain work.
 
 Type `/` for commands, skills and argument completion. Current-session YOLO reports the server's state. Side questions and background commands display their original question and received result. Saved-message Edit confirms history replacement; Regenerate replaces an answer in place, while Branch/Fork creates a separate chat. Parent chat uses server metadata. Shared older answer alternatives remain unavailable.
