@@ -135,7 +135,7 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
           padding: const EdgeInsets.all(16),
           children: [
             if (_busy) const LinearProgressIndicator(),
-            if (_error != null) AdminNotice(_error!),
+            if (_error != null) AdminNotice.error(_error!),
             AdminGroup(
               children: [
                 AdminRow(
@@ -248,40 +248,66 @@ class _AdminModelPicker extends StatefulWidget {
 
 class _AdminModelPickerState extends State<_AdminModelPicker> {
   String _query = '';
+  final _search = TextEditingController();
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => AlertDialog(
+    scrollable: true,
     title: const Text('Choose model'),
     content: SizedBox(
       width: 480,
-      height: 440,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
+            controller: _search,
             decoration: const InputDecoration(labelText: 'Search models'),
             onChanged: (v) => setState(() => _query = v.toLowerCase()),
           ),
-          Expanded(
-            child: ListView(
-              children: [
-                if (widget.allowAuto)
-                  ListTile(
-                    title: const Text('Automatic'),
-                    onTap: () => Navigator.pop(
-                      context,
-                      const ChatModelChoice(provider: 'auto', model: ''),
-                    ),
-                  ),
-                for (final choice in widget.choices.where(
-                  (c) =>
-                      '${c.provider} ${c.model}'.toLowerCase().contains(_query),
-                ))
-                  ListTile(
-                    title: Text(choice.model),
-                    subtitle: Text(choice.routeLabel),
-                    onTap: () => Navigator.pop(context, choice),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!widget.choices.any(
+                (c) =>
+                    '${c.provider} ${c.model}'.toLowerCase().contains(_query),
+              )) ...[
+                AdminNotice(
+                  _query.isEmpty
+                      ? 'No models are available from this provider.'
+                      : 'No models match this search.',
+                ),
+                if (_query.isNotEmpty)
+                  TextButton(
+                    onPressed: () {
+                      _search.clear();
+                      setState(() => _query = '');
+                    },
+                    child: const Text('Clear search'),
                   ),
               ],
-            ),
+              if (widget.allowAuto)
+                ListTile(
+                  title: const Text('Automatic'),
+                  onTap: () => Navigator.pop(
+                    context,
+                    const ChatModelChoice(provider: 'auto', model: ''),
+                  ),
+                ),
+              for (final choice in widget.choices.where(
+                (c) =>
+                    '${c.provider} ${c.model}'.toLowerCase().contains(_query),
+              ))
+                ListTile(
+                  title: Text(choice.model),
+                  subtitle: Text(choice.routeLabel),
+                  onTap: () => Navigator.pop(context, choice),
+                ),
+            ],
           ),
         ],
       ),
@@ -364,7 +390,7 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
         const AdminNotice(
           'Hermes tries these models in order. Changes are saved individually.',
         ),
-        if (_error != null) AdminNotice(_error!, retry: _load),
+        if (_error != null) AdminNotice.error(_error!, retry: _load),
         if (_rows == null && _error == null) const LinearProgressIndicator(),
         if (_rows != null) ...[
           for (final entry in _rows!.indexed)

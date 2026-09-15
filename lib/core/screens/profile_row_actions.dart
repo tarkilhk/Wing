@@ -1,3 +1,4 @@
+import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/hermes_profile.dart';
@@ -26,6 +27,7 @@ Future<void> showSavedDraftActions(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
+      scrollable: true,
       title: const Text('Discard draft?'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -131,6 +133,7 @@ Future<void> showChatActions(
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: const Text('Rename chat'),
         content: TextFormField(
           initialValue: title,
@@ -158,6 +161,7 @@ Future<void> showChatActions(
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: const Text('Delete chat?'),
         content: Text(
           'Permanently delete "$title" from ${resource.scope.profileName}? Its stored history cannot be recovered. Archive it instead to keep the conversation.',
@@ -234,12 +238,7 @@ Future<void> showChatProjectPicker(
                 ),
                 const SizedBox(height: 16),
                 if (error != null) ...[
-                  Text(
-                    error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
+                  StudioError(error!),
                   const SizedBox(height: 12),
                 ],
                 if (moving) ...[

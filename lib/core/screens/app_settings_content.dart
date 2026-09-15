@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/profile_workspace_theme.dart';
 import '../services/turn_notification_service.dart';
 import '../services/background_push_service.dart';
+import '../services/device_preference.dart';
+import '../widgets/studio_error.dart';
 import '../widgets/text_size_settings_card.dart';
 import '../widgets/installed_app_version_card.dart';
 import '../widgets/composer_action_settings.dart';
@@ -32,26 +34,38 @@ class AppSettingsContent extends StatefulWidget {
 
 class _AppSettingsContentState extends State<AppSettingsContent> {
   bool _requesting = false;
+  bool _saving = false;
+  late final Map<String, Object?> _confirmed;
+
+  @override
+  void initState() {
+    super.initState();
+    _confirmed = {
+      for (final key in [
+        'theme_mode',
+        WorkspaceAccent.preferenceKey,
+        completionNotificationsKey,
+        attentionNotificationsKey,
+        notificationTitlesKey,
+      ])
+        key: widget.preferences.get(key),
+    };
+  }
 
   Future<void> _save(String key, Object value) async {
+    if (_saving) return;
+    setState(() => _saving = true);
     try {
-      final saved = value is bool
-          ? await widget.preferences.setBool(key, value)
-          : await widget.preferences.setString(key, value as String);
-      if (!saved) {
-        throw StateError('Could not save the setting');
-      }
+      await saveDevicePreference(widget.preferences, key, value);
       if (!mounted) return;
-      setState(() {});
+      setState(() => _confirmed[key] = value);
       widget.onChanged();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not save the setting. Please retry.'),
-          ),
-        );
+        showStudioError(context, 'Could not save the setting. Please retry.');
       }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -70,7 +84,7 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
+            content: StudioError(
               error is StateError
                   ? error.message.toString()
                   : 'Could not send the test notification.',
@@ -86,7 +100,7 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
   @override
   Widget build(BuildContext context) {
     final accent = WorkspaceAccent.fromName(
-      widget.preferences.getString(WorkspaceAccent.preferenceKey),
+      _confirmed[WorkspaceAccent.preferenceKey] as String?,
     );
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -129,10 +143,10 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                           '${mode[0].toUpperCase()}${mode.substring(1)}',
                         ),
                         selected:
-                            (widget.preferences.getString('theme_mode') ??
-                                'system') ==
-                            mode,
-                        onSelected: (_) => _save('theme_mode', mode),
+                            (_confirmed['theme_mode'] ?? 'system') == mode,
+                        onSelected: _saving
+                            ? null
+                            : (_) => _save('theme_mode', mode),
                       ),
                   ],
                 ),
@@ -158,8 +172,12 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                               ? choice.dark
                               : choice.light,
                         ),
-                        onSelected: (_) =>
-                            _save(WorkspaceAccent.preferenceKey, choice.name),
+                        onSelected: _saving
+                            ? null
+                            : (_) => _save(
+                                WorkspaceAccent.preferenceKey,
+                                choice.name,
+                              ),
                       ),
                   ],
                 ),
@@ -182,30 +200,30 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                 CompactSwitchListTile(
                   title: const Text('Completed work'),
                   value:
-                      widget.preferences.getBool(completionNotificationsKey) ??
-                      true,
-                  onChanged: (value) =>
-                      _save(completionNotificationsKey, value),
+                      _confirmed[completionNotificationsKey] as bool? ?? true,
+                  onChanged: _saving
+                      ? null
+                      : (value) => _save(completionNotificationsKey, value),
                 ),
                 CompactSwitchListTile(
                   title: const Text('Needs attention'),
                   subtitle: const Text(
                     'Questions, approvals and failed turns.',
                   ),
-                  value:
-                      widget.preferences.getBool(attentionNotificationsKey) ??
-                      true,
-                  onChanged: (value) => _save(attentionNotificationsKey, value),
+                  value: _confirmed[attentionNotificationsKey] as bool? ?? true,
+                  onChanged: _saving
+                      ? null
+                      : (value) => _save(attentionNotificationsKey, value),
                 ),
                 CompactSwitchListTile(
                   title: const Text('Show chat titles in alerts'),
                   subtitle: const Text(
                     'Allow notification previews to include the chat title.',
                   ),
-                  value:
-                      widget.preferences.getBool(notificationTitlesKey) ??
-                      false,
-                  onChanged: (value) => _save(notificationTitlesKey, value),
+                  value: _confirmed[notificationTitlesKey] as bool? ?? false,
+                  onChanged: _saving
+                      ? null
+                      : (value) => _save(notificationTitlesKey, value),
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),

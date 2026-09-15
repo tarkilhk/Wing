@@ -1,3 +1,4 @@
+import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
 
 import '../services/profile_gateway.dart';
@@ -164,7 +165,7 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
+          content: StudioError(
             'Could not read this skill. Check the connection and try again.',
           ),
         ),
@@ -200,133 +201,136 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  '${widget.connectionLabel} · ${_gateway.scope.profileName}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Changes are saved on Hermes and affect other clients using this profile.',
-                  style: metadataStyle,
-                ),
-                const SizedBox(height: 12),
-                SegmentedButton<_CapabilityKind>(
-                  segments: const [
-                    ButtonSegment(
-                      value: _CapabilityKind.skills,
-                      label: Text('Skills'),
-                    ),
-                    ButtonSegment(
-                      value: _CapabilityKind.tools,
-                      label: Text('Tools'),
-                    ),
-                  ],
-                  selected: {_kind},
-                  onSelectionChanged: _saving
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _kind = value.single;
-                            _rows = [];
-                            _notice = null;
-                          });
-                          _load();
-                        },
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  decoration: const InputDecoration(
-                    hintText: 'Search capabilities',
-                    prefixIcon: Icon(Icons.search),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        '${widget.connectionLabel} · ${_gateway.scope.profileName}',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Changes are saved on Hermes and affect other clients using this profile.',
+                        style: metadataStyle,
+                      ),
+                      const SizedBox(height: 12),
+                      SegmentedButton<_CapabilityKind>(
+                        segments: const [
+                          ButtonSegment(
+                            value: _CapabilityKind.skills,
+                            label: Text('Skills'),
+                          ),
+                          ButtonSegment(
+                            value: _CapabilityKind.tools,
+                            label: Text('Tools'),
+                          ),
+                        ],
+                        selected: {_kind},
+                        onSelectionChanged: _saving
+                            ? null
+                            : (value) {
+                                setState(() {
+                                  _kind = value.single;
+                                  _rows = [];
+                                  _notice = null;
+                                });
+                                _load();
+                              },
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        decoration: const InputDecoration(
+                          hintText: 'Search capabilities',
+                          prefixIcon: Icon(Icons.search),
+                        ),
+                        onChanged: (value) => setState(() => _query = value),
+                      ),
+                    ],
                   ),
-                  onChanged: (value) => setState(() => _query = value),
                 ),
+                if (_notice != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(_notice!),
+                  ),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: [
+                        StudioError(_error!),
+                        TextButton(
+                          onPressed: _loading || _saving ? null : _load,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (_loading || _saving) const LinearProgressIndicator(),
               ],
             ),
           ),
-          if (_notice != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(_notice!),
-            ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  Text(_error!),
-                  TextButton(
-                    onPressed: _loading || _saving ? null : _load,
-                    child: const Text('Retry'),
-                  ),
-                ],
+          if (!_loading && rows.isEmpty && _error == null)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Text(
+                  _query.isEmpty
+                      ? 'No ${_skills ? 'skills' : 'tools'} returned by this profile.'
+                      : 'No matching capabilities.',
+                ),
               ),
-            ),
-          if (_loading || _saving) const LinearProgressIndicator(),
-          Expanded(
-            child: !_loading && rows.isEmpty && _error == null
-                ? Center(
-                    child: Text(
-                      _query.isEmpty
-                          ? 'No ${_skills ? 'skills' : 'tools'} returned by this profile.'
-                          : 'No matching capabilities.',
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: rows.length,
-                    itemBuilder: (context, index) {
-                      final row = rows[index];
-                      final name = row['name'] as String;
-                      final title = row['label']?.toString() ?? name;
-                      final tools = row['tools'];
-                      return ExpansionTile(
-                        key: ValueKey((_kind, name)),
-                        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-                        minTileHeight: 56,
-                        childrenPadding: const EdgeInsets.fromLTRB(
-                          16,
-                          0,
-                          16,
-                          12,
-                        ),
-                        title: Text(title, style: theme.textTheme.bodyLarge),
-                        subtitle: Text(
-                          _skills
-                              ? '${row['category'] ?? 'Skill'} · ${row['provenance'] ?? 'Installed'}'
-                              : '${row['configured'] == true ? 'Configured' : 'Setup needed'}${row['platform_label'] == null ? '' : ' · ${row['platform_label']}'}',
-                          style: metadataStyle,
-                        ),
-                        trailing: CompactSwitch(
-                          semanticLabel: 'Enable $title',
-                          value: row['enabled'] == true,
-                          onChanged: _loading || _saving
-                              ? null
-                              : (value) => _toggle(row, value),
-                        ),
-                        expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(row['description']?.toString() ?? ''),
-                          if (_skills)
-                            TextButton(
-                              onPressed: () => _readSkill(name),
-                              child: const Text('Read instructions'),
-                            ),
-                          if (!_skills && tools is List) ...[
-                            const SizedBox(height: 8),
-                            SelectableText(tools.join(', ')),
-                          ],
-                        ],
-                      );
-                    },
+            )
+          else
+            SliverList.builder(
+              itemCount: rows.length,
+              itemBuilder: (context, index) {
+                final row = rows[index];
+                final name = row['name'] as String;
+                final title = row['label']?.toString() ?? name;
+                final tools = row['tools'];
+                return ExpansionTile(
+                  key: ValueKey((_kind, name)),
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+                  minTileHeight: 56,
+                  childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  title: Text(title, style: theme.textTheme.bodyLarge),
+                  subtitle: Text(
+                    _skills
+                        ? '${row['category'] ?? 'Skill'} · ${row['provenance'] ?? 'Installed'}'
+                        : '${row['configured'] == true ? 'Configured' : 'Setup needed'}${row['platform_label'] == null ? '' : ' · ${row['platform_label']}'}',
+                    style: metadataStyle,
                   ),
-          ),
+                  trailing: CompactSwitch(
+                    semanticLabel: 'Enable $title',
+                    value: row['enabled'] == true,
+                    onChanged: _loading || _saving
+                        ? null
+                        : (value) => _toggle(row, value),
+                  ),
+                  expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(row['description']?.toString() ?? ''),
+                    if (_skills)
+                      TextButton(
+                        onPressed: () => _readSkill(name),
+                        child: const Text('Read instructions'),
+                      ),
+                    if (!_skills && tools is List) ...[
+                      const SizedBox(height: 8),
+                      SelectableText(tools.join(', ')),
+                    ],
+                  ],
+                );
+              },
+            ),
         ],
       ),
     );

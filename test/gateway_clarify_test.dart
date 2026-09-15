@@ -264,7 +264,12 @@ void main() {
       await tester.tap(find.byKey(const Key('clarify-continue')));
       await tester.pumpAndSettle();
 
-      final error = tester.widget<Text>(find.byKey(const Key('clarify-error')));
+      final error = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(const Key('clarify-error')),
+          matching: find.byType(Text),
+        ),
+      );
       expect(error.data, isNot(contains('raw gateway detail')));
       expect(find.byKey(const Key('clarify-question')), findsOneWidget);
     });

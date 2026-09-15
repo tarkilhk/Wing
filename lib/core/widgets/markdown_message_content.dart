@@ -1,3 +1,4 @@
+import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
@@ -35,7 +36,7 @@ class MarkdownMessageContent extends StatelessWidget {
         } catch (error) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(fileOpenErrorMessage(error))),
+              SnackBar(content: StudioError(fileOpenErrorMessage(error))),
             );
           }
           return;
@@ -45,7 +46,7 @@ class MarkdownMessageContent extends StatelessWidget {
     if (!opened && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
+          content: StudioError(
             uri == null
                 ? 'Only web links and linked Hermes files can be opened here.'
                 : 'Could not open this link.',

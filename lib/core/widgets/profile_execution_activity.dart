@@ -27,6 +27,7 @@ class ProfileLiveToolActivity extends StatelessWidget {
         ProfileTranscriptDisclosure(
           key: ValueKey(('live-tool', activity.toolId ?? activity.name)),
           maintainState: false,
+          isError: activity.isFailed,
           icon: activity.isFailed
               ? Icons.error_outline
               : activity.isTerminal

@@ -202,6 +202,21 @@ try {
   assert.equal(await page.locator('#diagram iframe').count(), 0);
   assert.equal(page.url(), `${origin}/index.html`);
   console.log('HTML controls work in an opaque sandbox; parent/storage access and HTTP resources are blocked.');
+  for (const dark of [false, true]) {
+    const palette = dark
+      ? { canvas: '#101B24', panel: '#192934', text: '#EBF1F2', muted: '#ADBDC4', border: '#344C58', error: '#F87171', accent: '#ABC9FF' }
+      : { canvas: '#F7F7F4', panel: '#FFFFFF', text: '#1B2D36', muted: '#586970', border: '#D6E0E1', error: '#B91C1C', accent: '#285F9B' };
+    await page.evaluate(({ dark, palette }) => {
+      window.setStudioTheme(dark, palette);
+      window.showDiagramError('This diagram could not be displayed. Return to source to review it.');
+    }, { dark, palette });
+    assert.equal(await page.locator('html').evaluate(node => getComputedStyle(node).backgroundColor), dark ? 'rgb(16, 27, 36)' : 'rgb(247, 247, 244)');
+    assert.equal(await page.locator('#status').evaluate(node => getComputedStyle(node).color), dark ? 'rgb(248, 113, 113)' : 'rgb(185, 28, 28)');
+    assert.equal(await page.locator('#status').evaluate(node => getComputedStyle(node, '::before').content), '"!"');
+    await page.screenshot({ path: join(root, 'build', `studio-diagram-error-${dark ? 'dark' : 'light'}.png`), fullPage: true });
+  }
+  console.log('Native viewer shell receives Studio canvas, panel, accent and semantic error colors in both themes.');
+
 } finally {
   await browser?.close();
   await new Promise((resolveClose) => server.close(resolveClose));

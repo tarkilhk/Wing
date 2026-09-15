@@ -1,3 +1,4 @@
+import '../widgets/studio_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../theme/hermes_theme.dart';
@@ -523,7 +524,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     if (chat.historyError != null) {
       return Column(
         children: [
-          Text(chat.historyError!),
+          StudioError(chat.historyError!),
           TextButton(
             onPressed: () => widget.controller.refreshHistory(chat),
             child: const Text('Refresh history'),

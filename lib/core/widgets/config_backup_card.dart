@@ -1,3 +1,4 @@
+import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import '../theme/hermes_theme.dart';
 
@@ -61,81 +62,81 @@ class _ExportPassphraseSheetState extends State<ExportPassphraseSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Protect this backup',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'The file contains your API keys and dashboard password, so it is '
-            'encrypted. Without this passphrase the backup cannot be restored.',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            key: const Key('export_passphrase_field'),
-            controller: _passphrase,
-            obscureText: _obscure,
-            autofocus: true,
-            decoration: InputDecoration(
-              labelText: 'Passphrase',
-              border: const OutlineInputBorder(
-                borderRadius: HermesRadius.control,
-              ),
-              suffixIcon: IconButton(
-                icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
-                onPressed: () => setState(() => _obscure = !_obscure),
-                tooltip: _obscure ? 'Show passphrase' : 'Hide passphrase',
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            key: const Key('export_passphrase_confirm_field'),
-            controller: _confirm,
-            obscureText: _obscure,
-            decoration: const InputDecoration(
-              labelText: 'Confirm passphrase',
-              border: OutlineInputBorder(borderRadius: HermesRadius.control),
-            ),
-            onSubmitted: (_) => _submit(),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Text(
-              _error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+              'Protect this backup',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'The file contains your API keys and dashboard password, so it is '
+              'encrypted. Without this passphrase the backup cannot be restored.',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              key: const Key('export_passphrase_field'),
+              controller: _passphrase,
+              obscureText: _obscure,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: 'Passphrase',
+                border: const OutlineInputBorder(
+                  borderRadius: HermesRadius.control,
+                ),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscure ? Icons.visibility : Icons.visibility_off,
+                  ),
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                  tooltip: _obscure ? 'Show passphrase' : 'Hide passphrase',
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('export_passphrase_confirm_field'),
+              controller: _confirm,
+              obscureText: _obscure,
+              decoration: const InputDecoration(
+                labelText: 'Confirm passphrase',
+                border: OutlineInputBorder(borderRadius: HermesRadius.control),
+              ),
+              onSubmitted: (_) => _submit(),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              StudioError(_error!),
+            ],
+            const SizedBox(height: 20),
+            OverflowBar(
+              alignment: MainAxisAlignment.spaceBetween,
+              overflowAlignment: OverflowBarAlignment.end,
+              spacing: 8,
+              overflowSpacing: 8,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton.icon(
+                  key: const Key('export_confirm_button'),
+                  onPressed: _submit,
+                  icon: const Icon(Icons.lock),
+                  label: const Text('Export'),
+                ),
+              ],
             ),
           ],
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              const Spacer(),
-              FilledButton.icon(
-                key: const Key('export_confirm_button'),
-                onPressed: _submit,
-                icon: const Icon(Icons.lock),
-                label: const Text('Export'),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -174,96 +175,96 @@ class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Restore configuration',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            key: const Key('import_passphrase_field'),
-            controller: _passphrase,
-            obscureText: _obscure,
-            autofocus: true,
-            decoration: InputDecoration(
-              labelText: 'Passphrase',
-              border: const OutlineInputBorder(
-                borderRadius: HermesRadius.control,
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Restore configuration',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              key: const Key('import_passphrase_field'),
+              controller: _passphrase,
+              obscureText: _obscure,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: 'Passphrase',
+                border: const OutlineInputBorder(
+                  borderRadius: HermesRadius.control,
+                ),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscure ? Icons.visibility : Icons.visibility_off,
+                  ),
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                  tooltip: _obscure ? 'Show passphrase' : 'Hide passphrase',
+                ),
               ),
-              suffixIcon: IconButton(
-                icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
-                onPressed: () => setState(() => _obscure = !_obscure),
-                tooltip: _obscure ? 'Show passphrase' : 'Hide passphrase',
+              onSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 16),
+            RadioGroup<ConfigImportMode>(
+              groupValue: _mode,
+              onChanged: (value) => setState(() => _mode = value!),
+              child: const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  RadioListTile<ConfigImportMode>(
+                    minTileHeight: 48,
+                    minVerticalPadding: 8,
+                    key: Key('import_mode_merge'),
+                    value: ConfigImportMode.merge,
+                    title: Text('Merge'),
+                    subtitle: Text(
+                      'Add and update connections from the backup, keep the '
+                      'rest.',
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  RadioListTile<ConfigImportMode>(
+                    minTileHeight: 48,
+                    minVerticalPadding: 8,
+                    key: Key('import_mode_replace'),
+                    value: ConfigImportMode.replace,
+                    title: Text('Replace'),
+                    subtitle: Text(
+                      'Delete connections that are not in the backup.',
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ],
               ),
             ),
-            onSubmitted: (_) => _submit(),
-          ),
-          const SizedBox(height: 16),
-          RadioGroup<ConfigImportMode>(
-            groupValue: _mode,
-            onChanged: (value) => setState(() => _mode = value!),
-            child: const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                RadioListTile<ConfigImportMode>(
-                  minTileHeight: 48,
-                  minVerticalPadding: 8,
-                  key: Key('import_mode_merge'),
-                  value: ConfigImportMode.merge,
-                  title: Text('Merge'),
-                  subtitle: Text(
-                    'Add and update connections from the backup, keep the '
-                    'rest.',
-                  ),
-                  contentPadding: EdgeInsets.zero,
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              StudioError(_error!),
+            ],
+            const SizedBox(height: 20),
+            OverflowBar(
+              alignment: MainAxisAlignment.spaceBetween,
+              overflowAlignment: OverflowBarAlignment.end,
+              spacing: 8,
+              overflowSpacing: 8,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
                 ),
-                RadioListTile<ConfigImportMode>(
-                  minTileHeight: 48,
-                  minVerticalPadding: 8,
-                  key: Key('import_mode_replace'),
-                  value: ConfigImportMode.replace,
-                  title: Text('Replace'),
-                  subtitle: Text(
-                    'Delete connections that are not in the backup.',
-                  ),
-                  contentPadding: EdgeInsets.zero,
+                FilledButton.icon(
+                  key: const Key('import_confirm_button'),
+                  onPressed: _submit,
+                  icon: const Icon(Icons.restore),
+                  label: const Text('Restore'),
                 ),
               ],
             ),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              _error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
           ],
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              const Spacer(),
-              FilledButton.icon(
-                key: const Key('import_confirm_button'),
-                onPressed: _submit,
-                icon: const Icon(Icons.restore),
-                label: const Text('Restore'),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -454,11 +455,7 @@ class _ConfigBackupCardState extends State<ConfigBackupCard> {
             ],
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(
-                _error!,
-                key: const Key('config_backup_error'),
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
+              StudioError(_error!, key: const Key('config_backup_error')),
             ],
           ],
         ),

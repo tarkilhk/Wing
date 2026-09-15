@@ -1,3 +1,5 @@
+import 'studio_action_label.dart';
+import 'studio_error.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -93,7 +95,7 @@ class _GatewaySensitivePromptPanelState
         request.kind == GatewaySensitivePromptKind.vaultSaveLogin;
     final showsCode = request.kind == GatewaySensitivePromptKind.vaultCode;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
         borderRadius: HermesRadius.card,
@@ -123,7 +125,7 @@ class _GatewaySensitivePromptPanelState
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Text(request.description),
           const SizedBox(height: 12),
           TextField(
@@ -151,7 +153,7 @@ class _GatewaySensitivePromptPanelState
             },
           ),
           if (savesLogin) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             TextField(
               key: const Key('sensitive-prompt-password'),
               controller: _passwordController,
@@ -176,16 +178,14 @@ class _GatewaySensitivePromptPanelState
           ],
           if (_error != null) ...[
             const SizedBox(height: 12),
-            Text(
-              _error!,
-              key: const Key('sensitive-prompt-error'),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.error,
-              ),
-            ),
+            StudioError(_error!, key: const Key('sensitive-prompt-error')),
           ],
-          const SizedBox(height: 10),
-          Row(
+          const SizedBox(height: 12),
+          OverflowBar(
+            alignment: MainAxisAlignment.end,
+            overflowAlignment: OverflowBarAlignment.end,
+            spacing: 12,
+            overflowSpacing: 8,
             children: [
               TextButton(
                 key: const Key('sensitive-prompt-cancel'),
@@ -197,29 +197,21 @@ class _GatewaySensitivePromptPanelState
                   _ => 'Cancel',
                 }),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ListenableBuilder(
-                  listenable: Listenable.merge([
-                    _controller,
-                    _passwordController,
-                  ]),
-                  builder: (context, _) => FilledButton(
-                    key: const Key('sensitive-prompt-submit'),
-                    onPressed: _enabled && _canSubmit
-                        ? () => _respond(_responseValue)
-                        : null,
-                    child: _submitting
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(
-                            request.kind ==
-                                    GatewaySensitivePromptKind.vaultSaveLogin
-                                ? 'Save login'
-                                : 'Continue',
-                          ),
+              ListenableBuilder(
+                listenable: Listenable.merge([
+                  _controller,
+                  _passwordController,
+                ]),
+                builder: (context, _) => FilledButton(
+                  key: const Key('sensitive-prompt-submit'),
+                  onPressed: _enabled && _canSubmit
+                      ? () => _respond(_responseValue)
+                      : null,
+                  child: StudioActionLabel(
+                    request.kind == GatewaySensitivePromptKind.vaultSaveLogin
+                        ? 'Save login'
+                        : 'Continue',
+                    busy: _submitting,
                   ),
                 ),
               ),

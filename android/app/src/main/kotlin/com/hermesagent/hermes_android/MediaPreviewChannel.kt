@@ -96,7 +96,7 @@ internal class MediaPreviewChannel(
                                     putExtra(MediaPreviewActivity.EXTRA_FILE_NAME, savedFile.name)
                                     putExtra(MediaPreviewActivity.EXTRA_TITLE, title)
                                     putExtra(MediaPreviewActivity.EXTRA_MIME_TYPE, mimeType)
-                                    for (key in listOf("dark", "surface", "text", "accent", "onAccent")) {
+                                    for (key in listOf("dark", "surface", "text", "accent", "onAccent", "error")) {
                                         (appearance[key] as? Number)?.let {
                                             putExtra("studio_$key", it.toInt())
                                         }

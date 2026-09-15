@@ -1,3 +1,4 @@
+import '../widgets/studio_error.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -95,7 +96,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(fileOpenErrorMessage(error)),
+        content: StudioError(fileOpenErrorMessage(error)),
         action: onRetry == null
             ? null
             : SnackBarAction(label: 'Retry', onPressed: onRetry),
@@ -294,7 +295,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                     if (!opened && previewContext.mounted) {
                       ScaffoldMessenger.of(previewContext).showSnackBar(
                         const SnackBar(
-                          content: Text(
+                          content: StudioError(
                             'No compatible app was found. Use Save or share instead.',
                           ),
                         ),
@@ -312,12 +313,13 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                         'text': theme.colorScheme.onSurface.toARGB32(),
                         'accent': theme.colorScheme.primary.toARGB32(),
                         'onAccent': theme.colorScheme.onPrimary.toARGB32(),
+                        'error': theme.colorScheme.error.toARGB32(),
                       },
                     );
                     if (!opened && previewContext.mounted) {
                       ScaffoldMessenger.of(previewContext).showSnackBar(
                         const SnackBar(
-                          content: Text(
+                          content: StudioError(
                             'Media playback is unavailable on this device. Try Open in app or Save or share.',
                           ),
                         ),
@@ -328,7 +330,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                         WebOutputPreview.maxHtmlSourceLength) {
                       ScaffoldMessenger.of(previewContext).showSnackBar(
                         const SnackBar(
-                          content: Text(
+                          content: StudioError(
                             'HTML preview is limited to 1 MiB. Use Save or share instead.',
                           ),
                         ),
@@ -341,7 +343,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                     } on FormatException {
                       ScaffoldMessenger.of(previewContext).showSnackBar(
                         const SnackBar(
-                          content: Text(
+                          content: StudioError(
                             "This HTML file can't be read here. Use Save or share to open it in another app.",
                           ),
                         ),
@@ -373,7 +375,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                   if (action == _FileAction.play) {
                     ScaffoldMessenger.of(previewContext).showSnackBar(
                       const SnackBar(
-                        content: Text(
+                        content: StudioError(
                           'This media could not be played on this device.',
                         ),
                       ),
@@ -509,15 +511,15 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
       return Scaffold(
         appBar: AppBar(title: Text(widget.initialOutput!.label)),
         body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (_initialError == null)
                   const CircularProgressIndicator()
                 else ...[
-                  Text(_initialError!, textAlign: TextAlign.center),
+                  StudioError(_initialError!),
                   const SizedBox(height: 12),
                   TextButton(
                     onPressed: _initialOpening
@@ -567,12 +569,13 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                 ? Center(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(24),
-                      child: Text(
-                        _loadError ??
-                            (_nextOffset == null
-                                ? 'No files or links found in this chat.'
-                                : 'No outputs found in the recent part of this chat. Load older outputs to look further back.'),
-                      ),
+                      child: _loadError != null
+                          ? StudioError(_loadError!)
+                          : Text(
+                              (_nextOffset == null
+                                  ? 'No files or links found in this chat.'
+                                  : 'No outputs found in the recent part of this chat. Load older outputs to look further back.'),
+                            ),
                     ),
                   )
                 : ListView.builder(
@@ -629,10 +632,11 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                   children: [
                     if (outputs.isNotEmpty &&
                         (_loadError != null || _nextOffset != null))
-                      Text(
-                        _loadError ??
-                            'Recent outputs shown. Load older outputs to look further back.',
-                      ),
+                      _loadError != null
+                          ? StudioError(_loadError!)
+                          : Text(
+                              'Recent outputs shown. Load older outputs to look further back.',
+                            ),
                     if (_loadError != null)
                       TextButton(
                         onPressed: _working || _loading

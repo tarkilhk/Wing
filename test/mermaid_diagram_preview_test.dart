@@ -106,7 +106,34 @@ void main() {
           const StandardMessageCodec().decodeMessage(
             ByteData.sublistView(args['params'] as Uint8List),
           ),
-          {'source': source, 'dark': true, 'format': 'mermaid'},
+          {
+            'source': source,
+            'dark': true,
+            'format': 'mermaid',
+            'palette': {
+              'canvas': Theme.of(
+                tester.element(find.byType(AndroidView)),
+              ).colorScheme.surface.toARGB32(),
+              'panel': Theme.of(
+                tester.element(find.byType(AndroidView)),
+              ).canvasColor.toARGB32(),
+              'text': Theme.of(
+                tester.element(find.byType(AndroidView)),
+              ).colorScheme.onSurface.toARGB32(),
+              'muted': Theme.of(
+                tester.element(find.byType(AndroidView)),
+              ).colorScheme.onSurfaceVariant.toARGB32(),
+              'border': Theme.of(
+                tester.element(find.byType(AndroidView)),
+              ).colorScheme.outlineVariant.toARGB32(),
+              'error': Theme.of(
+                tester.element(find.byType(AndroidView)),
+              ).colorScheme.error.toARGB32(),
+              'accent': Theme.of(
+                tester.element(find.byType(AndroidView)),
+              ).colorScheme.primary.toARGB32(),
+            },
+          },
         );
         expect(tester.takeException(), isNull);
         await tester.tap(find.byTooltip('Show source'));
@@ -163,7 +190,34 @@ void main() {
       const StandardMessageCodec().decodeMessage(
         ByteData.sublistView(args['params'] as Uint8List),
       ),
-      {'source': source, 'dark': false, 'format': 'svg'},
+      {
+        'source': source,
+        'dark': false,
+        'format': 'svg',
+        'palette': {
+          'canvas': Theme.of(
+            tester.element(find.byType(AndroidView)),
+          ).colorScheme.surface.toARGB32(),
+          'panel': Theme.of(
+            tester.element(find.byType(AndroidView)),
+          ).canvasColor.toARGB32(),
+          'text': Theme.of(
+            tester.element(find.byType(AndroidView)),
+          ).colorScheme.onSurface.toARGB32(),
+          'muted': Theme.of(
+            tester.element(find.byType(AndroidView)),
+          ).colorScheme.onSurfaceVariant.toARGB32(),
+          'border': Theme.of(
+            tester.element(find.byType(AndroidView)),
+          ).colorScheme.outlineVariant.toARGB32(),
+          'error': Theme.of(
+            tester.element(find.byType(AndroidView)),
+          ).colorScheme.error.toARGB32(),
+          'accent': Theme.of(
+            tester.element(find.byType(AndroidView)),
+          ).colorScheme.primary.toARGB32(),
+        },
+      },
     );
     await tester.tap(find.byTooltip('Show source'));
     await tester.pumpAndSettle();
@@ -174,33 +228,32 @@ void main() {
     expect(find.byTooltip('Show SVG'), findsOneWidget);
   });
 
-  testWidgets('streaming incomplete and oversized SVG fences stay source-only', (
-    tester,
-  ) async {
-    final streaming = splitMarkdownCodeBlocks(
-      '```svg\n<svg>',
-      streaming: true,
-    ).single as MarkdownCodeBlock;
-    final incomplete = splitMarkdownCodeBlocks(
-      '```svg\n<svg>',
-    ).single as MarkdownCodeBlock;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Column(
-          children: [
-            streaming,
-            MarkdownCodeBlock(
-              language: 'svg',
-              code: 'x' * (WebOutputPreview.maxSvgSourceLength + 1),
-            ),
-          ],
+  testWidgets(
+    'streaming incomplete and oversized SVG fences stay source-only',
+    (tester) async {
+      final streaming =
+          splitMarkdownCodeBlocks('```svg\n<svg>', streaming: true).single
+              as MarkdownCodeBlock;
+      final incomplete =
+          splitMarkdownCodeBlocks('```svg\n<svg>').single as MarkdownCodeBlock;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Column(
+            children: [
+              streaming,
+              MarkdownCodeBlock(
+                language: 'svg',
+                code: 'x' * (WebOutputPreview.maxSvgSourceLength + 1),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(streaming.previewEnabled, isFalse);
-    expect(incomplete.previewEnabled, isFalse);
-    expect(find.byTooltip('Open SVG'), findsNothing);
-    expect(find.byTooltip('Copy code'), findsNWidgets(2));
-  });
+      expect(streaming.previewEnabled, isFalse);
+      expect(incomplete.previewEnabled, isFalse);
+      expect(find.byTooltip('Open SVG'), findsNothing);
+      expect(find.byTooltip('Copy code'), findsNWidgets(2));
+    },
+  );
 }

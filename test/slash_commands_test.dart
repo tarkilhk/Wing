@@ -11,6 +11,7 @@ import 'package:hermes_android/core/services/profile_gateway.dart';
 import 'package:hermes_android/core/services/profile_workspace_controller.dart';
 import 'package:hermes_android/core/services/ws_client.dart';
 import 'package:hermes_android/core/widgets/slash_command_suggestions.dart';
+import 'package:hermes_android/core/theme/hermes_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_workspace_controller_test.dart' show Host;
@@ -19,6 +20,7 @@ class CommandHost extends Host {
   final commandCalls = <(String, Map<String, dynamic>)>[];
   Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)? respond;
   String yolo = '0';
+  String warning = '';
   String? yoloSetResult;
   final List<String> sideQuestionTaskIds = ['side-task-1'];
   final List<String> backgroundTaskIds = ['background-task-1'];
@@ -45,7 +47,7 @@ class CommandHost extends Host {
     'commands': {
       '/clear': {'desktop': 'terminal'},
     },
-    'warning': '',
+    'warning': warning,
   };
 
   @override
@@ -841,6 +843,49 @@ void main() {
       expect(chat.status, ProfileTurnStatus.running);
     },
   );
+
+  for (final brightness in Brightness.values) {
+    testWidgets('long command warning scrolls at 320dp/200% ${brightness.name}', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 760);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      host.warning =
+          'Some commands are unavailable while this server is reconnecting. Your draft is kept. You can still send a command by name after checking its availability.';
+      final input = TextEditingController(text: '/a-');
+      addTearDown(input.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: hermesTheme(brightness),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: Column(
+              children: [
+                SlashCommandSuggestions(
+                  controller: controller,
+                  chat: chat,
+                  composer: input,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.scrollUntilVisible(find.text('/a-skill'), 150);
+      await tester.tap(find.text('/a-skill'));
+      expect(input.text, '/a-skill ');
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 
   testWidgets(
     'picker searches all skills and inserts selection without sending',

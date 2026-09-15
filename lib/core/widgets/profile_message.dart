@@ -58,7 +58,7 @@ class ProfileMessage extends StatelessWidget {
         ),
       );
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
         child: result == null
             ? Center(child: label)
             : AnchoredExpansionTile(
@@ -97,7 +97,7 @@ class ProfileMessage extends StatelessWidget {
         color: theme.colorScheme.onSurfaceVariant,
       );
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
         child: Center(
           child: FractionallySizedBox(
             widthFactor: .86,
@@ -113,7 +113,7 @@ class ProfileMessage extends StatelessWidget {
                     size: 14,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                   Text('steered', style: style),
                   Text(' · ', style: style),
                   Flexible(child: SelectableText(steering, style: style)),
@@ -134,7 +134,7 @@ class ProfileMessage extends StatelessWidget {
           ? content
           : '${slash.group(1)!.trim()} · ${slash.group(2)!.trim()}';
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
         child: Center(
           child: SelectableText(
             text,

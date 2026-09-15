@@ -11,6 +11,7 @@ class ProfileTranscriptDisclosure extends StatefulWidget {
     this.summary,
     this.initiallyExpanded = false,
     this.loading = false,
+    this.isError = false,
     this.maintainState = true,
     this.onExpansionChanged,
     this.childrenPadding = EdgeInsets.zero,
@@ -22,6 +23,7 @@ class ProfileTranscriptDisclosure extends StatefulWidget {
   final List<Widget> children;
   final bool initiallyExpanded;
   final bool loading;
+  final bool isError;
   final bool maintainState;
   final ValueChanged<bool>? onExpansionChanged;
   final EdgeInsetsGeometry childrenPadding;
@@ -75,7 +77,13 @@ class _ProfileTranscriptDisclosureState
                   ),
                 )
               else
-                Icon(widget.icon, size: 16, color: color),
+                Icon(
+                  widget.icon,
+                  size: 16,
+                  color: widget.isError
+                      ? Theme.of(context).colorScheme.error
+                      : color,
+                ),
               const SizedBox(width: 8),
               Flexible(
                 child: Wrap(

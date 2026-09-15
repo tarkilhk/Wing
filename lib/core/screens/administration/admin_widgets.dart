@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/administration_repository.dart';
+import '../../widgets/studio_error.dart';
 
 /// Inherit all Studio component states and the selected app accent.
 ThemeData administrationTheme(ThemeData base) => base;
@@ -78,7 +79,7 @@ class AdminRow extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) => ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
     leading: Icon(icon, size: 22),
     title: Text(title),
     subtitle: Text(subtitle),
@@ -90,14 +91,19 @@ class AdminRow extends StatelessWidget {
 class AdminNotice extends StatelessWidget {
   final String text;
   final VoidCallback? retry;
-  const AdminNotice(this.text, {super.key, this.retry});
+  final bool isError;
+  const AdminNotice(this.text, {super.key, this.retry, this.isError = false});
+  const AdminNotice.error(this.text, {super.key, this.retry}) : isError = true;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 12),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(text, style: Theme.of(context).textTheme.bodyMedium),
+        if (isError)
+          StudioError(text)
+        else
+          Text(text, style: Theme.of(context).textTheme.bodyMedium),
         if (retry != null)
           TextButton(onPressed: retry, child: const Text('Retry')),
       ],
@@ -166,13 +172,10 @@ class _AdminLoadState extends State<AdminLoad> {
     children: [
       if (_loading) const LinearProgressIndicator(),
       if (_error != null)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: AdminNotice(
-            '${_data == null ? '' : 'Last checked ${TimeOfDay.fromDateTime(_checkedAt!).format(context)}. '}$_error',
-            retry: _loading ? null : _load,
-          ),
-        ),
+        if (widget.expand)
+          Flexible(child: SingleChildScrollView(child: _failure(context)))
+        else
+          _failure(context),
       if (_data != null)
         if (widget.expand)
           Expanded(child: _content(context))
@@ -181,16 +184,24 @@ class _AdminLoadState extends State<AdminLoad> {
     ],
   );
 
+  Widget _failure(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    child: AdminNotice.error(
+      '${_data == null ? '' : 'Last checked ${TimeOfDay.fromDateTime(_checkedAt!).format(context)}. '}$_error',
+      retry: _loading ? null : _load,
+    ),
+  );
+
   Widget _content(BuildContext context) {
     try {
       return widget.builder(context, _data!, _load);
     } on FormatException {
-      return AdminNotice(
+      return AdminNotice.error(
         'The server returned an invalid response.',
         retry: _load,
       );
     } on TypeError {
-      return AdminNotice(
+      return AdminNotice.error(
         'The server returned an incomplete response.',
         retry: _load,
       );
@@ -207,6 +218,7 @@ Future<bool> adminConfirm(
     await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: Text(title),
         content: Text(detail),
         actions: [
@@ -226,6 +238,10 @@ Future<bool> adminConfirm(
 Future<void> adminPush(BuildContext context, Widget page) =>
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
 
-void adminMessage(BuildContext context, String message) => ScaffoldMessenger.of(
-  context,
-).showSnackBar(SnackBar(content: Text(message)));
+void adminMessage(
+  BuildContext context,
+  String message, {
+  bool isError = false,
+}) => ScaffoldMessenger.of(context).showSnackBar(
+  SnackBar(content: isError ? StudioError(message) : Text(message)),
+);

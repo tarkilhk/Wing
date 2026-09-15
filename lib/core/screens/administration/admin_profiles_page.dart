@@ -146,7 +146,7 @@ class _AdminProfilesPageState extends State<AdminProfilesPage> {
           padding: const EdgeInsets.all(16),
           children: [
             if (_busy) const LinearProgressIndicator(),
-            if (_error != null) AdminNotice(_error!),
+            if (_error != null) AdminNotice.error(_error!),
             Align(
               alignment: Alignment.centerLeft,
               child: FilledButton.icon(
@@ -225,12 +225,14 @@ class _ProfileNameDialogState extends State<_ProfileNameDialog> {
   late String _name = widget.initial;
   @override
   Widget build(BuildContext context) => AlertDialog(
+    scrollable: true,
     title: Text(widget.title),
     content: TextFormField(
       initialValue: widget.initial,
       autofocus: true,
       decoration: InputDecoration(
         labelText: 'Name',
+        helperMaxLines: 4,
         helperText: widget.displayOnly
             ? 'Display name. The default identity stays unchanged.'
             : 'Lowercase letters, numbers, hyphens or underscores.',

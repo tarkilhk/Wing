@@ -1,3 +1,4 @@
+import '../../widgets/studio_select.dart';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 import '../../widgets/profile_diagnostics_panel.dart';
@@ -137,19 +138,16 @@ class _AdminUsagePageState extends State<AdminUsagePage> {
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child: DropdownButtonFormField<int>(
-            initialValue: _days,
-            decoration: const InputDecoration(labelText: 'Time range'),
-            items: [1, 7, 30, 90, 365]
-                .map(
-                  (days) => DropdownMenuItem(
-                    value: days,
-                    child: Text(
-                      days == 1 ? 'Last 24 hours' : 'Last $days days',
-                    ),
-                  ),
-                )
-                .toList(),
+          child: StudioSelect<int>(
+            value: _days,
+            label: 'Time range',
+            options: [
+              for (final days in [1, 7, 30, 90, 365])
+                (
+                  value: days,
+                  label: days == 1 ? 'Last 24 hours' : 'Last $days days',
+                ),
+            ],
             onChanged: (v) => setState(() => _days = v!),
           ),
         ),
@@ -198,7 +196,10 @@ class _AdminUsagePageState extends State<AdminUsagePage> {
                                   'api_calls' => 'Calls',
                                   _ => 'Sessions',
                                 }),
-                                trailing: Text('${model[key]}'),
+                                subtitle: Text(
+                                  '${model[key]}',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
                               ),
                         ],
                       ),

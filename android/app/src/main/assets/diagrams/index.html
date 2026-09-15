@@ -11,12 +11,25 @@
     <style>
       :root {
         color-scheme: light dark;
-        font-family: system-ui, sans-serif;
-        background: #F4F7F6;
+        font-family: Roboto, sans-serif;
+        --canvas: #F7F7F4;
+        --panel: #FFFFFF;
+        --text: #1B2D36;
+        --muted: #586970;
+        --border: #D6E0E1;
+        --error: #B91C1C;
+        --accent: #126D70;
+        background: var(--canvas);
       }
 
       :root[data-theme="dark"] {
-        background: #101917;
+        --canvas: #101B24;
+        --panel: #192934;
+        --text: #EBF1F2;
+        --muted: #ADBDC4;
+        --border: #344C58;
+        --error: #F87171;
+        --accent: #65C7BC;
       }
 
       html,
@@ -69,23 +82,33 @@
       }
 
       #status {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr);
+        column-gap: 12px;
+        align-items: start;
         box-sizing: border-box;
         width: min(100%, 42rem);
         margin: 24px auto;
         padding: 16px;
-        border: 1px solid #D5E0DA;
+        border: 1px solid var(--border);
         border-radius: 8px;
-        color: #172B27;
-        background: #FFFFFF;
-        font-size: 15px;
+        color: var(--error);
+        background: var(--panel);
+        font-size: 16px;
         line-height: 1.45;
         white-space: pre-wrap;
       }
 
-      :root[data-theme="dark"] #status {
-        border-color: #334C40;
-        color: #E8F2EC;
-        background: #182621;
+      #status::before {
+        content: "!";
+        display: inline-grid;
+        place-items: center;
+        width: 20px;
+        height: 20px;
+        border: 2px solid currentColor;
+        border-radius: 50%;
+        font-weight: 600;
+        line-height: 1;
       }
 
       [hidden] {

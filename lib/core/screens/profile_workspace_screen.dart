@@ -1,3 +1,5 @@
+import '../widgets/studio_action_label.dart';
+import '../widgets/studio_error.dart';
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
@@ -142,7 +144,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         };
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+        ).showSnackBar(SnackBar(content: StudioError(message)));
       }
     }
   }
@@ -351,7 +353,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               if (controller.switching) const LinearProgressIndicator(),
               if (controller.error != null)
                 MaterialBanner(
-                  content: Text(controller.error!),
+                  content: StudioError(controller.error!),
                   actions: [
                     TextButton(
                       onPressed: () => _run(controller.retry),
@@ -646,12 +648,9 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 ),
                 if (inlineError != null) ...[
                   const SizedBox(height: 12),
-                  Text(
+                  StudioError(
                     inlineError!,
                     key: const ValueKey('edit-message-error'),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
                   ),
                 ],
               ],
@@ -693,12 +692,10 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                         });
                       }
                     : null,
-                child: submitting
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Replace and resend'),
+                child: StudioActionLabel(
+                  'Replace and resend',
+                  busy: submitting,
+                ),
               ),
             ],
           );
@@ -807,11 +804,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     running: chat.busy,
                   ),
             tail: [
-              if (chat.error != null)
-                Text(
-                  chat.error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
+              if (chat.error != null) StudioError(chat.error!),
               if (chat.status == ProfileTurnStatus.reconnecting)
                 TextButton(
                   onPressed: () =>
@@ -907,7 +900,10 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               ))
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: SelectableText(output),
+                  child:
+                      output == ProfileWorkspaceController.markReadFailureNotice
+                      ? SelectionArea(child: StudioError(output))
+                      : SelectableText(output),
                 ),
               for (final delivery in chat.sideQuestionDeliveries)
                 SideQuestionDeliveryCard(
@@ -975,7 +971,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                         clipBehavior: Clip.none,
                         children: [
                           Padding(
-                            padding: const EdgeInsets.all(6),
+                            padding: const EdgeInsets.all(8),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -1015,7 +1011,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                       scrollDirection: Axis.horizontal,
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 8,
-                                        vertical: 6,
+                                        vertical: 8,
                                       ),
                                       child: Row(
                                         children: [
@@ -1131,7 +1127,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                 context,
                                               ).showSnackBar(
                                                 const SnackBar(
-                                                  content: Text(
+                                                  content: StudioError(
                                                     'This draft could not be saved on the device.',
                                                   ),
                                                 ),
@@ -1323,7 +1319,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                           ),
                                         ),
                                       ),
-                                      const SizedBox(width: 6),
+                                      const SizedBox(width: 8),
                                       _composerActionButton(chat),
                                     ],
                                   ),
@@ -1483,7 +1479,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         } else if (accepted == false && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Hermes rejected the steering message.'),
+              content: StudioError('Hermes rejected the steering message.'),
             ),
           );
         }
@@ -1548,17 +1544,14 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           ProfileTurnStatus.attention,
         }.contains(chat.status);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (_queuedEditErrors[chat.key] case final error?)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                error,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
+              child: StudioError(error),
             ),
           if (prompt.attachments.isNotEmpty)
             Padding(
@@ -1767,7 +1760,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        ).showSnackBar(SnackBar(content: StudioError(e.toString())));
       }
       return null;
     }
@@ -1846,7 +1839,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           if (controller.error != null &&
               _destination != AppDestination.settings)
             ListTile(
-              title: Text(controller.error!),
+              title: StudioError(controller.error!),
               trailing: TextButton(
                 onPressed: () => _run(controller.retry),
                 child: const Text('Retry'),

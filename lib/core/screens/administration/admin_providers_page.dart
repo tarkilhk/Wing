@@ -1,3 +1,6 @@
+import '../../theme/hermes_theme.dart';
+import '../../widgets/studio_action_label.dart';
+import '../../widgets/studio_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -65,7 +68,13 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
         );
       }
     } catch (e) {
-      if (mounted) adminMessage(context, administrationError(e, writing: true));
+      if (mounted) {
+        adminMessage(
+          context,
+          administrationError(e, writing: true),
+          isError: true,
+        );
+      }
     }
     if (mounted) setState(() => _busy = false);
   }
@@ -150,7 +159,11 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                     }
                   } catch (e) {
                     if (context.mounted) {
-                      adminMessage(context, administrationError(e));
+                      adminMessage(
+                        context,
+                        administrationError(e),
+                        isError: true,
+                      );
                     }
                   }
                 },
@@ -321,9 +334,9 @@ class _ProviderCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(access.name, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: .12),
                 borderRadius: BorderRadius.circular(8),
@@ -332,7 +345,7 @@ class _ProviderCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(icon, color: color, size: 18),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                   Flexible(
                     child: Text(
                       access.label,
@@ -421,7 +434,10 @@ class _ProviderCard extends StatelessWidget {
                     'Manage sign-in with the provider\'s tool on the server.',
                   ),
                   if (access.row['cli_command'] is String)
-                    SelectableText(access.row['cli_command'] as String),
+                    SelectableText(
+                      access.row['cli_command'] as String,
+                      style: HermesTokens.of(context).typography.mono,
+                    ),
                 ],
                 if (access.row['disconnect_hint'] is String)
                   Text(access.row['disconnect_hint'] as String),
@@ -551,7 +567,7 @@ class _AdminSecretPageState extends State<AdminSecretPage> {
           const AdminNotice(
             'Enter a new credential. Existing secret values are never loaded into this form.',
           ),
-          if (_error != null) AdminNotice(_error!),
+          if (_error != null) AdminNotice.error(_error!),
           TextField(
             controller: _input,
             obscureText: true,
@@ -566,7 +582,7 @@ class _AdminSecretPageState extends State<AdminSecretPage> {
             onPressed: _busy || _input.text.trim().isEmpty
                 ? null
                 : () => _save(),
-            child: Text(_busy ? 'Saving…' : 'Save credential'),
+            child: StudioActionLabel('Save credential', busy: _busy),
           ),
           if (widget.isSet)
             TextButton(
@@ -727,18 +743,26 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
                 ? 'This sign-in supplies shared access to inheriting profiles.'
                 : 'This creates a sign-in override for this profile.',
           ),
-          if (_error != null) AdminNotice(_error!),
+          if (_error != null) AdminNotice.error(_error!),
           if (_session == null)
             FilledButton(
               onPressed: _busy ? null : _start,
-              child: Text(_busy ? 'Starting…' : 'Start sign-in'),
+              child: StudioActionLabel('Start sign-in', busy: _busy),
             ),
           if (_session != null) ...[
-            Text(
-              _status == 'approved'
-                  ? 'Sign-in approved. Refresh access to confirm readiness.'
-                  : 'Status: $_status',
-            ),
+            if (const {
+              'error',
+              'failed',
+              'denied',
+              'expired',
+            }.contains(_status))
+              StudioError('Status: $_status')
+            else
+              Text(
+                _status == 'approved'
+                    ? 'Sign-in approved. Refresh access to confirm readiness.'
+                    : 'Status: $_status',
+              ),
             if (_pending) ...[
               const SizedBox(height: 16),
               SelectableText(

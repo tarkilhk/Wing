@@ -66,7 +66,7 @@ Future<String?> showWorkspaceActionMenu(
                   color: theme.colorScheme.onSurface,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Text(
                 scope,
                 maxLines: 2,
@@ -100,7 +100,7 @@ Future<String?> showWorkspaceActionMenu(
                     ? theme.colorScheme.error
                     : theme.colorScheme.onSurfaceVariant,
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   label,

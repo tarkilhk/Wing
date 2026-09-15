@@ -278,7 +278,9 @@ typedef ProfileAttention =
 /// switch never closes a socket, changes a chat owner, or cancels a turn.
 class ProfileWorkspaceController extends ChangeNotifier {
   static const _maxReviewNotices = 20;
-  static const _markReadFailureNotice =
+
+  /// App-owned failure; distinguish it from opaque command output in the UI.
+  static const markReadFailureNotice =
       'This chat opened, but it could not be marked as read. '
       'Return to Chats and choose Mark as read.';
 
@@ -1932,8 +1934,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
           if (!_closed &&
               current == resource &&
               identical(resource.chats[chat.key.sessionId], chat)) {
-            if (!chat.commandOutput.contains(_markReadFailureNotice)) {
-              chat.commandOutput.add(_markReadFailureNotice);
+            if (!chat.commandOutput.contains(markReadFailureNotice)) {
+              chat.commandOutput.add(markReadFailureNotice);
             }
             _changed();
           }
@@ -2288,7 +2290,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           chat.archived = updated['archived'] as bool;
         }
         if (updated['unread'] == false) {
-          chat.commandOutput.remove(_markReadFailureNotice);
+          chat.commandOutput.remove(markReadFailureNotice);
         }
       }
       if (resource.selectedSession == id &&

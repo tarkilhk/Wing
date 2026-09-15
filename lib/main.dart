@@ -1,3 +1,5 @@
+import 'core/widgets/studio_action_label.dart';
+import 'core/widgets/studio_error.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -252,7 +254,7 @@ class HermesAppState extends State<HermesApp> with WidgetsBindingObserver {
     if (context != null && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
+          content: StudioError(
             'This chat is unavailable on its original host or profile.',
           ),
         ),
@@ -585,7 +587,7 @@ class HomeScreenState extends State<HomeScreen> {
         : 'The backup could not be restored.';
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ).showSnackBar(SnackBar(content: StudioError(message)));
   }
 
   @override
@@ -654,7 +656,7 @@ class HomeScreenState extends State<HomeScreen> {
     widget.shareIntents?.intakeError.value = null;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ).showSnackBar(SnackBar(content: StudioError(message)));
   }
 
   Future<void> _discardIncomingShare() async {
@@ -668,7 +670,7 @@ class HomeScreenState extends State<HomeScreen> {
     if (!discarded) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
+          content: StudioError(
             'The shared content could not be discarded. Please try again.',
           ),
         ),
@@ -718,7 +720,7 @@ class HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
+            content: StudioError(
               'The shared draft could not be opened. It is still available to review.',
             ),
           ),
@@ -791,7 +793,7 @@ class HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
+            content: StudioError(
               'Connection ownership could not be verified securely.',
             ),
           ),
@@ -864,7 +866,7 @@ class HomeScreenState extends State<HomeScreen> {
       if (!acknowledged) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
+            content: StudioError(
               'Content was added to the draft, but the incoming share could not be cleared. Discard it from Home to avoid adding it twice.',
             ),
           ),
@@ -1005,7 +1007,7 @@ class HomeScreenState extends State<HomeScreen> {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text(
+                    content: StudioError(
                       'The connection could not be deleted safely.',
                     ),
                   ),
@@ -1140,9 +1142,7 @@ class HomeScreenState extends State<HomeScreen> {
                               vertical: 64,
                             ),
                             children: [
-                              const Center(
-                                child: PlayfulPortrait(size: 112),
-                              ),
+                              const Center(child: PlayfulPortrait(size: 112)),
                               const SizedBox(height: 24),
                               Text(
                                 'Connect to Hermes',
@@ -1289,6 +1289,7 @@ class _AddDialogState extends State<_AddDialog> {
   }
 
   Future<void> _validateAndSave() async {
+    if (_validating) return;
     if (!_formKey.currentState!.validate()) {
       setState(() => _showDashboard = true);
       return;
@@ -1391,7 +1392,7 @@ class _AddDialogState extends State<_AddDialog> {
               if (_error != null) ...[
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(12),
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
                     color: Theme.of(
@@ -1426,11 +1427,13 @@ class _AddDialogState extends State<_AddDialog> {
                 ),
               ],
               TextField(
+                enabled: !_validating,
                 controller: _label,
                 decoration: const InputDecoration(labelText: 'Label'),
               ),
               const SizedBox(height: 12),
               TextField(
+                enabled: !_validating,
                 controller: _host,
                 decoration: const InputDecoration(
                   labelText: 'Host',
@@ -1442,6 +1445,7 @@ class _AddDialogState extends State<_AddDialog> {
               ),
               const SizedBox(height: 12),
               TextField(
+                enabled: !_validating,
                 controller: _port,
                 decoration: const InputDecoration(
                   labelText: 'Port',
@@ -1451,6 +1455,7 @@ class _AddDialogState extends State<_AddDialog> {
               ),
               const SizedBox(height: 12),
               TextField(
+                enabled: !_validating,
                 controller: _dashUser,
                 decoration: const InputDecoration(
                   labelText: 'Username (optional)',
@@ -1459,6 +1464,7 @@ class _AddDialogState extends State<_AddDialog> {
               ),
               const SizedBox(height: 12),
               TextField(
+                enabled: !_validating,
                 controller: _dashPass,
                 decoration: const InputDecoration(
                   labelText: 'Password (optional)',
@@ -1471,27 +1477,32 @@ class _AddDialogState extends State<_AddDialog> {
                 onTap: _validating
                     ? null
                     : () => setState(() => _showDashboard = !_showDashboard),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _showDashboard ? Icons.expand_less : Icons.expand_more,
-                        size: 20,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          'Custom proxy and dashboard details',
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _showDashboard
+                              ? Icons.expand_less
+                              : Icons.expand_more,
+                          size: 20,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            'Custom proxy and dashboard details',
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1499,6 +1510,7 @@ class _AddDialogState extends State<_AddDialog> {
                 const SizedBox(height: 8),
                 const SizedBox(height: 12),
                 TextField(
+                  enabled: !_validating,
                   controller: _dashboardPrefix,
                   decoration: const InputDecoration(
                     labelText: 'Dashboard path prefix',
@@ -1512,7 +1524,9 @@ class _AddDialogState extends State<_AddDialog> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Dashboard behind proxy'),
                   subtitle: const Text('The proxy supplies authentication.'),
-                  onChanged: (v) => setState(() => _dashboardProxied = v),
+                  onChanged: _validating
+                      ? null
+                      : (v) => setState(() => _dashboardProxied = v),
                 ),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),
@@ -1525,6 +1539,7 @@ class _AddDialogState extends State<_AddDialog> {
                   ),
                 ),
                 TextField(
+                  enabled: !_validating,
                   controller: _dashPort,
                   decoration: const InputDecoration(
                     labelText: 'Dashboard Port',
@@ -1534,10 +1549,12 @@ class _AddDialogState extends State<_AddDialog> {
                 ),
                 const SizedBox(height: 12),
                 TextField(
+                  enabled: !_validating,
                   controller: _desktopGatewayUrl,
                   decoration: const InputDecoration(
                     labelText: 'Desktop Gateway URL (optional)',
                     hintText: 'https://hermes-desktop.example.lan',
+                    helperMaxLines: 4,
                     helperText:
                         'Override the gateway address supplied by the dashboard.',
                   ),
@@ -1568,16 +1585,10 @@ class _AddDialogState extends State<_AddDialog> {
         ),
         FilledButton(
           onPressed: _validating ? null : _validateAndSave,
-          child: _validating
-              ? SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Theme.of(context).colorScheme.onPrimary,
-                  ),
-                )
-              : Text(_isEditing ? 'Save Changes' : 'Connect'),
+          child: StudioActionLabel(
+            _isEditing ? 'Save Changes' : 'Connect',
+            busy: _validating,
+          ),
         ),
       ],
     );

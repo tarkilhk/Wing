@@ -1,3 +1,5 @@
+import '../theme/hermes_theme.dart';
+import 'studio_error.dart';
 import 'package:flutter/material.dart';
 
 import '../models/backend_update.dart';
@@ -137,7 +139,14 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                   controller.phase != BackendUpdatePhase.ready &&
                   controller.message == null)
                 Text(_phaseLabel(controller.phase)),
-              if (controller.message case final message?) Text(message),
+              if (controller.message case final message?)
+                const {
+                      BackendUpdatePhase.failed,
+                      BackendUpdatePhase.refused,
+                      BackendUpdatePhase.partial,
+                    }.contains(controller.phase)
+                    ? StudioError(message)
+                    : Text(message),
               if (status?.lines case final lines? when lines.isNotEmpty)
                 ExpansionTile(
                   tilePadding: EdgeInsets.zero,
@@ -153,7 +162,10 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                       color: Theme.of(
                         context,
                       ).colorScheme.surfaceContainerHighest,
-                      child: SelectableText(lines.join('\n')),
+                      child: SelectableText(
+                        lines.join('\n'),
+                        style: HermesTokens.of(context).typography.mono,
+                      ),
                     ),
                   ],
                 ),

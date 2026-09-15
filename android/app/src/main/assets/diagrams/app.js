@@ -29,6 +29,14 @@
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   }
 
+  window.setStudioTheme = (dark, palette) => {
+    setTheme(dark);
+    for (const role of ['canvas', 'panel', 'text', 'muted', 'border', 'error', 'accent']) {
+      if (!/^#[0-9a-f]{6}$/i.test(palette[role])) throw new Error('Invalid Studio palette');
+      document.documentElement.style.setProperty(`--${role}`, palette[role]);
+    }
+  };
+
   function revokeObjectUrl(url = activeObjectUrl) {
     if (!url) return;
     URL.revokeObjectURL(url);

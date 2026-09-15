@@ -137,7 +137,7 @@ class _ProfileActivityTabsState extends State<ProfileActivityTabs> {
                             button: true,
                             child: Material(
                               color: tab.id == _selected
-                                  ? colors.outlineVariant.withValues(alpha: .65)
+                                  ? colors.primaryContainer
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(4),
                               child: InkWell(
@@ -170,8 +170,13 @@ class _ProfileActivityTabsState extends State<ProfileActivityTabs> {
                                         height: 1.25,
                                         fontWeight: FontWeight.w400,
                                         letterSpacing: 0,
+                                        decoration: tab.id == _selected
+                                            ? TextDecoration.underline
+                                            : TextDecoration.none,
+                                        decorationColor: colors.primary,
+                                        decorationThickness: 2,
                                         color: tab.id == _selected
-                                            ? colors.onSurface
+                                            ? colors.primary
                                             : colors.onSurfaceVariant,
                                       ),
                                     ),

@@ -3,7 +3,6 @@ package com.hermesagent.hermes_android
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.AssetManager
-import android.graphics.Color
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Build
@@ -37,6 +36,14 @@ private class MermaidDiagramView(
     private val assets: AssetManager = context.assets
     private val webView = WebView(context)
     private val dark = creationParams?.get("dark") as? Boolean ?: false
+    private val palette = requireNotNull(creationParams?.get("palette") as? Map<*, *>)
+    private fun themeColor(role: String): Int = (palette[role] as Number).toInt()
+    private fun cssColor(role: String): String = "#%06X".format(themeColor(role) and 0xFFFFFF)
+    private val themeJson: String get() = JSONObject().apply {
+        for (role in listOf("canvas", "panel", "text", "muted", "border", "error", "accent")) {
+            put(role, cssColor(role))
+        }
+    }.toString()
     private val source = creationParams?.get("source") as? String
     private val format = (creationParams?.get("format") as? String)
         ?.takeIf { it == SVG_FORMAT || it == HTML_FORMAT || it == MERMAID_FORMAT }
@@ -79,7 +86,7 @@ private class MermaidDiagramView(
     @SuppressLint("SetJavaScriptEnabled")
     @Suppress("DEPRECATION")
     private fun configureWebView() {
-        webView.setBackgroundColor(if (dark) DARK_BACKGROUND else LIGHT_BACKGROUND)
+        webView.setBackgroundColor(themeColor("canvas"))
         webView.isVerticalScrollBarEnabled = true
         webView.isHorizontalScrollBarEnabled = true
         webView.setDownloadListener { _, _, _, _, _ -> }
@@ -136,7 +143,9 @@ private class MermaidDiagramView(
                 } ?: "if (typeof window.${renderFunction()} === 'function') {" +
                     "window.${renderFunction()}(${javascriptString(source)}, $dark);" +
                     "} else { ${viewerUnavailableScript()} }"
-                view.evaluateJavascript(script, null)
+                val themeScript = "if (typeof window.setStudioTheme === 'function') {" +
+                    "window.setStudioTheme($dark, $themeJson); }"
+                view.evaluateJavascript(themeScript + script, null)
             }
 
             override fun onReceivedSslError(
@@ -232,12 +241,13 @@ private class MermaidDiagramView(
         .replace("\u2029", "\\u2029")
 
     private fun viewerUnavailableScript(): String {
-        val foreground = if (dark) "#E8F2EC" else "#172B27"
-        val background = if (dark) "#101917" else "#F4F7F6"
+        val foreground = cssColor("error")
+        val background = cssColor("canvas")
         return "document.documentElement.style.background='$background';" +
             "document.body.style.color='$foreground';" +
             "document.body.style.background='$background';" +
-            "document.body.textContent='The diagram viewer could not load.';"
+            "document.body.style.font='16px Roboto, sans-serif';" +
+            "document.body.textContent='⚠ The diagram viewer could not load.';"
     }
 
     private fun renderFunction(): String =
@@ -265,8 +275,6 @@ private class MermaidDiagramView(
         private const val HTML_FORMAT = "html"
         private const val ORIGIN = "https://hermes-diagrams.invalid"
         private const val ENTRY_URL = "$ORIGIN/index.html"
-        private val DARK_BACKGROUND = Color.rgb(16, 25, 23)
-        private val LIGHT_BACKGROUND = Color.rgb(244, 247, 246)
         private val ASSETS = mapOf(
             ENTRY_URL to Asset("index.html", "text/html"),
             "$ORIGIN/app.js" to Asset("app.js", "application/javascript"),

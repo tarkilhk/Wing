@@ -72,6 +72,7 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
   }.contains(widget.name);
   bool _busy = false;
   String? _notice;
+  bool _noticeIsError = false;
   Future<void> _provider(
     Map<String, dynamic> row,
     VoidCallback refresh, [
@@ -80,6 +81,7 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
     setState(() {
       _busy = true;
       _notice = null;
+      _noticeIsError = false;
     });
     try {
       final result = await _profile.write('PUT', '$_base/provider', {
@@ -116,7 +118,10 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _notice = administrationError(e, writing: true));
+        setState(() {
+          _notice = administrationError(e, writing: true);
+          _noticeIsError = true;
+        });
       }
     }
     if (mounted) setState(() => _busy = false);
@@ -151,7 +156,10 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
       refresh();
     } catch (e) {
       if (mounted) {
-        setState(() => _notice = administrationError(e, writing: true));
+        setState(() {
+          _notice = administrationError(e, writing: true);
+          _noticeIsError = true;
+        });
       }
     }
     if (mounted) setState(() => _busy = false);
@@ -169,7 +177,7 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
           padding: const EdgeInsets.all(16),
           children: [
             if (_busy) const LinearProgressIndicator(),
-            if (_notice != null) AdminNotice(_notice!),
+            if (_notice != null) AdminNotice(_notice!, isError: _noticeIsError),
             TextButton(
               onPressed: _busy ? null : refresh,
               child: const Text('Refresh readiness'),
@@ -305,7 +313,13 @@ class _AdminToolModelsPageState extends State<AdminToolModelsPage> {
       }
       refresh();
     } catch (e) {
-      if (mounted) adminMessage(context, administrationError(e, writing: true));
+      if (mounted) {
+        adminMessage(
+          context,
+          administrationError(e, writing: true),
+          isError: true,
+        );
+      }
     }
     if (mounted) setState(() => _busy = false);
   }
@@ -326,6 +340,8 @@ class _AdminToolModelsPageState extends State<AdminToolModelsPage> {
             ),
           for (final model in administrationRows(data['models'] ?? []))
             ListTile(
+              selected: !_busy && data['current'] == model['id'],
+              enabled: !_busy,
               title: Text('${model['display'] ?? model['id']}'),
               subtitle: Text(
                 '${model['strengths'] ?? ''} ${model['price'] ?? ''}',

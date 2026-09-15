@@ -1,3 +1,5 @@
+import 'studio_action_label.dart';
+import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import '../theme/hermes_theme.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -92,6 +94,47 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
     }
   }
 
+  Widget _choice(int index) {
+    final theme = Theme.of(context);
+    final multiple = widget.request.multiSelect;
+    final selected = multiple
+        ? _selectedIndices.contains(index)
+        : _selectedIndex == index;
+    final title = Text(widget.request.choices[index]);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: selected && !_submitting
+            ? theme.colorScheme.primaryContainer
+            : theme.colorScheme.surfaceContainer,
+        shape: RoundedRectangleBorder(
+          borderRadius: HermesRadius.card,
+          side: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: multiple
+            ? CheckboxListTile(
+                key: Key('clarify-choice-$index'),
+                value: selected,
+                onChanged: _submitting ? null : (_) => _selectChoice(index),
+                title: title,
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                horizontalTitleGap: 12,
+              )
+            : RadioListTile<int>(
+                key: Key('clarify-choice-$index'),
+                value: index,
+                enabled: !_submitting,
+                title: title,
+                minTileHeight: 48,
+                minVerticalPadding: 8,
+                contentPadding: EdgeInsets.zero,
+              ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -135,54 +178,19 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
                     : 'Select one option, or enter another answer.',
                 style: theme.textTheme.bodySmall,
               ),
-              const SizedBox(height: 6),
-              for (var index = 0; index < request.choices.length; index++)
-                Semantics(
-                  selected: request.multiSelect
-                      ? _selectedIndices.contains(index)
-                      : _selectedIndex == index,
-                  button: true,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Material(
-                      color:
-                          (request.multiSelect
-                              ? _selectedIndices.contains(index)
-                              : _selectedIndex == index)
-                          ? theme.colorScheme.primaryContainer
-                          : theme.colorScheme.surfaceContainer,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: HermesRadius.card,
-                        side: BorderSide(
-                          color: theme.colorScheme.outlineVariant,
-                        ),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: ListTile(
-                        key: Key('clarify-choice-$index'),
-                        minTileHeight: 48,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                        ),
-                        leading: Icon(
-                          request.multiSelect
-                              ? (_selectedIndices.contains(index)
-                                    ? Icons.check_box_rounded
-                                    : Icons.check_box_outline_blank_rounded)
-                              : (_selectedIndex == index
-                                    ? Icons.radio_button_checked_rounded
-                                    : Icons.radio_button_off_rounded),
-                        ),
-                        title: Text(
-                          request.choices[index],
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                        enabled: !_submitting,
-                        onTap: () => _selectChoice(index),
-                      ),
-                    ),
-                  ),
+              const SizedBox(height: 8),
+              RadioGroup<int>(
+                groupValue: _selectedIndex,
+                onChanged: (index) {
+                  if (index != null) _selectChoice(index);
+                },
+                child: Column(
+                  children: [
+                    for (var index = 0; index < request.choices.length; index++)
+                      _choice(index),
+                  ],
                 ),
+              ),
             ],
             SizedBox(height: request.hasChoices ? 8 : 16),
             TextField(
@@ -215,13 +223,7 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(
-                _error!,
-                key: const Key('clarify-error'),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
+              StudioError(_error!, key: const Key('clarify-error')),
             ],
           ],
         ),
@@ -238,23 +240,19 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
         onPressed: _submitting || answer.isEmpty
             ? null
             : () => _respond(answer),
-        child: _submitting
-            ? const SizedBox.square(
-                dimension: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Text(
-                widget.inline
-                    ? (widget.number < widget.total
-                          ? 'Confirm & next'
-                          : 'Confirm & continue')
-                    : 'Continue',
-              ),
+        child: StudioActionLabel(
+          widget.inline
+              ? (widget.number < widget.total
+                    ? 'Confirm & next'
+                    : 'Confirm & continue')
+              : 'Continue',
+          busy: _submitting,
+        ),
       ),
     ];
     if (widget.inline) {
       return Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: theme.colorScheme.surfaceContainerLow,
           borderRadius: HermesRadius.card,
@@ -289,15 +287,15 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
                   ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             content,
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                actions.first,
-                const SizedBox(width: 12),
-                Expanded(child: actions.last),
-              ],
+            const SizedBox(height: 12),
+            OverflowBar(
+              alignment: MainAxisAlignment.end,
+              overflowAlignment: OverflowBarAlignment.end,
+              spacing: 12,
+              overflowSpacing: 8,
+              children: actions,
             ),
           ],
         ),

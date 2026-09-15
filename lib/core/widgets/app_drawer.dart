@@ -34,6 +34,23 @@ class AppDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final largeText = MediaQuery.textScalerOf(context).scale(16) > 24;
+    final identity = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Hermes', style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 8),
+        Text(
+          [
+            connectionLabel ?? 'Your mobile workspace',
+            ?profileLabel,
+          ].join(' · '),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+        ),
+      ],
+    );
     return Drawer(
       backgroundColor: colors.surfaceContainerLow,
       child: SafeArea(
@@ -42,29 +59,18 @@ class AppDrawer extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              child: Row(
+              child: Flex(
+                direction: largeText ? Axis.vertical : Axis.horizontal,
+                crossAxisAlignment: largeText
+                    ? CrossAxisAlignment.start
+                    : CrossAxisAlignment.center,
                 children: [
                   const PlayfulPortrait(),
-                  const SizedBox(width: HermesSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Hermes',
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          [
-                            connectionLabel ?? 'Your mobile workspace',
-                            ?profileLabel,
-                          ].join(' · '),
-                          style: TextStyle(color: colors.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
+                  SizedBox(
+                    width: HermesSpacing.md,
+                    height: largeText ? HermesSpacing.md : 0,
                   ),
+                  if (largeText) identity else Expanded(child: identity),
                 ],
               ),
             ),
@@ -81,8 +87,28 @@ class AppDrawer extends StatelessWidget {
                 ),
                 selected: selected == destination,
                 selectedTileColor: colors.primaryContainer,
-                leading: Icon(destination.icon),
-                title: Text(destination.label),
+                leading: largeText ? null : Icon(destination.icon),
+                title: largeText
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(destination.icon),
+                              if (selected == destination) ...[
+                                const SizedBox(width: 8),
+                                const Icon(Icons.check),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(destination.label),
+                        ],
+                      )
+                    : Text(destination.label),
+                trailing: !largeText && selected == destination
+                    ? const Icon(Icons.check)
+                    : null,
                 enabled:
                     hasConnection ||
                     destination == AppDestination.connections ||

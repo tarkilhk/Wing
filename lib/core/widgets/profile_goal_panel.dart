@@ -1,3 +1,4 @@
+import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import '../theme/hermes_theme.dart';
 import 'profile_transcript_disclosure.dart';
@@ -268,7 +269,7 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(child: Text(error)),
+                Expanded(child: StudioError(error)),
                 TextButton(
                   onPressed: working ? null : _refresh,
                   child: const Text('Retry'),

@@ -150,7 +150,12 @@ void main() {
     tester,
   ) async {
     await show(tester, Brightness.light);
-    await tester.enterText(find.byType(TextField), 'Memory budget');
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) => widget is TextField && !widget.readOnly,
+      ),
+      'Memory budget',
+    );
     await tester.pumpAndSettle();
     expect(find.text('Profile · Server A / personal'), findsOneWidget);
     await tester.tap(find.text('Memory budget').last);

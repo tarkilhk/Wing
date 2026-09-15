@@ -20,7 +20,7 @@ class _ContextRingState extends State<ContextRing>
   final _portal = OverlayPortalController();
   final _link = LayerLink();
   final _anchor = GlobalKey();
-  final _buttonFocus = FocusNode(canRequestFocus: false);
+  final _buttonFocus = FocusNode();
   late final AnimationController _animation;
 
   @override

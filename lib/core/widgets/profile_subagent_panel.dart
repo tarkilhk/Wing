@@ -1,3 +1,4 @@
+import 'studio_error.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -73,7 +74,7 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
         if (chat.subagentsError case final error?)
           Row(
             children: [
-              Expanded(child: Text(error)),
+              Expanded(child: StudioError(error)),
               TextButton(onPressed: _refresh, child: const Text('Retry')),
             ],
           ),
@@ -106,6 +107,11 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
                   ? Icons.help_outline
                   : _statusIcon(activity.status),
               size: 16,
+              color:
+                  !chat.unconfirmedSubagentIds.contains(activity.id) &&
+                      activity.status == GatewaySubagentStatus.failed
+                  ? Theme.of(context).colorScheme.error
+                  : null,
             ),
             minTileHeight: 32,
             minVerticalPadding: 0,
@@ -199,6 +205,7 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
   GatewaySubagentTail? _tail;
   String? _tailError;
   String? _controlMessage;
+  bool _controlFailed = false;
   int _tailFailures = 0;
   bool _loadingTail = false;
   bool _steering = false;
@@ -304,6 +311,7 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
     setState(() {
       _steering = true;
       _controlMessage = null;
+      _controlFailed = false;
     });
     try {
       final accepted = await widget.controller.steerSubagent(
@@ -320,11 +328,15 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
           _controlMessage = 'Steering queued.';
         } else {
           _controlMessage = 'The subagent did not accept that steering.';
+          _controlFailed = true;
         }
       });
     } catch (_) {
       if (mounted) {
-        setState(() => _controlMessage = 'Steering could not be queued.');
+        setState(() {
+          _controlMessage = 'Steering could not be queued.';
+          _controlFailed = true;
+        });
       }
     } finally {
       if (mounted) {
@@ -340,6 +352,7 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
     setState(() {
       _interrupting = true;
       _controlMessage = null;
+      _controlFailed = false;
     });
     try {
       final found = await widget.controller.interruptSubagent(
@@ -355,7 +368,10 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _controlMessage = 'Interrupt could not be requested.');
+        setState(() {
+          _controlMessage = 'Interrupt could not be requested.';
+          _controlFailed = true;
+        });
       }
     } finally {
       if (mounted) {
@@ -451,7 +467,7 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
                   ),
                   if (_controlMessage case final message?) ...[
                     const SizedBox(height: 8),
-                    Text(message),
+                    _controlFailed ? StudioError(message) : Text(message),
                   ],
                   const SizedBox(height: 12),
                   _tailBody(current),
@@ -488,7 +504,7 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
           ],
         ),
         if (_tailError case final error?) ...[
-          Text(error),
+          StudioError(error),
           if (_tailFailures >= 3)
             Align(
               alignment: Alignment.centerLeft,

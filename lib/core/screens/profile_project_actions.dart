@@ -1,3 +1,5 @@
+import '../widgets/studio_action_label.dart';
+import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
 import '../theme/hermes_theme.dart';
 import '../widgets/workspace_action_menu.dart';
@@ -275,10 +277,7 @@ class _ProjectDialogState extends State<_ProjectDialog> {
           ),
         if (_error != null) ...[
           const SizedBox(height: 12),
-          Text(
-            _error!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
+          StudioError(_error!),
         ],
       ],
     ),
@@ -299,14 +298,9 @@ class _ProjectDialogState extends State<_ProjectDialog> {
               )
             : null,
         onPressed: _submitting ? null : _save,
-        child: Text(
-          _submitting
-              ? widget.action == _ProjectAction.delete
-                    ? 'Deleting…'
-                    : 'Saving…'
-              : widget.action == _ProjectAction.delete
-              ? 'Delete'
-              : 'Save',
+        child: StudioActionLabel(
+          widget.action == _ProjectAction.delete ? 'Delete' : 'Save',
+          busy: _submitting,
         ),
       ),
     ],
@@ -335,10 +329,17 @@ class _ChoiceButton extends StatelessWidget {
     child: IconButton(
       tooltip: label,
       isSelected: selected,
-      style: IconButton.styleFrom(
-        side: selected
-            ? BorderSide(color: Theme.of(context).colorScheme.primary, width: 2)
-            : null,
+      style: ButtonStyle(
+        side: WidgetStateProperty.resolveWith((states) {
+          final colors = Theme.of(context).colorScheme;
+          if (states.contains(WidgetState.disabled)) {
+            return BorderSide(color: colors.outlineVariant);
+          }
+          if (states.contains(WidgetState.focused)) {
+            return BorderSide(color: colors.primary, width: 3);
+          }
+          return selected ? BorderSide(color: colors.primary, width: 2) : null;
+        }),
       ),
       onPressed: onPressed,
       icon: child,

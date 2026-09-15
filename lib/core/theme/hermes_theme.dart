@@ -130,6 +130,7 @@ class HermesTypography {
       bodyMedium: body.copyWith(color: onSurface),
       bodySmall: label.copyWith(color: muted),
       labelMedium: label.copyWith(color: muted),
+      labelSmall: label.copyWith(color: muted),
     );
   }
 }
@@ -339,12 +340,9 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
     borderRadius: HermesRadius.card,
     side: BorderSide(color: tokens.border),
   );
-  final disabled = WidgetStateProperty.resolveWith<Color?>(
-    (states) => states.contains(WidgetState.disabled) ? tokens.muted : null,
-  );
   final focusBorder = WidgetStateProperty.resolveWith<BorderSide?>(
     (states) => states.contains(WidgetState.focused)
-        ? BorderSide(color: tokens.onSurface, width: 2)
+        ? BorderSide(color: tokens.accent, width: 2)
         : null,
   );
   final action = TextButton.styleFrom(
@@ -391,10 +389,19 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
     filledButtonTheme: FilledButtonThemeData(
       style: action.copyWith(
         side: focusBorder,
-        foregroundColor: disabled,
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? tokens.muted
+              : states.contains(WidgetState.focused)
+              ? tokens.accent
+              : null,
+        ),
         backgroundColor: WidgetStateProperty.resolveWith(
-          (states) =>
-              states.contains(WidgetState.disabled) ? tokens.border : null,
+          (states) => states.contains(WidgetState.disabled)
+              ? tokens.border
+              : states.contains(WidgetState.focused)
+              ? tokens.raised
+              : null,
         ),
       ),
     ),
@@ -403,12 +410,17 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
         elevation: const WidgetStatePropertyAll(0),
         side: focusBorder,
         foregroundColor: WidgetStateProperty.resolveWith(
-          (states) =>
-              states.contains(WidgetState.disabled) ? tokens.muted : onAccent,
+          (states) => states.contains(WidgetState.disabled)
+              ? tokens.muted
+              : states.contains(WidgetState.focused)
+              ? tokens.accent
+              : onAccent,
         ),
         backgroundColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.disabled)
               ? tokens.border
+              : states.contains(WidgetState.focused)
+              ? tokens.raised
               : tokens.accent,
         ),
       ),
@@ -489,7 +501,7 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
         color: tokens.onSurface,
         fontSize: 13,
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     ),
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: action.copyWith(
@@ -549,6 +561,7 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
       ),
     ),
     dropdownMenuTheme: DropdownMenuThemeData(
+      disabledColor: tokens.muted,
       textStyle: TextStyle(
         fontFamily: HermesTypography.sans,
         color: tokens.onSurface,
@@ -636,6 +649,7 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
       elevation: 0,
     ),
     bottomSheetTheme: BottomSheetThemeData(
+      clipBehavior: Clip.antiAlias,
       backgroundColor: tokens.raised,
       surfaceTintColor: Colors.transparent,
       shape: const RoundedRectangleBorder(borderRadius: HermesRadius.sheet),

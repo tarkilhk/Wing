@@ -1,3 +1,4 @@
+import 'studio_error.dart';
 import 'package:flutter/material.dart';
 
 import '../services/profile_gateway.dart';
@@ -83,7 +84,7 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
           ),
           if (_failed) ...[
             const SizedBox(height: 8),
-            const Text(
+            const StudioError(
               'Folders could not be loaded. Enter an absolute path instead.',
             ),
           ] else if (_suggestions case final suggestions?) ...[

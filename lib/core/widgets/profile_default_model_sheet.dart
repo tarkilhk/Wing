@@ -1,3 +1,5 @@
+import 'studio_action_label.dart';
+import 'studio_error.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -211,135 +213,155 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
           height: MediaQuery.sizeOf(context).height * 0.82,
           child: Column(
             children: [
-              ListTile(
-                title: const Text('Profile default model'),
-                subtitle: Text('$_profileName on $_connectionLabel'),
-                trailing: IconButton(
-                  tooltip: 'Close',
-                  onPressed: _saving
-                      ? null
-                      : () => Navigator.pop(context, false),
-                  icon: const Icon(Icons.close_rounded),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: HermesSpacing.lg,
-                ),
-                child: Text(
-                  'Sets the server default for this profile and applies to new sessions only. Running chats keep their current model.',
-                  style: tokens.typography.body.copyWith(
-                    color: tokens.muted,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              const SizedBox(height: HermesSpacing.sm),
-              if (!_loading && _choices.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: HermesSpacing.lg,
-                  ),
-                  child: TextField(
-                    key: const Key('profile-model-search'),
-                    enabled: !_saving,
-                    decoration: const InputDecoration(
-                      hintText: 'Search models',
-                      prefixIcon: Icon(Icons.search_rounded),
-                      border: OutlineInputBorder(
-                        borderRadius: HermesRadius.control,
-                      ),
-                      isDense: true,
-                    ),
-                    onChanged: (value) => setState(() => _query = value),
-                  ),
-                ),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: HermesSpacing.lg,
-                  ),
-                  child: Text(
-                    _error!,
-                    key: const Key('profile-model-error'),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ),
-              if (_notice != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: HermesSpacing.lg,
-                  ),
-                  child: Text(_notice!, key: const Key('profile-model-notice')),
-                ),
               Expanded(
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _choices.isEmpty
-                    ? Center(
-                        child: TextButton(
-                          key: const Key('profile-model-retry'),
-                          onPressed: _load,
-                          child: const Text('Retry'),
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        title: Text(
+                          'Profile default model',
+                          style: Theme.of(context).textTheme.titleLarge,
                         ),
-                      )
-                    : groups.isEmpty
-                    ? Center(
+                        subtitle: Text('$_profileName on $_connectionLabel'),
+                        trailing: IconButton(
+                          tooltip: 'Close',
+                          onPressed: _saving
+                              ? null
+                              : () => Navigator.pop(context, false),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: HermesSpacing.lg,
+                        ),
                         child: Text(
-                          'No matching models',
+                          'Sets the server default for this profile and applies to new sessions only. Running chats keep their current model.',
                           style: tokens.typography.body.copyWith(
                             color: tokens.muted,
+                            fontSize: 16,
                           ),
-                        ),
-                      )
-                    : RadioGroup<String>(
-                        groupValue: _selected == null
-                            ? null
-                            : '${_selected!.provider}/${_selected!.model}',
-                        onChanged: (value) {
-                          if (_saving || value == null) return;
-                          final choice = _choices.firstWhere(
-                            (choice) =>
-                                '${choice.provider}/${choice.model}' == value,
-                          );
-                          setState(() {
-                            _selected = choice;
-                            _error = null;
-                            _notice = null;
-                          });
-                        },
-                        child: ListView(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: HermesSpacing.sm,
-                          ),
-                          children: [
-                            for (final entry in groups.entries)
-                              ExpansionTile(
-                                key: Key('profile-model-provider-${entry.key}'),
-                                initiallyExpanded:
-                                    entry.key == _selected?.provider,
-                                title: Text(entry.value.first.routeLabel),
-                                subtitle: Text(entry.key),
-                                children: [
-                                  for (final choice in entry.value)
-                                    RadioListTile<String>(
-                                      minTileHeight: 48,
-                                      minVerticalPadding: 8,
-                                      key: Key(
-                                        'profile-model-${choice.provider}-${choice.model}',
-                                      ),
-                                      value:
-                                          '${choice.provider}/${choice.model}',
-                                      enabled: !_saving,
-                                      title: Text(choice.model),
-                                    ),
-                                ],
-                              ),
-                          ],
                         ),
                       ),
+                      const SizedBox(height: HermesSpacing.sm),
+                      if (!_loading && _choices.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: HermesSpacing.lg,
+                          ),
+                          child: TextField(
+                            key: const Key('profile-model-search'),
+                            enabled: !_saving,
+                            decoration: const InputDecoration(
+                              hintText: 'Search models',
+                              prefixIcon: Icon(Icons.search_rounded),
+                              border: OutlineInputBorder(
+                                borderRadius: HermesRadius.control,
+                              ),
+                              isDense: true,
+                            ),
+                            onChanged: (value) =>
+                                setState(() => _query = value),
+                          ),
+                        ),
+                      if (_error != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: HermesSpacing.lg,
+                          ),
+                          child: StudioError(
+                            _error!,
+                            key: const Key('profile-model-error'),
+                          ),
+                        ),
+                      if (_notice != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: HermesSpacing.lg,
+                          ),
+                          child: Text(
+                            _notice!,
+                            key: const Key('profile-model-notice'),
+                          ),
+                        ),
+                      _loading
+                          ? const Center(child: CircularProgressIndicator())
+                          : _choices.isEmpty
+                          ? Center(
+                              child: TextButton(
+                                key: const Key('profile-model-retry'),
+                                onPressed: _load,
+                                child: const Text('Retry'),
+                              ),
+                            )
+                          : groups.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No matching models',
+                                style: tokens.typography.body.copyWith(
+                                  color: tokens.muted,
+                                ),
+                              ),
+                            )
+                          : RadioGroup<String>(
+                              groupValue: _selected == null
+                                  ? null
+                                  : '${_selected!.provider}/${_selected!.model}',
+                              onChanged: (value) {
+                                if (_saving || value == null) return;
+                                final choice = _choices.firstWhere(
+                                  (choice) =>
+                                      '${choice.provider}/${choice.model}' ==
+                                      value,
+                                );
+                                setState(() {
+                                  _selected = choice;
+                                  _error = null;
+                                  _notice = null;
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: HermesSpacing.lg,
+                                ),
+                                child: Column(
+                                  children: [
+                                    for (final entry in groups.entries)
+                                      ExpansionTile(
+                                        key: Key(
+                                          'profile-model-provider-${entry.key}',
+                                        ),
+                                        tilePadding: EdgeInsets.zero,
+                                        childrenPadding: EdgeInsets.zero,
+                                        initiallyExpanded:
+                                            entry.key == _selected?.provider,
+                                        title: Text(
+                                          entry.value.first.routeLabel,
+                                        ),
+                                        subtitle: Text(entry.key),
+                                        children: [
+                                          for (final choice in entry.value)
+                                            RadioListTile<String>(
+                                              contentPadding: EdgeInsets.zero,
+                                              minTileHeight: 48,
+                                              minVerticalPadding: 8,
+                                              key: Key(
+                                                'profile-model-${choice.provider}-${choice.model}',
+                                              ),
+                                              value:
+                                                  '${choice.provider}/${choice.model}',
+                                              enabled: !_saving,
+                                              title: Text(choice.model),
+                                            ),
+                                        ],
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                    ],
+                  ),
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
@@ -348,8 +370,11 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                   HermesSpacing.lg,
                   HermesSpacing.md,
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                child: OverflowBar(
+                  alignment: MainAxisAlignment.end,
+                  overflowAlignment: OverflowBarAlignment.end,
+                  spacing: 8,
+                  overflowSpacing: 8,
                   children: [
                     TextButton(
                       onPressed: _saving
@@ -357,16 +382,10 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                           : () => Navigator.pop(context, false),
                       child: const Text('Cancel'),
                     ),
-                    const SizedBox(width: HermesSpacing.sm),
                     FilledButton(
                       key: const Key('profile-model-save'),
                       onPressed: _dirty && !_saving ? _save : null,
-                      child: _saving
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Save'),
+                      child: StudioActionLabel('Save', busy: _saving),
                     ),
                   ],
                 ),

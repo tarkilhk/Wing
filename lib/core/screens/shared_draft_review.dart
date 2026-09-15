@@ -1,5 +1,6 @@
+import '../widgets/studio_select.dart';
+import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
-import '../theme/hermes_theme.dart';
 
 import '../services/android_share_intent_service.dart';
 import '../services/attachment_draft_service.dart';
@@ -306,25 +307,13 @@ class _SharedDraftReviewState extends State<_SharedDraftReview> {
                     const SizedBox(height: 8),
                     Text('Connection: ${controller.connection.label}'),
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
+                    StudioSelect<String>(
                       key: ValueKey('share-profile-$_profileName'),
-                      initialValue: _profileName,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Profile',
-                        border: OutlineInputBorder(
-                          borderRadius: HermesRadius.control,
-                        ),
-                      ),
-                      items: [
+                      value: _profileName,
+                      label: 'Profile',
+                      options: [
                         for (final profile in profiles)
-                          DropdownMenuItem(
-                            value: profile.name,
-                            child: Text(
-                              profile.label,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
+                          (value: profile.name, label: profile.label),
                       ],
                       onChanged: _working ? null : _selectProfile,
                     ),
@@ -417,12 +406,9 @@ class _SharedDraftReviewState extends State<_SharedDraftReview> {
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: Text(
+                  child: StudioError(
                     _error!,
                     key: const Key('share-review-error'),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
                   ),
                 ),
               Padding(

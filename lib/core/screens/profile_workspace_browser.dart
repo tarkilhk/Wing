@@ -1,3 +1,4 @@
+import '../widgets/studio_error.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -103,7 +104,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
+            content: StudioError(
               error is StateError
                   ? error.message.toString()
                   : 'Could not complete that action. Please retry.',
@@ -153,7 +154,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   }
 
   Widget _heading(String title, {Widget? action}) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 12, 12, 4),
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
     child: Row(
       children: [
         Expanded(
@@ -161,8 +162,8 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
             title,
             style: TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.0,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.2,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
@@ -191,7 +192,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
             project['name'] as String,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
           ),
           onTap: controller.switching ? null : () => _openProject(project),
           onLongPress: controller.switching
@@ -238,7 +239,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           clipBehavior: Clip.antiAlias,
           child: ListTile(
             key: ValueKey('chat-${row['id']}'),
-            contentPadding: const EdgeInsets.only(left: 14, right: 0),
+            contentPadding: const EdgeInsets.only(left: 16, right: 0),
             minTileHeight: 52,
             onLongPress:
                 controller.switching ||
@@ -251,7 +252,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 15,
+                fontSize: 16,
                 fontWeight: row['unread'] == true
                     ? FontWeight.w600
                     : FontWeight.w400,
@@ -271,11 +272,11 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 ProfileChatIndicator(chat: local, row: row),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Text(
                   _age(row),
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
@@ -354,13 +355,13 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
               onSecondaryTap: controller.switching ? null : actions,
               child: ListTile(
                 key: ValueKey('saved-draft-${draft.sessionId}'),
-                contentPadding: const EdgeInsets.only(left: 14, right: 0),
+                contentPadding: const EdgeInsets.only(left: 16, right: 0),
                 leading: const Icon(Icons.edit_note_outlined, size: 22),
                 title: Text(
                   title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 15),
+                  style: const TextStyle(fontSize: 16),
                 ),
                 subtitle: Text(
                   details.isEmpty
@@ -465,7 +466,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         if (pending) const LinearProgressIndicator(),
         if (resource.searchError != null)
           ListTile(
-            title: Text(resource.searchError!),
+            title: StudioError(resource.searchError!),
             trailing: TextButton(
               onPressed: () => controller.searchChats(_query),
               child: const Text('Retry search'),
@@ -547,8 +548,8 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           action: resource.projects.length > 5
               ? TextButton(
                   style: TextButton.styleFrom(
-                    minimumSize: const Size(0, 32),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    minimumSize: const Size(48, 40),
+                    tapTargetSize: MaterialTapTargetSize.padded,
                   ),
                   onPressed: () => setState(() => _view = 'projects'),
                   child: const Text('See all'),
@@ -557,7 +558,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         ),
         if (resource.projectsError != null)
           ListTile(
-            title: Text(resource.projectsError!),
+            title: StudioError(resource.projectsError!),
             trailing: TextButton(
               onPressed: () => _run(controller.refresh),
               child: const Text('Retry'),
@@ -572,7 +573,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         const LinearProgressIndicator(),
       if (project != null && resource.projectSessionsError != null)
         ListTile(
-          title: Text(resource.projectSessionsError!),
+          title: StudioError(resource.projectSessionsError!),
           trailing: TextButton(
             onPressed: () => _run(() => controller.selectProject(project)),
             child: const Text('Retry'),
@@ -616,7 +617,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         )
       else if (project == null && resource.sessionsPageError != null)
         ListTile(
-          title: Text(resource.sessionsPageError!),
+          title: StudioError(resource.sessionsPageError!),
           trailing: TextButton(
             onPressed: _loadMore,
             child: const Text('Retry'),
@@ -770,9 +771,9 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                   fontSize: 24,
-                  letterSpacing: -1.0,
+                  letterSpacing: -0.2,
                 ),
               ),
               Text(
@@ -817,51 +818,71 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                                 child: Center(
                                   child: TextButton(
                                     key: ValueKey('profile-${profile.name}'),
-                                    style: TextButton.styleFrom(
-                                      minimumSize: const Size(48, 36),
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.padded,
-                                      visualDensity: VisualDensity.standard,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                      ),
-                                      foregroundColor: profileAccent(
-                                        context,
-                                        profile.name,
-                                      ),
-                                      backgroundColor:
-                                          profileAccent(
+                                    style:
+                                        TextButton.styleFrom(
+                                          minimumSize: const Size(48, 36),
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.padded,
+                                          visualDensity: VisualDensity.standard,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                          ),
+                                          foregroundColor: profileAccent(
                                             context,
                                             profile.name,
-                                          ).withValues(
-                                            alpha:
-                                                resource?.scope.profileName ==
-                                                    profile.name
-                                                ? 0.22
-                                                : 0.09,
                                           ),
-                                      side: BorderSide(
-                                        color:
-                                            profileAccent(
-                                              context,
-                                              profile.name,
-                                            ).withValues(
-                                              alpha:
+                                          backgroundColor:
+                                              profileAccent(
+                                                context,
+                                                profile.name,
+                                              ).withValues(
+                                                alpha:
+                                                    resource
+                                                            ?.scope
+                                                            .profileName ==
+                                                        profile.name
+                                                    ? 0.22
+                                                    : 0.09,
+                                              ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: HermesRadius.control,
+                                          ),
+                                        ).copyWith(
+                                          side: WidgetStateProperty.resolveWith((
+                                            states,
+                                          ) {
+                                            if (states.contains(
+                                              WidgetState.focused,
+                                            )) {
+                                              return BorderSide(
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.primary,
+                                                width: 3,
+                                              );
+                                            }
+                                            return BorderSide(
+                                              color:
+                                                  profileAccent(
+                                                    context,
+                                                    profile.name,
+                                                  ).withValues(
+                                                    alpha:
+                                                        resource
+                                                                ?.scope
+                                                                .profileName ==
+                                                            profile.name
+                                                        ? 1
+                                                        : 0.28,
+                                                  ),
+                                              width:
                                                   resource?.scope.profileName ==
                                                       profile.name
-                                                  ? 1
-                                                  : 0.28,
-                                            ),
-                                        width:
-                                            resource?.scope.profileName ==
-                                                profile.name
-                                            ? 2
-                                            : 1,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: HermesRadius.control,
-                                      ),
-                                    ),
+                                                  ? 2
+                                                  : 1,
+                                            );
+                                          }),
+                                        ),
                                     child: Semantics(
                                       selected:
                                           resource?.scope.profileName ==
@@ -917,7 +938,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                 ),
                 if (controller.error != null)
                   ListTile(
-                    title: Text(controller.error!),
+                    title: StudioError(controller.error!),
                     trailing: TextButton(
                       onPressed: () => _run(controller.retry),
                       child: const Text('Retry'),

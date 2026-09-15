@@ -1,3 +1,4 @@
+import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -28,7 +29,7 @@ class _InstalledAppVersionCardState extends State<InstalledAppVersionCard> {
     final opened = await (widget.openLink ?? openWebPreview)(Uri.parse(href));
     if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open this link.')),
+        const SnackBar(content: StudioError('Could not open this link.')),
       );
     }
   }

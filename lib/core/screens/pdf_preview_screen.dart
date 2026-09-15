@@ -1,3 +1,4 @@
+import '../widgets/studio_error.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -95,12 +96,12 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
         child: _loading
             ? const CircularProgressIndicator()
             : _failed
-            ? Padding(
-                padding: const EdgeInsets.all(24),
+            ? SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
+                    StudioError(
                       _errorMessage ??
                           'This PDF could not be displayed. Go back to open it in '
                               'another app, or save/share it.',

@@ -1,3 +1,5 @@
+import '../theme/hermes_theme.dart';
+import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import 'anchored_expansion_tile.dart';
 import 'profile_transcript_disclosure.dart';
@@ -199,7 +201,7 @@ class _ProfileBackgroundWorkPanelState
               onRetry: working ? null : _refreshSessionControl,
             ),
           if (_actionError case final error?)
-            Align(alignment: Alignment.centerLeft, child: Text(error)),
+            Align(alignment: Alignment.centerLeft, child: StudioError(error)),
           if (chat.sessionControlNotice case final notice?)
             Align(alignment: Alignment.centerLeft, child: Text(notice)),
           const Divider(),
@@ -441,13 +443,21 @@ class _ProcessTile extends StatelessWidget {
     minTileHeight: 44,
     tilePadding: EdgeInsets.zero,
     childrenPadding: const EdgeInsets.only(left: 12, right: 4, bottom: 8),
-    title: Text(process.command, maxLines: 2, overflow: TextOverflow.ellipsis),
+    title: Text(
+      process.command,
+      style: HermesTokens.of(context).typography.mono,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    ),
     subtitle: Text(_processStatus(process)),
     children: [
       if (process.cwd case final cwd?)
         Align(
           alignment: Alignment.centerLeft,
-          child: SelectableText('Folder: $cwd'),
+          child: SelectableText(
+            'Folder: $cwd',
+            style: HermesTokens.of(context).typography.mono,
+          ),
         ),
       if (process.pid case final pid?)
         Align(alignment: Alignment.centerLeft, child: Text('PID $pid')),
@@ -475,11 +485,14 @@ class _ProcessTile extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(8),
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: SelectableText(output),
+          child: SelectableText(
+            output,
+            style: HermesTokens.of(context).typography.mono,
+          ),
         ),
       ],
       if (error case final message?)
-        Align(alignment: Alignment.centerLeft, child: Text(message)),
+        Align(alignment: Alignment.centerLeft, child: StudioError(message)),
       Align(
         alignment: Alignment.centerRight,
         child: process.isRunning
@@ -513,7 +526,7 @@ class _ErrorRow extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Expanded(child: Text(message)),
+      Expanded(child: StudioError(message)),
       TextButton(onPressed: onRetry, child: const Text('Retry')),
     ],
   );

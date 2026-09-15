@@ -1,3 +1,5 @@
+import '../theme/hermes_theme.dart';
+import 'studio_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/slash_command.dart';
@@ -129,16 +131,22 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
       constraints: const BoxConstraints(maxHeight: 220),
       child: Material(
         elevation: 3,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        shape: RoundedRectangleBorder(
+          borderRadius: HermesRadius.card,
+          side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ListView(
+          shrinkWrap: true,
           children: [
             if (_loading) const LinearProgressIndicator(),
             if (_error != null)
               TextButton(
                 onPressed: () => _load(_query, ++_generation),
-                child: Text(_error!),
+                child: StudioError(_error!),
               ),
-            if (_warning.isNotEmpty) Text(_warning),
+            if (_warning.isNotEmpty)
+              Padding(padding: const EdgeInsets.all(8), child: Text(_warning)),
             if (!_loading &&
                 _error == null &&
                 _items.isEmpty &&
@@ -149,31 +157,23 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
                   'No matching commands. You can still send a command by name.',
                 ),
               ),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _items.length,
-                itemBuilder: (context, index) {
-                  final item = _items[index];
-                  return ListTile(
-                    dense: true,
-                    title: Text(item.text),
-                    subtitle: Text(
-                      item.description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: item.category.isEmpty
-                        ? null
-                        : Text(
-                            item.category,
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                    onTap: () => _select(item),
-                  );
-                },
+            for (final item in _items)
+              ListTile(
+                dense: true,
+                title: Text(item.text),
+                subtitle: Text(
+                  item.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: item.category.isEmpty
+                    ? null
+                    : Text(
+                        item.category,
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                onTap: () => _select(item),
               ),
-            ),
           ],
         ),
       ),

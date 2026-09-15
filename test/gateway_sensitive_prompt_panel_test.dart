@@ -96,7 +96,14 @@ void main() {
     await tester.pump();
 
     expect(
-      tester.widget<Text>(find.byKey(const Key('sensitive-prompt-error'))).data,
+      tester
+          .widget<Text>(
+            find.descendant(
+              of: find.byKey(const Key('sensitive-prompt-error')),
+              matching: find.byType(Text),
+            ),
+          )
+          .data,
       'Hermes could not accept the response. Please try again.',
     );
     expect(find.textContaining('server echoed'), findsNothing);

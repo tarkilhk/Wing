@@ -1,3 +1,5 @@
+import '../../widgets/studio_select.dart';
+import '../../widgets/studio_action_label.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/compact_switch.dart';
 import '../../services/administration_repository.dart';
@@ -337,18 +339,13 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
     }
     if (field.kind == AdminFieldKind.choice) {
       final choices = {...field.choices, if (value is String) value}.toList();
-      return DropdownButtonFormField<String>(
-        initialValue: value is String ? value : null,
-        isExpanded: true,
-        decoration: InputDecoration(labelText: field.label),
-        items: choices
-            .map(
-              (v) => DropdownMenuItem(
-                value: v,
-                child: Text(v.isEmpty ? 'Server default' : v),
-              ),
-            )
-            .toList(),
+      return StudioSelect<String>(
+        value: value is String ? value : null,
+        label: field.label,
+        options: [
+          for (final v in choices)
+            (value: v, label: v.isEmpty ? 'Server default' : v),
+        ],
         onChanged: _saving
             ? null
             : (v) => setState(() => _values[field.key] = v),
@@ -428,7 +425,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                     const Spacer(),
                     FilledButton(
                       onPressed: _saving || !_dirty ? null : _save,
-                      child: Text(_saving ? 'Saving…' : 'Save'),
+                      child: StudioActionLabel('Save', busy: _saving),
                     ),
                   ],
                 ),
@@ -439,7 +436,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
           : _saved == null
           ? Padding(
               padding: const EdgeInsets.all(16),
-              child: AdminNotice(
+              child: AdminNotice.error(
                 _error ?? 'Settings unavailable',
                 retry: _load,
               ),
@@ -454,7 +451,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                       children: [
                         if (widget.explanation != null)
                           AdminNotice(widget.explanation!),
-                        if (_error != null) AdminNotice(_error!),
+                        if (_error != null) AdminNotice.error(_error!),
                         if (_fields.length < widget.fields.length)
                           const AdminNotice(
                             'Some settings are not exposed by this server.',

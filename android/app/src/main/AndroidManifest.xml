@@ -20,7 +20,7 @@
             android:name=".MediaPreviewActivity"
             android:exported="false"
             android:hardwareAccelerated="true"
-            android:theme="@style/NormalTheme" />
+            android:theme="@style/StudioMediaLight" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

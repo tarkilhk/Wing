@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:hermes_android/core/models/context_occupancy.dart';
@@ -6,6 +7,26 @@ import 'package:hermes_android/core/widgets/context_ring.dart';
 import 'package:hermes_android/core/theme/hermes_theme.dart';
 
 void main() {
+  testWidgets('context details can be reached and opened with a keyboard', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: hermesTheme(Brightness.light),
+        home: const Scaffold(body: Center(child: ContextRing(occupancy: null))),
+      ),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    final button = tester.widget<IconButton>(
+      find.byKey(const ValueKey('context-ring-details')),
+    );
+    expect(button.focusNode!.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('context-usage-popover')), findsOneWidget);
+  });
+
   test('parses and clamps server occupancy', () {
     final value = ContextOccupancy.fromJson({
       'context_used': 1200,

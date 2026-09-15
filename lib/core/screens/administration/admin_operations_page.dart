@@ -1,3 +1,6 @@
+import '../../theme/hermes_theme.dart';
+import '../../widgets/studio_select.dart';
+import '../../widgets/studio_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
@@ -66,20 +69,28 @@ class _AdminActionPageState extends State<AdminActionPage> {
       padding: const EdgeInsets.all(16),
       children: [
         if (_loading) const LinearProgressIndicator(),
-        if (_error != null) AdminNotice(_error!),
-        Text(
-          _status == null
-              ? 'Checking operation…'
-              : _status!['running'] == true
-              ? 'Running'
-              : _status!['exit_code'] == 0
-              ? 'Completed'
-              : _status!['exit_code'] == null
-              ? 'Outcome unavailable'
-              : 'Failed',
-        ),
+        if (_error != null) AdminNotice.error(_error!),
+        if (_status?['running'] != true &&
+            _status?['exit_code'] != null &&
+            _status!['exit_code'] != 0)
+          const StudioError('Failed')
+        else
+          Text(
+            _status == null
+                ? 'Checking operation…'
+                : _status!['running'] == true
+                ? 'Running'
+                : _status!['exit_code'] == 0
+                ? 'Completed'
+                : _status!['exit_code'] == null
+                ? 'Outcome unavailable'
+                : 'Failed',
+          ),
         const SizedBox(height: 16),
-        SelectableText((_status?['lines'] as List? ?? []).join('\n')),
+        SelectableText(
+          (_status?['lines'] as List? ?? []).join('\n'),
+          style: HermesTokens.of(context).typography.mono,
+        ),
         TextButton(
           onPressed: _loading ? null : _check,
           child: const Text('Check progress'),
@@ -120,7 +131,11 @@ Future<void> startAdminOperation(
     }
   } catch (e) {
     if (context.mounted) {
-      adminMessage(context, administrationError(e, writing: true));
+      adminMessage(
+        context,
+        administrationError(e, writing: true),
+        isError: true,
+      );
     }
   }
 }
@@ -146,54 +161,69 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
   Widget build(BuildContext context) => AdminPage(
     title: 'Logs',
     scope: '${widget.server.connectionLabel} / ${widget.runtimeLabel}',
-    child: Column(
+    child: ListView(
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _file,
-                      decoration: const InputDecoration(labelText: 'Log'),
-                      items: ['agent', 'errors', 'gateway']
-                          .map(
-                            (v) => DropdownMenuItem(value: v, child: Text(v)),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() {
-                        _file = v!;
-                        _version++;
-                      }),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _level,
-                      decoration: const InputDecoration(labelText: 'Severity'),
-                      items: ['', 'DEBUG', 'INFO', 'WARNING', 'ERROR']
-                          .map(
-                            (v) => DropdownMenuItem(
-                              value: v,
-                              child: Text(v.isEmpty ? 'All' : v),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() {
-                        _level = v!;
-                        _version++;
-                      }),
-                    ),
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final scaledWidth =
+                      constraints.maxWidth /
+                      (MediaQuery.textScalerOf(context).scale(16) / 16);
+                  final width = scaledWidth < 480
+                      ? constraints.maxWidth
+                      : (constraints.maxWidth - 12) / 2;
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      SizedBox(
+                        width: width,
+                        child: StudioSelect<String>(
+                          value: _file,
+                          label: 'Log',
+                          options: [
+                            for (final v in ['agent', 'errors', 'gateway'])
+                              (value: v, label: v),
+                          ],
+                          onChanged: (v) => setState(() {
+                            _file = v!;
+                            _version++;
+                          }),
+                        ),
+                      ),
+                      SizedBox(
+                        width: width,
+                        child: StudioSelect<String>(
+                          value: _level,
+                          label: 'Severity',
+                          options: [
+                            for (final v in [
+                              '',
+                              'DEBUG',
+                              'INFO',
+                              'WARNING',
+                              'ERROR',
+                            ])
+                              (value: v, label: v.isEmpty ? 'All' : v),
+                          ],
+                          onChanged: (v) => setState(() {
+                            _level = v!;
+                            _version++;
+                          }),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 12),
               TextField(
                 decoration: const InputDecoration(
                   labelText: 'Search logs',
+                  helperMaxLines: 4,
                   helperText: 'Last 100 matching lines. Submit to search.',
                 ),
                 onSubmitted: (v) => setState(() {
@@ -204,8 +234,10 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
             ],
           ),
         ),
-        Expanded(
+        Padding(
+          padding: const EdgeInsets.all(16),
           child: AdminLoad(
+            expand: false,
             key: ValueKey(_version),
             load: () => widget.server.read('logs', {
               'file': _file,
@@ -213,14 +245,15 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
               if (_level.isNotEmpty) 'level': _level,
               if (_search.isNotEmpty) 'search': _search,
             }),
-            builder: (context, data, refresh) => ListView(
-              padding: const EdgeInsets.all(16),
+            builder: (context, data, refresh) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 TextButton(onPressed: refresh, child: const Text('Refresh')),
                 SelectableText(
                   (data['lines'] as List? ?? data['logs'] as List? ?? []).join(
                     '\n',
                   ),
+                  style: HermesTokens.of(context).typography.mono,
                 ),
               ],
             ),

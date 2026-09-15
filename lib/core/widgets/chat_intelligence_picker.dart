@@ -138,7 +138,7 @@ class ChatIntelligenceButton extends StatelessWidget {
           minimumSize: const Size(48, 48),
           padding: const EdgeInsets.symmetric(
             horizontal: HermesSpacing.sm,
-            vertical: 6,
+            vertical: 4,
           ),
           shape: RoundedRectangleBorder(borderRadius: HermesRadius.control),
           backgroundColor: tokens.raised,
@@ -157,7 +157,7 @@ class ChatIntelligenceButton extends StatelessWidget {
                 size: 17,
                 color: onPressed == null ? tokens.muted : tokens.accent,
               ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
             Flexible(
               child: Column(
                 mainAxisSize: MainAxisSize.min,

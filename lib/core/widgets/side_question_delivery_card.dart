@@ -22,7 +22,6 @@ class SideQuestionDeliveryCard extends StatelessWidget {
     };
     final colors = Theme.of(context).colorScheme;
     return Card(
-      color: colors.secondaryContainer.withValues(alpha: 0.45),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -31,16 +30,22 @@ class SideQuestionDeliveryCard extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  pending ? Icons.schedule : Icons.call_split,
+                  failed
+                      ? Icons.error_outline
+                      : pending
+                      ? Icons.schedule
+                      : Icons.call_split,
                   size: 18,
-                  color: colors.onSecondaryContainer,
+                  color: failed ? colors.error : colors.onSecondaryContainer,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     label,
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: colors.onSecondaryContainer,
+                      color: failed
+                          ? colors.error
+                          : colors.onSecondaryContainer,
                     ),
                   ),
                 ),

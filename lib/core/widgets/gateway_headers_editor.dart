@@ -149,9 +149,9 @@ class _GatewayHeadersEditorState extends State<GatewayHeadersEditor> {
     children: [
       const Text('Extra gateway headers'),
       const SizedBox(height: 4),
-      const Text(
+      Text(
         'Use this for access proxies. Values stay hidden after saving.',
-        style: TextStyle(fontSize: 12),
+        style: Theme.of(context).textTheme.bodySmall,
       ),
       const SizedBox(height: 8),
       for (final entry in _rows.indexed)

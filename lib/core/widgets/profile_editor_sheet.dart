@@ -1,3 +1,4 @@
+import 'studio_error.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -299,7 +300,10 @@ class _ProfileEditorSheetState extends State<ProfileEditorSheet> {
                   ),
                 ],
               ),
-              Text('$_connectionLabel · $_profileName'),
+              Text(
+                '$_connectionLabel · $_profileName',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               const SizedBox(height: 4),
               const Text(
                 'Changes are stored on the central Hermes server for this profile.',
@@ -312,7 +316,9 @@ class _ProfileEditorSheetState extends State<ProfileEditorSheet> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(_error ?? 'This profile could not be loaded.'),
+                      StudioError(
+                        _error ?? 'This profile could not be loaded.',
+                      ),
                       TextButton(onPressed: _load, child: const Text('Retry')),
                     ],
                   ),
@@ -355,7 +361,7 @@ class _ProfileEditorSheetState extends State<ProfileEditorSheet> {
                 ],
                 if (_error case final error?) ...[
                   const SizedBox(height: 8),
-                  Text(error),
+                  StudioError(error),
                 ],
                 const SizedBox(height: 8),
                 Align(

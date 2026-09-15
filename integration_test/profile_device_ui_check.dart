@@ -145,7 +145,7 @@ class _DeviceCheckState extends State<DeviceCheck> {
     setState(() {
       controller = next;
       brightness = light ? Brightness.light : Brightness.dark;
-      scale = large ? 1.6 : 1;
+      scale = large ? 2 : 1;
     });
     debugPrint('DEVICE_QA ready question=$question light=$light large=$large');
   }

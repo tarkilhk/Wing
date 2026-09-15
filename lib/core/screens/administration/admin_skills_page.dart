@@ -1,3 +1,4 @@
+import '../../widgets/studio_action_label.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/compact_switch.dart';
 import '../../services/administration_repository.dart';
@@ -12,6 +13,13 @@ class AdminSkillLibraryPage extends StatefulWidget {
 }
 
 class _AdminSkillLibraryPageState extends State<AdminSkillLibraryPage> {
+  final _search = TextEditingController();
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
   String _query = '';
   bool _usageOrder = false;
   @override
@@ -23,10 +31,18 @@ class _AdminSkillLibraryPageState extends State<AdminSkillLibraryPage> {
       builder: (context, data, refresh) {
         final rows = administrationRows(data['data']);
         if (_usageOrder) rows.sort((a, b) => _usage(b).compareTo(_usage(a)));
+        final matches = rows
+            .where(
+              (r) => '${r['name']} ${r['description']}'.toLowerCase().contains(
+                _query,
+              ),
+            )
+            .toList();
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
             TextField(
+              controller: _search,
               decoration: const InputDecoration(
                 labelText: 'Search installed skills',
               ),
@@ -38,11 +54,7 @@ class _AdminSkillLibraryPageState extends State<AdminSkillLibraryPage> {
               value: _usageOrder,
               onChanged: (v) => setState(() => _usageOrder = v),
             ),
-            for (final row in rows.where(
-              (r) => '${r['name']} ${r['description']}'.toLowerCase().contains(
-                _query,
-              ),
-            ))
+            for (final row in matches)
               ListTile(
                 title: Text('${row['name']}'),
                 subtitle: Text(
@@ -58,7 +70,17 @@ class _AdminSkillLibraryPageState extends State<AdminSkillLibraryPage> {
                 },
               ),
             if (rows.isEmpty)
-              const AdminNotice('No skills reported for this profile.'),
+              const AdminNotice('No skills reported for this profile.')
+            else if (matches.isEmpty) ...[
+              const AdminNotice('No installed skills match this search.'),
+              TextButton(
+                onPressed: () {
+                  _search.clear();
+                  setState(() => _query = '');
+                },
+                child: const Text('Clear search'),
+              ),
+            ],
           ],
         );
       },
@@ -105,7 +127,13 @@ class _AdminSkillDetailState extends State<AdminSkillDetail> {
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) adminMessage(context, administrationError(e, writing: true));
+      if (mounted) {
+        adminMessage(
+          context,
+          administrationError(e, writing: true),
+          isError: true,
+        );
+      }
     }
     if (mounted) setState(() => _busy = false);
   }
@@ -138,7 +166,13 @@ class _AdminSkillDetailState extends State<AdminSkillDetail> {
         );
       }
     } catch (e) {
-      if (mounted) adminMessage(context, administrationError(e, writing: true));
+      if (mounted) {
+        adminMessage(
+          context,
+          administrationError(e, writing: true),
+          isError: true,
+        );
+      }
     }
     if (mounted) setState(() => _busy = false);
   }
@@ -293,20 +327,23 @@ class _AdminSkillEditorState extends State<AdminSkillEditor> {
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
+          padding: const EdgeInsets.all(16),
+          child: OverflowBar(
+            alignment: MainAxisAlignment.spaceBetween,
+            overflowAlignment: OverflowBarAlignment.end,
+            spacing: 8,
+            overflowSpacing: 8,
             children: [
               TextButton(
                 onPressed: _busy ? null : _close,
                 child: const Text('Close'),
               ),
-              const Spacer(),
               FilledButton(
                 onPressed:
                     _busy || _input.text == _saved || _input.text.trim().isEmpty
                     ? null
                     : _save,
-                child: Text(_busy ? 'Saving…' : 'Save'),
+                child: StudioActionLabel('Save', busy: _busy),
               ),
             ],
           ),
@@ -315,9 +352,11 @@ class _AdminSkillEditorState extends State<AdminSkillEditor> {
       child: Column(
         children: [
           if (_error != null)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: AdminNotice(_error!),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: AdminNotice.error(_error!),
+              ),
             ),
           Expanded(
             child: Padding(
@@ -375,7 +414,13 @@ class _AdminSkillHubPageState extends State<AdminSkillHubPage> {
       }
       refresh();
     } catch (e) {
-      if (mounted) adminMessage(context, administrationError(e, writing: true));
+      if (mounted) {
+        adminMessage(
+          context,
+          administrationError(e, writing: true),
+          isError: true,
+        );
+      }
     }
     if (mounted) setState(() => _busy = false);
   }
@@ -391,6 +436,7 @@ class _AdminSkillHubPageState extends State<AdminSkillHubPage> {
           child: TextField(
             decoration: const InputDecoration(
               labelText: 'Search catalogs',
+              helperMaxLines: 4,
               helperText: 'Submit to search configured sources.',
             ),
             onSubmitted: (v) => setState(() => _query = v.trim()),
@@ -498,7 +544,13 @@ class _AdminSkillPreviewState extends State<AdminSkillPreview> {
         );
       }
     } catch (e) {
-      if (mounted) adminMessage(context, administrationError(e, writing: true));
+      if (mounted) {
+        adminMessage(
+          context,
+          administrationError(e, writing: true),
+          isError: true,
+        );
+      }
     }
     if (mounted) setState(() => _busy = false);
   }
@@ -523,7 +575,7 @@ class _AdminSkillPreviewState extends State<AdminSkillPreview> {
           const SizedBox(height: 16),
           FilledButton(
             onPressed: _busy ? null : _install,
-            child: Text(_busy ? 'Installing…' : 'Install'),
+            child: StudioActionLabel('Install', busy: _busy),
           ),
         ],
       ),

@@ -755,7 +755,20 @@ void main() {
         const StandardMessageCodec().decodeMessage(
           ByteData.sublistView(args['params'] as Uint8List),
         ),
-        {'source': source, 'dark': false, 'format': 'html'},
+        allOf(
+          containsPair('source', source),
+          containsPair('dark', false),
+          containsPair('format', 'html'),
+          containsPair(
+            'palette',
+            containsPair(
+              'accent',
+              Theme.of(
+                tester.element(find.byType(AndroidView)),
+              ).colorScheme.primary.toARGB32(),
+            ),
+          ),
+        ),
       );
       expect(find.byTooltip('Save or share'), findsOneWidget);
       await tester.tap(find.byTooltip('Show source'));
@@ -1024,19 +1037,19 @@ void main() {
       await tester.pumpAndSettle();
       expect(readPaths, ['/srv/current/notes.md']);
 
-        await tester.tap(find.text('Open report', findRichText: true));
+      await tester.tap(find.text('Open report', findRichText: true));
       await tester.pumpAndSettle();
 
       expect(readPaths, ['/srv/current/notes.md', '/srv/current/report.txt']);
       expect(find.text('Scoped report contents'), findsOneWidget);
 
-        await tester.binding.handlePopRoute();
-        await tester.pumpAndSettle();
-        expect(find.text('Notes'), findsOneWidget);
-        expect(find.text('Open report'), findsOneWidget);
-        expect(find.text('Outputs · Only this chat'), findsNothing);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Notes'), findsOneWidget);
+      expect(find.text('Open report'), findsOneWidget);
+      expect(find.text('Outputs · Only this chat'), findsNothing);
 
-        await tester.binding.handlePopRoute();
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.text('Outputs · Only this chat'), findsOneWidget);
       expect(find.text('notes.md'), findsOneWidget);

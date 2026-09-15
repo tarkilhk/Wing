@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/text_size_preference.dart';
+import 'studio_error.dart';
 
 /// App-wide text-size control. It stores only the selected display preference;
 /// connection, profile, and credential data never enter this namespace.
@@ -30,59 +31,83 @@ class _TextSizeSettingsCardState extends State<TextSizeSettingsCard> {
     _preference = _store.read();
   }
 
-  Future<void> _select(TextSizePreference preference) async {
-    if (preference == _preference) {
-      Navigator.of(context).pop();
-      return;
-    }
-    await _store.save(preference);
-    if (!mounted) return;
-    setState(() => _preference = preference);
-    widget.onChanged(preference);
-    if (mounted) Navigator.of(context).pop();
-  }
-
   Future<void> _showPicker() {
+    var saving = false;
+    String? error;
     return showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Text size',
-                  style: Theme.of(sheetContext).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Explicit choices adjust Android accessibility text size; '
-                  'System leaves it unchanged.',
-                ),
-                const SizedBox(height: 8),
-                RadioGroup<TextSizePreference>(
-                  groupValue: _preference,
-                  onChanged: (value) {
-                    if (value != null) _select(value);
-                  },
-                  child: Column(
-                    children: [
-                      for (final preference in TextSizePreference.values)
-                        RadioListTile<TextSizePreference>(
-                          minTileHeight: 48,
-                          minVerticalPadding: 8,
-                          value: preference,
-                          title: Text(preference.label),
-                          subtitle: Text(preference.description),
-                        ),
-                    ],
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, updateSheet) => PopScope(
+          canPop: !saving,
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Text size',
+                    style: Theme.of(sheetContext).textTheme.titleLarge,
                   ),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Explicit choices adjust Android accessibility text size; '
+                    'System leaves it unchanged.',
+                  ),
+                  const SizedBox(height: 8),
+                  RadioGroup<TextSizePreference>(
+                    groupValue: _preference,
+                    onChanged: (value) async {
+                      if (saving || value == null) return;
+                      if (value == _preference) {
+                        Navigator.of(sheetContext).pop();
+                        return;
+                      }
+                      updateSheet(() {
+                        saving = true;
+                        error = null;
+                      });
+                      try {
+                        await _store.save(value);
+                        if (!mounted) return;
+                        setState(() => _preference = value);
+                        widget.onChanged(value);
+                        if (sheetContext.mounted) {
+                          updateSheet(() => saving = false);
+                          Navigator.of(sheetContext).pop();
+                        }
+                      } catch (_) {
+                        if (sheetContext.mounted) {
+                          updateSheet(() {
+                            saving = false;
+                            error =
+                                'Could not save the text size. Please retry.';
+                          });
+                        }
+                      }
+                    },
+                    child: Column(
+                      children: [
+                        for (final preference in TextSizePreference.values)
+                          RadioListTile<TextSizePreference>(
+                            contentPadding: EdgeInsets.zero,
+                            minTileHeight: 48,
+                            minVerticalPadding: 8,
+                            enabled: !saving,
+                            value: preference,
+                            title: Text(preference.label),
+                            subtitle: Text(preference.description),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (saving) const LinearProgressIndicator(),
+                  if (error != null) StudioError(error!),
+                ],
+              ),
             ),
           ),
         ),

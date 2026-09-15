@@ -1,3 +1,4 @@
+import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
 
@@ -43,12 +44,12 @@ class ChatImagePreview extends StatelessWidget {
           loadingBuilder: (context, child, progress) => progress == null
               ? child
               : const Center(child: CircularProgressIndicator()),
-          errorBuilder: (context, error, stack) => Padding(
-            padding: const EdgeInsets.all(24),
+          errorBuilder: (context, error, stack) => SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('This image could not be previewed.'),
+                const StudioError('This image could not be previewed.'),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: onOpenExternal,

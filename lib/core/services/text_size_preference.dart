@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'device_preference.dart';
+
 /// App-wide, non-secret reading-size choices stored independently of profiles.
 ///
 /// Explicit choices multiply the Android/OS [TextScaler], including its
@@ -57,7 +59,8 @@ class TextSizePreferenceStore {
   }
 
   Future<void> save(TextSizePreference preference) {
-    return _preferences.setString(
+    return saveDevicePreference(
+      _preferences,
       TextSizePreference.preferenceKey,
       preference.storageValue,
     );

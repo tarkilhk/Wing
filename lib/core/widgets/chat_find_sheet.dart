@@ -1,3 +1,4 @@
+import 'studio_error.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -163,7 +164,10 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                   child: _loading && _history.isEmpty
                       ? const Center(child: CircularProgressIndicator())
                       : _history.isEmpty && _loadError != null
-                      ? _Message(_loadError!)
+                      ? Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: StudioError(_loadError!),
+                        )
                       : query.isEmpty
                       ? const _Message('Type to search this chat.')
                       : matches.isEmpty
@@ -263,7 +267,7 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                                     : '${_formatCount(matches.length)} matching ${matches.length == 1 ? 'message' : 'messages'}',
                               ),
                             if (_loadError != null && _history.isNotEmpty)
-                              Text(_loadError!),
+                              StudioError(_loadError!),
                             if (_loadError != null)
                               Wrap(
                                 alignment: WrapAlignment.center,

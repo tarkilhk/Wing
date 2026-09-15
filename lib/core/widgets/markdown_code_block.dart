@@ -129,7 +129,7 @@ class _MarkdownCodeBlockState extends State<MarkdownCodeBlock> {
 
     return Container(
       key: const Key('markdown-code-block'),
-      margin: const EdgeInsets.symmetric(vertical: 6),
+      margin: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         color: background,
         borderRadius: HermesRadius.card,
@@ -143,7 +143,7 @@ class _MarkdownCodeBlockState extends State<MarkdownCodeBlock> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             color: header,
             child: Row(
               children: [
@@ -214,10 +214,7 @@ class _MarkdownCodeBlockState extends State<MarkdownCodeBlock> {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-            child: body,
-          ),
+          Padding(padding: const EdgeInsets.all(12), child: body),
         ],
       ),
     );

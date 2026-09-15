@@ -1,3 +1,4 @@
+import '../../widgets/studio_action_label.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../widgets/compact_switch.dart';
@@ -46,7 +47,13 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
         );
       }
     } catch (e) {
-      if (mounted) adminMessage(context, administrationError(e, writing: true));
+      if (mounted) {
+        adminMessage(
+          context,
+          administrationError(e, writing: true),
+          isError: true,
+        );
+      }
     }
     if (mounted) setState(() => _busy = false);
   }
@@ -220,7 +227,7 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
           'Cached observation. Test performs a new connection.',
         ),
         if (_busy) const LinearProgressIndicator(),
-        if (_error != null) AdminNotice(_error!),
+        if (_error != null) AdminNotice.error(_error!),
         Wrap(
           spacing: 8,
           children: [
@@ -383,7 +390,7 @@ class _AdminMcpSignInState extends State<AdminMcpSignIn> {
           const AdminNotice(
             'Sign-in opens in your browser and returns to the configured server callback. That address must be reachable from your phone.',
           ),
-          if (_error != null) AdminNotice(_error!),
+          if (_error != null) AdminNotice.error(_error!),
           if (_flow == null)
             FilledButton(
               onPressed: _busy ? null : _start,
@@ -392,7 +399,7 @@ class _AdminMcpSignInState extends State<AdminMcpSignIn> {
           if (_flow != null) ...[
             Text('Status: ${_flow!['status']}'),
             if (_flow!['status'] == 'error')
-              const AdminNotice(
+              const AdminNotice.error(
                 'Sign-in did not complete. Check the connector configuration.',
               ),
             if (_pending) ...[
@@ -465,7 +472,13 @@ class _AdminPluginsPageState extends State<AdminPluginsPage> {
       }
       refresh();
     } catch (e) {
-      if (mounted) adminMessage(context, administrationError(e, writing: true));
+      if (mounted) {
+        adminMessage(
+          context,
+          administrationError(e, writing: true),
+          isError: true,
+        );
+      }
     }
     if (mounted) setState(() => _busy = false);
   }
@@ -552,7 +565,13 @@ class _AdminRuntimePageState extends State<AdminRuntimePage> {
       }
       if (mounted) adminMessage(context, 'Runtime connectors reloaded.');
     } catch (e) {
-      if (mounted) adminMessage(context, administrationError(e, writing: true));
+      if (mounted) {
+        adminMessage(
+          context,
+          administrationError(e, writing: true),
+          isError: true,
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -572,7 +591,7 @@ class _AdminRuntimePageState extends State<AdminRuntimePage> {
         const SizedBox(height: 16),
         OutlinedButton(
           onPressed: _busy ? null : _reload,
-          child: Text(_busy ? 'Reloading…' : 'Reload runtime connectors'),
+          child: StudioActionLabel('Reload runtime connectors', busy: _busy),
         ),
       ],
     ),

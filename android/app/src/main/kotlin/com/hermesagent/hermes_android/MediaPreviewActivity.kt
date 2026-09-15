@@ -1,6 +1,7 @@
 package com.hermesagent.hermes_android
 
 import android.app.Activity
+import android.graphics.Typeface
 import android.graphics.Color
 import android.content.res.ColorStateList
 import android.content.res.Configuration
@@ -8,6 +9,8 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.RippleDrawable
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.WindowCompat
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -16,6 +19,9 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.MediaController
+import android.widget.ImageButton
+import android.widget.SeekBar
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.VideoView
 import androidx.core.view.ViewCompat
@@ -28,14 +34,20 @@ internal class MediaPreviewActivity : Activity() {
     private lateinit var playerArea: FrameLayout
     private lateinit var player: VideoView
     private lateinit var status: TextView
+    private lateinit var statusContainer: ScrollView
     private lateinit var controls: MediaController
     private var prepared = false
     private var started = false
     private var preparationGeneration = 0
     private var savedPosition = 0
     private var ownsMediaFile = false
+    private var canvasColor = Color.BLACK
+    private var errorColor = Color.RED
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val systemDark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        val dark = intent.getIntExtra("studio_dark", if (systemDark) 1 else 0) == 1
+        setTheme(if (dark) R.style.StudioMediaDark else R.style.StudioMediaLight)
         super.onCreate(savedInstanceState)
         savedPosition = savedInstanceState?.getInt(STATE_POSITION) ?: 0
         mimeType = intent.getStringExtra(EXTRA_MIME_TYPE)?.lowercase().orEmpty()
@@ -87,10 +99,18 @@ internal class MediaPreviewActivity : Activity() {
     private fun buildLayout(rawTitle: String) {
         val systemDark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         val dark = intent.getIntExtra("studio_dark", if (systemDark) 1 else 0) == 1
-        val canvas = intent.getIntExtra("studio_surface", Color.parseColor(if (dark) "#101917" else "#F4F7F6"))
-        val ink = intent.getIntExtra("studio_text", Color.parseColor(if (dark) "#E8F2EC" else "#172B27"))
-        val accent = intent.getIntExtra("studio_accent", Color.parseColor(if (dark) "#A6E3CB" else "#146B53"))
-        val onAccent = intent.getIntExtra("studio_onAccent", Color.parseColor(if (dark) "#10291F" else "#FFFFFF"))
+        val canvas = intent.getIntExtra("studio_surface", Color.parseColor(if (dark) "#101B24" else "#F7F7F4"))
+        val ink = intent.getIntExtra("studio_text", Color.parseColor(if (dark) "#EBF1F2" else "#1B2D36"))
+        val accent = intent.getIntExtra("studio_accent", Color.parseColor(if (dark) "#65C7BC" else "#126D70"))
+        val onAccent = intent.getIntExtra("studio_onAccent", Color.parseColor(if (dark) "#102C32" else "#FFFFFF"))
+        canvasColor = canvas
+        errorColor = intent.getIntExtra("studio_error", Color.parseColor(if (dark) "#F87171" else "#B3261E"))
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
         WindowInsetsControllerCompat(window, window.decorView).apply {
             isAppearanceLightStatusBars = !dark
             isAppearanceLightNavigationBars = !dark
@@ -108,15 +128,17 @@ internal class MediaPreviewActivity : Activity() {
         }
         val header = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(4), dp(12), dp(4))
+            setPadding(dp(16), dp(4), dp(16), dp(4))
         }
         header.addView(Button(this).apply {
             text = "Back"
             contentDescription = "Return to Outputs"
             minHeight = dp(48)
             minWidth = dp(48)
+            minimumWidth = dp(48)
             isAllCaps = false
             textSize = 14f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setTextColor(onAccent)
             setPadding(dp(16), 0, dp(16), 0)
             elevation = 0f
@@ -135,7 +157,8 @@ internal class MediaPreviewActivity : Activity() {
         })
         header.addView(TextView(this).apply {
             text = rawTitle.ifBlank { "Media preview" }.take(120)
-            textSize = 20f
+            textSize = 24f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setTextColor(ink)
             maxLines = 2
             setPadding(dp(8), 0, 0, 0)
@@ -151,10 +174,10 @@ internal class MediaPreviewActivity : Activity() {
         player = VideoView(this)
         status = TextView(this).apply {
             gravity = Gravity.CENTER
-            textSize = 18f
-            setTextColor(Color.WHITE)
-            setBackgroundColor(Color.BLACK)
-            setPadding(dp(24), dp(24), dp(24), dp(24))
+            textSize = 16f
+            setTextColor(ink)
+            setBackgroundColor(canvas)
+            setPadding(dp(16), dp(16), dp(16), dp(16))
         }
         val audio = mimeType.startsWith("audio/")
         playerArea.addView(
@@ -165,7 +188,19 @@ internal class MediaPreviewActivity : Activity() {
                 Gravity.CENTER,
             ),
         )
-        playerArea.addView(status, FrameLayout.LayoutParams(
+        statusContainer = ScrollView(this).apply {
+            isFillViewport = true
+            setBackgroundColor(canvas)
+            addView(LinearLayout(this@MediaPreviewActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                addView(status, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ))
+            })
+        }
+        playerArea.addView(statusContainer, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT,
         ))
@@ -176,12 +211,36 @@ internal class MediaPreviewActivity : Activity() {
         ))
         setContentView(root)
 
-        controls = MediaController(this).apply {
-            setAnchorView(playerArea)
-        }
+        controls = object : MediaController(this) {
+            override fun show(timeout: Int) {
+                super.show(timeout)
+                setBackgroundColor(canvas)
+                stylePlaybackControls(this, accent, ink, canvas)
+            }
+        }.apply { setAnchorView(playerArea) }
         player.setMediaController(controls)
         playerArea.setOnClickListener { if (prepared) controls.show(0) }
         status.setOnClickListener { if (prepared) controls.show(0) }
+        statusContainer.setOnClickListener { if (prepared) controls.show(0) }
+    }
+
+    private fun stylePlaybackControls(view: View, accent: Int, ink: Int, canvas: Int) {
+        when (view) {
+            is LinearLayout, is FrameLayout -> view.setBackgroundColor(canvas)
+            is SeekBar -> {
+                view.progressTintList = ColorStateList.valueOf(accent)
+                view.thumbTintList = ColorStateList.valueOf(accent)
+            }
+            is ImageButton -> view.imageTintList = ColorStateList.valueOf(accent)
+            is TextView -> {
+                view.setTextColor(ink)
+                view.textSize = 13f
+                view.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            }
+        }
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) stylePlaybackControls(view.getChildAt(index), accent, ink, canvas)
+        }
     }
 
     private fun prepareMedia() {
@@ -191,7 +250,7 @@ internal class MediaPreviewActivity : Activity() {
         if (mimeType.startsWith("audio/")) {
             status.text = "Preparing audio..."
         } else {
-            status.visibility = View.VISIBLE
+            statusContainer.visibility = View.VISIBLE
             status.text = "Preparing video..."
         }
         player.visibility = View.VISIBLE
@@ -205,7 +264,7 @@ internal class MediaPreviewActivity : Activity() {
             if (mimeType.startsWith("audio/")) {
                 status.text = "Audio ready\nUse Play and the timeline below."
             } else {
-                status.visibility = View.GONE
+                statusContainer.visibility = View.GONE
             }
             controls.setAnchorView(playerArea)
             controls.show(0)
@@ -224,7 +283,16 @@ internal class MediaPreviewActivity : Activity() {
     private fun showError() {
         controls.hide()
         player.visibility = View.GONE
-        status.visibility = View.VISIBLE
+        statusContainer.visibility = View.VISIBLE
+        val error = errorColor
+        status.setTextColor(error)
+        status.setBackgroundColor(canvasColor)
+        val icon = getDrawable(android.R.drawable.ic_dialog_alert)?.mutate()?.apply {
+            setTint(error)
+            setBounds(0, 0, dp(24), dp(24))
+        }
+        status.setCompoundDrawables(null, icon, null, null)
+        status.compoundDrawablePadding = dp(12)
         status.text = "This media format could not be played here.\n\n" +
             "Return to Outputs to open it in another app or save/share it."
     }

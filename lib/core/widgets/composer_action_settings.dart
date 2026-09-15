@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/composer_action.dart';
+import '../services/device_preference.dart';
 import 'composer_action_button.dart';
+import 'studio_error.dart';
 
 class ComposerActionSettings extends StatefulWidget {
   const ComposerActionSettings({super.key, required this.preferences});
@@ -14,22 +16,31 @@ class ComposerActionSettings extends StatefulWidget {
 
 class _ComposerActionSettingsState extends State<ComposerActionSettings> {
   bool _saving = false;
+  late ComposerAction _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = ComposerAction.fromPreference(
+      widget.preferences.getString(ComposerAction.preferenceKey),
+    );
+  }
 
   Future<void> _save(ComposerAction action) async {
+    if (_saving) return;
     setState(() => _saving = true);
     try {
-      if (!await widget.preferences.setString(
+      await saveDevicePreference(
+        widget.preferences,
         ComposerAction.preferenceKey,
         action.name,
-      )) {
-        throw StateError('Could not save the setting');
-      }
+      );
+      if (mounted) setState(() => _selected = action);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not save the default action. Please retry.'),
-          ),
+        showStudioError(
+          context,
+          'Could not save the default action. Please retry.',
         );
       }
     } finally {
@@ -39,9 +50,6 @@ class _ComposerActionSettingsState extends State<ComposerActionSettings> {
 
   @override
   Widget build(BuildContext context) {
-    final selected = ComposerAction.fromPreference(
-      widget.preferences.getString(ComposerAction.preferenceKey),
-    );
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -65,7 +73,7 @@ class _ComposerActionSettingsState extends State<ComposerActionSettings> {
                   ChoiceChip(
                     avatar: Icon(composerActionIcon(action), size: 18),
                     label: Text(action.label),
-                    selected: action == selected,
+                    selected: action == _selected,
                     onSelected: _saving ? null : (_) => _save(action),
                   ),
               ],

@@ -18,16 +18,46 @@ import 'package:hermes_android/core/services/web_preview.dart';
 import 'package:hermes_android/core/widgets/markdown_message_content.dart';
 import 'package:hermes_android/core/widgets/profile_execution_activity.dart';
 import 'package:hermes_android/core/widgets/web_output_preview.dart';
+import 'package:hermes_android/core/theme/hermes_theme.dart';
+import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
 
 void main() {
   if (!kDebugMode) throw StateError('Native reading QA requires debug mode.');
-  runApp(
-    MaterialApp(theme: ThemeData.dark(useMaterial3: true), home: const _Menu()),
+  runApp(const _StudioPreviewApp());
+}
+
+class _StudioPreviewApp extends StatefulWidget {
+  const _StudioPreviewApp();
+
+  @override
+  State<_StudioPreviewApp> createState() => _StudioPreviewAppState();
+}
+
+class _StudioPreviewAppState extends State<_StudioPreviewApp> {
+  Brightness _brightness = Brightness.dark;
+  WorkspaceAccent _accent = WorkspaceAccent.mint;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: profileWorkspaceTheme(hermesTheme(_brightness), accent: _accent),
+    home: _Menu(
+      toggleTheme: () => setState(
+        () => _brightness = _brightness == Brightness.dark
+            ? Brightness.light
+            : Brightness.dark,
+      ),
+      nextAccent: () => setState(
+        () => _accent = WorkspaceAccent
+            .values[(_accent.index + 1) % WorkspaceAccent.values.length],
+      ),
+    ),
   );
 }
 
 class _Menu extends StatelessWidget {
-  const _Menu();
+  const _Menu({required this.toggleTheme, required this.nextAccent});
+  final VoidCallback toggleTheme, nextAccent;
 
   @override
   Widget build(BuildContext context) {
@@ -36,9 +66,18 @@ class _Menu extends StatelessWidget {
     ).push(MaterialPageRoute<void>(builder: (_) => screen));
     Future<void> play(String filename, List<int> bytes) async {
       try {
+        final theme = Theme.of(context);
         final opened = await const MediaPreviewService().open(
           RemoteFileDownload(filename: filename, bytes: bytes),
           title: filename,
+          appearance: {
+            'dark': theme.brightness == Brightness.dark ? 1 : 0,
+            'surface': theme.colorScheme.surface.toARGB32(),
+            'text': theme.colorScheme.onSurface.toARGB32(),
+            'accent': theme.colorScheme.primary.toARGB32(),
+            'onAccent': theme.colorScheme.onPrimary.toARGB32(),
+            'error': theme.colorScheme.error.toARGB32(),
+          },
         );
         if (!opened) throw StateError('Native player unavailable');
       } catch (error) {
@@ -51,7 +90,21 @@ class _Menu extends StatelessWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Native reading QA')),
+      appBar: AppBar(
+        title: const Text('Native reading QA'),
+        actions: [
+          IconButton(
+            onPressed: toggleTheme,
+            icon: const Icon(Icons.brightness_6),
+            tooltip: 'Toggle theme',
+          ),
+          IconButton(
+            onPressed: nextAccent,
+            icon: const Icon(Icons.palette_outlined),
+            tooltip: 'Next accent',
+          ),
+        ],
+      ),
       body: ListView(
         children: [
           ListTile(
@@ -102,6 +155,21 @@ class _Menu extends StatelessWidget {
           ListTile(
             title: const Text('Content and execution details'),
             onTap: () => open(_contentExecutionScreen()),
+          ),
+          ListTile(
+            title: const Text('Diagram error'),
+            onTap: () => open(
+              const WebOutputPreview(
+                title: 'Diagram error',
+                format: WebOutputFormat.mermaid,
+                source: 'This is intentionally invalid diagram syntax',
+              ),
+            ),
+          ),
+          ListTile(
+            title: const Text('Media error'),
+            onTap: () =>
+                play('Invalid audio.wav', utf8.encode('Invalid audio')),
           ),
           ListTile(
             title: const Text('Browser preview'),

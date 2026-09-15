@@ -166,7 +166,7 @@ class _BackendUpdatesScreenState extends State<BackendUpdatesScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Backend updates')),
     body: ListView(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       children: [
         const Text(
           'Select one saved connection for each Hermes host. Connections are matched only by their configured dashboard endpoint.',

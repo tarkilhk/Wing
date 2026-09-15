@@ -1,3 +1,4 @@
+import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
@@ -33,7 +34,7 @@ class _PrivacyPolicyScreenState extends State<PrivacyPolicyScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Could not load the privacy policy.'),
+                  const StudioError('Could not load the privacy policy.'),
                   TextButton(
                     onPressed: () => setState(() {
                       _policy = DefaultAssetBundle.of(
@@ -60,7 +61,9 @@ class _PrivacyPolicyScreenState extends State<PrivacyPolicyScreen> {
             final opened = await openWebPreview(uri);
             if (!opened && context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Could not open the link.')),
+                const SnackBar(
+                  content: StudioError('Could not open the link.'),
+                ),
               );
             }
           },

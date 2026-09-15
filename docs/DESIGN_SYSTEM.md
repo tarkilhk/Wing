@@ -131,6 +131,14 @@ Use the chosen accent for primary actions, links, selected controls, model icon,
 
 Pressed actions use a modest tonal shift, selected rows add a check or structural marker, keyboard focus uses a clear outline, and disabled controls use neutral surfaces with readable labels. Loading states keep their label and control width. Errors use a distinct semantic color plus icon and text; empty states use plain explanations and one relevant action. Validate these states in the rendered app. No accessibility claim is made from images alone.
 
+Use `StudioSelect` for select-only form menus, `StudioActionLabel` for actions
+that can become pending, and `StudioError` (or `AdminNotice.error`) for failures.
+Keep uncertain observations distinct from confirmed failures. Device preference
+editors retain a confirmed value and disable writes until persistence finishes;
+a failed write must not become the displayed value when the editor is reopened.
+Native preview chrome receives the active Studio palette from Flutter. Authored
+HTML, diagrams, images and video retain their content-specific appearance.
+
 ## Verification
 
 Use [Testing](TESTING.md) for render entry points. Review actual widgets with real fonts and native controls; generated design boards are not acceptance evidence.

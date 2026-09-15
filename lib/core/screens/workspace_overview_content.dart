@@ -1,3 +1,4 @@
+import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
 
 import '../models/profile_live_activity.dart';
@@ -74,13 +75,13 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
             controller.activityProfileErrors.isNotEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 32),
-            child: Text('Activity unavailable.'),
+            child: StudioError('Activity unavailable.'),
           )
         else
           for (final message in controller.activityProfileErrors.values)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text(message),
+              child: StudioError(message),
             ),
         if (activity.isEmpty && controller.activityLoaded)
           if (controller.activityAvailableProfiles > 0)

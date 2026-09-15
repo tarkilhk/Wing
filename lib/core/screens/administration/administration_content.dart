@@ -1,3 +1,4 @@
+import '../../widgets/studio_select.dart';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 import '../../services/profile_workspace_controller.dart';
@@ -66,14 +67,11 @@ class _HermesAdministrationContentState
     }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
-      child: DropdownButtonFormField<String>(
+      child: StudioSelect<String>(
         key: ValueKey(name),
-        initialValue: name,
-        isExpanded: true,
-        decoration: const InputDecoration(labelText: 'Profile'),
-        items: profiles
-            .map((p) => DropdownMenuItem(value: p.name, child: Text(p.label)))
-            .toList(),
+        value: name,
+        label: 'Profile',
+        options: [for (final p in profiles) (value: p.name, label: p.label)],
         onChanged: widget.controller.switching
             ? null
             : (value) {
@@ -125,7 +123,7 @@ class _HermesAdministrationContentState
         );
       }
     } catch (e) {
-      if (mounted) adminMessage(context, administrationError(e));
+      if (mounted) adminMessage(context, administrationError(e), isError: true);
     }
   }
 

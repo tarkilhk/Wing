@@ -101,13 +101,22 @@ class _WebOutputPreviewState extends State<WebOutputPreview> {
                 ),
               )
             : AndroidView(
-                key: ValueKey(theme.brightness),
+                key: ValueKey((theme.brightness, theme.colorScheme)),
                 viewType: WebOutputPreview.viewType,
                 creationParamsCodec: const StandardMessageCodec(),
                 creationParams: {
                   'source': widget.source,
                   'dark': theme.brightness == Brightness.dark,
                   'format': language,
+                  'palette': {
+                    'canvas': theme.colorScheme.surface.toARGB32(),
+                    'panel': theme.canvasColor.toARGB32(),
+                    'text': theme.colorScheme.onSurface.toARGB32(),
+                    'muted': theme.colorScheme.onSurfaceVariant.toARGB32(),
+                    'border': theme.colorScheme.outlineVariant.toARGB32(),
+                    'error': theme.colorScheme.error.toARGB32(),
+                    'accent': theme.colorScheme.primary.toARGB32(),
+                  },
                 },
               ),
       ),
