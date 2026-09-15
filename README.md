@@ -2,24 +2,19 @@
   <img src="docs/design/images/wing-readme-hero-clean.png" alt="Wing: Your agent, with you | An Android companion for Hermes Agent" width="1000">
 </p>
 
-<p align="center">
-  <a href="https://github.com/tarkilhk/wing/releases"><strong>Get Wing</strong></a> &nbsp; · &nbsp;
-  <a href="docs/GETTING_STARTED.md">Getting started</a> &nbsp; · &nbsp;
-  <a href="docs/FEATURES.md">Features</a> &nbsp; · &nbsp;
-  <a href="docs/README.md">Documentation</a>
-</p>
-
 # Wing
 
-Pick up a conversation, check on running work, or send your agent the next idea. Wing brings your [Hermes Agent](https://github.com/NousResearch/hermes-agent) to your Android phone, with chats, projects and the tools to keep work moving.
+**Your agent, with you**
 
-Bring your own Hermes server. Wing is an independent client; it does not run a model on your phone or provide a hosted AI service.
+Continue conversations, check on running work, and send your next idea from your Android phone.
+
+Wing connects to your own [Hermes Agent](https://github.com/NousResearch/hermes-agent) server. You'll need Android 7.0 or later and a compatible server to get started.
+
+[**Download for Android**](https://github.com/tarkilhk/wing/releases/latest) · [Setup guide](docs/GETTING_STARTED.md) · [Documentation](docs/README.md)
 
 <a id="screenshots"></a>
 
-## A familiar face. Your own workspace.
-
-Navy, cream and mint give Wing its identity. Inside, the Studio interface keeps conversations readable, actions within reach, and light and dark themes ready for your preference.
+## A familiar face
 
 <table>
   <tr>
@@ -27,52 +22,35 @@ Navy, cream and mint give Wing its identity. Inside, the Studio interface keeps 
     <th>Bring your own agent</th>
   </tr>
   <tr>
-    <td align="center"><img src="docs/design/images/playful-live-dark-conversation.png" alt="Dark conversation view with an agent reply, code block, activity disclosure and message composer" width="300"></td>
-    <td align="center"><img src="docs/design/images/playful-live-light-first-connection.png" alt="Light connection screen with the Wing portrait and actions to add a connection or restore configuration" width="300"></td>
+    <td align="center"><img src="docs/design/images/wing-conversation-dark.png" alt="Wing conversation in dark mode with an agent reply, tool activity and message composer" width="300"></td>
+    <td align="center"><img src="docs/design/images/wing-welcome-light.png" alt="Wing welcome in light mode with the portrait, wordmark, Connect your agent, Restore configuration and Connection guide" width="300"></td>
   </tr>
   <tr>
-    <td>Read replies, inspect tool activity, and draft the next message.</td>
-    <td>Connect to your Hermes host and open its profiles and conversations.</td>
+    <td>Read replies and follow tool activity.</td>
+    <td>Connect your agent or restore your configuration.</td>
   </tr>
 </table>
 
-Actual app captures from 15 September 2026. These predate the Wing rename and later interface refinements. Accent colors follow the selected theme.
+App previews rendered from Wing's Flutter interface with sample data on 16 September 2026. Both light and dark themes are available.
 
-## From an idea to the result
+## What you can do
 
-| Keep the thread | Keep work moving |
-| --- | --- |
-| **Continue a chat.** Streaming replies, model and reasoning choices, and searchable history. | **Follow the work.** Tool activity, subagents, goals, and supported approval or clarification requests. |
-| **Find your place.** Projects, pinned chats, unread filters and Activity across profiles. | **Choose the next step.** Save a draft, queue a follow-up, steer a running turn, or stop it. |
-| **Send what you have.** Photos, files, dictated drafts and Android shares you review before sending. | **Open what comes back.** Markdown, images, PDFs, media and supported diagrams, ready to read or share. |
+- Continue conversations with streaming replies, searchable history, projects and pinned chats.
+- Follow running work, inspect tools and subagents, and respond to supported approval requests. Queue a follow-up, steer the current turn, or stop it.
+- Send photos, files and dictated ideas. Review content shared from other Android apps before sending.
+- Browse results, including code, images, PDFs, media and supported diagrams. Save or share files from your phone.
 
-Tap the context ring for usage details. Hold the composer arrow and slide to an available action. The drawer brings together Chats, Activity, Connections, App settings and Hermes administration.
+[Explore the feature guide](docs/FEATURES.md)
 
-[Explore the feature guide →](docs/FEATURES.md)
+## Get started
 
-## Make room for Wing
-
-1. **Have a host ready.** Android 7.0 or newer and a compatible Hermes server reachable from your phone.
-2. **Install the app.** Choose a signed APK from [Releases](https://github.com/tarkilhk/wing/releases), when available. Most current phones use ARM64. Release notes identify published builds.
-3. **Connect and say hello.** Follow [Getting started](docs/GETTING_STARTED.md) to start the authenticated dashboard, add a connection and verify your first chat.
+1. Have a compatible Hermes server reachable from your phone.
+2. Install a signed APK from the [latest release](https://github.com/tarkilhk/wing/releases/latest). Choose **arm64-v8a** for most current phones; other builds and checksums are listed with the release.
+3. Follow the [setup guide](docs/GETTING_STARTED.md) to start the authenticated dashboard, add a connection and send your first message.
 
 The modern dashboard and Desktop Gateway are required. An API key for the older API-only transport is not sufficient. Use HTTPS or an encrypted private network for remote access.
 
-### Know what stays connected
-
-Local notifications need an active connection and do not cover every unopened chat. Queues drain while the client is running and connected. If the app closes while sending, check server history before resending a recovered draft.
-
-There is no offline conversation archive or general remote filesystem browser. Bots and Cron/messaging/webhook administration are outside the current scope. [Known limitations](docs/KNOWN_LIMITATIONS.md) covers recovery and backend restrictions; the [product plan](docs/PRODUCT_PLAN.md) separates future work from delivered features.
-
-## A little wing, everywhere
-
-The wink, the messenger wing, and three pointed feathers above the **i**. One small shape connects the wordmark to the rest of the identity.
-
-<p align="center">
-  <a href="docs/design/2026-09-15-wing-identity.md"><img src="docs/design/images/wing-identity-board.png" alt="Approved Wing identity board showing the portrait, lowercase wordmark with compact feather accents, single-wing emblem, navy cream mint palette, and brand application concepts" width="900"></a>
-</p>
-
-The approved brand board shows identity concepts. The screenshots above show the app. [Identity rules and artwork](docs/design/2026-09-15-wing-identity.md) · [Studio design system](docs/DESIGN_SYSTEM.md)
+Wing is an independent client for your server, with no hosted AI service or on-device model. Read [known limitations](docs/KNOWN_LIMITATIONS.md) for connection, recovery and background-alert behavior.
 
 ## Build with us
 
@@ -88,6 +66,8 @@ flutter build apk --debug
 On Windows, use the guarded launcher in [Contributing](CONTRIBUTING.md). Run tests and Android builds sequentially. Live-server tests are opt-in and can create or change server data; read their prerequisites first.
 
 [Contributing](CONTRIBUTING.md) · [Release instructions](docs/ANDROID_RELEASE_PLAN.md) · [Changelog](CHANGELOG.md) · [Documentation index](docs/README.md)
+
+For design contributions, see the [Wing identity and artwork](docs/design/2026-09-15-wing-identity.md) and [Studio design system](docs/DESIGN_SYSTEM.md).
 
 <details>
 <summary>App identity and the repository name</summary>
@@ -110,4 +90,4 @@ Found a client problem? [Open an issue](https://github.com/tarkilhk/wing/issues)
 
 Wing is an independent fork of [rusty4444](https://github.com/rusty4444)'s Android client. Inherited contributors include CarlosReyesPena, CristianGCiocoi, AI-Guru, grunjol, louquillio and sternbergm. [NOTICE.md](NOTICE.md), the changelog and Git history preserve attribution.
 
-MIT, following upstream. See [NOTICE.md](NOTICE.md) for attribution and third-party notices.
+Licensed under [MIT](LICENSE). See [NOTICE.md](NOTICE.md) for attribution and third-party notices.
