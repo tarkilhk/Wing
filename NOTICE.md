@@ -1,6 +1,6 @@
 # Attribution and license
 
-Wing, formerly Hermes Personal, is the `tarkilhk/hermes-android` fork of [rusty4444/hermes-android](https://github.com/rusty4444/hermes-android). It is maintained independently and is not an official Hermes Agent, Nous Research or upstream Hermes Android release.
+Wing, formerly Hermes Personal, is the `tarkilhk/wing` fork of [rusty4444/hermes-android](https://github.com/rusty4444/hermes-android). It is maintained independently and is not an official Hermes Agent, Nous Research or upstream Hermes Android release.
 
 Upstream identifies Hermes Android as MIT. This fork retains that license identification and the attribution to its original authors. Preserve applicable copyright and permission notices when redistributing.
 

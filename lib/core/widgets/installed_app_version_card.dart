@@ -6,8 +6,8 @@ import '../services/web_preview.dart';
 import 'playful_portrait.dart';
 
 const _changelogUrl =
-    'https://github.com/tarkilhk/hermes-android/blob/main/CHANGELOG.md';
-const _releasesUrl = 'https://github.com/tarkilhk/hermes-android/releases';
+    'https://github.com/tarkilhk/wing/blob/main/CHANGELOG.md';
+const _releasesUrl = 'https://github.com/tarkilhk/wing/releases';
 
 typedef AppVersionLinkOpener = Future<bool> Function(Uri uri);
 

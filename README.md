@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/tarkilhk/hermes-android/releases"><strong>Get Wing</strong></a> &nbsp; · &nbsp;
+  <a href="https://github.com/tarkilhk/wing/releases"><strong>Get Wing</strong></a> &nbsp; · &nbsp;
   <a href="docs/GETTING_STARTED.md">Getting started</a> &nbsp; · &nbsp;
   <a href="docs/FEATURES.md">Features</a> &nbsp; · &nbsp;
   <a href="docs/README.md">Documentation</a>
@@ -53,7 +53,7 @@ Tap the context ring for usage details. Hold the composer arrow and slide to an 
 ## Make room for Wing
 
 1. **Have a host ready.** Android 7.0 or newer and a compatible Hermes server reachable from your phone.
-2. **Install the app.** Choose a signed APK from [Releases](https://github.com/tarkilhk/hermes-android/releases), when available. Most current phones use ARM64. Release notes identify published builds.
+2. **Install the app.** Choose a signed APK from [Releases](https://github.com/tarkilhk/wing/releases), when available. Most current phones use ARM64. Release notes identify published builds.
 3. **Connect and say hello.** Follow [Getting started](docs/GETTING_STARTED.md) to start the authenticated dashboard, add a connection and verify your first chat.
 
 The modern dashboard and Desktop Gateway are required. An API key for the older API-only transport is not sufficient. Use HTTPS or an encrypted private network for remote access.
@@ -97,7 +97,7 @@ Wing was previously labelled Hermes Personal. The approved wordmark uses lowerca
 - Release package: `com.tarkilhk.hermes.android`.
 - Development package: `com.hermesagent.hermes_android.dev`.
 - Package IDs and signing identity stay the same for in-place updates.
-- The repository still uses `tarkilhk/hermes-android`; its rename will follow separately.
+- The repository is now `tarkilhk/wing`, renamed from `tarkilhk/hermes-android`.
 - The inherited upstream application has a separate package and signing identity.
 
 [pubspec.yaml](pubspec.yaml) declares the source version. App settings shows the installed version. Source changes do not imply a published APK.
@@ -106,7 +106,7 @@ Wing was previously labelled Hermes Personal. The approved wordmark uses lowerca
 
 ## Support and provenance
 
-Found a client problem? [Open an issue](https://github.com/tarkilhk/hermes-android/issues) with reproducible steps, following the [redaction guidance](SECURITY.md). The [privacy policy](PRIVACY.md) covers storage, server processing, dictation and deletion, and is available offline in App settings.
+Found a client problem? [Open an issue](https://github.com/tarkilhk/wing/issues) with reproducible steps, following the [redaction guidance](SECURITY.md). The [privacy policy](PRIVACY.md) covers storage, server processing, dictation and deletion, and is available offline in App settings.
 
 Wing is an independent fork of [rusty4444/hermes-android](https://github.com/rusty4444/hermes-android). Inherited contributors include CarlosReyesPena, CristianGCiocoi, AI-Guru, grunjol, louquillio and sternbergm. [NOTICE.md](NOTICE.md), the changelog and Git history preserve attribution.
 

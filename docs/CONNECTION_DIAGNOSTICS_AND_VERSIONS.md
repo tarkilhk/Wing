@@ -8,7 +8,7 @@ Advanced headers support authenticated proxies through the existing connection e
 
 Secrets use the same secure storage and transactional save/rollback path as connection credentials. They are included only in explicit encrypted configuration export, never in displayed URLs, errors or logs. Credential changes must not leave the visible connection and stored secret out of sync.
 
-Dashboard HTTP requests refuse redirects, including requests authenticated with the dashboard session token. Configure the final URL and path directly. WebSocket authentication retains its redirect checks. Some HTTP operations still lack a deadline; see [issue #18](https://github.com/tarkilhk/hermes-android/issues/18).
+Dashboard HTTP requests refuse redirects, including requests authenticated with the dashboard session token. Configure the final URL and path directly. WebSocket authentication retains its redirect checks. Some HTTP operations still lack a deadline; see [issue #18](https://github.com/tarkilhk/wing/issues/18).
 
 ## Diagnostics and versions
 

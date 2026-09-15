@@ -48,4 +48,4 @@ The short [profile ownership ADR](adr/0001-request-scoped-hermes-profiles.md) an
 - [Bug tracker](BUG_TRACKER.md) for issue links; [upstream bugs](UPSTREAM_HERMES_BUGS.md) for backend reproductions and closure criteria.
 - [Changelog](../CHANGELOG.md) for product release history and [Notice](../NOTICE.md) for attribution.
 
-Superseded plans, research inventories, mockup prompts and deployment/QA journals are retained in [Git history](https://github.com/tarkilhk/hermes-android/commits/main/docs), rather than mixed into current instructions. Historical test results do not certify a later release.
+Superseded plans, research inventories, mockup prompts and deployment/QA journals are retained in [Git history](https://github.com/tarkilhk/wing/commits/main/docs), rather than mixed into current instructions. Historical test results do not certify a later release.

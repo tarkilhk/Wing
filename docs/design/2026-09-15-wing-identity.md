@@ -62,8 +62,9 @@ Keep the release application ID `com.tarkilhk.hermes.android`, development ID
 IDs, storage keys, Dart package `hermes_android` and native namespaces. A display
 name change must not create a separate installation or discard existing data.
 
-The repository is still `tarkilhk/hermes-android`. Its rename is a later owner
-action. Keep working repository URLs until then. After the rename, update the
-Git remote, release/update URLs, workflow references, documentation and store
-links, then verify release discovery against the renamed repository. Renaming
-the repository does not require changing Android package IDs.
+The owner renamed the repository to `tarkilhk/wing` on 15 September 2026.
+Use `https://github.com/tarkilhk/wing` for repository, release, changelog and
+support links. Existing clones should update their Git remote to
+`https://github.com/tarkilhk/wing.git`. Local checkout folders can keep their
+existing names. The repository rename does not change Android package IDs,
+signing configuration or installed app data.

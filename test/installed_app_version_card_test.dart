@@ -84,9 +84,9 @@ void main() {
 
     expect(opened, [
       Uri.parse(
-        'https://github.com/tarkilhk/hermes-android/blob/main/CHANGELOG.md',
+        'https://github.com/tarkilhk/wing/blob/main/CHANGELOG.md',
       ),
-      Uri.parse('https://github.com/tarkilhk/hermes-android/releases'),
+      Uri.parse('https://github.com/tarkilhk/wing/releases'),
     ]);
   });
 

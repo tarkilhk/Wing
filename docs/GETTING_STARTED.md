@@ -42,7 +42,7 @@ Keep the process running. From the phone's browser, open the dashboard address a
 
 ## 3. Install the Android app
 
-Download an appropriate signed APK from [this fork's releases](https://github.com/tarkilhk/hermes-android/releases), if one has been published. Use ARM64 for a compatible phone. Open the APK in Android and allow installation from that browser or file manager when prompted. Do not install an APK from an unrelated fork expecting it to update Wing.
+Download an appropriate signed APK from [this fork's releases](https://github.com/tarkilhk/wing/releases), if one has been published. Use ARM64 for a compatible phone. Open the APK in Android and allow installation from that browser or file manager when prompted. Do not install an APK from an unrelated fork expecting it to update Wing.
 
 For development builds, follow [Contributing](../CONTRIBUTING.md). A Play Store listing is not implied by the presence of store metadata in this repository.
 
