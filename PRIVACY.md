@@ -36,7 +36,7 @@ Drafts and queues remain in app storage until sent, removed, or cleared. Staged 
 
 Clearing or uninstalling the Android app does not delete conversations, uploaded files, credentials, or records stored on your Hermes server or its providers. Use the app's server-backed conversation deletion controls where available, and contact the server administrator or provider for their retention and deletion options. There is no separate account with this app's maintainer to delete.
 
-Configuration exports contain saved connections and credentials, protected with the passphrase you choose. Exported backups, files saved outside the app, and copies shared to other apps remain wherever you saved or sent them until you delete those copies. Keep the backup passphrase private.
+Configuration exports contain saved connections and credentials. A passphrase is optional: providing one encrypts the backup; leaving it blank creates a readable JSON file, including API keys and dashboard passwords. Exported backups, files saved outside the app, and copies shared to other apps remain wherever you saved or sent them until you delete those copies. Keep the backup passphrase private.
 
 ## Contact and policy changes
 

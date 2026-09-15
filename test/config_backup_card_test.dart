@@ -54,6 +54,25 @@ Future<void> completeExportSheet(
 
 void main() {
   group('export flow', () {
+    testWidgets('allows export with both passphrase fields empty', (
+      tester,
+    ) async {
+      String? seen;
+      await tester.pumpWidget(
+        wrap(
+          buildCard(
+            onExport: (passphrase) async {
+              seen = passphrase;
+              return 'plain-json';
+            },
+          ),
+        ),
+      );
+      await completeExportSheet(tester, passphrase: '');
+      expect(seen, '');
+      expect(find.byKey(const Key('export_passphrase_field')), findsNothing);
+    });
+
     testWidgets('passes the confirmed passphrase to the exporter', (
       tester,
     ) async {
@@ -285,12 +304,13 @@ void main() {
       );
     });
 
-    testWidgets('refuses to import without a passphrase', (tester) async {
+    testWidgets('allows import without a passphrase', (tester) async {
       var imported = false;
       await tester.pumpWidget(
         wrap(
           buildCard(
-            onImport: (_, _, _) async {
+            onImport: (_, passphrase, _) async {
+              expect(passphrase, '');
               imported = true;
               return _noopResult;
             },
@@ -303,11 +323,8 @@ void main() {
       await tester.tap(find.byKey(const Key('import_confirm_button')));
       await tester.pumpAndSettle();
 
-      expect(imported, isFalse);
-      expect(
-        find.text('Enter the passphrase for this backup.'),
-        findsOneWidget,
-      );
+      expect(imported, isTrue);
+      expect(find.byKey(const Key('import_passphrase_field')), findsNothing);
     });
   });
 }

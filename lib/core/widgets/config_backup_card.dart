@@ -20,7 +20,7 @@ class ImportChoice {
   const ImportChoice({required this.passphrase, required this.mode});
 }
 
-/// Asks for a passphrase to protect an export, requiring confirmation so a
+/// Offers a passphrase to protect an export, requiring confirmation so a
 /// typo cannot lock the user out of their own backup.
 class ExportPassphraseSheet extends StatefulWidget {
   const ExportPassphraseSheet({super.key});
@@ -44,11 +44,11 @@ class _ExportPassphraseSheetState extends State<ExportPassphraseSheet> {
 
   void _submit() {
     final value = _passphrase.text;
-    if (value.trim().isEmpty) {
-      setState(() => _error = 'Enter a passphrase.');
+    if (value.isEmpty && _confirm.text.isEmpty) {
+      Navigator.of(context).pop(const ExportPassphraseChoice(''));
       return;
     }
-    if (value.length < 8) {
+    if (value.trim().isEmpty || value.length < 8) {
       setState(() => _error = 'Use at least 8 characters.');
       return;
     }
@@ -70,13 +70,14 @@ class _ExportPassphraseSheetState extends State<ExportPassphraseSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Protect this backup',
+              'Back up configuration',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             Text(
-              'The file contains your API keys and dashboard password, so it is '
-              'encrypted. Without this passphrase the backup cannot be restored.',
+              'Add a passphrase to encrypt the backup, or leave it blank. '
+              'Without a passphrase, anyone with the file can read your '
+              'API keys and dashboard password.',
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -88,7 +89,7 @@ class _ExportPassphraseSheetState extends State<ExportPassphraseSheet> {
               obscureText: _obscure,
               autofocus: true,
               decoration: InputDecoration(
-                labelText: 'Passphrase',
+                labelText: 'Passphrase (optional)',
                 border: const OutlineInputBorder(
                   borderRadius: WingRadius.control,
                 ),
@@ -130,7 +131,7 @@ class _ExportPassphraseSheetState extends State<ExportPassphraseSheet> {
                 FilledButton.icon(
                   key: const Key('export_confirm_button'),
                   onPressed: _submit,
-                  icon: const Icon(Icons.lock),
+                  icon: const Icon(Icons.upload_file),
                   label: const Text('Export'),
                 ),
               ],
@@ -153,7 +154,6 @@ class ImportOptionsSheet extends StatefulWidget {
 class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
   final TextEditingController _passphrase = TextEditingController();
   ConfigImportMode _mode = ConfigImportMode.merge;
-  String? _error;
   bool _obscure = true;
 
   @override
@@ -163,10 +163,6 @@ class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
   }
 
   void _submit() {
-    if (_passphrase.text.trim().isEmpty) {
-      setState(() => _error = 'Enter the passphrase for this backup.');
-      return;
-    }
     Navigator.of(
       context,
     ).pop(ImportChoice(passphrase: _passphrase.text, mode: _mode));
@@ -193,7 +189,7 @@ class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
               obscureText: _obscure,
               autofocus: true,
               decoration: InputDecoration(
-                labelText: 'Passphrase',
+                labelText: 'Passphrase (if encrypted)',
                 border: const OutlineInputBorder(
                   borderRadius: WingRadius.control,
                 ),
@@ -240,10 +236,6 @@ class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
                 ],
               ),
             ),
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              StudioError(_error!),
-            ],
             const SizedBox(height: 20),
             OverflowBar(
               alignment: MainAxisAlignment.spaceBetween,
@@ -270,14 +262,14 @@ class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
   }
 }
 
-/// Settings card that exports the current configuration to an encrypted file
+/// Settings card that exports the current configuration to a file
 /// and restores it on another device.
 class ConfigBackupCard extends StatefulWidget {
-  /// Produces the encrypted backup file contents. Injected so the card can be
+  /// Produces the backup file contents. Injected so the card can be
   /// tested without touching the platform file system.
   final Future<String> Function(String passphrase) onExport;
 
-  /// Hands the encrypted contents to the platform (share sheet, file save).
+  /// Hands the backup contents to the platform (share sheet, file save).
   /// Returns a short description of where it went, or null if the user
   /// cancelled.
   final Future<String?> Function(String contents) onDeliverExport;
@@ -285,7 +277,7 @@ class ConfigBackupCard extends StatefulWidget {
   /// Reads a backup file chosen by the user. Returns null if cancelled.
   final Future<String?> Function() onPickBackupFile;
 
-  /// Applies a decrypted backup.
+  /// Applies a backup, decrypting it when necessary.
   final Future<ConfigImportResult> Function(
     String contents,
     String passphrase,
@@ -411,7 +403,7 @@ class _ConfigBackupCardState extends State<ConfigBackupCard> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Save your connections and settings to an encrypted file, then '
+              'Save your connections and settings to a file, then '
               'restore them after reinstalling or on another device.',
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,

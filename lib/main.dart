@@ -34,7 +34,6 @@ import 'core/widgets/wing_welcome.dart';
 import 'core/screens/app_settings_content.dart';
 import 'core/widgets/config_backup_card.dart';
 import 'core/widgets/gateway_headers_editor.dart';
-import 'core/screens/backend_updates_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -491,6 +490,8 @@ class HomeScreen extends StatefulWidget {
   final AndroidLaunchIntentService? launchIntents;
   final Future<void>? startupExternalNavigationReady;
   final String? deferredShareId;
+  final Future<String> Function(String passphrase)? exportBackup;
+  final Future<String?> Function(String contents)? deliverBackup;
   final Future<String?> Function()? pickBackupFile;
   final Future<ConfigImportResult> Function(
     String contents,
@@ -511,6 +512,8 @@ class HomeScreen extends StatefulWidget {
     this.launchIntents,
     this.startupExternalNavigationReady,
     this.deferredShareId,
+    this.exportBackup,
+    this.deliverBackup,
     this.pickBackupFile,
     this.importBackup,
     super.key,
@@ -525,6 +528,7 @@ class HomeScreenState extends State<HomeScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _autoNavigated = false;
   bool _opening = false;
+  bool _exportingBackup = false;
   bool _reviewingShare = false;
   bool _discardingShare = false;
   bool _startupExternalNavigationReady = false;
@@ -548,6 +552,39 @@ class HomeScreenState extends State<HomeScreen> {
   ConfigBackupIo get _backupIo =>
       ConfigBackupIo(connectionManager: widget.connManager);
 
+  Future<void> _showBackupConfig() async {
+    if (_exportingBackup) return;
+    setState(() => _exportingBackup = true);
+    try {
+      final choice = await showModalBottomSheet<ExportPassphraseChoice>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => const ExportPassphraseSheet(),
+      );
+      if (choice == null || !mounted) return;
+
+      final exporter = widget.exportBackup ?? _backupIo.exportBackup;
+      final deliver = widget.deliverBackup ?? _backupIo.deliverExport;
+      final contents = await exporter(choice.passphrase);
+      if (!mounted) return;
+      final destination = await deliver(contents);
+      if (!mounted || destination == null) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Backup exported — $destination')));
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is ConfigBackupException
+          ? error.message
+          : 'The backup could not be exported.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: StudioError(message)));
+    } finally {
+      if (mounted) setState(() => _exportingBackup = false);
+    }
+  }
+
   Future<void> _showRestoreConfig() async {
     String? contents;
     try {
@@ -568,7 +605,7 @@ class HomeScreenState extends State<HomeScreen> {
     if (choice == null || !mounted) return;
 
     try {
-      final importer = widget.importBackup ?? _backupIo.importEncrypted;
+      final importer = widget.importBackup ?? _backupIo.importBackup;
       final result = await importer(contents, choice.passphrase, choice.mode);
       if (!mounted) return;
       _refresh();
@@ -1076,21 +1113,17 @@ class HomeScreenState extends State<HomeScreen> {
             if (_destination == AppDestination.connections &&
                 _connections.isNotEmpty)
               IconButton(
-                tooltip: 'Backend updates',
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) =>
-                        BackendUpdatesScreen(connections: _connections),
-                  ),
-                ),
-                icon: const Icon(Icons.system_update_alt),
+                key: const Key('home_backup_config_menu'),
+                tooltip: 'Backup configuration',
+                onPressed: _exportingBackup ? null : _showBackupConfig,
+                icon: const Icon(Icons.upload_file),
               ),
             if (_destination == AppDestination.connections &&
                 _connections.isNotEmpty)
               IconButton(
                 key: const Key('home_restore_config_menu'),
                 tooltip: 'Restore configuration',
-                onPressed: _showRestoreConfig,
+                onPressed: _exportingBackup ? null : _showRestoreConfig,
                 icon: const Icon(Icons.settings_backup_restore),
               ),
           ],

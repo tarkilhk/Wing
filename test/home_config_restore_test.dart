@@ -106,6 +106,8 @@ ProfileWorkspaceController profileController(
 Future<void> pumpHome(
   WidgetTester tester,
   ConnectionManager manager, {
+  Future<String> Function(String)? exportBackup,
+  Future<String?> Function(String)? deliverBackup,
   Future<String?> Function()? pickBackupFile,
   Future<ConfigImportResult> Function(String, String, ConfigImportMode)?
   importBackup,
@@ -119,6 +121,8 @@ Future<void> pumpHome(
         connManager: manager,
         shareIntents: shareIntents,
         launchIntents: launchIntents,
+        exportBackup: exportBackup,
+        deliverBackup: deliverBackup,
         pickBackupFile: pickBackupFile,
         importBackup: importBackup,
       ),
@@ -305,9 +309,15 @@ void main() {
   testWidgets('restore stays reachable once connections exist', (tester) async {
     final manager = await buildManager();
     await manager.saveConnection('Miniserver', 'host', 8642, 'key');
-    await pumpHome(tester, manager);
+    await pumpHome(
+      tester,
+      manager,
+      pickBackupFile: () async => 'encrypted-backup',
+    );
 
-    expect(find.byKey(const Key('home_restore_config_menu')), findsOneWidget);
+    await tester.tap(find.byTooltip('Restore configuration'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('import_passphrase_field')), findsOneWidget);
   });
 
   testWidgets('tapping restore on an empty device opens the import sheet', (
@@ -409,24 +419,45 @@ void main() {
     },
   );
 
-  testWidgets('connections opens backend updates with deliberate selection', (
+  testWidgets('connections toolbar exports a passphrase-protected backup', (
     tester,
   ) async {
     final manager = await buildManager();
     await manager.saveConnection('Work', 'localhost', 9119, '');
-    await pumpHome(tester, manager);
-    await tester.tap(find.byTooltip('Backend updates'));
-    await tester.pumpAndSettle();
-    expect(find.text('Check selected'), findsOneWidget);
-    final update = tester.widget<FilledButton>(
-      find.byKey(const ValueKey('backend-updates-update-selected')),
+    String? exportedPassphrase;
+    String? deliveredContents;
+    await pumpHome(
+      tester,
+      manager,
+      exportBackup: (passphrase) async {
+        exportedPassphrase = passphrase;
+        return 'encrypted-backup';
+      },
+      deliverBackup: (contents) async {
+        deliveredContents = contents;
+        return 'wing-config.json';
+      },
     );
-    expect(update.onPressed, isNull);
-    expect(find.byType(CheckboxListTile), findsOneWidget);
+    expect(find.byTooltip('Backend updates'), findsNothing);
     expect(
-      tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
-      isFalse,
+      tester.getCenter(find.byTooltip('Backup configuration')).dx,
+      lessThan(tester.getCenter(find.byTooltip('Restore configuration')).dx),
     );
+    await tester.tap(find.byTooltip('Backup configuration'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('export_passphrase_field')),
+      'test-passphrase',
+    );
+    await tester.enterText(
+      find.byKey(const Key('export_passphrase_confirm_field')),
+      'test-passphrase',
+    );
+    await tester.tap(find.byKey(const Key('export_confirm_button')));
+    await tester.pumpAndSettle();
+    expect(exportedPassphrase, 'test-passphrase');
+    expect(deliveredContents, 'encrypted-backup');
+    expect(find.text('Backup exported — wing-config.json'), findsOneWidget);
   });
 
   testWidgets('a new connection never pre-fills a Desktop Gateway URL', (

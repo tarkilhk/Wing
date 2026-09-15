@@ -22,8 +22,8 @@ class ConfigBackupException implements Exception {
 /// every saved connection (including its secrets) plus the non-secret app
 /// preferences.
 ///
-/// This object is only ever written to disk through [ConfigBackupCodec], which
-/// encrypts it. It must never be serialized to an unprotected file.
+/// [ConfigBackupCodec] encrypts exports when a passphrase is supplied, or
+/// writes plain JSON when the user chooses to leave it empty.
 class ConfigBackup {
   static const String format = 'wing-config';
   static const int currentVersion = 1;
@@ -192,10 +192,9 @@ class ConfigBackup {
   }
 }
 
-/// Encrypts and decrypts a [ConfigBackup] with a user-supplied passphrase.
+/// Encodes and decodes backups with optional passphrase protection.
 ///
-/// The exported file holds API keys and dashboard passwords, so it is always
-/// encrypted: PBKDF2-HMAC-SHA256 derives a key from the passphrase, and
+/// With a passphrase, PBKDF2-HMAC-SHA256 derives an encryption key, and
 /// AES-256-GCM provides confidentiality plus authentication. A tampered file
 /// fails the MAC check and is rejected instead of being partially imported.
 class ConfigBackupCodec {
@@ -208,11 +207,12 @@ class ConfigBackupCodec {
 
   static final Random _random = Random.secure();
 
-  static Future<String> encrypt(
+  static Future<String> encode(
     ConfigBackup backup, {
     required String passphrase,
     int iterations = defaultIterations,
   }) async {
+    if (passphrase.isEmpty) return jsonEncode(backup.toJson());
     if (passphrase.trim().isEmpty) {
       throw const ConfigBackupException(
         'Choose a passphrase — the backup contains your API keys.',
@@ -259,7 +259,7 @@ class ConfigBackupCodec {
     });
   }
 
-  static Future<ConfigBackup> decrypt(
+  static Future<ConfigBackup> decode(
     String armored, {
     required String passphrase,
   }) async {
@@ -272,9 +272,17 @@ class ConfigBackupCodec {
       );
     }
 
+    if (envelope['format'] == ConfigBackup.format) {
+      return ConfigBackup.fromJson(envelope);
+    }
     if (envelope['format'] != envelopeFormat) {
       throw const ConfigBackupException(
         'This file is not a Wing configuration backup.',
+      );
+    }
+    if (passphrase.isEmpty) {
+      throw const ConfigBackupException(
+        'Enter the passphrase for this encrypted backup.',
       );
     }
     final version = envelope['version'];
