@@ -7,23 +7,27 @@ import '../models/answer_versions.dart';
 import '../models/chat_output.dart';
 import '../models/review_notice.dart';
 import '../models/transcript_notice.dart';
+import '../models/user_message_content.dart';
 import '../services/web_preview.dart';
 import 'markdown_message_content.dart';
 import 'profile_tool_activity.dart';
 import 'profile_review_notice_card.dart';
 import 'playful_portrait.dart';
+import 'user_message_attachment.dart';
 
-/// Remote content is display-only. Links require a tap, and images never fetch
-/// automatically or resolve a remote host path against the phone's filesystem.
+/// User attachments render inline. Authored Markdown links remain tap-to-open;
+/// server attachment paths are resolved only by the owning chat's loader.
 class ProfileMessage extends StatelessWidget {
   final Map<String, dynamic> message;
   final bool streaming;
   final Future<void> Function(ChatOutput output)? onOpenRemoteFile;
+  final UserAttachmentImageLoader? loadAttachmentImage;
   const ProfileMessage({
     super.key,
     required this.message,
     this.streaming = false,
     this.onOpenRemoteFile,
+    this.loadAttachmentImage,
   });
 
   static Uri? externalLink(String href) => externalWebLink(href);
@@ -145,10 +149,15 @@ class ProfileMessage extends StatelessWidget {
         ),
       );
     }
-    final content = role == 'user'
-        ? answerMessageDisplayText(message)
+    final userContent = role == 'user'
+        ? UserMessageContent.fromMessage(message)
+        : null;
+    final content = userContent != null
+        ? userContent.text
         : (message['display_content'] ?? message['content'] ?? '').toString();
-    if (content.isEmpty) return const SizedBox.shrink();
+    if (content.isEmpty && (userContent?.attachments.isEmpty ?? true)) {
+      return const SizedBox.shrink();
+    }
     if (role == 'system') {
       final slash = RegExp(r'^slash:(/[^\n]+)\n([\s\S]*)$').firstMatch(content);
       final text = slash == null
@@ -224,43 +233,66 @@ class ProfileMessage extends StatelessWidget {
                 ],
               ),
             ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: user
-                ? MainAxisAlignment.end
-                : MainAxisAlignment.start,
-            children: [
-              Flexible(
-                child: Container(
-                  margin: EdgeInsets.only(left: user ? 28 : 0),
-                  padding: user
-                      ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
-                      : EdgeInsets.zero,
-                  decoration: user
-                      ? BoxDecoration(
-                          color: theme.colorScheme.primaryContainer,
-                          borderRadius: WingRadius.card,
-                        )
-                      : null,
-                  child: user
-                      ? SelectableText(
-                          content,
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            height: 1.45,
-                            color: theme.colorScheme.onPrimaryContainer,
+          if (content.isNotEmpty)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: user
+                  ? MainAxisAlignment.end
+                  : MainAxisAlignment.start,
+              children: [
+                Flexible(
+                  child: Container(
+                    margin: EdgeInsets.only(left: user ? 28 : 0),
+                    padding: user
+                        ? const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          )
+                        : EdgeInsets.zero,
+                    decoration: user
+                        ? BoxDecoration(
+                            color: theme.colorScheme.primaryContainer,
+                            borderRadius: WingRadius.card,
+                          )
+                        : null,
+                    child: user
+                        ? SelectableText(
+                            content,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              height: 1.45,
+                              color: theme.colorScheme.onPrimaryContainer,
+                            ),
+                          )
+                        : MarkdownMessageContent(
+                            data: content,
+                            streaming: streaming,
+                            onOpenRemoteFile: onOpenRemoteFile,
                           ),
-                        )
-                      : MarkdownMessageContent(
-                          data: content,
-                          streaming: streaming,
-                          onOpenRemoteFile: onOpenRemoteFile,
-                        ),
+                  ),
+                ),
+                if (user && !streaming)
+                  _copy(
+                    context,
+                    answerMessageDisplayText(message),
+                    timestamp: timestamp,
+                  ),
+              ],
+            ),
+          if (userContent != null)
+            for (final attachment in userContent.attachments)
+              Padding(
+                padding: EdgeInsets.only(
+                  left: 28,
+                  right: streaming ? 0 : 48,
+                  top: 8,
+                ),
+                child: UserMessageAttachmentTile(
+                  key: ValueKey(attachment.target),
+                  attachment: attachment,
+                  loadImage: loadAttachmentImage,
                 ),
               ),
-              if (user && !streaming)
-                _copy(context, content, timestamp: timestamp),
-            ],
-          ),
+          if (user && content.isEmpty && timestamp != null) timestamp,
         ],
       ),
     );

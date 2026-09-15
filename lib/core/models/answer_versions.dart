@@ -167,8 +167,11 @@ List<Map<String, dynamic>> answerHistoryRows(
       (m) => {
         ...m,
         'id': answerMessageId(m),
-        'content': answerMessageText(m),
-        if (m['role'] == 'user') 'display_content': answerMessageDisplayText(m),
+        // Keep user content parts intact so forked/rewound history can render
+        // its attachments. Text-only consumers use the projections above.
+        'content': m['role'] == 'user'
+            ? m['content'] ?? m['text']
+            : answerMessageText(m),
       },
     )
     .toList();

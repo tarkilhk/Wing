@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/attachment_draft.dart';
+import '../models/user_message_content.dart';
 import '../models/context_occupancy.dart';
 import '../models/session_visibility.dart';
 import '../models/answer_versions.dart';
@@ -3874,6 +3875,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
             'role': 'user',
             'content': text,
             'display_content': ?display,
+            if (files.isNotEmpty)
+              'submitted_attachments': [
+                for (final draft in files)
+                  UserMessageAttachment(
+                    name: draft.name,
+                    target: draft.isImage ? draft.imagePath! : draft.refText!,
+                    isImage: draft.isImage,
+                  ),
+              ],
             'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
           });
           chat.streaming = '';

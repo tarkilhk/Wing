@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Show sent images as capped, cropped previews with full-image zoom, and other attachments as file cards with names and extensions.
 - Allow APK builds to advance their internal build number while retaining the current release version.
 - Ask for notification permission on first launch with Android's native dialog, while keeping notification controls in App settings.
 - Attach photos taken inside a chat directly to that chat's draft without opening share review.

@@ -485,6 +485,20 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
   }
 
+  Future<Uint8List> _loadAttachmentImage(ProfileChat chat, String path) async {
+    final owner = chat.key;
+    final files = controller.outputFiles(chat);
+    try {
+      return (await files.download(
+        path,
+        profileName: owner.workspace.profileName,
+        storedSessionId: owner.sessionId,
+      )).bytes;
+    } finally {
+      files.close();
+    }
+  }
+
   Widget _questionPanel(ProfileChat chat) {
     final payload = chat.clarification!;
     final questions = GatewayClarifyRequest.fromEventDataList(payload);
@@ -535,6 +549,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           if (reasoning.isNotEmpty) ProfileReasoningDisclosure(text: reasoning),
           ProfileMessage(
             message: message,
+            loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
             onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
           ),
         ],
@@ -566,6 +581,8 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 padding: const EdgeInsets.only(right: 40),
                 child: ProfileMessage(
                   message: message,
+                  loadAttachmentImage: (path) =>
+                      _loadAttachmentImage(chat, path),
                   onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
                 ),
               ),
@@ -590,6 +607,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         else
           ProfileMessage(
             message: message,
+            loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
             onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
           ),
         if (savedAnswer)

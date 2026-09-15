@@ -7,7 +7,7 @@ class ChatImagePreview extends StatelessWidget {
   final Uri? uri;
   final Uint8List? bytes;
   final String title;
-  final VoidCallback onOpenExternal;
+  final VoidCallback? onOpenExternal;
   final String actionLabel;
 
   const ChatImagePreview({
@@ -15,7 +15,7 @@ class ChatImagePreview extends StatelessWidget {
     this.uri,
     this.bytes,
     required this.title,
-    required this.onOpenExternal,
+    this.onOpenExternal,
     this.actionLabel = 'Open in browser',
   }) : assert((uri == null) != (bytes == null));
 
@@ -24,11 +24,12 @@ class ChatImagePreview extends StatelessWidget {
     appBar: AppBar(
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
       actions: [
-        IconButton(
-          tooltip: actionLabel,
-          icon: const Icon(Icons.open_in_new),
-          onPressed: onOpenExternal,
-        ),
+        if (onOpenExternal != null)
+          IconButton(
+            tooltip: actionLabel,
+            icon: const Icon(Icons.open_in_new),
+            onPressed: onOpenExternal,
+          ),
       ],
     ),
     body: Center(
@@ -50,12 +51,14 @@ class ChatImagePreview extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const StudioError('This image could not be previewed.'),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: onOpenExternal,
-                  icon: const Icon(Icons.open_in_new),
-                  label: Text(actionLabel),
-                ),
+                if (onOpenExternal != null) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: onOpenExternal,
+                    icon: const Icon(Icons.open_in_new),
+                    label: Text(actionLabel),
+                  ),
+                ],
               ],
             ),
           ),

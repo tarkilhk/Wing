@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/attachment_draft.dart';
+import 'package:wing/core/models/user_message_content.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'profile_workspace_controller_test.dart' show Host;
@@ -73,6 +74,11 @@ void main() {
       'What do you see in this image?',
     );
     expect(chat.attachments, isEmpty);
+    final sent = UserMessageContent.fromMessage(chat.messages.last);
+    expect(sent.text, isEmpty);
+    expect(sent.attachments.single.name, 'picture.png');
+    expect(sent.attachments.single.target, '/profile/images/upload.png');
+    expect(sent.attachments.single.isImage, isTrue);
   });
 
   test(
@@ -90,6 +96,13 @@ void main() {
         host.calls.singleWhere((call) => call.$2 == 'prompt.submit').$3['text'],
         'attached:notes.txt\n\nRead these.',
       );
+      final sent = UserMessageContent.fromMessage(chat.messages.last);
+      expect(sent.text, 'Read these.');
+      expect(sent.attachments.map((file) => file.name), [
+        'picture.png',
+        'notes.txt',
+      ]);
+      expect(sent.attachments.last.extension, 'TXT');
     },
   );
 

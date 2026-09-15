@@ -23,7 +23,9 @@ void main() {
           ),
         ),
       );
-      expect(find.text('@file:notes.txt\n\nRead the marker.'), findsOneWidget);
+      expect(find.text('Read the marker.'), findsOneWidget);
+      expect(find.text('notes.txt'), findsOneWidget);
+      expect(find.text('TXT'), findsOneWidget);
       expect(find.textContaining('PRIVATE FILE BODY'), findsNothing);
     },
   );
