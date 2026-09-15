@@ -6,7 +6,7 @@ Use [Getting started](GETTING_STARTED.md) for password connection setup. The app
 
 Advanced headers support authenticated proxies through the existing connection editor. Keep a saved value by leaving its replacement blank, replace it explicitly, or remove it. Names are unique ignoring case; names and values must be single-line. Managed authentication headers cannot be overridden.
 
-Secrets use the same secure storage and transactional save/rollback path as connection credentials. They are included only in explicit encrypted configuration export, never in displayed URLs, errors or logs. Credential changes must not leave the visible connection and stored secret out of sync.
+Secrets use the same secure storage and transactional save/rollback path as connection credentials. They are included only in explicit configuration export (optionally encrypted with a passphrase), never in displayed URLs, errors or logs. Credential changes must not leave the visible connection and stored secret out of sync.
 
 Dashboard HTTP requests refuse redirects, including requests authenticated with the dashboard session token. Configure the final URL and path directly. WebSocket authentication retains its redirect checks. Some HTTP operations still lack a deadline; see [issue #18](https://github.com/tarkilhk/wing/issues/18).
 

@@ -26,7 +26,7 @@ class ConfigBackupIo {
     preferences: connectionManager.prefs,
   );
 
-  Future<String> exportEncrypted(String passphrase) async {
+  Future<String> exportBackup(String passphrase) async {
     String appVersion;
     try {
       final info = await PackageInfo.fromPlatform();
@@ -35,10 +35,10 @@ class ConfigBackupIo {
       appVersion = 'unknown';
     }
     final backup = await _service.export(appVersion: appVersion);
-    return ConfigBackupCodec.encrypt(backup, passphrase: passphrase);
+    return ConfigBackupCodec.encode(backup, passphrase: passphrase);
   }
 
-  /// Writes the encrypted backup to a temp file and offers it to the share
+  /// Writes the backup to a temp file and offers it to the share
   /// sheet. Returns the file name, or null when the user dismisses the sheet.
   Future<String?> deliverExport(String contents) async {
     final stamp = DateTime.now()
@@ -78,12 +78,12 @@ class ConfigBackupIo {
     return File(path).readAsString();
   }
 
-  Future<ConfigImportResult> importEncrypted(
+  Future<ConfigImportResult> importBackup(
     String contents,
     String passphrase,
     ConfigImportMode mode,
   ) async {
-    final backup = await ConfigBackupCodec.decrypt(
+    final backup = await ConfigBackupCodec.decode(
       contents,
       passphrase: passphrase,
     );

@@ -40,6 +40,8 @@ Administration separates Profile, Server and Health. It includes supported model
 
 App settings includes paired light/dark themes, accent/text preferences, installed version, offline privacy policy and local alert controls. Configuration export/import transfers connections, credentials and allowlisted preferences; it is not a full draft/app backup.
 
+The Connections toolbar provides Backup configuration and Restore configuration, in that order. Backup offers an optional passphrase before sharing the file. Leave it blank for a plain JSON backup, including readable credentials, or enter and confirm a passphrase to encrypt it. Restore accepts either format and only needs a passphrase for encrypted files. Restore is also available before adding a first connection.
+
 See [Administration](ADMINISTRATION.md), [session controls](SESSION_CONTROLS.md), [subagents](SUBAGENT_SUPERVISION.md) and [notifications](BACKGROUND_NOTIFICATIONS.md).
 
 Accepted work continues on Hermes when the phone leaves. Local queues and alerts require a running, connected client. Firebase delivery, cold sensitive/side-task recovery and synchronized answer versions are not current features. The [product plan](PRODUCT_PLAN.md) separates selected work from exclusions.

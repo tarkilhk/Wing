@@ -37,6 +37,65 @@ void main() {
     );
   }
 
+  group('optional backup encryption', () {
+    test(
+      'an empty passphrase exports and restores plain JSON with credentials',
+      () async {
+        final original = sampleBackup();
+        final contents = await ConfigBackupCodec.encode(
+          original,
+          passphrase: '',
+        );
+        expect(jsonDecode(contents), original.toJson());
+        expect(contents, contains('sk-secret-key'));
+        final restored = await ConfigBackupCodec.decode(
+          contents,
+          passphrase: '',
+        );
+        expect(restored.toJson(), original.toJson());
+      },
+    );
+
+    test('encrypted backups still require their passphrase', () async {
+      final original = sampleBackup();
+      final contents = await ConfigBackupCodec.encode(
+        original,
+        passphrase: 'correct horse',
+        iterations: fastIterations,
+      );
+      expect(contents, isNot(contains('sk-secret-key')));
+      await expectLater(
+        ConfigBackupCodec.decode(contents, passphrase: ''),
+        throwsA(
+          isA<ConfigBackupException>().having(
+            (error) => error.message,
+            'message',
+            'Enter the passphrase for this encrypted backup.',
+          ),
+        ),
+      );
+      final restored = await ConfigBackupCodec.decode(
+        contents,
+        passphrase: 'correct horse',
+      );
+      expect(restored.toJson(), original.toJson());
+    });
+
+    test('plain JSON imports validate the schema and version', () async {
+      for (final contents in [
+        jsonEncode({...sampleBackup().toJson(), 'connections': 'invalid'}),
+        jsonEncode({...sampleBackup().toJson(), 'version': 999}),
+        '{"format":"unknown"}',
+        'not json',
+      ]) {
+        await expectLater(
+          ConfigBackupCodec.decode(contents, passphrase: ''),
+          throwsA(isA<ConfigBackupException>()),
+        );
+      }
+    });
+  });
+
   group('ConfigBackup serialization', () {
     test('round-trips connections including secrets', () {
       final restored = ConfigBackup.fromJson(sampleBackup().toJson());
@@ -111,7 +170,7 @@ void main() {
 
   group('ConfigBackupCodec', () {
     test('encrypts to an envelope that leaks no secret in cleartext', () async {
-      final armored = await ConfigBackupCodec.encrypt(
+      final armored = await ConfigBackupCodec.encode(
         sampleBackup(),
         passphrase: 'correct horse battery staple',
         iterations: fastIterations,
@@ -131,13 +190,13 @@ void main() {
     test(
       'decrypts back to the original backup with the right passphrase',
       () async {
-        final armored = await ConfigBackupCodec.encrypt(
+        final armored = await ConfigBackupCodec.encode(
           sampleBackup(),
           passphrase: 'correct horse battery staple',
           iterations: fastIterations,
         );
 
-        final restored = await ConfigBackupCodec.decrypt(
+        final restored = await ConfigBackupCodec.decode(
           armored,
           passphrase: 'correct horse battery staple',
         );
@@ -153,20 +212,20 @@ void main() {
     );
 
     test('fails closed on a wrong passphrase', () async {
-      final armored = await ConfigBackupCodec.encrypt(
+      final armored = await ConfigBackupCodec.encode(
         sampleBackup(),
         passphrase: 'correct horse battery staple',
         iterations: fastIterations,
       );
 
       expect(
-        () => ConfigBackupCodec.decrypt(armored, passphrase: 'wrong'),
+        () => ConfigBackupCodec.decode(armored, passphrase: 'wrong'),
         throwsA(isA<ConfigBackupException>()),
       );
     });
 
     test('fails closed when the ciphertext has been tampered with', () async {
-      final armored = await ConfigBackupCodec.encrypt(
+      final armored = await ConfigBackupCodec.encode(
         sampleBackup(),
         passphrase: 'pass',
         iterations: fastIterations,
@@ -179,7 +238,7 @@ void main() {
 
       expect(
         () =>
-            ConfigBackupCodec.decrypt(jsonEncode(envelope), passphrase: 'pass'),
+            ConfigBackupCodec.decode(jsonEncode(envelope), passphrase: 'pass'),
         throwsA(isA<ConfigBackupException>()),
       );
     });
@@ -187,7 +246,7 @@ void main() {
     test('uses a fresh salt and nonce for every export', () async {
       final first =
           jsonDecode(
-                await ConfigBackupCodec.encrypt(
+                await ConfigBackupCodec.encode(
                   sampleBackup(),
                   passphrase: 'pass',
                   iterations: fastIterations,
@@ -196,7 +255,7 @@ void main() {
               as Map<String, dynamic>;
       final second =
           jsonDecode(
-                await ConfigBackupCodec.encrypt(
+                await ConfigBackupCodec.encode(
                   sampleBackup(),
                   passphrase: 'pass',
                   iterations: fastIterations,
@@ -214,9 +273,9 @@ void main() {
       );
     });
 
-    test('rejects an empty passphrase rather than encrypting weakly', () {
+    test('rejects whitespace-only passphrases', () {
       expect(
-        () => ConfigBackupCodec.encrypt(
+        () => ConfigBackupCodec.encode(
           sampleBackup(),
           passphrase: '   ',
           iterations: fastIterations,
@@ -227,18 +286,17 @@ void main() {
 
     test('rejects a file that is not a Wing backup envelope', () {
       expect(
-        () =>
-            ConfigBackupCodec.decrypt('{"hello":"world"}', passphrase: 'pass'),
+        () => ConfigBackupCodec.decode('{"hello":"world"}', passphrase: 'pass'),
         throwsA(isA<ConfigBackupException>()),
       );
       expect(
-        () => ConfigBackupCodec.decrypt('not json at all', passphrase: 'pass'),
+        () => ConfigBackupCodec.decode('not json at all', passphrase: 'pass'),
         throwsA(isA<ConfigBackupException>()),
       );
     });
 
     test('honours the iteration count recorded in the envelope', () async {
-      final armored = await ConfigBackupCodec.encrypt(
+      final armored = await ConfigBackupCodec.encode(
         sampleBackup(),
         passphrase: 'pass',
         iterations: fastIterations,
@@ -251,14 +309,14 @@ void main() {
       (envelope['kdf'] as Map)['iterations'] = fastIterations + 1;
       expect(
         () =>
-            ConfigBackupCodec.decrypt(jsonEncode(envelope), passphrase: 'pass'),
+            ConfigBackupCodec.decode(jsonEncode(envelope), passphrase: 'pass'),
         throwsA(isA<ConfigBackupException>()),
       );
     });
 
     test('refuses an absurd iteration count from an untrusted file', () {
       expect(
-        () => ConfigBackupCodec.decrypt(
+        () => ConfigBackupCodec.decode(
           jsonEncode(<String, dynamic>{
             'format': ConfigBackupCodec.envelopeFormat,
             'version': 1,
