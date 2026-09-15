@@ -2,8 +2,7 @@
 
 ## Unreleased
 
-## [1.0.1] - 2026-09-16
-
+- Allow APK builds to advance their internal build number while retaining the current release version.
 - Keep notifications available outside Wing with automatic background monitoring, without Firebase.
 - Simplify notification settings and show an action only when delivery needs attention.
 

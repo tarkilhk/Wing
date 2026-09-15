@@ -100,7 +100,7 @@ class ReleaseTest(unittest.TestCase):
         release.git("tag", "v2.36.15")
         for value in ["2.36.16+2232", "2.36.14+2233"]:
             self.write_version(value)
-            with self.assertRaisesRegex(ValueError, "advance together"):
+            with self.assertRaisesRegex(ValueError, "progression"):
                 release.check_version(release.release_tag(release.current_version()[0]))
         self.write_version("2.36.16+2233")
         release.check_version("v2.36.16")
@@ -108,6 +108,19 @@ class ReleaseTest(unittest.TestCase):
     def test_check_allows_unchanged_released_version_for_normal_ci(self):
         release.git("tag", "v2.36.15")
         release.check_version()
+
+    def test_normal_build_can_advance_without_a_release_version_bump(self):
+        release.git("tag", "v2.36.15")
+        self.write_version("2.36.15+2237")
+        self.assertEqual(release.check_version(), ((2, 36, 15), 2237))
+
+    def test_normal_ci_rejects_older_builds_and_version_only_bumps(self):
+        release.git("tag", "v2.36.15")
+        for value in ["2.36.15+2231", "2.36.16+2232"]:
+            with self.subTest(value=value):
+                self.write_version(value)
+                with self.assertRaisesRegex(ValueError, "progression"):
+                    release.check_version()
 
     def test_first_wing_release_ignores_inherited_application_tags(self):
         release.git("tag", "v2.36.15", "HEAD~1")
@@ -121,7 +134,7 @@ class ReleaseTest(unittest.TestCase):
         self.commit_and_push()
         release.git("tag", "v1.1.0")
         self.write_version("1.0.0+2235")
-        with self.assertRaisesRegex(ValueError, "advance together"):
+        with self.assertRaisesRegex(ValueError, "progression"):
             release.check_version("v1.0.0")
 
     def test_invalid_history_boundary_fails_closed(self):

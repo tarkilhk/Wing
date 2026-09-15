@@ -14,7 +14,7 @@ Wing uses a new application ID and starts with separate local app data. Never un
 
 Read the source version and base build number from [pubspec.yaml](../pubspec.yaml). For split APKs, Gradle computes `base * 10 + ABI`, where ARMv7 is 1, ARM64 is 2 and x86_64 is 3. For example, base 2227 gives ARM64 code 22272. This is an example, not a second source of the current version.
 
-`pubspec.yaml` is the version source. The release helper updates it and the changelog; workflows and tests do not need per-release edits. Stable tags use `v<major>.<minor>.<patch>`. Both the version and base build number must advance beyond earlier Wing tags. Published Wing tags and assets are never overwritten.
+`pubspec.yaml` is the version source. The release helper updates it and the changelog; workflows and tests do not need per-release edits. Stable tags use `v<major>.<minor>.<patch>`. APK rebuilds may increase the internal base build number while keeping the current release version. Increase the displayed version when preparing a new release. New release tags must advance both the version and base build number beyond earlier Wing tags. Published Wing tags and assets are never overwritten.
 
 Wing begins at `1.0.0`. The displayed version starts a new series while the Android build number continues increasing. `scripts/release-history-start` pins the Wing package-identity commit; only tags descended from that commit participate in version comparisons. Keep that boundary fixed. The older Hermes tags describe a different application and do not constrain Wing's version. The inherited version tags were removed from this fork before the first Wing release, leaving `v1.0.0` available for Wing. Their source commits remain in Git history. The helper refuses all existing tag names.
 

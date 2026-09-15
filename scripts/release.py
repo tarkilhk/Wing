@@ -81,9 +81,10 @@ def check_version(tag=None):
             invalid = version <= previous_version or build <= previous_build
         else:
             invalid = version < previous_version or build < previous_build
-            invalid |= (version == previous_version) != (build == previous_build)
+            # Normal APK builds can keep the current release version.
+            invalid |= version > previous_version and build == previous_build
         if invalid:
-            raise ValueError(f"Version/build must advance together beyond {previous_tag} ({previous_build})")
+            raise ValueError(f"Invalid version/build progression beyond {previous_tag} ({previous_build})")
     print(f"Verified {release_tag(version)}; internal ARM64 versionCode {build * 10 + 2}")
     return version, build
 
