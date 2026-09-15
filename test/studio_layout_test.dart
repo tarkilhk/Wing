@@ -182,7 +182,7 @@ void main() {
               WorkspaceAccent.preferenceKey: accent.name,
             });
             PackageInfo.setMockInitialValues(
-              appName: 'Hermes Personal',
+              appName: 'Wing',
               packageName: 'com.example.preview',
               version: '2.34.3',
               buildNumber: '1',

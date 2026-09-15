@@ -119,7 +119,7 @@ class PluginTurnNotificationSink implements TurnNotificationSink {
         ?.createNotificationChannel(
           const AndroidNotificationChannel(
             'hermes_turn_notifications',
-            'Hermes Turns',
+            'Wing Turns',
             description: 'Notifications for completed background turns',
             importance: Importance.defaultImportance,
           ),
@@ -204,13 +204,13 @@ class PluginTurnNotificationSink implements TurnNotificationSink {
 /// Delivers Android notifications when a gateway turn completes while the app
 /// is backgrounded, mirroring the Hermes Desktop tray notification behaviour.
 ///
-/// The service owns a single notification channel ("Hermes Turns") and exposes
+/// The service owns a single notification channel ("Wing Turns") and exposes
 /// one idempotent [ensureInitialized] method safe to call from any lifecycle
 /// point (including before the Flutter engine binding is ready).
 class TurnNotificationService {
   static const turnChannel = TurnNotificationChannel(
     id: 'hermes_turn_notifications',
-    name: 'Hermes Turns',
+    name: 'Wing Turns',
     description: 'Notifications for completed background turns',
   );
 
@@ -275,7 +275,7 @@ class TurnNotificationService {
     await _sink.show(
       TurnNotification(
         id: notificationIdFor(turnId),
-        title: 'Hermes response ready',
+        title: 'Wing response ready',
         body: turnSummary,
         payload: turnId,
         channel: turnChannel,

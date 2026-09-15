@@ -15,7 +15,7 @@ flutter test
 flutter build apk --debug
 ```
 
-The ordinary debug APK uses `com.hermesagent.hermes_android.dev`, keeping its app storage separate from Hermes Personal. No release key is needed for development. Release signing is covered in [the release guide](docs/ANDROID_RELEASE_PLAN.md).
+The ordinary debug APK uses `com.hermesagent.hermes_android.dev`, keeping its app storage separate from Wing. No release key is needed for development. Release signing is covered in [the release guide](docs/ANDROID_RELEASE_PLAN.md).
 
 On Windows with the repository's toolchain layout, use the guarded launcher:
 

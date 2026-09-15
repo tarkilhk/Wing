@@ -1,5 +1,5 @@
 /// Manual Android verification of the shipped profile screen with isolated data.
-/// Debug entry point only. Never install this fixture as Hermes Personal.
+/// Debug entry point only. Never install this fixture as Wing.
 library;
 
 import 'package:flutter/material.dart';

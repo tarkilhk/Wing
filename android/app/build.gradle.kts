@@ -60,7 +60,7 @@ android {
        targetSdk = 36
        versionCode = flutter.versionCode
        versionName = flutter.versionName
-       manifestPlaceholders["appLabel"] = "Hermes Agent"
+       manifestPlaceholders["appLabel"] = "Wing"
    }
 
    signingConfigs {
@@ -81,7 +81,7 @@ android {
            // verifies the packaged arm64 code against that scheme.
            applicationIdSuffix = ".dev"
            versionNameSuffix = "-dev"
-           manifestPlaceholders["appLabel"] = if (personalDevelopment) "Hermes Personal Dev" else "Hermes Agent Dev"
+           manifestPlaceholders["appLabel"] = "Wing Dev"
            resValue("string", "hermes_application_id", "com.hermesagent.hermes_android.dev")
            if (personalDevelopment) {
                resValue("string", "hermes_application_id", "com.tarkilhk.hermes.android")
@@ -93,7 +93,7 @@ android {
            // the private distribution keystore. Never fall back to the debug
            // key: leave the APK explicitly unsigned until the real
            // key.properties file is supplied.
-           manifestPlaceholders["appLabel"] = "Hermes Personal"
+           manifestPlaceholders["appLabel"] = "Wing"
            resValue("string", "hermes_application_id", "com.tarkilhk.hermes.android")
            if (hasReleaseSigning) {
                signingConfig = signingConfigs.getByName("release")

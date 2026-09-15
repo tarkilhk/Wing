@@ -142,7 +142,7 @@ class HermesAppState extends State<HermesApp> with WidgetsBindingObserver {
     await _profileNotifications.show(
       const TurnNotification(
         id: 214600,
-        title: 'Hermes notification test',
+        title: 'Wing notification test',
         body: 'Local alerts are working on this device.',
         payload: '',
         channel: TurnNotificationService.turnChannel,
@@ -411,7 +411,7 @@ class HermesAppState extends State<HermesApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
-      title: 'Hermes',
+      title: 'Wing',
       themeMode: HermesApp.getThemeMode(widget.connManager.prefs),
       theme: profileWorkspaceTheme(
         hermesTheme(Brightness.light),

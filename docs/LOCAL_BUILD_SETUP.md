@@ -28,7 +28,7 @@ Keep Gradle's build cache enabled. Configuration cache was not usable with the p
 
 The default is a signed, non-debuggable ARM64 release. It skips Android code/resource shrinking while retaining Dart AOT, icon tree shaking and Android Lint. `-OptimizeAndroid` enables shrinking for distribution. Ordinary CI release commands remain optimized.
 
-`-Development` uses the Personal package and signing key with debugging enabled. It is labelled Hermes Personal Dev, is larger, and is unsuitable for judging release startup, animation or battery use. A matching signature and sufficient version code allow an in-place update that preserves app data. Ordinary Flutter debug builds use the separate `.dev` package.
+`-Development` uses the Personal package and signing key with debugging enabled. It is labelled Wing Dev, is larger, and is unsuitable for judging release startup, animation or battery use. A matching signature and sufficient version code allow an in-place update that preserves app data. Ordinary Flutter debug builds use the separate `.dev` package.
 
 See [Release guide](ANDROID_RELEASE_PLAN.md) for signing setup and artifact verification. Do not replace a signing key or uninstall an existing app to bypass an update failure.
 

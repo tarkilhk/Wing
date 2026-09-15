@@ -9,7 +9,7 @@ void main() {
     tester,
   ) async {
     PackageInfo.setMockInitialValues(
-      appName: 'Hermes',
+      appName: 'Wing',
       packageName: 'com.example.hermes',
       version: '2.9.0',
       buildNumber: '2158',
@@ -20,7 +20,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: InstalledAppVersionCard()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Hermes'), findsOneWidget);
+    expect(find.text('Wing'), findsOneWidget);
     expect(find.textContaining('2.9.0 (2158)'), findsOneWidget);
     expect(find.textContaining('com.example.hermes'), findsOneWidget);
   });
@@ -30,7 +30,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     PackageInfo.setMockInitialValues(
-      appName: 'Hermes',
+      appName: 'Wing',
       packageName: 'com.example.hermes',
       version: '2.9.0',
       buildNumber: '2158',
@@ -49,12 +49,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Hermes'), findsOneWidget);
+    expect(find.text('Wing'), findsOneWidget);
   });
 
   testWidgets("opens this fork's changelog and release pages", (tester) async {
     PackageInfo.setMockInitialValues(
-      appName: 'Hermes Personal',
+      appName: 'Wing',
       packageName: 'com.tarkilhk.hermes.android',
       version: '2.30.0',
       buildNumber: '2182',
@@ -92,7 +92,7 @@ void main() {
 
   testWidgets('reports when a release link cannot open', (tester) async {
     PackageInfo.setMockInitialValues(
-      appName: 'Hermes',
+      appName: 'Wing',
       packageName: 'com.tarkilhk.hermes.android',
       version: '2.30.0',
       buildNumber: '2182',

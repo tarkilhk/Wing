@@ -1,8 +1,8 @@
-# Hermes Android privacy policy
+# Wing privacy policy
 
 Effective date: 15 September 2026.
 
-This policy covers Hermes Android, labelled Hermes Personal, maintained in the `tarkilhk/hermes-android` repository. It is an independent Android client for a Hermes server you choose. The app does not require an account with this fork's maintainer. Your Hermes host, model providers, and services used by your agent have their own data practices.
+This policy covers Wing, previously labelled Hermes Personal, maintained in the `tarkilhk/hermes-android` repository. It is an independent Android client for a Hermes server you choose. The app does not require an account with this fork's maintainer. Your Hermes host, model providers, and services used by your agent have their own data practices.
 
 ## Data the app handles
 
@@ -32,7 +32,7 @@ Use HTTPS or an encrypted private network when connecting remotely. A plain HTTP
 
 ## Retention and deletion
 
-Drafts and queues remain in app storage until sent, removed, or cleared. Staged files and downloaded previews can remain in private storage or cache until the app cleans them up or you clear app storage. Removing a connection does not promise deletion of every related local draft or cached file. To remove all local app data, use Android Settings, Apps, Hermes Personal, Storage, Clear storage, or uninstall the app. Android's automatic app backup is disabled.
+Drafts and queues remain in app storage until sent, removed, or cleared. Staged files and downloaded previews can remain in private storage or cache until the app cleans them up or you clear app storage. Removing a connection does not promise deletion of every related local draft or cached file. To remove all local app data, use Android Settings, Apps, Wing, Storage, Clear storage, or uninstall the app. Android's automatic app backup is disabled.
 
 Clearing or uninstalling the Android app does not delete conversations, uploaded files, credentials, or records stored on your Hermes server or its providers. Use the app's server-backed conversation deletion controls where available, and contact the server administrator or provider for their retention and deletion options. There is no separate account with this app's maintainer to delete.
 

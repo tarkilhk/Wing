@@ -1,6 +1,6 @@
 Continue conversations with your own Hermes Agent from an Android phone.
 
-Hermes Personal is an independent Android client. It requires a compatible Hermes dashboard and Desktop Gateway that you operate or have permission to use. It does not run a model on the phone or provide a hosted AI account. Your server and model provider may have their own costs.
+Wing is an independent Android client. It requires a compatible Hermes dashboard and Desktop Gateway that you operate or have permission to use. It does not run a model on the phone or provide a hosted AI account. Your server and model provider may have their own costs.
 
 Features:
 - Streaming chats with per-chat model and reasoning choices

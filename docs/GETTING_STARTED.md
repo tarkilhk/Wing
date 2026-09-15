@@ -1,6 +1,6 @@
 # Getting started
 
-Hermes Android connects to a server you operate or have permission to use. You need Android 7.0 or newer, a configured Hermes model/provider, and a dashboard reachable from the phone. The dashboard must expose profile/session APIs and the Desktop Gateway at `/api/ws`.
+Wing connects to a server you operate or have permission to use. You need Android 7.0 or newer, a configured Hermes model/provider, and a dashboard reachable from the phone. The dashboard must expose profile/session APIs and the Desktop Gateway at `/api/ws`.
 
 ## Compatibility
 
@@ -42,7 +42,7 @@ Keep the process running. From the phone's browser, open the dashboard address a
 
 ## 3. Install the Android app
 
-Download an appropriate signed APK from [this fork's releases](https://github.com/tarkilhk/hermes-android/releases), if one has been published. Use ARM64 for a compatible phone. Open the APK in Android and allow installation from that browser or file manager when prompted. Do not install an APK from an unrelated fork expecting it to update Hermes Personal.
+Download an appropriate signed APK from [this fork's releases](https://github.com/tarkilhk/hermes-android/releases), if one has been published. Use ARM64 for a compatible phone. Open the APK in Android and allow installation from that browser or file manager when prompted. Do not install an APK from an unrelated fork expecting it to update Wing.
 
 For development builds, follow [Contributing](../CONTRIBUTING.md). A Play Store listing is not implied by the presence of store metadata in this repository.
 

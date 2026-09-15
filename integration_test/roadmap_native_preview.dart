@@ -4,7 +4,7 @@
 /// A nonempty `ROADMAP_NATIVE_NOTIFICATION_NONCE` posts one scoped notification
 /// after opening the work fixture; relaunching with the same nonce only handles
 /// the retained notification tap.
-/// Build only as debug; never install this entry point in Hermes Personal.
+/// Build only as debug; never install this entry point in Wing.
 library;
 
 import 'dart:async';

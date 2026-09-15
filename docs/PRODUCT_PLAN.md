@@ -1,6 +1,6 @@
 # Product scope
 
-This is the owner's selected scope for Hermes Android. [Features](FEATURES.md) describes the current app; [known limitations](KNOWN_LIMITATIONS.md) records incomplete behavior. Scope decisions were made on 11–14 September 2026. Earlier research and delivery journals are available in Git history.
+This is the owner's selected scope for Wing. [Features](FEATURES.md) describes the current app; [known limitations](KNOWN_LIMITATIONS.md) records incomplete behavior. Scope decisions were made on 11–14 September 2026. Earlier research and delivery journals are available in Git history.
 
 ## Product boundaries
 

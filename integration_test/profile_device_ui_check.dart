@@ -1,6 +1,6 @@
 /// Manual Android UI checks using the shipped screen/controller and an isolated
 /// gateway fixture. Build as a debug entry point, install with adb install -r,
-/// and restore lib/main.dart afterward. Never install this in Hermes Personal.
+/// and restore lib/main.dart afterward. Never install this in Wing.
 library;
 
 import 'package:flutter/material.dart';

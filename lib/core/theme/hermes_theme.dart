@@ -1,4 +1,4 @@
-/// The Hermes Android design system.
+/// The Wing app design system.
 ///
 /// One typed token layer that every screen consumes, so spacing, radius,
 /// motion, semantic status colors, and the typography ramp are decided once

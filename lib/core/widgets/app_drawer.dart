@@ -38,7 +38,7 @@ class AppDrawer extends StatelessWidget {
     final identity = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Hermes', style: Theme.of(context).textTheme.headlineSmall),
+        Text('Wing', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 8),
         Text(
           [

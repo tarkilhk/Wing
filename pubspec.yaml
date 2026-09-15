@@ -1,5 +1,5 @@
 name: hermes_android
-description: "A mobile client for Hermes profiles, conversations and agent work."
+description: "Wing, a mobile client for Hermes profiles, conversations and agent work."
 publish_to: 'none'
 version: 2.36.15+2232
 

@@ -152,7 +152,7 @@ class _TextSizeSettingsCardState extends State<TextSizeSettingsCard> {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Text(
-              'Hermes keeps Android accessibility text scaling active.',
+              'Wing keeps Android accessibility text scaling active.',
             ),
           ),
         ],

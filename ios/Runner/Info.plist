@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Hermes Android</string>
+	<string>Wing</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -27,9 +27,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Hermes uses the microphone to turn your speech into chat messages.</string>
+	<string>Wing uses the microphone to turn your speech into chat messages.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Hermes uses speech recognition so you can talk to your agent.</string>
+	<string>Wing uses speech recognition so you can talk to your agent.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

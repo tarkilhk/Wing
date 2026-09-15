@@ -1,4 +1,4 @@
-# Hermes design system
+# Wing design system
 
 Studio is the app's selected design language. This charter records the current shared tokens, component rules and behavior-preservation contract, including the September 2026 portrait, theme and menu updates.
 
@@ -16,6 +16,12 @@ The [product plan](PRODUCT_PLAN.md) owns functionality. This document owns the a
 - Shared provider accounts belong under Server / Providers. Profile keeps model/provider choices, inherited-access information and any explicit profile-specific credential override. MCP stays profile-owned. A shared account reached from Profile opens its Server detail. Hermes supports [shared provider-state inheritance](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/hermes_cli/auth.py#L773) and [shared credential-pool fallback](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/hermes_cli/auth.py#L893). do not infer account ownership from the presence of a profile parameter.
 
 ## App and notification identity
+
+The app is **Wing** in prose, Android labels and accessibility text. The
+approved wordmark reads **wing** in lowercase. The owner selected the compact
+feather-accent board on 15 September 2026. See the
+[Wing identity specification](design/2026-09-15-wing-identity.md) for the board,
+wordmark rules, decorative feather system and naming compatibility decisions.
 
 The owner selected the Playful portrait: a winking woman with a simple dark bob,
 mint headphones and a messenger wing on the earcup. Keep the navy, cream and

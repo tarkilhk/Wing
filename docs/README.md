@@ -1,6 +1,6 @@
 # Documentation
 
-## Using Hermes Personal
+## Using Wing
 
 | Guide | Covers |
 | --- | --- |
@@ -14,6 +14,7 @@
 
 - [Product scope](PRODUCT_PLAN.md) and [administration roadmap](ADMINISTRATION_ROADMAP.md) preserve selected feature IDs, priorities and exclusions.
 - [Design system](DESIGN_SYSTEM.md) owns shared tokens, controls and interaction preservation.
+- [Wing identity](design/2026-09-15-wing-identity.md) records the approved board, name, wordmark and feather accents.
 - [Administration ownership](design/2026-09-14-administration-handoff.md) maps Profile, Server and Health.
 - [Brand assets](design/2026-09-14-app-icon.md) covers the portrait, wing, in-app placements and exports.
 

@@ -40,7 +40,7 @@ void main() {
       );
       expect(
         gradle,
-        contains('manifestPlaceholders["appLabel"] = "Hermes Personal"'),
+        contains('manifestPlaceholders["appLabel"] = "Wing"'),
       );
       expect(
         gradle,

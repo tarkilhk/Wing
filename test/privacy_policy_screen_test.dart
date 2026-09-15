@@ -34,7 +34,7 @@ void main() {
       tester,
     ) async {
       PackageInfo.setMockInitialValues(
-        appName: 'Hermes Personal',
+        appName: 'Wing',
         packageName: 'com.tarkilhk.hermes.android',
         version: '1',
         buildNumber: '1',

@@ -1,8 +1,13 @@
-# Hermes Android
+# Wing
 
 Continue conversations with your [Hermes Agent](https://github.com/NousResearch/hermes-agent) from an Android phone. Browse chats and projects, follow running work, send files, and open the results.
 
-This is the independent `tarkilhk/hermes-android` fork, installed as **Hermes Personal**. It requires your own compatible Hermes server. It does not run a model on your phone or provide a hosted AI service.
+This is the independent `tarkilhk/hermes-android` fork, installed as **Wing**. It requires your own compatible Hermes server. It does not run a model on your phone or provide a hosted AI service.
+
+Wing was previously labelled Hermes Personal. The name changes while the Android
+package and signing identity stay the same for in-place updates. The repository
+still uses its existing name. See the [approved identity](docs/design/2026-09-15-wing-identity.md)
+for the lowercase wordmark, feather accents and brand board.
 
 [Getting started](docs/GETTING_STARTED.md) · [Feature guide](docs/FEATURES.md) · [Known limitations](docs/KNOWN_LIMITATIONS.md) · [Privacy](PRIVACY.md)
 
@@ -59,7 +64,7 @@ On Windows, use the guarded launcher described in [Contributing](CONTRIBUTING.md
 
 [pubspec.yaml](pubspec.yaml) declares the source version. App settings shows the installed version, and [CHANGELOG.md](CHANGELOG.md) records release changes.
 
-- Personal package: `com.tarkilhk.hermes.android`, labelled Hermes Personal.
+- Personal package: `com.tarkilhk.hermes.android`, labelled Wing.
 - Development package: `com.hermesagent.hermes_android.dev`.
 - The inherited upstream application is a separate package and signing identity.
 

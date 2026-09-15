@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Rename the app to Wing, with Wing Dev for development builds. Preserve package IDs, signing configuration and saved data compatibility.
+- Adopt the approved lowercase wing wordmark with compact pointed feather accents and a matching decorative feather system. Save the selected board and naming rules in the design framework.
+- Update app labels, notification branding, store metadata and current documentation. Repository links continue to use the existing repository name.
+
 ## [2.36.15+2232] - 2026-09-15
 
 ### Fixed
