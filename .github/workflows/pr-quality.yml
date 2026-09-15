@@ -9,8 +9,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
-  checks: write
 
 jobs:
   quality:
@@ -19,10 +17,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: '3.44.0'
           channel: 'stable'
@@ -30,7 +31,7 @@ jobs:
           pub-cache: false # The dedicated dependency cache below owns pub packages.
 
       - name: Cache Flutter dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.pub-cache
           key: flutter-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
@@ -40,43 +41,11 @@ jobs:
         run: flutter pub get
         id: pub_get
 
-      - name: Verify release identity and upgrade versionCode
-        env:
-          MINIMUM_INSTALLED_VERSION_CODE: '2127'
-          REQUIRED_BASE_VERSION_CODE: '2232'
-        run: |
-          python3 - <<'PY'
-          import os
-          import pathlib
-          import re
+      - name: Test release tooling
+        run: python3 -m unittest discover -s scripts/tests -v
 
-          match = re.search(
-              r"^version:\s*([^\s+]+)\+(\d+)\s*$",
-              pathlib.Path("pubspec.yaml").read_text(),
-              re.M,
-          )
-          if not match:
-              raise SystemExit("pubspec.yaml must declare versionName+versionCode")
-
-          version_name, version_code_text = match.groups()
-          version_code = int(version_code_text)
-          minimum = int(os.environ["MINIMUM_INSTALLED_VERSION_CODE"])
-          required_base = int(os.environ["REQUIRED_BASE_VERSION_CODE"])
-          if version_code <= minimum:
-              raise SystemExit(
-                  f"versionCode {version_code} must be greater than {minimum}"
-              )
-          if version_code != required_base:
-              raise SystemExit(
-                  f"versionCode {version_code} does not match required base "
-                  f"{required_base}"
-              )
-
-          print(
-              f"Verified {version_name}+{version_code}; upgrade floor is {minimum}; "
-              f"required base is {required_base}"
-          )
-          PY
+      - name: Verify source version
+        run: python3 scripts/release.py check
 
       # ── Step 1: Static analysis ──────────────────────────
       - name: Static analysis

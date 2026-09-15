@@ -14,7 +14,7 @@ Wing uses a new application ID and starts with separate local app data. Never un
 
 Read the source version and base build number from [pubspec.yaml](../pubspec.yaml). For split APKs, Gradle computes `base * 10 + ABI`, where ARMv7 is 1, ARM64 is 2 and x86_64 is 3. For example, base 2227 gives ARM64 code 22272. This is an example, not a second source of the current version.
 
-When bumping a release, update pubspec, both workflows' `REQUIRED_BASE_VERSION_CODE`, the release identity test and changelog together. Use a new tag matching `v<versionName>`. Do not overwrite a published tag or artifact.
+`pubspec.yaml` is the version source. The release helper updates it and the changelog; workflows and tests do not need per-release edits. Stable tags use `v<major>.<minor>.<patch>`. Both the version and base build number must advance beyond earlier stable tags. Published tags and assets are never overwritten.
 
 ## Validate one release candidate
 
@@ -50,9 +50,67 @@ Before installation, inspect the built artifact with Android build tools. Verify
 
 ## GitHub APK distribution
 
-The existing release workflow tests, builds and verifies signed ABI-split APKs. A matching `v*` tag publishes them to this fork's GitHub Releases when the signing secrets are configured. An unsigned tagged release is rejected. A manual run without signing secrets produces explicitly labelled debug validation artifacts.
+### Prepare a release
 
-Publishing a release or uploading signing secrets is a separate action from editing source or this guide. Check the workflow and repository visibility before creating a release tag. Retain the release's source revision, verification results and symbol files.
+Use Python 3.10 or newer and Git from the checkout root (on Windows, use `py -3` instead of `python3`). Add user-facing changes under `## Unreleased` in `CHANGELOG.md`, then choose a bump:
+
+```sh
+python3 scripts/release.py prepare patch --dry-run
+python3 scripts/release.py prepare patch
+```
+
+| Bump | Use for | Example from 2.36.15+2232 |
+| --- | --- | --- |
+| `patch` | Bug fixes and small improvements | 2.36.16+2233 |
+| `minor` | New features | 2.37.0+2233 |
+| `major` | Breaking changes | 3.0.0+2233 |
+
+Every bump increments the Android base build number by one. The helper moves Unreleased notes into a dated release entry and leaves an empty Unreleased section for future work. It edits only `pubspec.yaml` and `CHANGELOG.md`; review and commit those changes through the normal PR/merge process. It refuses empty notes and repeated preparation without new notes. It does not build an APK locally.
+
+### Trigger CI after merging
+
+Once the preparation is merged, update your local `main`, then:
+
+```sh
+git switch main
+git pull --ff-only origin main
+python3 scripts/release.py publish --dry-run
+python3 scripts/release.py publish
+```
+
+`publish` requires a clean tree, local `main` matching `origin/main`, dated changelog notes, and an unused version tag. It fetches remote tags, validates version/build progression, creates an annotated tag at the current commit and pushes only that tag to `origin`. The dry run fetches and validates without creating or pushing a tag. A failed tag push leaves the local tag in place and prints the retry command.
+
+The tag starts [the Release workflow](../.github/workflows/release.yml):
+
+1. Confirm the tag matches the source version and its commit is on `main`.
+2. Run release-tool tests, Flutter analysis and Flutter tests.
+3. Build signed ARMv7, ARM64 and x86_64 APKs with the pinned toolchain.
+4. Verify every APK's package, architecture, effective version code, version name, non-debuggable status and expected signing certificate.
+5. Package APKs, Dart symbols, changelog notes, source/certificate metadata and `SHA256SUMS`.
+6. In a separate job with `contents: write`, create a draft release, upload all assets, download them again and verify checksums, then publish automatically.
+
+The build job has read-only repository access; signing secrets are supplied only to the build step and the temporary keystore is removed afterward. Actions are pinned to commit revisions. Runs for the same ref are serialized. Keep tag creation restricted to trusted maintainers; Actions workflow and build-script changes should be reviewed before tagging. Enable immutable releases in GitHub repository settings if desired; the workflow itself refuses to overwrite an existing release. See [GitHub's action security guidance](https://docs.github.com/en/actions/reference/security/secure-use) and [draft release support](https://cli.github.com/manual/gh_release_create).
+
+### Configure signing once
+
+In GitHub **Settings → Secrets and variables → Actions**, add:
+
+| Secret | Value |
+| --- | --- |
+| `KEYSTORE_BASE64` | Base64 encoding of the intended Wing release keystore |
+| `STORE_PASSWORD` | Keystore password |
+| `KEY_PASSWORD` | Signing key password |
+| `KEY_ALIAS` | Signing key alias |
+
+The certificate must match `android/wing-release-certificate.sha256`. Keep the private keystore and passwords out of commits and logs. Uploading secrets and pushing a real release tag are separate from preparing the source changes.
+
+A manual Release workflow run on `main` builds and verifies signed artifacts without publishing. It requires all signing secrets; manual runs on other branches are skipped. A manual run against a version tag follows the publishing path. No debug APK is substituted when signing is unavailable.
+
+### Downloads and failures
+
+Release assets include `wing-vX.Y.Z-arm64-v8a.apk` (most current phones), the ARMv7 and x86_64 alternatives, a symbols archive, `release.json`, `release-notes.md`, and `SHA256SUMS`. The same assets remain available as an Actions artifact for 30 days; the GitHub Release retains the symbols alongside the APKs.
+
+If building or verification fails, fix the cause before retrying. If a failed publication leaves a draft, inspect it and delete only that unpublished draft before rerunning the publish job. An already published release is never replaced: prepare a new version. A tag's source commit must not be moved to fix code; use a new version tag. Verify a downloaded release on a phone using the acceptance checks above.
 
 ## Google Play preparation
 
