@@ -57,7 +57,8 @@ Future<void> main() async {
       preferences: preferences,
       gatewayFactory: fixture.gateway,
       onAttention: postNotification
-          ? (chat, needsInput, [eventId]) async {
+          ? (chat) async {
+              final needsInput = chat.content.needsAttention;
               if (preferences.getString(notificationMarker) ==
                   notificationNonce) {
                 return;

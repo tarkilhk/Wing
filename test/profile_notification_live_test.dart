@@ -38,7 +38,8 @@ void main() {
               connectionIdentity: id,
               preferences: preferences,
               onAttention: observe
-                  ? (chat, needsInput, [eventId]) async {
+                  ? (chat) async {
+                      final needsInput = chat.content.needsAttention;
                       notifications.add((
                         key: chat.key,
                         needsInput: needsInput,
@@ -137,7 +138,8 @@ void main() {
           ),
           connectionIdentity: 'notification-event-live-qa',
           preferences: await SharedPreferences.getInstance(),
-          onAttention: (chat, needsInput, [eventId]) async {
+          onAttention: (chat) async {
+            final needsInput = chat.content.needsAttention;
             notifications.add((key: chat.key, needsInput: needsInput));
             if (!completion.isCompleted) completion.complete();
           },

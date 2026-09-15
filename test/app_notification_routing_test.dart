@@ -63,14 +63,18 @@ Future<NotificationHarness> _harness() async {
   );
 }
 
-String _payload(NotificationHarness harness, String profile) => jsonEncode(
+String _payload(
+  NotificationHarness harness,
+  String profile, {
+  String session = 'same',
+}) => jsonEncode(
   ProfileSessionKey(
     WorkspaceScope(
       connectionId: harness.connection.id,
       connectionIdentity: harness.identity,
       profileName: profile,
     ),
-    'same',
+    session,
   ).toJson(),
 );
 
@@ -117,6 +121,30 @@ Future<void> _pumpNavigation(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('notification taps open the named chat within the same profile', (
+    tester,
+  ) async {
+    final harness = await _harness();
+    final app = await _pumpApp(tester, harness);
+    final first = _payload(harness, 'a');
+    final second = _payload(harness, 'a', session: 'second');
+
+    await app.currentState!.openProfileNotification(first);
+    await _pumpNavigation(tester);
+    expect(harness.controller.current!.chat!.key.sessionId, 'same');
+
+    await app.currentState!.openProfileNotification(second);
+    await _pumpNavigation(tester);
+    expect(harness.controller.current!.chat!.key.sessionId, 'second');
+    expect(find.text('Chat'), findsOneWidget);
+
+    await app.currentState!.openProfileNotification(first);
+    await _pumpNavigation(tester);
+    expect(harness.controller.current!.chat!.key.sessionId, 'same');
+    expect(find.text('a chat'), findsOneWidget);
+    await _expectSinglePopReturnsHome(tester);
+  });
+
   testWidgets(
     'concurrent and later taps refresh once without duplicate routes',
     (tester) async {

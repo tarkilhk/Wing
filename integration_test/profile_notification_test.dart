@@ -1,3 +1,4 @@
+import 'package:wing/core/models/chat_notification_content.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -68,7 +69,16 @@ void main() {
       chat.title = 'Notification QA: tap to reopen profile A';
       expect(await controller.switchProfile('android-qa-b'), isTrue);
       await tester.pumpAndSettle();
-      await controller.onAttention!(chat, false);
+      await controller.onAttention!(
+        ProfileNotification(
+          key: chat.key,
+          title: chat.title,
+          connectionLabel: controller.connection.label,
+          content: ChatNotificationContent.reply(
+            'Notification previews are working.',
+          ),
+        ),
+      );
       debugPrint(
         '[notification-qa] Posted QA notification while profile B is visible. Tap it now.',
       );

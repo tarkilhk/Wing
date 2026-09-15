@@ -15,7 +15,7 @@ Read Google's [Data safety form guidance](https://support.google.com/googleplay/
 | Local persistence | Credentials in secure storage; connection metadata, settings, drafts, queues and recovery references in private app storage | `connection_manager.dart`, `composer_draft_store.dart`, `gateway_turn_journal.dart` |
 | File sharing/viewing | Selected downloaded bytes passed to the selected external app | `android_file_delivery_service.dart`, native `MainActivity.kt` |
 | Remote images and web links | Requests to the referenced image host or browser destination | Message image widgets and `web_preview.dart` |
-| Notifications | Local session-derived alerts; titles optional | `turn_notification_service.dart` |
+| Notifications | Local session-derived alerts; chat names and connection/profile, optional message excerpts on by default | `turn_notification_service.dart` |
 | Optional custom push build | Messaging token, installation identifier and notification settings to Firebase and the configured server | `background_push_service.dart` |
 
 Source paths above are under `lib/core/services/` unless otherwise stated. There is no advertising or app analytics configuration in the standard build. Firebase packages remain, but initialization requires explicit build options. Do not reuse the standard-build declarations for an independently configured push build.

@@ -5,6 +5,19 @@ the [Studio design system](../DESIGN_SYSTEM.md).
 
 ![Approved Wing identity board](images/wing-identity-board.png)
 
+## Notification identity board
+
+Approved by the owner on 16 September 2026: **Hermes' caduceus for the permanent
+connection**, and **the messenger wing for each chat notification**.
+
+![Approved connection and chat notification icons](images/notification-identity-board.svg)
+
+This addition to the identity board renders the exact app vectors. Regenerate it
+with `python3 scripts/generate-notification-board.py`. Android supplies the tint;
+the light and dark specimens show the approved silhouettes at 18 and 24 px.
+The [production asset record](2026-09-14-app-icon.md#hermes-caduceus-connection-icon)
+owns the source paths and Android usage.
+
 ## Name and wordmark
 
 - Write **Wing** in prose, app titles, launcher labels, store listings and accessibility labels. Use **Wing Dev** for development builds.
@@ -21,8 +34,10 @@ The graphic-element specimen uses the same one-left, two-right arrangement;
 the splash card uses the two mint feathers enlarged. Preserve text clearance.
 
 Keep the selected winking portrait, dark bob, mint headphones and original
-single-wing earcup emblem. The normal launcher uses the portrait; notifications
-and optional themed icons use the existing single wing. See the
+single-wing earcup emblem. The normal launcher uses the portrait; chat alerts
+and optional themed icons use the existing single wing. The permanent connection
+indicator uses Hermes' caduceus as a separate monochrome glyph, as directed by
+the owner on 16 September 2026. See the
 [production asset record](2026-09-14-app-icon.md).
 
 | Brand color | Value |

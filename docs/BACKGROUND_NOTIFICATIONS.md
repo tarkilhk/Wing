@@ -2,6 +2,14 @@
 
 Wing keeps its authenticated Hermes event connections running in an Android foreground service. The ongoing **Monitoring Hermes** notification identifies this automatic monitoring. Firebase and server push registration are not required.
 
+The permanent connection indicator uses **Hermes' caduceus**; chat completion and
+attention alerts use the **wing** icon. Monitoring has its own notification
+group, with a summary and the foreground-service notification, so Android does
+not combine it with chat alerts. Both monitoring entries reopen Wing without
+selecting a chat. Expand a chat notification group and tap the individual alert
+to open its original chat. Android controls grouping and available status-bar
+space; see [Android notification groups](https://developer.android.com/develop/ui/views/notifications/group).
+
 The service retains the same Flutter engine and workspace controllers when the activity is backgrounded or destroyed. Reopening Wing attaches to that engine, preserving event subscriptions and notification tap routing. It monitors connections opened in this app; it does not subscribe to every saved server or fix missing server events.
 
 ## Enabling monitoring
@@ -22,9 +30,9 @@ Android force-stop, process termination, a reboot, lost connectivity and manufac
 
 On first launch, after the first screen appears, Wing requests Android notification permission through the native dialog if notifications are not already enabled. Acceptance or denial is remembered on this device, so subsequent launches do not ask again. A failed platform request can be retried on the next launch. No test alert is posted during startup.
 
-App settings has independent completion/input switches, optional chat titles and a permission/test action, which remains available after the startup request. Titles are off by default. Event messages use Finished working or Needs your attention, with the selected chat title or Tap to open the chat. The built-in test proves OS posting, not coverage of actual server work.
+App settings has independent completion/attention switches, **Show message previews** (on by default), and a permission/test action. Each alert shows the chat name and connection/profile. One expandable text layout covers updates (Reply ready), input requests (Input needed), and stopped work (Failed or Stopped). Side and background answers use their own reply text. Status-only transitions say Chat updated without claiming a successful result. Turning previews off leaves the chat name and short status. Tapping opens the owning chat. The built-in test proves OS posting, not coverage of actual server work.
 
-Avoid secrets, prompt contents and tool output in notifications. Follow [Privacy](../PRIVACY.md) for storage and optional title exposure.
+Previews omit reasoning, code blocks, tool output and URLs. Secure-input requests and failures use fixed text. Alerts use private lock-screen visibility; Android settings control exposure or generic system text. See [Privacy](../PRIVACY.md). Pending-input alerts and result alerts use separate notification identities so a result cannot replace input needed for the same chat.
 
 ## Event coverage
 
@@ -37,6 +45,10 @@ Unopened child-only work also depends on the global backend contract described i
 ## Tap routing
 
 Each notification retains connection/profile/durable-chat identity. Stable IDs avoid unrelated replacement, startup navigation retries when initialization is incomplete, and stale connection credentials invalidate obsolete targets. A tap for the same open chat reuses its view; when several requests race, the newest tap wins.
+
+Routing checks include two different chats in the same profile and tapping an
+older alert after a newer alert has been posted. A system-generated group header
+is not an individual chat target.
 
 Refresh server state when opening the chat. Notifications supplement that state and are not the durable record of a result or pending request. The unsent queue still needs a running, connected client to drain.
 

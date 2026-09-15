@@ -79,11 +79,14 @@ class NotificationCoverageHost {
             return {'sessions': active};
           }
           if (method == 'projects.tree') return {'projects': []};
-          if (method == 'session.create') {
+          if (method == 'session.create' || method == 'session.resume') {
+            final sessionId = method == 'session.create'
+                ? 'loaded'
+                : params['session_id'] as String;
             return {
-              'session_id': 'loaded-runtime',
-              'stored_session_id': 'loaded',
-              'session_key': 'loaded',
+              'session_id': '$sessionId-runtime',
+              'stored_session_id': sessionId,
+              'session_key': sessionId,
               'running': false,
               'info': {'profile_name': scope.profileName},
             };
@@ -142,10 +145,10 @@ void main() {
       connectionIdentity: 'notification-coverage',
       preferences: await SharedPreferences.getInstance(),
       gatewayFactory: host.gateway,
-      onAttention: (chat, input, [_]) async => alerts.add((
-        profile: chat.key.workspace.profileName,
-        session: chat.key.sessionId,
-        input: input,
+      onAttention: (notification) async => alerts.add((
+        profile: notification.key.workspace.profileName,
+        session: notification.key.sessionId,
+        input: notification.content.needsAttention,
       )),
     );
     await controller.initialize();

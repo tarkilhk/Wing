@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../models/chat_notification_content.dart';
+
 const completionNotificationsKey = 'completion_notifications';
 const attentionNotificationsKey = 'attention_notifications';
-const notificationTitlesKey = 'notification_chat_titles';
+const notificationPreviewsKey = 'notification_message_previews';
 
 /// The Android/iOS notification channel a [TurnNotification] belongs to.
 ///
@@ -28,6 +30,8 @@ class TurnNotification {
   final String title;
   final String body;
   final String payload;
+  final String? expandedBody;
+  final String? scopeLabel;
   final TurnNotificationChannel channel;
 
   const TurnNotification({
@@ -36,7 +40,33 @@ class TurnNotification {
     required this.body,
     required this.payload,
     required this.channel,
+    this.expandedBody,
+    this.scopeLabel,
   });
+
+  factory TurnNotification.chat({
+    required String payload,
+    required String title,
+    required String scopeLabel,
+    required ChatNotificationContent content,
+    required bool showPreview,
+    String? eventId,
+  }) {
+    final cleanTitle = notificationPlainText(title);
+    return TurnNotification(
+      id: TurnNotificationService.notificationIdFor(
+        jsonEncode([payload, content.category.name, eventId]),
+      ),
+      title: cleanTitle.isEmpty
+          ? 'Untitled chat'
+          : notificationTextLimit(cleanTitle, 120),
+      body: content.body(showPreview: showPreview),
+      expandedBody: content.body(showPreview: showPreview, limit: 800),
+      scopeLabel: notificationTextLimit(notificationPlainText(scopeLabel), 120),
+      payload: payload,
+      channel: TurnNotificationService.turnChannel,
+    );
+  }
 }
 
 /// The platform seam [TurnNotificationService] posts through.
@@ -171,9 +201,15 @@ class PluginTurnNotificationSink implements TurnNotificationSink {
       notification.channel.id,
       notification.channel.name,
       channelDescription: notification.channel.description,
+      icon: 'ic_stat_wing',
       importance: Importance.defaultImportance,
       priority: Priority.defaultPriority,
       autoCancel: true,
+      visibility: NotificationVisibility.private,
+      subText: notification.scopeLabel,
+      styleInformation: BigTextStyleInformation(
+        notification.expandedBody ?? notification.body,
+      ),
     );
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,

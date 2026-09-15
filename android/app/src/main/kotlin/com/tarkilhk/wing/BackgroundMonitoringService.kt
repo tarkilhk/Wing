@@ -47,8 +47,8 @@ class BackgroundMonitoringService : Service() {
                 },
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
-            val notification = NotificationCompat.Builder(this, channelId)
-                .setSmallIcon(R.drawable.ic_stat_wing)
+            val builder = NotificationCompat.Builder(this, channelId)
+                .setSmallIcon(R.drawable.ic_stat_connection)
                 .setContentTitle("Monitoring Hermes")
                 .setContentText("Keeping connected chats active for completion and attention alerts.")
                 .setContentIntent(open)
@@ -57,12 +57,17 @@ class BackgroundMonitoringService : Service() {
                 .setShowWhen(false)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
-                .build()
+                .setGroup(groupKey)
+                .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
+            val notification = builder.build()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startForeground(notificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
             } else {
                 startForeground(notificationId, notification)
             }
+            // A complete group keeps the connection separate from chat alerts.
+            // Android 16 can regroup a lone child or a summary without children.
+            manager.notify(summaryId, builder.setGroupSummary(true).build())
             if (wakeLock == null) {
                 wakeLock = getSystemService(PowerManager::class.java)
                     .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:hermes-monitoring")
@@ -81,6 +86,7 @@ class BackgroundMonitoringService : Service() {
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
         stopForeground(STOP_FOREGROUND_REMOVE)
+        getSystemService(NotificationManager::class.java).cancel(summaryId)
         MonitoringRuntime.serviceDestroyed()
         super.onDestroy()
     }
@@ -88,5 +94,7 @@ class BackgroundMonitoringService : Service() {
     companion object {
         private const val channelId = "hermes_monitoring"
         private const val notificationId = 214601
+        private const val summaryId = 214602
+        private const val groupKey = "wing_connection"
     }
 }

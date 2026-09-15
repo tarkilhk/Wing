@@ -303,8 +303,9 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
             connection: connection,
             connectionIdentity: identity,
             preferences: widget.connManager.prefs,
-            onAttention: (chat, needsInput, [eventId]) async {
-              final preference = needsInput
+            onAttention: (notification) async {
+              final eventId = notification.eventId;
+              final preference = notification.content.needsAttention
                   ? attentionNotificationsKey
                   : completionNotificationsKey;
               if (widget.connManager.prefs.getBool(preference) == false) return;
@@ -316,25 +317,21 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
                   !await _notificationDeliveries.claim(eventId)) {
                 return;
               }
-              final payload = jsonEncode(chat.key.toJson());
+              final payload = jsonEncode(notification.key.toJson());
               try {
                 await _profileNotifications.show(
-                  TurnNotification(
-                    id: TurnNotificationService.notificationIdFor(
-                      eventId == null ? payload : 'push-event:$eventId',
-                    ),
-                    title: needsInput
-                        ? 'Needs your attention'
-                        : 'Finished working',
-                    body:
-                        widget.connManager.prefs.getBool(
-                              notificationTitlesKey,
-                            ) ==
-                            true
-                        ? chat.title
-                        : 'Tap to open the chat.',
+                  TurnNotification.chat(
                     payload: payload,
-                    channel: TurnNotificationService.turnChannel,
+                    title: notification.title,
+                    scopeLabel:
+                        '${notification.connectionLabel} / ${notification.key.workspace.profileName}',
+                    content: notification.content,
+                    showPreview:
+                        widget.connManager.prefs.getBool(
+                          notificationPreviewsKey,
+                        ) ??
+                        true,
+                    eventId: eventId,
                   ),
                 );
               } catch (_) {

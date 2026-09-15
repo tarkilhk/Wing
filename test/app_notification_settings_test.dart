@@ -58,13 +58,13 @@ void main() {
     expect(permissionRequests, 0);
     final previews = find.widgetWithText(
       CompactSwitchListTile,
-      'Show chat titles in alerts',
+      'Show message previews',
     );
     await tester.scrollUntilVisible(previews, 250);
-    expect(tester.widget<CompactSwitchListTile>(previews).value, isFalse);
+    expect(tester.widget<CompactSwitchListTile>(previews).value, isTrue);
     await tester.tap(previews);
     await tester.pumpAndSettle();
-    expect(preferences.getBool(notificationTitlesKey), isTrue);
+    expect(preferences.getBool(notificationPreviewsKey), isFalse);
     final permission = find.text('Test notification');
     await tester.scrollUntilVisible(permission, 250);
     await tester.tap(permission);

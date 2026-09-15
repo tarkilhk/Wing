@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/attachment_draft.dart';
 import '../models/user_message_content.dart';
 import '../models/context_occupancy.dart';
+import '../models/chat_notification_content.dart';
 import '../models/session_visibility.dart';
 import '../models/answer_versions.dart';
 import '../models/hermes_profile.dart';
@@ -272,8 +273,25 @@ class _NotificationSession {
 }
 
 typedef ProfileGatewayFactory = ProfileGateway Function(WorkspaceScope scope);
+
+class ProfileNotification {
+  final ProfileSessionKey key;
+  final String title;
+  final String connectionLabel;
+  final ChatNotificationContent content;
+  final String? eventId;
+
+  const ProfileNotification({
+    required this.key,
+    required this.title,
+    required this.connectionLabel,
+    required this.content,
+    this.eventId,
+  });
+}
+
 typedef ProfileAttention =
-    Future<void> Function(ProfileChat chat, bool needsInput, [String? eventId]);
+    Future<void> Function(ProfileNotification notification);
 
 /// Owned by the application, not the workspace/chat widgets. A foreground
 /// switch never closes a socket, changes a chat owner, or cancels a turn.
@@ -3772,7 +3790,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
         ),
       );
     }
-    _notify(chat, false, eventId: _notificationEventId(data));
+    _notify(
+      chat,
+      ChatNotificationContent.reply(response),
+      eventId: _notificationEventId(data),
+    );
   }
 
   Future<bool> _sendPrompt(
@@ -4794,11 +4816,27 @@ class ProfileWorkspaceController extends ChangeNotifier {
       case 'approval.request':
         chat.approval = event.data;
         chat.status = ProfileTurnStatus.attention;
-        _notify(chat, true, eventId: _notificationEventId(event.data));
+        _notify(
+          chat,
+          ChatNotificationContent.input(
+            event.data['description'] is String
+                ? event.data['description'] as String
+                : '',
+          ),
+          eventId: _notificationEventId(event.data),
+        );
       case 'clarify':
         chat.clarification = event.data;
         chat.status = ProfileTurnStatus.attention;
-        _notify(chat, true, eventId: _notificationEventId(event.data));
+        _notify(
+          chat,
+          ChatNotificationContent.input(
+            chat.pendingQuestion?['question'] is String
+                ? chat.pendingQuestion!['question'] as String
+                : '',
+          ),
+          eventId: _notificationEventId(event.data),
+        );
       case 'request.cancel':
         if (chat.clarification != null &&
             event.data['method'] == 'clarify' &&
@@ -4869,7 +4907,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
           chat.sensitivePrompt = request;
           chat.sensitivePromptResponding = false;
           chat.status = ProfileTurnStatus.attention;
-          _notify(chat, true, eventId: _notificationEventId(event.data));
+          _notify(
+            chat,
+            ChatNotificationContent.secureInput,
+            eventId: _notificationEventId(event.data),
+          );
         }
       case 'message.complete':
       case 'turn.end':
@@ -4885,7 +4927,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
       case 'turn.error':
         chat.status = ProfileTurnStatus.failed;
         chat.error = event.data['message']?.toString() ?? 'Turn failed';
-        _notify(chat, true, eventId: _notificationEventId(event.data));
+        _notify(
+          chat,
+          ChatNotificationContent.failed,
+          eventId: _notificationEventId(event.data),
+        );
         unawaited(_journal().catchError((Object _) {}));
     }
     _changed();
@@ -4913,6 +4959,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat._commandPreflightSensitivePrompt = null;
     chat._commandPreflightReturnStatus = null;
     final finalText = completion['text']?.toString() ?? chat.streaming;
+    final notification = _notification(
+      chat,
+      failed
+          ? ChatNotificationContent.failed
+          : cancelled
+          ? ChatNotificationContent.stopped
+          : ChatNotificationContent.reply(finalText),
+      eventId: _notificationEventId(completion),
+    );
     if (finalText.isNotEmpty) {
       chat.messages.add({
         'role': 'assistant',
@@ -4969,7 +5024,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     await _journal();
     if (!isCurrentTurn()) return;
     if (failed || cancelled || chat.queuedPrompts.isEmpty || chat.queuePaused) {
-      _notify(chat, failed, eventId: _notificationEventId(completion));
+      _deliverNotification(chat, notification);
     }
     if (!failed && !cancelled) {
       unawaited(_drainQueuedPrompts(chat));
@@ -4982,11 +5037,34 @@ class ProfileWorkspaceController extends ChangeNotifier {
     return value is String && value.trim().isNotEmpty ? value.trim() : null;
   }
 
-  void _notify(ProfileChat chat, bool attention, {String? eventId}) {
+  ProfileNotification _notification(
+    ProfileChat chat,
+    ChatNotificationContent content, {
+    String? eventId,
+  }) => ProfileNotification(
+    key: chat.key,
+    title: chat.title,
+    connectionLabel: connection.label,
+    content: content,
+    eventId: eventId,
+  );
+
+  void _notify(
+    ProfileChat chat,
+    ChatNotificationContent content, {
+    String? eventId,
+  }) {
+    _deliverNotification(chat, _notification(chat, content, eventId: eventId));
+  }
+
+  void _deliverNotification(
+    ProfileChat chat,
+    ProfileNotification notification,
+  ) {
     if (visible && current?.chat == chat) return;
     final callback = onAttention;
     if (callback != null) {
-      unawaited(callback(chat, attention, eventId).catchError((Object _) {}));
+      unawaited(callback(notification).catchError((Object _) {}));
     }
   }
 
@@ -5123,11 +5201,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
         if (after.activity == _NotificationActivity.waiting &&
             before?.activity != _NotificationActivity.waiting) {
-          _notify(after.chat, true);
+          _notify(after.chat, ChatNotificationContent.input(''));
         } else if (after.activity == _NotificationActivity.idle &&
             before != null &&
             before.activity != _NotificationActivity.idle) {
-          _notify(after.chat, false);
+          _notify(after.chat, ChatNotificationContent.updated);
         }
       }
     } catch (_) {
@@ -5191,7 +5269,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
         if (result != null) _hydrate(chat, result);
         await refreshHistory(chat);
         if (wasBusy && !chat.busy) {
-          _notify(chat, chat.status == ProfileTurnStatus.failed);
+          _notify(chat, switch (chat.status) {
+            ProfileTurnStatus.failed => ChatNotificationContent.failed,
+            ProfileTurnStatus.cancelled => ChatNotificationContent.stopped,
+            _ => ChatNotificationContent.updated,
+          });
         }
         if (result != null) await _drainQueuedPrompts(chat);
       }
@@ -5426,7 +5508,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
         await refreshHistory(chat);
         await _drainQueuedPrompts(chat);
         _unrestoredPending.remove(key);
-        if (!chat.busy) _notify(chat, chat.status == ProfileTurnStatus.failed);
+        if (!chat.busy) {
+          _notify(chat, switch (chat.status) {
+            ProfileTurnStatus.failed => ChatNotificationContent.failed,
+            ProfileTurnStatus.cancelled => ChatNotificationContent.stopped,
+            _ => ChatNotificationContent.updated,
+          });
+        }
       } catch (_) {
         error =
             'Some pending chats could not be restored. No prompts were resent.';

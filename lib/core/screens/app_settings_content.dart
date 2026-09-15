@@ -48,7 +48,7 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
         WorkspaceAccent.preferenceKey,
         completionNotificationsKey,
         attentionNotificationsKey,
-        notificationTitlesKey,
+        notificationPreviewsKey,
       ])
         key: widget.preferences.get(key),
     };
@@ -220,11 +220,14 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                       : (value) => _save(attentionNotificationsKey, value),
                 ),
                 CompactSwitchListTile(
-                  title: const Text('Show chat titles in alerts'),
-                  value: _confirmed[notificationTitlesKey] as bool? ?? false,
+                  title: const Text('Show message previews'),
+                  subtitle: const Text(
+                    'Include reply and question text in alerts.',
+                  ),
+                  value: _confirmed[notificationPreviewsKey] as bool? ?? true,
                   onChanged: _saving
                       ? null
-                      : (value) => _save(notificationTitlesKey, value),
+                      : (value) => _save(notificationPreviewsKey, value),
                 ),
                 if (widget.backgroundMonitoringState != null) ...[
                   ValueListenableBuilder<BackgroundMonitoringState>(

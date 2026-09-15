@@ -23,6 +23,66 @@ void main() {
   });
 
   test(
+    'chat alerts keep their wing icon and individual tap payloads',
+    () async {
+      final posted = <Map<dynamic, dynamic>>[];
+      final opened = <String>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'initialize') return true;
+        if (call.method == 'getNotificationAppLaunchDetails') {
+          return <String, Object?>{'notificationLaunchedApp': false};
+        }
+        if (call.method == 'show') {
+          posted.add(call.arguments as Map<dynamic, dynamic>);
+        }
+        return null;
+      });
+      final sink = PluginTurnNotificationSink(onOpen: opened.add);
+      for (final target in ['first-chat', 'second-chat']) {
+        await sink.show(
+          TurnNotification(
+            id: TurnNotificationService.notificationIdFor(target),
+            title: 'Finished working',
+            body: 'Tap to open the chat.',
+            expandedBody: 'Reply ready · A longer event-specific excerpt.',
+            scopeLabel: 'Home / developer',
+            payload: target,
+            channel: TurnNotificationService.turnChannel,
+          ),
+        );
+      }
+      expect(posted.map((alert) => alert['id']).toSet(), hasLength(2));
+      for (final alert in posted) {
+        expect((alert['platformSpecifics'] as Map)['icon'], 'ic_stat_wing');
+        final android = alert['platformSpecifics'] as Map;
+        expect(android['visibility'], NotificationVisibility.private.index);
+        expect(android['subText'], 'Home / developer');
+        expect(
+          (android['styleInformation'] as Map)['bigText'],
+          'Reply ready · A longer event-specific excerpt.',
+        );
+      }
+
+      // Tap the older alert after the newer one has been posted, then the newer
+      // alert. Each platform callback must retain its own original target.
+      for (final alert in posted) {
+        await messenger.handlePlatformMessage(
+          channel.name,
+          const StandardMethodCodec().encodeMethodCall(
+            MethodCall('didReceiveNotificationResponse', {
+              'notificationId': alert['id'],
+              'notificationResponseType': 0,
+              'payload': alert['payload'],
+            }),
+          ),
+          (_) {},
+        );
+      }
+      expect(opened, ['first-chat', 'second-chat']);
+    },
+  );
+
+  test(
     'show retries plugin initialization after a transient failure',
     () async {
       var initializeCalls = 0;

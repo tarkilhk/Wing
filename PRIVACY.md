@@ -18,7 +18,7 @@ The maintainer does not operate a relay for these conversations. The app has no 
 
 ## Notifications and other services
 
-Wing creates notifications locally from connected Hermes sessions. Notifications can include chat titles only if you enable that option. Android may display them on your lock screen according to your system settings.
+Wing creates notifications locally from connected Hermes sessions. Alerts include the chat name and connection/profile. Message previews are on by default and can be disabled in App settings; disabling previews leaves the chat name and short status. Previews use reply, question or approval-description text. Secure-input requests and failures use fixed text, without secret values or raw errors. Notifications use private lock-screen visibility; Android controls whether private content is shown or replaced with generic system text.
 
 Background monitoring keeps these authenticated connections running with an ongoing notification and a partial wake lock. It uses additional battery; settings offer an Android battery-optimization exemption for screen-off delivery. Monitoring starts automatically when a saved connection exists, Android notifications are allowed and at least one alert category is enabled. Disabling both alert categories in app settings stops monitoring. Force-stop, process termination and network loss can interrupt alerts. Wing does not use Firebase or transmit device push tokens to a push provider.
 

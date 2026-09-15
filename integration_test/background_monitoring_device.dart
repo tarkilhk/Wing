@@ -14,6 +14,7 @@ import 'package:wing/core/services/profile_connection_identity.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_workspace_registry.dart';
 import 'package:wing/core/services/turn_notification_service.dart';
+import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/main.dart';
 
 import '../test/profile_connection_identity_test.dart' show MemoryIdentityStore;
@@ -53,13 +54,16 @@ void main() async {
       connectionIdentity: identity,
       preferences: preferences,
       gatewayFactory: host.gateway,
-      onAttention: (chat, attention, [eventId]) async {
+      onAttention: (chat) async {
         final id = 240001 + alerts;
         await sink.show(
           TurnNotification(
             id: id,
-            title: attention ? 'Fixture needs attention' : 'Fixture finished',
-            body: 'Background event received',
+            title: chat.title,
+            body: chat.content.body(showPreview: true),
+            expandedBody: chat.content.body(showPreview: true, limit: 800),
+            scopeLabel:
+                '${chat.connectionLabel} / ${chat.key.workspace.profileName}',
             payload: jsonEncode(chat.key.toJson()),
             channel: TurnNotificationService.turnChannel,
           ),
@@ -83,6 +87,23 @@ void main() async {
           ),
         ];
         host.changed();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+      if (request.method == 'POST' && request.uri.path == '/reply') {
+        final controller = await registry.forConnection(connection);
+        final chat = await controller.createChat();
+        chat.title = 'Rich notification check';
+        chat.status = ProfileTurnStatus.running;
+        host.gateways['a']!.onEvent!(
+          StreamEvent(
+            type: 'message.complete',
+            sessionId: chat.runtimeId,
+            data: {
+              'text':
+                  '**Chat names and previews are ready.** ${'More readable context. ' * 20}',
+            },
+          ),
+        );
         await Future<void>.delayed(const Duration(milliseconds: 300));
       }
       if (request.method == 'POST' && request.uri.path == '/close-activity') {

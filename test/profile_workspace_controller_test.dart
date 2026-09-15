@@ -274,7 +274,7 @@ void main() {
       ),
       preferences: preferences,
       gatewayFactory: host.gateway,
-      onAttention: (chat, _, [_]) async => notifications.add(chat.key),
+      onAttention: (notification) async => notifications.add(notification.key),
     );
     await controller.initialize();
   });
@@ -1246,7 +1246,7 @@ void main() {
       connection: connection,
       preferences: preferences,
       gatewayFactory: host.gateway,
-      onAttention: (chat, attention, [eventId]) async => eventIds.add(eventId),
+      onAttention: (notification) async => eventIds.add(notification.eventId),
     );
     await controller.initialize();
     final chat = await controller.createChat();
