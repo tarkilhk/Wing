@@ -1335,6 +1335,20 @@ async def handle_rpc(
         await ws.send_str(rpc_result(request_id, {"resolved": resolved}))
         return
 
+    # These methods use the server request ID, not a runtime session ID.
+    # Match Hermes contracts/prompt_voice.py: unknown params fail before dispatch.
+    if method in {"clarify.lock", "request.answer"}:
+        allowed = ({"request_id", "question_id", "answer", "profile"}
+                   if method == "clarify.lock" else {"id", "result", "profile"})
+        unknown = set(params) - allowed
+        if unknown:
+            await ws.send_str(rpc_error(
+                request_id,
+                f"invalid params for {method}: {sorted(unknown)[0]}: Extra inputs are not permitted",
+                code=4000,
+            ))
+            return
+
     if method == "request.answer" and str(params.get("id") or "") in pending_sensitive_prompts:
         prompt_request_id = str(params["id"])
         _, _, prompt_future = pending_sensitive_prompts[prompt_request_id]

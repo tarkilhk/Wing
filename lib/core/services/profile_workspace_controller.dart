@@ -4406,13 +4406,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
       batch ? 'clarify.lock' : 'request.answer',
       batch
           ? {
-              'session_id': chat.runtimeId,
               'request_id': question['request_id'],
               'answer': answer,
               'question_id': question['question_id'],
             }
           : {
-              'session_id': chat.runtimeId,
               'id': question['request_id'],
               'result': {'answer': answer},
             },

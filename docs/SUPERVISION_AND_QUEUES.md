@@ -36,6 +36,13 @@ replacing the previous `clarify.request` / `clarify.respond` protocol.
 Tool-call arguments or a timeout result in chat do not establish that the
 request frame reached the app.
 
+Reply params follow the [strict prompt contract](https://github.com/NousResearch/hermes-agent/blob/main/tui_gateway/contracts/prompt_voice.py):
+`clarify.lock` accepts `request_id`, `question_id`, `answer` and optional `profile`;
+`request.answer` accepts `id`, `result` and optional `profile`. Neither accepts
+`session_id`. That field belongs to the incoming request; echoing it in a reply
+causes RPC error 4000 before the answer reaches the handler. The test gateway
+rejects unknown reply fields so form tests exercise this boundary.
+
 ## Side questions
 
 `/btw`, `/bg` and `/background` retain the submitted question with their task kind and returned ID. An early completion must not be downgraded by a late acknowledgement. Show empty results explicitly and preserve existing cards on same-runtime reconnect when optional fields are absent.

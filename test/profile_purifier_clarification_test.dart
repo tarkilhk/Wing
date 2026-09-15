@@ -146,10 +146,13 @@ void main() {
         await tester.pump();
         await tester.pump();
 
+        expect(
+          find.text('Hermes could not accept the answer. Please try again.'),
+          findsNothing,
+        );
         final replies = host.calls.where((call) => call.$2 == 'clarify.lock');
         expect(replies, hasLength(i + 1));
         expect(replies.last.$3, {
-          'session_id': chat.runtimeId,
           'profile': 'a',
           'request_id': 'purifier-request',
           'question_id': 'q$i',

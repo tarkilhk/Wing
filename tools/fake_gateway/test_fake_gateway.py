@@ -1141,6 +1141,18 @@ async def probe(base_url: str) -> None:
             assert batch_request["questions"][1]["qid"] == "q2"
             assert "question" not in batch_request
 
+            rejected_reply = await rpc_response(
+                ws, 1219, "clarify.lock",
+                {
+                    "session_id": batch_request["session_id"],
+                    "request_id": batch_payload["id"],
+                    "question_id": "q1",
+                    "answer": "Balanced",
+                },
+            )
+            assert rejected_reply["error"]["code"] == 4000
+            assert "session_id" in rejected_reply["error"]["message"]
+
             q1_result = await rpc(
                 ws,
                 122,

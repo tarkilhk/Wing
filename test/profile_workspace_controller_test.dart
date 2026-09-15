@@ -161,6 +161,20 @@ class Host {
           throw JsonRpcError('session.resume', 'session not found', code: 4007);
         }
         if (method == 'clarify.lock' || method == 'request.answer') {
+          // Hermes contracts/prompt_voice.py uses Params, not SessionParams:
+          // these replies are owned by the server request ID. Unknown fields
+          // are rejected by contracts/registry.py before the handler runs.
+          final allowed = method == 'clarify.lock'
+              ? {'request_id', 'question_id', 'answer', 'profile'}
+              : {'id', 'result', 'profile'};
+          final unknown = params.keys.where((key) => !allowed.contains(key));
+          if (unknown.isNotEmpty) {
+            throw JsonRpcError(
+              method,
+              'invalid params: ${unknown.first}: Extra inputs are not permitted',
+              code: 4000,
+            );
+          }
           return clarifyResult;
         }
         if (method == 'projects.tree') {
