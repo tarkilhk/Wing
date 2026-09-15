@@ -166,6 +166,11 @@ void main() {
       expect(first.width, inInclusiveRange(64, 96));
       await tester.runAsync(() async {
         await tester.tap(find.byTooltip('Remove Pasted image.png'));
+        // The callback returns before its file deletion finishes. Let that
+        // operation complete before tearDown removes the same cache directory.
+        while (chat.queueMutating) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
       });
       await tester.pumpAndSettle();
       expect(chat.attachments.single.name, 'picked.jpg');

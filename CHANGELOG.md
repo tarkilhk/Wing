@@ -2,19 +2,74 @@
 
 ## Unreleased
 
-- Organize App settings into Appearance, Chat, Notifications and About, with a live chat preview, clearer action descriptions and compact text-size controls.
+## [1.0.1] - 2026-09-16
 
-- Run background monitoring only while chats are working; keep question and reply notifications when the service stops.
-- Replace the connection dialog with a Studio journey using Wing’s portrait and feather artwork: one dashboard URL, dashboard sign-in, separate profile/chat/history checks, then name and save. Hide proxy options in Custom setup, honor standard URL ports, retain failed-save drafts, and cancel provisional network work when leaving.
+Wing 1.0.1 refines the first-run experience, reorganizes device settings, improves attachments and chat alerts, and keeps notification monitoring active only while chats are working. This changelog covers all changes since the `v1.0.0` source tag.
 
-- Use the approved Hermes caduceus for permanent connection monitoring and the wing for each chat notification, with separate monitoring grouping and recorded identity-board artwork.
-- Show sent images as capped, cropped previews with full-image zoom, and other attachments as file cards with names and extensions.
-- Show chat names, connection/profile context and expandable message previews in alerts, with simple update, input-needed and stopped-work wording. Previews default on and can be disabled; private lock-screen visibility follows Android settings.
-- Allow APK builds to advance their internal build number while retaining the current release version.
-- Ask for notification permission on first launch with Android's native dialog, while keeping notification controls in App settings.
-- Attach photos taken inside a chat directly to that chat's draft without opening share review.
-- Keep notifications available outside Wing with automatic background monitoring, without Firebase.
-- Simplify notification settings and show an action only when delivery needs attention.
+### Connection setup and offline guide
+
+- Replace the Add/Edit connection dialog with a full-screen Studio journey: dashboard address, sign-in, connection checks, then name and save.
+- Bring the approved Wing portrait and pointed feather artwork into address and verification screens. Hide the address artwork when the keyboard opens to leave room for the form.
+- Accept one complete HTTP or HTTPS dashboard URL, including its custom port and path. Honor standard HTTP/HTTPS ports, support IPv6, and reject ambiguous endpoint URLs, embedded credentials, query strings, fragments and phone-local loopback addresses.
+- Explain that dashboard credentials sign in to Hermes and that model-provider keys stay on the Hermes host.
+- Keep proxy authentication, separate chat routing and access headers under Sign in / Custom setup, with access headers behind a further disclosure.
+- Check profiles, live chat and saved history separately before saving. Report which stage needs attention and provide connection details and retry actions. Checks do not send a chat message or establish that a model is ready.
+- Require a complete username/password pair for password sign-in, preserve intentional password whitespace, and show safe errors without exposing server response bodies or credentials.
+- Apply a deadline to each check, cancel provisional network work when leaving, close sockets still opening, and ignore late results after cancellation.
+- Preserve the verified connection draft after a failed save so storage can be retried without repeating successful checks. Save explicitly, then open the saved workspace.
+- Keep incoming-share and quick-chat routing from interrupting connection setup.
+- Restyle the offline Connection guide with numbered headings, shorter paragraphs, bold action names, selectable monospace address examples and an optional Custom setup explanation.
+- Improve guide reading width, spacing, safe-area handling and enlarged-text layouts in both themes. Retain the backup instructions and full setup link.
+
+### App settings and visual consistency
+
+- Organize App settings into Appearance, Chat, Notifications and About.
+- Add a live chat preview beside appearance choices so theme, accent and text-size changes are easier to assess.
+- Use compact text-size controls and clearer descriptions of default composer actions during work.
+- Group notification preferences and delivery-recovery actions together. Put installed version, release links and the offline privacy policy under About.
+- Express selection through the active accent background across chips, segmented controls, dropdowns, navigation, tabs and choice rows. Remove selection ticks, radio dots and selected-only borders while retaining labels and artwork.
+- Apply shared selection rows to device preferences, profile/model choices, project appearance, clarification, backup restore and update targets, retaining single/multiple-choice behavior, accessibility state and keyboard interaction.
+- Use tick-free status symbols and filled/empty Markdown task markers consistently across app-authored UI.
+
+### Background monitoring and chat notifications
+
+- Replace Firebase/server push registration with Android foreground monitoring of authenticated Hermes connections already opened in Wing.
+- Start monitoring automatically when a chat begins work and alerts are enabled. Remove the separate monitoring toggle and show settings actions when permission or battery restrictions need attention.
+- Retain the Flutter engine, live clients and notification routing across activity destruction and recreation while work continues.
+- Run the service only while chats are working. Keep it active for concurrent chats, queued submissions and live child work; do not treat a temporary disconnect or uncertain read as completion.
+- Stop monitoring after the last working chat finishes or asks for input, posting the final alert before releasing the engine and wake lock. Keep delivered reply/question notifications visible and restart monitoring when work resumes.
+- Request Android notification permission after the first screen appears. Remember acceptance or denial, avoid repeated prompts, and allow a failed platform request to be retried on a later launch.
+- Use Hermes’ approved caduceus for monitoring and Wing’s wing for chat alerts. Keep monitoring in its own notification group so it does not absorb chat alerts.
+- Show each alert’s chat name and connection/profile context. Use expandable message previews and clear Reply ready, Input needed, Failed, Stopped and Chat updated wording.
+- Take notification names and previews from the owning event, including side/background answers, and retain stable destinations when opening alerts.
+- Add Show message previews, enabled by default. When disabled, retain the chat name and short status. Let Android settings control private lock-screen visibility.
+- Retain separate completion and attention preferences, notification testing and delivery-recovery controls; stop monitoring when both alert categories are disabled or permission is revoked.
+
+### Camera and sent attachments
+
+- Attach a successful camera capture directly to its verified originating chat draft instead of opening share review. Preserve existing draft text and attachments, and keep Send explicit.
+- Acknowledge camera intake only after the destination draft is saved. Keep the photo pending on preparation/save failure and retain destination review when the original chat cannot be verified or reopened.
+- Render sent images as bounded, cropped previews with full-image zoom rather than unbounded transcript images.
+- Present other sent attachments as file cards with recognizable names and extensions, retaining their existing open behavior.
+
+### Documentation, maintenance and release reliability
+
+- Refresh the repository introduction and app previews, use Wing identity throughout public documentation, and correct setup, issue-reporting and release guidance.
+- Expand the historical 1.0.0 notes to describe the accumulated work in the first Wing release; those older features remain documented under 1.0.0.
+- Update connection, settings, attachment, notification and design documentation to describe the delivered behavior and its validation boundaries.
+- Remove obsolete generated repository maps and archived server-patch artifacts, and consolidate the release checklist under the maintained documentation.
+- Allow internal Android build numbers to advance independently of the displayed release version, while enforcing valid progression for new release tags.
+- Pin APK verification to Android build-tools 36.0.0 so newer `apksigner` output formats do not reject correctly signed APKs. Locate `sdkmanager` through the Android SDK root.
+- Store the non-secret signing alias as an Actions variable while retaining private signing credentials as secrets.
+- Support retries of an unpublished immutable version tag using current workflow tooling and the original tagged application source. Record both revisions in release metadata and refuse to overwrite published release assets.
+- Wait for asynchronous attachment removal before clipboard-test cache cleanup, avoiding an intermittent teardown race.
+- Extend regression coverage for connection parsing and transport, cancellation and save recovery, settings and selection layouts, camera intake, startup permissions, notification content/routing, monitoring lifecycle and release verification.
+
+### Update and operational notes
+
+- This release updates the existing `com.tarkilhk.wing` application with the same Wing signing identity. An in-place update preserves local app data; uninstalling is unnecessary.
+- Background monitoring is a live connection, not a wake-up push service. Android force-stop, process termination, reboot, lost connectivity and manufacturer restrictions can interrupt delivery. Reopen Wing to reconnect; work started from another client while Wing is idle cannot wake it.
+- Notification delivery still depends on events supplied by the Hermes server. A local test notification checks Android posting, not every server event or model workflow.
 
 ## [1.0.0] - 2026-09-16
 

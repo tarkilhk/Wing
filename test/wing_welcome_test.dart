@@ -53,7 +53,7 @@ void main() {
         await tester.tap(guide);
         await tester.pumpAndSettle();
         expect(find.byType(ConnectionGuideScreen), findsOneWidget);
-        expect(find.text('1  Prepare your agent'), findsOneWidget);
+        expect(find.text('Prepare your agent'), findsOneWidget);
         await tester.pageBack();
         await tester.pumpAndSettle();
         expect(find.byType(WingWelcome), findsOneWidget);
