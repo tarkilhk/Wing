@@ -59,6 +59,18 @@ Use Studio screen and action tokens in both themes; preserve text scaling and
 scrolling on short screens. Native launch uses the portrait on brand navy,
 without a timed hold, extra loading route or a network-readiness requirement.
 
+On 16 September 2026, the owner approved implementing the
+[connection journey](design/2026-09-16-connection-journey.md), with fewer visible
+options and more approved identity artwork. Add and Edit connection now use a
+full-screen address, sign-in, check and review flow. Use the 112 dp circular
+Playful portrait and the wordmark's original pointed feather cluster on the
+address and verified screens; hide the address artwork while the keyboard is
+open. Keep the approved 144 dp welcome screen unchanged. Custom authentication,
+separate chat routing and access headers live under Sign in / Custom setup.
+Use the active Studio accent, tick-free stage statuses, scrollable growing
+forms, specific failures and an explicit final save. No network check sends a
+chat message or establishes model readiness.
+
 ## Layout and controls
 
 Keep hamburger navigation and projects scoped inside Chats. Use compact connection/profile text below the page title. Search stays below this scope. Projects, pins and recents use full-width rows, grouped where helpful, with thin separators.

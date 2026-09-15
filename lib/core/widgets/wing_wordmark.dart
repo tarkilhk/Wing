@@ -67,35 +67,77 @@ class _WingPainter extends CustomPainter {
         ..cubicTo(478, 233, 423, 246, 394, 218),
       stroke,
     );
-    final fill = Paint()..color = ink;
-    canvas.drawPath(
-      Path()
-        ..moveTo(222, 66)
-        ..cubicTo(204, 60, 189, 49, 188, 29)
-        ..cubicTo(203, 39, 221, 41, 222, 66)
-        ..close(),
-      fill,
-    );
-    fill.color = const Color(0xFFC6EED5);
-    canvas.drawPath(
-      Path()
-        ..moveTo(226, 68)
-        ..cubicTo(232, 22, 272, 26, 282, 3)
-        ..cubicTo(282, 43, 247, 39, 226, 68)
-        ..close(),
-      fill,
-    );
-    canvas.drawPath(
-      Path()
-        ..moveTo(231, 69)
-        ..cubicTo(246, 44, 273, 48, 286, 32)
-        ..cubicTo(282, 58, 253, 58, 231, 69)
-        ..close(),
-      fill,
-    );
+    _paintFeathers(canvas, ink);
     canvas.restore();
   }
 
   @override
   bool shouldRepaint(_WingPainter oldDelegate) => oldDelegate.ink != ink;
+}
+
+/// The approved pointed feather cluster, shared with the wordmark.
+class WingFeathers extends StatelessWidget {
+  const WingFeathers({super.key, this.width = 64});
+  final double width;
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: SizedBox(
+      width: width,
+      height: width * 66 / 98,
+      child: CustomPaint(
+        painter: _FeatherPainter(
+          Theme.of(context).brightness == Brightness.dark
+              ? const Color(0xFFFFF9EB)
+              : const Color(0xFF0C304A),
+        ),
+      ),
+    ),
+  );
+}
+
+class _FeatherPainter extends CustomPainter {
+  const _FeatherPainter(this.ink);
+  final Color ink;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.scale(size.width / 98, size.height / 66);
+    canvas.translate(-188, -3);
+    _paintFeathers(canvas, ink);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_FeatherPainter oldDelegate) => oldDelegate.ink != ink;
+}
+
+void _paintFeathers(Canvas canvas, Color ink) {
+  final fill = Paint()..color = ink;
+  canvas.drawPath(
+    Path()
+      ..moveTo(222, 66)
+      ..cubicTo(204, 60, 189, 49, 188, 29)
+      ..cubicTo(203, 39, 221, 41, 222, 66)
+      ..close(),
+    fill,
+  );
+  fill.color = const Color(0xFFC6EED5);
+  canvas.drawPath(
+    Path()
+      ..moveTo(226, 68)
+      ..cubicTo(232, 22, 272, 26, 282, 3)
+      ..cubicTo(282, 43, 247, 39, 226, 68)
+      ..close(),
+    fill,
+  );
+  canvas.drawPath(
+    Path()
+      ..moveTo(231, 69)
+      ..cubicTo(246, 44, 273, 48, 286, 32)
+      ..cubicTo(282, 58, 253, 58, 231, 69)
+      ..close(),
+    fill,
+  );
 }

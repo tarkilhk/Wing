@@ -1,11 +1,10 @@
-import 'core/widgets/studio_action_label.dart';
+import 'core/screens/connection_setup_screen.dart';
 import 'core/widgets/studio_error.dart';
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'core/widgets/compact_switch.dart';
 import 'package:flutter/foundation.dart'
     show ValueListenable, defaultTargetPlatform, kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,9 +22,6 @@ import 'core/screens/shared_draft_review.dart';
 import 'core/services/profile_workspace_controller.dart';
 import 'core/services/profile_connection_identity.dart';
 import 'core/services/profile_workspace_registry.dart';
-import 'core/services/profile_gateway.dart';
-import 'core/services/profiles_repository.dart';
-import 'core/models/hermes_profile.dart';
 import 'core/services/turn_notification_service.dart';
 import 'core/services/background_monitoring_service.dart';
 import 'core/services/notification_delivery_ledger.dart';
@@ -35,7 +31,6 @@ import 'core/widgets/app_drawer.dart';
 import 'core/widgets/wing_welcome.dart';
 import 'core/screens/app_settings_content.dart';
 import 'core/widgets/config_backup_card.dart';
-import 'core/widgets/gateway_headers_editor.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -510,6 +505,7 @@ class HomeScreenState extends State<HomeScreen> {
   bool _exportingBackup = false;
   bool _reviewingShare = false;
   bool _discardingShare = false;
+  bool _settingUpConnection = false;
   bool _startupExternalNavigationReady = false;
   String? _deferredShareId;
   AppDestination _destination = AppDestination.connections;
@@ -658,6 +654,7 @@ class HomeScreenState extends State<HomeScreen> {
         !_startupExternalNavigationReady ||
         (!explicit && payload.id == _deferredShareId) ||
         _reviewingShare ||
+        _settingUpConnection ||
         _discardingShare ||
         _connections.isEmpty) {
       return;
@@ -753,7 +750,9 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   void _onQuickChat() {
-    if (!mounted || widget.launchIntents?.pendingQuickChat.value != true) {
+    if (!mounted ||
+        _settingUpConnection ||
+        widget.launchIntents?.pendingQuickChat.value != true) {
       return;
     }
     final connection = _connectionForExternalAction();
@@ -928,71 +927,68 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showAddDialog() => _showConnectionDialog();
+  void _addConnection() => _setupConnection();
 
-  void _showEditConnectionDialog(SavedConnection conn) {
-    _showConnectionDialog(existing: conn);
+  void _editConnection(SavedConnection connection) {
+    _setupConnection(existing: connection);
   }
 
-  void _showConnectionDialog({SavedConnection? existing}) {
-    showDialog(
-      context: context,
-      builder: (_) => _AddDialog(
-        initialConnection: existing,
-        onSave:
-            (
-              label,
-              host,
-              port,
-              apiKey, {
-              gatewayPrefix,
-              dashboardPrefix,
-              dashboardProxied = false,
-              desktopGatewayUrl,
-              dashboardPort,
-              dashboardUsername,
-              dashboardPassword,
-              gatewayHeaders,
-            }) async {
-              if (existing == null) {
-                await widget.connManager.saveConnection(
-                  label,
-                  host,
-                  port,
-                  apiKey,
-                  gatewayPrefix: gatewayPrefix,
-                  dashboardPrefix: dashboardPrefix,
-                  dashboardProxied: dashboardProxied,
-                  desktopGatewayUrl: desktopGatewayUrl,
-                  dashboardPort: dashboardPort,
-                  dashboardUsername: dashboardUsername,
-                  dashboardPassword: dashboardPassword,
-                  gatewayHeaders: resolveGatewayHeaderUpdate(
-                    const {},
-                    gatewayHeaders,
-                  ),
-                );
-              } else {
-                await widget.connManager.updateConnection(
-                  existing.id,
-                  label,
-                  host,
-                  port,
-                  apiKey,
-                  gatewayPrefix: gatewayPrefix,
-                  dashboardPrefix: dashboardPrefix,
-                  dashboardProxied: dashboardProxied,
-                  desktopGatewayUrl: desktopGatewayUrl,
-                  dashboardPort: dashboardPort,
-                  dashboardUsername: dashboardUsername,
-                  dashboardPassword: dashboardPassword,
-                  gatewayHeaders: gatewayHeaders,
-                );
-              }
-              _refresh();
-            },
+  Future<void> _setupConnection({SavedConnection? existing}) async {
+    if (_settingUpConnection) return;
+    _settingUpConnection = true;
+    final saved = await Navigator.of(context).push<SavedConnection>(
+      MaterialPageRoute(
+        builder: (_) => ConnectionSetupScreen(
+          initialConnection: existing,
+          onSave: (candidate) async {
+            if (existing == null) {
+              return widget.connManager.saveConnection(
+                candidate.label,
+                candidate.baseUrl,
+                candidate.port,
+                '',
+                dashboardPrefix: candidate.dashboardPrefix,
+                dashboardProxied: candidate.dashboardProxied,
+                desktopGatewayUrl: candidate.desktopGatewayUrl,
+                dashboardPort: candidate.dashboardPort,
+                dashboardUsername: candidate.dashboardUsername,
+                dashboardPassword: candidate.dashboardPassword,
+                gatewayHeaders: candidate.gatewayHeaders,
+              );
+            }
+            await widget.connManager.updateConnection(
+              existing.id,
+              candidate.label,
+              candidate.baseUrl,
+              candidate.port,
+              '',
+              gatewayPrefix: '',
+              dashboardPrefix: candidate.dashboardPrefix ?? '',
+              dashboardProxied: candidate.dashboardProxied,
+              desktopGatewayUrl: candidate.desktopGatewayUrl ?? '',
+              dashboardPort: candidate.dashboardPort,
+              dashboardUsername: candidate.dashboardUsername ?? '',
+              dashboardPassword: candidate.dashboardPassword ?? '',
+              gatewayHeaders: candidate.gatewayHeaders,
+            );
+            return widget.connManager.getConnections().firstWhere(
+              (c) => c.id == existing.id,
+            );
+          },
+        ),
       ),
     );
+    _settingUpConnection = false;
+    if (!mounted) return;
+    if (saved != null) {
+      _autoNavigated = true;
+      _refresh();
+      if (existing == null && widget.profileController != null) {
+        await _navigateToWorkspace(saved);
+      }
+    }
+    _onSharedText();
+    _onQuickChat();
   }
 
   Widget _buildConnectionCard(SavedConnection conn) {
@@ -1032,7 +1028,7 @@ class HomeScreenState extends State<HomeScreen> {
                 );
               }
             } else if (v == 'edit') {
-              _showEditConnectionDialog(conn);
+              _editConnection(conn);
             }
           },
           itemBuilder: (_) => [
@@ -1156,7 +1152,7 @@ class HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     child: _connections.isEmpty
                         ? WingWelcome(
-                            onConnect: _showAddDialog,
+                            onConnect: _addConnection,
                             onRestore: _showRestoreConfig,
                           )
                         : Align(
@@ -1182,416 +1178,12 @@ class HomeScreenState extends State<HomeScreen> {
                 _connections.isNotEmpty
             ? FloatingActionButton.extended(
                 tooltip: 'Add Connection',
-                onPressed: _showAddDialog,
+                onPressed: _addConnection,
                 icon: const Icon(Icons.add),
                 label: const Text('Add connection'),
               )
             : null,
       ),
     );
-  }
-}
-
-class _AddDialog extends StatefulWidget {
-  final SavedConnection? initialConnection;
-  final Future<void> Function(
-    String label,
-    String host,
-    int port,
-    String apiKey, {
-    String? gatewayPrefix,
-    String? dashboardPrefix,
-    bool dashboardProxied,
-    String? desktopGatewayUrl,
-    int? dashboardPort,
-    String? dashboardUsername,
-    String? dashboardPassword,
-    Map<String, String?>? gatewayHeaders,
-  })
-  onSave;
-  const _AddDialog({required this.onSave, this.initialConnection});
-
-  @override
-  State<_AddDialog> createState() => _AddDialogState();
-}
-
-class _AddDialogState extends State<_AddDialog> {
-  final _formKey = GlobalKey<FormState>();
-  late Map<String, String?> _gatewayHeaderEdits;
-  late final TextEditingController _label;
-  late final TextEditingController _host;
-  late final TextEditingController _port;
-  late final TextEditingController _dashboardPrefix;
-  late final TextEditingController _dashPort;
-  late final TextEditingController _dashUser;
-  late final TextEditingController _dashPass;
-  late final TextEditingController _desktopGatewayUrl;
-  late bool _showDashboard;
-  late bool _dashboardProxied;
-  bool _validating = false;
-  String? _error;
-
-  bool get _isEditing => widget.initialConnection != null;
-
-  @override
-  void initState() {
-    super.initState();
-    final conn = widget.initialConnection;
-    _gatewayHeaderEdits = {
-      for (final name in conn?.gatewayHeaders.keys ?? const <String>[])
-        name: null,
-    };
-    _label = TextEditingController(text: conn?.label ?? 'Home');
-    _host = TextEditingController(
-      text: conn == null
-          ? ''
-          : conn.useHttps
-          ? 'https://${conn.host}'
-          : conn.host,
-    );
-    _port = TextEditingController(text: (conn?.port ?? 9119).toString());
-    _dashboardPrefix = TextEditingController(text: conn?.dashboardPrefix ?? '');
-    _dashPort = TextEditingController(
-      text: conn?.dashboardPortOverride?.toString() ?? '',
-    );
-    _dashUser = TextEditingController(text: conn?.dashboardUsername ?? '');
-    _dashPass = TextEditingController(text: conn?.dashboardPassword ?? '');
-    // The Desktop Gateway URL is an advanced override, not a default: the
-    // app derives the JSON-RPC/WebSocket origin from the dashboard details
-    // when this field is blank. Pre-filling a hardcoded example here made
-    // every new connection silently point at a dead host and wedge Project
-    // loading. See docs/ANDROID_FINAL_UI_SPEC_DRAFT.md.
-    _desktopGatewayUrl = TextEditingController(
-      text: conn?.desktopGatewayUrl ?? '',
-    );
-    _dashboardProxied = conn?.dashboardProxied ?? false;
-    _showDashboard =
-        conn?.gatewayPrefix?.isNotEmpty == true ||
-        conn?.dashboardPrefix?.isNotEmpty == true ||
-        conn?.dashboardPortOverride != null ||
-        conn?.dashboardUsername?.isNotEmpty == true ||
-        conn?.dashboardPassword?.isNotEmpty == true ||
-        _dashboardProxied ||
-        conn?.gatewayHeaders.isNotEmpty == true ||
-        conn?.desktopGatewayUrl?.isNotEmpty == true;
-  }
-
-  Future<void> _validateAndSave() async {
-    if (_validating) return;
-    if (!_formKey.currentState!.validate()) {
-      setState(() => _showDashboard = true);
-      return;
-    }
-    final label = _label.text.trim();
-    final host = _host.text.trim();
-    final port = int.tryParse(_port.text.trim()) ?? 9119;
-    if (label.isEmpty || host.isEmpty || port <= 0 || port > 65535) return;
-    setState(() {
-      _validating = true;
-      _error = null;
-    });
-    ProfileGateway? probe;
-    try {
-      final normalized = SavedConnection.normalizeHostAndPort(host, port);
-      final dashPort = int.tryParse(_dashPort.text.trim()) ?? normalized.port;
-      final uri = Uri.tryParse(host.contains('://') ? host : 'http://$host');
-      final prefix = _dashboardPrefix.text.trim().isNotEmpty
-          ? _dashboardPrefix.text.trim()
-          : uri?.path ?? '';
-      final dashUser = _dashUser.text.trim();
-      final dashPass = _dashPass.text.trim();
-      final gatewayUrl = _desktopGatewayUrl.text.trim();
-      final gatewayHeaders = resolveGatewayHeaderUpdate(
-        widget.initialConnection?.gatewayHeaders ?? const {},
-        _gatewayHeaderEdits,
-      );
-      final candidate = SavedConnection(
-        id: 'connection-probe',
-        label: label,
-        host: normalized.host,
-        port: normalized.port,
-        useHttps: normalized.useHttps,
-        apiKey: '',
-        dashboardPortOverride: dashPort,
-        dashboardPrefix: prefix,
-        dashboardUsername: dashUser.isEmpty ? null : dashUser,
-        dashboardPassword: dashPass.isEmpty ? null : dashPass,
-        dashboardProxied: _dashboardProxied,
-        desktopGatewayUrl: gatewayUrl.isEmpty ? null : gatewayUrl,
-        gatewayHeaders: gatewayHeaders,
-      );
-      final repository = ProfilesRepository.forConnection(candidate);
-      late final ProfilesProbeResult discovery;
-      try {
-        discovery = await repository.probe();
-      } finally {
-        repository.close();
-      }
-      if (discovery.discovery == null) {
-        throw StateError(discovery.message ?? 'Profile API unavailable');
-      }
-      probe = ProfileGateway.forConnection(
-        candidate,
-        WorkspaceScope(
-          connectionId: candidate.id,
-          profileName: discovery.discovery!.serverPreferred.name,
-        ),
-      );
-      await probe.connect();
-      await probe.sessions();
-      if (!mounted) return;
-      await widget.onSave(
-        label,
-        host,
-        normalized.port,
-        '',
-        dashboardPrefix: prefix.isEmpty ? null : prefix,
-        dashboardProxied: _dashboardProxied,
-        desktopGatewayUrl: gatewayUrl.isEmpty ? null : gatewayUrl,
-        dashboardPort: dashPort,
-        dashboardUsername: dashUser.isEmpty ? null : dashUser,
-        dashboardPassword: dashPass.isEmpty ? null : dashPass,
-        gatewayHeaders: _gatewayHeaderEdits,
-      );
-      if (mounted) Navigator.pop(context);
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _error =
-              'Could not connect to Hermes. Check the address, password and proxy settings, then try again.';
-          _validating = false;
-        });
-      }
-    } finally {
-      probe?.close();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(_isEditing ? 'Edit connection' : 'Add connection'),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_error != null) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.error.withValues(alpha: 0.1),
-                    borderRadius: WingRadius.card,
-                    border: Border.all(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.error.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        color: Theme.of(context).colorScheme.error,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _error!,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              TextField(
-                enabled: !_validating,
-                controller: _label,
-                decoration: const InputDecoration(labelText: 'Label'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                enabled: !_validating,
-                controller: _host,
-                decoration: const InputDecoration(
-                  labelText: 'Host',
-                  hintText:
-                      '192.168.1.50, 100.x.y.z, or hermes-machine.tailnet.ts.net',
-                ),
-                keyboardType: TextInputType.text,
-                autocorrect: false,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                enabled: !_validating,
-                controller: _port,
-                decoration: const InputDecoration(
-                  labelText: 'Port',
-                  hintText: 'Hermes dashboard port',
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                enabled: !_validating,
-                controller: _dashUser,
-                decoration: const InputDecoration(
-                  labelText: 'Username (optional)',
-                ),
-                autocorrect: false,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                enabled: !_validating,
-                controller: _dashPass,
-                decoration: const InputDecoration(
-                  labelText: 'Password (optional)',
-                ),
-                obscureText: true,
-              ),
-              const SizedBox(height: 12),
-              const SizedBox(height: 4),
-              InkWell(
-                onTap: _validating
-                    ? null
-                    : () => setState(() => _showDashboard = !_showDashboard),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _showDashboard
-                              ? Icons.expand_less
-                              : Icons.expand_more,
-                          size: 20,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            'Custom proxy and dashboard details',
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              if (_showDashboard) ...[
-                const SizedBox(height: 8),
-                const SizedBox(height: 12),
-                TextField(
-                  enabled: !_validating,
-                  controller: _dashboardPrefix,
-                  decoration: const InputDecoration(
-                    labelText: 'Dashboard path prefix',
-                    hintText: 'e.g. /dashboard (proxy path before /api/)',
-                  ),
-                  autocorrect: false,
-                ),
-                const SizedBox(height: 8),
-                CompactSwitchListTile(
-                  value: _dashboardProxied,
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Dashboard behind proxy'),
-                  subtitle: const Text('The proxy supplies authentication.'),
-                  onChanged: _validating
-                      ? null
-                      : (v) => setState(() => _dashboardProxied = v),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    'Use the gateway address and authentication configured on your Hermes host.',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                TextField(
-                  enabled: !_validating,
-                  controller: _dashPort,
-                  decoration: const InputDecoration(
-                    labelText: 'Dashboard Port',
-                    hintText: 'Leave blank to use the gateway port',
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  enabled: !_validating,
-                  controller: _desktopGatewayUrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Desktop Gateway URL (optional)',
-                    hintText: 'https://hermes-desktop.example.lan',
-                    helperMaxLines: 4,
-                    helperText:
-                        'Override the gateway address supplied by the dashboard.',
-                  ),
-                  keyboardType: TextInputType.url,
-                  autocorrect: false,
-                ),
-                const SizedBox(height: 12),
-              ],
-              Visibility(
-                visible: _showDashboard,
-                maintainState: true,
-                child: GatewayHeadersEditor(
-                  savedNames:
-                      widget.initialConnection?.gatewayHeaders.keys.toSet() ??
-                      const {},
-                  enabled: !_validating,
-                  onChanged: (values) => _gatewayHeaderEdits = values,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _validating ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _validating ? null : _validateAndSave,
-          child: StudioActionLabel(
-            _isEditing ? 'Save Changes' : 'Connect',
-            busy: _validating,
-          ),
-        ),
-      ],
-    );
-  }
-
-  @override
-  void dispose() {
-    _label.dispose();
-    _host.dispose();
-    _port.dispose();
-    _dashboardPrefix.dispose();
-    _dashPort.dispose();
-    _dashUser.dispose();
-    _dashPass.dispose();
-    _desktopGatewayUrl.dispose();
-    super.dispose();
   }
 }

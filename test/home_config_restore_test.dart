@@ -390,12 +390,21 @@ void main() {
       await tester.tap(find.text('Connect your agent'));
       await tester.pumpAndSettle();
       await tester.enterText(
-        find.widgetWithText(TextField, 'Host'),
-        'localhost',
+        find.byKey(const Key('connection-address')),
+        'https://hermes.example.com',
       );
-      await tester.tap(find.text('Custom proxy and dashboard details'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Continue'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Custom setup'));
+      await tester.tap(find.text('Custom setup'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Access headers'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Add header'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Add header'));
       await tester.pump();
       await tester.enterText(
@@ -406,16 +415,15 @@ void main() {
         find.widgetWithText(TextFormField, 'Value'),
         'do-not-send',
       );
-      await tester.ensureVisible(
-        find.text('Custom proxy and dashboard details'),
-      );
-      await tester.tap(find.text('Custom proxy and dashboard details'));
+      await tester.ensureVisible(find.text('Access headers'));
+      await tester.tap(find.text('Access headers'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Connect'));
+      await tester.ensureVisible(find.text('Use these settings'));
+      await tester.tap(find.text('Use these settings'));
       await tester.pumpAndSettle();
       expect(find.textContaining('managed by Hermes'), findsOneWidget);
       expect(manager.getConnections(), isEmpty);
-      expect(find.text('Extra gateway headers'), findsOneWidget);
+      expect(find.text('Access header credentials'), findsOneWidget);
     },
   );
 
@@ -472,15 +480,24 @@ void main() {
     await tester.tap(find.text('Connect your agent'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Custom proxy and dashboard details'));
+    await tester.enterText(
+      find.byKey(const Key('connection-address')),
+      'https://hermes.example.com',
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Custom setup'));
+    await tester.tap(find.text('Custom setup'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Use a separate chat address'));
     await tester.pumpAndSettle();
 
-    final field = find.widgetWithText(
-      TextField,
-      'Desktop Gateway URL (optional)',
-    );
+    final field = find.byKey(const Key('connection-chat-address'));
     expect(field, findsOneWidget);
-    final textField = tester.widget<TextField>(field);
+    final textField = tester.widget<TextFormField>(field);
     expect(textField.controller?.text, isEmpty);
   });
 }

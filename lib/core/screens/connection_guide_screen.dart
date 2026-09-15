@@ -23,14 +23,21 @@ class ConnectionGuideScreen extends StatelessWidget {
             '2  Make the dashboard reachable',
             'Start an authenticated Hermes dashboard. Open its address from '
                 'your phone’s browser and check your dashboard credentials. '
+                'For a private-network dashboard, the address usually looks '
+                'like http://hermes.home:9119. An HTTPS proxy might use '
+                'https://hermes.example.com. Include any custom port or path. '
+                'Use your computer’s network address: localhost on your phone '
+                'means the phone itself. '
                 'Use HTTPS or an encrypted private network for remote access.',
           ),
           (
             '3  Connect in Wing',
             'Return to the welcome screen and choose Connect your agent. '
-                'Enter your host address and dashboard credentials. Wing '
-                'checks the connection before saving it. Keep model-provider '
-                'keys on your Hermes host.',
+                'Enter the complete dashboard address, then your dashboard '
+                'login. Wing checks profiles, live chat and history. Name '
+                'the verified connection and choose Save and open. '
+                'Custom setup is only for extra settings supplied by your '
+                'administrator. Keep model-provider keys on your Hermes host.',
           ),
           (
             'Already have a backup?',

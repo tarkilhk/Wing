@@ -126,17 +126,21 @@ class ProfileGateway {
       gatewayHeaders: connection.gatewayHeaders,
     );
     WsClient? socket;
+    WsClient? openingSocket;
+    var closed = false;
     var connected = false;
     Future<void>? connecting;
     late final ProfileGateway gateway;
     Future<void> open() async {
       final credentials = await dashboard.gatewayCredentials();
+      if (closed) throw StateError('Gateway is closed');
       final candidate = WsClient(
         connection.desktopGatewayUrl ?? dashboard.baseUrl,
         token: credentials.token,
         ticket: credentials.ticket,
         gatewayHeaders: connection.gatewayHeaders,
       );
+      openingSocket = candidate;
       candidate.onStreamEvent = (event) => gateway.onEvent?.call(event);
       candidate.onConnectionChanged = (value) {
         connected = value;
@@ -145,10 +149,13 @@ class ProfileGateway {
       try {
         await candidate.connect();
         await candidate.waitForGatewayReady();
+        if (closed) throw StateError('Gateway is closed');
         socket = candidate;
       } catch (_) {
         candidate.close();
         rethrow;
+      } finally {
+        if (identical(openingSocket, candidate)) openingSocket = null;
       }
     }
 
@@ -215,6 +222,8 @@ class ProfileGateway {
                   }
                 })()),
       close: () {
+        closed = true;
+        openingSocket?.close();
         socket?.close();
         dashboard.close();
       },

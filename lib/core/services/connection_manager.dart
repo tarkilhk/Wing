@@ -314,7 +314,7 @@ class ConnectionManager {
     await _saveAll(next);
   }
 
-  Future<void> saveConnection(
+  Future<SavedConnection> saveConnection(
     String label,
     String host,
     int port,
@@ -356,6 +356,7 @@ class ConnectionManager {
       nextCredentials: _ConnectionCredentials.fromConnection(conn),
       connections: current,
     );
+    return conn;
   }
 
   /// Updates all editable fields on an existing connection while preserving its
@@ -387,7 +388,7 @@ class ConnectionManager {
     final gateway = gatewayPrefix?.trim();
     final dashboard = dashboardPrefix?.trim();
     final dashUser = dashboardUsername?.trim();
-    final dashPass = dashboardPassword?.trim();
+    final dashPass = dashboardPassword;
     final desktopGateway = desktopGatewayUrl?.trim();
     final resolvedGatewayHeaders = resolveGatewayHeaderUpdate(
       current[idx].gatewayHeaders,
@@ -1206,10 +1207,10 @@ class DashboardClient {
         }),
       );
       if (res.statusCode == 401) {
-        throw Exception('Dashboard login failed: invalid username or password');
+        throw const DashboardHttpException(401, 'auth/password-login');
       }
       if (res.statusCode != 200) {
-        throw Exception('Dashboard login failed: HTTP ${res.statusCode}');
+        throw DashboardHttpException(res.statusCode, 'auth/password-login');
       }
       final setCookie = res.headers['set-cookie'] ?? '';
       // The `http` package folds multiple Set-Cookie headers into one
@@ -1303,9 +1304,7 @@ class DashboardClient {
       return mintWebSocketTicket(retried: true);
     }
     if (res.statusCode != 200) {
-      throw Exception(
-        'Could not mint Desktop gateway WebSocket ticket: HTTP ${res.statusCode}',
-      );
+      throw DashboardHttpException(res.statusCode, 'auth/ws-ticket');
     }
     final data = _decodeMapResponse(res);
     final ticket = data['ticket'] as String?;

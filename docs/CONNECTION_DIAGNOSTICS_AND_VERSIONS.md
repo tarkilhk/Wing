@@ -4,7 +4,7 @@ Use [Getting started](GETTING_STARTED.md) for password connection setup. The app
 
 ## Access headers
 
-Advanced headers support authenticated proxies through the existing connection editor. Keep a saved value by leaving its replacement blank, replace it explicitly, or remove it. Names are unique ignoring case; names and values must be single-line. Managed authentication headers cannot be overridden.
+Access headers support authenticated proxies through **Sign in → Custom setup → Access headers** in the connection journey. Most connections only need the dashboard URL and dashboard login. Keep a saved value by leaving its replacement blank, replace it explicitly, or remove it. Names are unique ignoring case; names and values must be single-line. Managed authentication headers cannot be overridden.
 
 Secrets use the same secure storage and transactional save/rollback path as connection credentials. They are included only in explicit configuration export (optionally encrypted with a passphrase), never in displayed URLs, errors or logs. Credential changes must not leave the visible connection and stored secret out of sync.
 

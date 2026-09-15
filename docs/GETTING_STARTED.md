@@ -50,20 +50,20 @@ For development builds, follow [Contributing](../CONTRIBUTING.md). A Play Store 
 
 ## 4. Add your connection
 
-Tap **Connect your agent** on the welcome screen, or add a connection from **Connections**, and enter:
+Tap **Connect your agent** on the welcome screen, or **Add connection** from **Connections**.
 
-| Field | Example or meaning |
-| --- | --- |
-| Label | A name you recognize, such as Home |
-| Host | Your private-network hostname, or `https://hermes.example.com` |
-| Dashboard port | `9119` for the dashboard above; `443` for a standard HTTPS proxy |
-| Username and password | The dashboard credentials configured on the host |
-| Dashboard path prefix | Leave blank unless your proxy serves the dashboard below a path |
-| Explicit Desktop Gateway URL | Leave blank when the dashboard serves `/api/ws`; use the actual gateway URL only for a separate deployment |
+1. **Address:** enter the complete dashboard base address, such as `http://hermes.home:9119`, `https://hermes.example.com`, or `https://hermes.example.com:8443/hermes`. Include the scheme, any custom port and any proxy path in this single field. HTTP and HTTPS use their standard ports (80 and 443) when you omit the port. The normal Hermes dashboard port `9119` must be included explicitly for a direct connection.
+2. **Sign in:** enter your dashboard username and password. These are not your model-provider credentials. Wing normally uses this same dashboard address for profiles, live chat and history.
+3. **Check connection:** Wing checks profile access, the authenticated chat WebSocket and session listing separately. Each stage shows its result; a failed stage gives its own recovery guidance. You can cancel without saving, correct your details and try again.
+4. **Save and open:** give the verified connection a recognizable name, then save it to open Chats. A successful check establishes connection access; it does not send a message or verify model inference. Select the intended profile, send a short message, then leave and reopen it to verify saved history.
 
-Keep path prefixes in their dedicated field. Under advanced settings, custom access headers can supply access-proxy credentials. Use proxy-authenticated mode only if your deployment provides that authentication. See [Access headers](CONNECTION_DIAGNOSTICS_AND_VERSIONS.md#access-headers).
+**Custom setup** is under sign-in, for extra settings supplied by your administrator:
 
-Save checks profile discovery, the gateway connection and session listing before accepting the connection. Select the intended profile, create a chat, send a short message, then leave and reopen it to verify saved history.
+- **My access proxy handles sign-in** is only for a proxy configured to authenticate Wing's requests. An HTTPS reverse proxy alone does not establish this.
+- **Use a separate chat address** accepts a complete HTTP(S) base address when live chat is explicitly served elsewhere. Wing adds `/api/ws`; do not paste that endpoint into the field. Review this destination because it also receives chat authentication and configured access headers.
+- **Access headers** supplies extra proxy credentials when required, including alongside normal dashboard sign-in. Values remain hidden after saving. Most connections do not need headers. See [Access headers](CONNECTION_DIAGNOSTICS_AND_VERSIONS.md#access-headers).
+
+There is no separate API-server address, API key or second port in the normal journey. The standalone OpenAI-compatible API service on port `8642` is not used by this setup. Connection edits use the same address/sign-in/check flow and retain the connection's identity. Failed checks do not replace the saved connection; failed local saves keep your draft for retry.
 
 ## Troubleshooting
 

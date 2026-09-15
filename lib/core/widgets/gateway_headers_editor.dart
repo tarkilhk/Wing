@@ -147,10 +147,10 @@ class _GatewayHeadersEditorState extends State<GatewayHeadersEditor> {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const Text('Extra gateway headers'),
+      const Text('Access header credentials'),
       const SizedBox(height: 4),
       Text(
-        'Use this for access proxies. Values stay hidden after saving.',
+        'Use the names and values supplied by your administrator. Saved values stay hidden.',
         style: Theme.of(context).textTheme.bodySmall,
       ),
       const SizedBox(height: 8),
