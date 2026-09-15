@@ -4,26 +4,107 @@
 
 ## [1.0.0] - 2026-09-16
 
-First release of Wing, an independent Android client for a self-hosted Hermes server. The app uses `com.tarkilhk.wing` and starts with separate local data from the inherited Hermes application.
+Wing 1.0.0 is the first release under the Wing name: an independent Android client for a self-hosted Hermes server. It brings together the accumulated workspace, conversation, supervision, file-viewing, administration and Android reliability work recorded throughout the development changelog.
 
-### Added
+### A redesigned Android workspace
 
-- Continue and search chats, switch profiles, attach files, follow running work, and manage supported server settings from Android.
-- Offline setup guidance and encrypted connection backup and restore.
-- Release helper with major, minor and patch version bumps, changelog preparation and a command to publish a merged version tag.
-- Verified GitHub APK releases with checksums, archived debug symbols and build metadata; publish only after all uploaded assets pass verification.
+- Navigate through a shared drawer for Chats, Activity, Connections, App settings and Hermes administration.
+- Work across saved connections and server profiles, with profile-scoped chats, projects, drafts and ongoing work.
+- Browse paginated chat history, search chats and projects, and filter unread or automated conversations. Activity offers Running and Needs input filters.
+- Create projects from discovered host folders or a manually entered path. Rename projects, choose their icons and colors, and delete them through the project controls.
+- Rename, pin, archive, mark read/unread, delete and move chats with server/runtime checks. Move an idle conversation directly from its header, including before its first message.
+- Use compact, anchored project and chat menus and a floating New chat button that leaves more room for the chat list.
+- Return from a conversation to the chat list with Android Back while preserving the draft; top-level destinations share consistent drawer navigation.
 
-### Changed
+### Conversation controls and a more capable composer
 
-- Add the approved navy portrait splash and light/dark Wing welcome screens, with a scalable wordmark and an offline connection guide. Preserve connection setup, restore, drawer navigation and short-screen scrolling.
-- Move repository, release, changelog and support links to `tarkilhk/wing` following the GitHub repository rename.
-- Rename the app to Wing, with Wing Dev for development builds and a separate Wing application identity.
-- Adopt the approved lowercase wing wordmark with compact pointed feather accents and a matching decorative feather system. Save the selected board and naming rules in the design framework.
-- Update app labels, notification branding, store metadata and current documentation.
+- Select a model per conversation from searchable provider groups and choose supported reasoning settings. Inspect context usage without dismissing the keyboard.
+- Use gateway slash commands, profile skills and command completion, including supported session-specific YOLO and approval controls.
+- Steer a running turn or queue a follow-up. Hold the composer arrow, slide to Steer, Stop, Queue or Fork, and release to act; slide away to cancel. The default action during work is configurable.
+- Queue text, files or attachment-only messages. Review, pause, resume, edit or delete queued instructions while keeping the separate composer draft and attachments intact.
+- Edit queued instructions directly in the composer, save them in place or steer them into the running turn. Queue dispatch pauses during editing and after stopped, failed or uncertain work.
+- Edit and resend saved messages with confirmation before replacing history. Regenerate an answer in the current chat or branch from a saved answer into a separate conversation.
+- Open a parent chat when Hermes supplies the relationship. Fork validation handles hidden notices and compacted history without rejecting valid branches.
+- Answer structured clarifications and supported approval requests. Dedicated sudo, secret and vault forms keep sensitive answers out of ordinary drafts and conversation history.
+- Read side-question and background-task results separately from ordinary replies, with the original question, running status and returned result kept together.
 
-### Fixed
+### A cleaner transcript and visibility into running work
 
-- Make Connections backup actions reliable and passphrase protection optional for exports.
+- Read streamed replies with selectable code, copying, narrow-screen Markdown tables, image previews, reasoning, timing and server todo progress.
+- Inspect expandable tool calls and results in compact Activity panels. Tools, Tasks and Agents have their own tabs, with goals and background processes under Work.
+- Follow thinking, writing, tool progress, input waits and subagent work above the composer. A subtle live highlight respects reduced-motion settings.
+- Keep the selected activity tab, expanded details and transcript position as updates arrive or panels open and close.
+- Group historical tools and live work, collapse completed agent deliveries and background-process batches, and present server status as compact notices.
+- Hide internal task snapshots, compaction continuation reminders and delivery wrappers from the transcript and chat search while preserving saved history and ordinary quoted text.
+- Keep memory-review summaries accessible without a persistent oversized card, and show discreet message timestamps.
+- Reopen long conversations near the latest user prompt even when tool activity fills the first history page, with manual scrolling and Back to latest preserved.
+
+### Attachments, search and output viewers
+
+- Add photos, camera captures and files, or paste supported clipboard images. Staged images show thumbnails and individual remove controls.
+- Review Android shares and choose a connection, profile and destination chat before adding them to a draft. Sending remains a separate action.
+- Preserve pending shares, captured photos, draft text and staged attachments across navigation, reconnection and app restart, including camera-return recovery.
+- Prepare attachments while a reply is running. Upload photos through the image API, retry or remove partial uploads, and keep saved attachment prompts readable during editing and regeneration.
+- Find text within recent messages, load older matches and jump to a result with nearby conversation context. Matching tool results expand automatically.
+- Browse per-chat Outputs without loading the whole conversation; load older file references and keep existing results available after a failed page request.
+- Open images, text, source and formatted Markdown inside the app, including linked Hermes files from Markdown previews.
+- Read PDFs with page navigation and zoom; inspect SVG blocks and files with source access; open completed Mermaid diagrams in an offline viewer.
+- Play supported audio and video with seeking, preview web links and self-contained interactive HTML, and save or share downloaded file bytes through Android.
+- Show clearer file-opening failures and retry options, apply saved proxy authentication to previews/downloads, and keep search navigation accessible beside long results.
+
+### Supervision, goals and background work
+
+- Discover ongoing work across profiles, including chats whose delegated agents are still running after the main turn ends.
+- Inspect subagents, their recent activity and live output, and use supported targeted Steer or Interrupt controls. Failed steering preserves the guidance for retry.
+- View goal status, criteria, verification details, turn limits and waiting reasons; pause, resume or clear goals without losing drafts or queues.
+- Add, remove and clear goal criteria, retaining unsaved additions when a request fails.
+- Inspect supported session loops, heartbeats and background processes, including recent output and exit status; stop processes or dismiss finished work.
+- Keep background-task results attached to the correct chat when events arrive out of order, and retain previously confirmed work when a refresh fails.
+- Configure local completion and attention alerts, optional chat-title previews and sample notifications. Observed transitions in unopened chats can also alert while the app remains connected.
+- Recover notification setup after temporary startup failures, avoid duplicate chat screens on notification taps, and prioritize the latest tapped destination.
+
+### Profile, server and health administration
+
+- Use separate Profile, Server and Health tabs, keeping profile defaults, shared server configuration and runtime observations in their owning scopes.
+- Change supported model defaults, reasoning and speed settings; manage auxiliary model assignments and ordered fallback models.
+- Edit profile descriptions and SOUL content. Browse retained memory and configure supported memory and context-compression settings.
+- Browse and search installed skills, read their full instructions, toggle skills and toolsets, inspect setup readiness and manage supported skill installation and updates.
+- Manage supported shared provider accounts and profile overrides with clearer connection, authentication and token-expiry status.
+- Inspect MCP connections, test their status and use supported enablement, authentication and removal controls. Browse agent-plugin status and enablement.
+- Create, clone configuration, rename and delete supported server profiles, checking the resulting server state.
+- Configure supported approval, security and speech settings, with settings search and clear unavailable states for unsupported operations.
+- Run connection and profile diagnostics, inspect bounded runtime logs and supported Doctor/security-audit actions, and check backend versions.
+- Check and update eligible selected Hermes hosts with explicit confirmation, separate progress and an outcome for each host.
+- View server-recorded sessions, API calls, tokens and estimated costs, with supported date ranges and per-model breakdowns.
+- Preserve edits after rejected or partial saves, guard duplicate submissions, and keep editor actions reachable above the keyboard.
+
+### Wing identity and Android presentation
+
+- Adopt the Wing name, lowercase wordmark, portrait artwork, feather accents and matching launcher and notification icons.
+- Introduce the navy splash screen and light/dark first-connection welcome, with an offline connection guide and restore access before setup.
+- Apply the Studio design across the app: paired light/dark themes, refined Teal accents, compact controls, consistent feedback and improved native previews.
+- Bring the portrait identity into the drawer, empty-chat greeting, settings and assistant badges while keeping short screens scrollable.
+- Simplify alert headings to “Finished working” and “Needs your attention,” with optional chat titles underneath.
+- Display the public version as `1.0.0`, and update repository, support, store and release links for Wing.
+- Use the independent `com.tarkilhk.wing` application identity, with Wing Dev for development builds. Wing starts with separate local data from the inherited Hermes application.
+
+### Recovery, privacy and release delivery
+
+- Restore unsent drafts, attachments and queues to their originating connection, profile and chat, including recovery from Chats after a cold restart.
+- Refresh execution and pending-input state when reopening a chat; preserve newer composer edits and pause uncertain queued sends for review.
+- Mark chats read on Hermes only after successful history loading, and recover saved chat titles in Activity after restart.
+- Fix clarification and secure-input forms rejected or omitted under strict gateway request validation, and prevent cancelled skill secret setup from leaving work stuck.
+- Prevent Queue from taking attachments while an ordinary send awaits acknowledgement, and stop dashboard redirects from forwarding session credentials to another endpoint.
+- Export and restore connection configuration and allowlisted preferences. Backup protection is optional: a passphrase encrypts the export; an unencrypted export contains readable credentials.
+- Access the privacy policy offline in App settings, along with first-connection guidance, public feature documentation and known limitations.
+- Install signed ARM64, ARMv7 or x86_64 APKs from GitHub Releases, with checksums, archived debug symbols and source/signing metadata.
+- Prepare future releases with major, minor or patch version bumps and dated changelog notes. Release automation runs analysis and tests, verifies every APK, and checks uploaded assets before publication.
+
+### Scope of this first release
+
+Wing requires a compatible modern Hermes dashboard and gateway; individual controls depend on the server's capabilities. Accepted work continues on Hermes when the phone leaves, but local queues and alerts need a running, connected client. Firebase push delivery and synchronized older answer alternatives are not part of this release. Configuration exports do not back up drafts or the full app state.
+
+The [full development changelog](https://github.com/tarkilhk/wing/blob/main/CHANGELOG.md) retains the detailed intermediate entries. See the [v1.0.0 known limitations](https://github.com/tarkilhk/wing/blob/v1.0.0/docs/KNOWN_LIMITATIONS.md) for recovery, file and backend boundaries.
 
 ## [2.36.15+2232] - 2026-09-15
 
