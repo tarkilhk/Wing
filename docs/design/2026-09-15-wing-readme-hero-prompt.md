@@ -1,5 +1,10 @@
 # Wing README hero
 
+Final composition edit: remove the two oversized mint feathers behind the
+portrait and fill that area with plain navy. Keep the small feathers above the
+i and the earcup wing. This supersedes the optional background decoration in
+the original prompt below.
+
 Final punctuation edit: remove the terminal period after “Your agent, with you”.
 Preserve the comma and all other lettering and artwork. This supersedes the
 tagline punctuation in the original prompt below.
