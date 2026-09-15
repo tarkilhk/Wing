@@ -42,8 +42,23 @@ def current_version():
     return parse_version((ROOT / "pubspec.yaml").read_text(encoding="utf-8"))
 
 
+def is_ancestor(ancestor, ref):
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", ancestor, ref], cwd=ROOT,
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    if result.returncode not in (0, 1):
+        result.check_returncode()
+    return result.returncode == 0
+
+
 def check_version(tag=None):
     version, build = current_version()
+    # Wing starts its own release series at the committed package rename.
+    # Inherited Hermes tags are a different application's release history.
+    history_start = (ROOT / "scripts/release-history-start").read_text().strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", history_start) or not is_ancestor(history_start, "HEAD"):
+        raise ValueError("Release history start must be a full commit SHA ancestral to HEAD")
     gradle = (ROOT / "android/app/build.gradle.kts").read_text(encoding="utf-8")
     floor = re.search(r"val minimumInstalledVersionCode = (\d+)", gradle)
     if not floor or build <= int(floor.group(1)):
@@ -55,6 +70,8 @@ def check_version(tag=None):
     for previous_tag in git("tag", "--list", "v*").splitlines():
         if not TAG.fullmatch(previous_tag) or previous_tag == tag:
             continue
+        if not is_ancestor(history_start, f"refs/tags/{previous_tag}"):
+            continue
         previous_version, previous_build = parse_version(
             git("show", f"refs/tags/{previous_tag}:pubspec.yaml")
         )
@@ -65,7 +82,7 @@ def check_version(tag=None):
             invalid |= (version == previous_version) != (build == previous_build)
         if invalid:
             raise ValueError(f"Version/build must advance together beyond {previous_tag} ({previous_build})")
-    print(f"Verified {version_text(version, build)}; ARM64 versionCode {build * 10 + 2}")
+    print(f"Verified {release_tag(version)}; internal ARM64 versionCode {build * 10 + 2}")
     return version, build
 
 
@@ -82,10 +99,10 @@ def unreleased_section(text):
     return heading.start(), end, notes
 
 
-def release_notes(version, build):
+def release_notes(version):
     text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     heading = re.search(
-        rf"^## \[{re.escape(version_text(version, build))}\] - \d{{4}}-\d{{2}}-\d{{2}}\s*$",
+        rf"^## \[{re.escape(release_tag(version)[1:])}\] - \d{{4}}-\d{{2}}-\d{{2}}\s*$",
         text, re.M,
     )
     if not heading:
@@ -108,20 +125,20 @@ def prepare(bump, dry_run):
     changelog_path = ROOT / "CHANGELOG.md"
     changelog = changelog_path.read_text(encoding="utf-8")
     start, end, notes = unreleased_section(changelog)
-    label = version_text(new_version, new_build)
+    label = release_tag(new_version)[1:]
     if f"## [{label}]" in changelog:
         raise ValueError(f"Changelog already contains {label}")
     new_changelog = (
         changelog[:start] + f"## Unreleased\n\n## [{label}] - {date.today().isoformat()}\n\n"
         + notes + "\n\n" + changelog[end:]
     )
-    print(f"{'Would prepare' if dry_run else 'Preparing'} {version_text(version, build)} -> {label}")
+    print(f"{'Would prepare' if dry_run else 'Preparing'} {release_tag(version)[1:]} -> {label}")
     print(f"Files: pubspec.yaml, CHANGELOG.md; release tag: {release_tag(new_version)}")
     if dry_run:
         return
     pubspec_path = ROOT / "pubspec.yaml"
     pubspec = pubspec_path.read_text(encoding="utf-8")
-    pubspec_path.write_text(VERSION.sub(f"version: {label}", pubspec), encoding="utf-8")
+    pubspec_path.write_text(VERSION.sub(f"version: {version_text(new_version, new_build)}", pubspec), encoding="utf-8")
     changelog_path.write_text(new_changelog, encoding="utf-8")
     print("Review and commit these changes, merge to main, then run: python3 scripts/release.py publish")
 
@@ -141,7 +158,7 @@ def publish(dry_run):
     if git("tag", "--list", tag):
         raise ValueError(f"Tag {tag} already exists; rerun its workflow or prepare a new version")
     check_version(tag)
-    release_notes(version, build)
+    release_notes(version)
     print(f"{'Would tag and push' if dry_run else 'Tagging and pushing'} {tag} at {head} to origin")
     if dry_run:
         return
@@ -175,7 +192,7 @@ def main():
         elif args.command == "check":
             check_version(args.tag)
         else:
-            args.output.write_text(release_notes(*current_version()), encoding="utf-8")
+            args.output.write_text(release_notes(current_version()[0]), encoding="utf-8")
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         print(f"Release stopped: {error}", file=sys.stderr)
         if isinstance(error, subprocess.CalledProcessError):

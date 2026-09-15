@@ -2,8 +2,14 @@
 
 ## Unreleased
 
+## [1.0.0] - 2026-09-16
+
+First release of Wing, an independent Android client for a self-hosted Hermes server. The app uses `com.tarkilhk.wing` and starts with separate local data from the inherited Hermes application.
+
 ### Added
 
+- Continue and search chats, switch profiles, attach files, follow running work, and manage supported server settings from Android.
+- Offline setup guidance and encrypted connection backup and restore.
 - Release helper with major, minor and patch version bumps, changelog preparation and a command to publish a merged version tag.
 - Verified GitHub APK releases with checksums, archived debug symbols and build metadata; publish only after all uploaded assets pass verification.
 
@@ -11,9 +17,13 @@
 
 - Add the approved navy portrait splash and light/dark Wing welcome screens, with a scalable wordmark and an offline connection guide. Preserve connection setup, restore, drawer navigation and short-screen scrolling.
 - Move repository, release, changelog and support links to `tarkilhk/wing` following the GitHub repository rename.
-- Rename the app to Wing, with Wing Dev for development builds. Preserve package IDs, signing configuration and saved data compatibility.
+- Rename the app to Wing, with Wing Dev for development builds and a separate Wing application identity.
 - Adopt the approved lowercase wing wordmark with compact pointed feather accents and a matching decorative feather system. Save the selected board and naming rules in the design framework.
 - Update app labels, notification branding, store metadata and current documentation.
+
+### Fixed
+
+- Make Connections backup actions reliable and passphrase protection optional for exports.
 
 ## [2.36.15+2232] - 2026-09-15
 

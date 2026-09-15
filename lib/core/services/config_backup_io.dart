@@ -30,7 +30,7 @@ class ConfigBackupIo {
     String appVersion;
     try {
       final info = await PackageInfo.fromPlatform();
-      appVersion = '${info.version}+${info.buildNumber}';
+      appVersion = info.version;
     } catch (_) {
       appVersion = 'unknown';
     }

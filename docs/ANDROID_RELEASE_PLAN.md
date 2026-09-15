@@ -14,7 +14,9 @@ Wing uses a new application ID and starts with separate local app data. Never un
 
 Read the source version and base build number from [pubspec.yaml](../pubspec.yaml). For split APKs, Gradle computes `base * 10 + ABI`, where ARMv7 is 1, ARM64 is 2 and x86_64 is 3. For example, base 2227 gives ARM64 code 22272. This is an example, not a second source of the current version.
 
-`pubspec.yaml` is the version source. The release helper updates it and the changelog; workflows and tests do not need per-release edits. Stable tags use `v<major>.<minor>.<patch>`. Both the version and base build number must advance beyond earlier stable tags. Published tags and assets are never overwritten.
+`pubspec.yaml` is the version source. The release helper updates it and the changelog; workflows and tests do not need per-release edits. Stable tags use `v<major>.<minor>.<patch>`. Both the version and base build number must advance beyond earlier Wing tags. Published Wing tags and assets are never overwritten.
+
+Wing begins at `1.0.0`. The displayed version starts a new series while the Android build number continues increasing. `scripts/release-history-start` pins the Wing package-identity commit; only tags descended from that commit participate in version comparisons. Keep that boundary fixed. The older Hermes tags describe a different application and do not constrain Wing's version. The inherited `v1.0.0` tag must be archived as `upstream/v1.0.0` before the first Wing release can reuse its name; this is a one-time maintainer operation, and the helper still refuses all existing tag names.
 
 ## Validate one release candidate
 
@@ -59,11 +61,11 @@ python3 scripts/release.py prepare patch --dry-run
 python3 scripts/release.py prepare patch
 ```
 
-| Bump | Use for | Example from 2.36.15+2232 |
+| Bump | Use for | Example from 1.0.0 |
 | --- | --- | --- |
-| `patch` | Bug fixes and small improvements | 2.36.16+2233 |
-| `minor` | New features | 2.37.0+2233 |
-| `major` | Breaking changes | 3.0.0+2233 |
+| `patch` | Bug fixes and small improvements | 1.0.1 |
+| `minor` | New features | 1.1.0 |
+| `major` | Breaking changes | 2.0.0 |
 
 Every bump increments the Android base build number by one. The helper moves Unreleased notes into a dated release entry and leaves an empty Unreleased section for future work. It edits only `pubspec.yaml` and `CHANGELOG.md`; review and commit those changes through the normal PR/merge process. It refuses empty notes and repeated preparation without new notes. It does not build an APK locally.
 

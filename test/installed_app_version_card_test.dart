@@ -5,14 +5,14 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:wing/core/widgets/installed_app_version_card.dart';
 
 void main() {
-  testWidgets('shows installed app label, version/build, and package', (
+  testWidgets('shows the public version and keeps the Android build internal', (
     tester,
   ) async {
     PackageInfo.setMockInitialValues(
       appName: 'Wing',
       packageName: 'com.example.hermes',
-      version: '2.9.0',
-      buildNumber: '2158',
+      version: '1.0.0',
+      buildNumber: '22332',
       buildSignature: '',
       installerStore: '',
     );
@@ -21,7 +21,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Wing'), findsOneWidget);
-    expect(find.textContaining('2.9.0 (2158)'), findsOneWidget);
+    expect(find.text('1.0.0\ncom.example.hermes'), findsOneWidget);
+    expect(find.textContaining('22332'), findsNothing);
     expect(find.textContaining('com.example.hermes'), findsOneWidget);
   });
 

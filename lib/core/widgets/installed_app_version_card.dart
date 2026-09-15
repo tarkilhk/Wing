@@ -63,9 +63,6 @@ class _InstalledAppVersionCardState extends State<InstalledAppVersionCard> {
             ),
           );
         }
-        final version = info.buildNumber.trim().isEmpty
-            ? info.version
-            : '${info.version} (${info.buildNumber})';
         return Card(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -75,7 +72,7 @@ class _InstalledAppVersionCardState extends State<InstalledAppVersionCard> {
                 title: Text(
                   info.appName.trim().isEmpty ? 'Android app' : info.appName,
                 ),
-                subtitle: Text('$version\n${info.packageName}'),
+                subtitle: Text('${info.version}\n${info.packageName}'),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),

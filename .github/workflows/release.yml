@@ -130,7 +130,7 @@ jobs:
           import sys
           import tarfile
           sys.path.insert(0, "scripts")
-          from release import current_version, release_notes, release_tag, version_text
+          from release import current_version, release_notes, release_tag
 
           version, build = current_version()
           tag = release_tag(version)
@@ -143,9 +143,10 @@ jobs:
               raise SystemExit("No Dart debug symbols were produced")
           with tarfile.open(assets / f"wing-{tag}-symbols.tar.gz", "w:gz") as archive:
               archive.add("symbols", arcname="symbols")
-          (assets / "release-notes.md").write_text(release_notes(version, build))
+          (assets / "release-notes.md").write_text(release_notes(version))
           metadata = {
-              "version": version_text(version, build),
+              "version": tag.removeprefix("v"),
+              "android_build_number": build,
               "tag": tag,
               "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
               "package": "com.tarkilhk.wing",

@@ -34,6 +34,10 @@ class ReleaseTest(unittest.TestCase):
         )
         release.git("add", ".")
         release.git("commit", "-m", "Initial source")
+        (self.root / "scripts").mkdir()
+        (self.root / "scripts/release-history-start").write_text(release.git("rev-parse", "HEAD") + "\n")
+        release.git("add", ".")
+        release.git("commit", "-m", "Set release history boundary")
         self.remote = Path(self.temp.name) / "origin.git"
         release.git("init", "--bare", str(self.remote))
         release.git("remote", "add", "origin", str(self.remote))
@@ -54,8 +58,8 @@ class ReleaseTest(unittest.TestCase):
                 release.prepare(bump, False)
                 self.assertIn(f"version: {expected}", (self.root / "pubspec.yaml").read_text())
                 changelog = (self.root / "CHANGELOG.md").read_text()
-                self.assertIn(f"## Unreleased\n\n## [{expected}] - ", changelog)
-                self.assertEqual(release.release_notes(*release.current_version()), "### Fixed\n\n- Fix a bug.\n")
+                self.assertIn(f"## Unreleased\n\n## [{expected.split('+')[0]}] - ", changelog)
+                self.assertEqual(release.release_notes(release.current_version()[0]), "### Fixed\n\n- Fix a bug.\n")
                 self.assertIn("- Previous release.", changelog)
 
     def test_prepare_dry_run_is_read_only(self):
@@ -96,6 +100,26 @@ class ReleaseTest(unittest.TestCase):
     def test_check_allows_unchanged_released_version_for_normal_ci(self):
         release.git("tag", "v2.36.15")
         release.check_version()
+
+    def test_first_wing_release_ignores_inherited_application_tags(self):
+        release.git("tag", "v2.36.15", "HEAD~1")
+        boundary = release.git("rev-parse", "HEAD")
+        (self.root / "scripts/release-history-start").write_text(boundary + "\n")
+        self.write_version("1.0.0+2233")
+        release.check_version("v1.0.0")
+
+    def test_wing_versions_still_cannot_move_backwards(self):
+        self.write_version("1.1.0+2234")
+        self.commit_and_push()
+        release.git("tag", "v1.1.0")
+        self.write_version("1.0.0+2235")
+        with self.assertRaisesRegex(ValueError, "advance together"):
+            release.check_version("v1.0.0")
+
+    def test_invalid_history_boundary_fails_closed(self):
+        (self.root / "scripts/release-history-start").write_text("main\n")
+        with self.assertRaisesRegex(ValueError, "full commit SHA"):
+            release.check_version()
 
     def test_publishing_pushes_only_annotated_version_tag(self):
         release.prepare("patch", False)

@@ -1,7 +1,7 @@
 name: wing
 description: "Wing, a mobile client for Hermes profiles, conversations and agent work."
 publish_to: 'none'
-version: 2.36.15+2232
+version: 1.0.0+2233
 
 environment:
   sdk: ^3.12.0
