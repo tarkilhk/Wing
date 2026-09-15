@@ -3136,7 +3136,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
       await _journal();
       chat.messages = [
         ...answerHistoryRows(history.take(targetIndex).toList()),
-        {'role': 'user', 'content': text},
+        {
+          'role': 'user',
+          'content': text,
+          'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
+        },
       ];
       chat.streaming = '';
       chat.status = ProfileTurnStatus.running;
@@ -3870,6 +3874,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
             'role': 'user',
             'content': text,
             'display_content': ?display,
+            'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
           });
           chat.streaming = '';
           chat.status = ProfileTurnStatus.running;
@@ -4679,6 +4684,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           chat.messages.add({
             'role': 'assistant',
             'content': text,
+            'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
             if (chat.reasoning.isNotEmpty) '_gateway_reasoning': chat.reasoning,
           });
         }
@@ -4901,6 +4907,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat.messages.add({
         'role': 'assistant',
         'content': finalText,
+        'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
         if (chat.reasoning.isNotEmpty) '_gateway_reasoning': chat.reasoning,
       });
     }

@@ -26,6 +26,16 @@ Saved user display removes generated expanded attachment context while preservin
 
 ## Model, context and reading
 
+Messages show a discreet local `HH:mm` timestamp in the existing assistant
+header or beneath the user's copy icon. Long-press the time for its full date
+and local time; screen readers announce the full value. The user timestamp
+fits within the existing 48 dp copy target, keeping bubble width and message
+height unchanged even with enlarged text. Copy still copies only the message.
+Saved history uses the server timestamp. Newly submitted prompts and completed
+reply segments use their local submission/receipt time until history refreshes.
+Messages without a timestamp leave it blank; streaming replies gain their time
+when the segment completes.
+
 Choose models by the server's technical provider route and supported reasoning options. `/yolo` uses the current session's configuration and displays its returned state; it must not change global defaults.
 
 The thin context ring beside the model selector uses server usage or a labelled estimate. Unknown is not zero. Warning thresholds are 65% and 85%. After cold resume, the lazy agent's ready event triggers a guarded `session.info`/breakdown refresh, without submitting a prompt or polling indefinitely.

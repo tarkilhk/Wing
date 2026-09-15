@@ -28,19 +28,40 @@ class ProfileMessage extends StatelessWidget {
 
   static Uri? externalLink(String href) => externalWebLink(href);
 
-  Widget _copy(BuildContext context, String content) => IconButton(
-    tooltip: 'Copy message',
-    style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
-    icon: const Icon(Icons.copy_outlined, size: 17),
-    onPressed: () async {
-      await Clipboard.setData(ClipboardData(text: content));
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Message copied')));
-      }
-    },
-  );
+  Widget _copy(BuildContext context, String content, {Widget? timestamp}) =>
+      IconButton(
+        tooltip: 'Copy message',
+        style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+        padding: timestamp == null ? null : EdgeInsets.zero,
+        icon: timestamp == null
+            ? const Icon(Icons.copy_outlined, size: 17)
+            : SizedBox(
+                width: 48,
+                height: 48,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.copy_outlined, size: 17),
+                    const SizedBox(height: 2),
+                    // Keep metadata inside the existing copy target, including
+                    // at enlarged text sizes; the full date remains accessible.
+                    SizedBox(
+                      width: 44,
+                      height: 20,
+                      child: FittedBox(fit: BoxFit.scaleDown, child: timestamp),
+                    ),
+                  ],
+                ),
+              ),
+        onPressed: () async {
+          await Clipboard.setData(ClipboardData(text: content));
+          if (context.mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Message copied')));
+          }
+        },
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -149,6 +170,7 @@ class ProfileMessage extends StatelessWidget {
       return ProfileToolActivity(messages: [message]);
     }
     final user = role == 'user';
+    final timestamp = _timestamp(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -190,7 +212,14 @@ class ProfileMessage extends StatelessWidget {
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  const Spacer(),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: timestamp == null
+                          ? null
+                          : FittedBox(fit: BoxFit.scaleDown, child: timestamp),
+                    ),
+                  ),
                   if (!streaming) _copy(context, content),
                 ],
               ),
@@ -228,10 +257,44 @@ class ProfileMessage extends StatelessWidget {
                         ),
                 ),
               ),
-              if (user && !streaming) _copy(context, content),
+              if (user && !streaming)
+                _copy(context, content, timestamp: timestamp),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget? _timestamp(BuildContext context) {
+    // The transcript contract uses Unix seconds. Unknown times stay absent.
+    final seconds = message['timestamp'];
+    if (seconds is! num || !seconds.isFinite || seconds.abs() > 8640000000000) {
+      return null;
+    }
+    final date = DateTime.fromMillisecondsSinceEpoch((seconds * 1000).round());
+    final localizations = MaterialLocalizations.of(context);
+    final time = TimeOfDay.fromDateTime(date);
+    final compact = localizations.formatTimeOfDay(
+      time,
+      alwaysUse24HourFormat: true,
+    );
+    final full =
+        '${localizations.formatFullDate(date)}, '
+        '${localizations.formatTimeOfDay(time, alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context))}';
+    return Tooltip(
+      message: full,
+      excludeFromSemantics: true,
+      child: Text(
+        compact,
+        semanticsLabel: full,
+        maxLines: 1,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          fontSize: 12,
+          height: 1,
+          fontFeatures: const [FontFeature.tabularFigures()],
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }
