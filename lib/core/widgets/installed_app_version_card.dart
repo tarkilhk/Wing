@@ -42,28 +42,31 @@ class _InstalledAppVersionCardState extends State<InstalledAppVersionCard> {
         if (snapshot.hasError ||
             (snapshot.connectionState == ConnectionState.done &&
                 info == null)) {
-          return const Card(
+          return const Material(
+            type: MaterialType.transparency,
             child: ListTile(
               leading: Icon(Icons.info_outline),
-              title: Text('Android app version'),
+              title: Text('App version'),
               subtitle: Text('Version information is unavailable.'),
             ),
           );
         }
         if (info == null) {
-          return const Card(
+          return const Material(
+            type: MaterialType.transparency,
             child: ListTile(
               leading: SizedBox(
                 width: 24,
                 height: 24,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              title: Text('Android app version'),
+              title: Text('App version'),
               subtitle: Text('Loading version information…'),
             ),
           );
         }
-        return Card(
+        return Material(
+          type: MaterialType.transparency,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -72,7 +75,7 @@ class _InstalledAppVersionCardState extends State<InstalledAppVersionCard> {
                 title: Text(
                   info.appName.trim().isEmpty ? 'Android app' : info.appName,
                 ),
-                subtitle: Text('${info.version}\n${info.packageName}'),
+                subtitle: Text('Version ${info.version}'),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/profile_workspace_theme.dart';
+import '../theme/wing_theme.dart';
 import '../services/turn_notification_service.dart';
 import '../services/background_monitoring_service.dart';
 import '../services/device_preference.dart';
@@ -104,211 +105,395 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
     final accent = WorkspaceAccent.fromName(
       _confirmed[WorkspaceAccent.preferenceKey] as String?,
     );
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(4, 0, 4, 16),
-          child: Text('Appearance and notifications for this device.'),
-        ),
-        const InstalledAppVersionCard(),
-        const SizedBox(height: 12),
-        Card(
-          child: ListTile(
-            key: const ValueKey('privacy-policy'),
-            leading: const Icon(Icons.privacy_tip_outlined),
-            title: const Text('Privacy policy'),
-            subtitle: const Text('Data use, storage and your choices.'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+    final mode = _confirmed['theme_mode'] as String? ?? 'system';
+    return SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, bottom: 24),
+                  child: Text(
+                    'Your preferences, on this device.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: WingTokens.of(context).muted,
+                    ),
+                  ),
+                ),
+                _SettingsSection(
+                  title: 'Appearance',
+                  child: Card(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _AppearancePreview(mode: mode, accent: accent),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Theme',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  for (final option in [
+                                    (
+                                      'system',
+                                      'System',
+                                      Icons.brightness_auto_outlined,
+                                    ),
+                                    (
+                                      'light',
+                                      'Light',
+                                      Icons.light_mode_outlined,
+                                    ),
+                                    ('dark', 'Dark', Icons.dark_mode_outlined),
+                                  ])
+                                    ChoiceChip(
+                                      showCheckmark: false,
+                                      key: ValueKey('theme-${option.$1}'),
+                                      avatar: Icon(option.$3, size: 18),
+                                      label: Text(option.$2),
+                                      selected: mode == option.$1,
+                                      onSelected: _saving
+                                          ? null
+                                          : (_) =>
+                                                _save('theme_mode', option.$1),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+                              Text(
+                                'Accent color',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  for (final choice in WorkspaceAccent.values)
+                                    ChoiceChip(
+                                      showCheckmark: false,
+                                      key: ValueKey('accent-${choice.name}'),
+                                      label: Text(choice.label),
+                                      selected: accent == choice,
+                                      avatar: CircleAvatar(
+                                        radius: 8,
+                                        backgroundColor:
+                                            Theme.of(context).brightness ==
+                                                Brightness.dark
+                                            ? choice.dark
+                                            : choice.light,
+                                      ),
+                                      onSelected: _saving
+                                          ? null
+                                          : (_) => _save(
+                                              WorkspaceAccent.preferenceKey,
+                                              choice.name,
+                                            ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        TextSizeSettingsCard(
+                          preferences: widget.preferences,
+                          onChanged: (_) => widget.onChanged(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                _SettingsSection(
+                  title: 'Chat',
+                  child: ComposerActionSettings(
+                    preferences: widget.preferences,
+                  ),
+                ),
+                if (widget.enableNotifications != null)
+                  _SettingsSection(
+                    title: 'Notifications',
+                    child: Card(
+                      child: Column(
+                        children: [
+                          CompactSwitchListTile(
+                            title: const Text('Completed work'),
+                            value:
+                                _confirmed[completionNotificationsKey]
+                                    as bool? ??
+                                true,
+                            onChanged: _saving
+                                ? null
+                                : (value) =>
+                                      _save(completionNotificationsKey, value),
+                          ),
+                          CompactSwitchListTile(
+                            title: const Text('Needs attention'),
+                            subtitle: const Text(
+                              'Questions, approvals and failed turns.',
+                            ),
+                            value:
+                                _confirmed[attentionNotificationsKey]
+                                    as bool? ??
+                                true,
+                            onChanged: _saving
+                                ? null
+                                : (value) =>
+                                      _save(attentionNotificationsKey, value),
+                          ),
+                          CompactSwitchListTile(
+                            title: const Text('Show message previews'),
+                            subtitle: const Text(
+                              'Include reply and question text in alerts.',
+                            ),
+                            value:
+                                _confirmed[notificationPreviewsKey] as bool? ??
+                                true,
+                            onChanged: _saving
+                                ? null
+                                : (value) =>
+                                      _save(notificationPreviewsKey, value),
+                          ),
+                          if (widget.backgroundMonitoringState != null) ...[
+                            ValueListenableBuilder<BackgroundMonitoringState>(
+                              valueListenable:
+                                  widget.backgroundMonitoringState!,
+                              builder: (_, state, _) {
+                                if (state !=
+                                        BackgroundMonitoringState
+                                            .batteryRestricted &&
+                                    state != BackgroundMonitoringState.failed) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    0,
+                                    16,
+                                    16,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        state ==
+                                                BackgroundMonitoringState
+                                                    .batteryRestricted
+                                            ? 'Notifications may be delayed.'
+                                            : 'Notifications paused.',
+                                      ),
+                                      if (state ==
+                                              BackgroundMonitoringState
+                                                  .batteryRestricted &&
+                                          widget.openMonitoringBatterySettings !=
+                                              null)
+                                        TextButton(
+                                          onPressed: () async {
+                                            try {
+                                              await widget
+                                                  .openMonitoringBatterySettings!();
+                                            } catch (_) {
+                                              if (context.mounted) {
+                                                showStudioError(
+                                                  context,
+                                                  'Could not open battery settings.',
+                                                );
+                                              }
+                                            }
+                                          },
+                                          child: const Text(
+                                            'Allow background activity',
+                                          ),
+                                        ),
+                                      if (state ==
+                                          BackgroundMonitoringState.failed)
+                                        TextButton(
+                                          onPressed: widget.onChanged,
+                                          child: const Text('Retry'),
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                          const Divider(height: 1),
+                          ListTile(
+                            leading: const Icon(Icons.notifications_outlined),
+                            title: widget.backgroundMonitoringState == null
+                                ? const Text('Test notification')
+                                : ValueListenableBuilder<
+                                    BackgroundMonitoringState
+                                  >(
+                                    valueListenable:
+                                        widget.backgroundMonitoringState!,
+                                    builder: (_, state, _) => Text(
+                                      state ==
+                                              BackgroundMonitoringState
+                                                  .permissionRequired
+                                          ? 'Enable notifications'
+                                          : 'Test notification',
+                                    ),
+                                  ),
+                            trailing: _requesting
+                                ? const SizedBox.square(
+                                    dimension: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.chevron_right),
+                            onTap: _requesting ? null : _notifications,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                _SettingsSection(
+                  title: 'About',
+                  child: Card(
+                    child: Column(
+                      children: [
+                        const InstalledAppVersionCard(),
+                        const Divider(height: 1),
+                        ListTile(
+                          key: const ValueKey('privacy-policy'),
+                          leading: const Icon(Icons.privacy_tip_outlined),
+                          title: const Text('Privacy policy'),
+                          subtitle: const Text(
+                            'How your data is stored and used.',
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => Navigator.of(context).push<void>(
+                            MaterialPageRoute(
+                              builder: (_) => const PrivacyPolicyScreen(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
+      ),
+    );
+  }
+}
+
+class _SettingsSection extends StatelessWidget {
+  const _SettingsSection({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 24),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Semantics(
+            header: true,
+            child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+          ),
+        ),
+        child,
+      ],
+    ),
+  );
+}
+
+/// A real themed reading sample, updated only after the preference is saved.
+class _AppearancePreview extends StatelessWidget {
+  const _AppearancePreview({required this.mode, required this.accent});
+
+  final String mode;
+  final WorkspaceAccent accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = switch (mode) {
+      'light' => Brightness.light,
+      'dark' => Brightness.dark,
+      _ => MediaQuery.platformBrightnessOf(context),
+    };
+    return Theme(
+      data: profileWorkspaceTheme(
+        ThemeData(brightness: brightness),
+        accent: accent,
+      ),
+      child: Builder(
+        builder: (context) {
+          final tokens = WingTokens.of(context);
+          return Container(
+            key: const ValueKey('appearance-preview'),
+            width: double.infinity,
             padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: tokens.surface,
+              borderRadius: WingRadius.card,
+              border: Border.all(color: tokens.border),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Theme', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final mode in ['system', 'light', 'dark'])
-                      ChoiceChip(
-                        showCheckmark: false,
-                        key: ValueKey('theme-$mode'),
-                        label: Text(
-                          '${mode[0].toUpperCase()}${mode.substring(1)}',
-                        ),
-                        selected:
-                            (_confirmed['theme_mode'] ?? 'system') == mode,
-                        onSelected: _saving
-                            ? null
-                            : (_) => _save('theme_mode', mode),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 24),
                 Text(
-                  'Accent color',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  'Chat preview',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelMedium?.copyWith(color: tokens.muted),
                 ),
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final choice in WorkspaceAccent.values)
-                      ChoiceChip(
-                        showCheckmark: false,
-                        key: ValueKey('accent-${choice.name}'),
-                        label: Text(choice.label),
-                        selected: accent == choice,
-                        avatar: CircleAvatar(
-                          radius: 9,
-                          backgroundColor:
-                              Theme.of(context).brightness == Brightness.dark
-                              ? choice.dark
-                              : choice.light,
-                        ),
-                        onSelected: _saving
-                            ? null
-                            : (_) => _save(
-                                WorkspaceAccent.preferenceKey,
-                                choice.name,
-                              ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextSizeSettingsCard(
-          preferences: widget.preferences,
-          onChanged: (_) => widget.onChanged(),
-        ),
-        const SizedBox(height: 12),
-        ComposerActionSettings(preferences: widget.preferences),
-        if (widget.enableNotifications != null) ...[
-          const SizedBox(height: 12),
-          Card(
-            child: Column(
-              children: [
-                CompactSwitchListTile(
-                  title: const Text('Completed work'),
-                  value:
-                      _confirmed[completionNotificationsKey] as bool? ?? true,
-                  onChanged: _saving
-                      ? null
-                      : (value) => _save(completionNotificationsKey, value),
-                ),
-                CompactSwitchListTile(
-                  title: const Text('Needs attention'),
-                  subtitle: const Text(
-                    'Questions, approvals and failed turns.',
-                  ),
-                  value: _confirmed[attentionNotificationsKey] as bool? ?? true,
-                  onChanged: _saving
-                      ? null
-                      : (value) => _save(attentionNotificationsKey, value),
-                ),
-                CompactSwitchListTile(
-                  title: const Text('Show message previews'),
-                  subtitle: const Text(
-                    'Include reply and question text in alerts.',
-                  ),
-                  value: _confirmed[notificationPreviewsKey] as bool? ?? true,
-                  onChanged: _saving
-                      ? null
-                      : (value) => _save(notificationPreviewsKey, value),
-                ),
-                if (widget.backgroundMonitoringState != null) ...[
-                  ValueListenableBuilder<BackgroundMonitoringState>(
-                    valueListenable: widget.backgroundMonitoringState!,
-                    builder: (_, state, _) {
-                      if (state !=
-                              BackgroundMonitoringState.batteryRestricted &&
-                          state != BackgroundMonitoringState.failed) {
-                        return const SizedBox.shrink();
-                      }
-                      return Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              state ==
-                                      BackgroundMonitoringState
-                                          .batteryRestricted
-                                  ? 'Notifications may be delayed.'
-                                  : 'Notifications paused.',
-                            ),
-                            if (state ==
-                                    BackgroundMonitoringState
-                                        .batteryRestricted &&
-                                widget.openMonitoringBatterySettings != null)
-                              TextButton(
-                                onPressed: () async {
-                                  try {
-                                    await widget
-                                        .openMonitoringBatterySettings!();
-                                  } catch (_) {
-                                    if (context.mounted) {
-                                      showStudioError(
-                                        context,
-                                        'Could not open battery settings.',
-                                      );
-                                    }
-                                  }
-                                },
-                                child: const Text('Allow background activity'),
-                              ),
-                            if (state == BackgroundMonitoringState.failed)
-                              TextButton(
-                                onPressed: widget.onChanged,
-                                child: const Text('Retry'),
-                              ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.notifications_outlined),
-              title: widget.backgroundMonitoringState == null
-                  ? const Text('Test notification')
-                  : ValueListenableBuilder<BackgroundMonitoringState>(
-                      valueListenable: widget.backgroundMonitoringState!,
-                      builder: (_, state, _) => Text(
-                        state == BackgroundMonitoringState.permissionRequired
-                            ? 'Enable notifications'
-                            : 'Test notification',
-                      ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
-              trailing: _requesting
-                  ? const SizedBox.square(
-                      dimension: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.chevron_right),
-              onTap: _requesting ? null : _notifications,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      borderRadius: WingRadius.card,
+                    ),
+                    child: Text(
+                      'Let’s make a plan.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'One step at a time.',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: tokens.onSurface),
+                ),
+              ],
             ),
-          ),
-        ],
-      ],
+          );
+        },
+      ),
     );
   }
 }

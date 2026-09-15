@@ -21,9 +21,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Wing'), findsOneWidget);
-    expect(find.text('1.0.0\ncom.example.hermes'), findsOneWidget);
+    expect(find.text('Version 1.0.0'), findsOneWidget);
     expect(find.textContaining('22332'), findsNothing);
-    expect(find.textContaining('com.example.hermes'), findsOneWidget);
+    expect(find.textContaining('com.example.hermes'), findsNothing);
   });
 
   testWidgets('keeps a compact card layout at large text', (tester) async {

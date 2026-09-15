@@ -40,7 +40,7 @@ Respond to supported approval scopes and structured clarification. Dedicated sud
 
 Administration separates Profile, Server and Health. It includes supported model defaults, SOUL/description, skills/toolsets, shared provider accounts and explicit overrides, MCP controls, profile lifecycle, settings, diagnostics, logs and usage. Unsupported writes are labelled, including individual memory edits and per-tool MCP changes. Eligible backend updates support deliberate single-host or selected-host actions with separate outcomes.
 
-App settings includes paired light/dark themes, accent/text preferences, installed version, offline privacy policy and local alert controls. Configuration export/import transfers connections, credentials and allowlisted preferences; it is not a full draft/app backup.
+App settings groups device preferences into Appearance, Chat, Notifications and About. Appearance includes a live chat preview, paired light/dark themes, accent colors and text size. Chat explains the default action during work; Notifications groups alert preferences and delivery recovery. About contains the installed version, release links and offline privacy policy. Configuration export/import transfers connections, credentials and allowlisted preferences; it is not a full draft/app backup.
 
 The Connections toolbar provides Backup configuration and Restore configuration, in that order. Backup offers an optional passphrase before sharing the file. Leave it blank for a plain JSON backup, including readable credentials, or enter and confirm a passphrase to encrypt it. Restore accepts either format and only needs a passphrase for encrypted files. Restore is also available before adding a first connection.
 

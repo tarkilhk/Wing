@@ -442,7 +442,7 @@ void main() {
               await tester.pumpAndSettle();
               await _capture(tester, '${brightness.name}-settings$adminSuffix');
               await tester.scrollUntilVisible(
-                find.text('Default action while working'),
+                find.text('While your agent is working'),
                 200,
                 scrollable: find.byType(Scrollable).last,
               );

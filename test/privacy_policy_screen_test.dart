@@ -78,7 +78,15 @@ void main() {
         findsWidgets,
       );
       expect(tester.takeException(), isNull);
-      await tester.drag(find.byType(Scrollable).last, const Offset(0, -600));
+      await tester.drag(
+        find
+            .descendant(
+              of: find.byType(PrivacyPolicyScreen),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+        const Offset(0, -600),
+      );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await tester.pageBack();

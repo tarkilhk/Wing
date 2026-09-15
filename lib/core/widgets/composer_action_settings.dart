@@ -57,13 +57,11 @@ class _ComposerActionSettingsState extends State<ComposerActionSettings> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Default action while working',
+              'While your agent is working',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            const Text(
-              'For this device. Hold the chat button and slide to choose another action. Idle chats use Send.',
-            ),
+            const Text('Choose what a tap on the chat button does.'),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
@@ -78,6 +76,18 @@ class _ComposerActionSettingsState extends State<ComposerActionSettings> {
                     onSelected: _saving ? null : (_) => _save(action),
                   ),
               ],
+            ),
+            const SizedBox(height: 12),
+            Text(switch (_selected) {
+              ComposerAction.queue =>
+                'Queue sends your message after the current reply.',
+              ComposerAction.stop => 'Stop ends the current response.',
+              _ => 'Steer sends your message into the work in progress.',
+            }, style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 8),
+            Text(
+              'Hold and slide to use another action.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         ),

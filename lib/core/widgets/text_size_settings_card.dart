@@ -54,11 +54,15 @@ class _TextSizeSettingsCardState extends State<TextSizeSettingsCard> {
                     style: Theme.of(sheetContext).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Explicit choices adjust Android accessibility text size; '
-                    'System leaves it unchanged.',
+                  const Text('Follows your Android text size.'),
+                  const SizedBox(height: 16),
+                  Semantics(
+                    label: 'Text size preview',
+                    child: const ExcludeSemantics(
+                      child: Text('A little easier to read.'),
+                    ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 16),
                   RadioGroup<TextSizePreference>(
                     groupValue: _preference,
                     onChanged: (value) async {
@@ -118,45 +122,18 @@ class _TextSizeSettingsCardState extends State<TextSizeSettingsCard> {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Semantics(
-            label: 'Text size: ${_preference.label}',
-            button: true,
-            child: ExcludeSemantics(
-              child: ListTile(
-                leading: const Icon(Icons.format_size),
-                title: const Text('Text size'),
-                subtitle: Text(
-                  '${_preference.label} — ${_preference.description}',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _showPicker,
-              ),
-            ),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Semantics(
-              label: 'Text size preview',
-              child: ExcludeSemantics(
-                child: Text(
-                  'Preview',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Text(
-              'Wing keeps Android accessibility text scaling active.',
-            ),
-          ),
-        ],
+    return Semantics(
+      label: 'Text size: ${_preference.label}',
+      button: true,
+      onTap: _showPicker,
+      child: ExcludeSemantics(
+        child: ListTile(
+          leading: const Icon(Icons.format_size),
+          title: const Text('Text size'),
+          subtitle: Text(_preference.label),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: _showPicker,
+        ),
       ),
     );
   }

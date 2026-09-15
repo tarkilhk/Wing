@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Organize App settings into Appearance, Chat, Notifications and About, with a live chat preview, clearer action descriptions and compact text-size controls.
+
 - Run background monitoring only while chats are working; keep question and reply notifications when the service stops.
 - Replace the connection dialog with a Studio journey using Wing’s portrait and feather artwork: one dashboard URL, dashboard sign-in, separate profile/chat/history checks, then name and save. Hide proxy options in Custom setup, honor standard URL ports, retain failed-save drafts, and cancel provisional network work when leaving.
 

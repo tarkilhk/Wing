@@ -77,6 +77,8 @@ void main() {
       ),
       findsOneWidget,
     );
+    await tester.tap(find.text('Text size'));
+    await tester.pumpAndSettle();
     expect(
       find.byWidgetPredicate(
         (widget) =>
@@ -85,8 +87,6 @@ void main() {
       ),
       findsOneWidget,
     );
-    await tester.tap(find.text('Text size'));
-    await tester.pumpAndSettle();
     final extraLarge = find.text('Extra large');
     await tester.scrollUntilVisible(extraLarge, 200);
     await tester.tap(extraLarge);
