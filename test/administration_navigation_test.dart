@@ -5,11 +5,11 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
-import 'package:hermes_android/core/screens/administration/administration_content.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/profile_workspace_theme.dart';
+import 'package:wing/core/screens/administration/administration_content.dart';
 import 'support/administration_fixture.dart';
 import 'support/profile_browser_fixture.dart';
 
@@ -66,7 +66,7 @@ void main() {
         key: const ValueKey('admin-preview'),
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
-          theme: profileWorkspaceTheme(hermesTheme(brightness), accent: accent),
+          theme: profileWorkspaceTheme(wingTheme(brightness), accent: accent),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(
               context,

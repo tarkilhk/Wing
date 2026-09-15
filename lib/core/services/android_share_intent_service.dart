@@ -90,7 +90,7 @@ class AndroidSharePayload {
 
 /// Receives text, URLs, images, and files sent through Android share intents.
 class AndroidShareIntentService {
-  static const channelName = 'com.hermesagent.hermes_android/share';
+  static const channelName = 'com.tarkilhk.wing/share';
   static const _channel = MethodChannel(channelName);
   static const _genericIntakeError = 'Shared content could not be imported.';
 

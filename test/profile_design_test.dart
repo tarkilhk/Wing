@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/models/gateway_activity.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
-import 'package:hermes_android/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/models/gateway_activity.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/profile_workspace_theme.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'support/profile_actions_fixture.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 
@@ -37,7 +37,7 @@ void main() {
 
   test('workspace status-bar icons contrast with the active theme', () {
     for (final brightness in Brightness.values) {
-      final theme = profileWorkspaceTheme(hermesTheme(brightness));
+      final theme = profileWorkspaceTheme(wingTheme(brightness));
       expect(
         theme.appBarTheme.systemOverlayStyle!.statusBarIconBrightness,
         brightness == Brightness.light ? Brightness.dark : Brightness.light,
@@ -51,7 +51,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MaterialApp(
-        theme: hermesTheme(Brightness.light),
+        theme: wingTheme(Brightness.light),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(
             context,
@@ -70,7 +70,7 @@ void main() {
       for (final brightness in Brightness.values) {
         for (final accent in WorkspaceAccent.values) {
           final theme = profileWorkspaceTheme(
-            hermesTheme(brightness),
+            wingTheme(brightness),
             accent: accent,
           );
           final c = theme.colorScheme;
@@ -89,8 +89,8 @@ void main() {
             );
           }
           expect(
-            theme.extension<HermesTokens>()!.running,
-            HermesTokens.forBrightness(brightness).running,
+            theme.extension<WingTokens>()!.running,
+            WingTokens.forBrightness(brightness).running,
           );
         }
       }

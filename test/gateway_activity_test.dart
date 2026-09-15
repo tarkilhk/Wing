@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/gateway_activity.dart';
+import 'package:wing/core/models/gateway_activity.dart';
 
 void main() {
   group('GatewayToolActivity', () {
@@ -7,7 +7,7 @@ void main() {
       final activity = GatewayToolActivity.fromGatewayEvent('tool.start', {
         'tool_id': 'tool-1',
         'name': 'search_files',
-        'context': 'Hermes Android workspace',
+        'context': 'Wing workspace',
         'args_text': '{"query":"not rendered"}',
       });
 
@@ -16,7 +16,7 @@ void main() {
       expect(activity.name, 'search_files');
       expect(activity.displayName, 'Search files');
       expect(activity.phase, GatewayToolActivityPhase.running);
-      expect(activity.detail, 'Hermes Android workspace');
+      expect(activity.detail, 'Wing workspace');
     });
 
     test('parses progress without inventing an id', () {

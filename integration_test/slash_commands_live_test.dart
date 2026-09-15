@@ -5,12 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/main.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_selection_store.dart';
-import 'package:hermes_android/core/services/profile_connection_identity.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/widgets/slash_command_suggestions.dart';
+import 'package:wing/main.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_selection_store.dart';
+import 'package:wing/core/services/profile_connection_identity.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/widgets/slash_command_suggestions.dart';
 
 /// Real emulator + Prestige's installed gateway. No model prompts are submitted.
 void main() {
@@ -36,7 +36,7 @@ void main() {
         await ProfileConnectionIdentity().resolve(connection),
         'android-qa-a',
       );
-      await tester.pumpWidget(HermesApp(connManager: manager));
+      await tester.pumpWidget(WingApp(connManager: manager));
 
       Future<void> until(bool Function() condition) async {
         final deadline = DateTime.now().add(const Duration(seconds: 60));

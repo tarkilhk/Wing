@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 
 import '../services/connection_manager.dart';
 import '../services/profile_gateway.dart';
@@ -227,7 +227,7 @@ class _DiagnosticRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = HermesTokens.of(context);
+    final tokens = WingTokens.of(context);
     final (icon, color) = switch (result.state) {
       _DiagnosticState.ready => (Icons.check_circle_outline, tokens.success),
       _DiagnosticState.failed => (Icons.error_outline, tokens.danger),

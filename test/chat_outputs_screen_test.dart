@@ -5,17 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/chat_output.dart';
-import 'package:hermes_android/core/screens/chat_outputs_screen.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/remote_files_client.dart';
-import 'package:hermes_android/core/services/android_file_delivery_service.dart';
-import 'package:hermes_android/core/services/media_preview_service.dart';
-import 'package:hermes_android/core/services/pdf_preview_service.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/widgets/markdown_code_block.dart';
-import 'package:hermes_android/core/widgets/markdown_message_content.dart';
-import 'package:hermes_android/core/widgets/web_output_preview.dart';
+import 'package:wing/core/models/chat_output.dart';
+import 'package:wing/core/screens/chat_outputs_screen.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/remote_files_client.dart';
+import 'package:wing/core/services/android_file_delivery_service.dart';
+import 'package:wing/core/services/media_preview_service.dart';
+import 'package:wing/core/services/pdf_preview_service.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/widgets/markdown_code_block.dart';
+import 'package:wing/core/widgets/markdown_message_content.dart';
+import 'package:wing/core/widgets/web_output_preview.dart';
 
 class _FileDelivery extends AndroidFileDeliveryService {
   final Future<bool> Function(RemoteFileDownload file, String? mimeType) open;

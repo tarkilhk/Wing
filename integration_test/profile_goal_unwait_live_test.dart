@@ -5,11 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:hermes_android/core/models/session_control.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/widgets/profile_goal_panel.dart';
+import 'package:wing/core/models/session_control.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/widgets/profile_goal_panel.dart';
 
 ({String processId, int pid})? _backgroundProcess(Object? value) {
   if (value is String) {

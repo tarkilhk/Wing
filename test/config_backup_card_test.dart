@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/services/config_backup.dart';
-import 'package:hermes_android/core/services/config_backup_service.dart';
-import 'package:hermes_android/core/widgets/config_backup_card.dart';
+import 'package:wing/core/services/config_backup.dart';
+import 'package:wing/core/services/config_backup_service.dart';
+import 'package:wing/core/widgets/config_backup_card.dart';
 
 Widget wrap(Widget child) {
   return MaterialApp(

@@ -1,4 +1,4 @@
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import 'anchored_expansion_tile.dart';
@@ -445,7 +445,7 @@ class _ProcessTile extends StatelessWidget {
     childrenPadding: const EdgeInsets.only(left: 12, right: 4, bottom: 8),
     title: Text(
       process.command,
-      style: HermesTokens.of(context).typography.mono,
+      style: WingTokens.of(context).typography.mono,
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
     ),
@@ -456,7 +456,7 @@ class _ProcessTile extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: SelectableText(
             'Folder: $cwd',
-            style: HermesTokens.of(context).typography.mono,
+            style: WingTokens.of(context).typography.mono,
           ),
         ),
       if (process.pid case final pid?)
@@ -487,7 +487,7 @@ class _ProcessTile extends StatelessWidget {
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
           child: SelectableText(
             output,
-            style: HermesTokens.of(context).typography.mono,
+            style: WingTokens.of(context).typography.mono,
           ),
         ),
       ],

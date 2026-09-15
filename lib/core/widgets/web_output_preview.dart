@@ -11,7 +11,7 @@ class WebOutputPreview extends StatefulWidget {
   static const maxMermaidSourceLength = 50000;
   static const maxSvgSourceLength = 256 * 1024;
   static const maxHtmlSourceLength = 1024 * 1024;
-  static const viewType = 'com.hermesagent.hermes_android/mermaid_diagram';
+  static const viewType = 'com.tarkilhk.wing/mermaid_diagram';
 
   final String source;
   final WebOutputFormat format;

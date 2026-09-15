@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/widgets/chat_intelligence_picker.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/chat_intelligence_picker.dart';
 
 void main() {
   test('model options reject malformed lists instead of partial choices', () {
@@ -41,7 +41,7 @@ void main() {
     var pressed = false;
     await tester.pumpWidget(
       MaterialApp(
-        theme: hermesTheme(Brightness.dark),
+        theme: wingTheme(Brightness.dark),
         home: Scaffold(
           body: Center(
             child: SizedBox(
@@ -74,7 +74,7 @@ void main() {
     ChatIntelligenceSelection? result;
     await tester.pumpWidget(
       MaterialApp(
-        theme: hermesTheme(Brightness.dark),
+        theme: wingTheme(Brightness.dark),
         home: Scaffold(
           body: Center(
             child: ChatIntelligenceSheet(
@@ -141,7 +141,7 @@ void main() {
     ChatIntelligenceSelection? result;
     await tester.pumpWidget(
       MaterialApp(
-        theme: hermesTheme(Brightness.dark),
+        theme: wingTheme(Brightness.dark),
         home: Scaffold(
           body: ChatIntelligenceSheet(
             choices: grouped,
@@ -190,7 +190,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: hermesTheme(Brightness.dark),
+        theme: wingTheme(Brightness.dark),
         home: MediaQuery(
           data: const MediaQueryData(textScaler: TextScaler.linear(2)),
           child: Scaffold(

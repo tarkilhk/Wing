@@ -1,4 +1,4 @@
-/// Gateway capability discovery for the Hermes Android shell.
+/// Gateway capability discovery for the Wing shell.
 ///
 /// Phase 0 of `docs/ANDROID_DAILY_DRIVER_ROADMAP.md` requires every later
 /// feature to be capability-aware rather than to assume the newest gateway.

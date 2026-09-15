@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/provider_access.dart';
+import 'package:wing/core/models/provider_access.dart';
 
 void main() {
   final now = DateTime.utc(2026, 9, 14);

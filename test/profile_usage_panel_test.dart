@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/services/profiles_repository.dart';
-import 'package:hermes_android/core/widgets/profile_usage_panel.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profiles_repository.dart';
+import 'package:wing/core/widgets/profile_usage_panel.dart';
 
 ProfileGateway gateway(
   Future<Map<String, dynamic>> Function(String, Map<String, String>) get,

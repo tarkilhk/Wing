@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/connection.dart';
-import 'package:hermes_android/core/services/gateway_turn_application_controller.dart';
-import 'package:hermes_android/core/services/gateway_turn_coordinator.dart';
-import 'package:hermes_android/core/services/gateway_turn_recovery.dart';
+import 'package:wing/core/models/connection.dart';
+import 'package:wing/core/services/gateway_turn_application_controller.dart';
+import 'package:wing/core/services/gateway_turn_coordinator.dart';
+import 'package:wing/core/services/gateway_turn_recovery.dart';
 
 void main() {
   test('retains one session across screen remounts until app close', () async {

@@ -209,7 +209,7 @@ async def health(request: web.Request) -> web.Response:
     return web.json_response(
         {
             "status": "ok",
-            "service": "hermes-android-fixture",
+            "service": "wing-fixture",
             "environment": "local-emulator-only",
             "contracts": [
                 "mobile-rest",
@@ -249,7 +249,7 @@ async def dashboard_home(request: web.Request) -> web.Response:
         text=(
             "<!doctype html><html><body><script>"
             f'window.__HERMES_SESSION_TOKEN__="{DASHBOARD_TOKEN}";'
-            "</script>Hermes Android fixture</body></html>"
+            "</script>Wing fixture</body></html>"
         ),
         content_type="text/html",
     )
@@ -912,7 +912,7 @@ async def handle_rpc(
                                 "goal": "Inspect fixture transport",
                                 "task_index": 1,
                                 "task_count": 1,
-                                "model": "hermes-android-fixture",
+                                "model": "wing-fixture",
                             },
                         )
                     )
@@ -1007,7 +1007,7 @@ async def handle_rpc(
                             {
                                 "tool_id": tool_id,
                                 "name": "search_files",
-                                "context": "Hermes Android workspace",
+                                "context": "Wing workspace",
                                 "args_text": '{"query":"gateway events"}',
                             },
                         )
@@ -1045,7 +1045,7 @@ async def handle_rpc(
                             "approval.request",
                             session_id,
                             {
-                                "command": "echo hermes-android-approval",
+                                "command": "echo wing-approval",
                                 "description": "Run a synthetic fixture command",
                                 "allow_permanent": True,
                                 "choices": ["once", "session", "always", "deny"],
@@ -1603,7 +1603,7 @@ def main() -> None:
         args.turn_recovery_ledger,
     )
     print(
-        f"Hermes Android fixture listening on http://{args.host}:{args.port}",
+        f"Wing fixture listening on http://{args.host}:{args.port}",
         flush=True,
     )
     web.run_app(

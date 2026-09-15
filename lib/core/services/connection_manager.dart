@@ -34,7 +34,7 @@ class FlutterSecureCredentialStore implements CredentialStore {
   static const AndroidOptions _androidOptions = AndroidOptions(
     resetOnError: false,
     migrateWithBackup: true,
-    storageNamespace: 'hermes_android_connections',
+    storageNamespace: 'wing_connections',
   );
 
   final FlutterSecureStorage _storage;

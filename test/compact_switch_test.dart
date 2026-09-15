@@ -5,14 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/widgets/compact_switch.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/compact_switch.dart';
 
 void main() {
   setUpAll(() async {
     final fontPath = Platform.environment['HERMES_CONTROL_FONT'];
     if (fontPath != null) {
-      final loader = FontLoader(HermesTypography.sans);
+      final loader = FontLoader(WingTypography.sans);
       loader.addFont(File(fontPath).readAsBytes().then(ByteData.sublistView));
       await loader.load();
     }
@@ -76,7 +76,7 @@ void main() {
       final boundaryKey = GlobalKey();
       await tester.pumpWidget(
         MaterialApp(
-          theme: hermesTheme(brightness),
+          theme: wingTheme(brightness),
           home: MediaQuery(
             data: const MediaQueryData(textScaler: TextScaler.linear(2)),
             child: RepaintBoundary(

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/connection.dart';
-import 'package:hermes_android/core/widgets/gateway_headers_editor.dart';
+import 'package:wing/core/models/connection.dart';
+import 'package:wing/core/widgets/gateway_headers_editor.dart';
 
 void main() {
   test('shared validator rejects managed, duplicate and unsafe headers', () {

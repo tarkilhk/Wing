@@ -1,6 +1,6 @@
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 
 import '../services/config_backup.dart';
 import '../services/config_backup_service.dart';
@@ -90,7 +90,7 @@ class _ExportPassphraseSheetState extends State<ExportPassphraseSheet> {
               decoration: InputDecoration(
                 labelText: 'Passphrase',
                 border: const OutlineInputBorder(
-                  borderRadius: HermesRadius.control,
+                  borderRadius: WingRadius.control,
                 ),
                 suffixIcon: IconButton(
                   icon: Icon(
@@ -108,7 +108,7 @@ class _ExportPassphraseSheetState extends State<ExportPassphraseSheet> {
               obscureText: _obscure,
               decoration: const InputDecoration(
                 labelText: 'Confirm passphrase',
-                border: OutlineInputBorder(borderRadius: HermesRadius.control),
+                border: OutlineInputBorder(borderRadius: WingRadius.control),
               ),
               onSubmitted: (_) => _submit(),
             ),
@@ -195,7 +195,7 @@ class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
               decoration: InputDecoration(
                 labelText: 'Passphrase',
                 border: const OutlineInputBorder(
-                  borderRadius: HermesRadius.control,
+                  borderRadius: WingRadius.control,
                 ),
                 suffixIcon: IconButton(
                   icon: Icon(

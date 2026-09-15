@@ -4,7 +4,7 @@ import 'remote_files_client.dart';
 
 /// Hands an already authenticated download to an installed Android viewer.
 class AndroidFileDeliveryService {
-  static const channelName = 'com.hermesagent.hermes_android/file_delivery';
+  static const channelName = 'com.tarkilhk.wing/file_delivery';
   static const _maxBytes = RemoteFilesClient.defaultMaxDownloadBytes;
 
   final MethodChannel _channel;

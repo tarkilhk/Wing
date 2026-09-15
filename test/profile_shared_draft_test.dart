@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/attachment_draft.dart';
-import 'package:hermes_android/core/services/android_share_intent_service.dart';
-import 'package:hermes_android/core/services/attachment_draft_service.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/models/queued_prompt_draft.dart';
+import 'package:wing/core/models/attachment_draft.dart';
+import 'package:wing/core/services/android_share_intent_service.dart';
+import 'package:wing/core/services/attachment_draft_service.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/models/queued_prompt_draft.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;

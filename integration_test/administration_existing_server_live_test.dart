@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/models/backend_update.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/models/backend_update.dart';
 
 /// Read-only shell/navigation acceptance against the owner's running server.
 void main() {
@@ -36,7 +36,7 @@ void main() {
       var connectionsRequested = false;
       await tester.pumpWidget(
         MaterialApp(
-          theme: hermesTheme(Brightness.dark),
+          theme: wingTheme(Brightness.dark),
           home: ProfileWorkspaceScreen(
             controller: controller,
             onConnections: () => connectionsRequested = true,

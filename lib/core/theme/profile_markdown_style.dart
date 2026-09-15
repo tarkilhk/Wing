@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'hermes_theme.dart';
+import 'wing_theme.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 // flutter_markdown merges its theme paragraph style into nested quotes. Flutter
@@ -58,7 +58,7 @@ MarkdownStyleSheet profileMarkdownStyle(
     ),
     codeblockDecoration: BoxDecoration(
       color: colors.surfaceContainerLow,
-      borderRadius: HermesRadius.card,
+      borderRadius: WingRadius.card,
     ),
     // The Markdown renderer scrolls intrinsic tables horizontally rather than
     // crushing every column into the phone's width.

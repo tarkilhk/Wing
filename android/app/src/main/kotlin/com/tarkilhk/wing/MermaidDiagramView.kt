@@ -1,4 +1,4 @@
-package com.hermesagent.hermes_android
+package com.tarkilhk.wing
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -273,7 +273,7 @@ private class MermaidDiagramView(
         private const val MERMAID_FORMAT = "mermaid"
         private const val SVG_FORMAT = "svg"
         private const val HTML_FORMAT = "html"
-        private const val ORIGIN = "https://hermes-diagrams.invalid"
+        private const val ORIGIN = "https://wing-diagrams.invalid"
         private const val ENTRY_URL = "$ORIGIN/index.html"
         private val ASSETS = mapOf(
             ENTRY_URL to Asset("index.html", "text/html"),

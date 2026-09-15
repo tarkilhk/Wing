@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/widgets/workspace_options_menu.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/workspace_options_menu.dart';
 
 class _OptionsReviewBinding extends AutomatedTestWidgetsFlutterBinding {
   @override
@@ -52,7 +52,7 @@ void main() {
         key: const ValueKey('options-preview'),
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
-          theme: hermesTheme(brightness),
+          theme: wingTheme(brightness),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(
               context,

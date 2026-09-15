@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 /// Bridges Android launcher actions into the Flutter navigation lifecycle.
 class AndroidLaunchIntentService {
-  static const channelName = 'com.hermesagent.hermes_android/launch';
+  static const channelName = 'com.tarkilhk.wing/launch';
   static const _quickChatAction = 'quickChat';
 
   final MethodChannel _channel;

@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/services/ai_search_query_rewriter.dart';
+import 'package:wing/core/services/ai_search_query_rewriter.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 

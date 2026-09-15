@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/gateway_activity.dart';
-import 'package:hermes_android/core/models/gateway_insight.dart';
-import 'package:hermes_android/core/utils/chat_display_items.dart';
+import 'package:wing/core/models/gateway_activity.dart';
+import 'package:wing/core/models/gateway_insight.dart';
+import 'package:wing/core/utils/chat_display_items.dart';
 
 GatewayToolActivity _tool(String name) =>
     GatewayToolActivity(name: name, phase: GatewayToolActivityPhase.completed);

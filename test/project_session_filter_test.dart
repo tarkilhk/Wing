@@ -8,8 +8,8 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/session.dart';
-import 'package:hermes_android/core/utils/project_session_filter.dart';
+import 'package:wing/core/models/session.dart';
+import 'package:wing/core/utils/project_session_filter.dart';
 
 Session _session({
   String id = 's1',

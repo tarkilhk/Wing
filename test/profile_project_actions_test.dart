@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/screens/profile_project_actions.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/screens/profile_project_actions.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
@@ -57,40 +57,44 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('rename stays reviewable on failure and blocks duplicate submit', (
-    tester,
-  ) async {
-    await showHarness(tester);
-    await openAction(tester, 'rename');
-    await tester.enterText(
-      find.byKey(const ValueKey('project-name-field')),
-      'Renamed project',
-    );
+  testWidgets(
+    'rename stays reviewable on failure and blocks duplicate submit',
+    (tester) async {
+      await showHarness(tester);
+      await openAction(tester, 'rename');
+      await tester.enterText(
+        find.byKey(const ValueKey('project-name-field')),
+        'Renamed project',
+      );
 
-    host.delay = Completer<void>();
-    await tester.tap(find.byKey(const ValueKey('project-rename-save')));
-    await tester.pump();
-    expect(
-      tester
-          .widget<FilledButton>(
-            find.byKey(const ValueKey('project-rename-save')),
-          )
-          .onPressed,
-      isNull,
-    );
-    expect(host.calls.where((call) => call.$2 == 'projects.update'), hasLength(1));
-    host.failMutation = true;
-    host.delay!.complete();
-    await tester.pumpAndSettle();
+      host.delay = Completer<void>();
+      await tester.tap(find.byKey(const ValueKey('project-rename-save')));
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.byKey(const ValueKey('project-rename-save')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        host.calls.where((call) => call.$2 == 'projects.update'),
+        hasLength(1),
+      );
+      host.failMutation = true;
+      host.delay!.complete();
+      await tester.pumpAndSettle();
 
-    expect(find.text('Renamed project'), findsOneWidget);
-    expect(find.textContaining('not acknowledged'), findsOneWidget);
-    host.failMutation = false;
-    await tester.tap(find.byKey(const ValueKey('project-rename-save')));
-    await tester.pumpAndSettle();
-    expect(find.text('Rename project'), findsNothing);
-    expect(host.personalProject['label'], 'Renamed project');
-  });
+      expect(find.text('Renamed project'), findsOneWidget);
+      expect(find.textContaining('not acknowledged'), findsOneWidget);
+      host.failMutation = false;
+      await tester.tap(find.byKey(const ValueKey('project-rename-save')));
+      await tester.pumpAndSettle();
+      expect(find.text('Rename project'), findsNothing);
+      expect(host.personalProject['label'], 'Renamed project');
+    },
+  );
 
   testWidgets('appearance sends Desktop color and icon values', (tester) async {
     await showHarness(tester);
@@ -113,7 +117,9 @@ void main() {
     expect(find.text('Project appearance'), findsNothing);
   });
 
-  testWidgets('captured owner prevents a profile-switched rename', (tester) async {
+  testWidgets('captured owner prevents a profile-switched rename', (
+    tester,
+  ) async {
     await showHarness(tester);
     await openAction(tester, 'rename');
     await tester.enterText(
@@ -130,26 +136,30 @@ void main() {
     expect(host.calls.where((call) => call.$2 == 'projects.update'), isEmpty);
   });
 
-  testWidgets('delete states its scope and keeps a rejected confirmation open', (
-    tester,
-  ) async {
-    await showHarness(tester);
-    await openAction(tester, 'delete');
-    expect(find.textContaining('chats will remain'), findsOneWidget);
-    expect(find.textContaining('Files on the host will not be deleted'), findsOneWidget);
+  testWidgets(
+    'delete states its scope and keeps a rejected confirmation open',
+    (tester) async {
+      await showHarness(tester);
+      await openAction(tester, 'delete');
+      expect(find.textContaining('chats will remain'), findsOneWidget);
+      expect(
+        find.textContaining('Files on the host will not be deleted'),
+        findsOneWidget,
+      );
 
-    host.failMutation = true;
-    await tester.tap(find.byKey(const ValueKey('project-delete-confirm')));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('not acknowledged'), findsOneWidget);
-    expect(find.text('Delete project?'), findsOneWidget);
+      host.failMutation = true;
+      await tester.tap(find.byKey(const ValueKey('project-delete-confirm')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('not acknowledged'), findsOneWidget);
+      expect(find.text('Delete project?'), findsOneWidget);
 
-    host.failMutation = false;
-    await tester.tap(find.byKey(const ValueKey('project-delete-confirm')));
-    await tester.pumpAndSettle();
-    expect(find.text('Delete project?'), findsNothing);
-    expect(controller.current!.projects, isEmpty);
-  });
+      host.failMutation = false;
+      await tester.tap(find.byKey(const ValueKey('project-delete-confirm')));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete project?'), findsNothing);
+      expect(controller.current!.projects, isEmpty);
+    },
+  );
 
   testWidgets('project avatar accepts server appearance and invalid fallback', (
     tester,
@@ -159,10 +169,8 @@ void main() {
         home: Row(
           children: [
             Builder(
-              builder: (context) => projectAvatar(context, {
-                'color': '#123456',
-                'icon': 'repo',
-              }),
+              builder: (context) =>
+                  projectAvatar(context, {'color': '#123456', 'icon': 'repo'}),
             ),
             Builder(
               builder: (context) => projectAvatar(context, {
@@ -213,7 +221,11 @@ class _ProjectFixture extends ProfileBrowserFixture {
       get: base.read,
       rpc: (method, params) async {
         if (method == 'projects.update' || method == 'projects.delete') {
-          calls.add((scope.profileName, method, Map<String, dynamic>.from(params)));
+          calls.add((
+            scope.profileName,
+            method,
+            Map<String, dynamic>.from(params),
+          ));
           await delay?.future;
           delay = null;
           if (failMutation) throw StateError('Rejected');

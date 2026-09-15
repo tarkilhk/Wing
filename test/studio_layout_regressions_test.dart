@@ -5,20 +5,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/screens/administration/admin_operations_page.dart';
-import 'package:hermes_android/core/screens/administration/admin_widgets.dart';
-import 'package:hermes_android/core/screens/profile_capabilities_screen.dart';
-import 'package:hermes_android/core/services/administration_repository.dart';
-import 'package:hermes_android/core/screens/administration/admin_defaults_page.dart';
-import 'package:hermes_android/core/screens/administration/admin_health_page.dart';
-import 'package:hermes_android/core/screens/administration/admin_skills_page.dart';
-import 'package:hermes_android/core/screens/administration/admin_providers_page.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/widgets/config_backup_card.dart';
-import 'package:hermes_android/core/widgets/profile_default_model_sheet.dart';
-import 'package:hermes_android/core/widgets/chat_intelligence_picker.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/screens/administration/admin_operations_page.dart';
+import 'package:wing/core/screens/administration/admin_widgets.dart';
+import 'package:wing/core/screens/profile_capabilities_screen.dart';
+import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/screens/administration/admin_defaults_page.dart';
+import 'package:wing/core/screens/administration/admin_health_page.dart';
+import 'package:wing/core/screens/administration/admin_skills_page.dart';
+import 'package:wing/core/screens/administration/admin_providers_page.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/config_backup_card.dart';
+import 'package:wing/core/widgets/profile_default_model_sheet.dart';
+import 'package:wing/core/widgets/chat_intelligence_picker.dart';
 import 'support/administration_fixture.dart';
 
 const export = bool.fromEnvironment('STUDIO_AUDIT_REVIEW');
@@ -40,7 +40,7 @@ Future<void> capture(WidgetTester tester, String name) async {
 
 Widget app(Widget home, Brightness brightness) => MaterialApp(
   debugShowCheckedModeBanner: false,
-  theme: hermesTheme(brightness),
+  theme: wingTheme(brightness),
   builder: (context, child) => RepaintBoundary(
     key: boundary,
     child: MediaQuery(

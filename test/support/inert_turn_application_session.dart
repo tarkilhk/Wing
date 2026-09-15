@@ -7,9 +7,9 @@
 /// for behaviour this fake deliberately does not model.
 library;
 
-import 'package:hermes_android/core/services/gateway_turn_application_controller.dart';
-import 'package:hermes_android/core/services/gateway_turn_coordinator.dart';
-import 'package:hermes_android/core/services/gateway_turn_recovery.dart';
+import 'package:wing/core/services/gateway_turn_application_controller.dart';
+import 'package:wing/core/services/gateway_turn_coordinator.dart';
+import 'package:wing/core/services/gateway_turn_recovery.dart';
 
 class InertTurnApplicationSession implements GatewayTurnApplicationSession {
   bool closed = false;

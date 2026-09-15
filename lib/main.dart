@@ -27,7 +27,7 @@ import 'core/services/profiles_repository.dart';
 import 'core/models/hermes_profile.dart';
 import 'core/services/turn_notification_service.dart';
 import 'core/services/background_push_service.dart';
-import 'core/theme/hermes_theme.dart';
+import 'core/theme/wing_theme.dart';
 import 'core/theme/profile_workspace_theme.dart';
 import 'core/widgets/app_drawer.dart';
 import 'core/widgets/playful_portrait.dart';
@@ -44,7 +44,7 @@ void main() async {
   final launchIntents = AndroidLaunchIntentService();
   await Future.wait([shareIntents.initialize(), launchIntents.initialize()]);
   runApp(
-    HermesApp(
+    WingApp(
       connManager: connManager,
       shareIntents: shareIntents,
       launchIntents: launchIntents,
@@ -52,7 +52,7 @@ void main() async {
   );
 }
 
-class HermesApp extends StatefulWidget {
+class WingApp extends StatefulWidget {
   final ConnectionManager connManager;
   final AndroidShareIntentService? shareIntents;
   final AndroidLaunchIntentService? launchIntents;
@@ -60,7 +60,7 @@ class HermesApp extends StatefulWidget {
 
   /// When supplied, this app owns and disposes the registry.
   final ProfileWorkspaceRegistry? profileControllers;
-  const HermesApp({
+  const WingApp({
     required this.connManager,
     this.shareIntents,
     this.launchIntents,
@@ -70,7 +70,7 @@ class HermesApp extends StatefulWidget {
   });
 
   @override
-  State<HermesApp> createState() => HermesAppState();
+  State<WingApp> createState() => WingAppState();
 
   static ThemeMode getThemeMode(SharedPreferences prefs) {
     final stored = prefs.getString('theme_mode') ?? 'system';
@@ -101,7 +101,7 @@ class HermesApp extends StatefulWidget {
   }
 }
 
-class HermesAppState extends State<HermesApp> with WidgetsBindingObserver {
+class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _homeKey = GlobalKey<HomeScreenState>();
   final _notificationRoutes = <ProfileWorkspaceController, Route<void>>{};
@@ -278,7 +278,7 @@ class HermesAppState extends State<HermesApp> with WidgetsBindingObserver {
     );
     _notificationDeliveries = PushDeliveryLedger(widget.connManager.prefs);
     _backgroundPushState = ValueNotifier(
-      hermesFirebaseOptions() == null
+      wingFirebaseOptions() == null
           ? BackgroundPushState.unavailableBuild
           : BackgroundPushState.syncing,
     );
@@ -354,12 +354,12 @@ class HermesAppState extends State<HermesApp> with WidgetsBindingObserver {
       if (!_disposed) {
         _backgroundPushState.value = BackgroundPushState.unavailableServer;
       }
-      // Registration failure must not interrupt local Hermes use.
+      // Registration failure must not interrupt local Wing use.
     }
   }
 
   Future<BackgroundPushService?> _backgroundPush() {
-    if (hermesFirebaseOptions() == null) return Future.value(null);
+    if (wingFirebaseOptions() == null) return Future.value(null);
     final existing = _backgroundPushReady;
     if (existing != null) return existing;
     final attempt = BackgroundPushService.create(
@@ -412,22 +412,22 @@ class HermesAppState extends State<HermesApp> with WidgetsBindingObserver {
     return MaterialApp(
       navigatorKey: _navigatorKey,
       title: 'Wing',
-      themeMode: HermesApp.getThemeMode(widget.connManager.prefs),
+      themeMode: WingApp.getThemeMode(widget.connManager.prefs),
       theme: profileWorkspaceTheme(
-        hermesTheme(Brightness.light),
+        wingTheme(Brightness.light),
         accent: WorkspaceAccent.fromName(
           widget.connManager.prefs.getString(WorkspaceAccent.preferenceKey),
         ),
       ),
       darkTheme: profileWorkspaceTheme(
-        hermesTheme(Brightness.dark),
+        wingTheme(Brightness.dark),
         accent: WorkspaceAccent.fromName(
           widget.connManager.prefs.getString(WorkspaceAccent.preferenceKey),
         ),
       ),
       builder: (context, child) {
         final systemMediaQuery = MediaQuery.of(context);
-        final preference = HermesApp.getTextSizePreference(
+        final preference = WingApp.getTextSizePreference(
           widget.connManager.prefs,
         );
         return MediaQuery(
@@ -1398,7 +1398,7 @@ class _AddDialogState extends State<_AddDialog> {
                     color: Theme.of(
                       context,
                     ).colorScheme.error.withValues(alpha: 0.1),
-                    borderRadius: HermesRadius.card,
+                    borderRadius: WingRadius.card,
                     border: Border.all(
                       color: Theme.of(
                         context,

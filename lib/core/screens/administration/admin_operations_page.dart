@@ -1,4 +1,4 @@
-import '../../theme/hermes_theme.dart';
+import '../../theme/wing_theme.dart';
 import '../../widgets/studio_select.dart';
 import '../../widgets/studio_error.dart';
 import 'dart:async';
@@ -89,7 +89,7 @@ class _AdminActionPageState extends State<AdminActionPage> {
         const SizedBox(height: 16),
         SelectableText(
           (_status?['lines'] as List? ?? []).join('\n'),
-          style: HermesTokens.of(context).typography.mono,
+          style: WingTokens.of(context).typography.mono,
         ),
         TextButton(
           onPressed: _loading ? null : _check,
@@ -253,7 +253,7 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                   (data['lines'] as List? ?? data['logs'] as List? ?? []).join(
                     '\n',
                   ),
-                  style: HermesTokens.of(context).typography.mono,
+                  style: WingTokens.of(context).typography.mono,
                 ),
               ],
             ),

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/gateway_sensitive_prompt.dart';
+import 'package:wing/core/models/gateway_sensitive_prompt.dart';
 
 void main() {
   group('GatewaySensitivePromptRequest', () {

@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/gateway_turn_contract.dart';
-import 'package:hermes_android/core/services/gateway_turn_journal.dart';
-import 'package:hermes_android/core/services/gateway_turn_recovery.dart';
+import 'package:wing/core/models/gateway_turn_contract.dart';
+import 'package:wing/core/services/gateway_turn_journal.dart';
+import 'package:wing/core/services/gateway_turn_recovery.dart';
 
 const _digestA =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -16,11 +16,9 @@ const _baseMs = 1720000000000;
 
 class _MemoryJournalStore implements GatewayTurnJournalStore {
   String? value;
-  String? v1Value;
   bool unavailable = false;
   bool failNextWrite = false;
   bool corruptNextReadback = false;
-  bool failV1Delete = false;
   Duration delay = Duration.zero;
 
   @override
@@ -50,21 +48,6 @@ class _MemoryJournalStore implements GatewayTurnJournalStore {
       throw StateError('write failed');
     }
     value = newValue;
-  }
-
-  @override
-  Future<void> deleteLegacy() async {
-    await Future<void>.delayed(delay);
-    if (unavailable) throw StateError('unavailable');
-    if (failV1Delete) throw StateError('v1 delete unavailable');
-    v1Value = null;
-  }
-
-  @override
-  Future<String?> readLegacy() async {
-    await Future<void>.delayed(delay);
-    if (unavailable) throw StateError('unavailable');
-    return v1Value != null ? 'incompatible' : null;
   }
 }
 
@@ -847,127 +830,27 @@ void main() {
       },
     );
 
-    test(
-      'purges incompatible v2 and v1 fail-first without migration',
-      () async {
-        final v2Payload = jsonEncode(<String, Object>{
-          'schema': 'hermes.android.turn-journal.v2',
-          'runtime_session_id': 'runtime-must-never-migrate',
-          'entries': const <Object>[],
-        });
-        final v1Payload = jsonEncode(<String, Object>{
-          'schema': 'hermes.android.turn-journal.v1',
-          'runtime_session_id': 'runtime-must-never-migrate',
-          'entries': const <Object>[],
-        });
-        final store = _MemoryJournalStore()
-          ..value = v2Payload
-          ..v1Value = v1Payload;
-        final journal = GatewayTurnJournal(store: store);
-
+    test('rejects unsupported schemas without rewriting the journal', () async {
+      final store = _MemoryJournalStore();
+      final journal = GatewayTurnJournal(store: store);
+      await _seedBinding(journal);
+      final current = jsonDecode(store.value!) as Map<String, dynamic>;
+      for (final schema in [
+        'wing.turn-journal.v1',
+        'wing.turn-journal.v2',
+        'wing.turn-journal.v3',
+        'unrelated-journal',
+      ]) {
+        current['schema'] = schema;
+        final encoded = jsonEncode(current);
+        store.value = encoded;
         await expectLater(
           journal.loadSnapshot(),
           throwsA(isA<GatewayTurnJournalException>()),
         );
-        expect(store.v1Value, isNull);
-        expect(store.value, isNull);
-        expect((await journal.loadSnapshot()).bindings, isEmpty);
-
-        final blocked = _MemoryJournalStore()
-          ..value = v2Payload
-          ..v1Value = v1Payload
-          ..failV1Delete = true;
-        await expectLater(
-          GatewayTurnJournal(store: blocked).loadSnapshot(),
-          throwsA(isA<GatewayTurnJournalException>()),
-        );
-        expect(blocked.v1Value, v1Payload);
-        expect(blocked.value, v2Payload);
-      },
-    );
-
-    test(
-      'keeps v4 in the same authority slot while purging legacy v1',
-      () async {
-        final store = _MemoryJournalStore();
-        final journal = GatewayTurnJournal(store: store);
-        await _seedBinding(journal);
-        final v4Authority = store.value;
-        store.v1Value = jsonEncode(<String, Object>{
-          'schema': 'hermes.android.turn-journal.v1',
-          'entries': const <Object>[],
-        });
-
-        await expectLater(
-          journal.loadSnapshot(),
-          throwsA(isA<GatewayTurnJournalException>()),
-        );
-        expect(store.v1Value, isNull);
-        expect(store.value, v4Authority);
-        expect((await journal.loadSnapshot()).bindings, hasLength(1));
-
-        final root = jsonDecode(store.value!) as Map<String, dynamic>;
-        expect(root['schema'], GatewayTurnJournal.schema);
-        // A downgraded v2 reader sees incompatible v4 in its own slot; there is
-        // no parallel v2 authority to revive after rollback.
-        expect(root['schema'], isNot('hermes.android.turn-journal.v2'));
-      },
-    );
-
-    test(
-      'migrates active v3 and quarantines payload-free completed v3',
-      () async {
-        final store = _MemoryJournalStore();
-        final journal = GatewayTurnJournal(store: store);
-        final binding = _binding();
-        await journal.upsertBinding(binding);
-        await journal.upsert(
-          _entry(
-            binding: binding,
-            turnId: 'turn-active-v3',
-            status: GatewayRecoveryTurnStatus.running,
-            lastSeq: 2,
-            ackUncertain: true,
-          ),
-        );
-        await journal.upsert(
-          _entry(
-            binding: binding,
-            clientTurnId: _uuidFor(2),
-            turnId: 'turn-completed-v3',
-            status: GatewayRecoveryTurnStatus.completed,
-            lastSeq: 7,
-            terminalEventRecorded: true,
-            ackUncertain: false,
-            updatedAtEpochMs: _baseMs + 1,
-          ),
-          now: DateTime.fromMillisecondsSinceEpoch(_baseMs + 2, isUtc: true),
-        );
-
-        final legacy = jsonDecode(store.value!) as Map<String, dynamic>;
-        legacy['schema'] = GatewayTurnJournal.compatibleLegacySchema;
-        for (final raw in legacy['entries'] as List<dynamic>) {
-          (raw as Map<String, dynamic>).remove('terminal_result');
-        }
-        store.value = jsonEncode(legacy);
-
-        final migrated = await GatewayTurnJournal(store: store).loadAll();
-        final active = migrated.singleWhere(
-          (entry) => entry.turnId == 'turn-active-v3',
-        );
-        final completed = migrated.singleWhere(
-          (entry) => entry.turnId == 'turn-completed-v3',
-        );
-        expect(active.failure, isNull);
-        expect(active.status, GatewayRecoveryTurnStatus.running);
-        expect(completed.failure, GatewayTurnRecoveryFailure.protocolViolation);
-        expect(completed.terminalResult, isNull);
-        expect(
-          (jsonDecode(store.value!) as Map<String, dynamic>)['schema'],
-          GatewayTurnJournal.schema,
-        );
-      },
-    );
+        expect(store.value, encoded);
+      }
+    });
 
     test(
       'bounds UTF-8 bytes before parsing current or incompatible data',
@@ -995,7 +878,7 @@ void main() {
         expect(store.value, same(encoded));
 
         final oversizedV2 = jsonEncode(<String, Object>{
-          'schema': 'hermes.android.turn-journal.v2',
+          'schema': 'wing.turn-journal.v2',
           'runtime_session_id': padding,
           'entries': const <Object>[],
         });

@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/models/gateway_insight.dart';
-import 'package:hermes_android/core/models/gateway_todo.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/widgets/profile_execution_activity.dart';
-import 'package:hermes_android/core/widgets/profile_subagent_panel.dart';
-import 'package:hermes_android/core/widgets/profile_tool_activity.dart';
-import 'package:hermes_android/core/widgets/profile_transcript_disclosure.dart';
+import 'package:wing/core/models/gateway_insight.dart';
+import 'package:wing/core/models/gateway_todo.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/profile_execution_activity.dart';
+import 'package:wing/core/widgets/profile_subagent_panel.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/widgets/profile_transcript_disclosure.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
 
@@ -44,7 +44,7 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         MaterialApp(
-          theme: hermesTheme(Brightness.dark),
+          theme: wingTheme(Brightness.dark),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(
               context,

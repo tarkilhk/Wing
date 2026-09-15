@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/services/chat_space_store.dart';
-import 'package:hermes_android/core/services/projects_gateway_client.dart';
-import 'package:hermes_android/core/services/projects_repository.dart';
-import 'package:hermes_android/core/services/ws_client.dart';
+import 'package:wing/core/services/chat_space_store.dart';
+import 'package:wing/core/services/projects_gateway_client.dart';
+import 'package:wing/core/services/projects_repository.dart';
+import 'package:wing/core/services/ws_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Map<String, dynamic> _projectJson({
@@ -118,7 +118,7 @@ void main() {
   group('refresh', () {
     test('loads projects from the gateway and reports live data', () async {
       final gateway = _FakeGateway(
-        projects: [_projectJson(id: 'p1', name: 'Hermes Android')],
+        projects: [_projectJson(id: 'p1', name: 'Wing')],
         activeId: 'p1',
       );
       final repo = _repository(gateway, await SharedPreferences.getInstance());
@@ -127,7 +127,7 @@ void main() {
 
       expect(view.support, ProjectsSupport.native);
       expect(view.isStale, isFalse);
-      expect(view.projects.single.name, 'Hermes Android');
+      expect(view.projects.single.name, 'Wing');
       expect(view.activeId, 'p1');
     });
 
@@ -174,7 +174,7 @@ void main() {
       () async {
         final prefs = await SharedPreferences.getInstance();
         final gateway = _FakeGateway(
-          projects: [_projectJson(id: 'p1', name: 'Hermes Android')],
+          projects: [_projectJson(id: 'p1', name: 'Wing')],
           activeId: 'p1',
         );
         final repo = _repository(gateway, prefs);
@@ -183,7 +183,7 @@ void main() {
         gateway.failNext = _offline;
         final view = await repo.refresh();
 
-        expect(view.projects.single.name, 'Hermes Android');
+        expect(view.projects.single.name, 'Wing');
         expect(view.isStale, isTrue);
         expect(view.error, isNotNull);
       },
@@ -374,7 +374,7 @@ void main() {
 
     test('selecting a project updates the active id', () async {
       final gateway = _FakeGateway(
-        projects: [_projectJson(id: 'p1', name: 'Hermes Android')],
+        projects: [_projectJson(id: 'p1', name: 'Wing')],
       );
       final repo = _repository(gateway, await SharedPreferences.getInstance());
       await repo.refresh();
@@ -415,7 +415,7 @@ void main() {
       'matches local spaces to server projects by normalized name',
       () async {
         final gateway = _FakeGateway(
-          projects: [_projectJson(id: 'p1', name: 'Hermes Android')],
+          projects: [_projectJson(id: 'p1', name: 'Wing')],
         );
         final repo = _repository(
           gateway,
@@ -426,7 +426,7 @@ void main() {
         final plan = repo.planMigration(
           const ChatSpaceState(
             spaces: [
-              ChatSpace(id: 's1', name: '  hermes android ', createdAt: 1),
+              ChatSpace(id: 's1', name: '  wing ', createdAt: 1),
               ChatSpace(id: 's2', name: 'ScriptHive', createdAt: 2),
             ],
             assignments: {'chat-1': 's1', 'chat-2': 's2', 'chat-3': 's1'},
@@ -452,7 +452,7 @@ void main() {
 
     test('planning performs no gateway call and mutates nothing', () async {
       final gateway = _FakeGateway(
-        projects: [_projectJson(id: 'p1', name: 'Hermes Android')],
+        projects: [_projectJson(id: 'p1', name: 'Wing')],
       );
       final repo = _repository(gateway, await SharedPreferences.getInstance());
       await repo.refresh();

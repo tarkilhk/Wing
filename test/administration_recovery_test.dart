@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/screens/administration/admin_connectors_page.dart';
-import 'package:hermes_android/core/screens/administration/admin_defaults_page.dart';
-import 'package:hermes_android/core/screens/administration/admin_profiles_page.dart';
-import 'package:hermes_android/core/screens/administration/admin_providers_page.dart';
+import 'package:wing/core/screens/administration/admin_connectors_page.dart';
+import 'package:wing/core/screens/administration/admin_defaults_page.dart';
+import 'package:wing/core/screens/administration/admin_profiles_page.dart';
+import 'package:wing/core/screens/administration/admin_providers_page.dart';
 import 'support/administration_fixture.dart';
 
 Map<String, dynamic> profiles({String display = 'Shared root'}) => {

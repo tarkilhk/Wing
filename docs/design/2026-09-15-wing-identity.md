@@ -50,19 +50,22 @@ This change adopts the name and saves the visual framework. It does not insert
 the entire board into the app or replace existing launcher artwork. Generated
 mockups are not evidence of implemented screens or backend capabilities.
 
-## Compatibility and repository rename
+## Application and repository identity
 
-Wing is the independent client, previously labelled Hermes Personal. Hermes
-Agent remains the server product, so connection, administration and agent-state
-references may still say Hermes. Preserve upstream attribution.
+Wing is the independent client. Hermes Agent remains the server product, so
+connection, administration and agent-state references use Hermes where they
+identify the server. Preserve upstream author attribution.
 
-Keep the release application ID `com.tarkilhk.hermes.android`, development ID
-`com.hermesagent.hermes_android.dev`, signing configuration, notification channel
-IDs, storage keys, Dart package `hermes_android` and native namespaces. A display
-name change must not create a separate installation or discard existing data.
+Use release application ID `com.tarkilhk.wing`, development ID
+`com.tarkilhk.wing.dev`, Dart package `wing` and native namespace
+`com.tarkilhk.wing`. App classes, theme tokens, native channels, notifications,
+secure-storage namespaces, backup formats and build tooling use Wing names.
 
-The repository is still `tarkilhk/hermes-android`. Its rename is a later owner
-action. Keep working repository URLs until then. After the rename, update the
-Git remote, release/update URLs, workflow references, documentation and store
-links, then verify release discovery against the renamed repository. Renaming
-the repository does not require changing Android package IDs.
+This is a clean identity change. Android installs Wing under its new application
+ID with separate local data. Backup imports accept only the Wing format, and the
+turn journal accepts only its current schema. There are no aliases or migration
+paths for the previous identity.
+
+The repository is [`tarkilhk/wing`](https://github.com/tarkilhk/wing).
+The Git remote, app release/changelog links and documentation point directly to
+this repository. Release workflows use the current GitHub repository context.

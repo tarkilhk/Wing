@@ -2,15 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/answer_versions.dart';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/services/profiles_repository.dart';
-import 'package:hermes_android/core/services/ws_client.dart';
-import 'package:hermes_android/core/widgets/answer_actions.dart';
+import 'package:wing/core/models/answer_versions.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/profiles_repository.dart';
+import 'package:wing/core/services/ws_client.dart';
+import 'package:wing/core/widgets/answer_actions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/process_batch_fixture.dart';
@@ -69,118 +69,120 @@ class AnswerHost {
     };
   }
 
-  ProfileGateway gateway(WorkspaceScope scope) =>
-      gateways[scope.profileName] = ProfileGateway(
-        scope: scope,
-        discover: () async => const ProfileDiscovery(
-          profiles: [
-            HermesProfile(name: 'a'),
-            HermesProfile(name: 'b'),
-          ],
-          currentName: 'a',
-          activeName: 'a',
-        ),
-        get: (path, query) async => path == 'sessions'
-            ? {
-                'offset': int.parse(query['offset']!),
-                'limit': int.parse(query['limit']!),
-                'total': 1 + parents.length,
-                'sessions': [
-                  {
-                    'id': 'original',
-                    'title': 'Original chat',
-                    'profile': scope.profileName,
-                  },
-                  for (final entry in parents.entries)
-                    {
-                      'id': entry.key,
-                      'title': 'Branched chat',
-                      'profile': scope.profileName,
-                      'parent_session_id': entry.value,
-                    },
-                ],
-              }
-            : historyPage(scope.profileName, path, query),
-        rpc: (method, params) async {
-          calls.add((method, params));
-          final profile = scope.profileName;
-          final id = (params['session_id'] as String? ?? 'original')
-              .replaceFirst('runtime-', '');
-          Map<String, dynamic> session(String child) => {
-            'session_id': 'runtime-$child',
-            'stored_session_id': child,
-            if (clearSessionParent)
-              'parent_session_id': null
-            else if (!omitSessionParent && parents.containsKey(child))
-              'parent_session_id': parents[child],
-            'messages': history(
-              profile,
-              child,
-            ).where(shown).map((m) => Map<String, dynamic>.from(m)).toList(),
-            'info': {'profile_name': profile},
-            'title': 'Branched chat',
-          };
-          switch (method) {
-            case 'projects.tree':
-              return {'projects': <Map<String, dynamic>>[]};
-            case 'session.resume':
-              return session(id);
-            case 'session.history':
-              return {
-                'messages': history(profile, id)
-                    .where(shown)
-                    .where((m) => m['compacted'] != true)
-                    .map(
-                      (m) => {
-                        ...m,
-                        if (omitRowIds && m['role'] == 'user') 'row_id': null,
-                      },
-                    )
-                    .toList(),
-              };
-            case 'session.branch':
-              await branchDelay?.future;
-              final child = 'child-${++next}';
-              histories['$profile/$child'] = history(profile, id)
-                  .where(isBranchMessage)
-                  .take(params['count'] as int)
-                  .map((m) => Map<String, dynamic>.from(m))
-                  .toList();
-              for (var i = 0; i < histories['$profile/$child']!.length; i++) {
-                histories['$profile/$child']![i]['row_id'] =
-                    next * 1000 + i + 1;
-              }
-              parents[child] = id;
-              alterBranch?.call(histories['$profile/$child']!);
-              return {
-                ...session(child),
-                'parent': id,
-                if (branchReplyMessages != null) 'messages': branchReplyMessages,
-              };
-            case 'prompt.submit':
-              await submitDelay?.future;
-              if (submitError != null) throw submitError!;
-              final rows = history(profile, id);
-              final cut = params['truncate_before_row_id'];
-              if (cut != null) {
-                final index = rows.indexWhere((m) => m['row_id'] == cut);
-                rows.removeRange(index, rows.length);
-              }
-              rows.add({
-                'role': 'user',
-                'text': params['text'],
-                'row_id': nextRow++,
-              });
-              rows.add({
-                'role': 'assistant',
-                'text': 'New answer $next',
-                'row_id': nextRow++,
-              });
-              return {'status': 'streaming'};
+  ProfileGateway gateway(
+    WorkspaceScope scope,
+  ) => gateways[scope.profileName] = ProfileGateway(
+    scope: scope,
+    discover: () async => const ProfileDiscovery(
+      profiles: [
+        HermesProfile(name: 'a'),
+        HermesProfile(name: 'b'),
+      ],
+      currentName: 'a',
+      activeName: 'a',
+    ),
+    get: (path, query) async => path == 'sessions'
+        ? {
+            'offset': int.parse(query['offset']!),
+            'limit': int.parse(query['limit']!),
+            'total': 1 + parents.length,
+            'sessions': [
+              {
+                'id': 'original',
+                'title': 'Original chat',
+                'profile': scope.profileName,
+              },
+              for (final entry in parents.entries)
+                {
+                  'id': entry.key,
+                  'title': 'Branched chat',
+                  'profile': scope.profileName,
+                  'parent_session_id': entry.value,
+                },
+            ],
           }
-          return {};
-        },
+        : historyPage(scope.profileName, path, query),
+    rpc: (method, params) async {
+      calls.add((method, params));
+      final profile = scope.profileName;
+      final id = (params['session_id'] as String? ?? 'original').replaceFirst(
+        'runtime-',
+        '',
       );
+      Map<String, dynamic> session(String child) => {
+        'session_id': 'runtime-$child',
+        'stored_session_id': child,
+        if (clearSessionParent)
+          'parent_session_id': null
+        else if (!omitSessionParent && parents.containsKey(child))
+          'parent_session_id': parents[child],
+        'messages': history(
+          profile,
+          child,
+        ).where(shown).map((m) => Map<String, dynamic>.from(m)).toList(),
+        'info': {'profile_name': profile},
+        'title': 'Branched chat',
+      };
+      switch (method) {
+        case 'projects.tree':
+          return {'projects': <Map<String, dynamic>>[]};
+        case 'session.resume':
+          return session(id);
+        case 'session.history':
+          return {
+            'messages': history(profile, id)
+                .where(shown)
+                .where((m) => m['compacted'] != true)
+                .map(
+                  (m) => {
+                    ...m,
+                    if (omitRowIds && m['role'] == 'user') 'row_id': null,
+                  },
+                )
+                .toList(),
+          };
+        case 'session.branch':
+          await branchDelay?.future;
+          final child = 'child-${++next}';
+          histories['$profile/$child'] = history(profile, id)
+              .where(isBranchMessage)
+              .take(params['count'] as int)
+              .map((m) => Map<String, dynamic>.from(m))
+              .toList();
+          for (var i = 0; i < histories['$profile/$child']!.length; i++) {
+            histories['$profile/$child']![i]['row_id'] = next * 1000 + i + 1;
+          }
+          parents[child] = id;
+          alterBranch?.call(histories['$profile/$child']!);
+          return {
+            ...session(child),
+            'parent': id,
+            if (branchReplyMessages != null) 'messages': branchReplyMessages,
+          };
+        case 'prompt.submit':
+          await submitDelay?.future;
+          if (submitError != null) throw submitError!;
+          final rows = history(profile, id);
+          final cut = params['truncate_before_row_id'];
+          if (cut != null) {
+            final index = rows.indexWhere((m) => m['row_id'] == cut);
+            rows.removeRange(index, rows.length);
+          }
+          rows.add({
+            'role': 'user',
+            'text': params['text'],
+            'row_id': nextRow++,
+          });
+          rows.add({
+            'role': 'assistant',
+            'text': 'New answer $next',
+            'row_id': nextRow++,
+          });
+          return {'status': 'streaming'};
+      }
+      return {};
+    },
+  );
 
   Future<void> complete(ProfileChat chat) async {
     gateways[chat.key.workspace.profileName]!.onEvent!(

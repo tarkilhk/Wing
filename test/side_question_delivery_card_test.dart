@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/side_question_delivery.dart';
-import 'package:hermes_android/core/widgets/side_question_delivery_card.dart';
+import 'package:wing/core/models/side_question_delivery.dart';
+import 'package:wing/core/widgets/side_question_delivery_card.dart';
 
 void main() {
   testWidgets('renders pending side questions as selectable delivery cards', (

@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/connection.dart';
-import 'package:hermes_android/core/services/config_backup.dart';
+import 'package:wing/core/models/connection.dart';
+import 'package:wing/core/services/config_backup.dart';
 
 void main() {
   // Test-only KDF cost. Production uses ConfigBackupCodec.defaultIterations.
@@ -225,7 +225,7 @@ void main() {
       );
     });
 
-    test('rejects a file that is not a Hermes backup envelope', () {
+    test('rejects a file that is not a Wing backup envelope', () {
       expect(
         () =>
             ConfigBackupCodec.decrypt('{"hello":"world"}', passphrase: 'pass'),

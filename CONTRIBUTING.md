@@ -15,7 +15,7 @@ flutter test
 flutter build apk --debug
 ```
 
-The ordinary debug APK uses `com.hermesagent.hermes_android.dev`, keeping its app storage separate from Wing. No release key is needed for development. Release signing is covered in [the release guide](docs/ANDROID_RELEASE_PLAN.md).
+The ordinary debug APK uses `com.tarkilhk.wing.dev`, keeping its app storage separate from Wing. No release key is needed for development. Release signing is covered in [the release guide](docs/ANDROID_RELEASE_PLAN.md).
 
 On Windows with the repository's toolchain layout, use the guarded launcher:
 
@@ -26,7 +26,7 @@ On Windows with the repository's toolchain layout, use the guarded launcher:
 ./scripts/invoke-flutter.ps1 -ToolchainRoot '<toolchain-root>' -FlutterArguments @('build', 'apk', '--debug')
 ```
 
-That root contains `flutter`, `jdk-17` and `android-sdk`. The launcher reports SDK-cache access failures promptly instead of entering Flutter's bootstrap retry loop. The [Windows build workflow](docs/LOCAL_BUILD_SETUP.md) covers incremental builds, Personal development builds and hot reload.
+That root contains `flutter`, `jdk-17` and `android-sdk`. The launcher reports SDK-cache access failures promptly instead of entering Flutter's bootstrap retry loop. The [Windows build workflow](docs/LOCAL_BUILD_SETUP.md) covers incremental builds, Wing development builds and hot reload.
 
 Run tests and Android builds sequentially. Do not remove another process's locks. Reuse build caches for ordinary iteration, and use a separate workspace for independent work. Existing local changes belong to their author; keep them intact.
 
@@ -54,6 +54,6 @@ A useful change description explains the user-visible result, its boundaries, te
 
 ## Reporting problems and provenance
 
-Use [this fork's issues](https://github.com/tarkilhk/hermes-android/issues) for reproducible client bugs. Include Android/client versions, backend revision if known, expected behavior and minimal steps. Follow [SECURITY.md](SECURITY.md) before attaching logs or screenshots.
+Use [this fork's issues](https://github.com/tarkilhk/wing/issues) for reproducible client bugs. Include Android/client versions, backend revision if known, expected behavior and minimal steps. Follow [SECURITY.md](SECURITY.md) before attaching logs or screenshots.
 
 Preserve existing MIT attribution and applicable third-party license notices. See [NOTICE.md](NOTICE.md). Record the license of any new third-party component.

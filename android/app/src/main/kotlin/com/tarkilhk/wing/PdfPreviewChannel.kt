@@ -1,4 +1,4 @@
-package com.hermesagent.hermes_android
+package com.tarkilhk.wing
 
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -252,7 +252,7 @@ internal class PdfPreviewChannel(
     private class PreviewException(val code: String, val safeMessage: String) : Exception()
 
     private companion object {
-        const val CHANNEL_NAME = "com.hermesagent.hermes_android/pdf_preview"
+        const val CHANNEL_NAME = "com.tarkilhk.wing/pdf_preview"
         const val CACHE_DIRECTORY = "pdf_previews"
         const val MAX_PDF_BYTES = 32 * 1024 * 1024
         const val MAX_OPEN_DOCUMENTS = 3

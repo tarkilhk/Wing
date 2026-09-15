@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 
 /// One model exposed by the active Hermes profile.
 class ChatModelChoice {
@@ -120,7 +120,7 @@ class ChatIntelligenceButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = HermesTokens.of(context);
+    final tokens = WingTokens.of(context);
     final modelLabel = compactChatModelLabel(model);
     final reasoningLabel = chatReasoningEffortLabel(reasoningEffort);
 
@@ -137,10 +137,10 @@ class ChatIntelligenceButton extends StatelessWidget {
           foregroundColor: tokens.onSurface,
           minimumSize: const Size(48, 48),
           padding: const EdgeInsets.symmetric(
-            horizontal: HermesSpacing.sm,
+            horizontal: WingSpacing.sm,
             vertical: 4,
           ),
-          shape: RoundedRectangleBorder(borderRadius: HermesRadius.control),
+          shape: RoundedRectangleBorder(borderRadius: WingRadius.control),
           backgroundColor: tokens.raised,
         ),
         child: Row(
@@ -275,13 +275,13 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: availableHeight.clamp(0, 720)),
           child: AnimatedSize(
-            duration: HermesMotion.standard,
+            duration: WingMotion.standard,
             alignment: Alignment.bottomCenter,
-            curve: HermesMotion.curve,
+            curve: WingMotion.curve,
             child: AnimatedSwitcher(
-              duration: HermesMotion.standard,
-              switchInCurve: HermesMotion.curve,
-              switchOutCurve: HermesMotion.curve,
+              duration: WingMotion.standard,
+              switchInCurve: WingMotion.curve,
+              switchOutCurve: WingMotion.curve,
               child: _choosingModel ? _buildModelPage() : _buildReasoningPage(),
             ),
           ),
@@ -291,7 +291,7 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
   }
 
   Widget _buildReasoningPage() {
-    final tokens = HermesTokens.of(context);
+    final tokens = WingTokens.of(context);
     return Column(
       key: const ValueKey('reasoning-page'),
       mainAxisSize: MainAxisSize.min,
@@ -301,18 +301,18 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
           child: ListView(
             shrinkWrap: true,
             padding: const EdgeInsets.fromLTRB(
-              HermesSpacing.sm,
+              WingSpacing.sm,
               0,
-              HermesSpacing.sm,
-              HermesSpacing.sm,
+              WingSpacing.sm,
+              WingSpacing.sm,
             ),
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(
-                  HermesSpacing.sm,
-                  HermesSpacing.xs,
-                  HermesSpacing.sm,
-                  HermesSpacing.xs,
+                  WingSpacing.sm,
+                  WingSpacing.xs,
+                  WingSpacing.sm,
+                  WingSpacing.xs,
                 ),
                 child: Text(
                   'Reasoning',
@@ -321,12 +321,12 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
               ),
               LayoutBuilder(
                 builder: (context, constraints) => Wrap(
-                  spacing: HermesSpacing.sm,
-                  runSpacing: HermesSpacing.xs,
+                  spacing: WingSpacing.sm,
+                  runSpacing: WingSpacing.xs,
                   children: [
                     for (final entry in chatReasoningEffortLabels.entries)
                       SizedBox(
-                        width: (constraints.maxWidth - HermesSpacing.sm) / 2,
+                        width: (constraints.maxWidth - WingSpacing.sm) / 2,
                         child: _PickerTile(
                           key: Key('reasoning-${entry.key}'),
                           title: entry.value,
@@ -338,13 +338,13 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
                   ],
                 ),
               ),
-              const Divider(height: HermesSpacing.md),
+              const Divider(height: WingSpacing.md),
               ListTile(
                 key: const Key('choose-chat-model'),
                 dense: true,
                 minTileHeight: 56,
                 contentPadding: const EdgeInsets.symmetric(
-                  horizontal: HermesSpacing.sm,
+                  horizontal: WingSpacing.sm,
                 ),
                 title: Text(
                   _selectedChoice.model,
@@ -365,10 +365,10 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
                       _selectedChoice.provider != widget.defaultProvider))
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
-                    HermesSpacing.sm,
+                    WingSpacing.sm,
                     0,
-                    HermesSpacing.sm,
-                    HermesSpacing.sm,
+                    WingSpacing.sm,
+                    WingSpacing.sm,
                   ),
                   child: Text(
                     'Profile default: ${widget.defaultModel}'
@@ -395,7 +395,7 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
   }
 
   Widget _buildModelPage() {
-    final tokens = HermesTokens.of(context);
+    final tokens = WingTokens.of(context);
     final normalizedQuery = _modelQuery.trim().toLowerCase();
     final visibleChoices = widget.choices
         .where((choice) {
@@ -420,17 +420,17 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(
-            HermesSpacing.lg,
+            WingSpacing.lg,
             0,
-            HermesSpacing.lg,
-            HermesSpacing.sm,
+            WingSpacing.lg,
+            WingSpacing.sm,
           ),
           child: TextField(
             key: const Key('model-search'),
             decoration: const InputDecoration(
               hintText: 'Search models',
               prefixIcon: Icon(Icons.search_rounded),
-              border: OutlineInputBorder(borderRadius: HermesRadius.control),
+              border: OutlineInputBorder(borderRadius: WingRadius.control),
               isDense: true,
             ),
             onChanged: (value) => setState(() => _modelQuery = value),
@@ -446,7 +446,7 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
                 )
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: HermesSpacing.sm,
+                    horizontal: WingSpacing.sm,
                   ),
                   itemCount: groups.length,
                   itemBuilder: (context, index) {
@@ -493,14 +493,9 @@ class _SheetHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = HermesTokens.of(context);
+    final tokens = WingTokens.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        HermesSpacing.sm,
-        0,
-        HermesSpacing.sm,
-        0,
-      ),
+      padding: const EdgeInsets.fromLTRB(WingSpacing.sm, 0, WingSpacing.sm, 0),
       child: Row(
         children: [
           if (onBack != null)
@@ -515,7 +510,7 @@ class _SheetHeader extends StatelessWidget {
             ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(left: HermesSpacing.sm),
+              padding: const EdgeInsets.only(left: WingSpacing.sm),
               child: Text(
                 title,
                 style: tokens.typography.section.copyWith(
@@ -552,13 +547,13 @@ class _PickerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = HermesTokens.of(context);
+    final tokens = WingTokens.of(context);
     return ListTile(
       dense: true,
       minTileHeight: 48,
-      minVerticalPadding: HermesSpacing.xs,
-      contentPadding: const EdgeInsets.symmetric(horizontal: HermesSpacing.sm),
-      shape: RoundedRectangleBorder(borderRadius: HermesRadius.card),
+      minVerticalPadding: WingSpacing.xs,
+      contentPadding: const EdgeInsets.symmetric(horizontal: WingSpacing.sm),
+      shape: RoundedRectangleBorder(borderRadius: WingRadius.card),
       selected: selected,
       selectedTileColor: tokens.accent.withValues(alpha: 0.1),
       title: Text(title, style: tokens.typography.body),
@@ -578,22 +573,22 @@ class _SheetActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = HermesTokens.of(context);
+    final tokens = WingTokens.of(context);
     return Container(
       decoration: BoxDecoration(
         color: tokens.raised,
         border: Border(top: BorderSide(color: tokens.border)),
       ),
       padding: const EdgeInsets.fromLTRB(
-        HermesSpacing.lg,
-        HermesSpacing.sm,
-        HermesSpacing.lg,
-        HermesSpacing.sm,
+        WingSpacing.lg,
+        WingSpacing.sm,
+        WingSpacing.lg,
+        WingSpacing.sm,
       ),
       child: OverflowBar(
         alignment: MainAxisAlignment.end,
-        spacing: HermesSpacing.sm,
-        overflowSpacing: HermesSpacing.xs,
+        spacing: WingSpacing.sm,
+        overflowSpacing: WingSpacing.xs,
         children: [
           TextButton(onPressed: onCancel, child: const Text('Cancel')),
           FilledButton(onPressed: onApply, child: const Text('Apply')),

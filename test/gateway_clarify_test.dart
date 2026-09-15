@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/gateway_clarify.dart';
-import 'package:hermes_android/core/widgets/gateway_clarify_dialog.dart';
+import 'package:wing/core/models/gateway_clarify.dart';
+import 'package:wing/core/widgets/gateway_clarify_dialog.dart';
 
 void main() {
   group('GatewayClarifyRequest', () {

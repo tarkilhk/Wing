@@ -11,7 +11,7 @@ index 84172eb..c925dee 100644
 +    "mobile_push": {
 +        "enabled": False,
 +        "firebase_project_id": "",
-+        "allowed_application_ids": ["com.tarkilhk.hermes.android"],
++        "allowed_application_ids": ["com.tarkilhk.wing"],
 +        "registration_max_age_days": 90,
 +    },
      "_config_version": 42,  # Config schema version - bump this when adding new required fields
@@ -95,7 +95,7 @@ index 0000000..057b510
 +    config = {
 +        "enabled": False,
 +        "firebase_project_id": "",
-+        "allowed_application_ids": ["com.tarkilhk.hermes.android"],
++        "allowed_application_ids": ["com.tarkilhk.wing"],
 +        "registration_max_age_days": _DEFAULT_MAX_AGE_DAYS,
 +    }
 +    try:
@@ -542,7 +542,7 @@ index 0000000..248251c
 +CONFIG = {
 +    "enabled": True,
 +    "firebase_project_id": "test-project",
-+    "allowed_application_ids": ["com.tarkilhk.hermes.android"],
++    "allowed_application_ids": ["com.tarkilhk.wing"],
 +}
 +
 +
@@ -552,7 +552,7 @@ index 0000000..248251c
 +        "installation_id": "96f8869a-9212-4779-b0f0-b383b868d872",
 +        "fcm_token": token,
 +        "platform": "android",
-+        "application_id": "com.tarkilhk.hermes.android",
++        "application_id": "com.tarkilhk.wing",
 +        "workspace": {"connection": "saved-1", "connection_identity": "host-key", "profile": "work"},
 +        "preferences": {"completion": True, "attention": True, "include_chat_title": False},
 +    }

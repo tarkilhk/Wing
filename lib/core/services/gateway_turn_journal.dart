@@ -12,10 +12,6 @@ abstract interface class GatewayTurnJournalStore {
   Future<void> write(String value);
 
   Future<void> delete();
-
-  Future<String?> readLegacy();
-
-  Future<void> deleteLegacy();
 }
 
 /// Optional shared read-modify-write authority for store wrappers that target
@@ -29,14 +25,11 @@ class FlutterSecureGatewayTurnJournalStore
     implements
         GatewayTurnJournalStore,
         GatewayTurnJournalSerializationAuthority {
-  // Keep the v2 slot name intentionally. A rollback must encounter the v3
-  // schema in the same authority slot, never create a parallel v2 journal.
-  static const _key = 'gateway_turn_journal_v2';
-  static const _legacyKey = 'gateway_turn_journal_v1';
+  static const _key = 'wing_turn_journal';
   static const AndroidOptions _androidOptions = AndroidOptions(
     resetOnError: false,
     migrateWithBackup: true,
-    storageNamespace: 'hermes_android_turn_recovery',
+    storageNamespace: 'wing_turn_recovery',
   );
   static final Object _sharedSerializationAuthority = Object();
 
@@ -56,14 +49,6 @@ class FlutterSecureGatewayTurnJournalStore
 
   @override
   Future<void> delete() => _storage.delete(key: _key);
-
-  @override
-  Future<String?> readLegacy() => _storage
-      .containsKey(key: _legacyKey)
-      .then((present) => present ? 'incompatible' : null);
-
-  @override
-  Future<void> deleteLegacy() => _storage.delete(key: _legacyKey);
 }
 
 class GatewayTurnJournalException implements Exception {
@@ -320,14 +305,8 @@ class GatewayTurnJournalEntry {
     'updated_at_epoch_ms': updatedAtEpochMs,
   };
 
-  static GatewayTurnJournalEntry _fromJson(
-    Map<String, dynamic> value, {
-    required bool legacyV3,
-  }) {
-    final acceptedKeys = legacyV3
-        ? allowedJsonKeys.difference(const {'terminal_result'})
-        : allowedJsonKeys;
-    if (value.keys.any((key) => !acceptedKeys.contains(key))) {
+  static GatewayTurnJournalEntry _fromJson(Map<String, dynamic> value) {
+    if (value.keys.any((key) => !allowedJsonKeys.contains(key))) {
       throw const GatewayTurnJournalException();
     }
     final statusRaw = value['status'];
@@ -374,10 +353,6 @@ class GatewayTurnJournalEntry {
       throw const GatewayTurnJournalException();
     }
     try {
-      final legacyUnrecoverableCompletion =
-          legacyV3 &&
-          status == GatewayRecoveryTurnStatus.completed &&
-          failure == null;
       return GatewayTurnJournalEntry(
         bindingIdentity: value['binding_id'] as String,
         clientTurnId: value['client_turn_id'] as String,
@@ -387,12 +362,8 @@ class GatewayTurnJournalEntry {
         eventPayloadBytes: value['event_payload_bytes'] as int,
         terminalEventRecorded: value['terminal_event_recorded'] as bool,
         terminalResult: terminalResult,
-        ackUncertain: legacyUnrecoverableCompletion
-            ? false
-            : value['ack_uncertain'] as bool,
-        failure: legacyUnrecoverableCompletion
-            ? GatewayTurnRecoveryFailure.protocolViolation
-            : failure,
+        ackUncertain: value['ack_uncertain'] as bool,
+        failure: failure,
         updatedAtEpochMs: value['updated_at_epoch_ms'] as int,
       );
     } on ArgumentError {
@@ -412,8 +383,7 @@ class GatewayTurnJournalSnapshot {
 }
 
 class GatewayTurnJournal {
-  static const schema = 'hermes.android.turn-journal.v4';
-  static const compatibleLegacySchema = 'hermes.android.turn-journal.v3';
+  static const schema = 'wing.turn-journal.v4';
   static const maxBindings = 64;
   static const maxEntries = 64;
   static const maxEncodedBytes = 5 * 1024 * 1024;
@@ -613,7 +583,7 @@ class GatewayTurnJournal {
 
   Future<_JournalData> _readData() async {
     try {
-      final encoded = await _readCurrentAfterLegacyPurge();
+      final encoded = await _store.read();
       if (encoded == null) return _JournalData.empty();
       if (utf8.encode(encoded).length > maxEncodedBytes) {
         throw const GatewayTurnJournalException();
@@ -621,9 +591,8 @@ class GatewayTurnJournal {
       final decoded = jsonDecode(encoded);
       if (decoded is! Map) throw const GatewayTurnJournalException();
       final root = Map<String, dynamic>.from(decoded);
-      final legacyV3 = root['schema'] == compatibleLegacySchema;
       if (root.length != 3 ||
-          root['schema'] != schema && !legacyV3 ||
+          root['schema'] != schema ||
           root['bindings'] is! List ||
           root['entries'] is! List) {
         throw const GatewayTurnJournalException();
@@ -651,7 +620,6 @@ class GatewayTurnJournal {
         if (rawEntry is! Map) throw const GatewayTurnJournalException();
         final entry = GatewayTurnJournalEntry._fromJson(
           Map<String, dynamic>.from(rawEntry),
-          legacyV3: legacyV3,
         );
         if (!bindingIds.contains(entry.bindingIdentity) ||
             !entryIds.add(entry.entryIdentity)) {
@@ -660,7 +628,6 @@ class GatewayTurnJournal {
         entries.add(entry);
       }
       final data = _JournalData(bindings: bindings, entries: entries);
-      if (legacyV3) await _writeData(data);
       return data;
     } on GatewayTurnJournalException {
       rethrow;
@@ -789,36 +756,6 @@ class GatewayTurnJournal {
       bindings: List<GatewayTurnJournalBinding>.unmodifiable(data.bindings),
       entries: List<GatewayTurnJournalEntry>.unmodifiable(data.entries),
     );
-  }
-
-  Future<String?> _readCurrentAfterLegacyPurge() async {
-    try {
-      final hasV1 = await _store.readLegacy() != null;
-      final encoded = await _store.read();
-      if (encoded != null && utf8.encode(encoded).length > maxEncodedBytes) {
-        throw const GatewayTurnJournalException();
-      }
-      final hasIncompatibleCurrent = _hasLegacySchema(encoded);
-      if (!hasV1 && !hasIncompatibleCurrent) return encoded;
-
-      if (hasV1) {
-        await _store.deleteLegacy();
-        if (await _store.readLegacy() != null) {
-          throw const GatewayTurnJournalException();
-        }
-      }
-      if (hasIncompatibleCurrent) {
-        await _store.delete();
-        if (await _store.read() != null) {
-          throw const GatewayTurnJournalException();
-        }
-      }
-    } catch (_) {
-      throw const GatewayTurnJournalException();
-    }
-    // The first encounter always stops. No v2/v1 field, especially a runtime
-    // session ID, is ever parsed or migrated into the v3 authority record.
-    throw const GatewayTurnJournalException();
   }
 }
 
@@ -982,17 +919,4 @@ GatewayTurnRecoveryFailure? _recoveryFailureFromWire(Object? value) {
     if (failure.name == value) return failure;
   }
   return null;
-}
-
-bool _hasLegacySchema(String? encoded) {
-  if (encoded == null) return false;
-  try {
-    final decoded = jsonDecode(encoded);
-    if (decoded is! Map) return false;
-    final schema = decoded['schema'];
-    return schema == 'hermes.android.turn-journal.v2' ||
-        schema == 'hermes.android.turn-journal.v1';
-  } catch (_) {
-    return false;
-  }
 }

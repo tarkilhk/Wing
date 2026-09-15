@@ -1,4 +1,4 @@
-package com.hermesagent.hermes_android
+package com.tarkilhk.wing
 
 import android.app.Activity
 import android.content.Intent
@@ -152,7 +152,7 @@ internal class MediaPreviewChannel(
         ?: "Media preview"
 
     private companion object {
-        const val CHANNEL_NAME = "com.hermesagent.hermes_android/media_preview"
+        const val CHANNEL_NAME = "com.tarkilhk.wing/media_preview"
         const val MAX_MEDIA_BYTES = 32 * 1024 * 1024
         const val MAX_ORPHANS_PER_OPEN = 32
         const val ORPHAN_MAX_AGE_MS = 24L * 60L * 60L * 1_000L

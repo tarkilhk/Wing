@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/screens/profile_capabilities_screen.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/services/profiles_repository.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/screens/profile_capabilities_screen.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profiles_repository.dart';
 
 final _scope = WorkspaceScope(connectionId: 'server-a', profileName: 'work');
 const _profiles = ProfileDiscovery(

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/services/gateway_turn_coordinator.dart';
-import 'package:hermes_android/core/services/ws_client.dart';
-import 'package:hermes_android/core/utils/turn_recovery_fallback.dart';
+import 'package:wing/core/services/gateway_turn_coordinator.dart';
+import 'package:wing/core/services/ws_client.dart';
+import 'package:wing/core/utils/turn_recovery_fallback.dart';
 
 void main() {
   group('classifyTurnRecoveryFailure', () {

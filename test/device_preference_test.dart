@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/composer_action.dart';
-import 'package:hermes_android/core/services/device_preference.dart';
-import 'package:hermes_android/core/services/text_size_preference.dart';
-import 'package:hermes_android/core/widgets/composer_action_settings.dart';
-import 'package:hermes_android/core/widgets/text_size_settings_card.dart';
+import 'package:wing/core/models/composer_action.dart';
+import 'package:wing/core/services/device_preference.dart';
+import 'package:wing/core/services/text_size_preference.dart';
+import 'package:wing/core/widgets/composer_action_settings.dart';
+import 'package:wing/core/widgets/text_size_settings_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

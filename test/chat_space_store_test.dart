@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/session.dart';
-import 'package:hermes_android/core/services/chat_space_store.dart';
+import 'package:wing/core/models/session.dart';
+import 'package:wing/core/services/chat_space_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Session session(String id, {double startedAt = 1}) => Session(
@@ -22,10 +22,10 @@ void main() {
     final first = ChatSpaceStore(prefs, connectionId: 'gateway-a');
     final second = ChatSpaceStore(prefs, connectionId: 'gateway-b');
 
-    final project = await first.createSpace('Hermes Android');
+    final project = await first.createSpace('Wing');
     await first.assignSession('session-1', project.id);
 
-    expect((await first.load()).spaces.single.name, 'Hermes Android');
+    expect((await first.load()).spaces.single.name, 'Wing');
     expect((await first.load()).spaceIdForSession('session-1'), project.id);
     expect((await second.load()).spaces, isEmpty);
     expect((await second.load()).spaceIdForSession('session-1'), isNull);
@@ -87,11 +87,11 @@ void main() {
     final android = await store.createSpace('Android');
     await store.assignSession('one', android.id);
 
-    await store.renameSpace(android.id, 'Hermes Android');
+    await store.renameSpace(android.id, 'Wing');
 
     final state = await store.load();
     expect(state.spaces.single.id, android.id);
-    expect(state.spaces.single.name, 'Hermes Android');
+    expect(state.spaces.single.name, 'Wing');
     expect(state.spaceIdForSession('one'), android.id);
   });
 

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 
 import '../test/support/profile_actions_fixture.dart';
 
@@ -68,7 +68,7 @@ Future<void> main() async {
   runApp(
     MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: hermesTheme(Brightness.dark),
+      theme: wingTheme(Brightness.dark),
       home: ProfileWorkspaceScreen(controller: controller),
     ),
   );

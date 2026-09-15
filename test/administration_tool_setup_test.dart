@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/screens/administration/admin_tool_setup_page.dart';
+import 'package:wing/core/screens/administration/admin_tool_setup_page.dart';
 import 'support/administration_fixture.dart';
 
 void main() {

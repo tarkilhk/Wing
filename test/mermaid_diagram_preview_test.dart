@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/widgets/web_output_preview.dart';
-import 'package:hermes_android/core/widgets/markdown_code_block.dart';
-import 'package:hermes_android/core/widgets/profile_message.dart';
+import 'package:wing/core/widgets/web_output_preview.dart';
+import 'package:wing/core/widgets/markdown_code_block.dart';
+import 'package:wing/core/widgets/profile_message.dart';
 
 void main() {
   test('only complete non-streaming Mermaid blocks offer rendering', () {

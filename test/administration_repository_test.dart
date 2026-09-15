@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/services/administration_repository.dart';
+import 'package:wing/core/services/administration_repository.dart';
 import 'support/administration_fixture.dart';
 
 void main() {

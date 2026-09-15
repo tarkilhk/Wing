@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/widgets/chat_intelligence_picker.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/widgets/chat_intelligence_picker.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_intelligence_fixture.dart';
 

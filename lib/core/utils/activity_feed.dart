@@ -31,7 +31,7 @@ library;
 
 import '../models/gateway_turn_contract.dart';
 import '../services/gateway_turn_journal.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 
 /// How long a running turn may go without a journal update before Activity
 /// reports it as stalled instead of live.
@@ -94,7 +94,7 @@ class ActivityItem {
   /// What this turn is doing, in the user's words.
   final String label;
 
-  final HermesStatus status;
+  final WingStatus status;
 
   /// When the journal last heard about this turn.
   final DateTime updatedAt;
@@ -155,7 +155,7 @@ class ActivityFeed {
 class _Classification {
   final ActivityGroupKind kind;
   final String label;
-  final HermesStatus status;
+  final WingStatus status;
 
   const _Classification(this.kind, this.label, this.status);
 }
@@ -277,7 +277,7 @@ _Classification _classify(
     return const _Classification(
       ActivityGroupKind.failed,
       'Turn recovery failed',
-      HermesStatus.failed,
+      WingStatus.failed,
     );
   }
 
@@ -286,25 +286,25 @@ _Classification _classify(
       return const _Classification(
         ActivityGroupKind.needsYou,
         'Waiting for your input',
-        HermesStatus.blocked,
+        WingStatus.blocked,
       );
     case GatewayRecoveryTurnStatus.failed:
       return const _Classification(
         ActivityGroupKind.failed,
         'The turn failed',
-        HermesStatus.failed,
+        WingStatus.failed,
       );
     case GatewayRecoveryTurnStatus.completed:
       return const _Classification(
         ActivityGroupKind.completed,
         'Completed',
-        HermesStatus.completed,
+        WingStatus.completed,
       );
     case GatewayRecoveryTurnStatus.interrupted:
       return const _Classification(
         ActivityGroupKind.completed,
         'Stopped',
-        HermesStatus.idle,
+        WingStatus.idle,
       );
     case null:
     case GatewayRecoveryTurnStatus.accepted:
@@ -315,7 +315,7 @@ _Classification _classify(
         return const _Classification(
           ActivityGroupKind.failed,
           'Stalled — no update from Hermes',
-          HermesStatus.failed,
+          WingStatus.failed,
         );
       }
       // A null status is deliberately in flight: the submit was written ahead
@@ -323,7 +323,7 @@ _Classification _classify(
       return _Classification(
         ActivityGroupKind.running,
         entry.status == null ? 'Submitted, waiting for Hermes' : 'Running',
-        HermesStatus.running,
+        WingStatus.running,
       );
   }
 }

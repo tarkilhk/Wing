@@ -2,7 +2,7 @@ import 'studio_error.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 
 import '../services/profile_gateway.dart';
 
@@ -335,7 +335,7 @@ class _ProfileEditorSheetState extends State<ProfileEditorSheet> {
                     hintText: 'What this profile is for',
                     alignLabelWithHint: true,
                     border: OutlineInputBorder(
-                      borderRadius: HermesRadius.control,
+                      borderRadius: WingRadius.control,
                     ),
                   ),
                 ),
@@ -351,7 +351,7 @@ class _ProfileEditorSheetState extends State<ProfileEditorSheet> {
                     hintText: 'Instructions that shape this profile',
                     alignLabelWithHint: true,
                     border: OutlineInputBorder(
-                      borderRadius: HermesRadius.control,
+                      borderRadius: WingRadius.control,
                     ),
                   ),
                 ),

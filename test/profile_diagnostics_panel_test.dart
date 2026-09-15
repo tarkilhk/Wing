@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/services/profiles_repository.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/widgets/profile_diagnostics_panel.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profiles_repository.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/widgets/profile_diagnostics_panel.dart';
 
 class _DiagnosticsHost {
   final reads = <(String, Map<String, String>)>[];

@@ -1,4 +1,4 @@
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 import 'studio_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -132,7 +132,7 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
       child: Material(
         elevation: 3,
         shape: RoundedRectangleBorder(
-          borderRadius: HermesRadius.card,
+          borderRadius: WingRadius.card,
           side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
         ),
         clipBehavior: Clip.antiAlias,

@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/widgets/profile_message.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/profile_message.dart';
 
 const _capture = bool.fromEnvironment('STUDIO_REVIEW');
 const _frame = ValueKey('timestamp-frame');
@@ -44,7 +44,7 @@ void main() {
         key: _frame,
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
-          theme: hermesTheme(brightness),
+          theme: wingTheme(brightness),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(
               context,

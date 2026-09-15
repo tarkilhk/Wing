@@ -7,16 +7,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/models/context_occupancy.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
-import 'package:hermes_android/core/widgets/chat_intelligence_picker.dart';
-import 'package:hermes_android/core/widgets/compact_switch.dart';
-import 'package:hermes_android/core/widgets/playful_portrait.dart';
-import 'package:hermes_android/main.dart';
+import 'package:wing/core/models/context_occupancy.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/profile_workspace_theme.dart';
+import 'package:wing/core/widgets/chat_intelligence_picker.dart';
+import 'package:wing/core/widgets/compact_switch.dart';
+import 'package:wing/core/widgets/playful_portrait.dart';
+import 'package:wing/main.dart';
 import 'support/profile_browser_fixture.dart';
 
 const _export = bool.fromEnvironment('STUDIO_REVIEW');
@@ -100,7 +100,7 @@ void main() {
             key: _frame,
             child: MaterialApp(
               debugShowCheckedModeBanner: false,
-              theme: hermesTheme(brightness),
+              theme: wingTheme(brightness),
               builder: (context, child) => MediaQuery(
                 data: MediaQuery.of(
                   context,
@@ -141,7 +141,7 @@ void main() {
         'readable text and actions for ${brightness.name} ${accent.name}',
         () {
           final theme = profileWorkspaceTheme(
-            hermesTheme(brightness),
+            wingTheme(brightness),
             accent: accent,
           );
           final colors = theme.colorScheme;
@@ -209,7 +209,7 @@ void main() {
                 child: MaterialApp(
                   debugShowCheckedModeBanner: false,
                   theme: profileWorkspaceTheme(
-                    hermesTheme(brightness),
+                    wingTheme(brightness),
                     accent: accent,
                   ),
                   builder: (context, child) => MediaQuery(
@@ -452,7 +452,7 @@ void main() {
     ) async {
       await tester.binding.setSurfaceSize(const Size(420, 1000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
-      final theme = hermesTheme(brightness);
+      final theme = wingTheme(brightness);
       await tester.pumpWidget(
         RepaintBoundary(
           key: _frame,

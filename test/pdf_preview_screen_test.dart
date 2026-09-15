@@ -4,9 +4,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/screens/pdf_preview_screen.dart';
-import 'package:hermes_android/core/services/pdf_preview_service.dart';
-import 'package:hermes_android/core/services/remote_files_client.dart';
+import 'package:wing/core/screens/pdf_preview_screen.dart';
+import 'package:wing/core/services/pdf_preview_service.dart';
+import 'package:wing/core/services/remote_files_client.dart';
 
 final _png = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=',

@@ -7,7 +7,7 @@ Current qualification, 2026-09-15: the lifetime/ownership decision remains accep
 
 ## Context
 
-Changing the visible profile is a navigation and data-scope action. It is not an instruction to stop work. Hermes Android already has an application-level turn controller designed to retain coordinators, sockets, and recovery authority above screen lifetimes. Official Hermes Desktop likewise permits background profile sockets and sessions to keep streaming concurrently.
+Changing the visible profile is a navigation and data-scope action. It is not an instruction to stop work. Wing already has an application-level turn controller designed to retain coordinators, sockets, and recovery authority above screen lifetimes. Official Hermes Desktop likewise permits background profile sockets and sessions to keep streaming concurrently.
 
 Closing a profile's turn controller or invoking interrupt during a switch would conflate foreground UI ownership with agent execution ownership. It could destroy useful work and violate user expectations.
 

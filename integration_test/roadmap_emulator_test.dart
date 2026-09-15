@@ -7,15 +7,15 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:hermes_android/core/models/answer_versions.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_connection_identity.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/services/profile_workspace_registry.dart';
-import 'package:hermes_android/core/services/text_size_preference.dart';
-import 'package:hermes_android/core/widgets/app_drawer.dart';
-import 'package:hermes_android/main.dart';
+import 'package:wing/core/models/answer_versions.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_connection_identity.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/profile_workspace_registry.dart';
+import 'package:wing/core/services/text_size_preference.dart';
+import 'package:wing/core/widgets/app_drawer.dart';
+import 'package:wing/main.dart';
 
 import 'support/roadmap_emulator_fixture.dart';
 
@@ -28,7 +28,7 @@ void main() {
   setUp(() async {
     PackageInfo.setMockInitialValues(
       appName: 'Wing',
-      packageName: 'com.tarkilhk.hermes.android',
+      packageName: 'com.tarkilhk.wing',
       version: '1.0.0',
       buildNumber: '1',
       buildSignature: '',
@@ -368,7 +368,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('project-folder-find')));
     await _settle(tester);
     final discoveredFolder = find.byKey(
-      const ValueKey('project-folder-/srv/hermes-android'),
+      const ValueKey('project-folder-/srv/wing'),
     );
     await tester.ensureVisible(discoveredFolder);
     await tester.tap(discoveredFolder);
@@ -381,8 +381,8 @@ void main() {
 
     expect(harness.fixture.projectCreates.single, {
       'name': 'Roadmap integration',
-      'folders': ['/srv/hermes-android'],
-      'primary_path': '/srv/hermes-android',
+      'folders': ['/srv/wing'],
+      'primary_path': '/srv/wing',
       'profile': 'personal',
     });
     expect(find.text('Roadmap integration'), findsOneWidget);
@@ -1047,7 +1047,7 @@ class _RoadmapHarness {
 
   Future<void> launch(WidgetTester tester) async {
     await tester.pumpWidget(
-      HermesApp(connManager: connectionManager, profileControllers: registry),
+      WingApp(connManager: connectionManager, profileControllers: registry),
     );
     await _pumpUntil(
       tester,

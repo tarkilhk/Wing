@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/services/android_share_intent_service.dart';
+import 'package:wing/core/services/android_share_intent_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

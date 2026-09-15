@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 import 'anchored_expansion_tile.dart';
 import 'package:flutter/services.dart';
 
@@ -192,7 +192,7 @@ class ProfileMessage extends StatelessWidget {
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primaryContainer,
-                        borderRadius: HermesRadius.card,
+                        borderRadius: WingRadius.card,
                       ),
                       child: Text(
                         'S',
@@ -239,7 +239,7 @@ class ProfileMessage extends StatelessWidget {
                   decoration: user
                       ? BoxDecoration(
                           color: theme.colorScheme.primaryContainer,
-                          borderRadius: HermesRadius.card,
+                          borderRadius: WingRadius.card,
                         )
                       : null,
                   child: user

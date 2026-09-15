@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/services/administration_repository.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/services/profile_gateway.dart';
 
 class AdministrationFixture {
   final String id;

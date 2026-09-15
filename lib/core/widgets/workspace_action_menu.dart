@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 
 /// Compact row actions anchored to the invoking control, with native dismissal
 /// and keyboard navigation. The menu repositions when the viewport changes.
@@ -13,7 +13,7 @@ Future<String?> showWorkspaceActionMenu(
   String keyPrefix = 'action',
 }) {
   final theme = Theme.of(context);
-  final tokens = HermesTokens.of(context);
+  final tokens = WingTokens.of(context);
   final overlay =
       Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
   RelativeRect position() {
@@ -40,11 +40,11 @@ Future<String?> showWorkspaceActionMenu(
     color: tokens.raised,
     surfaceTintColor: Colors.transparent,
     shape: RoundedRectangleBorder(
-      borderRadius: HermesRadius.card,
+      borderRadius: WingRadius.card,
       side: BorderSide(color: tokens.border),
     ),
     elevation: 4,
-    menuPadding: const EdgeInsets.symmetric(vertical: HermesSpacing.xs),
+    menuPadding: const EdgeInsets.symmetric(vertical: WingSpacing.xs),
     popUpAnimationStyle: MediaQuery.disableAnimationsOf(context)
         ? AnimationStyle.noAnimation
         : const AnimationStyle(duration: Duration(milliseconds: 160)),

@@ -7,7 +7,7 @@ Current qualification, 2026-09-15: the ownership decision remains accepted. The 
 
 ## Context
 
-Hermes Android currently binds its active Workspace to one `SavedConnection`. Its legacy “Switch profile” UI actually switches saved Android connections. Official Hermes profiles are different: each profile identifies an isolated `HERMES_HOME` with its own sessions, projects, configuration, and state.
+Wing currently binds its active Workspace to one `SavedConnection`. Its legacy “Switch profile” UI actually switches saved Android connections. Official Hermes profiles are different: each profile identifies an isolated `HERMES_HOME` with its own sessions, projects, configuration, and state.
 
 A profile-aware Hermes dashboard already supports profile discovery and explicit profile scope on session REST routes and session/project JSON-RPC methods. `POST /api/profiles/active` changes a sticky default for later launches; it does not retarget an already-running client.
 

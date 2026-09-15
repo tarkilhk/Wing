@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/gateway_process.dart';
+import 'package:wing/core/models/gateway_process.dart';
 
 void main() {
   test('parses a real running process row and ignores extra fields', () {

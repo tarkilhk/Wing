@@ -2,9 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/screens/app_settings_content.dart';
-import 'package:hermes_android/core/screens/privacy_policy_screen.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
+import 'package:wing/core/screens/app_settings_content.dart';
+import 'package:wing/core/screens/privacy_policy_screen.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -35,7 +35,7 @@ void main() {
     ) async {
       PackageInfo.setMockInitialValues(
         appName: 'Wing',
-        packageName: 'com.tarkilhk.hermes.android',
+        packageName: 'com.tarkilhk.wing',
         version: '1',
         buildNumber: '1',
         buildSignature: '',
@@ -50,7 +50,7 @@ void main() {
         DefaultAssetBundle(
           bundle: _PolicyBundle(policy),
           child: MaterialApp(
-            theme: hermesTheme(brightness),
+            theme: wingTheme(brightness),
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(
                 context,

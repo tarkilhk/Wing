@@ -7,19 +7,19 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:hermes_android/core/models/gateway_activity.dart';
-import 'package:hermes_android/core/models/gateway_todo.dart';
-import 'package:hermes_android/core/screens/chat_outputs_screen.dart';
-import 'package:hermes_android/core/screens/pdf_preview_screen.dart';
-import 'package:hermes_android/core/services/media_preview_service.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/services/remote_files_client.dart';
-import 'package:hermes_android/core/services/web_preview.dart';
-import 'package:hermes_android/core/widgets/markdown_message_content.dart';
-import 'package:hermes_android/core/widgets/profile_execution_activity.dart';
-import 'package:hermes_android/core/widgets/web_output_preview.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
+import 'package:wing/core/models/gateway_activity.dart';
+import 'package:wing/core/models/gateway_todo.dart';
+import 'package:wing/core/screens/chat_outputs_screen.dart';
+import 'package:wing/core/screens/pdf_preview_screen.dart';
+import 'package:wing/core/services/media_preview_service.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/remote_files_client.dart';
+import 'package:wing/core/services/web_preview.dart';
+import 'package:wing/core/widgets/markdown_message_content.dart';
+import 'package:wing/core/widgets/profile_execution_activity.dart';
+import 'package:wing/core/widgets/web_output_preview.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/profile_workspace_theme.dart';
 
 void main() {
   if (!kDebugMode) throw StateError('Native reading QA requires debug mode.');
@@ -40,7 +40,7 @@ class _StudioPreviewAppState extends State<_StudioPreviewApp> {
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
-    theme: profileWorkspaceTheme(hermesTheme(_brightness), accent: _accent),
+    theme: profileWorkspaceTheme(wingTheme(_brightness), accent: _accent),
     home: _Menu(
       toggleTheme: () => setState(
         () => _brightness = _brightness == Brightness.dark

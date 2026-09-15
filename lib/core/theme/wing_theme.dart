@@ -10,8 +10,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// The 4dp spacing grid shared by every Hermes surface.
-abstract final class HermesSpacing {
+/// The 4dp spacing grid shared by every Wing surface.
+abstract final class WingSpacing {
   static const double xs = 4;
   static const double sm = 8;
   static const double md = 12;
@@ -21,7 +21,7 @@ abstract final class HermesSpacing {
 }
 
 /// Corner radii, growing from small controls to full sheets.
-abstract final class HermesRadius {
+abstract final class WingRadius {
   static const double sm = 6;
   static const double md = 8;
   static const double lg = 10;
@@ -35,7 +35,7 @@ abstract final class HermesRadius {
 }
 
 /// Motion budget. Animations exist to explain a change, never to decorate.
-abstract final class HermesMotion {
+abstract final class WingMotion {
   static const Duration fast = Duration(milliseconds: 120);
   static const Duration standard = Duration(milliseconds: 200);
   static const Duration emphasized = Duration(milliseconds: 320);
@@ -44,11 +44,11 @@ abstract final class HermesMotion {
 }
 
 /// Semantic state of a chat, task, or activity item.
-enum HermesStatus {
+enum WingStatus {
   /// Work is actively progressing.
   running,
 
-  /// Hermes cannot continue without the user (approval, clarify, secret).
+  /// Wing cannot continue without the user (approval, clarify, secret).
   blocked,
 
   /// Work ended in an error.
@@ -61,10 +61,10 @@ enum HermesStatus {
   idle,
 }
 
-/// The Hermes typography ramp.
+/// The Wing typography ramp.
 ///
 /// [mono] owns code, file paths, and terminal output; everything else is prose.
-class HermesTypography {
+class WingTypography {
   static const String sans = 'Roboto';
 
   final TextStyle display;
@@ -74,7 +74,7 @@ class HermesTypography {
   final TextStyle label;
   final TextStyle mono;
 
-  const HermesTypography({
+  const WingTypography({
     required this.display,
     required this.title,
     required this.section,
@@ -83,8 +83,8 @@ class HermesTypography {
     required this.mono,
   });
 
-  static HermesTypography ramp(Brightness brightness) {
-    return const HermesTypography(
+  static WingTypography ramp(Brightness brightness) {
+    return const WingTypography(
       display: TextStyle(
         fontFamily: sans,
         fontSize: 28,
@@ -135,9 +135,9 @@ class HermesTypography {
   }
 }
 
-/// The Hermes design tokens, carried on [ThemeData.extensions].
+/// The Wing design tokens, carried on [ThemeData.extensions].
 @immutable
-class HermesTokens extends ThemeExtension<HermesTokens> {
+class WingTokens extends ThemeExtension<WingTokens> {
   final Brightness brightness;
   final Color surface;
   final Color raised;
@@ -150,9 +150,9 @@ class HermesTokens extends ThemeExtension<HermesTokens> {
   final Color danger;
   final Color running;
   final Color blocked;
-  final HermesTypography typography;
+  final WingTypography typography;
 
-  const HermesTokens({
+  const WingTokens({
     required this.brightness,
     required this.surface,
     required this.raised,
@@ -168,8 +168,8 @@ class HermesTokens extends ThemeExtension<HermesTokens> {
     required this.typography,
   });
 
-  factory HermesTokens.dark() {
-    return HermesTokens(
+  factory WingTokens.dark() {
+    return WingTokens(
       brightness: Brightness.dark,
       surface: const Color(0xFF101B24),
       raised: const Color(0xFF192934),
@@ -182,12 +182,12 @@ class HermesTokens extends ThemeExtension<HermesTokens> {
       danger: const Color(0xFFF87171),
       running: const Color(0xFF60A5FA),
       blocked: const Color(0xFFF59E0B),
-      typography: HermesTypography.ramp(Brightness.dark),
+      typography: WingTypography.ramp(Brightness.dark),
     );
   }
 
-  factory HermesTokens.light() {
-    return HermesTokens(
+  factory WingTokens.light() {
+    return WingTokens(
       brightness: Brightness.light,
       surface: const Color(0xFFF7F7F4),
       raised: const Color(0xFFFFFFFF),
@@ -200,41 +200,41 @@ class HermesTokens extends ThemeExtension<HermesTokens> {
       danger: const Color(0xFFB91C1C),
       running: const Color(0xFF1D4ED8),
       blocked: const Color(0xFF9A5B00),
-      typography: HermesTypography.ramp(Brightness.light),
+      typography: WingTypography.ramp(Brightness.light),
     );
   }
 
-  static HermesTokens forBrightness(Brightness brightness) {
+  static WingTokens forBrightness(Brightness brightness) {
     return brightness == Brightness.dark
-        ? HermesTokens.dark()
-        : HermesTokens.light();
+        ? WingTokens.dark()
+        : WingTokens.light();
   }
 
   /// The tokens for the closest theme, falling back to a matching set when a
   /// widget is mounted under a plain [ThemeData] (tests, previews, plugins).
-  static HermesTokens of(BuildContext context) {
+  static WingTokens of(BuildContext context) {
     final theme = Theme.of(context);
-    return theme.extension<HermesTokens>() ??
-        HermesTokens.forBrightness(theme.brightness);
+    return theme.extension<WingTokens>() ??
+        WingTokens.forBrightness(theme.brightness);
   }
 
-  Color colorForStatus(HermesStatus status) {
+  Color colorForStatus(WingStatus status) {
     switch (status) {
-      case HermesStatus.running:
+      case WingStatus.running:
         return running;
-      case HermesStatus.blocked:
+      case WingStatus.blocked:
         return blocked;
-      case HermesStatus.failed:
+      case WingStatus.failed:
         return danger;
-      case HermesStatus.completed:
+      case WingStatus.completed:
         return success;
-      case HermesStatus.idle:
+      case WingStatus.idle:
         return muted;
     }
   }
 
   @override
-  HermesTokens copyWith({
+  WingTokens copyWith({
     Brightness? brightness,
     Color? surface,
     Color? raised,
@@ -247,9 +247,9 @@ class HermesTokens extends ThemeExtension<HermesTokens> {
     Color? danger,
     Color? running,
     Color? blocked,
-    HermesTypography? typography,
+    WingTypography? typography,
   }) {
-    return HermesTokens(
+    return WingTokens(
       brightness: brightness ?? this.brightness,
       surface: surface ?? this.surface,
       raised: raised ?? this.raised,
@@ -267,9 +267,9 @@ class HermesTokens extends ThemeExtension<HermesTokens> {
   }
 
   @override
-  HermesTokens lerp(ThemeExtension<HermesTokens>? other, double t) {
-    if (other is! HermesTokens) return this;
-    return HermesTokens(
+  WingTokens lerp(ThemeExtension<WingTokens>? other, double t) {
+    if (other is! WingTokens) return this;
+    return WingTokens(
       brightness: t < 0.5 ? brightness : other.brightness,
       surface: Color.lerp(surface, other.surface, t)!,
       raised: Color.lerp(raised, other.raised, t)!,
@@ -287,15 +287,13 @@ class HermesTokens extends ThemeExtension<HermesTokens> {
   }
 }
 
-/// Builds the Hermes [ThemeData] for one brightness, tokens attached.
-ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
-  final tokens = HermesTokens.forBrightness(
-    brightness,
-  ).copyWith(accent: accent);
+/// Builds the Wing [ThemeData] for one brightness, tokens attached.
+ThemeData wingTheme(Brightness brightness, {Color? accent}) {
+  final tokens = WingTokens.forBrightness(brightness).copyWith(accent: accent);
   final dark = brightness == Brightness.dark;
   final onAccent = dark ? const Color(0xFF102C32) : Colors.white;
   final selected =
-      accent == null || accent == HermesTokens.forBrightness(brightness).accent
+      accent == null || accent == WingTokens.forBrightness(brightness).accent
       ? dark
             ? const Color(0xFF20454A)
             : const Color(0xFFE2F1EE)
@@ -328,16 +326,14 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
 
   final base = ThemeData(
     colorScheme: scheme,
-    fontFamily: HermesTypography.sans,
+    fontFamily: WingTypography.sans,
     brightness: brightness,
     useMaterial3: true,
   );
 
-  const actionShape = RoundedRectangleBorder(
-    borderRadius: HermesRadius.control,
-  );
+  const actionShape = RoundedRectangleBorder(borderRadius: WingRadius.control);
   final panelShape = RoundedRectangleBorder(
-    borderRadius: HermesRadius.card,
+    borderRadius: WingRadius.card,
     side: BorderSide(color: tokens.border),
   );
   final focusBorder = WidgetStateProperty.resolveWith<BorderSide?>(
@@ -351,13 +347,13 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
     shape: actionShape,
     tapTargetSize: MaterialTapTargetSize.padded,
     textStyle: const TextStyle(
-      fontFamily: HermesTypography.sans,
+      fontFamily: WingTypography.sans,
       fontSize: 14,
       fontWeight: FontWeight.w600,
     ),
   );
   final fieldBorder = OutlineInputBorder(
-    borderRadius: HermesRadius.control,
+    borderRadius: WingRadius.control,
     borderSide: BorderSide(color: tokens.border),
   );
 
@@ -475,11 +471,11 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
         borderSide: BorderSide(color: tokens.danger, width: 2),
       ),
       labelStyle: TextStyle(
-        fontFamily: HermesTypography.sans,
+        fontFamily: WingTypography.sans,
         color: tokens.muted,
       ),
       hintStyle: TextStyle(
-        fontFamily: HermesTypography.sans,
+        fontFamily: WingTypography.sans,
         color: tokens.muted,
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -492,12 +488,12 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
       disabledColor: tokens.border,
       checkmarkColor: tokens.accent,
       labelStyle: TextStyle(
-        fontFamily: HermesTypography.sans,
+        fontFamily: WingTypography.sans,
         color: tokens.onSurface,
         fontSize: 13,
       ),
       secondaryLabelStyle: TextStyle(
-        fontFamily: HermesTypography.sans,
+        fontFamily: WingTypography.sans,
         color: tokens.onSurface,
         fontSize: 13,
       ),
@@ -515,12 +511,12 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
     ),
     listTileTheme: ListTileThemeData(
       titleTextStyle: TextStyle(
-        fontFamily: HermesTypography.sans,
+        fontFamily: WingTypography.sans,
         fontSize: 16,
         color: tokens.onSurface,
       ),
       subtitleTextStyle: TextStyle(
-        fontFamily: HermesTypography.sans,
+        fontFamily: WingTypography.sans,
         fontSize: 13,
         color: tokens.muted,
       ),
@@ -547,7 +543,7 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
       shape: panelShape,
       labelTextStyle: WidgetStatePropertyAll(
         TextStyle(
-          fontFamily: HermesTypography.sans,
+          fontFamily: WingTypography.sans,
           color: tokens.onSurface,
           fontSize: 14,
         ),
@@ -563,7 +559,7 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
     dropdownMenuTheme: DropdownMenuThemeData(
       disabledColor: tokens.muted,
       textStyle: TextStyle(
-        fontFamily: HermesTypography.sans,
+        fontFamily: WingTypography.sans,
         color: tokens.onSurface,
         fontSize: 16,
       ),
@@ -580,11 +576,11 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
     tooltipTheme: TooltipThemeData(
       decoration: BoxDecoration(
         color: tokens.raised,
-        borderRadius: HermesRadius.control,
+        borderRadius: WingRadius.control,
         border: Border.all(color: tokens.border),
       ),
       textStyle: TextStyle(
-        fontFamily: HermesTypography.sans,
+        fontFamily: WingTypography.sans,
         color: tokens.onSurface,
         fontSize: 12,
       ),
@@ -633,7 +629,7 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: HermesRadius.card,
+        borderRadius: WingRadius.card,
         side: BorderSide(color: tokens.border),
       ),
     ),
@@ -652,7 +648,7 @@ ThemeData hermesTheme(Brightness brightness, {Color? accent}) {
       clipBehavior: Clip.antiAlias,
       backgroundColor: tokens.raised,
       surfaceTintColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(borderRadius: HermesRadius.sheet),
+      shape: const RoundedRectangleBorder(borderRadius: WingRadius.sheet),
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: tokens.raised,

@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/services/profiles_repository.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profiles_repository.dart';
 
 /// Authored UI data, never used by the production application or a live server.
 class ProfileBrowserFixture {
@@ -194,7 +194,9 @@ class ProfileBrowserFixture {
     rpc: (method, params) async {
       calls.add((scope.profileName, method, params));
       if (method == 'session.active_list') {
-        return {'sessions': liveSessions.values.expand((rows) => rows).toList()};
+        return {
+          'sessions': liveSessions.values.expand((rows) => rows).toList(),
+        };
       }
       if (method == 'projects.tree') {
         if (failProjects) throw StateError('Projects unavailable');

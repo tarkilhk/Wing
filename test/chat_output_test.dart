@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/chat_output.dart';
+import 'package:wing/core/models/chat_output.dart';
 
 void main() {
   test('classifies only explicit remote file link targets', () {

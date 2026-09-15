@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/widgets/profile_activity_tabs.dart';
-import 'package:hermes_android/core/widgets/profile_execution_activity.dart';
-import 'package:hermes_android/core/widgets/profile_tool_activity.dart';
-import 'package:hermes_android/core/widgets/anchored_expansion_tile.dart';
-import 'package:hermes_android/core/utils/expansion_scroll_controller.dart';
+import 'package:wing/core/widgets/profile_activity_tabs.dart';
+import 'package:wing/core/widgets/profile_execution_activity.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/widgets/anchored_expansion_tile.dart';
+import 'package:wing/core/utils/expansion_scroll_controller.dart';
 
 void main() {
   for (final scale in [1.0, 2.0, 3.0]) {

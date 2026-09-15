@@ -5,11 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
-import 'package:hermes_android/core/widgets/studio_action_label.dart';
-import 'package:hermes_android/core/widgets/studio_error.dart';
-import 'package:hermes_android/core/widgets/studio_select.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/profile_workspace_theme.dart';
+import 'package:wing/core/widgets/studio_action_label.dart';
+import 'package:wing/core/widgets/studio_error.dart';
+import 'package:wing/core/widgets/studio_select.dart';
 
 const _export = bool.fromEnvironment('STUDIO_AUDIT_REVIEW');
 final _frame = GlobalKey();
@@ -60,7 +60,7 @@ void main() {
         addTearDown(tester.view.reset);
         Future<void> show(bool busy) => tester.pumpWidget(
           MaterialApp(
-            theme: hermesTheme(Brightness.light),
+            theme: wingTheme(Brightness.light),
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(
                 context,
@@ -102,7 +102,7 @@ void main() {
               child: MaterialApp(
                 debugShowCheckedModeBanner: false,
                 theme: profileWorkspaceTheme(
-                  hermesTheme(brightness),
+                  wingTheme(brightness),
                   accent: accent,
                 ),
                 builder: (context, child) => MediaQuery(
@@ -179,7 +179,7 @@ void main() {
               child: MaterialApp(
                 debugShowCheckedModeBanner: false,
                 theme: profileWorkspaceTheme(
-                  hermesTheme(brightness),
+                  wingTheme(brightness),
                   accent: accent,
                 ),
                 home: Scaffold(

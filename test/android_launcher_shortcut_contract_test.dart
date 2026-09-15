@@ -16,48 +16,35 @@ void main() {
     expect(shortcuts, contains('android:shortcutId="new_quick_chat"'));
     expect(
       shortcuts,
-      contains('android:targetPackage="@string/hermes_application_id"'),
+      contains('android:targetPackage="@string/wing_application_id"'),
     );
     expect(
       shortcuts,
-      contains(
-        'android:targetClass="com.hermesagent.hermes_android.MainActivity"',
-      ),
+      contains('android:targetClass="com.tarkilhk.wing.MainActivity"'),
     );
-    expect(
-      shortcuts,
-      contains('com.hermesagent.hermes_android.action.QUICK_CHAT'),
-    );
+    expect(shortcuts, contains('com.tarkilhk.wing.action.QUICK_CHAT'));
   });
 
   test(
-    'personal release has a separate identity and keeps Dev storage',
+    'Wing release and development builds have distinct application IDs',
     () async {
       final gradle = await File('android/app/build.gradle.kts').readAsString();
       expect(
         gradle,
-        contains('variant.applicationId.set("com.tarkilhk.hermes.android")'),
+        contains('variant.applicationId.set("com.tarkilhk.wing")'),
       );
+      expect(gradle, contains('manifestPlaceholders["appLabel"] = "Wing"'));
       expect(
         gradle,
-        contains('manifestPlaceholders["appLabel"] = "Wing"'),
+        contains('"wing_application_id", "com.tarkilhk.wing.dev"'),
       );
-      expect(
-        gradle,
-        contains(
-          '"hermes_application_id", "com.hermesagent.hermes_android.dev"',
-        ),
-      );
-      expect(
-        gradle,
-        contains('"hermes_application_id", "com.tarkilhk.hermes.android"'),
-      );
+      expect(gradle, contains('"wing_application_id", "com.tarkilhk.wing"'));
     },
   );
 
   test('MainActivity forwards cold and warm shortcut launches', () async {
     final source = await File(
-      'android/app/src/main/kotlin/com/hermesagent/hermes_android/MainActivity.kt',
+      'android/app/src/main/kotlin/com/tarkilhk/wing/MainActivity.kt',
     ).readAsString();
 
     expect(source, contains('getInitialLaunchAction'));

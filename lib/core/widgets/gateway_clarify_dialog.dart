@@ -1,7 +1,7 @@
 import 'studio_action_label.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../models/gateway_clarify.dart';
@@ -108,7 +108,7 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
             ? theme.colorScheme.primaryContainer
             : theme.colorScheme.surfaceContainer,
         shape: RoundedRectangleBorder(
-          borderRadius: HermesRadius.card,
+          borderRadius: WingRadius.card,
           side: BorderSide(color: theme.colorScheme.outlineVariant),
         ),
         clipBehavior: Clip.antiAlias,
@@ -204,7 +204,7 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
               textInputAction: TextInputAction.done,
               decoration: InputDecoration(
                 isDense: true,
-                border: OutlineInputBorder(borderRadius: HermesRadius.control),
+                border: OutlineInputBorder(borderRadius: WingRadius.control),
                 labelText: request.hasChoices ? 'Other answer' : 'Your answer',
               ),
               onChanged: (value) {
@@ -255,7 +255,7 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: theme.colorScheme.surfaceContainerLow,
-          borderRadius: HermesRadius.card,
+          borderRadius: WingRadius.card,
           border: Border.all(
             color: theme.colorScheme.primary.withValues(alpha: 0.35),
           ),

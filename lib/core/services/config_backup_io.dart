@@ -47,12 +47,12 @@ class ConfigBackupIo {
         .split('.')
         .first;
     final directory = await getTemporaryDirectory();
-    final file = File('${directory.path}/hermes-config-$stamp.json');
+    final file = File('${directory.path}/wing-config-$stamp.json');
     await file.writeAsString(contents, flush: true);
 
     final result = await SharePlus.instance.share(
       ShareParams(
-        subject: 'Hermes configuration backup',
+        subject: 'Wing configuration backup',
         files: <XFile>[XFile(file.path, mimeType: 'application/json')],
       ),
     );

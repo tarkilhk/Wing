@@ -1,7 +1,7 @@
 import '../widgets/studio_action_label.dart';
 import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 import '../widgets/workspace_action_menu.dart';
 
 import '../services/profile_workspace_controller.dart';
@@ -117,7 +117,7 @@ Widget projectAvatar(
     height: size,
     decoration: BoxDecoration(
       color: color.withValues(alpha: 0.16),
-      borderRadius: HermesRadius.control,
+      borderRadius: WingRadius.control,
     ),
     alignment: Alignment.center,
     child: Icon(icon, size: (size * 0.55).clamp(16.0, 24.0), color: color),

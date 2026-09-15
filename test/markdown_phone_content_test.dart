@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/widgets/markdown_code_block.dart';
-import 'package:hermes_android/core/widgets/profile_message.dart';
+import 'package:wing/core/widgets/markdown_code_block.dart';
+import 'package:wing/core/widgets/profile_message.dart';
 
 void main() {
   testWidgets(

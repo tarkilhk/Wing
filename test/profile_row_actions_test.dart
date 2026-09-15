@@ -2,10 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/widgets/profile_chat_indicator.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/widgets/profile_chat_indicator.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
 
@@ -29,7 +29,7 @@ void main() {
   Future<void> show(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        theme: hermesTheme(Brightness.light),
+        theme: wingTheme(Brightness.light),
         home: ProfileWorkspaceScreen(controller: controller),
       ),
     );
@@ -589,33 +589,30 @@ void main() {
       );
     },
   );
-  test(
-    'failed moves and busy runtimes do not change local rows',
-    () async {
-      final project = controller.current!.projects.first;
-      final before = Map<String, dynamic>.from(
-        controller.current!.sessions.firstWhere((r) => r['id'] == 'newest'),
-      );
-      host.active = true;
-      host.activeStatus = 'working';
-      await expectLater(
-        controller.moveSessionToProject(key(), project),
-        throwsStateError,
-      );
-      expect(host.moves, isEmpty);
-      host.active = false;
-      host.failMutation = true;
-      await expectLater(
-        controller.moveSessionToProject(key(), project),
-        throwsStateError,
-      );
-      expect(
-        controller.current!.sessions.firstWhere((r) => r['id'] == 'newest'),
-        before,
-      );
-      expect(controller.current!.mutatingSessions, isEmpty);
-    },
-  );
+  test('failed moves and busy runtimes do not change local rows', () async {
+    final project = controller.current!.projects.first;
+    final before = Map<String, dynamic>.from(
+      controller.current!.sessions.firstWhere((r) => r['id'] == 'newest'),
+    );
+    host.active = true;
+    host.activeStatus = 'working';
+    await expectLater(
+      controller.moveSessionToProject(key(), project),
+      throwsStateError,
+    );
+    expect(host.moves, isEmpty);
+    host.active = false;
+    host.failMutation = true;
+    await expectLater(
+      controller.moveSessionToProject(key(), project),
+      throwsStateError,
+    );
+    expect(
+      controller.current!.sessions.firstWhere((r) => r['id'] == 'newest'),
+      before,
+    );
+    expect(controller.current!.mutatingSessions, isEmpty);
+  });
   test(
     'duplicate and delayed moves retain original profile ownership',
     () async {

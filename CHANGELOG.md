@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Release helper with major, minor and patch version bumps, changelog preparation and a command to publish a merged version tag.
+- Verified GitHub APK releases with checksums, archived debug symbols and build metadata; publish only after all uploaded assets pass verification.
+
 ### Changed
 
 - Rename the app to Wing, with Wing Dev for development builds. Preserve package IDs, signing configuration and saved data compatibility.

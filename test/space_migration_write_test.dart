@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/services/chat_space_store.dart';
-import 'package:hermes_android/core/services/projects_gateway_client.dart';
-import 'package:hermes_android/core/services/projects_repository.dart';
-import 'package:hermes_android/core/services/ws_client.dart';
+import 'package:wing/core/services/chat_space_store.dart';
+import 'package:wing/core/services/projects_gateway_client.dart';
+import 'package:wing/core/services/projects_repository.dart';
+import 'package:wing/core/services/ws_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// The migration *write* path: turning the validated preview into real server
@@ -165,13 +165,13 @@ void main() {
       () async {
         final prefs = await SharedPreferences.getInstance();
         final gateway = _FakeGateway(
-          projects: [_projectJson(id: 'p1', name: 'Hermes Android')],
+          projects: [_projectJson(id: 'p1', name: 'Wing workspace')],
         );
         final repo = _repository(gateway, prefs);
         await repo.refresh();
         // Same project, different casing/spacing than the local Space.
         final store = await _storeWith(prefs, [
-          '  hermes   android ',
+          '  wing   workspace ',
           'New One',
         ]);
 

@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/theme/profile_markdown_style.dart';
-import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
-import 'package:hermes_android/core/widgets/profile_message.dart';
+import 'package:wing/core/theme/profile_markdown_style.dart';
+import 'package:wing/core/theme/profile_workspace_theme.dart';
+import 'package:wing/core/widgets/profile_message.dart';
 
 const sample =
     '## Keep the review focused\n\n'

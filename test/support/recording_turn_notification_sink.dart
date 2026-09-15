@@ -1,4 +1,4 @@
-import 'package:hermes_android/core/services/turn_notification_service.dart';
+import 'package:wing/core/services/turn_notification_service.dart';
 
 /// In-memory [TurnNotificationSink] used to characterize what Hermes actually
 /// posts to Android, without touching the platform plugin.

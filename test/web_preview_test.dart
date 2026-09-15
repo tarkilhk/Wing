@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/services/web_preview.dart';
+import 'package:wing/core/services/web_preview.dart';
 import 'package:url_launcher_platform_interface/link.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
@@ -20,7 +20,8 @@ class _Browser extends UrlLauncherPlatform {
   Future<bool> launchUrl(String url, LaunchOptions options) async {
     calls.add((url, options));
     if (options.mode == PreferredLaunchMode.inAppBrowserView && previewFails ||
-        options.mode == PreferredLaunchMode.externalApplication && externalFails) {
+        options.mode == PreferredLaunchMode.externalApplication &&
+            externalFails) {
       throw PlatformException(code: 'ACTIVITY_NOT_FOUND');
     }
     return true;
@@ -40,19 +41,25 @@ void main() {
   });
   tearDown(() => UrlLauncherPlatform.instance = original);
 
-  test('opens the exact web URL in a titled browser preview without headers', () async {
-    expect(await openWebPreview(uri), isTrue);
-    expect(browser.calls.single.$1, uri.toString());
-    final options = browser.calls.single.$2;
-    expect(options.mode, PreferredLaunchMode.inAppBrowserView);
-    expect(options.browserConfiguration.showTitle, isTrue);
-    expect(options.webViewConfiguration.headers, isEmpty);
-  });
+  test(
+    'opens the exact web URL in a titled browser preview without headers',
+    () async {
+      expect(await openWebPreview(uri), isTrue);
+      expect(browser.calls.single.$1, uri.toString());
+      final options = browser.calls.single.$2;
+      expect(options.mode, PreferredLaunchMode.inAppBrowserView);
+      expect(options.browserConfiguration.showTitle, isTrue);
+      expect(options.webViewConfiguration.headers, isEmpty);
+    },
+  );
 
   test('unsupported previews use the external browser', () async {
     browser.supported = false;
     expect(await openWebPreview(uri), isTrue);
-    expect(browser.calls.single.$2.mode, PreferredLaunchMode.externalApplication);
+    expect(
+      browser.calls.single.$2.mode,
+      PreferredLaunchMode.externalApplication,
+    );
   });
 
   test('preview failure falls back and total failure is recoverable', () async {

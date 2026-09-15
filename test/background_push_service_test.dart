@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/services/background_push_service.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_connection_identity.dart';
-import 'package:hermes_android/core/services/turn_notification_service.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/background_push_service.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_connection_identity.dart';
+import 'package:wing/core/services/turn_notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _MemoryCredentialStore implements CredentialStore {
@@ -146,13 +146,13 @@ void main() {
       final first = await coordinator.sync(
         connections: [connection],
         fcmToken: 'token-1',
-        applicationId: 'com.tarkilhk.hermes.android',
+        applicationId: 'com.tarkilhk.wing',
         pushPreferences: pushPreferences,
       );
       final second = await coordinator.sync(
         connections: [connection],
         fcmToken: 'token-2',
-        applicationId: 'com.tarkilhk.hermes.android',
+        applicationId: 'com.tarkilhk.wing',
         pushPreferences: pushPreferences,
       );
 
@@ -164,10 +164,7 @@ void main() {
         {'installation-1'},
       );
       expect(transport.registerCalls.last.token, 'token-2');
-      expect(
-        transport.registerCalls.last.applicationId,
-        'com.tarkilhk.hermes.android',
-      );
+      expect(transport.registerCalls.last.applicationId, 'com.tarkilhk.wing');
       expect(transport.registerCalls.last.preferences.toJson(), {
         'completion': true,
         'attention': false,
@@ -195,13 +192,13 @@ void main() {
     final first = coordinator.sync(
       connections: [connection],
       fcmToken: 'old-token',
-      applicationId: 'com.tarkilhk.hermes.android',
+      applicationId: 'com.tarkilhk.wing',
       pushPreferences: pushPreferences,
     );
     final second = coordinator.sync(
       connections: [connection],
       fcmToken: 'new-token',
-      applicationId: 'com.tarkilhk.hermes.android',
+      applicationId: 'com.tarkilhk.wing',
       pushPreferences: pushPreferences,
     );
     await Future<void>.delayed(Duration.zero);
@@ -227,7 +224,7 @@ void main() {
     await coordinator.sync(
       connections: [connection],
       fcmToken: 'token',
-      applicationId: 'com.tarkilhk.hermes.android',
+      applicationId: 'com.tarkilhk.wing',
       pushPreferences: pushPreferences,
     );
 
@@ -377,7 +374,7 @@ void main() {
     await coordinator.sync(
       connections: [connection],
       fcmToken: 'token',
-      applicationId: 'com.tarkilhk.hermes.android',
+      applicationId: 'com.tarkilhk.wing',
       pushPreferences: const PushPreferences(
         completion: true,
         attention: true,
@@ -388,7 +385,7 @@ void main() {
     final result = await coordinator.sync(
       connections: [connection],
       fcmToken: 'token',
-      applicationId: 'com.tarkilhk.hermes.android',
+      applicationId: 'com.tarkilhk.wing',
       pushPreferences: const PushPreferences(
         completion: false,
         attention: false,
@@ -417,7 +414,7 @@ void main() {
     await coordinator.sync(
       connections: [connection],
       fcmToken: 'token',
-      applicationId: 'com.tarkilhk.hermes.android',
+      applicationId: 'com.tarkilhk.wing',
       pushPreferences: pushPreferences,
     );
     transport.failProfiles.add(connection.id);
@@ -425,7 +422,7 @@ void main() {
     final result = await coordinator.sync(
       connections: [connection],
       fcmToken: 'rotated-token',
-      applicationId: 'com.tarkilhk.hermes.android',
+      applicationId: 'com.tarkilhk.wing',
       pushPreferences: pushPreferences,
     );
 
@@ -451,14 +448,14 @@ void main() {
       await coordinator.sync(
         connections: [connection],
         fcmToken: 'token',
-        applicationId: 'com.tarkilhk.hermes.android',
+        applicationId: 'com.tarkilhk.wing',
         pushPreferences: pushPreferences,
       );
 
       await coordinator.sync(
         connections: const [],
         fcmToken: 'token',
-        applicationId: 'com.tarkilhk.hermes.android',
+        applicationId: 'com.tarkilhk.wing',
         pushPreferences: pushPreferences,
       );
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/screens/administration/admin_providers_page.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
+import 'package:wing/core/screens/administration/admin_providers_page.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 import 'support/administration_fixture.dart';
 
 Map<String, dynamic> provider(
@@ -54,7 +54,7 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         MaterialApp(
-          theme: hermesTheme(Brightness.dark),
+          theme: wingTheme(Brightness.dark),
           home: AdminProvidersPage(
             profile: fixture.server.profile('default'),
             shared: true,
@@ -125,7 +125,7 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         MaterialApp(
-          theme: hermesTheme(Brightness.light),
+          theme: wingTheme(Brightness.light),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(
               context,

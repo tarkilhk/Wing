@@ -1,7 +1,7 @@
 import '../widgets/studio_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 import '../services/profile_workspace_controller.dart';
 import '../utils/expansion_scroll_controller.dart';
 import '../widgets/anchored_expansion_tile.dart';
@@ -351,13 +351,13 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                           child: Center(
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                vertical: HermesSpacing.xl,
+                                vertical: WingSpacing.xl,
                               ),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   const PlayfulPortrait(size: 104),
-                                  const SizedBox(height: HermesSpacing.lg),
+                                  const SizedBox(height: WingSpacing.lg),
                                   Text(
                                     'Start a conversation',
                                     textAlign: TextAlign.center,
@@ -500,7 +500,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                                 color: Theme.of(context).colorScheme.primary,
                                 width: 2,
                               ),
-                              borderRadius: HermesRadius.card,
+                              borderRadius: WingRadius.card,
                             )
                           : null,
                       child: widget.messageBuilder(section.messages.last),

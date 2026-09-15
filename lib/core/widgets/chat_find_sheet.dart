@@ -2,7 +2,7 @@ import 'studio_error.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 
 import '../models/answer_versions.dart';
 import '../models/transcript_notice.dart';
@@ -153,7 +153,7 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                       labelText: 'Find in chat',
                       prefixIcon: Icon(Icons.search),
                       border: OutlineInputBorder(
-                        borderRadius: HermesRadius.control,
+                        borderRadius: WingRadius.control,
                       ),
                     ),
                   ),

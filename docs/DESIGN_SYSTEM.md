@@ -21,7 +21,7 @@ The app is **Wing** in prose, Android labels and accessibility text. The
 approved wordmark reads **wing** in lowercase. The owner selected the compact
 feather-accent board on 15 September 2026. See the
 [Wing identity specification](design/2026-09-15-wing-identity.md) for the board,
-wordmark rules, decorative feather system and naming compatibility decisions.
+wordmark rules, decorative feather system and application identity decisions.
 
 The owner selected the Playful portrait: a winking woman with a simple dark bob,
 mint headphones and a messenger wing on the earcup. Keep the navy, cream and

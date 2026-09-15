@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 import 'compact_switch.dart';
 
 /// View filters and workspace commands, anchored below the app-bar control.
@@ -26,27 +26,27 @@ class WorkspaceOptionsMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = HermesTokens.of(context);
+    final tokens = WingTokens.of(context);
     return PopupMenuButton<String>(
       enabled: enabled,
       tooltip: 'Workspace options',
       icon: const Icon(Icons.more_horiz, size: 20),
       style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
       position: PopupMenuPosition.under,
-      offset: const Offset(0, HermesSpacing.xs),
+      offset: const Offset(0, WingSpacing.xs),
       constraints: const BoxConstraints(minWidth: 288, maxWidth: 288),
       color: tokens.raised,
       surfaceTintColor: Colors.transparent,
       elevation: 4,
       shape: RoundedRectangleBorder(
-        borderRadius: HermesRadius.card,
+        borderRadius: WingRadius.card,
         side: BorderSide(color: tokens.border),
       ),
-      menuPadding: const EdgeInsets.symmetric(vertical: HermesSpacing.xs),
+      menuPadding: const EdgeInsets.symmetric(vertical: WingSpacing.xs),
       requestFocus: true,
       popUpAnimationStyle: MediaQuery.disableAnimationsOf(context)
           ? AnimationStyle.noAnimation
-          : const AnimationStyle(duration: HermesMotion.fast),
+          : const AnimationStyle(duration: WingMotion.fast),
       onSelected: onSelected,
       itemBuilder: (_) => [
         if (!projectsOnly) ...[
@@ -89,7 +89,7 @@ class _Option extends PopupMenuItem<String> {
         value: id,
         height: 48,
         child: null,
-        padding: const EdgeInsets.symmetric(horizontal: HermesSpacing.lg),
+        padding: const EdgeInsets.symmetric(horizontal: WingSpacing.lg),
       );
 
   final String label;
@@ -114,11 +114,11 @@ class _OptionState extends PopupMenuItemState<String, _Option> {
   Widget buildChild() {
     final colors = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: HermesSpacing.xs),
+      padding: const EdgeInsets.symmetric(vertical: WingSpacing.xs),
       child: Row(
         children: [
           Icon(widget.icon, size: 20, color: colors.onSurfaceVariant),
-          const SizedBox(width: HermesSpacing.md),
+          const SizedBox(width: WingSpacing.md),
           Expanded(
             child: Text(
               widget.label,
@@ -129,7 +129,7 @@ class _OptionState extends PopupMenuItemState<String, _Option> {
             ),
           ),
           if (widget.toggled case final value?) ...[
-            const SizedBox(width: HermesSpacing.md),
+            const SizedBox(width: WingSpacing.md),
             // The native menu row owns focus, semantics and activation. The
             // switch is its state indicator; tapping it selects the same row.
             ExcludeSemantics(

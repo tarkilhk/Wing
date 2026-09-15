@@ -53,7 +53,7 @@ abstract class HermesBuildLease : BuildService<HermesBuildLease.Parameters>, Aut
         try {
             val acquired = try { opened.tryLock() } catch (_: OverlappingFileLockException) { null }
             check(acquired != null) {
-                "Another Hermes Android build is running. Let it finish, then retry. " +
+                "Another Wing build is running. Let it finish, then retry. " +
                     "Reuse one checkout to keep Flutter and Gradle incremental outputs."
             }
             channel = opened
@@ -70,7 +70,7 @@ abstract class HermesBuildLease : BuildService<HermesBuildLease.Parameters>, Aut
 }
 
 val hermesBuildLease = gradle.sharedServices.registerIfAbsent("hermesBuildLease", HermesBuildLease::class) {
-    parameters.lockFile.fileValue(gradle.gradleUserHomeDir.resolve("hermes-android-build.lock"))
+    parameters.lockFile.fileValue(gradle.gradleUserHomeDir.resolve("wing-build.lock"))
 }
 hermesBuildLease.get().acquire()
 gradle.beforeProject {

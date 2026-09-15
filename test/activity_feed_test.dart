@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/gateway_turn_contract.dart';
-import 'package:hermes_android/core/services/gateway_turn_journal.dart';
-import 'package:hermes_android/core/services/gateway_turn_recovery.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/utils/activity_feed.dart';
+import 'package:wing/core/models/gateway_turn_contract.dart';
+import 'package:wing/core/services/gateway_turn_journal.dart';
+import 'package:wing/core/services/gateway_turn_recovery.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/utils/activity_feed.dart';
 
 const _digestA =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -161,7 +161,7 @@ void main() {
     final item = _group(feed, ActivityGroupKind.needsYou).items.single;
     expect(item.sessionId, 'session-a');
     expect(item.label, 'Waiting for your input');
-    expect(item.status, HermesStatus.blocked);
+    expect(item.status, WingStatus.blocked);
     expect(feed.blockedCount, 1);
   });
 
@@ -173,7 +173,7 @@ void main() {
 
     final item = _group(feed, ActivityGroupKind.running).items.single;
     expect(item.label, 'Submitted, waiting for Hermes');
-    expect(item.status, HermesStatus.running);
+    expect(item.status, WingStatus.running);
     expect(item.turnId, isNull);
     expect(feed.runningCount, 1);
   });
@@ -196,7 +196,7 @@ void main() {
 
     final item = _group(feed, ActivityGroupKind.failed).items.single;
     expect(item.label, 'Turn recovery failed');
-    expect(item.status, HermesStatus.failed);
+    expect(item.status, WingStatus.failed);
   });
 
   test('an interrupted turn reads as stopped, not as completed work', () {
@@ -208,7 +208,7 @@ void main() {
 
     final item = _group(feed, ActivityGroupKind.completed).items.single;
     expect(item.label, 'Stopped');
-    expect(item.status, HermesStatus.idle);
+    expect(item.status, WingStatus.idle);
   });
 
   test('a running turn with no update for too long is reported as stalled', () {

@@ -1,4 +1,4 @@
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
 
@@ -164,7 +164,7 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                       ).colorScheme.surfaceContainerHighest,
                       child: SelectableText(
                         lines.join('\n'),
-                        style: HermesTokens.of(context).typography.mono,
+                        style: WingTokens.of(context).typography.mono,
                       ),
                     ),
                   ],

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/text_size_preference.dart';
-import 'package:hermes_android/core/widgets/text_size_settings_card.dart';
-import 'package:hermes_android/main.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/text_size_preference.dart';
+import 'package:wing/core/widgets/text_size_settings_card.dart';
+import 'package:wing/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -134,16 +134,16 @@ void main() {
     }
   });
 
-  testWidgets('HermesApp updates its inherited scaler immediately', (
+  testWidgets('WingApp updates its inherited scaler immediately', (
     tester,
   ) async {
     final prefs = await SharedPreferences.getInstance();
-    final appKey = GlobalKey<HermesAppState>();
+    final appKey = GlobalKey<WingAppState>();
 
     await tester.pumpWidget(
       MediaQuery(
         data: const MediaQueryData(textScaler: TextScaler.linear(1.6)),
-        child: HermesApp(key: appKey, connManager: ConnectionManager(prefs)),
+        child: WingApp(key: appKey, connManager: ConnectionManager(prefs)),
       ),
     );
     await tester.pumpAndSettle();

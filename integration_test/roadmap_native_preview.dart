@@ -14,14 +14,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:hermes_android/core/services/android_launch_intent_service.dart';
-import 'package:hermes_android/core/services/android_share_intent_service.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_connection_identity.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/services/profile_workspace_registry.dart';
-import 'package:hermes_android/core/services/turn_notification_service.dart';
-import 'package:hermes_android/main.dart';
+import 'package:wing/core/services/android_launch_intent_service.dart';
+import 'package:wing/core/services/android_share_intent_service.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_connection_identity.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/profile_workspace_registry.dart';
+import 'package:wing/core/services/turn_notification_service.dart';
+import 'package:wing/main.dart';
 
 import 'support/roadmap_emulator_fixture.dart';
 
@@ -103,9 +103,9 @@ Future<void> main() async {
   final shareIntents = AndroidShareIntentService();
   final launchIntents = AndroidLaunchIntentService();
   await Future.wait([shareIntents.initialize(), launchIntents.initialize()]);
-  final appKey = GlobalKey<HermesAppState>();
+  final appKey = GlobalKey<WingAppState>();
   runApp(
-    HermesApp(
+    WingApp(
       key: appKey,
       connManager: manager,
       profileControllers: registry,

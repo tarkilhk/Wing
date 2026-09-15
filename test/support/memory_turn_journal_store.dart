@@ -5,11 +5,10 @@
 /// caller's degradation path is assertable.
 library;
 
-import 'package:hermes_android/core/services/gateway_turn_journal.dart';
+import 'package:wing/core/services/gateway_turn_journal.dart';
 
 class MemoryTurnJournalStore implements GatewayTurnJournalStore {
   String? value;
-  String? legacyValue;
 
   /// When true, every operation throws, standing in for a storage backend
   /// that is unavailable on this device.
@@ -35,17 +34,5 @@ class MemoryTurnJournalStore implements GatewayTurnJournalStore {
   Future<void> delete() async {
     _guard();
     value = null;
-  }
-
-  @override
-  Future<String?> readLegacy() async {
-    _guard();
-    return legacyValue;
-  }
-
-  @override
-  Future<void> deleteLegacy() async {
-    _guard();
-    legacyValue = null;
   }
 }

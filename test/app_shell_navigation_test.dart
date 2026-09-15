@@ -3,12 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/screens/workspace_overview_content.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/widgets/app_drawer.dart';
-import 'package:hermes_android/main.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/screens/workspace_overview_content.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/widgets/app_drawer.dart';
+import 'package:wing/main.dart';
 
 import 'support/profile_browser_fixture.dart';
 
@@ -19,7 +19,7 @@ void main() {
   setUp(() async {
     PackageInfo.setMockInitialValues(
       appName: 'Wing',
-      packageName: 'com.tarkilhk.hermes.android',
+      packageName: 'com.tarkilhk.wing',
       version: '1.0.0',
       buildNumber: '1',
       buildSignature: '',

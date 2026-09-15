@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/services/media_preview_service.dart';
-import 'package:hermes_android/core/services/remote_files_client.dart';
+import 'package:wing/core/services/media_preview_service.dart';
+import 'package:wing/core/services/remote_files_client.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -30,7 +30,7 @@ import '../widgets/gateway_sensitive_prompt_panel.dart';
 import '../widgets/gateway_clarify_dialog.dart';
 import '../widgets/chat_find_sheet.dart';
 import '../theme/profile_workspace_theme.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 import '../widgets/profile_activity_status.dart';
 import '../widgets/chat_intelligence_picker.dart';
 import '../widgets/context_ring.dart';
@@ -962,7 +962,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                         color: Theme.of(
                           context,
                         ).colorScheme.surfaceContainerLow,
-                        borderRadius: HermesRadius.card,
+                        borderRadius: WingRadius.card,
                         border: Border.all(
                           color: Theme.of(context).colorScheme.outlineVariant,
                         ),

@@ -16,7 +16,7 @@
 library;
 
 import '../models/session.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 
 /// A Home section, declared in descending attention rank.
 enum HomeSectionKind {
@@ -50,7 +50,7 @@ enum HomeSectionKind {
 /// One session as Home presents it.
 class HomeItem {
   final Session session;
-  final HermesStatus status;
+  final WingStatus status;
 
   /// Why this session is blocked, when it is. `null` for every other status,
   /// so the UI never invents a reason.
@@ -170,7 +170,7 @@ HomeDigest buildHomeDigest({
       buckets[HomeSectionKind.needsYou]!.add(
         HomeItem(
           session: session,
-          status: HermesStatus.blocked,
+          status: WingStatus.blocked,
           activityAt: activityAt,
           attentionLabel: reason,
           projectName: projectNames[session.id],
@@ -183,7 +183,7 @@ HomeDigest buildHomeDigest({
       buckets[HomeSectionKind.running]!.add(
         HomeItem(
           session: session,
-          status: HermesStatus.running,
+          status: WingStatus.running,
           activityAt: activityAt,
           projectName: projectNames[session.id],
         ),
@@ -198,7 +198,7 @@ HomeDigest buildHomeDigest({
       buckets[HomeSectionKind.completedRecently]!.add(
         HomeItem(
           session: session,
-          status: HermesStatus.completed,
+          status: WingStatus.completed,
           activityAt: activityAt,
           projectName: projectNames[session.id],
         ),
@@ -211,7 +211,7 @@ HomeDigest buildHomeDigest({
     buckets[HomeSectionKind.continueWorking]!.add(
       HomeItem(
         session: session,
-        status: HermesStatus.idle,
+        status: WingStatus.idle,
         activityAt: activityAt,
         projectName: projectNames[session.id],
       ),

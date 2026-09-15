@@ -1,16 +1,16 @@
 # Android release guide
 
-This guide covers this fork's build identity and release checks. Source versions do not imply published artifacts. Check [the releases page](https://github.com/tarkilhk/hermes-android/releases) for published APKs and [the changelog](../CHANGELOG.md) for release changes.
+This guide covers this fork's build identity and release checks. Source versions do not imply published artifacts. Check [the releases page](https://github.com/tarkilhk/wing/releases) for published APKs and [the changelog](../CHANGELOG.md) for release changes.
 
 ## Identity and versioning
 
 | Build | Application ID | Signing |
 | --- | --- | --- |
-| Personal release | `com.tarkilhk.hermes.android` | Existing Personal release key |
-| Ordinary development | `com.hermesagent.hermes_android.dev` | Android debug key |
-| Personal development | `com.tarkilhk.hermes.android` | Existing Personal key, explicitly enabled by the development build script |
+| Wing release | `com.tarkilhk.wing` | Existing Wing release key |
+| Ordinary development | `com.tarkilhk.wing.dev` | Android debug key |
+| Wing development | `com.tarkilhk.wing` | Existing Wing key, explicitly enabled by the development build script |
 
-The upstream package `com.hermesagent.hermes_android` is separate. Never uninstall an existing app to bypass a signature mismatch. Updates that preserve data require the same application ID, a compatible signing certificate and an acceptable version code.
+Wing uses a new application ID and starts with separate local app data. Never uninstall an existing app to bypass a signature mismatch. Updates that preserve data require the same application ID, a compatible signing certificate and an acceptable version code.
 
 Read the source version and base build number from [pubspec.yaml](../pubspec.yaml). For split APKs, Gradle computes `base * 10 + ABI`, where ARMv7 is 1, ARM64 is 2 and x86_64 is 3. For example, base 2227 gives ARM64 code 22272. This is an example, not a second source of the current version.
 
@@ -34,17 +34,17 @@ Record dependency update decisions rather than upgrading everything during a rel
 
 Signing material stays outside Git. Ordinary release builds never fall back to the debug key; without release signing configuration, they are unsigned validation artifacts.
 
-The maintainer's Windows signing directory is `%LOCALAPPDATA%/HermesPersonal/signing`. The existing script loads its DPAPI-protected credential, supplies signing through process environment variables and checks the certificate, package, version code and debuggable flag:
+The build script's default Windows signing directory is `%LOCALAPPDATA%/Wing/signing`. The script expects `wing.p12` and loads its DPAPI-protected credential, supplies signing through process environment variables and checks the certificate, package, version code and debuggable flag:
 
 ```powershell
-./scripts/build-personal-release.ps1 -ToolchainRoot '<toolchain-root>' -OptimizeAndroid
+./scripts/build-wing-release.ps1 -ToolchainRoot '<toolchain-root>' -OptimizeAndroid
 ```
 
-`-OptimizeAndroid` enables the smaller optimized distribution APK. The toolchain root contains `flutter`, `jdk-17` and `android-sdk`. `-InitializeSigning` is for first provisioning only; it refuses an existing directory. Do not generate a replacement key for updates. `-Development` produces a debuggable Personal build and must not be distributed as a production release.
+`-OptimizeAndroid` enables the smaller optimized distribution APK. The toolchain root contains `flutter`, `jdk-17` and `android-sdk`. `-InitializeSigning` is for first provisioning only; it refuses an existing directory. Do not generate a replacement key for updates. `-Development` produces a debuggable Wing build and must not be distributed as a production release.
 
-The public certificate fingerprint is pinned in `android/personal-release-certificate.sha256`. Keep a protected, portable backup of the keystore and password; the DPAPI credential file alone cannot be moved to another Windows account or machine.
+The public certificate fingerprint is pinned in `android/wing-release-certificate.sha256`. Keep a protected, portable backup of the keystore and password; the DPAPI credential file alone cannot be moved to another Windows account or machine.
 
-CI signing uses `KEYSTORE_BASE64`, `STORE_PASSWORD`, `KEY_PASSWORD` and `KEY_ALIAS` in the repository secret store. Local Gradle signing also accepts repository-root `key.properties` or all four `HERMES_STORE_FILE`, `HERMES_STORE_PASSWORD`, `HERMES_KEY_ALIAS` and `HERMES_KEY_PASSWORD` environment variables. Never place values in source, release notes or logs.
+CI signing uses `KEYSTORE_BASE64`, `STORE_PASSWORD`, `KEY_PASSWORD` and `KEY_ALIAS` in the repository secret store. Local Gradle signing also accepts repository-root `key.properties` or all four `WING_STORE_FILE`, `WING_STORE_PASSWORD`, `WING_KEY_ALIAS` and `WING_KEY_PASSWORD` environment variables. Never place values in source, release notes or logs.
 
 Before installation, inspect the built artifact with Android build tools. Verify package, effective version code, non-debuggable status and the expected certificate. Test a signed release on a phone: connect, stream a reply, reopen history, switch profiles, interrupt and recover a send, attach/queue files, open an output and check notification routing.
 
@@ -68,6 +68,10 @@ Before submitting, verify the final bundle on a device and follow [Android's pag
 
 Publish [PRIVACY.md](../PRIVACY.md) at a public URL and enter that URL in Play Console. The app already bundles the same policy for offline reading in App settings. Complete Data safety using [the data-handling inventory](PLAY_DATA_SAFETY.md) and the actual artifact's SDK configuration. This document does not represent completed Play Console declarations. Include complete license/copyright notices consistent with the [recorded upstream MIT identification](../NOTICE.md).
 
-## Moving settings between packages
+## Local data and backups
 
-Android isolates storage by package ID. The encrypted configuration export/import can transfer connections, credentials and allowlisted preferences. It does not transfer every appearance setting, profile selection, draft, queue or recovery journal. Keep the old app until the new one works, and review unsent work before uninstalling. Hermes retains server conversation data independently.
+Android isolates storage by package ID, so this identity starts with separate
+local data. Wing exports and imports `wing-config` backups in a
+`wing-config-encrypted` envelope. Backups from the previous identity are rejected;
+connections and settings must be configured again. Recovery journals are not
+migrated. Hermes retains server conversation data independently.

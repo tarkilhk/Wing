@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:hermes_android/core/models/context_occupancy.dart';
-import 'package:hermes_android/core/widgets/context_ring.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
+import 'package:wing/core/models/context_occupancy.dart';
+import 'package:wing/core/widgets/context_ring.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 
 void main() {
   testWidgets('context details can be reached and opened with a keyboard', (
@@ -12,7 +12,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
-        theme: hermesTheme(Brightness.light),
+        theme: wingTheme(Brightness.light),
         home: const Scaffold(body: Center(child: ContextRing(occupancy: null))),
       ),
     );
@@ -129,7 +129,7 @@ void main() {
       addTearDown(focus.dispose);
       await tester.pumpWidget(
         MaterialApp(
-          theme: hermesTheme(Brightness.dark),
+          theme: wingTheme(Brightness.dark),
           home: Scaffold(
             body: Align(
               alignment: Alignment.bottomLeft,
@@ -193,11 +193,11 @@ void main() {
     'occupancy keeps the existing warning thresholds in both themes',
     (tester) async {
       for (final brightness in Brightness.values) {
-        final tokens = HermesTokens.forBrightness(brightness);
+        final tokens = WingTokens.forBrightness(brightness);
         for (final percent in [0.0, 64.9, 65.0, 84.9, 85.0, 100.0]) {
           await tester.pumpWidget(
             MaterialApp(
-              theme: hermesTheme(brightness),
+              theme: wingTheme(brightness),
               home: Scaffold(
                 body: Center(
                   child: ContextRing(

@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/services/profiles_repository.dart';
-import 'package:hermes_android/core/widgets/profile_default_model_sheet.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profiles_repository.dart';
+import 'package:wing/core/widgets/profile_default_model_sheet.dart';
 
 class _Fixture {
   String provider = 'openai-codex';
@@ -143,10 +143,10 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(
-      fixture.reads.singleWhere((read) => read.$1 == 'model/options').$2,
-      {'explicit_only': '1', 'profile': 'work'},
-    );
+    expect(fixture.reads.singleWhere((read) => read.$1 == 'model/options').$2, {
+      'explicit_only': '1',
+      'profile': 'work',
+    });
 
     await selectAstra(tester);
     await save(tester);
@@ -271,9 +271,9 @@ void main() {
     await tester.pumpAndSettle();
     await selectAstra(tester);
     expect(
-      tester.widget<FilledButton>(
-        find.byKey(const Key('profile-model-save')),
-      ).onPressed,
+      tester
+          .widget<FilledButton>(find.byKey(const Key('profile-model-save')))
+          .onPressed,
       isNotNull,
     );
     await save(tester);
@@ -286,11 +286,7 @@ void main() {
   testWidgets('search and save actions fit above a small-screen keyboard', (
     tester,
   ) async {
-    await open(
-      tester,
-      size: const Size(320, 640),
-      keyboard: 240,
-    );
+    await open(tester, size: const Size(320, 640), keyboard: 240);
 
     expect(tester.takeException(), isNull);
     expect(find.byKey(const Key('profile-model-search')), findsOneWidget);

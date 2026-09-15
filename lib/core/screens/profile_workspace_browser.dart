@@ -8,7 +8,7 @@ import '../services/composer_draft_store.dart';
 import '../services/profile_workspace_controller.dart';
 import '../models/session_visibility.dart';
 import '../services/profile_gateway.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 import '../theme/profile_workspace_theme.dart';
 import '../widgets/profile_chat_indicator.dart';
 import '../widgets/workspace_options_menu.dart';
@@ -178,7 +178,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Material(
         color: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: HermesRadius.card),
+        shape: RoundedRectangleBorder(borderRadius: WingRadius.card),
         clipBehavior: Clip.antiAlias,
         child: ListTile(
           key: ValueKey('project-${project['id']}'),
@@ -235,7 +235,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           color: row['pinned'] == true
               ? Theme.of(context).colorScheme.surfaceContainerLow
               : Colors.transparent,
-          borderRadius: HermesRadius.card,
+          borderRadius: WingRadius.card,
           clipBehavior: Clip.antiAlias,
           child: ListTile(
             key: ValueKey('chat-${row['id']}'),
@@ -349,7 +349,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
           child: Material(
             color: Theme.of(context).colorScheme.surfaceContainerLow,
-            borderRadius: HermesRadius.card,
+            borderRadius: WingRadius.card,
             clipBehavior: Clip.antiAlias,
             child: GestureDetector(
               onSecondaryTap: controller.switching ? null : actions,
@@ -652,7 +652,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       _projectVisibleCount = ProfileGateway.sessionPageSize;
     }
     final colors = Theme.of(context).colorScheme;
-    final background = HermesTokens.of(context).surface;
+    final background = WingTokens.of(context).surface;
     final isWorkspaceHome =
         project == null &&
         !_unreadOnly &&
@@ -845,7 +845,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                                                     : 0.09,
                                               ),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: HermesRadius.control,
+                                            borderRadius: WingRadius.control,
                                           ),
                                         ).copyWith(
                                           side: WidgetStateProperty.resolveWith((

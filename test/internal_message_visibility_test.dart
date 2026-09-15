@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/answer_versions.dart';
-import 'package:hermes_android/core/models/transcript_notice.dart';
-import 'package:hermes_android/core/models/skill_invocation.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/widgets/profile_message.dart';
-import 'package:hermes_android/core/widgets/chat_find_sheet.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/models/answer_versions.dart';
+import 'package:wing/core/models/transcript_notice.dart';
+import 'package:wing/core/models/skill_invocation.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/widgets/profile_message.dart';
+import 'package:wing/core/widgets/chat_find_sheet.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;

@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:hermes_android/core/widgets/compact_switch.dart';
+import 'package:wing/core/widgets/compact_switch.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/screens/administration/administration_content.dart';
-import 'package:hermes_android/core/screens/administration/admin_settings_page.dart';
-import 'package:hermes_android/core/screens/administration/admin_tool_setup_page.dart';
-import 'package:hermes_android/core/screens/administration/admin_widgets.dart';
-import 'package:hermes_android/core/screens/administration/admin_providers_page.dart';
-import 'package:hermes_android/core/services/administration_repository.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
+import 'package:wing/core/screens/administration/administration_content.dart';
+import 'package:wing/core/screens/administration/admin_settings_page.dart';
+import 'package:wing/core/screens/administration/admin_tool_setup_page.dart';
+import 'package:wing/core/screens/administration/admin_widgets.dart';
+import 'package:wing/core/screens/administration/admin_providers_page.dart';
+import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 
 /// Real-device acceptance. Use only an isolated, disposable Hermes home.
 /// No fixture transport or inference is used. The two QA profiles are removed.
@@ -141,7 +141,7 @@ void main() {
   Future<void> show(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        theme: hermesTheme(Brightness.dark),
+        theme: wingTheme(Brightness.dark),
         home: Scaffold(
           appBar: AppBar(title: const Text('Administration')),
           body: HermesAdministrationContent(
@@ -257,7 +257,7 @@ void main() {
       }.entries) {
         await tester.pumpWidget(
           MaterialApp(
-            theme: hermesTheme(Brightness.dark),
+            theme: wingTheme(Brightness.dark),
             home: Navigator(
               onGenerateRoute: (_) => MaterialPageRoute<void>(
                 builder: (_) => AdminSettingsPage(
@@ -750,7 +750,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           key: ValueKey(tool),
-          theme: hermesTheme(Brightness.dark),
+          theme: wingTheme(Brightness.dark),
           home: AdminToolSetupPage(profile: profile, name: tool),
         ),
       );

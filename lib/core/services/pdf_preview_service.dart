@@ -11,7 +11,7 @@ class PdfDocument {
 
 /// Temporary native PDF resources, released when the reader closes.
 class PdfPreviewService {
-  static const channelName = 'com.hermesagent.hermes_android/pdf_preview';
+  static const channelName = 'com.tarkilhk.wing/pdf_preview';
   final MethodChannel _channel;
 
   const PdfPreviewService({MethodChannel? channel})

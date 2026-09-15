@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/session.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/utils/home_digest.dart';
+import 'package:wing/core/models/session.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/utils/home_digest.dart';
 
 /// A fixed clock so window boundaries are asserted, not approximated.
 final _now = DateTime.utc(2026, 8, 27, 12, 0, 0);
@@ -115,7 +115,7 @@ void main() {
       );
 
       final item = _section(digest, HomeSectionKind.needsYou)!.items.single;
-      expect(item.status, HermesStatus.blocked);
+      expect(item.status, WingStatus.blocked);
       expect(item.attentionLabel, 'Clarification needed');
     });
 
@@ -127,7 +127,7 @@ void main() {
       );
 
       final item = _section(digest, HomeSectionKind.running)!.items.single;
-      expect(item.status, HermesStatus.running);
+      expect(item.status, WingStatus.running);
       expect(item.attentionLabel, isNull);
     });
 
@@ -338,14 +338,11 @@ void main() {
           _session(id: 'b'),
         ],
         now: _now,
-        projectNames: const {'a': 'Hermes Android'},
+        projectNames: const {'a': 'Wing'},
       );
 
       final items = _section(digest, HomeSectionKind.continueWorking)!.items;
-      expect(
-        items.firstWhere((i) => i.session.id == 'a').projectName,
-        'Hermes Android',
-      );
+      expect(items.firstWhere((i) => i.session.id == 'a').projectName, 'Wing');
       expect(items.firstWhere((i) => i.session.id == 'b').projectName, isNull);
     });
 

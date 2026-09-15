@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/utils/message_content.dart';
+import 'package:wing/core/utils/message_content.dart';
 
 void main() {
   group('messageContentToText', () {

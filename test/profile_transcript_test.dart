@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/models/gateway_sensitive_prompt.dart';
-import 'package:hermes_android/core/models/gateway_activity.dart';
-import 'package:hermes_android/core/widgets/profile_execution_activity.dart';
-import 'package:hermes_android/core/screens/profile_transcript.dart';
-import 'package:hermes_android/core/widgets/playful_portrait.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/models/gateway_sensitive_prompt.dart';
+import 'package:wing/core/models/gateway_activity.dart';
+import 'package:wing/core/widgets/profile_execution_activity.dart';
+import 'package:wing/core/screens/profile_transcript.dart';
+import 'package:wing/core/widgets/playful_portrait.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_history_fixture.dart';
 

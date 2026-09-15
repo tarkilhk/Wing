@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/hermes_project.dart';
-import 'package:hermes_android/core/services/capability_registry.dart';
-import 'package:hermes_android/core/services/projects_gateway_client.dart';
-import 'package:hermes_android/core/services/ws_client.dart';
+import 'package:wing/core/models/hermes_project.dart';
+import 'package:wing/core/services/capability_registry.dart';
+import 'package:wing/core/services/projects_gateway_client.dart';
+import 'package:wing/core/services/ws_client.dart';
 
 /// Records the JSON-RPC calls a test makes and replays canned envelopes.
 class _RecordingRpc {
@@ -37,8 +37,8 @@ Map<String, dynamic> _error(int code, String message) => {
 
 Map<String, dynamic> _projectJson({
   String id = 'p1',
-  String slug = 'hermes-android',
-  String name = 'Hermes Android',
+  String slug = 'wing',
+  String name = 'Wing',
   bool archived = false,
   List<Map<String, dynamic>>? folders,
 }) {
@@ -50,14 +50,14 @@ Map<String, dynamic> _projectJson({
     'icon': 'phone',
     'color': '#D4AF37',
     'board_slug': null,
-    'primary_path': '/home/carlos/dev/hermes-android',
+    'primary_path': '/home/carlos/dev/wing',
     'archived': archived,
     'created_at': 1750000000,
     'folders':
         folders ??
         [
           {
-            'path': '/home/carlos/dev/hermes-android',
+            'path': '/home/carlos/dev/wing',
             'label': 'app',
             'is_primary': true,
             'added_at': 1750000000,
@@ -72,10 +72,10 @@ void main() {
       final project = HermesProject.fromJson(_projectJson());
 
       expect(project.id, 'p1');
-      expect(project.slug, 'hermes-android');
-      expect(project.name, 'Hermes Android');
+      expect(project.slug, 'wing');
+      expect(project.name, 'Wing');
       expect(project.description, 'Android daily driver');
-      expect(project.primaryPath, '/home/carlos/dev/hermes-android');
+      expect(project.primaryPath, '/home/carlos/dev/wing');
       expect(project.archived, isFalse);
       expect(project.folders, hasLength(1));
       expect(project.folders.single.isPrimary, isTrue);
@@ -118,7 +118,7 @@ void main() {
       expect(snapshot.activeId, 'p1');
       expect(snapshot.active.map((p) => p.id), ['p1']);
       expect(snapshot.archived.map((p) => p.id), ['p2']);
-      expect(snapshot.activeProject?.name, 'Hermes Android');
+      expect(snapshot.activeProject?.name, 'Wing');
     });
 
     test('snapshot ignores an active id that no longer exists', () {
@@ -146,7 +146,7 @@ void main() {
 
       expect(rpc.calls.single.method, 'projects.list');
       expect(rpc.calls.single.params, isEmpty);
-      expect(snapshot.projects.single.name, 'Hermes Android');
+      expect(snapshot.projects.single.name, 'Wing');
       expect(snapshot.activeId, 'p1');
     });
 

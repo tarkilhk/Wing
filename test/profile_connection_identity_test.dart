@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_connection_identity.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_connection_identity.dart';
 
 class MemoryIdentityStore implements CredentialStore {
   final values = <String, String>{};
@@ -111,7 +111,10 @@ void main() {
       },
     );
 
-    expect(await identities.resolve(reordered), await identities.resolve(first));
+    expect(
+      await identities.resolve(reordered),
+      await identities.resolve(first),
+    );
     expect(
       await identities.resolve(
         reordered.copyWith(

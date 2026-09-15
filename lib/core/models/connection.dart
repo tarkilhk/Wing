@@ -11,9 +11,7 @@ class NormalizedConnectionHost {
   });
 }
 
-final RegExp _gatewayHeaderToken = RegExp(
-  r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$",
-);
+final RegExp _gatewayHeaderToken = RegExp(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$");
 
 const Set<String> _managedGatewayHeaders = <String>{
   'authorization',
@@ -99,9 +97,8 @@ Map<String, String> resolveGatewayHeaderUpdate(
 List<List<String>> canonicalGatewayHeaders(Map<String, String> headers) {
   final entries = validateGatewayHeaders(headers).entries.toList()
     ..sort(
-      (first, second) => first.key.toLowerCase().compareTo(
-        second.key.toLowerCase(),
-      ),
+      (first, second) =>
+          first.key.toLowerCase().compareTo(second.key.toLowerCase()),
     );
   return entries
       .map((entry) => <String>[entry.key.toLowerCase(), entry.value])

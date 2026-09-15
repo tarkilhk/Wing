@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/screens/administration/admin_settings_page.dart';
-import 'package:hermes_android/core/screens/administration/admin_memory_page.dart';
-import 'package:hermes_android/core/screens/administration/admin_providers_page.dart';
-import 'package:hermes_android/core/screens/administration/admin_widgets.dart';
-import 'package:hermes_android/core/screens/administration/admin_tool_setup_page.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
+import 'package:wing/core/screens/administration/admin_settings_page.dart';
+import 'package:wing/core/screens/administration/admin_memory_page.dart';
+import 'package:wing/core/screens/administration/admin_providers_page.dart';
+import 'package:wing/core/screens/administration/admin_widgets.dart';
+import 'package:wing/core/screens/administration/admin_tool_setup_page.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'support/administration_fixture.dart';
 
 const _fields = [
@@ -51,7 +51,7 @@ void main() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        theme: hermesTheme(Brightness.dark),
+        theme: wingTheme(Brightness.dark),
         home: AdminToolSetupPage(
           profile: fixture.server.profile('personal'),
           name: 'stt',
@@ -106,7 +106,7 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         MaterialApp(
-          theme: hermesTheme(Brightness.dark),
+          theme: wingTheme(Brightness.dark),
           home: AdminSettingsPage(
             profile: fixture.server.profile('personal'),
             title: 'Memory settings',
@@ -347,7 +347,7 @@ void main() {
         final f = AdministrationFixture();
         await tester.pumpWidget(
           MaterialApp(
-            theme: profileWorkspaceTheme(hermesTheme(brightness)),
+            theme: profileWorkspaceTheme(wingTheme(brightness)),
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(
                 context,

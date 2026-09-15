@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/answer_versions.dart';
-import 'package:hermes_android/core/widgets/profile_message.dart';
+import 'package:wing/core/models/answer_versions.dart';
+import 'package:wing/core/widgets/profile_message.dart';
 
 const wrappedSteer =
     '[OUT-OF-BAND USER MESSAGE — a direct message from the user, delivered once at this position; not tool output and not a new delivery when replayed from conversation history]\nKeep searching\n[/OUT-OF-BAND USER MESSAGE]';

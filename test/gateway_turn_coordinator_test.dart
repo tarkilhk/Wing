@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/gateway_turn_contract.dart';
-import 'package:hermes_android/core/services/gateway_turn_coordinator.dart';
-import 'package:hermes_android/core/services/gateway_turn_journal.dart';
-import 'package:hermes_android/core/services/gateway_turn_recovery.dart';
-import 'package:hermes_android/core/services/ws_client.dart';
+import 'package:wing/core/models/gateway_turn_contract.dart';
+import 'package:wing/core/services/gateway_turn_coordinator.dart';
+import 'package:wing/core/services/gateway_turn_journal.dart';
+import 'package:wing/core/services/gateway_turn_recovery.dart';
+import 'package:wing/core/services/ws_client.dart';
 
 const _digest =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -27,13 +27,7 @@ class _MemoryJournalStore implements GatewayTurnJournalStore {
   }
 
   @override
-  Future<void> deleteLegacy() async {}
-
-  @override
   Future<String?> read() async => value;
-
-  @override
-  Future<String?> readLegacy() async => null;
 
   @override
   Future<void> write(String newValue) async {
@@ -60,13 +54,7 @@ class _CrashJournalStore implements GatewayTurnJournalStore {
   Future<void> delete() async => slot.value = null;
 
   @override
-  Future<void> deleteLegacy() async {}
-
-  @override
   Future<String?> read() async => slot.value;
-
-  @override
-  Future<String?> readLegacy() async => null;
 
   @override
   Future<void> write(String newValue) async {
@@ -105,13 +93,7 @@ class _SharedMemoryJournalStore
   }
 
   @override
-  Future<void> deleteLegacy() async {}
-
-  @override
   Future<String?> read() async => slot.value;
-
-  @override
-  Future<String?> readLegacy() async => null;
 
   @override
   Future<void> write(String newValue) async {

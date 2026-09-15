@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:hermes_android/core/widgets/compact_switch.dart';
+import 'package:wing/core/widgets/compact_switch.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/screens/app_settings_content.dart';
-import 'package:hermes_android/core/services/turn_notification_service.dart';
+import 'package:wing/core/screens/app_settings_content.dart';
+import 'package:wing/core/services/turn_notification_service.dart';
 
 void main() {
   setUp(() {

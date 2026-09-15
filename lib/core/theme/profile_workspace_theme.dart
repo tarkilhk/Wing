@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'hermes_theme.dart';
+import 'wing_theme.dart';
 
 /// Shared appearance for the workspace, connection setup and app shell.
 enum WorkspaceAccent {
@@ -23,7 +23,7 @@ ThemeData profileWorkspaceTheme(
   ThemeData base, {
   WorkspaceAccent accent = WorkspaceAccent.mint,
 }) {
-  return hermesTheme(
+  return wingTheme(
     base.brightness,
     accent: base.brightness == Brightness.dark ? accent.dark : accent.light,
   );

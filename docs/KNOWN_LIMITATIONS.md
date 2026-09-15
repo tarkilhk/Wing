@@ -6,13 +6,13 @@ These limits describe the current client. The [product plan](PRODUCT_PLAN.md) co
 
 The app requires the modern Hermes dashboard, profile/session APIs and Desktop Gateway. Older API-only/SSE installations are not supported by the active workspace. Capabilities depend on the server and provider. A slash command appearing in a catalog does not establish that it works from Android. Terminal-only, messaging-only and host-microphone operations retain those restrictions.
 
-Some dashboard requests still lack a transport deadline. A host that accepts a connection but never answers can leave connection setup or a download pending. Tracked in [issue #18](https://github.com/tarkilhk/hermes-android/issues/18).
+Some dashboard requests still lack a transport deadline. A host that accepts a connection but never answers can leave connection setup or a download pending. Tracked in [issue #18](https://github.com/tarkilhk/wing/issues/18).
 
 ## Leaving the app and recovering work
 
 Hermes runs accepted work on the server. The phone must be running and connected to drain its unsent follow-up queue or generate local alerts. Unopened chats have limited notification coverage, and Android can suspend background connections. Firebase delivery is outside the selected release scope.
 
-If Android closes after a normal send reaches Hermes but before its acknowledgement arrives, the retained draft can return without an uncertainty warning. Check server history before sending that draft again. The client does not automatically resend it. This affects the acknowledgement window; it does not mean every reconnect duplicates a message. Tracked in [issue #17](https://github.com/tarkilhk/hermes-android/issues/17).
+If Android closes after a normal send reaches Hermes but before its acknowledgement arrives, the retained draft can return without an uncertainty warning. Check server history before sending that draft again. The client does not automatically resend it. This affects the acknowledgement window; it does not mean every reconnect duplicates a message. Tracked in [issue #17](https://github.com/tarkilhk/wing/issues/17).
 
 Pending sensitive requests, side tasks and synchronized answer-version recovery depend on server capabilities. See [Sensitive input and side questions](SUPERVISION_AND_QUEUES.md#sensitive-input-and-approvals) and [Server chat relationships](SERVER_CHAT_RELATIONSHIPS.md). Client fixtures do not establish live-server support.
 

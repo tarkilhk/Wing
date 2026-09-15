@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/services/profiles_repository.dart';
-import 'package:hermes_android/core/widgets/project_folder_picker.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/profiles_repository.dart';
+import 'package:wing/core/widgets/project_folder_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _ProjectScreenHost {
@@ -129,10 +129,7 @@ void main() {
       discover: () async {
         discoveries++;
         return const [
-          ProjectFolderSuggestion(
-            path: '/srv/hermes-android',
-            label: 'Hermes Android',
-          ),
+          ProjectFolderSuggestion(path: '/srv/wing', label: 'Wing'),
           ProjectFolderSuggestion(path: '/srv/docs', label: 'Docs'),
         ];
       },
@@ -142,23 +139,21 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('project-folder-find')));
     await tester.pumpAndSettle();
     expect(discoveries, 1);
-    expect(find.text('Hermes Android'), findsOneWidget);
+    expect(find.text('Wing'), findsOneWidget);
 
-    await tester.tap(
-      find.byKey(const ValueKey('project-folder-/srv/hermes-android')),
-    );
+    await tester.tap(find.byKey(const ValueKey('project-folder-/srv/wing')));
     await tester.pump();
     expect(
       tester
           .widget<TextField>(find.byKey(const ValueKey('project-folder-path')))
           .controller!
           .text,
-      '/srv/hermes-android',
+      '/srv/wing',
     );
     await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
     await tester.pumpAndSettle();
 
-    expect(result, '/srv/hermes-android');
+    expect(result, '/srv/wing');
   });
 
   testWidgets('folders remain usable with large text and the keyboard open', (

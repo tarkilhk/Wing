@@ -3,8 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/gateway_sensitive_prompt.dart';
-import 'package:hermes_android/core/widgets/gateway_sensitive_prompt_panel.dart';
+import 'package:wing/core/models/gateway_sensitive_prompt.dart';
+import 'package:wing/core/widgets/gateway_sensitive_prompt_panel.dart';
 
 void main() {
   const sudo = GatewaySensitivePromptRequest(

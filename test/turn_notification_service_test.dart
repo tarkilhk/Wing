@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/services/turn_notification_service.dart';
+import 'package:wing/core/services/turn_notification_service.dart';
 
 import 'support/recording_turn_notification_sink.dart';
 
-/// Characterization tests for the notification behaviour Hermes Android ships
+/// Characterization tests for the notification behaviour Wing ships
 /// today. These tests pin the current contract so changes remain deliberate.
 void main() {
   late RecordingTurnNotificationSink sink;
@@ -77,7 +77,7 @@ void main() {
         expect(posted.body, 'Roadmap: Response ready');
         // The payload is the deep-link seed Phase 3 will extend.
         expect(posted.payload, 'turn-42');
-        expect(posted.channel.id, 'hermes_turn_notifications');
+        expect(posted.channel.id, 'wing_turn_notifications');
         expect(posted.channel.name, 'Wing Turns');
         expect(
           posted.channel.description,

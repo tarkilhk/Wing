@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
+import 'package:wing/core/services/connection_manager.dart';
 
 void main() {
   for (final download in [false, true]) {

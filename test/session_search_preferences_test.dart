@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/services/session_search_preferences.dart';
+import 'package:wing/core/services/session_search_preferences.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

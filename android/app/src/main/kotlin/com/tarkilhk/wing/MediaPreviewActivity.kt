@@ -1,4 +1,4 @@
-package com.hermesagent.hermes_android
+package com.tarkilhk.wing
 
 import android.app.Activity
 import android.graphics.Typeface

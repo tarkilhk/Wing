@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models/context_occupancy.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 
 /// Server-reported context occupancy, independent of task progress.
 class ContextRing extends StatefulWidget {
@@ -26,7 +26,7 @@ class _ContextRingState extends State<ContextRing>
   @override
   void initState() {
     super.initState();
-    _animation = AnimationController(vsync: this, duration: HermesMotion.fast)
+    _animation = AnimationController(vsync: this, duration: WingMotion.fast)
       ..addStatusListener((status) {
         if (status == AnimationStatus.dismissed) _portal.hide();
       });
@@ -42,7 +42,7 @@ class _ContextRingState extends State<ContextRing>
   void _toggle() {
     _animation.duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
-        : HermesMotion.fast;
+        : WingMotion.fast;
     if (_portal.isShowing && _animation.status != AnimationStatus.reverse) {
       _animation.reverse();
     } else {
@@ -52,7 +52,7 @@ class _ContextRingState extends State<ContextRing>
   }
 
   Widget _details(BuildContext context, String label, Color color) {
-    final tokens = HermesTokens.of(context);
+    final tokens = WingTokens.of(context);
     final media = MediaQuery.of(context);
     final box = _anchor.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.attached) return const SizedBox.shrink();
@@ -82,7 +82,7 @@ class _ContextRingState extends State<ContextRing>
                   child: ScaleTransition(
                     alignment: Alignment.bottomLeft,
                     scale: _animation
-                        .drive(CurveTween(curve: HermesMotion.curve))
+                        .drive(CurveTween(curve: WingMotion.curve))
                         .drive(Tween(begin: .92, end: 1.0)),
                     child: ConstrainedBox(
                       constraints: BoxConstraints(
@@ -98,11 +98,11 @@ class _ContextRingState extends State<ContextRing>
                           color: tokens.raised,
                           elevation: 4,
                           shape: RoundedRectangleBorder(
-                            borderRadius: HermesRadius.card,
+                            borderRadius: WingRadius.card,
                             side: BorderSide(color: tokens.border),
                           ),
                           child: SingleChildScrollView(
-                            padding: const EdgeInsets.all(HermesSpacing.md),
+                            padding: const EdgeInsets.all(WingSpacing.md),
                             child: Semantics(
                               label: label,
                               liveRegion: true,
@@ -128,7 +128,7 @@ class _ContextRingState extends State<ContextRing>
                                         ),
                                     ],
                                   ),
-                                  const SizedBox(height: HermesSpacing.xs),
+                                  const SizedBox(height: WingSpacing.xs),
                                   Text(
                                     value == null
                                         ? label
@@ -138,7 +138,7 @@ class _ContextRingState extends State<ContextRing>
                                     ),
                                   ),
                                   if (value != null) ...[
-                                    const SizedBox(height: HermesSpacing.sm),
+                                    const SizedBox(height: WingSpacing.sm),
                                     LinearProgressIndicator(
                                       value: value.percent.clamp(0, 100) / 100,
                                       minHeight: 3,
@@ -166,7 +166,7 @@ class _ContextRingState extends State<ContextRing>
   @override
   Widget build(BuildContext context) {
     final value = widget.occupancy;
-    final tokens = HermesTokens.of(context);
+    final tokens = WingTokens.of(context);
     final label = value == null
         ? 'Context usage unknown'
         : '${value.estimated ? 'Approximately ' : ''}${value.used} of ${value.max} tokens, ${value.percent.round()} percent used';

@@ -21,10 +21,10 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/projects_tree_overview.dart';
-import 'package:hermes_android/core/services/capability_registry.dart';
-import 'package:hermes_android/core/services/projects_gateway_client.dart';
-import 'package:hermes_android/core/services/ws_client.dart';
+import 'package:wing/core/models/projects_tree_overview.dart';
+import 'package:wing/core/services/capability_registry.dart';
+import 'package:wing/core/services/projects_gateway_client.dart';
+import 'package:wing/core/services/ws_client.dart';
 
 class _RecordingRpc {
   final List<({String method, Map<String, dynamic> params})> calls = [];
@@ -68,14 +68,14 @@ Map<String, dynamic> _sessionRow({String id = 's1', String title = 'Chat'}) {
     'source': 'cli',
     'message_count': 12,
     'model': 'claude-opus-5',
-    'cwd': '/home/carlos/dev/hermes-android',
+    'cwd': '/home/carlos/dev/wing',
   };
 }
 
 /// An overview project node: lanes present, session rows emptied, counts kept.
 Map<String, dynamic> _overviewNode({
   String id = 'p1',
-  String label = 'Hermes Android',
+  String label = 'Wing',
   bool isAuto = false,
   bool isNoProject = false,
   int sessionCount = 7,
@@ -85,7 +85,7 @@ Map<String, dynamic> _overviewNode({
   return {
     'id': id,
     'label': label,
-    'path': '/home/carlos/dev/hermes-android',
+    'path': '/home/carlos/dev/wing',
     'color': '#D4AF37',
     'icon': 'phone',
     'isAuto': isAuto,
@@ -98,15 +98,15 @@ Map<String, dynamic> _overviewNode({
         repos ??
         [
           {
-            'id': '/home/carlos/dev/hermes-android',
-            'label': 'hermes-android',
-            'path': '/home/carlos/dev/hermes-android',
+            'id': '/home/carlos/dev/wing',
+            'label': 'wing',
+            'path': '/home/carlos/dev/wing',
             'sessionCount': 7,
             'groups': [
               {
-                'id': '/home/carlos/dev/hermes-android::branch::main',
+                'id': '/home/carlos/dev/wing::branch::main',
                 'label': 'main',
-                'path': '/home/carlos/dev/hermes-android',
+                'path': '/home/carlos/dev/wing',
                 'isMain': true,
                 'isKanban': false,
                 // hydrate=False: the overview carries no rows here.
@@ -297,7 +297,7 @@ void main() {
       final overview = await client.tree();
 
       expect(rpc.calls.single.method, 'projects.tree');
-      expect(overview.projects.single.label, 'Hermes Android');
+      expect(overview.projects.single.label, 'Wing');
       expect(overview.activeId, 'p1');
       expect(overview.scopedSessionIds, ['s1']);
     });

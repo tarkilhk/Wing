@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/widgets/chat_image_preview.dart';
-import 'package:hermes_android/core/widgets/profile_message.dart';
-import 'package:hermes_android/core/widgets/markdown_message_content.dart';
+import 'package:wing/core/widgets/chat_image_preview.dart';
+import 'package:wing/core/widgets/profile_message.dart';
+import 'package:wing/core/widgets/markdown_message_content.dart';
 
 void main() {
   testWidgets('image preview opens on tap and returns to the conversation', (

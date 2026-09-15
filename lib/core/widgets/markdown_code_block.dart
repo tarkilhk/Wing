@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 import 'package:flutter/services.dart';
 
 import 'web_output_preview.dart';
@@ -132,7 +132,7 @@ class _MarkdownCodeBlockState extends State<MarkdownCodeBlock> {
       margin: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: HermesRadius.card,
+        borderRadius: WingRadius.card,
         border: Border.all(
           color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
         ),

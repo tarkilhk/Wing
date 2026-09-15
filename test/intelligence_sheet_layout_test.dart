@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/widgets/chat_intelligence_picker.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/chat_intelligence_picker.dart';
 
 void main() {
   const capture = bool.fromEnvironment('CAPTURE_INTELLIGENCE');
@@ -45,7 +45,7 @@ void main() {
         RepaintBoundary(
           key: frame,
           child: MaterialApp(
-            theme: hermesTheme(Brightness.dark),
+            theme: wingTheme(Brightness.dark),
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(
                 context,
@@ -103,7 +103,10 @@ void main() {
       }
       await tester.ensureVisible(find.byKey(const Key('reasoning-ultra')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('reasoning-ultra')).hitTestable(), findsOneWidget);
+      expect(
+        find.byKey(const Key('reasoning-ultra')).hitTestable(),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const Key('reasoning-ultra')));
       await tester.tap(find.text('Apply'));
       await tester.pumpAndSettle();

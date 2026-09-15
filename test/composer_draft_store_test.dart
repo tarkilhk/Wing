@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/attachment_draft.dart';
-import 'package:hermes_android/core/models/queued_prompt_draft.dart';
-import 'package:hermes_android/core/services/composer_draft_store.dart';
+import 'package:wing/core/models/attachment_draft.dart';
+import 'package:wing/core/models/queued_prompt_draft.dart';
+import 'package:wing/core/services/composer_draft_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

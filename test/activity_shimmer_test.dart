@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/widgets/activity_shimmer.dart';
+import 'package:wing/core/widgets/activity_shimmer.dart';
 
 void main() {
   testWidgets('motion stops when disabled, hidden or idle and can resume', (

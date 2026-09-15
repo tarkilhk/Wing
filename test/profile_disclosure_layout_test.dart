@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
-import 'package:hermes_android/core/widgets/profile_execution_activity.dart';
-import 'package:hermes_android/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/profile_workspace_theme.dart';
+import 'package:wing/core/widgets/profile_execution_activity.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
 
 void main() {
   const activityKey = ValueKey('saved-activity');
@@ -15,7 +15,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MaterialApp(
-        theme: profileWorkspaceTheme(hermesTheme(Brightness.dark)),
+        theme: profileWorkspaceTheme(wingTheme(Brightness.dark)),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(
             context,

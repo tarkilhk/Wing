@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 import 'playful_portrait.dart';
 
 enum AppDestination {
@@ -67,8 +67,8 @@ class AppDrawer extends StatelessWidget {
                 children: [
                   const PlayfulPortrait(),
                   SizedBox(
-                    width: HermesSpacing.md,
-                    height: largeText ? HermesSpacing.md : 0,
+                    width: WingSpacing.md,
+                    height: largeText ? WingSpacing.md : 0,
                   ),
                   if (largeText) identity else Expanded(child: identity),
                 ],
@@ -82,9 +82,7 @@ class AppDrawer extends StatelessWidget {
                 ),
               ListTile(
                 key: ValueKey('nav-${destination.name}'),
-                shape: RoundedRectangleBorder(
-                  borderRadius: HermesRadius.control,
-                ),
+                shape: RoundedRectangleBorder(borderRadius: WingRadius.control),
                 selected: selected == destination,
                 selectedTileColor: colors.primaryContainer,
                 leading: largeText ? null : Icon(destination.icon),

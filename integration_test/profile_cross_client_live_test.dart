@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/models/backend_update.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/services/ws_client.dart';
-import 'package:hermes_android/core/widgets/chat_intelligence_picker.dart';
+import 'package:wing/core/models/backend_update.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/ws_client.dart';
+import 'package:wing/core/widgets/chat_intelligence_picker.dart';
 
 /// Opt-in cross-client checks against a local, disposable Hermes profile.
 ///

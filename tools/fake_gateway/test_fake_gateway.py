@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Live contract probe for the local Hermes Android fixture."""
+"""Live contract probe for the local Wing fixture."""
 
 from __future__ import annotations
 
@@ -737,7 +737,7 @@ async def probe(base_url: str) -> None:
             )
             assert reasoning["value"] == "xhigh"
 
-            fixture_bytes = b"Hermes Android fixture attachment\n"
+            fixture_bytes = b"Wing fixture attachment\n"
             attachment = await rpc(
                 ws,
                 3,
@@ -835,7 +835,7 @@ async def probe(base_url: str) -> None:
             approval_payload = json.loads(approval_message.data)
             assert approval_payload["params"]["type"] == "approval.request"
             approval_request = approval_payload["params"]["payload"]
-            assert approval_request["command"] == "echo hermes-android-approval"
+            assert approval_request["command"] == "echo wing-approval"
             assert approval_request["choices"] == [
                 "once",
                 "session",

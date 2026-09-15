@@ -25,7 +25,7 @@ class ConfigBackupException implements Exception {
 /// This object is only ever written to disk through [ConfigBackupCodec], which
 /// encrypts it. It must never be serialized to an unprotected file.
 class ConfigBackup {
-  static const String format = 'hermes-android-config';
+  static const String format = 'wing-config';
   static const int currentVersion = 1;
 
   final DateTime createdAt;
@@ -56,7 +56,7 @@ class ConfigBackup {
   factory ConfigBackup.fromJson(Map<String, dynamic> json) {
     if (json['format'] != format) {
       throw const ConfigBackupException(
-        'This file is not a Hermes configuration backup.',
+        'This file is not a Wing configuration backup.',
       );
     }
     final version = json['version'];
@@ -199,7 +199,7 @@ class ConfigBackup {
 /// AES-256-GCM provides confidentiality plus authentication. A tampered file
 /// fails the MAC check and is rejected instead of being partially imported.
 class ConfigBackupCodec {
-  static const String envelopeFormat = 'hermes-android-config-encrypted';
+  static const String envelopeFormat = 'wing-config-encrypted';
   static const int envelopeVersion = 1;
   static const int defaultIterations = 210000;
   static const int _maxIterations = 2000000;
@@ -268,13 +268,13 @@ class ConfigBackupCodec {
       envelope = jsonDecode(armored) as Map<String, dynamic>;
     } catch (_) {
       throw const ConfigBackupException(
-        'This file is not a Hermes configuration backup.',
+        'This file is not a Wing configuration backup.',
       );
     }
 
     if (envelope['format'] != envelopeFormat) {
       throw const ConfigBackupException(
-        'This file is not a Hermes configuration backup.',
+        'This file is not a Wing configuration backup.',
       );
     }
     final version = envelope['version'];

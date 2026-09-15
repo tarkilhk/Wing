@@ -7,10 +7,10 @@ import 'package:integration_test/integration_test.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_connection_identity.dart';
-import 'package:hermes_android/core/services/profile_selection_store.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_connection_identity.dart';
+import 'package:wing/core/services/profile_selection_store.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
 
 /// A transparent, one-shot WebSocket fault injector.
 ///

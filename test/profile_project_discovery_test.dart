@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/services/profiles_repository.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profiles_repository.dart';
 
 void main() {
   ProfileGateway gateway({
@@ -35,14 +35,14 @@ void main() {
         return {
           'repos': [
             {
-              'root': '/srv/hermes-android',
-              'label': 'Hermes Android',
+              'root': '/srv/wing',
+              'label': 'Wing',
               'sessions': 3,
               'last_active': 42,
               'future_metadata': true,
             },
             {
-              'root': '/srv/hermes-android',
+              'root': '/srv/wing',
               'label': 'Duplicate root',
               'sessions': 1,
               'last_active': 12,
@@ -64,8 +64,8 @@ void main() {
     expect(method, 'projects.discover_repos');
     expect(params, {'scan': true, 'profile': 'work'});
     expect(folders, hasLength(2));
-    expect(folders.first.path, '/srv/hermes-android');
-    expect(folders.first.label, 'Hermes Android');
+    expect(folders.first.path, '/srv/wing');
+    expect(folders.first.label, 'Wing');
     expect(folders.last.path, '/srv/docs');
   });
 

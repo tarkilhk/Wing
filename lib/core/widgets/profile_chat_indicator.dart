@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/profile_live_activity.dart';
 import '../services/profile_workspace_controller.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 
 /// Precise state comes from an owned runtime. REST is_active is only a recent
 /// activity heuristic, never evidence that an unseen chat is still running.
@@ -12,7 +12,7 @@ class ProfileChatIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = HermesTokens.of(context);
+    final tokens = WingTokens.of(context);
     final status =
         chat?.activityState == ProfileLiveActivityState.running &&
             chat?.status != ProfileTurnStatus.reconnecting

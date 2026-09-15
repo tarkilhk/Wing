@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/services/profiles_repository.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/services/attachment_draft_service.dart';
-import 'package:hermes_android/core/models/attachment_draft.dart';
-import 'package:hermes_android/core/services/android_launch_intent_service.dart';
-import 'package:hermes_android/core/services/android_share_intent_service.dart';
-import 'package:hermes_android/core/services/config_backup_service.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/main.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profiles_repository.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/attachment_draft_service.dart';
+import 'package:wing/core/models/attachment_draft.dart';
+import 'package:wing/core/services/android_launch_intent_service.dart';
+import 'package:wing/core/services/android_share_intent_service.dart';
+import 'package:wing/core/services/config_backup_service.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _MemoryCredentialStore implements CredentialStore {

@@ -17,7 +17,7 @@ void main() {
     'MainActivity copies shared streams before handing them to Flutter',
     () async {
       final source = await File(
-        'android/app/src/main/kotlin/com/hermesagent/hermes_android/MainActivity.kt',
+        'android/app/src/main/kotlin/com/tarkilhk/wing/MainActivity.kt',
       ).readAsString();
 
       expect(source, contains('Intent.ACTION_SEND_MULTIPLE'));

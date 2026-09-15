@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/answer_versions.dart';
-import 'package:hermes_android/core/widgets/profile_message.dart';
+import 'package:wing/core/models/answer_versions.dart';
+import 'package:wing/core/widgets/profile_message.dart';
 
 const snapshotHeader =
     '[Your active task list was preserved across context compression]';

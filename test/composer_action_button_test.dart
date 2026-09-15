@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/composer_action.dart';
-import 'package:hermes_android/core/widgets/composer_action_button.dart';
+import 'package:wing/core/models/composer_action.dart';
+import 'package:wing/core/widgets/composer_action_button.dart';
 
 void main() {
   late List<ComposerAction> selected;

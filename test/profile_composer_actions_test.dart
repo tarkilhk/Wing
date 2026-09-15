@@ -7,16 +7,16 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/models/attachment_draft.dart';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/models/queued_prompt_draft.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/models/attachment_draft.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/models/queued_prompt_draft.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
-import 'package:hermes_android/core/models/composer_action.dart';
-import 'package:hermes_android/core/widgets/composer_action_button.dart';
+import 'package:wing/core/models/composer_action.dart';
+import 'package:wing/core/widgets/composer_action_button.dart';
 
 class _ComposerActionsFixture extends ProfileActionsFixture {
   Map<String, dynamic> steerResult = {'status': 'queued'};

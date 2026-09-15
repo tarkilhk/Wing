@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/gateway_turn_contract.dart';
-import 'package:hermes_android/core/services/gateway_turn_recovery.dart';
-import 'package:hermes_android/core/services/gateway_turn_ui_projection.dart';
+import 'package:wing/core/models/gateway_turn_contract.dart';
+import 'package:wing/core/services/gateway_turn_recovery.dart';
+import 'package:wing/core/services/gateway_turn_ui_projection.dart';
 
 const _clientTurnId = '123e4567-e89b-42d3-a456-426614174000';
 const _turnId = 'turn-authoritative';

@@ -22,7 +22,7 @@ class TurnNotificationChannel {
   });
 }
 
-/// A notification Hermes wants Android to post, described as plain data.
+/// A notification Wing wants Android to post, described as plain data.
 class TurnNotification {
   final int id;
   final String title;
@@ -94,7 +94,7 @@ class PluginTurnNotificationSink implements TurnNotificationSink {
   }
 
   Future<void> _initializeOnce() async {
-    const androidSettings = AndroidInitializationSettings('ic_stat_hermes');
+    const androidSettings = AndroidInitializationSettings('ic_stat_wing');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -118,7 +118,7 @@ class PluginTurnNotificationSink implements TurnNotificationSink {
         >()
         ?.createNotificationChannel(
           const AndroidNotificationChannel(
-            'hermes_turn_notifications',
+            'wing_turn_notifications',
             'Wing Turns',
             description: 'Notifications for completed background turns',
             importance: Importance.defaultImportance,
@@ -209,7 +209,7 @@ class PluginTurnNotificationSink implements TurnNotificationSink {
 /// point (including before the Flutter engine binding is ready).
 class TurnNotificationService {
   static const turnChannel = TurnNotificationChannel(
-    id: 'hermes_turn_notifications',
+    id: 'wing_turn_notifications',
     name: 'Wing Turns',
     description: 'Notifications for completed background turns',
   );
@@ -224,14 +224,14 @@ class TurnNotificationService {
     FlutterLocalNotificationsPlugin? plugin,
   }) : _sink = sink ?? PluginTurnNotificationSink(plugin: plugin);
 
-  /// Whether the platform currently allows Hermes to post notifications.
+  /// Whether the platform currently allows Wing to post notifications.
   ///
   /// `false` means Android 13+ denied POST_NOTIFICATIONS: turns still complete
   /// but the OS drops every notification, so the UI can surface that instead of
   /// leaving the user wondering why nothing arrives.
   bool get permissionGranted => _permissionGranted;
 
-  /// One-shot initialisation of the Hermes notification channel.
+  /// One-shot initialisation of the Wing notification channel.
   ///
   /// Safe to call repeatedly — once it has succeeded, subsequent calls are
   /// no-ops. A failed attempt (platform channel unavailable, e.g. in tests)
@@ -289,7 +289,7 @@ class TurnNotificationService {
     await _sink.cancel(notificationIdFor(turnId));
   }
 
-  /// Removes all Hermes turn notifications.
+  /// Removes all Wing turn notifications.
   Future<void> cancelAll() async {
     if (!_initialized) return;
     await _sink.cancelAll();

@@ -1,4 +1,4 @@
-package com.hermesagent.hermes_android
+package com.tarkilhk.wing
 
 import android.app.Activity
 import android.content.ClipboardManager
@@ -11,7 +11,7 @@ import java.util.concurrent.Executors
 
 /** Reads clipboard content only after an explicit Paste action. */
 class ImageClipboardChannel(messenger: BinaryMessenger, private val activity: Activity) {
-    private val channel = MethodChannel(messenger, "com.hermesagent.hermes_android/image_clipboard")
+    private val channel = MethodChannel(messenger, "com.tarkilhk.wing/image_clipboard")
     private val executor = Executors.newSingleThreadExecutor()
     private val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     private val maxBytes = 64 * 1024 * 1024

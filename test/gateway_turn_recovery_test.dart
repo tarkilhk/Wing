@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/gateway_turn_contract.dart';
-import 'package:hermes_android/core/services/gateway_turn_recovery.dart';
+import 'package:wing/core/models/gateway_turn_contract.dart';
+import 'package:wing/core/services/gateway_turn_recovery.dart';
 
 const _clientTurnId = '11111111-1111-4111-8111-111111111111';
 const _mobileSessionId = '22222222-2222-4222-8222-222222222222';

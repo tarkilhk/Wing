@@ -3,12 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/widgets/profile_message.dart';
-import 'package:hermes_android/core/widgets/markdown_message_content.dart';
-import 'package:hermes_android/core/widgets/markdown_code_block.dart';
-import 'package:hermes_android/core/screens/profile_workspace_screen.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/widgets/profile_message.dart';
+import 'package:wing/core/widgets/markdown_message_content.dart';
+import 'package:wing/core/widgets/markdown_code_block.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_history_fixture.dart';
 

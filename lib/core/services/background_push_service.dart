@@ -24,16 +24,12 @@ const backgroundPushPermissionRequestedKey =
 
 /// Firebase identifiers supplied by the release build. These values identify a
 /// Firebase app but do not contain the trusted sender credential.
-FirebaseOptions? hermesFirebaseOptions() {
-  const apiKey = String.fromEnvironment('HERMES_FIREBASE_API_KEY');
-  const appId = String.fromEnvironment('HERMES_FIREBASE_APP_ID');
-  const senderId = String.fromEnvironment(
-    'HERMES_FIREBASE_MESSAGING_SENDER_ID',
-  );
-  const projectId = String.fromEnvironment('HERMES_FIREBASE_PROJECT_ID');
-  const storageBucket = String.fromEnvironment(
-    'HERMES_FIREBASE_STORAGE_BUCKET',
-  );
+FirebaseOptions? wingFirebaseOptions() {
+  const apiKey = String.fromEnvironment('WING_FIREBASE_API_KEY');
+  const appId = String.fromEnvironment('WING_FIREBASE_APP_ID');
+  const senderId = String.fromEnvironment('WING_FIREBASE_MESSAGING_SENDER_ID');
+  const projectId = String.fromEnvironment('WING_FIREBASE_PROJECT_ID');
+  const storageBucket = String.fromEnvironment('WING_FIREBASE_STORAGE_BUCKET');
   if ([apiKey, appId, senderId, projectId].any((value) => value.isEmpty)) {
     return null;
   }
@@ -673,10 +669,10 @@ class BackgroundPushService {
     required Future<void> Function(String target) onOpen,
     required ValueNotifier<BackgroundPushState> state,
   }) async {
-    final options = hermesFirebaseOptions();
+    final options = wingFirebaseOptions();
     if (options == null) return null;
     await Firebase.initializeApp(options: options);
-    FirebaseMessaging.onBackgroundMessage(hermesFirebaseBackgroundHandler);
+    FirebaseMessaging.onBackgroundMessage(wingFirebaseBackgroundHandler);
     final packageInfo = await PackageInfo.fromPlatform();
     final service = BackgroundPushService(
       preferences: preferences,
@@ -802,11 +798,11 @@ class BackgroundPushService {
 }
 
 @pragma('vm:entry-point')
-Future<void> hermesFirebaseBackgroundHandler(RemoteMessage message) async {
+Future<void> wingFirebaseBackgroundHandler(RemoteMessage message) async {
   BackgroundPushMessage? parsed;
   PushDeliveryLedger? deliveries;
   try {
-    final options = hermesFirebaseOptions();
+    final options = wingFirebaseOptions();
     if (options == null) return;
     if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp(options: options);

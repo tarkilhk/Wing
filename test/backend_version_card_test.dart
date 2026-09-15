@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/services/backend_update_controller.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/services/profiles_repository.dart';
-import 'package:hermes_android/core/widgets/backend_version_card.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/backend_update_controller.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profiles_repository.dart';
+import 'package:wing/core/widgets/backend_version_card.dart';
 
 const _available = <String, dynamic>{
   'current_version': '1.2.3',

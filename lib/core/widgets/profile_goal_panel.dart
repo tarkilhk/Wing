@@ -1,6 +1,6 @@
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 import 'profile_transcript_disclosure.dart';
 
 import '../models/session_control.dart';
@@ -421,7 +421,7 @@ class _AddCriterionDialogState extends State<_AddCriterionDialog> {
               errorText: _error,
               alignLabelWithHint: true,
               border: const OutlineInputBorder(
-                borderRadius: HermesRadius.control,
+                borderRadius: WingRadius.control,
               ),
             ),
             onChanged: (value) {

@@ -42,7 +42,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
             <intent-filter>
-                <action android:name="com.hermesagent.hermes_android.action.QUICK_CHAT" />
+                <action android:name="com.tarkilhk.wing.action.QUICK_CHAT" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <intent-filter>

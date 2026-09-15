@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:hermes_android/core/services/profile_gateway.dart';
-import 'package:hermes_android/core/widgets/chat_find_sheet.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/widgets/chat_find_sheet.dart';
 
 ProfileHistoryPage page(
   List<Map<String, dynamic>> rows, {
@@ -109,11 +109,7 @@ void main() {
                   },
                 ])
               : page([
-                  {
-                    'id': 1,
-                    'role': 'assistant',
-                    'content': 'oldest needle',
-                  },
+                  {'id': 1, 'role': 'assistant', 'content': 'oldest needle'},
                   {
                     'id': 500,
                     'role': 'assistant',
@@ -199,7 +195,10 @@ void main() {
     await tester.tap(find.byType(ExpansionTile).first);
     await tester.pump();
     expect(find.byType(SelectableText), findsOneWidget);
-    expect(tester.widget<SelectableText>(find.byType(SelectableText)).data, longText);
+    expect(
+      tester.widget<SelectableText>(find.byType(SelectableText)).data,
+      longText,
+    );
     await tester.drag(find.byType(ListView), const Offset(0, -10000));
     await tester.pumpAndSettle();
     expect(find.text('needle 1'), findsOneWidget);

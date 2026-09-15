@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_gateway.dart';
 
 /// Opt-in, no model calls. Uses existing disposable profiles on the unmodified
 /// local Desktop-managed server. Authentication is fetched, never logged/saved.

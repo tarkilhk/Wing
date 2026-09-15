@@ -7,9 +7,9 @@
         android:shortcutShortLabel="@string/shortcut_quick_chat_short"
         android:shortcutLongLabel="@string/shortcut_quick_chat_long">
         <intent
-            android:action="com.hermesagent.hermes_android.action.QUICK_CHAT"
-            android:targetPackage="@string/hermes_application_id"
-            android:targetClass="com.hermesagent.hermes_android.MainActivity" />
+            android:action="com.tarkilhk.wing.action.QUICK_CHAT"
+            android:targetPackage="@string/wing_application_id"
+            android:targetClass="com.tarkilhk.wing.MainActivity" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
 </shortcuts>

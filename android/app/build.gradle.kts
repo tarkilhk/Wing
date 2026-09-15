@@ -14,31 +14,31 @@ if (keystorePath.exists()) {
    keystoreProperties.load(FileInputStream(keystorePath))
 }
 val signingEnvironment = mapOf(
-    "storeFile" to "HERMES_STORE_FILE",
-    "storePassword" to "HERMES_STORE_PASSWORD",
-    "keyAlias" to "HERMES_KEY_ALIAS",
-    "keyPassword" to "HERMES_KEY_PASSWORD"
+    "storeFile" to "WING_STORE_FILE",
+    "storePassword" to "WING_STORE_PASSWORD",
+    "keyAlias" to "WING_KEY_ALIAS",
+    "keyPassword" to "WING_KEY_PASSWORD"
 )
 if (signingEnvironment.values.any { !System.getenv(it).isNullOrBlank() }) {
     check(signingEnvironment.values.all { !System.getenv(it).isNullOrBlank() }) {
-        "All HERMES signing environment variables must be supplied"
+        "All WING signing environment variables must be supplied"
     }
     signingEnvironment.forEach { (property, environment) ->
         keystoreProperties[property] = System.getenv(environment)
     }
 }
 val hasReleaseSigning = keystoreProperties.containsKey("storeFile")
-// Opt in only for personal development APKs. Ordinary debug builds retain
+// Opt in only for Wing development APKs. Ordinary debug builds retain
 // their separate Dev identity and debug signing key.
-val personalDevelopment = providers.gradleProperty("hermesPersonalDevelopment").orNull == "true"
-check(!personalDevelopment || signingEnvironment.keys.all {
+val wingDevelopment = providers.gradleProperty("wingDevelopment").orNull == "true"
+check(!wingDevelopment || signingEnvironment.keys.all {
     !keystoreProperties.getProperty(it).isNullOrBlank()
 }) {
-    "Personal development APKs require the complete personal signing configuration"
+    "Wing development APKs require the complete Wing signing configuration"
 }
 
 android {
-   namespace = "com.hermesagent.hermes_android"
+   namespace = "com.tarkilhk.wing"
    compileSdk = 36
    buildFeatures {
        resValues = true
@@ -53,9 +53,9 @@ android {
    defaultConfig {
        check(flutter.versionCode > minimumInstalledVersionCode) {
            "versionCode ${flutter.versionCode} must be greater than " +
-               "$minimumInstalledVersionCode to upgrade the accepted Hermes APK"
+               "$minimumInstalledVersionCode to upgrade the accepted Wing APK"
        }
-       applicationId = "com.hermesagent.hermes_android"
+       applicationId = "com.tarkilhk.wing"
        minSdk = 24
        targetSdk = 36
        versionCode = flutter.versionCode
@@ -82,9 +82,9 @@ android {
            applicationIdSuffix = ".dev"
            versionNameSuffix = "-dev"
            manifestPlaceholders["appLabel"] = "Wing Dev"
-           resValue("string", "hermes_application_id", "com.hermesagent.hermes_android.dev")
-           if (personalDevelopment) {
-               resValue("string", "hermes_application_id", "com.tarkilhk.hermes.android")
+           resValue("string", "wing_application_id", "com.tarkilhk.wing.dev")
+           if (wingDevelopment) {
+               resValue("string", "wing_application_id", "com.tarkilhk.wing")
                signingConfig = signingConfigs.getByName("release")
            }
        }
@@ -94,7 +94,7 @@ android {
            // key: leave the APK explicitly unsigned until the real
            // key.properties file is supplied.
            manifestPlaceholders["appLabel"] = "Wing"
-           resValue("string", "hermes_application_id", "com.tarkilhk.hermes.android")
+           resValue("string", "wing_application_id", "com.tarkilhk.wing")
            if (hasReleaseSigning) {
                signingConfig = signingConfigs.getByName("release")
            }
@@ -102,15 +102,15 @@ android {
    }
 }
 
-// Keep the installed Dev identity, but never replace the unrelated upstream app.
+// Signed development builds use the Wing release application ID.
 androidComponents {
     onVariants(selector().withBuildType("debug")) { variant ->
-        if (personalDevelopment) {
-            variant.applicationId.set("com.tarkilhk.hermes.android")
+        if (wingDevelopment) {
+            variant.applicationId.set("com.tarkilhk.wing")
         }
     }
     onVariants(selector().withBuildType("release")) { variant ->
-        variant.applicationId.set("com.tarkilhk.hermes.android")
+        variant.applicationId.set("com.tarkilhk.wing")
     }
 }
 

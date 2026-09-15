@@ -13,10 +13,10 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/project_sessions_tree.dart';
-import 'package:hermes_android/core/services/capability_registry.dart';
-import 'package:hermes_android/core/services/projects_gateway_client.dart';
-import 'package:hermes_android/core/services/ws_client.dart';
+import 'package:wing/core/models/project_sessions_tree.dart';
+import 'package:wing/core/services/capability_registry.dart';
+import 'package:wing/core/services/projects_gateway_client.dart';
+import 'package:wing/core/services/ws_client.dart';
 
 class _RecordingRpc {
   final List<({String method, Map<String, dynamic> params})> calls = [];
@@ -75,9 +75,9 @@ Map<String, dynamic> _sessionRow({
     'estimated_cost_usd': 0.004,
     'model': 'claude-opus-5',
     'is_active': false,
-    'cwd': '/home/carlos/dev/hermes-android',
+    'cwd': '/home/carlos/dev/wing',
     'git_branch': 'main',
-    'git_repo_root': '/home/carlos/dev/hermes-android',
+    'git_repo_root': '/home/carlos/dev/wing',
   };
 }
 
@@ -89,8 +89,8 @@ Map<String, dynamic> _projectNode({
 }) {
   return {
     'id': id,
-    'label': 'Hermes Android',
-    'path': '/home/carlos/dev/hermes-android',
+    'label': 'Wing',
+    'path': '/home/carlos/dev/wing',
     'color': '#D4AF37',
     'icon': 'phone',
     'isAuto': false,
@@ -103,15 +103,15 @@ Map<String, dynamic> _projectNode({
         repos ??
         [
           {
-            'id': '/home/carlos/dev/hermes-android',
-            'label': 'hermes-android',
-            'path': '/home/carlos/dev/hermes-android',
+            'id': '/home/carlos/dev/wing',
+            'label': 'wing',
+            'path': '/home/carlos/dev/wing',
             'sessionCount': 2,
             'groups': [
               {
                 'id': 'main',
                 'label': 'main',
-                'path': '/home/carlos/dev/hermes-android',
+                'path': '/home/carlos/dev/wing',
                 'isMain': true,
                 'isKanban': false,
                 'sessions': [
@@ -137,15 +137,15 @@ void main() {
       final tree = ProjectSessionsTree.fromJson(_projectNode());
 
       expect(tree.id, 'p1');
-      expect(tree.label, 'Hermes Android');
-      expect(tree.path, '/home/carlos/dev/hermes-android');
+      expect(tree.label, 'Wing');
+      expect(tree.path, '/home/carlos/dev/wing');
       expect(tree.sessionCount, 2);
       expect(tree.lastActive, 1750000900);
 
       expect(tree.repos, hasLength(1));
       final repo = tree.repos.single;
-      expect(repo.id, '/home/carlos/dev/hermes-android');
-      expect(repo.label, 'hermes-android');
+      expect(repo.id, '/home/carlos/dev/wing');
+      expect(repo.label, 'wing');
       expect(repo.sessionCount, 2);
 
       expect(repo.lanes, hasLength(1));

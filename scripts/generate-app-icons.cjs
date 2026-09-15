@@ -45,7 +45,7 @@ async function main() {
       await sharp(visible).resize(pixels, pixels).composite([{ input: mask, blend: 'dest-in' }]).png().toBuffer());
   }
   const vector = `<?xml version="1.0" encoding="utf-8"?>\n<!-- Generated from assets/icon/wing.svg by scripts/generate-app-icons.cjs. -->\n<vector xmlns:android="http://schemas.android.com/apk/res/android"\n    android:width="24dp" android:height="24dp"\n    android:viewportWidth="24" android:viewportHeight="24">\n    <path android:fillColor="#FFFFFFFF" android:pathData="${wingPath}" />\n</vector>\n`;
-  await write('android/app/src/main/res/drawable/ic_stat_hermes.xml', vector);
+  await write('android/app/src/main/res/drawable/ic_stat_wing.xml', vector);
   const themed = `<?xml version="1.0" encoding="utf-8"?>\n<!-- Same wing, positioned inside the adaptive icon safe region. -->\n<vector xmlns:android="http://schemas.android.com/apk/res/android"\n    android:width="108dp" android:height="108dp"\n    android:viewportWidth="108" android:viewportHeight="108">\n    <group android:translateX="21" android:translateY="21" android:scaleX="2.75" android:scaleY="2.75">\n        <path android:fillColor="#FFFFFFFF" android:pathData="${wingPath}" />\n    </group>\n</vector>\n`;
   await write('android/app/src/main/res/drawable/ic_launcher_monochrome.xml', themed);
   // A deterministic proof of the shipped pixels, not an ImageGen mockup.

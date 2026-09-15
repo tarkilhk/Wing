@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/answer_versions.dart';
-import 'package:hermes_android/core/models/transcript_notice.dart';
+import 'package:wing/core/models/answer_versions.dart';
+import 'package:wing/core/models/transcript_notice.dart';
 
 import 'support/process_batch_fixture.dart';
 

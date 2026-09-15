@@ -9,7 +9,7 @@
     "ast_hash": "c72b34a839f98e27879ede58388f2113",
     "semantic_hash": ""
   },
-  "android/app/src/main/kotlin/com/hermesagent/hermes_android/MainActivity.kt": {
+  "android/app/src/main/kotlin/com/tarkilhk/wing/MainActivity.kt": {
     "mtime": 1788242875.931366,
     "ast_hash": "104a2e9162619f5cd787ccdffd982d4c",
     "semantic_hash": ""
@@ -809,12 +809,12 @@
     "ast_hash": "c2f8a58a8527a85cd6a39f4e295c153e",
     "semantic_hash": ""
   },
-  "lib/core/theme/hermes_theme.dart": {
+  "lib/core/theme/wing_theme.dart": {
     "mtime": 1787613803.124157,
     "ast_hash": "41a09a331456272b207b46f7fd7bda22",
     "semantic_hash": ""
   },
-  "test/hermes_theme_test.dart": {
+  "test/wing_theme_test.dart": {
     "mtime": 1787613826.1554482,
     "ast_hash": "ed8ae6eb6d366869c7dc71861fe659b8",
     "semantic_hash": ""
@@ -1169,7 +1169,7 @@
     "ast_hash": "00de5e619a90ba92bf248cccc7be3ce7",
     "semantic_hash": ""
   },
-  "docs/HERMES_ANDROID_INDISPENSABLE_PRODUCT_SPEC.md": {
+  "docs/wing_INDISPENSABLE_PRODUCT_SPEC.md": {
     "mtime": 1788078799.525682,
     "ast_hash": "439177e1570f5640a3a8dcc9de0bdbbc",
     "semantic_hash": ""

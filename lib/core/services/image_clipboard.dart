@@ -3,9 +3,7 @@ import 'package:flutter/services.dart';
 
 /// Android image clipboard access, invoked by the composer's paste menu.
 class ImageClipboard {
-  static const channel = MethodChannel(
-    'com.hermesagent.hermes_android/image_clipboard',
-  );
+  static const channel = MethodChannel('com.tarkilhk.wing/image_clipboard');
   static const mimeTypes = ['image/png', 'image/jpeg', 'image/webp'];
 
   static Future<bool> hasImage() async {

@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/screens/profile_transcript.dart';
-import 'package:hermes_android/core/widgets/profile_message.dart';
-import 'package:hermes_android/core/services/connection_manager.dart';
-import 'package:hermes_android/core/services/profile_connection_identity.dart';
-import 'package:hermes_android/core/services/profile_workspace_controller.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
+import 'package:wing/core/screens/profile_transcript.dart';
+import 'package:wing/core/widgets/profile_message.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_connection_identity.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/profile_gateway.dart';
 
 /// Production read-only acceptance. No session.resume, prompts, or mutations.
 /// Display metadata and message bodies are never printed to logs.

@@ -1,4 +1,4 @@
-package com.hermesagent.hermes_android
+package com.tarkilhk.wing
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
@@ -21,10 +21,10 @@ import java.util.UUID
 import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
-    private val shareChannelName = "com.hermesagent.hermes_android/share"
-    private val launchChannelName = "com.hermesagent.hermes_android/launch"
-    private val fileDeliveryChannelName = "com.hermesagent.hermes_android/file_delivery"
-    private val quickChatAction = "com.hermesagent.hermes_android.action.QUICK_CHAT"
+    private val shareChannelName = "com.tarkilhk.wing/share"
+    private val launchChannelName = "com.tarkilhk.wing/launch"
+    private val fileDeliveryChannelName = "com.tarkilhk.wing/file_delivery"
+    private val quickChatAction = "com.tarkilhk.wing.action.QUICK_CHAT"
     private val intakePreferencesName = "pending_share_intake"
     private val intakeQueueKey = "queue"
     private val pendingCameraKey = "pending_camera"
@@ -65,7 +65,7 @@ class MainActivity : FlutterActivity() {
             this,
         ) { activityResumed }
         flutterEngine.platformViewsController.registry.registerViewFactory(
-            "com.hermesagent.hermes_android/mermaid_diagram",
+            "com.tarkilhk.wing/mermaid_diagram",
             MermaidDiagramViewFactory(),
         )
         shareChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, shareChannelName).apply {
@@ -184,7 +184,7 @@ class MainActivity : FlutterActivity() {
                     try {
                         val view = Intent(Intent.ACTION_VIEW).apply {
                             setDataAndType(uri, mimeType)
-                            clipData = ClipData.newRawUri("Hermes output", uri)
+                            clipData = ClipData.newRawUri("Wing output", uri)
                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
                         startActivity(view)

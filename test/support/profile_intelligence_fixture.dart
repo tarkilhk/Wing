@@ -1,5 +1,5 @@
-import 'package:hermes_android/core/models/hermes_profile.dart';
-import 'package:hermes_android/core/services/profile_gateway.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/profile_gateway.dart';
 import 'profile_browser_fixture.dart';
 
 /// Isolated gateway responses for the real profile screen/controller device check.

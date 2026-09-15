@@ -3,7 +3,7 @@ import 'studio_error.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 
 import '../models/gateway_sensitive_prompt.dart';
 
@@ -98,7 +98,7 @@ class _GatewaySensitivePromptPanelState
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: HermesRadius.card,
+        borderRadius: WingRadius.card,
         border: Border.all(
           color: theme.colorScheme.primary.withValues(alpha: 0.35),
         ),
@@ -142,7 +142,7 @@ class _GatewaySensitivePromptPanelState
                 : TextInputAction.done,
             decoration: InputDecoration(
               isDense: true,
-              border: OutlineInputBorder(borderRadius: HermesRadius.control),
+              border: OutlineInputBorder(borderRadius: WingRadius.control),
               labelText: request.fieldLabel,
             ),
             onChanged: (_) {
@@ -165,7 +165,7 @@ class _GatewaySensitivePromptPanelState
               textInputAction: TextInputAction.done,
               decoration: InputDecoration(
                 isDense: true,
-                border: OutlineInputBorder(borderRadius: HermesRadius.control),
+                border: OutlineInputBorder(borderRadius: WingRadius.control),
                 labelText: 'Password',
               ),
               onChanged: (_) {

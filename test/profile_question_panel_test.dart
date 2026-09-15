@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/gateway_clarify.dart';
-import 'package:hermes_android/core/widgets/gateway_clarify_dialog.dart';
-import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
+import 'package:wing/core/models/gateway_clarify.dart';
+import 'package:wing/core/widgets/gateway_clarify_dialog.dart';
+import 'package:wing/core/theme/profile_workspace_theme.dart';
 
 Widget panel(
   Future<void> Function(String) respond, {

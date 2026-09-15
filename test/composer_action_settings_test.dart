@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_android/core/models/composer_action.dart';
-import 'package:hermes_android/core/widgets/composer_action_settings.dart';
+import 'package:wing/core/models/composer_action.dart';
+import 'package:wing/core/widgets/composer_action_settings.dart';
 
 void main() {
   testWidgets('Steer is the default and a new choice survives reopening', (

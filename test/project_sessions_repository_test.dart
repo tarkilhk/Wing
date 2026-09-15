@@ -22,9 +22,9 @@ library;
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/services/projects_gateway_client.dart';
-import 'package:hermes_android/core/services/projects_repository.dart';
-import 'package:hermes_android/core/services/ws_client.dart';
+import 'package:wing/core/services/projects_gateway_client.dart';
+import 'package:wing/core/services/projects_repository.dart';
+import 'package:wing/core/services/ws_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Map<String, dynamic> _ok(Map<String, dynamic> result) => {
@@ -70,17 +70,17 @@ Map<String, dynamic> _projectNode({
   int? sessionCount,
 }) => {
   'id': id,
-  'label': 'Hermes Android',
-  'path': '/home/carlos/dev/hermes-android',
+  'label': 'Wing',
+  'path': '/home/carlos/dev/wing',
   'sessionCount': sessionCount ?? sessions.length,
   'lastActive': 1750000900,
   'repos':
       repos ??
       [
         {
-          'id': '/home/carlos/dev/hermes-android',
-          'label': 'hermes-android',
-          'path': '/home/carlos/dev/hermes-android',
+          'id': '/home/carlos/dev/wing',
+          'label': 'wing',
+          'path': '/home/carlos/dev/wing',
           'sessionCount': sessions.length,
           'groups': [
             {
@@ -171,7 +171,7 @@ void main() {
 
   test('reads a project tree and flattens its chats in server order', () async {
     final gateway = _FakeGateway(
-      projects: [_projectJson(id: 'p1', name: 'Hermes Android')],
+      projects: [_projectJson(id: 'p1', name: 'Wing')],
       trees: {
         'p1': _projectNode(
           sessions: [
@@ -192,7 +192,7 @@ void main() {
     expect(view.error, isNull);
     expect(view.sessions.map((s) => s.id), ['s1', 's2']);
     expect(view.sessions.first.title, 'Projects pane');
-    expect(view.tree?.label, 'Hermes Android');
+    expect(view.tree?.label, 'Wing');
     expect(view.isEmpty, isFalse);
   });
 
@@ -342,7 +342,7 @@ void main() {
       // compatibility mode for that would be a regression the cached verdict
       // never undoes.
       final gateway = _FakeGateway(
-        projects: [_projectJson(id: 'p1', name: 'Hermes Android')],
+        projects: [_projectJson(id: 'p1', name: 'Wing')],
       );
       final repo = await _repository(gateway);
       await repo.refresh();
@@ -357,7 +357,7 @@ void main() {
       expect(view.error, isNull);
       expect(view.sessions, isEmpty);
       expect(repo.current.support, ProjectsSupport.native);
-      expect(repo.current.projects.single.name, 'Hermes Android');
+      expect(repo.current.projects.single.name, 'Wing');
     },
   );
 

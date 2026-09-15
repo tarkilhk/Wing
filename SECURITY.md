@@ -1,6 +1,6 @@
 # Security and support
 
-Use [this fork's GitHub issues](https://github.com/tarkilhk/hermes-android/issues) for reproducible client problems that can be described without disclosing sensitive data. For a vulnerability, use GitHub's private reporting option if it is available. Otherwise ask for a private contact route without posting exploit details or credentials. Do not send this fork's reports to an unrelated upstream issue tracker by default.
+Use [this fork's GitHub issues](https://github.com/tarkilhk/wing/issues) for reproducible client problems that can be described without disclosing sensitive data. For a vulnerability, use GitHub's private reporting option if it is available. Otherwise ask for a private contact route without posting exploit details or credentials. Do not send this fork's reports to an unrelated upstream issue tracker by default.
 
 Before sharing logs, screenshots or diagnostics:
 
@@ -15,7 +15,7 @@ Include the app version/build, Android version, backend revision if known, expec
 
 Use HTTPS or an encrypted private network for remote access. Plain HTTP does not encrypt credentials or messages. Keep the dashboard authenticated and restrict who can reach it. The app refuses HTTP redirects for dashboard requests; configure the final address and path directly. Custom access-header secrets are stored with connection credentials in Android secure storage.
 
-Only install artifacts from a source you trust. Wing uses `com.tarkilhk.hermes.android` and its own signing identity. Debug builds and unsigned build outputs are not production releases. See [the release guide](docs/ANDROID_RELEASE_PLAN.md).
+Only install artifacts from a source you trust. Wing uses `com.tarkilhk.wing` and its own signing identity. Debug builds and unsigned build outputs are not production releases. See [the release guide](docs/ANDROID_RELEASE_PLAN.md).
 
 ## Data handling
 

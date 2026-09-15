@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import 'package:hermes_android/core/widgets/installed_app_version_card.dart';
+import 'package:wing/core/widgets/installed_app_version_card.dart';
 
 void main() {
   testWidgets('shows installed app label, version/build, and package', (
@@ -55,7 +55,7 @@ void main() {
   testWidgets("opens this fork's changelog and release pages", (tester) async {
     PackageInfo.setMockInitialValues(
       appName: 'Wing',
-      packageName: 'com.tarkilhk.hermes.android',
+      packageName: 'com.tarkilhk.wing',
       version: '2.30.0',
       buildNumber: '2182',
       buildSignature: '',
@@ -83,17 +83,15 @@ void main() {
     await tester.pump();
 
     expect(opened, [
-      Uri.parse(
-        'https://github.com/tarkilhk/hermes-android/blob/main/CHANGELOG.md',
-      ),
-      Uri.parse('https://github.com/tarkilhk/hermes-android/releases'),
+      Uri.parse('https://github.com/tarkilhk/wing/blob/main/CHANGELOG.md'),
+      Uri.parse('https://github.com/tarkilhk/wing/releases'),
     ]);
   });
 
   testWidgets('reports when a release link cannot open', (tester) async {
     PackageInfo.setMockInitialValues(
       appName: 'Wing',
-      packageName: 'com.tarkilhk.hermes.android',
+      packageName: 'com.tarkilhk.wing',
       version: '2.30.0',
       buildNumber: '2182',
       buildSignature: '',

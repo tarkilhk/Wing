@@ -1,4 +1,4 @@
-import '../../theme/hermes_theme.dart';
+import '../../theme/wing_theme.dart';
 import '../../widgets/studio_action_label.dart';
 import '../../widgets/studio_error.dart';
 import 'dart:async';
@@ -436,7 +436,7 @@ class _ProviderCard extends StatelessWidget {
                   if (access.row['cli_command'] is String)
                     SelectableText(
                       access.row['cli_command'] as String,
-                      style: HermesTokens.of(context).typography.mono,
+                      style: WingTokens.of(context).typography.mono,
                     ),
                 ],
                 if (access.row['disconnect_hint'] is String)

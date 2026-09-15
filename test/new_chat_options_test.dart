@@ -1,13 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/models/hermes_project.dart';
-import 'package:hermes_android/core/services/projects_repository.dart';
-import 'package:hermes_android/core/utils/new_chat_options.dart';
+import 'package:wing/core/models/hermes_project.dart';
+import 'package:wing/core/services/projects_repository.dart';
+import 'package:wing/core/utils/new_chat_options.dart';
 
 final _now = DateTime.utc(2026, 8, 28, 9, 30, 0);
 
 HermesProject _project({
   String id = 'p1',
-  String name = 'Hermes Android',
+  String name = 'Wing',
   bool archived = false,
 }) {
   return HermesProject(
@@ -193,7 +193,7 @@ void main() {
       );
 
       expect(draft.projectId, isNull);
-      expect(draft.session.title, isNot(contains('Hermes Android')));
+      expect(draft.session.title, isNot(contains('Wing')));
     });
 
     test('a quick chat is marked Quick in its title', () {
@@ -227,8 +227,8 @@ void main() {
 
       expect(draft.isQuick, isFalse);
       expect(draft.projectId, 'p1');
-      expect(draft.projectName, 'Hermes Android');
-      expect(draft.session.title, contains('Hermes Android'));
+      expect(draft.projectName, 'Wing');
+      expect(draft.session.title, contains('Wing'));
       expect(draft.expiresAt, isNull);
     });
 

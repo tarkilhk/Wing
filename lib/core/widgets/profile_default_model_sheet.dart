@@ -5,7 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/profile_gateway.dart';
-import '../theme/hermes_theme.dart';
+import '../theme/wing_theme.dart';
 import 'chat_intelligence_picker.dart';
 
 Future<bool> showProfileDefaultModelSheet(
@@ -189,7 +189,7 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = HermesTokens.of(context);
+    final tokens = WingTokens.of(context);
     final groups = <String, List<ChatModelChoice>>{};
     final query = _query.trim().toLowerCase();
     for (final choice in _choices.where(
@@ -233,7 +233,7 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                       ),
                       Padding(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: HermesSpacing.lg,
+                          horizontal: WingSpacing.lg,
                         ),
                         child: Text(
                           'Sets the server default for this profile and applies to new sessions only. Running chats keep their current model.',
@@ -243,11 +243,11 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: HermesSpacing.sm),
+                      const SizedBox(height: WingSpacing.sm),
                       if (!_loading && _choices.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: HermesSpacing.lg,
+                            horizontal: WingSpacing.lg,
                           ),
                           child: TextField(
                             key: const Key('profile-model-search'),
@@ -256,7 +256,7 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                               hintText: 'Search models',
                               prefixIcon: Icon(Icons.search_rounded),
                               border: OutlineInputBorder(
-                                borderRadius: HermesRadius.control,
+                                borderRadius: WingRadius.control,
                               ),
                               isDense: true,
                             ),
@@ -267,7 +267,7 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                       if (_error != null)
                         Padding(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: HermesSpacing.lg,
+                            horizontal: WingSpacing.lg,
                           ),
                           child: StudioError(
                             _error!,
@@ -277,7 +277,7 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                       if (_notice != null)
                         Padding(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: HermesSpacing.lg,
+                            horizontal: WingSpacing.lg,
                           ),
                           child: Text(
                             _notice!,
@@ -322,7 +322,7 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                               },
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: HermesSpacing.lg,
+                                  horizontal: WingSpacing.lg,
                                 ),
                                 child: Column(
                                   children: [
@@ -365,10 +365,10 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
-                  HermesSpacing.lg,
-                  HermesSpacing.sm,
-                  HermesSpacing.lg,
-                  HermesSpacing.md,
+                  WingSpacing.lg,
+                  WingSpacing.sm,
+                  WingSpacing.lg,
+                  WingSpacing.md,
                 ),
                 child: OverflowBar(
                   alignment: MainAxisAlignment.end,

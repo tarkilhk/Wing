@@ -5,7 +5,7 @@ import 'remote_files_client.dart';
 
 /// Plays an authenticated audio or video download in the native media viewer.
 class MediaPreviewService {
-  static const channelName = 'com.hermesagent.hermes_android/media_preview';
+  static const channelName = 'com.tarkilhk.wing/media_preview';
   static const maxBytes = RemoteFilesClient.defaultMaxDownloadBytes;
 
   final MethodChannel _channel;

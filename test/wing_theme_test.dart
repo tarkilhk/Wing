@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_android/core/theme/hermes_theme.dart';
-import 'package:hermes_android/core/theme/profile_workspace_theme.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/profile_workspace_theme.dart';
 
-HermesTokens? _tokensFrom(ThemeData theme) => theme.extension<HermesTokens>();
+WingTokens? _tokensFrom(ThemeData theme) => theme.extension<WingTokens>();
 
-Future<HermesTokens> _pumpAndReadTokens(
+Future<WingTokens> _pumpAndReadTokens(
   WidgetTester tester,
   ThemeData theme,
 ) async {
-  late HermesTokens seen;
+  late WingTokens seen;
   await tester.pumpWidget(
     MaterialApp(
       theme: theme,
       home: Builder(
         builder: (context) {
-          seen = HermesTokens.of(context);
+          seen = WingTokens.of(context);
           return const SizedBox.shrink();
         },
       ),
@@ -25,15 +25,15 @@ Future<HermesTokens> _pumpAndReadTokens(
 }
 
 void main() {
-  group('HermesSpacing', () {
+  group('WingSpacing', () {
     test('exposes a strictly increasing 4dp-based scale', () {
       const scale = [
-        HermesSpacing.xs,
-        HermesSpacing.sm,
-        HermesSpacing.md,
-        HermesSpacing.lg,
-        HermesSpacing.xl,
-        HermesSpacing.xxl,
+        WingSpacing.xs,
+        WingSpacing.sm,
+        WingSpacing.md,
+        WingSpacing.lg,
+        WingSpacing.xl,
+        WingSpacing.xxl,
       ];
 
       for (final step in scale) {
@@ -45,23 +45,23 @@ void main() {
     });
 
     test('radii grow from control to sheet', () {
-      expect(HermesRadius.sm, lessThan(HermesRadius.md));
-      expect(HermesRadius.md, lessThan(HermesRadius.lg));
-      expect(HermesRadius.lg, lessThan(HermesRadius.xl));
+      expect(WingRadius.sm, lessThan(WingRadius.md));
+      expect(WingRadius.md, lessThan(WingRadius.lg));
+      expect(WingRadius.lg, lessThan(WingRadius.xl));
     });
 
     test('motion durations stay inside the roadmap 150-250ms budget', () {
-      expect(HermesMotion.fast.inMilliseconds, greaterThanOrEqualTo(100));
-      expect(HermesMotion.standard.inMilliseconds, inInclusiveRange(150, 250));
-      expect(HermesMotion.emphasized.inMilliseconds, lessThanOrEqualTo(400));
-      expect(HermesMotion.standard, greaterThan(HermesMotion.fast));
+      expect(WingMotion.fast.inMilliseconds, greaterThanOrEqualTo(100));
+      expect(WingMotion.standard.inMilliseconds, inInclusiveRange(150, 250));
+      expect(WingMotion.emphasized.inMilliseconds, lessThanOrEqualTo(400));
+      expect(WingMotion.standard, greaterThan(WingMotion.fast));
     });
   });
 
-  group('HermesTokens', () {
+  group('WingTokens', () {
     test('dark and light token sets are distinct but complete', () {
-      final dark = HermesTokens.dark();
-      final light = HermesTokens.light();
+      final dark = WingTokens.dark();
+      final light = WingTokens.light();
 
       for (final tokens in [dark, light]) {
         expect(tokens.accent.a, 1.0);
@@ -79,41 +79,41 @@ void main() {
       () {
         final savedAccent = WorkspaceAccent.fromName('mint');
         expect(savedAccent.label, 'Teal');
-        expect(HermesTokens.dark().accent, savedAccent.dark);
-        expect(HermesTokens.light().accent, savedAccent.light);
+        expect(WingTokens.dark().accent, savedAccent.dark);
+        expect(WingTokens.light().accent, savedAccent.light);
         expect(WorkspaceAccent.fromName(null), savedAccent);
       },
     );
 
     test('status colors resolve from a semantic status enum', () {
-      final tokens = HermesTokens.dark();
+      final tokens = WingTokens.dark();
 
-      expect(tokens.colorForStatus(HermesStatus.running), tokens.running);
-      expect(tokens.colorForStatus(HermesStatus.blocked), tokens.blocked);
-      expect(tokens.colorForStatus(HermesStatus.failed), tokens.danger);
-      expect(tokens.colorForStatus(HermesStatus.completed), tokens.success);
-      expect(tokens.colorForStatus(HermesStatus.idle), tokens.muted);
+      expect(tokens.colorForStatus(WingStatus.running), tokens.running);
+      expect(tokens.colorForStatus(WingStatus.blocked), tokens.blocked);
+      expect(tokens.colorForStatus(WingStatus.failed), tokens.danger);
+      expect(tokens.colorForStatus(WingStatus.completed), tokens.success);
+      expect(tokens.colorForStatus(WingStatus.idle), tokens.muted);
     });
 
     test('lerp keeps a valid token set mid-animation', () {
-      final dark = HermesTokens.dark();
-      final light = HermesTokens.light();
+      final dark = WingTokens.dark();
+      final light = WingTokens.light();
 
       final mid = dark.lerp(light, 0.5);
 
-      expect(mid, isA<HermesTokens>());
+      expect(mid, isA<WingTokens>());
       expect(mid.accent, Color.lerp(dark.accent, light.accent, .5));
       expect(mid.surface, isNot(dark.surface));
     });
 
     test('lerp against a foreign extension keeps this token set', () {
-      final dark = HermesTokens.dark();
+      final dark = WingTokens.dark();
 
       expect(dark.lerp(null, 0.5), same(dark));
     });
 
     test('copyWith overrides only the named token', () {
-      final tokens = HermesTokens.dark();
+      final tokens = WingTokens.dark();
       final recolored = tokens.copyWith(danger: const Color(0xFF00FF00));
 
       expect(recolored.danger, const Color(0xFF00FF00));
@@ -122,9 +122,9 @@ void main() {
     });
   });
 
-  group('HermesTypography', () {
+  group('WingTypography', () {
     test('the ramp is ordered and mono is a monospace family', () {
-      final ramp = HermesTypography.ramp(Brightness.dark);
+      final ramp = WingTypography.ramp(Brightness.dark);
 
       expect(ramp.display.fontSize, greaterThan(ramp.title.fontSize!));
       expect(ramp.title.fontSize, greaterThan(ramp.section.fontSize!));
@@ -135,9 +135,9 @@ void main() {
     });
   });
 
-  group('hermesTheme', () {
+  group('wingTheme', () {
     testWidgets('attaches tokens to the dark theme', (tester) async {
-      final theme = hermesTheme(Brightness.dark);
+      final theme = wingTheme(Brightness.dark);
       expect(_tokensFrom(theme), isNotNull);
 
       final tokens = await _pumpAndReadTokens(tester, theme);
@@ -145,7 +145,7 @@ void main() {
     });
 
     testWidgets('attaches tokens to the light theme', (tester) async {
-      final theme = hermesTheme(Brightness.light);
+      final theme = wingTheme(Brightness.light);
       expect(_tokensFrom(theme), isNotNull);
 
       final tokens = await _pumpAndReadTokens(tester, theme);
@@ -161,12 +161,12 @@ void main() {
       );
 
       expect(tokens.brightness, Brightness.light);
-      expect(tokens.accent, HermesTokens.light().accent);
+      expect(tokens.accent, WingTokens.light().accent);
     });
 
     test('uses Material 3 and keeps the accent in the color scheme', () {
       for (final brightness in Brightness.values) {
-        final theme = hermesTheme(brightness);
+        final theme = wingTheme(brightness);
         expect(theme.useMaterial3, isTrue);
         expect(theme.brightness, brightness);
         expect(theme.colorScheme.brightness, brightness);
@@ -175,7 +175,7 @@ void main() {
 
     test('body text meets the WCAG AA contrast floor on the base surface', () {
       for (final brightness in Brightness.values) {
-        final tokens = _tokensFrom(hermesTheme(brightness))!;
+        final tokens = _tokensFrom(wingTheme(brightness))!;
         expect(
           contrastRatio(tokens.onSurface, tokens.surface),
           greaterThanOrEqualTo(4.5),
@@ -186,7 +186,7 @@ void main() {
 
     test('muted text still meets the AA large-text floor', () {
       for (final brightness in Brightness.values) {
-        final tokens = _tokensFrom(hermesTheme(brightness))!;
+        final tokens = _tokensFrom(wingTheme(brightness))!;
         expect(
           contrastRatio(tokens.muted, tokens.surface),
           greaterThanOrEqualTo(3.0),
