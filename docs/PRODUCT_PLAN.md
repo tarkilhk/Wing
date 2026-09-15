@@ -51,4 +51,4 @@ Verify backend support before presenting an operation as available. Fixture test
 
 Reads, writes and late responses must retain their captured owner across two profiles and two connections. Preserve newer draft text/files during asynchronous work. An update request, upload receipt or process exit is not proof that the requested final result succeeded.
 
-Use [Testing](TESTING.md) and the [release checklist](../CODE_QUALITY_CHECKLIST.md). Update current guides when behavior changes. Keep the changelog about product changes, with version/date labels; omit personal deployment journals, test counts and releases with no independent user-facing change.
+Use [Testing](TESTING.md) and the [release checklist](CODE_QUALITY_CHECKLIST.md). Update current guides when behavior changes. Keep the changelog about product changes, with version/date labels; omit personal deployment journals, test counts and releases with no independent user-facing change.

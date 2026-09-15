@@ -56,6 +56,6 @@ app.*.map.json
 *.dpapi.xml
 key.properties
 
-# Graphify local incremental cache and machine-specific scan root
-graphify-out/cache/
-graphify-out/.graphify_root
+# Generated local analysis and design output
+/graphify-out/
+/output/

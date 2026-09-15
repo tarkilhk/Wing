@@ -1,3 +1,2 @@
-server-patches/*.patch text eol=lf whitespace=-blank-at-eol
 android/app/src/main/assets/diagrams/mermaid.min.js -text -diff -whitespace linguist-vendored
 android/app/src/main/assets/diagrams/*LICENSE -text -whitespace

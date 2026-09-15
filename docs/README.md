@@ -44,7 +44,7 @@ The short [profile ownership ADR](adr/0001-request-scoped-hermes-profiles.md) an
 ## Development and release
 
 - [Contributing](../CONTRIBUTING.md), [Windows build workflow](LOCAL_BUILD_SETUP.md) and [Testing](TESTING.md).
-- [Release guide](ANDROID_RELEASE_PLAN.md), [release checklist](../CODE_QUALITY_CHECKLIST.md) and [Play data safety preparation](PLAY_DATA_SAFETY.md).
+- [Release guide](ANDROID_RELEASE_PLAN.md), [release checklist](CODE_QUALITY_CHECKLIST.md) and [Play data safety preparation](PLAY_DATA_SAFETY.md).
 - [Bug tracker](BUG_TRACKER.md) for issue links; [upstream bugs](UPSTREAM_HERMES_BUGS.md) for backend reproductions and closure criteria.
 - [Changelog](../CHANGELOG.md) for product release history and [Notice](../NOTICE.md) for attribution.
 

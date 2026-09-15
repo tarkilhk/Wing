@@ -1,6 +1,6 @@
 # Testing and acceptance
 
-[Contributing](../CONTRIBUTING.md) covers the toolchain and ordinary analyze/test/build commands. [Windows build workflow](LOCAL_BUILD_SETUP.md) covers cache/lock handling and data-preserving installation. Complete the [release checklist](../CODE_QUALITY_CHECKLIST.md) for a fixed release candidate.
+[Contributing](../CONTRIBUTING.md) covers the toolchain and ordinary analyze/test/build commands. [Windows build workflow](LOCAL_BUILD_SETUP.md) covers cache/lock handling and data-preserving installation. Complete the [release checklist](CODE_QUALITY_CHECKLIST.md) for a fixed release candidate.
 
 ## What a passing check establishes
 

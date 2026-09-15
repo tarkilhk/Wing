@@ -30,7 +30,7 @@ flutter pub outdated
 flutter build apk --release --split-per-abi
 ```
 
-Record dependency update decisions rather than upgrading everything during a release. Follow [Contributing](../CONTRIBUTING.md) for toolchain requirements and the Windows launcher. Complete [CODE_QUALITY_CHECKLIST.md](../CODE_QUALITY_CHECKLIST.md). Live gateway tests are opt-in and require their own authorized disposable data.
+Record dependency update decisions rather than upgrading everything during a release. Follow [Contributing](../CONTRIBUTING.md) for toolchain requirements and the Windows launcher. Complete the [release checklist](CODE_QUALITY_CHECKLIST.md). Live gateway tests are opt-in and require their own authorized disposable data.
 
 ## Sign and verify
 

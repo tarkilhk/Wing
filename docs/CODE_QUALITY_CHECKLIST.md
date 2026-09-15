@@ -1,6 +1,6 @@
 # Release checklist
 
-Complete this for a fixed release candidate. Record passed, failed or not applicable with a reason in the release PR. Use the [release guide](docs/ANDROID_RELEASE_PLAN.md) for identity/signing and [Testing](docs/TESTING.md) for live-server prerequisites.
+Complete this for a fixed release candidate. Record passed, failed or not applicable with a reason in the release notes or pull request. Use the [release guide](ANDROID_RELEASE_PLAN.md) for identity/signing and [Testing](TESTING.md) for live-server prerequisites.
 
 ## Automated checks
 
