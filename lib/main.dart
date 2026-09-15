@@ -6,7 +6,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/widgets/compact_switch.dart';
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, defaultTargetPlatform, kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/services/android_launch_intent_service.dart';
 import 'core/services/android_share_intent_service.dart';
@@ -102,6 +103,8 @@ class WingApp extends StatefulWidget {
 }
 
 class WingAppState extends State<WingApp> with WidgetsBindingObserver {
+  static const _notificationPermissionRequestedKey =
+      'notification_permission_requested';
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _homeKey = GlobalKey<HomeScreenState>();
   final _notificationRoutes = <ProfileWorkspaceController, Route<void>>{};
@@ -287,9 +290,10 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         widget.startupExternalNavigationReady ??
         _profileNotifications.initialize().catchError((Object _) {});
     unawaited(
-      WidgetsBinding.instance.endOfFrame.then(
-        (_) => _syncBackgroundMonitoring(),
-      ),
+      WidgetsBinding.instance.endOfFrame.then((_) async {
+        await _requestStartupNotificationPermission();
+        await _syncBackgroundMonitoring();
+      }),
     );
     _profileControllers =
         widget.profileControllers ??
@@ -347,6 +351,26 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   void refreshPreferences() {
     if (mounted) setState(() {});
     unawaited(_syncBackgroundMonitoring());
+  }
+
+  Future<void> _requestStartupNotificationPermission() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    final prefs = widget.connManager.prefs;
+    if (prefs.getBool(_notificationPermissionRequestedKey) == true) return;
+    try {
+      await _notificationsReady;
+      if (!mounted) return;
+      final enabled = await _profileNotifications.notificationsEnabled();
+      if (!mounted) return;
+      if (enabled != true) {
+        await _profileNotifications.requestPermission();
+      }
+      // Remember both acceptance and denial; further requests are user-driven
+      // through App settings. A platform failure remains retryable next launch.
+      await prefs.setBool(_notificationPermissionRequestedKey, true);
+    } catch (_) {
+      // Notification setup must not prevent the app from opening.
+    }
   }
 
   Future<void> _syncBackgroundMonitoring() async {

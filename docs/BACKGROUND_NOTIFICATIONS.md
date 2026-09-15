@@ -20,7 +20,9 @@ Android force-stop, process termination, a reboot, lost connectivity and manufac
 
 ## Settings and text
 
-App settings has independent completion/input switches, optional chat titles and a permission/test action. Titles are off by default. Event messages use Finished working or Needs your attention, with the selected chat title or Tap to open the chat. The built-in test proves OS posting, not coverage of actual server work.
+On first launch, after the first screen appears, Wing requests Android notification permission through the native dialog if notifications are not already enabled. Acceptance or denial is remembered on this device, so subsequent launches do not ask again. A failed platform request can be retried on the next launch. No test alert is posted during startup.
+
+App settings has independent completion/input switches, optional chat titles and a permission/test action, which remains available after the startup request. Titles are off by default. Event messages use Finished working or Needs your attention, with the selected chat title or Tap to open the chat. The built-in test proves OS posting, not coverage of actual server work.
 
 Avoid secrets, prompt contents and tool output in notifications. Follow [Privacy](../PRIVACY.md) for storage and optional title exposure.
 
