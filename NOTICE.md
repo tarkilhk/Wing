@@ -1,6 +1,6 @@
 # Attribution and license
 
-Wing, is the `tarkilhk/wing` fork of [rusty4444](https://github.com/rusty4444)'s Android client. It is maintained independently and is not an official Hermes Agent, Nous Research or upstream client release.
+Wing is the `tarkilhk/wing` fork of [rusty4444](https://github.com/rusty4444)'s Android client. It is maintained independently and is not an official Hermes Agent, Nous Research or upstream client release.
 
 Upstream identifies its Android client as MIT. This fork retains that license identification and the attribution to its original authors. Preserve applicable copyright and permission notices when redistributing.
 

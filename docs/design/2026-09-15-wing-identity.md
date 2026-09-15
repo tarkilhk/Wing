@@ -34,8 +34,9 @@ and optional themed icons use the existing single wing. See the
 These colors belong to the artwork. Studio screen tokens and user accent
 preferences continue to govern controls. Rounded lettering and circular portrait
 masks remain part of the identity. The board's “Wink” heading is the original
-concept name; the product name is Wing. “Your agent, with you.” is the selected
-tagline, and “A familiar face.” is supporting copy.
+concept name; the product name is Wing. “Your agent, with you” is the selected
+tagline, and “A familiar face” is supporting copy. Omit terminal periods from
+brand-card and banner copy. Retain the comma in the tagline.
 
 ## Source and implementation boundary
 
