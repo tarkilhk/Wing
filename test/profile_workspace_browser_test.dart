@@ -6,6 +6,7 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/widgets/context_ring.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 import 'support/profile_browser_fixture.dart';
 
 void main() {
@@ -13,7 +14,7 @@ void main() {
   late ProfileWorkspaceController controller;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    fixture = ProfileBrowserFixture();
+    fixture = _ProjectFilterFixture();
     controller = ProfileWorkspaceController(
       connection: SavedConnection(
         id: 'host',
@@ -33,7 +34,10 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(460, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        theme: wingTheme(Brightness.light),
+        home: ProfileWorkspaceScreen(controller: controller),
+      ),
     );
   }
 
@@ -109,7 +113,7 @@ void main() {
   ) async {
     await controller.selectProject(controller.current!.projects.first);
     await controller.openSession(
-      ProfileSessionKey(controller.current!.scope, 'newest'),
+      ProfileSessionKey(controller.current!.scope, 'old'),
     );
     await show(tester);
     await tester.pumpAndSettle();
@@ -165,23 +169,228 @@ void main() {
     },
   );
 
+  testWidgets('project filters in place and tapping again restores all chats', (
+    tester,
+  ) async {
+    await show(tester);
+    await tester.tap(find.text('Mobile app'));
+    await tester.pumpAndSettle();
+    expect(find.text('Project-only chat'), findsOneWidget);
+    expect(find.text('Improve the conversation list'), findsNothing);
+    expect(find.text('Pinned chats'), findsNothing);
+    expect(find.text('Projects'), findsOneWidget);
+    expect(find.text('Chats'), findsOneWidget);
+    expect(find.text('Recents'), findsOneWidget);
+    expect(find.byTooltip('Back to workspace'), findsNothing);
+    expect(
+      tester
+          .widget<ListTile>(find.byKey(const ValueKey('project-p2')))
+          .selected,
+      isTrue,
+    );
+    await tester.tap(find.text('Mobile app'));
+    await tester.pumpAndSettle();
+    expect(find.text('Projects'), findsOneWidget);
+    expect(find.text('Improve the conversation list'), findsOneWidget);
+    expect(find.text('Pinned chats'), findsOneWidget);
+    expect(controller.current!.selectedProject, isNull);
+    expect(
+      tester
+          .widget<ListTile>(find.byKey(const ValueKey('project-p2')))
+          .selected,
+      isFalse,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('switching projects filters both pins and recents', (
+    tester,
+  ) async {
+    await show(tester);
+    await tester.tap(find.text('Mobile app'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Website'));
+    await tester.pumpAndSettle();
+    expect(controller.current!.selectedProject?['id'], 'p4');
+    expect(find.text('Plan the Android workspace'), findsOneWidget);
+    expect(find.text('Improve the conversation list'), findsOneWidget);
+    expect(find.text('Ideas to return to'), findsNothing);
+    expect(find.text('Project-only chat'), findsNothing);
+    expect(find.text('Pinned chats'), findsOneWidget);
+    expect(find.text('Recents'), findsOneWidget);
+    expect(
+      tester
+          .widget<ListTile>(find.byKey(const ValueKey('project-p2')))
+          .selected,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<ListTile>(find.byKey(const ValueKey('project-p4')))
+          .selected,
+      isTrue,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('project search stays scoped and survives toggling the filter', (
+    tester,
+  ) async {
+    await show(tester);
+    await tester.tap(find.text('Mobile app'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Android workspace');
+    await tester.pumpAndSettle();
+    expect(find.text('No matching chats'), findsOneWidget);
+    expect(find.text('Pinned chats'), findsNothing);
+    expect(find.text('Mobile app'), findsOneWidget);
+    await tester.tap(find.text('Website'));
+    await tester.pumpAndSettle();
+    expect(find.text('Plan the Android workspace'), findsOneWidget);
+    expect(find.text('Improve the conversation list'), findsNothing);
+    await tester.tap(find.text('Website'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(controller.current!.selectedProject, isNull);
+    expect(find.text('Plan the Android workspace'), findsOneWidget);
+    expect(controller.current!.searchQuery, 'android workspace');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
-    'project opens only authoritative member chats and Back returns to root',
+    'All projects keeps a selected older project reachable in Chats',
     (tester) async {
       await show(tester);
       await tester.tap(find.text('Mobile app'));
       await tester.pumpAndSettle();
-      expect(find.text('Project-only chat'), findsOneWidget);
-      expect(find.text('Improve the conversation list'), findsNothing);
-      expect(find.text('Pinned chats'), findsNothing);
-      expect(find.text('Projects'), findsNothing);
-      await tester.tap(find.byTooltip('Back to workspace'));
+      await tester.tap(find.text('See all'));
       await tester.pumpAndSettle();
-      expect(find.text('Projects'), findsOneWidget);
+      expect(find.text('All projects'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'Archive');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('project-p1')));
+      await tester.pumpAndSettle();
+      expect(find.text('Chats'), findsOneWidget);
+      expect(find.text('Recents'), findsOneWidget);
+      expect(find.text('No chats in this project yet'), findsOneWidget);
+      expect(find.text('Pinned chats'), findsNothing);
+      expect(find.text('Mobile app'), findsOneWidget);
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(const ValueKey('project-p1')))
+            .selected,
+        isTrue,
+      );
+      await tester.tap(find.text('Archive'));
+      await tester.pumpAndSettle();
+      expect(controller.current!.selectedProject, isNull);
       expect(find.text('Improve the conversation list'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+
+  testWidgets(
+    'plus creates in the selected project and unassigned after clearing',
+    (tester) async {
+      await show(tester);
+      await tester.tap(find.text('Mobile app'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('workspace-new-chat')));
+      await tester.pumpAndSettle();
+      expect(controller.current!.chat!.projectId, 'p2');
+      expect(
+        fixture.calls.lastWhere((c) => c.$2 == 'session.create').$3['cwd'],
+        '/Mobile app',
+      );
+      await tester.tap(find.byTooltip('Back to sessions'));
+      await tester.pumpAndSettle();
+      expect(controller.current!.selectedProject?['id'], 'p2');
+      await tester.tap(find.text('Mobile app'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('workspace-new-chat')));
+      await tester.pumpAndSettle();
+      expect(controller.current!.chat!.projectId, isNull);
+      expect(
+        fixture.calls.lastWhere((c) => c.$2 == 'session.create').$3['cwd'],
+        isNull,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('project menu leaves selection alone and system Back clears it', (
+    tester,
+  ) async {
+    await show(tester);
+    await tester.tap(find.text('Mobile app'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('project-p4')),
+        matching: find.byTooltip('Project actions'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(controller.current!.selectedProject?['id'], 'p2');
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(controller.current!.selectedProject?['id'], 'p2');
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(controller.current!.selectedProject, isNull);
+    expect(find.text('Improve the conversation list'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final brightness in Brightness.values) {
+    testWidgets(
+      'project selection uses theme tint at narrow large text: $brightness',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(320, 1400));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final semantics = tester.ensureSemantics();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(2)),
+              child: child!,
+            ),
+            home: ProfileWorkspaceScreen(controller: controller),
+          ),
+        );
+        final row = find.byKey(const ValueKey('project-p2'));
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+        final tile = tester.widget<ListTile>(row);
+        expect(
+          tile.selectedTileColor,
+          wingTheme(brightness).colorScheme.primaryContainer,
+        );
+        expect(
+          tester.getSemantics(row),
+          matchesSemantics(
+            isSelected: true,
+            hasSelectedState: true,
+            isButton: true,
+            hasEnabledState: true,
+            isEnabled: true,
+            hasTapAction: true,
+            hasLongPressAction: true,
+            hasFocusAction: true,
+            isFocusable: true,
+            label: 'Mobile app',
+          ),
+        );
+        expect(tester.getSize(row).height, greaterThanOrEqualTo(48));
+        expect(tester.takeException(), isNull);
+        semantics.dispose();
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
 
   testWidgets(
     'profile chips refresh the entire tree and discard prior project and search',
@@ -195,7 +404,7 @@ void main() {
       await tester.pump();
       expect(find.text('Project-only chat'), findsNothing);
       expect(find.text('Opening your chats'), findsOneWidget);
-      await tester.tap(find.byTooltip('Back to workspace'));
+      await tester.binding.handlePopRoute();
       await tester.pump();
       expect(tester.takeException(), isNull);
       fixture.delays['work']!.complete();
@@ -239,4 +448,20 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+}
+
+class _ProjectFilterFixture extends ProfileBrowserFixture {
+  @override
+  List<Map<String, dynamic>> projectSessions(String profile, String id) {
+    if (profile == 'work' || id == 'p2') {
+      return super.projectSessions(profile, id);
+    }
+    if (id == 'p4') {
+      return sessions(profile)
+          .where((row) => {'pinned', 'newest'}.contains(row['id']))
+          .map((row) => {...row}..remove('pinned'))
+          .toList();
+    }
+    return [];
+  }
 }

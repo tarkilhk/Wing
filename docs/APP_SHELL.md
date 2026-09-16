@@ -6,7 +6,9 @@ The drawer opens Chats, Activity, Connections, App settings and Hermes administr
 
 Chat browsing keeps the connection and selected profile visible, with five recent projects, pinned chats and recents. The header menu opens compact filters. Archived chats do not offer another Archived destination. All projects omits chat filters and the duplicate New project action.
 
-The floating plus creates a chat or project for the current view. A project row's menu offers New chat, Rename, Appearance and Delete. Use the shared menu rules in [Design system](DESIGN_SYSTEM.md), including clear labels and 48 dp touch targets.
+Tap a project to filter pinned chats and recents in place. The selected row uses the shared background tint; tap it again to clear the filter or tap another project to switch. Keep the Chats title and Recents heading unchanged, and hide Pinned chats when the filtered set has no pins. All projects returns to Chats with the chosen project visible and selected. Search matches titles within the selected project's results.
+
+The floating plus creates a chat in the selected project, or a project in All projects. With no project filter, it creates an unassigned chat. A project row's menu offers New chat, Rename, Appearance and Delete without changing the filter. Use the shared menu rules in [Design system](DESIGN_SYSTEM.md), including clear labels and 48 dp touch targets.
 
 Back unwinds the current preview or editor, then returns from a conversation to Chats. At the workspace root it opens the drawer before exiting. Navigation preserves the open work and draft.
 

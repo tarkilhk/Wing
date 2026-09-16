@@ -70,6 +70,8 @@ void main() {
   testWidgets(
     'project scrolling reveals members locally and preserves old pins',
     (tester) async {
+      await tester.binding.setSurfaceSize(const Size(460, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       await controller.selectProject(controller.current!.projects.first);
       await show(tester);
       expect(find.text('Pinned chats'), findsOneWidget);
@@ -84,7 +86,9 @@ void main() {
         reason: 'No invented project paging endpoint',
       );
       expect(controller.current!.projectSessions.length, 125);
-      await tester.tap(find.byTooltip('Back to workspace'));
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView).last, const Offset(0, 10000));
       await tester.pumpAndSettle();
       await tester.tap(find.text('personal other project'));
       await tester.pumpAndSettle();

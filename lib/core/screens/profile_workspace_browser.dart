@@ -125,10 +125,10 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     } else if (controller.current?.archivedOnly == true) {
       unawaited(_run(() => controller.showArchived(false)));
       setState(() => _view = 'home');
-    } else if (controller.current?.selectedProject != null) {
-      unawaited(controller.selectProject(null));
     } else if (_view != 'home') {
       setState(() => _view = 'home');
+    } else if (controller.current?.selectedProject != null) {
+      unawaited(controller.selectProject(null));
     } else {
       Navigator.maybePop(context);
     }
@@ -185,6 +185,9 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         clipBehavior: Clip.antiAlias,
         child: ListTile(
           key: ValueKey('project-${project['id']}'),
+          selected: controller.current?.selectedProject?['id'] == project['id'],
+          selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
+          selectedColor: Theme.of(context).colorScheme.onSurface,
           contentPadding: const EdgeInsets.only(left: 4),
           minTileHeight: 48,
           minVerticalPadding: 0,
@@ -197,7 +200,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
           ),
-          onTap: controller.switching ? null : () => _openProject(project),
+          onTap: controller.switching ? null : () => _toggleProject(project),
           onLongPress: controller.switching
               ? null
               : () => _run(
@@ -418,15 +421,16 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     ),
   );
 
-  void _openProject(Map<String, dynamic> project) {
+  void _toggleProject(Map<String, dynamic> project) {
     _searchDebounce?.cancel();
-    _search.clear();
+    final selected =
+        controller.current?.selectedProject?['id'] == project['id'];
+    if (_view == 'projects') _search.clear();
     setState(() {
-      _query = '';
       _view = 'home';
-      _unreadOnly = false;
     });
-    unawaited(_run(() => controller.selectProject(project)));
+    unawaited(_run(() => controller.selectProject(selected ? null : project)));
+    _setQuery(_search.text);
   }
 
   Widget _projectOverview(List<Map<String, dynamic>> projects) => Column(
@@ -436,7 +440,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
 
   List<Widget> _tree() {
     final resource = controller.current!;
-    if (_view == 'projects' && resource.selectedProject == null) {
+    if (_view == 'projects') {
       return [
         if (resource.projectsError != null) _empty(resource.projectsError!),
         for (final project in resource.projects.where(
@@ -549,10 +553,8 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
               ? 'Unread chats in loaded results. Load more chats to check older pages.'
               : 'Unread chats in this profile.',
         ),
-      if (project == null &&
-          !_unreadOnly &&
-          !resource.archivedOnly &&
-          _query.isEmpty) ...[
+      if (!resource.archivedOnly &&
+          (project != null || (!_unreadOnly && _query.isEmpty))) ...[
         _heading(
           'Projects',
           action: resource.projects.length > 5
@@ -577,7 +579,12 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         else if (resource.projects.isEmpty)
           _empty('No projects in this profile')
         else
-          _projectOverview(resource.projects.take(5).toList()),
+          _projectOverview([
+            ...resource.projects.take(5),
+            if (project != null &&
+                !resource.projects.take(5).any((p) => p['id'] == project['id']))
+              project,
+          ]),
       ],
       if (project != null && resource.projectSessionsLoading)
         const LinearProgressIndicator(),
@@ -597,16 +604,15 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         _heading('Pinned chats'),
         ...pinned.map(_session),
       ],
-      if (project == null || pinned.isNotEmpty)
-        _heading(
-          _query.isEmpty
-              ? (_unreadOnly
-                    ? 'Unread chats'
-                    : resource.archivedOnly
-                    ? 'Archived chats'
-                    : 'Recents')
-              : 'Search results',
-        ),
+      _heading(
+        _query.isEmpty
+            ? (_unreadOnly
+                  ? 'Unread chats'
+                  : resource.archivedOnly
+                  ? 'Archived chats'
+                  : 'Recents')
+            : 'Search results',
+      ),
       ...(project == null ? recent : recent.take(_projectVisibleCount)).map(
         _session,
       ),
@@ -617,7 +623,9 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           _unreadOnly
               ? 'No unread chats in loaded results'
               : _query.isEmpty
-              ? 'No chats here yet'
+              ? (project == null
+                    ? 'No chats here yet'
+                    : 'No chats in this project yet')
               : 'No matching chats',
         ),
       if (project == null && resource.sessionsLoadingMore)
@@ -664,10 +672,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     final colors = Theme.of(context).colorScheme;
     final background = WingTokens.of(context).surface;
     final isWorkspaceHome =
-        project == null &&
-        !_unreadOnly &&
-        _view == 'home' &&
-        resource?.archivedOnly != true;
+        !_unreadOnly && _view == 'home' && resource?.archivedOnly != true;
     final workspaceOptions = WorkspaceOptionsMenu(
       key: _workspaceOptionsKey,
       enabled: resource != null && !controller.switching,
@@ -745,7 +750,9 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         if (!didPop) {
           if (_scaffoldKey.currentState?.isDrawerOpen == true) {
             unawaited(SystemNavigator.pop());
-          } else if (isWorkspaceHome && widget.drawer != null) {
+          } else if (isWorkspaceHome &&
+              project == null &&
+              widget.drawer != null) {
             _scaffoldKey.currentState?.openDrawer();
           } else {
             _back();
@@ -764,7 +771,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           leading: isWorkspaceHome
               ? null
               : IconButton(
-                  tooltip: project == null ? 'Back' : 'Back to workspace',
+                  tooltip: 'Back',
                   icon: const Icon(Icons.arrow_back_rounded, size: 22),
                   onPressed: _back,
                 ),
@@ -772,12 +779,11 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                project?['name']?.toString() ??
-                    (resource?.archivedOnly == true
-                        ? 'Archived chats'
-                        : _view == 'projects'
-                        ? 'All projects'
-                        : 'Chats'),
+                resource?.archivedOnly == true
+                    ? 'Archived chats'
+                    : _view == 'projects'
+                    ? 'All projects'
+                    : 'Chats',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -790,7 +796,6 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                 label: controller.connection.label,
                 icon: controller.connection.icon,
                 status: controller.connectionStatus,
-                suffix: project == null ? null : resource!.scope.profileName,
                 style: TextStyle(
                   fontSize: 12,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -998,7 +1003,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                                 final rows = _tree();
                                 return ListView.builder(
                                   key: ValueKey(
-                                    '${resource.scope.storageNamespace}-${project?['id']}-$_view-$_unreadOnly-${controller.sessionVisibility.name}',
+                                    '${resource.scope.storageNamespace}-$_view-$_unreadOnly-${controller.sessionVisibility.name}',
                                   ),
                                   physics:
                                       const AlwaysScrollableScrollPhysics(),
