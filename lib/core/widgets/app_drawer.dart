@@ -1,3 +1,5 @@
+import '../services/server_connection_status.dart';
+import 'server_connection_label.dart';
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 import 'playful_portrait.dart';
@@ -21,6 +23,7 @@ class AppDrawer extends StatelessWidget {
     required this.selected,
     required this.onSelected,
     this.connectionLabel,
+    this.connectionStatus,
     this.profileLabel,
     this.hasConnection = true,
   });
@@ -28,6 +31,7 @@ class AppDrawer extends StatelessWidget {
   final AppDestination selected;
   final ValueChanged<AppDestination> onSelected;
   final String? connectionLabel;
+  final ServerConnectionStatus? connectionStatus;
   final String? profileLabel;
   final bool hasConnection;
 
@@ -40,15 +44,22 @@ class AppDrawer extends StatelessWidget {
       children: [
         Text('Wing', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 8),
-        Text(
-          [
-            connectionLabel ?? 'Your mobile workspace',
-            ?profileLabel,
-          ].join(' · '),
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-        ),
+        if (connectionLabel != null)
+          ServerConnectionLabel(
+            label: connectionLabel!,
+            status: connectionStatus,
+            suffix: profileLabel,
+          )
+        else
+          Text(
+            [
+              connectionLabel ?? 'Your mobile workspace',
+              ?profileLabel,
+            ].join(' · '),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+          ),
       ],
     );
     return Drawer(

@@ -1,3 +1,5 @@
+import 'core/widgets/server_connection_label.dart';
+import 'core/services/network_availability.dart';
 import 'core/screens/connection_setup_screen.dart';
 import 'core/widgets/studio_error.dart';
 import 'dart:async';
@@ -113,6 +115,8 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   int _notificationOpenGeneration = 0;
   String? _deferredShareId;
   bool _disposed = false;
+  ProfileWorkspaceController? _openingNotificationController;
+  final _networkAvailability = NetworkAvailability();
 
   Future<ProfileWorkspaceController> profileController(
     SavedConnection connection,
@@ -153,6 +157,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
       );
     } catch (_) {
       _notificationOpenGeneration++;
+      _openingNotificationController?.cancelNotificationOpen();
       _pendingNotificationKey = null;
       _pendingNotificationOpen = null;
       _showNotificationOpenError();
@@ -201,14 +206,19 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
       }
       final controller = await _profileControllers.forSession(connection, key);
       if (!_isCurrentNotificationOpen(generation)) return;
-      if (controller.discovery == null) await controller.initialize();
-      if (!_isCurrentNotificationOpen(generation)) return;
-      await controller.openSession(key);
-      if (!_isCurrentNotificationOpen(generation)) return;
-      if (controller.current?.scope != key.workspace ||
-          controller.current?.chat?.key != key) {
-        throw StateError('The notification target is unavailable');
+      final previous = _openingNotificationController;
+      if (previous != null && previous != controller) {
+        previous.cancelNotificationOpen();
+        final previousRoute = _notificationRoutes.remove(previous);
+        if (previousRoute != null && previousRoute.isActive) {
+          _navigatorKey.currentState?.removeRoute(previousRoute);
+        }
       }
+      _openingNotificationController = controller;
+      final opening = controller.openNotification(
+        key,
+        isCurrent: () => _isCurrentNotificationOpen(generation),
+      );
       final navigator = _navigatorKey.currentState;
       if (navigator == null) {
         throw StateError('Notification navigation is unavailable');
@@ -216,6 +226,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
       final existingRoute = _notificationRoutes[controller];
       if (existingRoute != null && existingRoute.isActive) {
         navigator.popUntil((route) => identical(route, existingRoute));
+        await opening;
         return;
       }
       final route = MaterialPageRoute<void>(
@@ -234,10 +245,12 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         route.popped.then((_) {
           if (identical(_notificationRoutes[controller], route)) {
             _notificationRoutes.remove(controller);
+            controller.cancelNotificationOpen();
           }
         }),
       );
       navigator.push(route);
+      await opening;
     } catch (_) {
       if (!_isCurrentNotificationOpen(generation)) return;
       // Malformed or removed targets cannot be rerouted to a default profile.
@@ -338,6 +351,10 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
           ),
         );
     _profileControllers.addListener(_monitoringActivityChanged);
+    _networkAvailability.start(
+      _profileControllers.recoverConnections,
+      _profileControllers.networkUnavailable,
+    );
   }
 
   void _monitoringActivityChanged() {
@@ -444,6 +461,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   void dispose() {
     _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
+    _networkAvailability.dispose();
     _profileControllers.removeListener(_monitoringActivityChanged);
     _backgroundMonitoring.dispose();
     _profileControllers.dispose();
@@ -719,6 +737,8 @@ class HomeScreenState extends State<HomeScreen> {
                         ),
                         for (final connection in _connections)
                           ListTile(
+                            horizontalTitleGap: 4,
+                            leading: _serverIndicator(connection),
                             title: Text(connection.label),
                             onTap: () => Navigator.pop(context, connection),
                           ),
@@ -991,19 +1011,29 @@ class HomeScreenState extends State<HomeScreen> {
     _onQuickChat();
   }
 
+  final _connectionOwners =
+      <SavedConnection, Future<ProfileWorkspaceController>>{};
+  Widget _serverIndicator(SavedConnection connection) =>
+      FutureBuilder<ProfileWorkspaceController>(
+        key: ValueKey(connection),
+        future: widget.profileController == null
+            ? null
+            : _connectionOwners.putIfAbsent(
+                connection,
+                () async => await widget.profileController!(connection),
+              ),
+        builder: (context, snapshot) => ServerConnectionIndicator(
+          label: connection.label,
+          status: snapshot.data?.connectionStatus,
+        ),
+      );
+
   Widget _buildConnectionCard(SavedConnection conn) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Theme.of(
-            context,
-          ).colorScheme.primary.withValues(alpha: 0.12),
-          child: Icon(
-            Icons.dns_outlined,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-        ),
+        horizontalTitleGap: 4,
+        leading: _serverIndicator(conn),
         title: Text(conn.label),
         subtitle: Text(
           '${conn.host}:${conn.dashboardPort}${conn.dashboardPrefix ?? ''}',
@@ -1075,11 +1105,22 @@ class HomeScreenState extends State<HomeScreen> {
       },
       child: Scaffold(
         key: _scaffoldKey,
-        drawer: AppDrawer(
-          selected: _destination,
-          connectionLabel: connection?.label,
-          hasConnection: connection != null && widget.profileController != null,
-          onSelected: _selectDestination,
+        drawer: FutureBuilder<ProfileWorkspaceController>(
+          key: ValueKey(connection),
+          future: connection == null || widget.profileController == null
+              ? null
+              : _connectionOwners.putIfAbsent(
+                  connection,
+                  () async => await widget.profileController!(connection),
+                ),
+          builder: (context, snapshot) => AppDrawer(
+            selected: _destination,
+            connectionLabel: connection?.label,
+            connectionStatus: snapshot.data?.connectionStatus,
+            hasConnection:
+                connection != null && widget.profileController != null,
+            onSelected: _selectDestination,
+          ),
         ),
         appBar: AppBar(
           title:

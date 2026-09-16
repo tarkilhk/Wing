@@ -175,21 +175,23 @@ void main() {
     },
   );
 
-  testWidgets('a failed open remains retryable', (tester) async {
+  testWidgets('notification opens its destination during a network outage', (
+    tester,
+  ) async {
     final harness = await _harness();
     final app = await _pumpApp(tester, harness);
     final payload = _payload(harness, 'a');
     harness.host.resumeFailures = 1;
 
     await app.currentState!.openProfileNotification(payload);
-    await tester.pump();
-    expect(find.byType(ProfileWorkspaceScreen), findsNothing);
+    await _pumpNavigation(tester);
+    expect(find.byType(ProfileWorkspaceScreen), findsOneWidget);
     expect(
       find.text('This chat is unavailable on its original host or profile.'),
-      findsOneWidget,
+      findsNothing,
     );
 
-    await app.currentState!.openProfileNotification(payload);
+    await tester.pump(const Duration(seconds: 1));
     await _pumpNavigation(tester);
     expect(_resumeCount(harness, 'a'), 2);
     await _expectSinglePopReturnsHome(tester);

@@ -62,6 +62,24 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
     return controller;
   }
 
+  void networkUnavailable() {
+    if (_closed) return;
+    for (final owner in _controllers.values) {
+      owner.networkUnavailable();
+    }
+  }
+
+  void recoverConnections() {
+    if (_closed) return;
+    for (final owner in _controllers.values) {
+      if (owner.initialized ||
+          owner.recovering ||
+          owner.notificationChat != null) {
+        owner.resumeConnection(networkChanged: true);
+      }
+    }
+  }
+
   @override
   void dispose() {
     if (_closed) return;

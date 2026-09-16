@@ -598,7 +598,11 @@ class WsClient {
     Duration timeout = const Duration(seconds: 30),
   }) async {
     if (!_connected || _channel == null) {
-      throw Exception('Not connected');
+      throw JsonRpcError(
+        method,
+        'Connection unavailable',
+        reason: 'connection_closed',
+      );
     }
 
     final id = _nextId++;
@@ -606,7 +610,9 @@ class WsClient {
     final timer = Timer(timeout, () {
       _pending.remove(id);
       if (!completer.isCompleted) {
-        completer.completeError(JsonRpcError(method, 'Timeout'));
+        completer.completeError(
+          JsonRpcError(method, 'Timeout', reason: 'request_timeout'),
+        );
       }
     });
 
@@ -631,7 +637,11 @@ class WsClient {
     Duration timeout = const Duration(seconds: 120),
   }) async {
     if (!_connected || _channel == null) {
-      throw Exception('Not connected');
+      throw JsonRpcError(
+        method,
+        'Connection unavailable',
+        reason: 'connection_closed',
+      );
     }
 
     final id = _nextId++;
@@ -643,7 +653,9 @@ class WsClient {
       _pending.remove(id);
       _streams.remove(id);
       if (!completer.isCompleted) {
-        completer.completeError(JsonRpcError(method, 'Timeout'));
+        completer.completeError(
+          JsonRpcError(method, 'Timeout', reason: 'request_timeout'),
+        );
       }
     });
 
@@ -712,7 +724,9 @@ class WsClient {
     listeners.add(listener);
     timer = Timer(timeout, () {
       if (!completion.isCompleted) {
-        completion.completeError(JsonRpcError('prompt.submit', 'Timeout'));
+        completion.completeError(
+          JsonRpcError('prompt.submit', 'Timeout', reason: 'request_timeout'),
+        );
       }
     });
 

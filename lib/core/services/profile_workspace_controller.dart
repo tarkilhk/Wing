@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -29,6 +30,9 @@ import 'profile_gateway.dart';
 import 'profile_selection_store.dart';
 import 'profiles_repository.dart';
 import 'ws_client.dart';
+import 'workspace_connection_failure.dart';
+import 'server_connection_status.dart';
+import 'workspace_snapshot_store.dart';
 import '../widgets/chat_intelligence_picker.dart';
 import '../models/gateway_approval.dart';
 import '../models/gateway_sensitive_prompt.dart';
@@ -91,6 +95,9 @@ class ProfileChat {
   ContextOccupancy? context;
   int contextGeneration = 0;
   ProfileSessionKey key;
+  bool opening = false;
+  bool offlineSnapshot = false;
+  String? openingError;
   String runtimeId;
   String title;
   String source;
@@ -154,6 +161,7 @@ class ProfileChat {
   int historyGeneration = 0;
   bool historyLoading = false;
   String? historyError;
+  bool historyUnavailable = false;
   double historyScrollOffset = 0;
   bool archived = false;
   final List<AttachmentDraft> attachments = [];
@@ -255,6 +263,9 @@ class ProfileWorkspaceData {
   int reconnectAttempt = 0;
   Timer? retry;
   bool reconnecting = false;
+  bool recovering = false;
+  bool loaded = false;
+  bool offlineSnapshot = false;
   String? reconnectError;
   ProfileWorkspaceData(this.gateway);
   WorkspaceScope get scope => gateway.scope;
@@ -323,6 +334,29 @@ class ProfileWorkspaceController extends ChangeNotifier {
   int _generation = 0;
   int _navigationGeneration = 0;
   bool _closed = false;
+  bool initialized = false;
+  Object? _initializationFailure;
+  late final ServerConnectionStatus connectionStatus;
+  late final WorkspaceSnapshotStore _snapshots;
+  DateTime? _lastSnapshot;
+  ProfileSessionKey? _notificationTarget;
+  ProfileChat? get notificationChat =>
+      _resources[_notificationTarget?.workspace]?.chats[_notificationTarget
+          ?.sessionId];
+  Timer? _notificationRetry;
+  Future<void>? _notificationOpening;
+  int _notificationAttempts = 0;
+  int _notificationGeneration = 0;
+  bool Function()? _notificationIsCurrent;
+
+  Future<void>? _initializing;
+  Timer? _initializationRetry;
+  int _initializationAttempt = 0;
+  bool _recoveringInitialization = false;
+  bool get recovering =>
+      _recoveringInitialization || (current?.recovering ?? false);
+  bool get recoveryInProgress =>
+      _initializing != null || (current?.reconnecting ?? false);
   bool _openingSavedDraft = false;
   Future<void> _journalQueue = Future.value();
   List<ProfileLiveActivity> _liveActivity = const [];
@@ -386,6 +420,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _drafts =
         draftStore ??
         ComposerDraftStore(preferences, connectionIdentity: connectionIdentity);
+    connectionStatus = ServerConnectionStatus(connection.label);
+    connectionStatus.retry = resumeConnection;
+    connectionStatus.onInterruption = () {
+      final resource = current;
+      if (!_closed &&
+          initialized &&
+          _notificationTarget == null &&
+          resource != null) {
+        _scheduleReconnect(resource);
+        _changed();
+      }
+    };
+    _snapshots = WorkspaceSnapshotStore(preferences, connectionIdentity);
+    _restoreReadingSnapshot();
   }
 
   Future<void> setSessionVisibility(SessionVisibility value) async {
@@ -578,7 +626,229 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   void _changed() {
-    if (!_closed) notifyListeners();
+    if (_closed) return;
+    if (_lastSnapshot == null ||
+        DateTime.now().difference(_lastSnapshot!).inSeconds >= 1) {
+      unawaited(_saveReadingSnapshot());
+    }
+    notifyListeners();
+  }
+
+  List<Map<String, dynamic>> _snapshotRecords(Object? value) => value is List
+      ? value
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList()
+      : [];
+
+  void _restoreReadingSnapshot() {
+    final snapshot = _snapshots.read();
+    for (final saved in _snapshotRecords(snapshot['profiles'])) {
+      final name = saved['name'];
+      if (name is! String) continue;
+      final resource = _resource(name)..offlineSnapshot = true;
+      resource.archivedOnly = saved['archived'] == true;
+      resource.sessions = _snapshotRecords(saved['sessions']);
+      resource.projects = _snapshotRecords(saved['projects']);
+      for (final row in _snapshotRecords(saved['chats'])) {
+        final id = row['id'];
+        if (id is! String) continue;
+        resource.chats[id] =
+            ProfileChat(
+                key: ProfileSessionKey(resource.scope, id),
+                runtimeId: id,
+                title: row['title'] is String ? row['title'] as String : 'Chat',
+                source: row['source'] is String ? row['source'] as String : '',
+                projectId: row['project'] is String
+                    ? row['project'] as String
+                    : null,
+              )
+              ..offlineSnapshot = true
+              ..archived = row['archived'] == true
+              ..messages = _snapshotRecords(row['messages'])
+              ..historySessionId = row['history_session'] is String
+                  ? row['history_session'] as String
+                  : null;
+      }
+      if (snapshot['selected'] == name) current = resource;
+    }
+  }
+
+  Future<void> _saveReadingSnapshot() async {
+    _lastSnapshot = DateTime.now();
+    try {
+      await _snapshots.write({
+        'selected': current?.scope.profileName,
+        'profiles': [
+          for (final resource
+              in _resources.values
+                  .where(
+                    (r) => r.loaded || r.offlineSnapshot || r.chats.isNotEmpty,
+                  )
+                  .take(12))
+            {
+              'name': resource.scope.profileName,
+              'archived': resource.archivedOnly,
+              'sessions': resource.sessions.take(200).toList(),
+              'projects': resource.projects.take(100).toList(),
+              'chats': [
+                for (final chat
+                    in (resource.chats.values.toList()..sort(
+                          (a, b) => b.lastActive.compareTo(a.lastActive),
+                        ))
+                        .take(10))
+                  {
+                    'id': chat.key.sessionId,
+                    'title': chat.title,
+                    'history_session': chat.historySessionId,
+                    'source': chat.source,
+                    'project': chat.projectId,
+                    'archived': chat.archived,
+                    'messages': [
+                      for (final row in chat.messages.skip(
+                        chat.messages.length > 60
+                            ? chat.messages.length - 60
+                            : 0,
+                      ))
+                        if (jsonEncode(row).length < 32768)
+                          {
+                            for (final key in [
+                              'id',
+                              'role',
+                              'content',
+                              'timestamp',
+                            ])
+                              if (row.containsKey(key)) key: row[key],
+                          },
+                    ],
+                  },
+              ],
+            },
+        ],
+      });
+    } catch (_) {
+      /* Reading snapshots must never block the live workspace. */
+    }
+  }
+
+  /// Establish the destination synchronously, before any network operation.
+  Future<void> openNotification(
+    ProfileSessionKey key, {
+    bool Function()? isCurrent,
+  }) {
+    if (!owns(key)) throw ArgumentError('Wrong connection settings or host');
+    cancelNotificationOpen();
+    _notificationTarget = key;
+    _notificationIsCurrent = isCurrent;
+    _notificationAttempts = 0;
+    final resource = _resource(key.workspace.profileName);
+    final row = resource.sessions
+        .where((r) => r['id'] == key.sessionId)
+        .firstOrNull;
+    final chat = resource.chats.putIfAbsent(
+      key.sessionId,
+      () => ProfileChat(
+        key: key,
+        runtimeId: key.sessionId,
+        title: row?['title'] as String? ?? 'Chat',
+      )..offlineSnapshot = true,
+    );
+    chat.opening = true;
+    chat.openingError = null;
+    connectionStatus.beginRecovery('notification');
+    _changed();
+    return _retryNotification();
+  }
+
+  Future<void> _retryNotification() {
+    if (_notificationOpening != null) return _notificationOpening!;
+    _notificationRetry?.cancel();
+    _notificationRetry = null;
+    final generation = _notificationGeneration;
+    return _notificationOpening = _openNotificationAttempt(generation)
+        .whenComplete(() {
+          if (generation == _notificationGeneration) {
+            _notificationOpening = null;
+          }
+        });
+  }
+
+  Future<void> _openNotificationAttempt(int generation) async {
+    final key = _notificationTarget;
+    bool valid() =>
+        !_closed &&
+        generation == _notificationGeneration &&
+        key == _notificationTarget &&
+        (_notificationIsCurrent?.call() ?? true);
+    if (key == null || !valid()) return;
+    final chat = notificationChat!;
+    connectionStatus.beginRecovery('notification');
+    try {
+      await _restoreDraft(chat);
+      if (!valid()) return;
+      if (!initialized) await initialize();
+      if (!valid()) return;
+      if (!initialized) {
+        throw _initializationFailure ?? TimeoutException('Connecting');
+      }
+      await _resource(key.workspace.profileName).gateway.connect();
+      if (!valid()) return;
+      final opened = await openSession(
+        key,
+        propagateHistoryFailure: true,
+        isCurrentRequest: valid,
+      );
+      if (!valid()) return;
+      if (opened == null) {
+        throw _initializationFailure ?? TimeoutException('Connecting');
+      }
+      chat.opening = false;
+      chat.offlineSnapshot = false;
+      final row = _resource(
+        key.workspace.profileName,
+      ).sessions.where((row) => row['id'] == key.sessionId).firstOrNull;
+      if (row?['title'] is String) chat.title = row!['title'] as String;
+      chat.openingError = null;
+      _notificationTarget = null;
+      connectionStatus.endRecovery('notification');
+    } catch (failure) {
+      if (!valid()) return;
+      if (isTemporaryWorkspaceFailure(failure)) {
+        error = null;
+        if (_notificationAttempts < 5) {
+          _notificationRetry = Timer(
+            _recoveryDelay(_notificationAttempts++),
+            () {
+              if (valid()) unawaited(_retryNotification());
+            },
+          );
+        } else {
+          connectionStatus.endRecovery('notification');
+        }
+      } else {
+        error = null;
+        chat.openingError = _isMissingSessionFailure(failure)
+            ? 'This conversation is no longer available.'
+            : workspaceFailureMessage(failure);
+        connectionStatus.endRecovery('notification');
+      }
+    } finally {
+      if (valid()) _changed();
+    }
+  }
+
+  bool _isMissingSessionFailure(Object failure) =>
+      failure is JsonRpcError && _isMissingSessionResume(failure) ||
+      failure is DashboardHttpException && failure.statusCode == 404;
+
+  void cancelNotificationOpen() {
+    notificationChat?.opening = false;
+    _notificationTarget = null;
+    _notificationGeneration++;
+    _notificationRetry?.cancel();
+    _notificationOpening = null;
+    _navigationGeneration++;
+    connectionStatus.endRecovery('notification');
   }
 
   ProfileWorkspaceData _resource(String name) {
@@ -589,6 +859,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     );
     return _resources.putIfAbsent(scope, () {
       final resource = ProfileWorkspaceData(_factory(scope));
+      resource.gateway.connectionStatus = connectionStatus;
       resource.gateway.onEvent = (event) => _event(resource, event);
       resource.gateway.onConnectionChanged = (connected) {
         if (!connected && !_closed) {
@@ -597,7 +868,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
             chat.sensitivePromptResponding = false;
             chat.status = ProfileTurnStatus.reconnecting;
           }
-          _scheduleReconnect(resource);
+          if (resource.loaded ||
+              resource.chats.values.any((chat) => chat.busy)) {
+            connectionStatus.liveChanged(scope.profileName, false);
+            if (_notificationTarget == null) _scheduleReconnect(resource);
+          }
           _changed();
         }
       };
@@ -605,7 +880,21 @@ class ProfileWorkspaceController extends ChangeNotifier {
     });
   }
 
-  Future<void> initialize() async {
+  Future<void> initialize() {
+    if (_closed) return Future.value();
+    return _initializing ??= _initialize().whenComplete(() {
+      _initializing = null;
+      _changed();
+    });
+  }
+
+  Future<void> _initialize() async {
+    connectionStatus.beginRecovery('initialization');
+    _initializationFailure = null;
+    final generation = _generation;
+    _initializationRetry?.cancel();
+    _initializationRetry = null;
+    error = null;
     try {
       for (final key
           in preferences
@@ -623,18 +912,90 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
       }
       // This temporary owner is used only for host-level discovery, not data.
-      discovery = await _resource('default').gateway.discover();
+      final profiles = await _resource('default').gateway.discover();
+      if (_closed || generation != _generation) return;
+      discovery = profiles;
       final initial = ProfileSelectionStore(
         preferences,
       ).resolveInitial(connectionIdentity, discovery!);
-      await switchProfile(initial.name);
+      if (!await switchProfile(initial.name)) return;
+      if (_closed) return;
+      initialized = true;
+      connectionStatus.endRecovery('initialization');
+      _recoveringInitialization = false;
+      _initializationAttempt = 0;
       await _restorePending();
       if (onAttention != null && current != null) {
         await _scheduleNotificationReconciliation(current!);
       }
     } catch (e) {
-      error = e.toString();
+      if (_closed) return;
+      _initializationFailed(e);
       _changed();
+    }
+  }
+
+  static Duration _recoveryDelay(int attempt) =>
+      Duration(seconds: attempt < 5 ? 1 << attempt : 30);
+
+  void _initializationFailed(Object failure) {
+    _initializationFailure = failure;
+    _recoveringInitialization = isTemporaryWorkspaceFailure(failure);
+    error = _recoveringInitialization ? null : workspaceFailureMessage(failure);
+    if (_recoveringInitialization &&
+        !_closed &&
+        _notificationTarget == null &&
+        _initializationAttempt < 5) {
+      _initializationRetry?.cancel();
+      _initializationRetry = Timer(
+        _recoveryDelay(_initializationAttempt++),
+        () {
+          _initializationRetry = null;
+          unawaited(initialize());
+        },
+      );
+    } else {
+      connectionStatus.endRecovery('initialization');
+    }
+  }
+
+  void networkUnavailable() {
+    if (_closed || (!initialized && !recovering && notificationChat == null)) {
+      return;
+    }
+    connectionStatus.accessFailed(const SocketException('Network unavailable'));
+    for (final resource in _resources.values.where((r) => r.loaded)) {
+      resource.gateway.disconnect();
+      resource.gateway.onConnectionChanged?.call(false);
+    }
+  }
+
+  /// Foreground entry also recovers a workspace that never finished loading.
+  Future<void> resumeConnection({bool networkChanged = false}) async {
+    if (_closed) return;
+    if (networkChanged) {
+      // A socket associated with the previous mobile route can look connected
+      // until its next timeout. Re-open it when Android reports a new route.
+      for (final resource in _resources.values) {
+        if (connectionStatus.liveAvailable(resource.scope.profileName)) {
+          resource.gateway.disconnect();
+          resource.gateway.onConnectionChanged?.call(false);
+        }
+      }
+    }
+    if (_notificationTarget != null) {
+      _notificationAttempts = 0;
+      notificationChat?.openingError = null;
+      await _retryNotification();
+    } else if (!initialized) {
+      _initializationAttempt = 0;
+      await initialize();
+    } else {
+      await Future.wait(
+        _resources.values
+            .where((r) => r.loaded || r.chats.values.any((chat) => chat.busy))
+            .map((resource) => reconnect(resource.scope)),
+      );
     }
   }
 
@@ -643,13 +1004,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
     bool resetNavigation = false,
   }) async {
     final generation = ++_generation;
-    if (current != null) _clearSearch(current!);
+    final navigating = current?.scope.profileName != name || resetNavigation;
+    if (current != null && navigating) _clearSearch(current!);
     _cancelOlderLoads();
     if (current != null) _invalidateSessionLoad(current!);
     final target = _resource(name);
     if (target != current) _invalidateSessionLoad(target);
     final sessionReadGeneration = target.sessionGeneration;
-    pendingProfile = name;
+    pendingProfile = navigating ? name : null;
     error = null;
     _changed();
     try {
@@ -674,7 +1036,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (sessionReadGeneration != target.sessionGeneration) {
         throw StateError('Chats changed while loading. Refresh to reload.');
       }
-      _clearSearch(target);
+      if (navigating) _clearSearch(target);
       target.archivedOnly = archivedOnly;
       _replaceSessions(target, sessions);
       target.projects = projects;
@@ -704,6 +1066,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       discovery = profiles;
       current = target;
+      target.loaded = true;
+      target.offlineSnapshot = false;
       pendingProfile = null;
       await ProfileSelectionStore(preferences).write(connectionIdentity, name);
       _changed();
@@ -711,7 +1075,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
     } catch (e) {
       if (!_closed && generation == _generation) {
         pendingProfile = null;
-        error = e.toString();
+        _initializationFailure = e;
+        if (!initialized) {
+          _initializationFailed(e);
+        } else if (target == current && isTemporaryWorkspaceFailure(e)) {
+          _scheduleReconnect(target);
+        } else {
+          error = e is StateError
+              ? e.message.toString()
+              : workspaceFailureMessage(e);
+        }
         _changed();
       }
       return false;
@@ -908,14 +1281,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
-  Future<void> retry() async {
-    final resource = current;
-    if (_error == null && resource?.reconnectError != null) {
-      await reconnect(resource!.scope);
-    } else {
-      await refresh();
-    }
-  }
+  Future<void> retry() => resumeConnection();
 
   /// Profile navigation always enters that profile's root tree, never a stale
   /// project or chat retained from an earlier visit. Running owners are kept.
@@ -987,11 +1353,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   /// Read-only transcript hydration, also usable without attaching a runtime.
-  Future<void> refreshHistory(ProfileChat chat) async {
+  Future<void> refreshHistory(
+    ProfileChat chat, {
+    bool propagateFailure = false,
+  }) async {
     final resource = _owned(chat);
     final generation = ++chat.historyGeneration;
     chat.historyLoading = true;
     chat.historyError = null;
+    chat.historyUnavailable = false;
     _changed();
     try {
       final page = await resource.gateway.history(
@@ -1056,10 +1426,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
         chat.nextHistoryOffset = olderPage.nextOffset;
       }
       unawaited(refreshContext(chat));
-    } catch (_) {
+      unawaited(_saveReadingSnapshot());
+    } catch (failure) {
       if (!_closed && chat.historyGeneration == generation) {
+        chat.historyUnavailable = isTemporaryWorkspaceFailure(failure);
         chat.historyError = 'History could not be loaded. Retry to reload.';
       }
+      if (propagateFailure) rethrow;
     } finally {
       if (!_closed && chat.historyGeneration == generation) {
         chat.historyLoading = false;
@@ -1780,8 +2153,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (source.workspace != destination.key.workspace) {
       throw ArgumentError('Draft and destination must use the same profile');
     }
-    if (_resources[source.workspace]?.chats.containsKey(source.sessionId) ==
-            true ||
+    final sourceChat = _resources[source.workspace]?.chats[source.sessionId];
+    if (sourceChat != null && !sourceChat.offlineSnapshot ||
         source.sessionId == destination.key.sessionId ||
         !destination._replaceableUnsubmittedRuntime ||
         !destination.draftRestored ||
@@ -1816,6 +2189,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
         throw StateError('The saved draft is no longer available.');
       }
       _applyDraftSnapshot(destination, restored);
+      if (sourceChat?.offlineSnapshot == true) {
+        _resources[source.workspace]?.chats.remove(source.sessionId);
+      }
       _recoveredDraftTargets[source] = destination;
       _changed();
     } finally {
@@ -1830,6 +2206,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<ProfileChat?> openSession(
     ProfileSessionKey key, {
     bool recoverExpiredDraft = false,
+    bool propagateHistoryFailure = false,
+    bool Function()? isCurrentRequest,
   }) async {
     final navigation = ++_navigationGeneration;
     if (!owns(key)) {
@@ -1854,6 +2232,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         !await switchProfile(key.workspace.profileName)) {
       return null;
     }
+    if (isCurrentRequest?.call() == false) return null;
     final resource = _resource(key.workspace.profileName);
     if (resource.deletedSessions.contains(key.sessionId)) {
       throw StateError('Chat was deleted');
@@ -1937,7 +2316,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
         return null;
       }
       if (response != null) {
+        final partial = chat.streaming;
         _hydrate(chat, response);
+        if (chat.streaming.isEmpty && partial.isNotEmpty) {
+          chat.streaming = partial;
+        }
         chat.parentSessionId = response.containsKey('parent_session_id')
             ? _serverParent(response['parent_session_id'], key.sessionId)
             : parentSessionId(chat);
@@ -1952,6 +2335,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
     }
     // The user may have navigated again while resume was in flight.
+    if (isCurrentRequest?.call() == false) return null;
     if (current == resource &&
         !switching &&
         navigation == _navigationGeneration) {
@@ -1961,7 +2345,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (current?.chat == chat) {
       unawaited(refreshSessionControl(chat));
       if (chat.projectId == null) unawaited(_loadChatProject(resource, chat));
-      await refreshHistory(chat);
+      await refreshHistory(chat, propagateFailure: propagateHistoryFailure);
+      chat.offlineSnapshot = false;
+      if (!chat.busy && chat.historyError == null) chat.streaming = '';
       if (markReadAfterOpen &&
           !chat._replaceableUnsubmittedRuntime &&
           chat.historyError == null &&
@@ -2216,6 +2602,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   void showList() {
+    cancelNotificationOpen();
     _navigationGeneration++;
     _cancelOlderLoads();
     current?.selectedSession = null;
@@ -2702,6 +3089,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   bool canAddAttachment(ProfileChat chat) {
+    if (chat.opening ||
+        chat.offlineSnapshot ||
+        (_resources[chat.key.workspace]?.recovering ?? false)) {
+      return false;
+    }
     final resource = _resources[chat.key.workspace];
     return identical(resource?.chats[chat.key.sessionId], chat) &&
         !chat._replacingExpiredRuntime &&
@@ -3399,6 +3791,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       });
 
   Future<void> send(ProfileChat chat) async {
+    if (chat.opening || chat.offlineSnapshot || _owned(chat).recovering) return;
     if (chat._replacingExpiredRuntime ||
         chat.commandRunning ||
         chat.changingIntelligence ||
@@ -5302,19 +5695,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
         resource.reconnectAttempt >= 5) {
       return;
     }
-    resource.retry = Timer(
-      Duration(seconds: 1 << resource.reconnectAttempt++),
-      () {
-        resource.retry = null;
-        unawaited(_reconnect(resource));
-      },
-    );
+    resource.recovering = true;
+    connectionStatus.beginRecovery(resource.scope.profileName);
+    resource.retry = Timer(_recoveryDelay(resource.reconnectAttempt++), () {
+      resource.retry = null;
+      unawaited(_reconnect(resource));
+    });
   }
 
   Future<void> reconnect(WorkspaceScope scope) async {
     final resource = _resources[scope];
     if (resource == null || resource.reconnecting || _closed) return;
-    // A user retry or app resume starts a fresh, bounded recovery window.
+    // A user retry or app resume doesn't wait for the next scheduled attempt.
     resource.retry?.cancel();
     resource.retry = null;
     resource.reconnectAttempt = 0;
@@ -5325,10 +5717,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<void> _reconnect(ProfileWorkspaceData resource) async {
     if (resource.reconnecting || _closed) return;
     resource.reconnecting = true;
+    resource.recovering = true;
+    connectionStatus.beginRecovery(resource.scope.profileName);
     _changed();
-    var failed = false;
+    var retry = false;
     try {
       await resource.gateway.connect();
+      if (_closed) return;
       for (final chat in resource.chats.values.toList()) {
         if (!chat.busy && chat != resource.chat) continue;
         final wasBusy = chat.busy;
@@ -5339,8 +5734,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
           if (!_isDefinitivelyExpiredDraft(chat, error)) rethrow;
           await _replaceExpiredDraftRuntime(resource, chat);
         }
+        final partial = chat.streaming;
         if (result != null) _hydrate(chat, result);
-        await refreshHistory(chat);
+        if (chat.streaming.isEmpty && partial.isNotEmpty) {
+          chat.streaming = partial;
+        }
+        await refreshHistory(chat, propagateFailure: true);
+        if (!chat.busy) chat.streaming = '';
+        chat.offlineSnapshot = false;
         if (wasBusy && !chat.busy) {
           _notify(chat, switch (chat.status) {
             ProfileTurnStatus.failed => ChatNotificationContent.failed,
@@ -5351,26 +5752,38 @@ class ProfileWorkspaceController extends ChangeNotifier {
         if (result != null) await _drainQueuedPrompts(chat);
       }
       await _journal();
+      await _refreshSessions(resource);
       await _scheduleNotificationReconciliation(resource);
       resource.reconnectAttempt = 0;
       resource.reconnectError = null;
-    } catch (_) {
-      failed = true;
-      // Short network interruptions are normal when Android wakes up. Report
-      // failure only once automatic recovery has exhausted its retry window.
-      if (resource.reconnectAttempt >= 5) {
-        resource.reconnectError =
-            'Could not reconnect to ${resource.scope.profileName}. No prompts were resent.';
+      resource.recovering = false;
+      resource.offlineSnapshot = false;
+      connectionStatus.endRecovery(resource.scope.profileName);
+    } catch (failure) {
+      retry = isTemporaryWorkspaceFailure(failure);
+      if (retry &&
+          !connectionStatus.liveAvailable(resource.scope.profileName)) {
+        try {
+          await resource.gateway.discover();
+        } catch (_) {
+          /* Observed by the shared connection state. */
+        }
+      }
+      resource.recovering = retry;
+      resource.reconnectError = retry ? null : workspaceFailureMessage(failure);
+      if (!retry || resource.reconnectAttempt >= 5) {
+        connectionStatus.endRecovery(resource.scope.profileName);
       }
     } finally {
       resource.reconnecting = false;
       _changed();
       // Idle conversations and the session list also need recovery. A failed
       // connection must not depend on whether a prompt happens to be running.
-      if (failed ||
-          resource.chats.values.any(
-            (c) => c.status == ProfileTurnStatus.reconnecting,
-          )) {
+      if (retry ||
+          resource.reconnectError == null &&
+              resource.chats.values.any(
+                (c) => c.status == ProfileTurnStatus.reconnecting,
+              )) {
         _scheduleReconnect(resource);
       }
     }
@@ -5564,22 +5977,27 @@ class ProfileWorkspaceController extends ChangeNotifier {
     for (final key in _unrestoredPending.toList()) {
       try {
         final resource = _resource(key.workspace.profileName);
-        if (resource.chats.containsKey(key.sessionId)) {
+        final existing = resource.chats[key.sessionId];
+        if (existing != null && !existing.offlineSnapshot) {
           _unrestoredPending.remove(key);
           continue;
         }
         await resource.gateway.connect();
         final title = await _pendingChatTitle(resource, key.sessionId);
         final result = await resource.gateway.resume(key.sessionId);
-        final chat = ProfileChat(
-          key: key,
-          runtimeId: result['session_id'] as String,
-          title: title,
-        )..status = ProfileTurnStatus.reconnecting;
+        final chat =
+            existing ??
+            ProfileChat(
+              key: key,
+              runtimeId: result['session_id'] as String,
+              title: title,
+            );
+        chat.status = ProfileTurnStatus.reconnecting;
         _hydrate(chat, result);
         await _restoreDraft(chat);
         resource.chats[key.sessionId] = chat;
         await refreshHistory(chat);
+        chat.offlineSnapshot = false;
         await _drainQueuedPrompts(chat);
         _unrestoredPending.remove(key);
         if (!chat.busy) {
@@ -5601,6 +6019,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
   @override
   void dispose() {
     _closed = true;
+    _notificationRetry?.cancel();
+    unawaited(_saveReadingSnapshot());
+    connectionStatus.dispose();
+    _initializationRetry?.cancel();
     for (final resource in _resources.values) {
       resource.retry?.cancel();
       resource.gateway.close();

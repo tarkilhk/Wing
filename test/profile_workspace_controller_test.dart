@@ -61,6 +61,7 @@ class Host {
   Completer<void>? promptSubmitDelay;
   int connectFailures = 0;
   int connectCalls = 0;
+  int disconnectCalls = 0;
   int resumeFailures = 0;
   bool expireUnsubmittedResume = false;
   int sessionCreates = 0;
@@ -74,13 +75,18 @@ class Host {
   List<Map<String, dynamic>>? historyMessages;
   Completer<void>? projectDelay;
   bool wrongProjectOwner = false;
+  Object? discoveryFailure;
   Map<String, dynamic> clarifyResult = {'status': 'ok'};
   Map<String, dynamic> steerResult = {'status': 'queued'};
-  Future<ProfileDiscovery> discover() async => ProfileDiscovery(
-    profiles: profiles.map((p) => HermesProfile(name: p)).toList(),
-    currentName: 'a',
-    activeName: 'a',
-  );
+  Future<ProfileDiscovery> discover() async {
+    if (discoveryFailure case final failure?) throw failure;
+    return ProfileDiscovery(
+      profiles: profiles.map((p) => HermesProfile(name: p)).toList(),
+      currentName: 'a',
+      activeName: 'a',
+    );
+  }
+
   ProfileGateway gateway(WorkspaceScope scope) {
     final name = scope.profileName;
     return gateways[name] = ProfileGateway(
@@ -90,10 +96,11 @@ class Host {
         connectCalls++;
         if (connectFailures > 0) {
           connectFailures--;
-          throw StateError('Network is waking up');
+          throw TimeoutException('Network is waking up');
         }
       },
       close: () => closed.add(name),
+      disconnect: () => disconnectCalls++,
       get: (path, query) async {
         reads.add((path, query));
         await delays[name]?.future;
@@ -1344,7 +1351,7 @@ void main() {
     host.failures.add('b');
     expect(await controller.switchProfile('b'), isFalse);
     expect(controller.current!.scope.profileName, 'a');
-    expect(controller.error, contains('offline'));
+    expect(controller.error, contains('Couldn’t open this workspace'));
   });
 
   test('deleted profile blocks write, never retries unscoped', () async {
@@ -1422,6 +1429,81 @@ void main() {
     },
   );
 
+  test(
+    'partial response survives resume until server history is available',
+    () async {
+      final chat = await controller.createChat();
+      chat.status = ProfileTurnStatus.running;
+      chat.streaming = 'An answer in progress';
+      host.running = false;
+      host.failures.add('a');
+      await controller.reconnect(chat.key.workspace);
+      expect(chat.streaming, 'An answer in progress');
+      host.failures.clear();
+      await controller.reconnect(chat.key.workspace);
+      expect(chat.streaming, isEmpty);
+      expect(chat.messages.single['content'], 'a completed');
+      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+    },
+  );
+
+  testWidgets('startup timeout then DNS failure recovers without user action', (
+    tester,
+  ) async {
+    controller.dispose();
+    controller = ProfileWorkspaceController(
+      connection: SavedConnection(
+        id: 'host',
+        label: 'Host',
+        host: 'localhost',
+        port: 1,
+        apiKey: '',
+      ),
+      connectionIdentity: 'original-settings',
+      preferences: preferences,
+      gatewayFactory: host.gateway,
+    );
+    host.discoveryFailure = TimeoutException(
+      'Future not completed',
+      const Duration(seconds: 20),
+    );
+    await controller.initialize();
+    expect(controller.error, isNull);
+    host.discoveryFailure = const SocketException('Failed host lookup');
+    await tester.pump(const Duration(seconds: 1));
+    expect(controller.error, isNull);
+    host.discoveryFailure = null;
+    await tester.pump(const Duration(seconds: 2));
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump();
+    expect(controller.current?.scope.profileName, 'a');
+    expect(controller.error, isNull);
+    expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
+  });
+
+  testWidgets('refresh keeps loaded chats visible while the network stalls', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('a chat'), findsOneWidget);
+    late Future<void> refresh;
+    await tester.runAsync(() async {
+      host.delays['a'] = Completer<void>();
+      refresh = controller.refresh();
+      await Future<void>.delayed(Duration.zero);
+    });
+    await tester.pump();
+    expect(find.text('a chat'), findsOneWidget);
+    await tester.runAsync(() async {
+      host.delays['a']!.complete();
+      await refresh;
+    });
+    await tester.pump();
+  });
+
   testWidgets('idle chat recovers after a transient reconnect failure', (
     tester,
   ) async {
@@ -1474,43 +1556,38 @@ void main() {
     expect(controller.current!.retry, isNull);
   });
 
-  testWidgets('reconnect exhausts its budget and Retry restores the chat', (
-    tester,
-  ) async {
-    final chat = await controller.createChat();
-    host.running = false;
-    host.connectFailures = 5;
-    await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
-    );
-    final before = host.connectCalls;
-    host.gateways['a']!.onConnectionChanged!(false);
-    for (final seconds in [1, 2, 4, 8]) {
-      await tester.pump(Duration(seconds: seconds));
-      expect(controller.error, isNull);
-      expect(find.byType(MaterialBanner), findsNothing);
-    }
-    await tester.pump(const Duration(seconds: 16));
-    expect(controller.error, contains('Could not reconnect to a'));
-    expect(find.byType(MaterialBanner), findsOneWidget);
-    expect(host.connectCalls - before, 5);
-    await tester.pump(const Duration(minutes: 1));
-    expect(host.connectCalls - before, 5);
-
-    // The first manual attempt may also hit a transient error. It must get a
-    // fresh retry budget after the previous outage exhausted automatic retry.
-    host.connectFailures = 1;
-    await tester.tap(find.text('Retry'));
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
-    await tester.pump();
-    expect(controller.error, isNull);
-    expect(find.byType(MaterialBanner), findsNothing);
-    expect(host.calls.where((c) => c.$2 == 'session.resume'), hasLength(1));
-    expect(chat.status, ProfileTurnStatus.idle);
-    expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
-  });
+  testWidgets(
+    'retry exhaustion preserves the draft until a new recovery cycle',
+    (tester) async {
+      final chat = await controller.createChat();
+      await controller.updateDraft(chat, 'Keep this draft');
+      host.running = false;
+      host.connectFailures = 5;
+      await tester.pumpWidget(
+        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      );
+      final before = host.connectCalls;
+      host.gateways['a']!.onConnectionChanged!(false);
+      for (final seconds in [1, 2, 4, 8, 16, 30]) {
+        await tester.pump(Duration(seconds: seconds));
+        expect(controller.error, isNull);
+        expect(find.byType(MaterialBanner), findsNothing);
+      }
+      expect(host.connectCalls - before, 5);
+      expect(find.text('Live updates interrupted'), findsOneWidget);
+      expect(chat.draft, 'Keep this draft');
+      await controller.send(chat);
+      expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
+      await tester.runAsync(controller.resumeConnection);
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
+      expect(controller.recovering, isFalse);
+      expect(find.text('Live updates interrupted'), findsNothing);
+      expect(chat.draft, 'Keep this draft');
+      expect(chat.status, ProfileTurnStatus.idle);
+      expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
+    },
+  );
 
   testWidgets('manual reconnect cancels a pending automatic retry', (
     tester,
@@ -1542,26 +1619,22 @@ void main() {
     },
   );
 
-  testWidgets('background reconnect errors stay with their profile', (
-    tester,
-  ) async {
+  testWidgets('background recovery stays with its profile', (tester) async {
     final a = controller.current!;
     await controller.switchProfile('b');
-    host.connectFailures = 5;
+    host.connectFailures = 6;
     host.gateways['a']!.onConnectionChanged!(false);
     for (final seconds in [1, 2, 4, 8, 16]) {
       await tester.pump(Duration(seconds: seconds));
     }
-    expect(a.reconnectError, contains('Could not reconnect to a'));
+    expect(a.recovering, isTrue);
+    expect(a.reconnectError, isNull);
+    expect(controller.recovering, isFalse);
     expect(controller.error, isNull);
-    await tester.runAsync(
-      () => controller.reconnect(controller.current!.scope),
-    );
-    expect(a.reconnectError, isNotNull);
-    await controller.switchProfile('a');
-    expect(controller.error, contains('Could not reconnect to a'));
-    await tester.runAsync(controller.retry);
-    expect(controller.error, isNull);
+    host.connectFailures = 0;
+    await tester.runAsync(() => controller.reconnect(a.scope));
+    expect(a.recovering, isFalse);
+    expect(controller.current!.scope.profileName, 'b');
   });
 
   test('background approval stays with its owning profile', () async {

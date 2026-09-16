@@ -8,6 +8,8 @@ import '../models/answer_versions.dart';
 import 'connection_manager.dart';
 import 'profiles_repository.dart';
 import 'ws_client.dart';
+import 'server_connection_status.dart';
+import 'workspace_connection_failure.dart';
 
 typedef ScopedGet =
     Future<Map<String, dynamic>> Function(
@@ -73,15 +75,44 @@ class ProjectFolderSuggestion {
 /// this immutable scope. There is no unscoped or experimental-recovery fallback.
 class ProfileGateway {
   final WorkspaceScope scope;
-  final ScopedGet _get;
-  final ScopedRpc _rpc;
+  final ScopedGet _getRequest;
+  final ScopedRpc _rpcRequest;
+  Future<Map<String, dynamic>> _rpc(
+    String method,
+    Map<String, dynamic> params,
+  ) async {
+    try {
+      return await _rpcRequest(method, params);
+    } catch (failure) {
+      if (isTemporaryWorkspaceFailure(failure)) {
+        disconnect();
+        connectionStatus?.liveChanged(_statusOwner, false);
+        onConnectionChanged?.call(false);
+      }
+      rethrow;
+    }
+  }
+
   final ScopedPatch? _patch;
   final ScopedPost? _post;
   final ScopedPost? _put;
   final ScopedDelete? _delete;
   final Future<void> Function() _connect;
   final void Function() _close;
-  final Future<ProfileDiscovery> Function() discover;
+  final void Function() disconnect;
+  final Future<ProfileDiscovery> Function() _discover;
+  ServerConnectionStatus? connectionStatus;
+  String? statusOwner;
+  String get _statusOwner => statusOwner ?? scope.profileName;
+  Future<Map<String, dynamic>> _get(
+    String endpoint,
+    Map<String, String> query,
+  ) => connectionStatus == null
+      ? _getRequest(endpoint, query)
+      : connectionStatus!.observeAccess(() => _getRequest(endpoint, query));
+  Future<ProfileDiscovery> discover() => connectionStatus == null
+      ? _discover()
+      : connectionStatus!.observeAccess(_discover);
   StreamCallback? onEvent;
   ConnectionCallback? onConnectionChanged;
 
@@ -93,17 +124,20 @@ class ProfileGateway {
     ScopedPost? post,
     ScopedPost? put,
     ScopedDelete? delete,
-    required this.discover,
+    required Future<ProfileDiscovery> Function() discover,
     Future<void> Function()? connect,
     void Function()? close,
-  }) : _get = get,
-       _rpc = rpc,
+    void Function()? disconnect,
+  }) : _getRequest = get,
+       _discover = discover,
+       _rpcRequest = rpc,
        _patch = patch,
        _post = post,
        _put = put,
        _delete = delete,
        _connect = connect ?? _nothing,
-       _close = close ?? _noop;
+       _close = close ?? _noop,
+       disconnect = disconnect ?? _noop;
 
   static Future<void> _nothing() async {}
   static void _noop() {}
@@ -132,7 +166,15 @@ class ProfileGateway {
     Future<void>? connecting;
     late final ProfileGateway gateway;
     Future<void> open() async {
-      final credentials = await dashboard.gatewayCredentials();
+      final credentials =
+          await (gateway.connectionStatus?.observeAccess(
+                () => dashboard.gatewayCredentials().timeout(
+                  const Duration(seconds: 20),
+                ),
+              ) ??
+              dashboard.gatewayCredentials().timeout(
+                const Duration(seconds: 20),
+              ));
       if (closed) throw StateError('Gateway is closed');
       final candidate = WsClient(
         connection.desktopGatewayUrl ?? dashboard.baseUrl,
@@ -143,7 +185,14 @@ class ProfileGateway {
       openingSocket = candidate;
       candidate.onStreamEvent = (event) => gateway.onEvent?.call(event);
       candidate.onConnectionChanged = (value) {
+        if (!identical(socket, candidate) &&
+            !identical(openingSocket, candidate)) {
+          return;
+        }
         connected = value;
+        if (!value && !closed && identical(socket, candidate)) {
+          gateway.connectionStatus?.liveChanged(gateway._statusOwner, false);
+        }
         gateway.onConnectionChanged?.call(value);
       };
       try {
@@ -180,7 +229,13 @@ class ProfileGateway {
           .timeout(const Duration(seconds: 20)),
       rpc: (method, params) async {
         final current = socket;
-        if (current == null) throw StateError('Gateway is not connected');
+        if (current == null) {
+          throw JsonRpcError(
+            method,
+            'Connection unavailable',
+            reason: 'connection_closed',
+          );
+        }
         final envelope = await current.send(
           method,
           params,
@@ -221,6 +276,12 @@ class ProfileGateway {
                     connecting = null;
                   }
                 })()),
+      disconnect: () {
+        final previous = socket;
+        socket = null;
+        connected = false;
+        previous?.close();
+      },
       close: () {
         closed = true;
         openingSocket?.close();
@@ -231,8 +292,20 @@ class ProfileGateway {
     return gateway;
   }
 
-  Future<void> connect() => _connect();
-  void close() => _close();
+  Future<void> connect() async {
+    try {
+      await _connect();
+      connectionStatus?.liveChanged(_statusOwner, true);
+    } catch (_) {
+      connectionStatus?.liveChanged(_statusOwner, false);
+      rethrow;
+    }
+  }
+
+  void close() {
+    _close();
+    if (statusOwner != null) connectionStatus?.forgetLive(_statusOwner);
+  }
 
   /// Revalidate immediately before writes. Stock servers can still have a
   /// deletion-after-validation race; client validation cannot fix that race.

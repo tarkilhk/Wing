@@ -1,3 +1,4 @@
+import '../../widgets/server_connection_label.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/administration_repository.dart';
@@ -39,7 +40,12 @@ class AdminPage extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Text(scope, style: Theme.of(context).textTheme.bodySmall),
+              child: ServerConnectionScope.of(context) == null
+                  ? Text(scope, style: Theme.of(context).textTheme.bodySmall)
+                  : ServerConnectionLabel(
+                      label: scope,
+                      status: ServerConnectionScope.of(context),
+                    ),
             ),
             Expanded(child: child),
           ],
@@ -235,8 +241,16 @@ Future<bool> adminConfirm(
     ) ??
     false;
 
-Future<void> adminPush(BuildContext context, Widget page) =>
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
+Future<void> adminPush(BuildContext context, Widget page) {
+  final status = ServerConnectionScope.of(context);
+  return Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => status == null
+          ? page
+          : ServerConnectionScope(status: status, child: page),
+    ),
+  );
+}
 
 void adminMessage(
   BuildContext context,

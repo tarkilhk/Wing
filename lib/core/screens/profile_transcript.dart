@@ -1,3 +1,4 @@
+import '../services/server_connection_status.dart';
 import '../widgets/studio_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -226,7 +227,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         ),
       ...widget.tail,
     ].reversed.toList();
+    final showOpening =
+        chat.opening && chat.messages.isEmpty && chat.streaming.isEmpty;
     final showWelcome =
+        !chat.opening &&
         chat.messages.isEmpty &&
         !chat.historyLoading &&
         chat.historyError == null &&
@@ -340,7 +344,63 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                 }
                 return KeyedSubtree(
                   key: const ValueKey('history-edge'),
-                  child: showWelcome
+                  child: showOpening
+                      ? ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: (constraints.maxHeight - 16).clamp(
+                              0.0,
+                              double.infinity,
+                            ),
+                          ),
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 48,
+                                horizontal: 16,
+                              ),
+                              child: ListenableBuilder(
+                                listenable: widget.controller.connectionStatus,
+                                builder: (context, _) {
+                                  final status =
+                                      widget.controller.connectionStatus;
+                                  final waiting =
+                                      status.phase ==
+                                      ServerConnectionPhase.reconnecting;
+                                  return Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        chat.openingError ??
+                                            (waiting
+                                                ? 'Reconnecting to ${status.label}'
+                                                : 'Waiting for connection'),
+                                        textAlign: TextAlign.center,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleMedium,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        chat.openingError == null
+                                            ? 'This conversation will open automatically.'
+                                            : 'You can retry or return to your chats.',
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      if (!waiting)
+                                        TextButton(
+                                          onPressed: widget
+                                              .controller
+                                              .resumeConnection,
+                                          child: const Text('Retry connection'),
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        )
+                      : showWelcome
                       ? ConstrainedBox(
                           constraints: BoxConstraints(
                             minHeight: (constraints.maxHeight - 16).clamp(
@@ -521,6 +581,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   );
 
   Widget _historyEdge(ProfileChat chat) {
+    if (chat.historyUnavailable) return const SizedBox.shrink();
     if (chat.historyLoading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 12),

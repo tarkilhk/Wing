@@ -1,3 +1,5 @@
+import '../services/server_connection_status.dart';
+import '../widgets/server_connection_label.dart';
 import '../widgets/studio_error.dart';
 import 'dart:async';
 
@@ -12,6 +14,7 @@ import '../theme/wing_theme.dart';
 import '../theme/profile_workspace_theme.dart';
 import '../widgets/profile_chat_indicator.dart';
 import '../widgets/workspace_options_menu.dart';
+import '../widgets/workspace_connection_status.dart';
 import 'profile_row_actions.dart';
 import 'profile_project_actions.dart';
 
@@ -302,11 +305,17 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
             ),
             onTap: controller.switching
                 ? null
-                : () => _run(
-                    () => controller.openSession(
-                      ProfileSessionKey(resource.scope, row['id'] as String),
-                    ),
-                  ),
+                : () => _run(() async {
+                    final key = ProfileSessionKey(
+                      resource.scope,
+                      row['id'] as String,
+                    );
+                    if (resource.offlineSnapshot || controller.recovering) {
+                      await controller.openNotification(key);
+                    } else {
+                      await controller.openSession(key);
+                    }
+                  }),
           ),
         ),
       ),
@@ -495,6 +504,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         },
     };
     for (final chat in resource.chats.values) {
+      if (chat.offlineSnapshot && !resource.offlineSnapshot) continue;
       if (chat.archived == resource.archivedOnly &&
           controller.sessionVisibility.includes(chat.source) &&
           (project == null || chat.projectId == project['id']) &&
@@ -748,7 +758,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         drawer: widget.drawer,
         appBar: AppBar(
           centerTitle: false,
-          toolbarHeight: 64 + (MediaQuery.textScalerOf(context).scale(24) - 24),
+          toolbarHeight: 88 + (MediaQuery.textScalerOf(context).scale(24) - 24),
           backgroundColor: background,
           surfaceTintColor: Colors.transparent,
           leading: isWorkspaceHome
@@ -776,10 +786,10 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                   letterSpacing: -0.2,
                 ),
               ),
-              Text(
-                '${controller.connection.label}${project == null ? '' : ' · ${resource!.scope.profileName}'}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              ServerConnectionLabel(
+                label: controller.connection.label,
+                status: controller.connectionStatus,
+                suffix: project == null ? null : resource!.scope.profileName,
                 style: TextStyle(
                   fontSize: 12,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -922,6 +932,10 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                     ),
                   ),
                 ),
+                if (resource != null)
+                  WorkspaceConnectionStatus(
+                    status: controller.connectionStatus,
+                  ),
                 if (controller.error != null)
                   ListTile(
                     title: StudioError(controller.error!),
@@ -933,9 +947,45 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                 Expanded(
                   child: controller.switching || resource == null
                       ? Center(
-                          child: controller.error == null
-                              ? const CircularProgressIndicator()
-                              : const Text('Workspace unavailable'),
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (controller.error == null) ...[
+                                  Icon(
+                                    Icons.cloud_sync_outlined,
+                                    color: colors.onSurfaceVariant,
+                                    size: 32,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    controller.connectionStatus.phase ==
+                                            ServerConnectionPhase.disconnected
+                                        ? 'Waiting for connection'
+                                        : controller.recovering
+                                        ? 'Reconnecting to ${controller.connection.label}'
+                                        : 'Opening your chats',
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Your chats will appear automatically when connected.',
+                                    textAlign: TextAlign.center,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                  if (controller.recovering)
+                                    TextButton(
+                                      onPressed: controller.recoveryInProgress
+                                          ? null
+                                          : () => _run(controller.retry),
+                                      child: const Text('Retry now'),
+                                    ),
+                                ],
+                              ],
+                            ),
+                          ),
                         )
                       : RefreshIndicator(
                           onRefresh: controller.refresh,
@@ -977,7 +1027,11 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           foregroundColor: controller.switching || resource == null
               ? colors.onSurfaceVariant
               : null,
-          onPressed: controller.switching || resource == null
+          onPressed:
+              controller.switching ||
+                  resource == null ||
+                  resource.offlineSnapshot ||
+                  controller.recovering
               ? null
               : () => _run(() async {
                   if (_view == 'projects') {

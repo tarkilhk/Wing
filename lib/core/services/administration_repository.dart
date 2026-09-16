@@ -4,6 +4,7 @@ import '../models/hermes_profile.dart';
 import 'connection_manager.dart';
 import 'profile_gateway.dart';
 import 'profiles_repository.dart';
+import 'server_connection_status.dart';
 
 typedef AdministrationRequest =
     Future<Map<String, dynamic>> Function(
@@ -35,8 +36,9 @@ class AdministrationRepository {
 
   factory AdministrationRepository.forConnection(
     SavedConnection connection,
-    String identity,
-  ) {
+    String identity, {
+    required ServerConnectionStatus connectionStatus,
+  }) {
     final dashboard = DashboardClient(
       host: connection.host,
       port: connection.dashboardPort,
@@ -64,18 +66,23 @@ class AdministrationRepository {
           'DELETE' => dashboard.apiDeleteResult(path, body: body),
           _ => throw ArgumentError('Unsupported administration request'),
         };
-        return response.timeout(const Duration(seconds: 45));
+        return connectionStatus.observeAccess(
+          () => response.timeout(const Duration(seconds: 45)),
+        );
       },
       gateway: (name) => gateways.putIfAbsent(
         name,
-        () => ProfileGateway.forConnection(
-          connection,
-          WorkspaceScope(
-            connectionId: connection.id,
-            connectionIdentity: identity,
-            profileName: name,
-          ),
-        ),
+        () =>
+            ProfileGateway.forConnection(
+                connection,
+                WorkspaceScope(
+                  connectionId: connection.id,
+                  connectionIdentity: identity,
+                  profileName: name,
+                ),
+              )
+              ..connectionStatus = connectionStatus
+              ..statusOwner = 'administration:$name',
       ),
       close: () {
         for (final gateway in gateways.values) {

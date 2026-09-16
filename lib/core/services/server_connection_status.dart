@@ -1,0 +1,143 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+
+import 'connection_manager.dart';
+import 'workspace_connection_failure.dart';
+
+enum ServerConnectionPhase {
+  unchecked,
+  connected,
+  reconnecting,
+  limited,
+  disconnected,
+}
+
+enum ConnectionAvailability { unchecked, available, unavailable }
+
+/// One owner per exact saved connection identity; never persisted as live truth.
+class ServerConnectionStatus extends ChangeNotifier {
+  final String label;
+  ConnectionAvailability access = ConnectionAvailability.unchecked;
+  final Map<String, ConnectionAvailability> _live = {};
+  final Set<String> _recoveries = {};
+  String? problem;
+  DateTime? lastConnected;
+  Future<void> Function()? retry;
+  VoidCallback? onInterruption;
+  bool _closed = false;
+
+  ServerConnectionStatus(this.label);
+
+  ConnectionAvailability get live =>
+      _live.values.contains(ConnectionAvailability.unavailable)
+      ? ConnectionAvailability.unavailable
+      : _live.values.contains(ConnectionAvailability.available)
+      ? ConnectionAvailability.available
+      : ConnectionAvailability.unchecked;
+  bool liveAvailable(String owner) =>
+      _live[owner] == ConnectionAvailability.available;
+  ServerConnectionPhase get phase {
+    if (_recoveries.isNotEmpty) return ServerConnectionPhase.reconnecting;
+    if (access == ConnectionAvailability.available &&
+        live == ConnectionAvailability.available) {
+      return ServerConnectionPhase.connected;
+    }
+    if (access == ConnectionAvailability.available ||
+        live == ConnectionAvailability.available) {
+      return ServerConnectionPhase.limited;
+    }
+    if (access == ConnectionAvailability.unavailable ||
+        live == ConnectionAvailability.unavailable) {
+      return ServerConnectionPhase.disconnected;
+    }
+    return ServerConnectionPhase.unchecked;
+  }
+
+  String get description => switch (phase) {
+    ServerConnectionPhase.unchecked => 'Not checked',
+    ServerConnectionPhase.connected => 'Connected',
+    ServerConnectionPhase.reconnecting => 'Reconnecting',
+    ServerConnectionPhase.limited =>
+      live == ConnectionAvailability.unavailable
+          ? 'Live updates interrupted'
+          : live == ConnectionAvailability.unchecked
+          ? 'Live chat not checked'
+          : 'Server access interrupted',
+    ServerConnectionPhase.disconnected => 'Disconnected',
+  };
+  void _changed() {
+    if (!_closed) notifyListeners();
+  }
+
+  void beginRecovery(String owner) {
+    if (_closed) return;
+    _recoveries.add(owner);
+    _changed();
+  }
+
+  void endRecovery(String owner) {
+    if (_closed) return;
+    _recoveries.remove(owner);
+    _changed();
+  }
+
+  void accessAvailable() {
+    if (_closed) return;
+    access = ConnectionAvailability.available;
+    problem = null;
+    lastConnected = DateTime.now();
+    _changed();
+  }
+
+  void liveChanged(String owner, bool connected) {
+    if (_closed) return;
+    _live[owner] = connected
+        ? ConnectionAvailability.available
+        : ConnectionAvailability.unavailable;
+    if (connected) lastConnected = DateTime.now();
+    _changed();
+  }
+
+  void forgetLive(String owner) {
+    if (_closed) return;
+    _live.remove(owner);
+    _changed();
+  }
+
+  void accessFailed(Object failure) {
+    if (_closed) return;
+    if (failure is TlsException ||
+        isTemporaryWorkspaceFailure(failure) ||
+        failure is DashboardHttpException &&
+            {401, 403}.contains(failure.statusCode)) {
+      access = ConnectionAvailability.unavailable;
+      problem = isTemporaryWorkspaceFailure(failure)
+          ? null
+          : workspaceFailureMessage(failure);
+      _changed();
+      if (isTemporaryWorkspaceFailure(failure)) onInterruption?.call();
+    } else if (failure is DashboardHttpException) {
+      // A rejected operation is a response, not a lost connection.
+      accessAvailable();
+    }
+  }
+
+  Future<T> observeAccess<T>(Future<T> Function() action) async {
+    try {
+      final result = await action();
+      accessAvailable();
+      return result;
+    } catch (failure) {
+      accessFailed(failure);
+      rethrow;
+    }
+  }
+
+  @override
+  void dispose() {
+    _closed = true;
+    retry = null;
+    onInterruption = null;
+    super.dispose();
+  }
+}

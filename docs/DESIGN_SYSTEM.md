@@ -117,6 +117,12 @@ The selection audit covers App settings and composer preferences; Activity filte
 
 ## Conversation preservation
 
+The owner approved the [network continuity behavior](design/2026-09-16-network-continuity.md)
+on 16 September 2026: a shared LED on the left of each server identity, quiet
+bounded recovery, retained conversation state, and immediate notification
+navigation with cached reading where available. Use that specification for
+connection cues, accessible status targets and the two recovery journeys.
+
 Keep the existing Activity disclosure, tool counts, Tools/Tasks/Agents/Work tabs when available, thinking disclosure, nested tool rows, guide line, selection, expansion state, scroll anchoring and copyable details. Do not add extra outer cards, timeline dots or permanent rows simply because the raster mockup draws them. Use the current component geometry as the baseline and apply color/type/border refinements. Approvals and questions remain outside collapsible tool results.
 
 Keep activity status and queued-message controls above the composer. Preserve the two-row composer: draft first, then attachment/capture controls, the compact model/reasoning selector and Send/Stop. Preserve existing voice states and attachment options.

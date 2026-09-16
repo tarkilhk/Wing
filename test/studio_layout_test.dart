@@ -256,7 +256,10 @@ void main() {
             final menuRect = tester.getRect(menu);
             expect(menuRect.width, lessThan(width - 16));
             expect(menuRect.right, closeTo(anchor.right, 1));
-            expect(menuRect.top, closeTo(anchor.bottom + 4, 1));
+            expect(
+              menuRect.top,
+              closeTo((anchor.bottom + 4).clamp(8, 792 - menuRect.height), 1),
+            );
             expect(menuRect.bottom, lessThanOrEqualTo(792));
             expect(find.byType(BottomSheet), findsNothing);
             if (export) {

@@ -79,14 +79,7 @@ void main() {
     );
     expect(header, findsOneWidget);
     expect(find.byTooltip('Switch profile'), findsNothing);
-    expect(
-      find.descendant(
-        of: find.byType(AppBar),
-        matching: find.byIcon(Icons.folder_outlined),
-      ),
-      findsOneWidget,
-    );
-    await tester.tap(header);
+    await tester.tap(find.text(chat.title));
     await tester.pumpAndSettle();
     expect(controller.current!.chat, same(chat));
     expect(find.text('work'), findsNothing);
@@ -201,7 +194,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('profile-work')));
       await tester.pump();
       expect(find.text('Project-only chat'), findsNothing);
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('Opening your chats'), findsOneWidget);
       await tester.tap(find.byTooltip('Back to workspace'));
       await tester.pump();
       expect(tester.takeException(), isNull);

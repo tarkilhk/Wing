@@ -13,6 +13,7 @@ class ProfileActivityStatus extends StatelessWidget {
   const ProfileActivityStatus({super.key, required this.chat});
 
   String get label {
+    if (chat.opening || chat.offlineSnapshot) return 'You can keep writing';
     switch (chat.status) {
       case ProfileTurnStatus.reconnecting:
         return 'Reconnecting… · checking current activity';

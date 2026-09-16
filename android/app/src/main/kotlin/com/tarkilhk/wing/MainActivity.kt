@@ -35,6 +35,7 @@ class MainActivity : FlutterActivity() {
     private val maxPendingRecords = 10
     private val maxPendingBytes = 128L * 1024L * 1024L
     private val maxSharedTextChars = 256 * 1024
+    private var networkAvailability: NetworkAvailabilityChannel? = null
     private var shareChannel: MethodChannel? = null
     private var launchChannel: MethodChannel? = null
     private var fileDeliveryChannel: MethodChannel? = null
@@ -65,6 +66,8 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MonitoringRuntime.attach(this, flutterEngine)
+        networkAvailability?.close()
+        networkAvailability = NetworkAvailabilityChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         imageClipboardChannel = ImageClipboardChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             this,
@@ -240,6 +243,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        networkAvailability?.close()
+        networkAvailability = null
         shareChannel?.setMethodCallHandler(null)
         shareChannel = null
         launchChannel?.setMethodCallHandler(null)

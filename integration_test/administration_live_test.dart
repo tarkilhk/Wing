@@ -1,3 +1,4 @@
+import 'package:wing/core/services/server_connection_status.dart';
 import 'package:flutter/material.dart';
 import 'package:wing/core/widgets/compact_switch.dart';
 
@@ -39,6 +40,7 @@ void main() {
     server = AdministrationRepository.forConnection(
       connection,
       'admin-verifier',
+      connectionStatus: ServerConnectionStatus(connection.label),
     );
     for (final name in ['admin-live-a', 'admin-live-b']) {
       if ((await server.discover()).named(name) == null) {

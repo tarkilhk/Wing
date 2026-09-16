@@ -139,6 +139,18 @@ void main() {
     });
   }
 
+  test(
+    'temporary HTTP failure recovers without a history error banner',
+    () async {
+      httpError = 500;
+      final chat = await controller.createChat();
+      expect(chat.historyUnavailable, isTrue);
+      expect(controller.recovering, isTrue);
+      expect(chat.historyLoading, isFalse);
+      expect(runtimeReads, isEmpty);
+    },
+  );
+
   test('malformed empty database response remains an error', () async {
     httpError = null;
     malformedPage = true;

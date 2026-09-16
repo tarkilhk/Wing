@@ -1,5 +1,8 @@
+import '../services/workspace_connection_failure.dart';
+import '../widgets/server_connection_label.dart';
 import '../widgets/studio_action_label.dart';
 import '../widgets/studio_error.dart';
+import '../widgets/workspace_connection_status.dart';
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
@@ -115,7 +118,9 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   }
 
   Future<void> _enter() async {
-    if (controller.discovery == null) await controller.initialize();
+    if (!controller.initialized && controller.notificationChat == null) {
+      await controller.initialize();
+    }
     if (!mounted || controller.current == null) return;
     if (_destination == AppDestination.activity) {
       await controller.refreshActivity();
@@ -133,8 +138,8 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     controller.visible =
         state == AppLifecycleState.resumed &&
         _destination == AppDestination.chats;
-    if (state == AppLifecycleState.resumed && controller.current != null) {
-      unawaited(controller.reconnect(controller.current!.scope));
+    if (state == AppLifecycleState.resumed) {
+      unawaited(controller.resumeConnection());
     }
   }
 
@@ -142,11 +147,15 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     try {
       await action();
     } catch (e) {
+      if (isTemporaryWorkspaceFailure(e)) {
+        unawaited(controller.resumeConnection());
+        return;
+      }
       if (mounted) {
         final message = switch (e) {
           StateError error => error.message.toString(),
           FormatException error => error.message,
-          _ => e.toString(),
+          _ => workspaceFailureMessage(e),
         };
         ScaffoldMessenger.of(
           context,
@@ -172,14 +181,17 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         controller.preferences.getString(WorkspaceAccent.preferenceKey),
       ),
     ),
-    child: Builder(builder: (context) => _buildWorkspace(context)),
+    child: ServerConnectionScope(
+      status: controller.connectionStatus,
+      child: Builder(builder: (context) => _buildWorkspace(context)),
+    ),
   );
 
   Widget _buildWorkspace(BuildContext context) => ListenableBuilder(
     listenable: controller,
     builder: (context, _) {
       final current = controller.current;
-      final chat = current?.chat;
+      final chat = controller.notificationChat ?? current?.chat;
       if (_composerKey != chat?.key ||
           _composer.text != (chat?.composerText ?? '')) {
         _composerKey = chat?.key;
@@ -219,60 +231,66 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           key: _scaffoldKey,
           drawer: _drawer(),
           appBar: AppBar(
+            toolbarHeight:
+                96 + (MediaQuery.textScalerOf(context).scale(20) - 20),
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
               tooltip: 'Back to sessions',
               onPressed: controller.showList,
             ),
-            title: Tooltip(
-              message: 'Move to project',
-              child: InkWell(
-                key: const ValueKey('chat-project-picker'),
-                borderRadius: BorderRadius.circular(8),
-                onTap:
-                    controller.switching ||
-                        current!.mutatingSessions.contains(chat.key.sessionId)
-                    ? null
-                    : () => unawaited(
-                        _run(
-                          () => showChatProjectPicker(
-                            context,
-                            controller,
-                            chat.key,
-                            currentProjectId: chat.projectId,
-                          ),
-                        ),
-                      ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        chat.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.folder_outlined, size: 14),
-                          const SizedBox(width: 5),
-                          Flexible(
-                            child: Text(
-                              '${controller.connection.label} · ${controller.chatProjectLabel(chat)}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.labelMedium,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Tooltip(
+                  message: 'Move to project',
+                  child: InkWell(
+                    key: const ValueKey('chat-project-picker'),
+                    borderRadius: BorderRadius.circular(8),
+                    onTap:
+                        chat.opening ||
+                            chat.offlineSnapshot ||
+                            controller.switching ||
+                            (current?.mutatingSessions.contains(
+                                  chat.key.sessionId,
+                                ) ??
+                                false)
+                        ? null
+                        : () => unawaited(
+                            _run(
+                              () => showChatProjectPicker(
+                                context,
+                                controller,
+                                chat.key,
+                                currentProjectId: chat.projectId,
+                              ),
                             ),
                           ),
-                        ],
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minHeight: 48,
+                        minWidth: 48,
                       ),
-                    ],
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          chat.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                ServerConnectionLabel(
+                  label: controller.connection.label,
+                  status: controller.connectionStatus,
+                  suffix: chat.opening || chat.offlineSnapshot
+                      ? chat.key.workspace.profileName
+                      : controller.chatProjectLabel(chat),
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              ],
             ),
             actions: [
               Builder(
@@ -357,6 +375,10 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           body: Column(
             children: [
               if (controller.switching) const LinearProgressIndicator(),
+              WorkspaceConnectionStatus(
+                status: controller.connectionStatus,
+                showHint: !chat.opening || chat.messages.isNotEmpty,
+              ),
               if (controller.error != null)
                 MaterialBanner(
                   content: StudioError(controller.error!),
@@ -366,6 +388,11 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                       child: const Text('Retry'),
                     ),
                   ],
+                ),
+              if (chat.openingError != null && chat.messages.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(chat.openingError!),
                 ),
               Expanded(child: _chat(chat, context)),
             ],
@@ -565,6 +592,9 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         answerMessageId(message) != null &&
         isBranchMessage(message);
     final enabled =
+        !chat.opening &&
+        !chat.offlineSnapshot &&
+        !controller.recovering &&
         !chat.busy &&
         !chat.changingAnswer &&
         !chat.changingIntelligence &&
@@ -829,12 +859,6 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   ),
             tail: [
               if (chat.error != null) StudioError(chat.error!),
-              if (chat.status == ProfileTurnStatus.reconnecting)
-                TextButton(
-                  onPressed: () =>
-                      _run(() => controller.reconnect(chat.key.workspace)),
-                  child: const Text('Reconnect and check history'),
-                ),
               if (chat.approval != null)
                 Builder(
                   builder: (context) {
@@ -1327,7 +1351,10 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                     chat.key ||
                                                 chat.changingIntelligence,
                                             onPressed:
-                                                chat.busy ||
+                                                chat.opening ||
+                                                    chat.offlineSnapshot ||
+                                                    controller.recovering ||
+                                                    chat.busy ||
                                                     chat.changingAnswer ||
                                                     chat.commandRunning ||
                                                     controller.switching ||
@@ -1421,6 +1448,12 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       );
 
   Map<ComposerAction, String?> _composerActions(ProfileChat chat) {
+    if (controller.recovering || chat.opening || chat.offlineSnapshot) {
+      return {
+        for (final action in ComposerAction.values)
+          action: 'Reconnecting · Your draft is kept',
+      };
+    }
     final text = chat.draft.trim();
     final blocked =
         controller.switching ||
@@ -1801,6 +1834,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Widget _drawer() => AppDrawer(
     selected: _destination,
     connectionLabel: controller.connection.label,
+    connectionStatus: controller.connectionStatus,
     profileLabel: controller.current?.scope.profileName,
     onSelected: _selectDestination,
   );
@@ -1860,6 +1894,19 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         children: [
           if (controller.switching && _destination != AppDestination.settings)
             const LinearProgressIndicator(),
+          if (_destination == AppDestination.activity)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: ServerConnectionLabel(
+                  label: controller.connection.label,
+                  status: controller.connectionStatus,
+                ),
+              ),
+            ),
+          if (_destination != AppDestination.settings)
+            WorkspaceConnectionStatus(status: controller.connectionStatus),
           if (controller.error != null &&
               _destination != AppDestination.settings)
             ListTile(

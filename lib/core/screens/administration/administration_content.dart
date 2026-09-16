@@ -1,3 +1,4 @@
+import '../../widgets/server_connection_label.dart';
 import '../../widgets/studio_select.dart';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
@@ -40,6 +41,7 @@ class _HermesAdministrationContentState
       AdministrationRepository.forConnection(
         widget.controller.connection,
         widget.controller.connectionIdentity,
+        connectionStatus: widget.controller.connectionStatus,
       );
   String _search = '';
   @override
@@ -408,7 +410,10 @@ class _HermesAdministrationContentState
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text(_server.connectionLabel),
+                child: ServerConnectionLabel(
+                  label: _server.connectionLabel,
+                  status: widget.controller.connectionStatus,
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
