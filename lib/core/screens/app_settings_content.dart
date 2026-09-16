@@ -118,15 +118,6 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 4, bottom: 24),
-                  child: Text(
-                    'Your preferences, on this device.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: WingTokens.of(context).muted,
-                    ),
-                  ),
-                ),
                 _SettingsSection(
                   title: 'Appearance',
                   child: Card(
