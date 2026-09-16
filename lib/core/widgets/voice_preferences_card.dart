@@ -323,7 +323,8 @@ class _VoicePreferencesCardState extends State<VoicePreferencesCard>
                           } else {
                             _preview.speak(
                               'preview',
-                              'This is the voice Wing will use to read replies aloud.',
+                              'Hello, welcome to Wing. '
+                              'A familiar face, now with a voice to match.',
                               VoicePreferences(
                                 voice: _preferences.voice,
                                 rate: _preferences.rate,
