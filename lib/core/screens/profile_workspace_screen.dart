@@ -1626,18 +1626,6 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                 }
                                               }),
                                       ),
-                                      IconButton(
-                                        tooltip: 'Dictate message',
-                                        icon: const Icon(Icons.mic_none),
-                                        onPressed:
-                                            _voiceInput.active ||
-                                                controller.switching ||
-                                                chat.opening ||
-                                                chat.commandRunning ||
-                                                chat.changingAnswer
-                                            ? null
-                                            : () => _run(() => _dictate(chat)),
-                                      ),
                                       ContextRing(occupancy: chat.context),
                                       Expanded(
                                         child: Align(
@@ -1670,6 +1658,18 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                   ),
                                           ),
                                         ),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Dictate message',
+                                        icon: const Icon(Icons.mic_none),
+                                        onPressed:
+                                            _voiceInput.active ||
+                                                controller.switching ||
+                                                chat.opening ||
+                                                chat.commandRunning ||
+                                                chat.changingAnswer
+                                            ? null
+                                            : () => _run(() => _dictate(chat)),
                                       ),
                                       const SizedBox(width: 8),
                                       _composerActionButton(chat),
