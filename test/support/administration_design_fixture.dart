@@ -27,6 +27,8 @@ class AdministrationDesignFixture extends AdministrationFixture {
     };
   }
   final jobs = <Map<String, dynamic>>[];
+  bool partialIdentity = false;
+  bool toolEnabled = true;
   String description = 'Research, planning and everyday questions';
   String soul =
       'Be curious and precise.\n\nExplain what you know, what remains uncertain, and how to proceed.\n\nUse clear language. Keep the user in control of consequential decisions.';
@@ -37,12 +39,15 @@ class AdministrationDesignFixture extends AdministrationFixture {
     rpc: (method, params) async {
       if (method == 'profiles.configure') {
         if (params['description'] case final String value) description = value;
-        if (params['soul'] case final String value) soul = value;
+        if (!partialIdentity && params['soul'] is String) {
+          soul = params['soul'] as String;
+        }
         return {
-          'ok': true,
+          'ok': !partialIdentity,
           'applied': {
             for (final key in ['description', 'soul'])
-              if (params.containsKey(key)) key: true,
+              if (params.containsKey(key))
+                key: key != 'soul' || !partialIdentity,
           },
         };
       }
@@ -56,6 +61,11 @@ class AdministrationDesignFixture extends AdministrationFixture {
     Map<String, String> query,
     Map<String, dynamic>? body,
   ) async {
+    if (method == 'PUT' && path == 'tools/toolsets/web') {
+      requests.add((method, path, {...query}, body));
+      toolEnabled = body!['enabled'] as bool;
+      return {'ok': true, 'name': 'web', 'enabled': toolEnabled};
+    }
     final result = switch (path) {
       'cron/jobs' => {'data': jobs},
       'providers/oauth' => {
@@ -146,7 +156,7 @@ class AdministrationDesignFixture extends AdministrationFixture {
           {
             'name': 'web',
             'label': 'Web search and research',
-            'enabled': true,
+            'enabled': toolEnabled,
             'configured': false,
             'platform_label': 'Available on this server',
             'description': 'Find sources and read web pages.',

@@ -6,9 +6,34 @@ import 'package:wing/core/screens/administration/admin_profile_overview.dart';
 import 'package:wing/core/screens/administration/admin_providers_page.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'support/administration_design_fixture.dart';
+import 'support/administration_fixture.dart';
 import 'support/scheduled_tasks_fixture.dart';
 
 void main() {
+  testWidgets('zero total and invalid costs produce no cost-share bars', (
+    tester,
+  ) async {
+    final fixture = AdministrationFixture();
+    fixture.override = (_, _, _, _) async => {
+      'models': [
+        {'model': 'Zero', 'estimated_cost': 0},
+        {'model': 'Missing'},
+        {'model': 'Invalid', 'estimated_cost': -1},
+      ],
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        home: AdminUsagePage(profile: fixture.server.profile('personal')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.textContaining('1 of 3 models'), findsOneWidget);
+    expect(find.textContaining('Total reported: USD 0.00'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'usage compares known costs without counting unknown as zero and changes range',
     (tester) async {

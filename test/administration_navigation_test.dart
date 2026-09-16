@@ -56,9 +56,10 @@ void main() {
     WidgetTester tester,
     Brightness brightness, {
     double scale = 1,
+    double width = 390,
     WorkspaceAccent accent = WorkspaceAccent.mint,
   }) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = Size(width, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
@@ -142,6 +143,41 @@ void main() {
       },
     );
   }
+  testWidgets('all root owners remain reachable at 320dp and 200 percent', (
+    tester,
+  ) async {
+    await show(tester, Brightness.dark, scale: 2, width: 320);
+    await screenshot(tester, 'narrow-profile');
+    await tester.scrollUntilVisible(
+      find.text('Scheduled tasks'),
+      300,
+      scrollable: find
+          .byWidgetPredicate(
+            (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    await screenshot(tester, 'narrow-profile-bottom');
+    await tester.ensureVisible(find.text('Health'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Health'));
+    await tester.pumpAndSettle();
+    await screenshot(tester, 'narrow-health');
+    await tester.scrollUntilVisible(
+      find.text('Doctor'),
+      300,
+      scrollable: find
+          .byWidgetPredicate(
+            (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    await screenshot(tester, 'narrow-health-runtime');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'server controls and runtime health remain available without a selected profile',
     (tester) async {

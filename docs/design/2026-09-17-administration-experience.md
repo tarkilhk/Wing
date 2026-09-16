@@ -1,6 +1,6 @@
 # Administration experience: approved direction
 
-Status: IN PROGRESS — owner gave explicit go on 2026-09-17.
+Status: IMPLEMENTED AND VERIFIED — see Plan 003 for acceptance evidence.
 
 On 17 September 2026, the owner accepted all ten recommendations from the
 administration design review and requested documents and a goal definition
@@ -14,10 +14,10 @@ Recommendation 3 explains ownership within and between those tabs; it does not
 replace the navigation split.
 
 This document owns the accepted design requirements. The
-[implementation plan and draft goal](../../plans/003-administration-experience.md)
+[implementation plan and goal](../../plans/003-administration-experience.md)
 own execution order and completion evidence. The [Studio charter](../DESIGN_SYSTEM.md)
 and [ownership contract](2026-09-14-administration-handoff.md) remain the shared
-references. This is a proposed target, not a claim about delivered behavior.
+references. The implementation plan records delivered behavior and verification evidence.
 
 ## Outcome and design thesis
 

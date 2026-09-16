@@ -13,6 +13,10 @@ void main() {
       expect(shiftDecimal('0.8123456789', 2), '81.23456789');
       expect(shiftDecimal('.5', -2), '0.005');
       expect(shiftDecimal('1e-3', 2), '0.1');
+      expect(
+        shiftDecimal('1e999999999999999999999999', 2),
+        '1e999999999999999999999999',
+      );
     },
   );
 

@@ -216,6 +216,7 @@ class AdminSettingsPage extends StatefulWidget {
 class _AdminSettingsPageState extends State<AdminSettingsPage> {
   late final _profile = widget.profile;
   final _form = GlobalKey<FormState>();
+  final _noticeAnchor = GlobalKey();
   Map<String, dynamic>? _saved;
   List<AdminField> _fields = [];
   final _values = <String, dynamic>{};
@@ -355,6 +356,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
 
   Future<void> _save() async {
     if (!_form.currentState!.validate() || _saving) return;
+    FocusScope.of(context).unfocus();
     setState(() {
       _saving = true;
       _error = null;
@@ -395,7 +397,10 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
         setState(() => _error = administrationError(e, writing: true));
       }
     }
-    if (mounted) setState(() => _saving = false);
+    if (mounted) {
+      setState(() => _saving = false);
+      if (_error != null) revealAdminNotice(context, _noticeAnchor);
+    }
   }
 
   Widget _field(AdminField field) {
@@ -654,7 +659,8 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                             _compressionDiagram(),
                           if (widget.explanation != null)
                             AdminNotice(widget.explanation!),
-                          if (_error != null) AdminNotice.error(_error!),
+                          if (_error != null)
+                            AdminNotice.error(_error!, key: _noticeAnchor),
                           if (_fields.length < widget.fields.length)
                             const AdminNotice(
                               'Some settings are not exposed by this server.',
@@ -706,7 +712,9 @@ String shiftDecimal(String input, int places) {
   final whole = match[2]!;
   final digits = whole + (match[3] ?? '');
   if (digits.isEmpty) return input;
-  final position = whole.length + places + int.parse(match[4] ?? '0');
+  final exponent = int.tryParse(match[4] ?? '0');
+  if (exponent == null) return input;
+  final position = whole.length + places + exponent;
   if (position.abs() > 1000) return input;
   var result = position <= 0
       ? '0.${'0' * -position}$digits'

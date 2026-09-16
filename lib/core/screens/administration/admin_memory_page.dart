@@ -92,10 +92,20 @@ class _AdminMemoryPageState extends State<AdminMemoryPage> {
             for (final entry in indexed)
               ListTile(
                 title: Text('${entry.$2['title'] ?? 'Memory'}'),
-                subtitle: Text(
-                  '${entry.$2['body'] ?? ''}${entry.$2['source'] is String ? '\nSource: ${entry.$2['source']}' : ''}',
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${entry.$2['body'] ?? ''}',
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (entry.$2['source'] case final String source)
+                      Text(
+                        'Source: $source',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                  ],
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => adminPush(

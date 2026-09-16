@@ -129,7 +129,7 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
     ].join('\n');
     return tasks.error == null
         ? activity
-        : '$activity · Last observation; refresh unavailable';
+        : '$activity · ${tasks.checkedAt == null ? 'Last observation' : 'Last checked ${TimeOfDay.fromDateTime(tasks.checkedAt!).format(context)}'}; refresh unavailable';
   }
 
   Widget _row(String name, String summary, IconData icon) => AdminRow(

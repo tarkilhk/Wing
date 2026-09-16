@@ -1,6 +1,6 @@
 # Plan 003: Complete the administration experience redesign
 
-Status: IN PROGRESS — owner authorized goal execution on 2026-09-17.
+Status: DONE — accepted redesign implemented and verified on the isolated branch.
 
 Worktree: `/home/dev/projects/hermes-android/administration-experience`; branch:
 `codex/administration-experience`. Starting revision: `28b7f61`. The original
@@ -102,7 +102,7 @@ and limits, not newly executed checks or proof of the future redesign. Recheck
 the current state once at kickoff and run proportionate affected regressions;
 retain this goal's final integrated verification requirements.
 
-## Execution sequence — only after go
+## Execution sequence
 
 ### 1. Integrate the finished baseline and map data
 
@@ -169,7 +169,7 @@ Deep-link field results to visible field anchors with transient emphasis and no
 unrequested keyboard. Ensure exact input values are not altered by display rounding.
 
 Primary seams: `admin_settings_page.dart`, `admin_defaults_page.dart`,
-`profile_editor_sheet.dart` and its administration entry, plus root search.
+`admin_identity_page.dart` and its administration entry, plus root search.
 Inspect non-administration callers before changing shared identity logic.
 
 Completion: R7 and R9a pass, including multi-field conflicts, another remote change
@@ -218,25 +218,25 @@ goal complete when every required acceptance item and evidence condition is met.
 
 ## Acceptance and evidence matrix
 
-All rows start pending. Record implementation/test/capture references in the last
-column as work completes; a row passes only when every referenced sub-item passes.
+All acceptance rows are complete. References below identify implementation and
+verification; the execution record distinguishes host, rendered and native evidence.
 
 | Requirement | Observable completion criterion | Status / evidence |
 | --- | --- | --- |
-| R1a–d | Compact profile brief and all seven informative destinations; two groups; scope-safe independent loading with honest unknown/stale states; overview issues only reads | Pending |
-| R2a–c | Coherent hierarchy, aligned controls and exception emphasis using shared tokens in light/dark and all accents; growing text and tick-free selection | Pending |
-| R3a–d | Three tabs retained; known shared/profile/external sources route to correct owners; effects shown before writes; connection and readiness facts distinct | Pending |
-| R4a–d | Profile/runtime findings precede utilities; check coverage/freshness visible; owner-specific edit/return/recheck works; output disclosure and missing-profile access verified | Pending |
-| R5a–d | Scannable provider rows and useful details; direct renewal where supported; explicit Add service key; accurate source/removal implications | Pending |
-| R6a–c | Capability-oriented inventory/detail with distinct enablement/setup/platform states; skill usage/content/edit/archive/Hub and agent-plugin operations remain reachable | Pending |
-| R7a–b | Percent input round-trips correctly; capacity diagram and verified policy/limit/unit explanations aid choices | Pending |
-| R7c–d | Dirty count, fixed target, effect labeling, sparse save/readback and deliberate conflict comparison retain drafts across failure/partial/uncertain results | Pending |
-| R7e | Dedicated full-screen Identity supports long description/SOUL, keyboard, discard protection, captured ownership and partial-save handling | Pending |
-| R8a–c | Memory-first reading/search/detail, concise read-only explanation, source when known and useful empty/settings action; no invented occupancy or writes | Pending |
-| R9a | Owner/path search, task vocabulary, clear/back behavior and scroll-to-field emphasis work without surprise keyboard activation | Pending |
-| R9b–c | Sortable formatted per-model comparisons and expansion preserve ranges/metrics; cost bars show honest coverage and handle unknown/zero correctly | Pending |
-| R10a–b | Scheduled-task integration preserves finished functionality; warm first-use copy, compact populated state, retained context and purposeful reduced-motion-safe updates | Pending |
-| R10c | Every changed screen/control meets text-scaling, touch, focus, status semantics, keyboard and row-action criteria | Pending |
+| R1a–d | Compact profile brief and all seven informative destinations; two groups; scope-safe independent loading with honest unknown/stale states; overview issues only reads | Pass — `admin_profile_overview.dart`, `administration_overview.dart`; overview/comparison/navigation tests; light/dark/root captures. |
+| R2a–c | Coherent hierarchy, aligned controls and exception emphasis using shared tokens in light/dark and all accents; growing text and tick-free selection | Pass — `admin_widgets.dart`, `studio_select.dart`; all-accent navigation and Studio control/selection tests; 320 dp/200% and wide captures. |
+| R3a–d | Three tabs retained; known shared/profile/external sources route to correct owners; effects shown before writes; connection and readiness facts distinct | Pass — provider/defaults/detail routes and captured repositories; provider-status, ownership and navigation tests; native canonical shared-account link. |
+| R4a–d | Profile/runtime findings precede utilities; check coverage/freshness visible; owner-specific edit/return/recheck works; output disclosure and missing-profile access verified | Pass — `admin_health_page.dart`, `profile_diagnostics_panel.dart`, `admin_operations_page.dart`; diagnostics/recovery tests and retained Health → search → editor → recheck test; Health captures. |
+| R5a–d | Scannable provider rows and useful details; direct renewal where supported; explicit Add service key; accurate source/removal implications | Pass — `admin_providers_page.dart`; provider status/renewal tests and explicit service-key journey; inventory/detail/catalog captures; native shared-account navigation. |
+| R6a–c | Capability-oriented inventory/detail with distinct enablement/setup/platform states; skill usage/content/edit/archive/Hub and agent-plugin operations remain reachable | Pass — direct `ProfileCapabilitiesScreen` entry with setup/library/Hub/plugin callbacks; capability/tool/skill regressions; native separate disclosure, toggle and setup actions. |
+| R7a–b | Percent input round-trips correctly; capacity diagram and verified policy/limit/unit explanations aid choices | Pass — `admin_settings_page.dart`; exact-decimal, invalid-exponent and percentage tests; upstream unit/special-value inspection; compression captures. |
+| R7c–d | Dirty count, fixed target, effect labeling, sparse save/readback and deliberate conflict comparison retain drafts across failure/partial/uncertain results | Pass — sparse-save/ownership tests, repeated remote-conflict test, retained draft/unconfirmed captures and native conflict resolution; failures reveal their explanation. |
+| R7e | Dedicated full-screen Identity supports long description/SOUL, keyboard, discard protection, captured ownership and partial-save handling | Pass — `admin_identity_page.dart`; retained profile-editor regressions, long/partial captures, native keyboard/back/discard/save journey. |
+| R8a–c | Memory-first reading/search/detail, concise read-only explanation, source when known and useful empty/settings action; no invented occupancy or writes | Pass — `admin_memory_page.dart`; read-only/search/empty/failure regressions; list/detail captures, source separately visible below excerpts. |
+| R9a | Owner/path search, task vocabulary, clear/back behavior and scroll-to-field emphasis work without surprise keyboard activation | Pass — scoped search paths, exact-field keys and reduced-motion-aware reveal; editor/navigation tests including keyboard absence and originating Health tab restoration. |
+| R9b–c | Sortable formatted per-model comparisons and expansion preserve ranges/metrics; cost bars show honest coverage and handle unknown/zero correctly | Pass — `AdminUsagePage`; formatted expansion/sort/range, unknown/invalid/zero-total tests; light/dark/large-text/wide usage captures. |
+| R10a–b | Scheduled-task integration preserves finished functionality; warm first-use copy, compact populated state, retained context and purposeful reduced-motion-safe updates | Pass — leased scheduled-task controller in overview, latest listed-run coverage, next-run selection and stale timestamp; full scheduling regressions, overview handoff test, retained tab state and reduced-motion checks. |
+| R10c | Every changed screen/control meets text-scaling, touch, focus, status semantics, keyboard and row-action criteria | Pass — growing titles/selects/field labels, keyboard-safe footer; full Studio/layout tests and rendered matrix; native keyboard/focus/semantics tap plus independently exposed 48 × 48 dp switch and row actions. |
 
 Required automated commands, using the repository's configured Flutter SDK:
 
@@ -300,8 +300,9 @@ mutation is necessary to certify this UI redesign.
 - Missing required native/build/test evidence remains outstanding. Do not mark
   the goal complete merely because code is written or document limitations as
   if that satisfies the required checks. Scope changes must come from the owner.
-- This goal authorizes implementation after go, not commit/push, release/signing,
-  deployment, real-account changes or unrelated product redesign.
+- The owner authorized an isolated branch and integration of concurrent commits.
+  Local branch checkpoints are part of that work. Release/signing, deployment,
+  real-account changes and unrelated product redesign remain outside this goal.
 
 ## Evidence record
 
@@ -314,3 +315,71 @@ plan index and other agents' files unchanged during preparation.
 Plan-only follow-up: reviewed the scheduled-task commit `a84abda` and its recorded
 acceptance, then updated these two planning documents with the delivered integration
 baseline. No goal activation, implementation or app-test execution occurred.
+
+### Execution record, 17 September 2026
+
+Implementation started at `28b7f61` in the isolated worktree named above. The busy
+original main checkout was left intact. Checkpoints `5b57e02` and `79bd15c` establish
+the redesign. Main was integrated through `818ecbe` in merge `d7922e1`, including
+voice input/output, final preview greeting and microphone placement, project
+selection/header refinements, and Support Wing fixes. The two feature agents'
+completion records report their phone installations complete. No agent in this
+thread tree was available for direct cross-thread messaging; synchronization used
+committed main state and their completion records.
+
+The greeting/layout conflict was resolved by retaining Studio's single gutter and
+phone/profile ownership copy together with the exact approved greeting. Analysis
+and all 18 voice/project regression tests passed after that merge.
+
+Execution-limit help was checked against local upstream source at
+`af4a3eba0a3674633050bf1c41df45f8ed6f0858`: `agent/agent_init.py` normalizes a
+nonpositive run budget to no budget; `tools/delegate_tool_config.py` sets a positive
+child timeout floor of 30 seconds, disables it at zero, and floors spawn depth at
+one. These describe the exposed settings rather than adding legacy behavior.
+
+Render entry points: `test/administration_design_test.dart` (11 families × light,
+dark, 320 dp/200%, 840 dp; pending/unconfirmed compression and partial Identity),
+`test/administration_navigation_test.dart` (all five accents in both themes, roots,
+missing profile and keyboard), and the integrated `test/project_picker_design_test.dart`.
+The combined final capture run passed 70 tests. Actual images are under ignored
+`build/administration-preview/` and `build/project-picker-review/`.
+
+Render review corrected clipped selected values/page titles, large-text labels,
+Save-caption wrapping, excess provider/voice gutters, cost-bar semantics, and save
+notices hidden above long drafts. Targeted navigation/Studio regressions passed 40
+tests. Final analysis, host-suite, normal debug-build and native results follow.
+
+### Final verification
+
+- Static analysis: `flutter analyze --no-pub --fatal-infos` — no issues.
+- Full host suite: **2,000 passed, 11 opt-in live tests skipped**. Earlier failures
+  were old route-label/scroll expectations; corrected tests retain their behavior
+  assertions. The final full-suite log is `build/administration-native/host-tests.log`.
+- Final presentation/observation regression and capture pass: **71 passed**;
+  includes the final separate memory-source line and task stale-check timestamp.
+- Normal development APK: `flutter build apk --debug --no-pub` — passed. Preserved
+  at `build/administration-native/wing-administration-debug.apk` before native-test
+  builds. SHA-256: `46bae6bfd2a0541002a5ea7f58075c3c2210b3317d20cc1e5ee610135bda0976`.
+  Existing Kotlin-plugin toolchain warnings did not prevent the build.
+- Native: **3 passed** in `integration_test/administration_native_test.dart` on
+  disposable `emulator-5558`, Android API 36, 320 × 640 dp. Its independent AVD is
+  under `/tmp/wing-administration-avd`; no user phone or other agent's emulator
+  profile was used. The screenshot and Android accessibility tree are
+  `build/administration-native/android-capability-actions.{png,xml}`.
+- Native checks exercised an accessibility action into an editor, real keyboard,
+  a remote conflict and explicit resolution, clean save then dirty discard, a long
+  Identity draft/back/cancel/save, canonical shared ownership at 200% text, and
+  separate tool disclosure/toggle/setup. The target-edge tap succeeded. Android
+  exposes the switch as checkable/unchecked with bounds `[256,424][304,472]`,
+  separate from the expandable row and Setup and providers button. Reduced-motion
+  rendering and keyboard focus were also exercised.
+- Actual final Flutter renders were inspected for roots, all changed families,
+  partial/unconfirmed/pending editors, narrow and wide layouts, and incoming
+  voice/project UI. All five accents are represented in root/shared-control checks.
+- `git diff --check` — clean. Main changes through `818ecbe` are integrated.
+
+The opt-in live drivers require an explicitly supplied disposable backend and were
+not activated. No real provider inference, account changes, deployment, release or
+phone installation was performed for this redesign. Native fixture acceptance and
+Android accessibility-tree inspection do not certify every screen-reader product
+or a live backend. These are the agreed evidence boundaries, not omitted UI work.

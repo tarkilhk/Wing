@@ -10,6 +10,7 @@ import 'package:wing/core/screens/administration/admin_widgets.dart';
 import 'package:wing/core/screens/profile_capabilities_screen.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import '../test/support/administration_design_fixture.dart';
+import 'package:wing/core/widgets/compact_switch.dart';
 
 /// Production widgets on disposable Android with in-memory observations only.
 void main() {
@@ -19,81 +20,84 @@ void main() {
     (tester) async {
       final fixture = AdministrationDesignFixture();
       final semantics = tester.ensureSemantics();
-      addTearDown(semantics.dispose);
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: wingTheme(Brightness.dark),
-          home: Builder(
-            builder: (context) => Scaffold(
-              body: Center(
-                child: FilledButton(
-                  onPressed: () => adminPush(
-                    context,
-                    AdminSettingsPage(
-                      profile: fixture.server.profile('personal'),
-                      title: 'Memory settings',
-                      fields: [memoryFields[2]],
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(Brightness.dark),
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () => adminPush(
+                      context,
+                      AdminSettingsPage(
+                        profile: fixture.server.profile('personal'),
+                        title: 'Memory settings',
+                        fields: [memoryFields[2]],
+                      ),
                     ),
+                    child: const Text('Edit memory'),
                   ),
-                  child: const Text('Edit memory'),
                 ),
               ),
             ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final entry = tester.getSemantics(find.text('Edit memory'));
-      tester.binding.renderViews.single.owner!.semanticsOwner!.performAction(
-        entry.id,
-        SemanticsAction.tap,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(TextFormField));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextFormField), '2800');
-      await tester.pumpAndSettle();
-      expect(find.text('Save').hitTestable(), findsOneWidget);
-      (fixture.configs['personal']!['memory'] as Map)['memory_char_limit'] =
-          3200;
-      await tester.tap(find.text('Save'));
-      await tester.pumpAndSettle();
-      // Hide the native IME before navigating the comparison below the input.
-      FocusManager.instance.primaryFocus?.unfocus();
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Keep my value'));
-      await tester.pumpAndSettle();
-      expect(find.text('Current server value: 3200'), findsOneWidget);
-      await tester.tap(find.text('Keep my value'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Save'));
-      await tester.pumpAndSettle();
-      expect(
-        (fixture.configs['personal']!['memory'] as Map)['memory_char_limit'],
-        2800,
-      );
-      await tester.tap(find.text('Close'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Edit memory'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(TextFormField));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextFormField), '2900');
-      await tester.pump(const Duration(seconds: 1));
-      await tester.pumpAndSettle();
-      FocusManager.instance.primaryFocus?.unfocus();
-      await tester.pumpAndSettle();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.text('1 unsaved change'), findsOneWidget);
-      expect(find.text('Close').hitTestable(), findsOneWidget);
-      await tester.tap(find.text('Close'));
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.pumpAndSettle();
-      expect(find.text('Discard edits?'), findsOneWidget);
-      await tester.tap(find.text('Discard'));
-      await tester.pumpAndSettle();
-      expect(find.text('Edit memory'), findsOneWidget);
-      expect(tester.takeException(), isNull);
+        );
+        await tester.pumpAndSettle();
+        final entry = tester.getSemantics(find.text('Edit memory'));
+        tester.binding.renderViews.single.owner!.semanticsOwner!.performAction(
+          entry.id,
+          SemanticsAction.tap,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byType(TextFormField));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextFormField), '2800');
+        await tester.pumpAndSettle();
+        expect(find.text('Save').hitTestable(), findsOneWidget);
+        (fixture.configs['personal']!['memory'] as Map)['memory_char_limit'] =
+            3200;
+        await tester.tap(find.text('Save'));
+        await tester.pumpAndSettle();
+        // Hide the native IME before navigating the comparison below the input.
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Keep my value'));
+        await tester.pumpAndSettle();
+        expect(find.text('Current server value: 3200'), findsOneWidget);
+        await tester.tap(find.text('Keep my value'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Save'));
+        await tester.pumpAndSettle();
+        expect(
+          (fixture.configs['personal']!['memory'] as Map)['memory_char_limit'],
+          2800,
+        );
+        await tester.tap(find.text('Close'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Edit memory'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byType(TextFormField));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextFormField), '2900');
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pumpAndSettle();
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.text('1 unsaved change'), findsOneWidget);
+        expect(find.text('Close').hitTestable(), findsOneWidget);
+        await tester.tap(find.text('Close'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        expect(find.text('Discard edits?'), findsOneWidget);
+        await tester.tap(find.text('Discard'));
+        await tester.pumpAndSettle();
+        expect(find.text('Edit memory'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      } finally {
+        semantics.dispose();
+      }
     },
   );
 
@@ -205,6 +209,13 @@ void main() {
       await tester.tap(find.text('Web search and research'));
       await tester.pumpAndSettle();
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+      final toggle = find.byType(CompactSwitch);
+      expect(tester.getSize(toggle).width, greaterThanOrEqualTo(48));
+      expect(tester.getSize(toggle).height, greaterThanOrEqualTo(48));
+      await tester.tapAt(tester.getTopLeft(toggle) + const Offset(3, 3));
+      await tester.pumpAndSettle();
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+      expect(find.text('Setup and providers'), findsOneWidget);
       await tester.ensureVisible(find.text('Setup and providers'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Setup and providers'));
@@ -213,6 +224,10 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       expect(FocusManager.instance.primaryFocus, isNotNull);
       expect(tester.takeException(), isNull);
+      if (const bool.fromEnvironment('CAPTURE_NATIVE_ADMINISTRATION')) {
+        debugPrint('NATIVE_ADMINISTRATION_CAPTURE_READY');
+        await Future<void>.delayed(const Duration(seconds: 10));
+      }
     },
   );
 }

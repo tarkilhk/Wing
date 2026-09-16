@@ -210,7 +210,12 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Reasoning and speed'), findsNothing);
-      await tester.ensureVisible(find.text('Reset all helper models'));
+      await tester.scrollUntilVisible(
+        find.text('Reset all helper models'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Reset all helper models'));
       await tester.pumpAndSettle();
       expect(

@@ -76,9 +76,17 @@ class _HermesAdministrationContentState
       );
     }
     final selected = profiles.where((p) => p.name == name).firstOrNull;
-    return Row(
+    final largeText = MediaQuery.textScalerOf(context).scale(16) >= 24;
+    return Flex(
+      direction: largeText ? Axis.vertical : Axis.horizontal,
+      crossAxisAlignment: largeText
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.center,
+      mainAxisSize: largeText ? MainAxisSize.min : MainAxisSize.max,
       children: [
-        Expanded(
+        Flexible(
+          flex: largeText ? 0 : 1,
+          fit: FlexFit.tight,
           child: Text(
             selected?.label ?? 'Choose a profile',
             style: Theme.of(context).textTheme.titleLarge,
@@ -479,7 +487,9 @@ class _HermesAdministrationContentState
                 child: TextField(
                   controller: _searchInput,
                   decoration: InputDecoration(
-                    hintText: 'Search settings',
+                    hintText: MediaQuery.textScalerOf(context).scale(16) >= 24
+                        ? 'Search'
+                        : 'Search settings',
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: _search.isEmpty
                         ? null
@@ -505,6 +515,13 @@ class _HermesAdministrationContentState
                       child: Column(
                         children: [
                           TabBar(
+                            isScrollable:
+                                MediaQuery.textScalerOf(context).scale(14) >=
+                                21,
+                            tabAlignment:
+                                MediaQuery.textScalerOf(context).scale(14) >= 21
+                                ? TabAlignment.start
+                                : TabAlignment.fill,
                             controller: _tabs,
                             tabs: const [
                               Tab(text: 'Profile'),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -155,6 +156,45 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         await snapshot(tester, '$mode-$family');
+        if (family == 'identity') {
+          fixture.partialIdentity = true;
+          await tester.enterText(
+            find.byKey(const ValueKey('profile-description-field')),
+            'Research companion',
+          );
+          await tester.enterText(
+            find.byKey(const ValueKey('profile-soul-field')),
+            'A long draft kept after a partially applied save.\n' * 12,
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Save'));
+          await tester.pumpAndSettle();
+          expect(find.text('1 unsaved change'), findsOneWidget);
+          await snapshot(tester, '$mode-identity-partial');
+        }
+        if (family == 'compression') {
+          await tester.enterText(
+            find.byKey(const ValueKey('setting:compression.threshold')),
+            '82',
+          );
+          await tester.pumpAndSettle();
+          fixture.ignoreSave = true;
+          final gate = Completer<void>();
+          fixture.writeGate = gate;
+          await tester.tap(find.text('Save'));
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(
+            tester
+                .widget<FilledButton>(find.widgetWithText(FilledButton, 'Save'))
+                .onPressed,
+            isNull,
+          );
+          await snapshot(tester, '$mode-compression-pending');
+          gate.complete();
+          await tester.pumpAndSettle();
+          expect(find.textContaining('Save not confirmed'), findsOneWidget);
+          await snapshot(tester, '$mode-compression-unconfirmed');
+        }
         // Exercise the full scrollable extent, including controls outside the capture.
         final scrolls = find.byType(Scrollable);
         if (scrolls.evaluate().isNotEmpty) {

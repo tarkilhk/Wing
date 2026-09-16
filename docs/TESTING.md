@@ -143,3 +143,31 @@ The 13–14 September 2026 acceptance used local Hermes 0.21.2 at `e16f686706b1e
 | Notifications | Local posting/routing plus foreground-service lifecycle checks cover Home, activity destruction/recreation, Doze with battery exemption and stop/restart. Server event gaps and process termination still limit delivery. |
 
 Backend reproductions and closure criteria are retained in [Upstream Hermes bugs](UPSTREAM_HERMES_BUGS.md). App reliability gaps are linked from [Known limitations](KNOWN_LIMITATIONS.md) and the [bug tracker](BUG_TRACKER.md). Retest a reproduced limitation when its relevant contract changes; do not relabel it as a pass to produce an all-green report.
+
+## Administration experience review
+
+The 17 September redesign is specified in
+[Plan 003](../plans/003-administration-experience.md). Its fixtures establish UI
+behavior without contacting real profiles, speech providers or service accounts.
+
+```bash
+flutter test test/administration_overview_test.dart test/administration_comparison_test.dart test/administration_editor_experience_test.dart test/administration_navigation_test.dart
+flutter test --dart-define=CAPTURE_ADMINISTRATION=true --dart-define=CAPTURE_FONT_DIR=/path/to/fonts test/administration_design_test.dart test/administration_navigation_test.dart
+flutter test integration_test/administration_native_test.dart -d <disposable-emulator> --no-uninstall
+```
+
+The capture font directory contains `roboto-regular.ttf` and
+`materialicons-regular.otf`. Actual Flutter captures are written to ignored
+`build/administration-preview/`; the integrated project-picker test retains its
+own capture switch and directory. The matrix includes eleven detail/editor
+families in light/dark, 320 dp at 200% text, a standard phone and an 840 dp layout;
+root checks cover all five accents. Pending/unconfirmed settings and partially
+applied Identity writes use explicit fixture responses.
+
+Native tests exercise a semantics tap, the actual Android keyboard, deliberate
+remote-conflict resolution, discard protection, long Identity drafts, a canonical
+shared-account link, independent capability disclosure/toggle actions, 48 dp target
+edges and keyboard focus. `CAPTURE_NATIVE_ADMINISTRATION=true` adds a ten-second
+capture point after the capability checks for external `adb` screenshot/tree
+collection. This is fixture-based Android interaction evidence, not certification
+of a live backend, every installed screen reader or production account access.

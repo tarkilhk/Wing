@@ -384,6 +384,21 @@ class _AdminLoadState extends State<AdminLoad> {
   }
 }
 
+/// Bring a failed/partial save into view without moving focus into an input.
+void revealAdminNotice(BuildContext context, GlobalKey anchor) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    final target = anchor.currentContext;
+    if (!context.mounted || target == null) return;
+    Scrollable.ensureVisible(
+      target,
+      alignment: 0,
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 200),
+    );
+  });
+}
+
 Future<bool> adminConfirm(
   BuildContext context,
   String title,

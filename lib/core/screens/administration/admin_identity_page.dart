@@ -42,6 +42,7 @@ class AdminIdentityPage extends StatefulWidget {
 }
 
 class _AdminIdentityPageState extends State<AdminIdentityPage> {
+  final _noticeAnchor = GlobalKey();
   final _description = TextEditingController();
   final _soul = TextEditingController();
   late final ProfileGateway _gateway;
@@ -134,6 +135,7 @@ class _AdminIdentityPageState extends State<AdminIdentityPage> {
     if (!_loaded || _loading || _saving || !_dirty) {
       return;
     }
+    FocusScope.of(context).unfocus();
     final wanted = <String, String>{
       if (_descriptionDirty) 'description': _description.text,
       if (_soulDirty) 'soul': _soul.text,
@@ -195,6 +197,7 @@ class _AdminIdentityPageState extends State<AdminIdentityPage> {
     } finally {
       if (mounted) {
         setState(() => _saving = false);
+        if (_error != null) revealAdminNotice(context, _noticeAnchor);
       }
     }
   }
@@ -316,8 +319,14 @@ class _AdminIdentityPageState extends State<AdminIdentityPage> {
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 24),
-                  if (_notice != null) AdminNotice(_notice!),
-                  if (_error != null) AdminNotice.error(_error!),
+                  Column(
+                    key: _noticeAnchor,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_notice != null) AdminNotice(_notice!),
+                      if (_error != null) AdminNotice.error(_error!),
+                    ],
+                  ),
                   TextField(
                     key: const ValueKey('profile-description-field'),
                     controller: _description,

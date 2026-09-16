@@ -183,6 +183,23 @@ a failed write must not become the displayed value when the editor is reopened.
 Native preview chrome receives the active Studio palette from Flutter. Authored
 HTML, diagrams, images and video retain their content-specific appearance.
 
+## Administration refinement, 17 September 2026
+
+Profile / Server / Health remains the ownership structure. Profile uses a small
+identity brief, two purpose-based groups and observed-value rows. Quiet metadata
+supports stronger destination titles; exception states retain their semantic colors.
+Providers use comparable rows with disclosure to account detail, and capabilities
+open directly to their inventory. Health leads with findings and explicit check
+coverage. Identity is a full-screen editor; settings show dirty counts, sparse-save
+feedback and deliberate field conflict resolution. Percent diagrams describe
+configuration and usage bars describe reported costs, never inferred activity.
+
+Growing select-only values, page titles and large-text field labels must remain
+readable at 320 dp/200%. Keep 48 dp controls and keyboard-safe editor actions.
+Transient changed-value emphasis respects reduced motion. Failed saves reveal their
+explanation while preserving the draft. The accepted requirements and evidence are
+in [Plan 003](../plans/003-administration-experience.md).
+
 ## Verification
 
 Use [Testing](TESTING.md) for render entry points. Review actual widgets with real fonts and native controls; generated design boards are not acceptance evidence.

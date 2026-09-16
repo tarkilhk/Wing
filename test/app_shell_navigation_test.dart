@@ -173,7 +173,7 @@ void main() {
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.text('Defaults'), findsOneWidget);
+    expect(find.text('Models and reasoning'), findsOneWidget);
     expect(find.byType(AppDrawer), findsNothing);
     expect(
       calls.where((call) => call.method == 'SystemNavigator.pop'),
@@ -202,7 +202,7 @@ void main() {
       expect(controller.visible, isTrue);
       await navigate(tester, AppDestination.administration);
       expect(find.byType(HermesAdministrationContent), findsOneWidget);
-      expect(find.text('Defaults'), findsOneWidget);
+      expect(find.text('Models and reasoning'), findsOneWidget);
       await tester.tap(find.text('Health'));
       await tester.pumpAndSettle();
       expect(find.text('Selected profile'), findsOneWidget);
@@ -257,7 +257,7 @@ void main() {
     final owner = controller.current!.scope.profileName;
     await tester.tap(find.text('Identity'));
     await tester.pumpAndSettle();
-    expect(find.text('Edit profile'), findsOneWidget);
+    expect(find.text('Identity'), findsOneWidget);
     final read = fixture.calls
         .where((call) => call.$2 == 'profiles.describe')
         .single;
@@ -348,7 +348,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await navigate(tester, AppDestination.administration);
     expect(find.byType(HermesAdministrationContent), findsOneWidget);
-    expect(find.text('Defaults'), findsOneWidget);
+    expect(find.text('Models and reasoning'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
