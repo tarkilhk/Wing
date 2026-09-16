@@ -159,6 +159,24 @@ void main() {
           await tester.tap(find.byTooltip('Close connection details'));
           await tester.pumpAndSettle();
           expect(host.moves, isEmpty);
+          project['name'] = 'australia-rwc-2027';
+          controller.current!.chat!.projectId = project['id'] as String;
+          controller.current!.chat!.title = 'Find budget car rental in Perth';
+          controller.notifyListeners();
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          final projectText = find.text('australia-rwc-2027');
+          expect(projectText, findsOneWidget);
+          final nameStyle = tester.widget<Text>(projectText).style;
+          expect(
+            nameStyle?.color,
+            tester.widget<Text>(find.text('Host')).style?.color,
+          );
+          if (scale == 1) {
+            final title = find.text('Find budget car rental in Perth');
+            expect(tester.getRect(selector).right, tester.getRect(title).right);
+          }
+          await screenshot(tester, 'header-assigned-${brightness.name}-$scale');
         },
       );
     }
