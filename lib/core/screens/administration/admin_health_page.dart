@@ -26,6 +26,38 @@ class AdminHealthContent extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(16),
     children: [
+      Text('Selected profile', style: Theme.of(context).textTheme.titleMedium),
+      profileSelector,
+      if (profile == null)
+        const AdminNotice('Select an available profile to view its health.')
+      else ...[
+        if (workspace != null && onConnections != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: ProfileDiagnosticsPanel(
+              workspace: workspace!,
+              connectionLabel: server.connectionLabel,
+              onManageConnections: onConnections!,
+              onReviewProviderAccess: () => adminPush(
+                context,
+                AdminProvidersPage(profile: profile!, shared: false),
+              ),
+              onReviewConnectors: () =>
+                  adminPush(context, AdminConnectorsPage(profile: profile!)),
+            ),
+          ),
+        AdminGroup(
+          children: [
+            AdminRow(
+              title: 'Usage',
+              subtitle: 'Rolling time ranges and model detail',
+              icon: Icons.bar_chart,
+              onTap: () =>
+                  adminPush(context, AdminUsagePage(profile: profile!)),
+            ),
+          ],
+        ),
+      ],
       Text('Runtime', style: Theme.of(context).textTheme.titleMedium),
       const SizedBox(height: 8),
       AdminLoad(
@@ -85,38 +117,6 @@ class AdminHealthContent extends StatelessWidget {
         },
       ),
       const SizedBox(height: 20),
-      Text('Selected profile', style: Theme.of(context).textTheme.titleMedium),
-      profileSelector,
-      if (profile == null)
-        const AdminNotice('Select an available profile to view its health.')
-      else ...[
-        AdminGroup(
-          children: [
-            AdminRow(
-              title: 'Usage',
-              subtitle: 'Rolling time ranges and model detail',
-              icon: Icons.bar_chart,
-              onTap: () =>
-                  adminPush(context, AdminUsagePage(profile: profile!)),
-            ),
-          ],
-        ),
-        if (workspace != null && onConnections != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: ProfileDiagnosticsPanel(
-              workspace: workspace!,
-              connectionLabel: server.connectionLabel,
-              onManageConnections: onConnections!,
-              onReviewProviderAccess: () => adminPush(
-                context,
-                AdminProvidersPage(profile: profile!, shared: false),
-              ),
-              onReviewConnectors: () =>
-                  adminPush(context, AdminConnectorsPage(profile: profile!)),
-            ),
-          ),
-      ],
     ],
   );
 }
@@ -130,6 +130,15 @@ class AdminUsagePage extends StatefulWidget {
 
 class _AdminUsagePageState extends State<AdminUsagePage> {
   int _days = 7;
+  String _sort = 'estimated_cost';
+  bool valid(Object? value) => value is num && value.isFinite && value >= 0;
+  String number(BuildContext context, Object? value, {bool money = false}) =>
+      !valid(value)
+      ? 'Unavailable'
+      : money
+      ? 'USD ${(value as num).toStringAsFixed(2)}'
+      : MaterialLocalizations.of(context).formatDecimal((value as num).toInt());
+
   @override
   Widget build(BuildContext context) => AdminPage(
     title: 'Usage',
@@ -148,7 +157,7 @@ class _AdminUsagePageState extends State<AdminUsagePage> {
                   label: days == 1 ? 'Last 24 hours' : 'Last $days days',
                 ),
             ],
-            onChanged: (v) => setState(() => _days = v!),
+            onChanged: (value) => setState(() => _days = value!),
           ),
         ),
         Expanded(
@@ -158,52 +167,129 @@ class _AdminUsagePageState extends State<AdminUsagePage> {
                 widget.profile.read('analytics/models', {'days': '$_days'}),
             builder: (context, data, refresh) {
               final models = administrationRows(data['models']);
+              models.sort((a, b) {
+                if (_sort == 'model') {
+                  return '${a['model']}'.compareTo('${b['model']}');
+                }
+                final aValue = a[_sort], bValue = b[_sort];
+                if (!valid(aValue)) return valid(bValue) ? 1 : 0;
+                if (!valid(bValue)) return -1;
+                return (bValue as num).compareTo(aValue as num);
+              });
+              final known = models
+                  .where((model) => valid(model['estimated_cost']))
+                  .toList();
+              final total = known.fold<double>(
+                0,
+                (sum, model) =>
+                    sum + (model['estimated_cost'] as num).toDouble(),
+              );
               return ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 children: [
+                  Text(
+                    'Where your agent spends its time',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   const AdminNotice(
                     'Hermes usage estimates. These are not provider invoices.',
                   ),
-                  TextButton(onPressed: refresh, child: const Text('Refresh')),
+                  StudioSelect<String>(
+                    value: _sort,
+                    label: 'Sort models',
+                    options: const [
+                      (value: 'estimated_cost', label: 'Estimated cost'),
+                      (value: 'api_calls', label: 'Calls'),
+                      (value: 'input_tokens', label: 'Input tokens'),
+                      (value: 'output_tokens', label: 'Output tokens'),
+                      (value: 'model', label: 'Model name'),
+                    ],
+                    onChanged: (value) => setState(() => _sort = value!),
+                  ),
+                  const SizedBox(height: 12),
                   if (models.isEmpty)
                     const AdminNotice(
                       'No recorded model usage in this period.',
                     ),
-                  for (final model in models)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: AdminGroup(
-                        children: [
-                          ListTile(
-                            title: Text('${model['model'] ?? 'Unknown model'}'),
-                            subtitle: Text(
-                              '${model['provider'] ?? 'Provider unavailable'}',
+                  if (models.isNotEmpty)
+                    Text(
+                      'Cost bars compare ${known.length} of ${models.length} models with reported costs. Total reported: ${number(context, total, money: true)}.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  const SizedBox(height: 12),
+                  AdminGroup(
+                    children: [
+                      for (final model in models)
+                        ExpansionTile(
+                          key: PageStorageKey(
+                            'usage:$_days:${model['provider']}:${model['model']}',
+                          ),
+                          title: Text(
+                            '${model['model'] ?? 'Unknown model'}',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 4, bottom: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  '${model['provider'] ?? 'Provider unavailable'}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${number(context, model['api_calls'])} calls · ${number(context, model['estimated_cost'], money: true)}',
+                                ),
+                                if (valid(model['estimated_cost']) &&
+                                    total > 0 &&
+                                    total.isFinite) ...[
+                                  const SizedBox(height: 8),
+                                  LinearProgressIndicator(
+                                    value:
+                                        ((model['estimated_cost'] as num) /
+                                                total)
+                                            .clamp(0, 1)
+                                            .toDouble(),
+                                    semanticsLabel:
+                                        '${model['model']} share of reported estimated cost',
+                                    semanticsValue:
+                                        '${((model['estimated_cost'] as num) / total * 100).toStringAsFixed(1)} percent',
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                          for (final key in [
-                            'sessions',
-                            'api_calls',
-                            'input_tokens',
-                            'output_tokens',
-                            'estimated_cost',
-                          ])
-                            if (model[key] is num)
+                          children: [
+                            for (final (key, label) in [
+                              ('sessions', 'Sessions'),
+                              ('api_calls', 'Calls'),
+                              ('input_tokens', 'Input tokens'),
+                              ('output_tokens', 'Output tokens'),
+                              ('estimated_cost', 'Estimated cost'),
+                            ])
                               ListTile(
-                                title: Text(switch (key) {
-                                  'input_tokens' => 'Input tokens',
-                                  'output_tokens' => 'Output tokens',
-                                  'estimated_cost' => 'Estimated cost · USD',
-                                  'api_calls' => 'Calls',
-                                  _ => 'Sessions',
-                                }),
+                                dense: true,
+                                title: Text(label),
                                 subtitle: Text(
-                                  '${model[key]}',
-                                  style: Theme.of(context).textTheme.bodyMedium,
+                                  number(
+                                    context,
+                                    model[key],
+                                    money: key == 'estimated_cost',
+                                  ),
                                 ),
                               ),
-                        ],
-                      ),
+                          ],
+                        ),
+                    ],
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: refresh,
+                      child: const Text('Refresh'),
                     ),
+                  ),
                 ],
               );
             },

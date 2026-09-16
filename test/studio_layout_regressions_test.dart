@@ -197,6 +197,10 @@ void main() {
         await tester.pumpWidget(
           app(
             ProfileCapabilitiesScreen(
+              onToolSetup: (_) async {},
+              onLibrary: () {},
+              onHub: () {},
+              onPlugins: () {},
               gateway: gateway,
               connectionLabel: 'Development server with a long display name',
             ),

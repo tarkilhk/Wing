@@ -11,11 +11,19 @@ class ProfileCapabilitiesScreen extends StatefulWidget {
   const ProfileCapabilitiesScreen({
     required this.gateway,
     required this.connectionLabel,
+    required this.onToolSetup,
+    required this.onLibrary,
+    required this.onHub,
+    required this.onPlugins,
     super.key,
   });
 
   final ProfileGateway gateway;
   final String connectionLabel;
+  final Future<void> Function(String name) onToolSetup;
+  final VoidCallback onLibrary;
+  final VoidCallback onHub;
+  final VoidCallback onPlugins;
 
   @override
   State<ProfileCapabilitiesScreen> createState() =>
@@ -221,6 +229,24 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                         style: metadataStyle,
                       ),
                       const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          TextButton(
+                            onPressed: widget.onLibrary,
+                            child: const Text('Skill library'),
+                          ),
+                          TextButton(
+                            onPressed: widget.onHub,
+                            child: const Text('Discover skills'),
+                          ),
+                          TextButton(
+                            onPressed: widget.onPlugins,
+                            child: const Text('Agent plugins'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
                       SegmentedButton<_CapabilityKind>(
                         showSelectedIcon: false,
                         segments: const [
@@ -306,13 +332,17 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                   subtitle: Text(
                     _skills
                         ? '${row['category'] ?? 'Skill'} · ${row['provenance'] ?? 'Installed'}'
-                        : '${row['configured'] == true ? 'Configured' : 'Setup needed'}${row['platform_label'] == null ? '' : ' · ${row['platform_label']}'}',
+                        : '${row['configured'] is! bool
+                              ? 'Setup status unavailable'
+                              : row['configured'] == true
+                              ? 'Configured'
+                              : 'Setup needed'}${row['platform_label'] == null ? '' : ' · ${row['platform_label']}'}',
                     style: metadataStyle,
                   ),
                   trailing: CompactSwitch(
                     semanticLabel: 'Enable $title',
                     value: row['enabled'] == true,
-                    onChanged: _loading || _saving
+                    onChanged: _loading || _saving || row['enabled'] is! bool
                         ? null
                         : (value) => _toggle(row, value),
                   ),
@@ -323,6 +353,17 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                       TextButton(
                         onPressed: () => _readSkill(name),
                         child: const Text('Read instructions'),
+                      ),
+                    if (!_skills)
+                      TextButton.icon(
+                        onPressed: _saving
+                            ? null
+                            : () async {
+                                await widget.onToolSetup(name);
+                                if (mounted) await _load();
+                              },
+                        icon: const Icon(Icons.tune, size: 18),
+                        label: const Text('Setup and providers'),
                       ),
                     if (!_skills && tools is List) ...[
                       const SizedBox(height: 8),

@@ -27,6 +27,10 @@ Future<void> _show(WidgetTester tester, ProfileGateway gateway) async {
   await tester.pumpWidget(
     MaterialApp(
       home: ProfileCapabilitiesScreen(
+        onToolSetup: (_) async {},
+        onLibrary: () {},
+        onHub: () {},
+        onPlugins: () {},
         gateway: gateway,
         connectionLabel: 'Server A',
       ),
@@ -111,6 +115,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ProfileCapabilitiesScreen(
+            onToolSetup: (_) async {},
+            onLibrary: () {},
+            onHub: () {},
+            onPlugins: () {},
             connectionLabel: 'Server A',
             gateway: _gateway(
               get: (path, _) => path == 'skills'

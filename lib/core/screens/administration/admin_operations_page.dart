@@ -87,9 +87,17 @@ class _AdminActionPageState extends State<AdminActionPage> {
                 : 'Failed',
           ),
         const SizedBox(height: 16),
-        SelectableText(
-          (_status?['lines'] as List? ?? []).join('\n'),
-          style: WingTokens.of(context).typography.mono,
+        const Text(
+          'This result describes the diagnostic operation. Review its output for findings.',
+        ),
+        ExpansionTile(
+          title: const Text('Diagnostic output'),
+          children: [
+            SelectableText(
+              (_status?['lines'] as List? ?? []).join('\n'),
+              style: WingTokens.of(context).typography.mono,
+            ),
+          ],
         ),
         TextButton(
           onPressed: _loading ? null : _check,

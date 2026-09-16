@@ -7,7 +7,7 @@ import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
-import 'package:wing/core/widgets/profile_editor_sheet.dart';
+import 'package:wing/core/screens/administration/admin_identity_page.dart';
 
 /// Opt-in UI acceptance against the disposable android-qa-a profile.
 ///
@@ -331,7 +331,7 @@ void main() {
               builder: (context) => Scaffold(
                 body: Center(
                   child: FilledButton(
-                    onPressed: () => showProfileEditorSheet(
+                    onPressed: () => showAdminIdentityEditor(
                       context,
                       gateway: editorGateway,
                       connectionLabel: connection().label,

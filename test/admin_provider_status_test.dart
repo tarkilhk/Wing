@@ -64,21 +64,26 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Connected (2)'), findsOneWidget);
       expect(find.text('Needs attention (1)'), findsOneWidget);
-      expect(find.byType(Card).first, findsOneWidget);
       expect(
-        tester.widget<Card>(find.byType(Card).first).key,
-        const ValueKey('provider-expired'),
+        tester.getTopLeft(find.byKey(const ValueKey('provider-expired'))).dy,
+        lessThan(
+          tester.getTopLeft(find.byKey(const ValueKey('provider-alpha'))).dy,
+        ),
       );
+      expect(find.byTooltip('Renew expired sign-in'), findsOneWidget);
       await tester.tap(find.text('Connected (2)'));
       await tester.pumpAndSettle();
-      expect(find.text('Token expired'), findsNothing);
+      expect(find.textContaining('Sign-in expired'), findsNothing);
+      await tester.tap(find.text('alpha'));
+      await tester.pumpAndSettle();
       expect(find.text('Default provider for: personal'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('Default provider for: work'),
-        250,
-        scrollable: pageScroll,
-      );
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('beta'));
+      await tester.pumpAndSettle();
       expect(find.text('Default provider for: work'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
       expect(
         fixture.requests
             .where((r) => r.$2 == 'providers/oauth')
@@ -149,10 +154,19 @@ void main() {
         findsOneWidget,
       );
       await tester.scrollUntilVisible(
+        find.text('External provider with a long display name'),
+        200,
+        scrollable: pageScroll,
+      );
+      await tester.tap(find.text('External provider with a long display name'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
         find.text('Source and sign-in help'),
         200,
         scrollable: pageScroll,
       );
+      await tester.ensureVisible(find.text('Source and sign-in help'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Source and sign-in help'));
       await tester.pumpAndSettle();
       expect(find.text('Check external sign-in'), findsOneWidget);

@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profiles_repository.dart';
-import 'package:wing/core/widgets/profile_editor_sheet.dart';
+import 'package:wing/core/screens/administration/admin_identity_page.dart';
 
 class _ProfileEditorFixture {
   String description = 'Work profile';
@@ -114,7 +114,7 @@ void main() {
           body: Builder(
             builder: (context) => FilledButton(
               onPressed: () async {
-                result = await showProfileEditorSheet(
+                result = await showAdminIdentityEditor(
                   context,
                   gateway: fixture.gateway,
                   connectionLabel: 'Central server',
@@ -147,11 +147,9 @@ void main() {
     tester,
   ) async {
     await openEditor(tester);
-    expect(find.text('Central server · work'), findsOneWidget);
+    expect(find.text('Central server / work'), findsOneWidget);
     expect(
-      find.text(
-        'Changes are stored on the central Hermes server for this profile.',
-      ),
+      find.text('Stored for this profile on Central server.'),
       findsOneWidget,
     );
     expect(
@@ -210,7 +208,7 @@ void main() {
       fixture.calls.where((call) => call.$1 == 'profiles.configure'),
       hasLength(1),
     );
-    await tester.tap(find.byTooltip('Close profile editor'));
+    await tester.tap(find.widgetWithText(TextButton, 'Close'));
     await tester.pumpAndSettle();
     expect(find.text('Discard unsaved changes?'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Discard'));
@@ -298,12 +296,9 @@ void main() {
     await tester.tapAt(const Offset(4, 4));
     await tester.binding.handlePopRoute();
     await tester.pump();
-    expect(find.text('Edit profile'), findsOneWidget);
-    final close = tester.widget<IconButton>(
-      find.ancestor(
-        of: find.byTooltip('Close profile editor'),
-        matching: find.byType(IconButton),
-      ),
+    expect(find.text('Identity'), findsOneWidget);
+    final close = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Close'),
     );
     expect(close.onPressed, isNull);
 
@@ -327,7 +322,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ProfileEditorSheet(
+          body: AdminIdentityPage(
             key: editorKey,
             gateway: fixture.gateway,
             connectionLabel: 'First server',
@@ -342,7 +337,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ProfileEditorSheet(
+          body: AdminIdentityPage(
             key: editorKey,
             gateway: other.gateway,
             connectionLabel: 'Other server',

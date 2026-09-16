@@ -24,7 +24,7 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
   late final _profile = widget.profile;
   String _query = '';
   String _filter = 'All';
-  bool _busy = false;
+  final bool _busy = false;
 
   Future<Map<String, dynamic>> _profileSelections() async {
     try {
@@ -32,51 +32,6 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
     } catch (_) {
       return {'unavailable': true};
     }
-  }
-
-  Future<void> _disconnect(
-    Map<String, dynamic> row,
-    VoidCallback refresh,
-  ) async {
-    if (!await adminConfirm(
-      context,
-      widget.shared ? 'Disconnect shared account?' : 'Remove profile account?',
-      widget.shared
-          ? 'Profiles using this shared account may lose access. Other credential sources may still be available.'
-          : 'This removes the profile account. Shared access may become available again.',
-      action: 'Disconnect',
-    )) {
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      final result = await _profile.write(
-        'DELETE',
-        'providers/oauth/${Uri.encodeComponent(row['id'] as String)}',
-      );
-      if (result['ok'] != true) {
-        throw const AdministrationFailure(
-          'No account removal was confirmed. Refresh effective access.',
-        );
-      }
-      await _profile.read('providers/oauth');
-      refresh();
-      if (mounted) {
-        adminMessage(
-          context,
-          'Removal requested. Check the refreshed access status for remaining sources.',
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        adminMessage(
-          context,
-          administrationError(e, writing: true),
-          isError: true,
-        );
-      }
-    }
-    if (mounted) setState(() => _busy = false);
   }
 
   @override
@@ -108,9 +63,7 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
               return order != 0 ? order : a.name.compareTo(b.name);
             });
         final selections = data['selections'] as Map;
-        final profiles = selections['profiles'] is List
-            ? administrationRows(selections['profiles'])
-            : <Map<String, dynamic>>[];
+
         final connected = providers
             .where((p) => p.state == ProviderAccessState.connected)
             .length;
@@ -221,45 +174,77 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
               ),
             if (visible.isEmpty)
               const AdminNotice('No providers match this view.'),
-            for (final access in visible)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _ProviderCard(
-                  access: access,
-                  selectedBy: [
-                    for (final profile in profiles)
-                      if (profile['provider'] == access.id &&
-                          (widget.shared || profile['name'] == _profile.name))
-                        '${profile['display_name'] is String && (profile['display_name'] as String).isNotEmpty ? profile['display_name'] : profile['name']}',
-                  ],
-                  shared: widget.shared,
-                  busy: _busy,
-                  disconnect: () => _disconnect(access.row, refresh),
-                  signIn: () async {
-                    await adminPush(
-                      context,
-                      AdminProviderSignIn(
-                        profile: _profile,
-                        provider: access.row,
-                        shared: widget.shared,
-                      ),
-                    );
-                    refresh();
-                  },
-                ),
-              ),
+            AdminGroup(
+              children: [
+                for (final access in visible)
+                  ListTile(
+                    key: ValueKey('provider-${access.id}'),
+                    title: Text(
+                      access.name,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      '${providerInventoryStatus(access)} · ${access.external ? 'Managed externally' : access.status['source_label'] ?? 'Source not reported'}',
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (access.state == ProviderAccessState.expired &&
+                            access.row['flow'] == 'device_code')
+                          IconButton(
+                            tooltip: 'Renew ${access.name} sign-in',
+                            icon: const Icon(Icons.login),
+                            onPressed: () async {
+                              await adminPush(
+                                context,
+                                AdminProviderSignIn(
+                                  profile: _profile,
+                                  provider: access.row,
+                                  shared: widget.shared,
+                                ),
+                              );
+                              refresh();
+                            },
+                          ),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
+                    onTap: () async {
+                      await adminPush(
+                        context,
+                        AdminProviderDetail(
+                          profile: _profile,
+                          shared: widget.shared,
+                          providerId: access.id,
+                        ),
+                      );
+                      refresh();
+                    },
+                  ),
+              ],
+            ),
             const SizedBox(height: 12),
             Text(
               'Service keys',
               style: Theme.of(context).textTheme.titleMedium,
             ),
-            if (_query.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  'Stored keys appear here. Search to add another service key.',
-                ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () async {
+                  await adminPush(
+                    context,
+                    AdminServiceKeyCatalog(
+                      profile: _profile,
+                      shared: widget.shared,
+                    ),
+                  );
+                  refresh();
+                },
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add service key'),
               ),
+            ),
             for (final entry in keys)
               ListTile(
                 title: Text(entry.key.toString()),
@@ -284,6 +269,267 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                         refresh();
                       },
               ),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+String providerInventoryStatus(ProviderAccess access) => switch (access.state) {
+  ProviderAccessState.connected => 'Sign-in stored',
+  ProviderAccessState.expired => 'Sign-in expired',
+  ProviderAccessState.signedOut => 'No sign-in stored',
+  ProviderAccessState.external => 'Check external sign-in',
+  ProviderAccessState.unknown => 'Status unavailable',
+};
+
+class AdminProviderDetail extends StatefulWidget {
+  const AdminProviderDetail({
+    super.key,
+    required this.profile,
+    required this.shared,
+    required this.providerId,
+  });
+  final ProfileAdministration profile;
+  final bool shared;
+  final String providerId;
+  @override
+  State<AdminProviderDetail> createState() => _AdminProviderDetailState();
+}
+
+class _AdminProviderDetailState extends State<AdminProviderDetail> {
+  late final _profile = widget.profile;
+  bool _busy = false;
+  Future<void> _disconnect(
+    Map<String, dynamic> row,
+    VoidCallback refresh,
+  ) async {
+    if (!await adminConfirm(
+      context,
+      widget.shared ? 'Disconnect shared account?' : 'Remove profile account?',
+      widget.shared
+          ? 'Profiles using this shared account may lose access. Other credential sources may still be available.'
+          : 'This removes the profile account. Shared access may become available again.',
+      action: 'Disconnect',
+    )) {
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final result = await _profile.write(
+        'DELETE',
+        'providers/oauth/${Uri.encodeComponent(row['id'] as String)}',
+      );
+      if (result['ok'] != true) {
+        throw const AdministrationFailure(
+          'No account removal was confirmed. Refresh effective access.',
+        );
+      }
+      await _profile.read('providers/oauth');
+      refresh();
+      if (mounted) {
+        adminMessage(
+          context,
+          'Removal requested. Check the refreshed access status for remaining sources.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        adminMessage(
+          context,
+          administrationError(e, writing: true),
+          isError: true,
+        );
+      }
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) => AdminPage(
+    title: 'Provider account',
+    scope: widget.shared
+        ? '${_profile.server.connectionLabel} / Shared accounts'
+        : _profile.label,
+    child: AdminLoad(
+      load: () async {
+        final providers = await _profile.read('providers/oauth');
+        Map<String, dynamic> profiles;
+        try {
+          profiles = await _profile.server.read('profiles');
+        } catch (_) {
+          profiles = {};
+        }
+        return {...providers, 'profiles': profiles['profiles']};
+      },
+      builder: (context, data, refresh) {
+        final row = administrationRows(
+          data['providers'],
+        ).where((row) => row['id'] == widget.providerId).firstOrNull;
+        if (row == null) {
+          return AdminNotice(
+            'This provider is no longer available.',
+            retry: refresh,
+          );
+        }
+        final access = ProviderAccess(row);
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(
+              widget.shared ? 'Shared account' : 'Profile access',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              widget.shared
+                  ? 'Managed on ${_profile.server.connectionLabel}. Profiles may use these credentials unless they have their own access.'
+                  : 'Access observed for ${_profile.name}. Credential source: ${access.status['source_label'] ?? 'unavailable'}. Individual account ownership is not reported.',
+            ),
+            if (!widget.shared)
+              TextButton(
+                onPressed: _busy
+                    ? null
+                    : () async {
+                        try {
+                          final shared = await _profile.server
+                              .sharedProviders();
+                          if (context.mounted) {
+                            await adminPush(
+                              context,
+                              AdminProviderDetail(
+                                profile: shared,
+                                shared: true,
+                                providerId: widget.providerId,
+                              ),
+                            );
+                          }
+                          refresh();
+                        } catch (error) {
+                          if (context.mounted) {
+                            adminMessage(
+                              context,
+                              administrationError(error),
+                              isError: true,
+                            );
+                          }
+                        }
+                      },
+                child: const Text('Manage shared account'),
+              ),
+            _ProviderCard(
+              access: access,
+              selectedBy: data['profiles'] is List
+                  ? [
+                      for (final selected in administrationRows(
+                        data['profiles'],
+                      ))
+                        if (selected['provider'] == widget.providerId &&
+                            (widget.shared ||
+                                selected['name'] == _profile.name))
+                          '${selected['display_name'] is String && (selected['display_name'] as String).isNotEmpty ? selected['display_name'] : selected['name']}',
+                    ]
+                  : const [],
+              shared: widget.shared,
+              busy: _busy,
+              disconnect: () => _disconnect(row, refresh),
+              signIn: () async {
+                await adminPush(
+                  context,
+                  AdminProviderSignIn(
+                    profile: _profile,
+                    provider: row,
+                    shared: widget.shared,
+                  ),
+                );
+                refresh();
+              },
+            ),
+            TextButton(
+              onPressed: _busy ? null : refresh,
+              child: const Text('Refresh access'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+class AdminServiceKeyCatalog extends StatefulWidget {
+  const AdminServiceKeyCatalog({
+    super.key,
+    required this.profile,
+    required this.shared,
+  });
+  final ProfileAdministration profile;
+  final bool shared;
+  @override
+  State<AdminServiceKeyCatalog> createState() => _AdminServiceKeyCatalogState();
+}
+
+class _AdminServiceKeyCatalogState extends State<AdminServiceKeyCatalog> {
+  String query = '';
+  @override
+  Widget build(BuildContext context) => AdminPage(
+    title: 'Add service key',
+    scope: widget.shared
+        ? '${widget.profile.server.connectionLabel} / Shared accounts'
+        : widget.profile.label,
+    child: AdminLoad(
+      load: () => widget.profile.read('env'),
+      builder: (context, data, refresh) {
+        final entries = data.entries
+            .where(
+              (entry) =>
+                  entry.value is Map &&
+                  (entry.value as Map)['channel_managed'] != true &&
+                  (entry.value as Map)['category'] != 'custom' &&
+                  '${entry.key} ${(entry.value as Map)['provider_label'] ?? ''}'
+                      .toLowerCase()
+                      .contains(query.toLowerCase()),
+            )
+            .toList();
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            TextField(
+              decoration: const InputDecoration(
+                labelText: 'Find a service',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (value) => setState(() => query = value),
+            ),
+            const SizedBox(height: 16),
+            if (entries.isEmpty)
+              const AdminNotice('No services match this search.'),
+            AdminGroup(
+              children: [
+                for (final entry in entries)
+                  ListTile(
+                    title: Text(
+                      '${(entry.value as Map)['provider_label'] ?? entry.key}',
+                    ),
+                    subtitle: Text(
+                      '${entry.key}${(entry.value as Map)['is_set'] == true ? ' · Key stored' : ''}',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      await adminPush(
+                        context,
+                        AdminSecretPage(
+                          profile: widget.profile,
+                          name: entry.key,
+                          shared: widget.shared,
+                          isSet: (entry.value as Map)['is_set'] == true,
+                        ),
+                      );
+                      refresh();
+                    },
+                  ),
+              ],
+            ),
           ],
         );
       },
@@ -349,7 +595,7 @@ class _ProviderCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
-                      access.label,
+                      providerInventoryStatus(access),
                       style: TextStyle(
                         color: color,
                         fontWeight: FontWeight.w600,

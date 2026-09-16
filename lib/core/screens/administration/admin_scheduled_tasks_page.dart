@@ -42,7 +42,9 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    controller.refresh();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !controller.loading) controller.refresh();
+    });
     timer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (resumed &&
           mounted &&
@@ -144,7 +146,8 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             physics: const AlwaysScrollableScrollPhysics(),
             children: [
-              if (MediaQuery.textScalerOf(context).scale(16) <= 24) ...[
+              if (controller.tasks?.isEmpty == true &&
+                  MediaQuery.textScalerOf(context).scale(16) <= 24) ...[
                 Text(
                   'A little ahead of you.',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(

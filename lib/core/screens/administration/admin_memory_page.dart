@@ -51,22 +51,49 @@ class _AdminMemoryPageState extends State<AdminMemoryPage> {
               onChanged: (v) => setState(() => _query = v),
             ),
             const SizedBox(height: 12),
-            const AdminNotice(
-              'Memory correction is unavailable until the server supports safe concurrent edits. You can read retained memories here.',
-            ),
-            const AdminNotice(
-              'Exact retained-file sizes are unavailable for independently selected profiles. Budgets are measured in characters.',
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Read only'),
+              subtitle: const Text('Browse what this profile remembers'),
+              children: const [
+                Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'Editing and deleting need server support for safe concurrent changes. Memory budgets are configured in characters; actual retained-file sizes are not reported for this profile.',
+                  ),
+                ),
+              ],
             ),
             TextButton(onPressed: refresh, child: const Text('Refresh')),
             if (rows.isEmpty)
-              const AdminNotice('No retained memories in this profile.'),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Nothing remembered yet',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const AdminNotice('No retained memories in this profile.'),
+                  TextButton(
+                    onPressed: () => adminPush(
+                      context,
+                      AdminSettingsPage(
+                        profile: _profile,
+                        title: 'Memory settings',
+                        fields: memoryFields,
+                      ),
+                    ),
+                    child: const Text('Memory settings'),
+                  ),
+                ],
+              ),
             if (rows.isNotEmpty && indexed.isEmpty)
               const AdminNotice('No matching memories.'),
             for (final entry in indexed)
               ListTile(
                 title: Text('${entry.$2['title'] ?? 'Memory'}'),
                 subtitle: Text(
-                  '${entry.$2['body'] ?? ''}',
+                  '${entry.$2['body'] ?? ''}${entry.$2['source'] is String ? '\nSource: ${entry.$2['source']}' : ''}',
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                 ),

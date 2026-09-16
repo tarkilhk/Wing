@@ -1,45 +1,47 @@
-import 'studio_error.dart';
 import 'dart:async';
-
 import 'package:flutter/material.dart';
-import '../theme/wing_theme.dart';
+import '../../services/profile_gateway.dart';
+import '../../widgets/server_connection_label.dart';
+import 'admin_widgets.dart';
 
-import '../services/profile_gateway.dart';
-
-Future<bool> showProfileEditorSheet(
+Future<bool> showAdminIdentityEditor(
   BuildContext context, {
   required ProfileGateway gateway,
   required String connectionLabel,
-}) async =>
-    await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      isDismissible: false,
-      enableDrag: false,
-      builder: (_) => ProfileEditorSheet(
-        gateway: gateway,
-        connectionLabel: connectionLabel,
-      ),
-    ) ??
-    false;
+}) async {
+  final status = ServerConnectionScope.of(context);
+  return await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) {
+            final page = AdminIdentityPage(
+              gateway: gateway,
+              connectionLabel: connectionLabel,
+            );
+            return status == null
+                ? page
+                : ServerConnectionScope(status: status, child: page);
+          },
+        ),
+      ) ??
+      false;
+}
 
 /// Edits the description and SOUL owned by one captured server profile.
-class ProfileEditorSheet extends StatefulWidget {
+class AdminIdentityPage extends StatefulWidget {
   final ProfileGateway gateway;
   final String connectionLabel;
 
-  const ProfileEditorSheet({
+  const AdminIdentityPage({
     super.key,
     required this.gateway,
     required this.connectionLabel,
   });
 
   @override
-  State<ProfileEditorSheet> createState() => _ProfileEditorSheetState();
+  State<AdminIdentityPage> createState() => _AdminIdentityPageState();
 }
 
-class _ProfileEditorSheetState extends State<ProfileEditorSheet> {
+class _AdminIdentityPageState extends State<AdminIdentityPage> {
   final _description = TextEditingController();
   final _soul = TextEditingController();
   late final ProfileGateway _gateway;
@@ -268,122 +270,85 @@ class _ProfileEditorSheetState extends State<ProfileEditorSheet> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    return PopScope(
-      canPop: _allowPop,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) {
-          unawaited(_close());
-        }
-      },
-      child: FractionallySizedBox(
-        heightFactor: 0.94,
-        child: SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: EdgeInsets.fromLTRB(16, 12, 16, bottom + 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+  Widget build(BuildContext context) => PopScope(
+    canPop: _allowPop,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) unawaited(_close());
+    },
+    child: AdminPage(
+      title: 'Identity',
+      scope: '$_connectionLabel / $_profileName',
+      bottomNavigationBar: !_loaded
+          ? null
+          : AdminEditorActions(
+              dirtyCount: (_descriptionDirty ? 1 : 0) + (_soulDirty ? 1 : 0),
+              saving: _saving,
+              onClose: _close,
+              onSave: _dirty ? _save : null,
+            ),
+      child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : !_loaded
+          ? Padding(
+              padding: const EdgeInsets.all(16),
+              child: AdminNotice.error(
+                _error ?? 'This profile could not be loaded.',
+                retry: _load,
+              ),
+            )
+          : SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(
-                    child: Text(
-                      'Edit profile',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
+                  Text(
+                    'Give your agent a point of view',
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  IconButton(
-                    tooltip: 'Close profile editor',
-                    onPressed: _saving ? null : _close,
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
-              ),
-              Text(
-                '$_connectionLabel · $_profileName',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Changes are stored on the central Hermes server for this profile.',
-              ),
-              const SizedBox(height: 12),
-              if (_loading)
-                const Center(child: CircularProgressIndicator())
-              else if (!_loaded)
-                Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      StudioError(
-                        _error ?? 'This profile could not be loaded.',
-                      ),
-                      TextButton(onPressed: _load, child: const Text('Retry')),
-                    ],
-                  ),
-                )
-              else ...[
-                TextField(
-                  key: const ValueKey('profile-description-field'),
-                  controller: _description,
-                  enabled: !_saving,
-                  maxLines: 4,
-                  minLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
-                    hintText: 'What this profile is for',
-                    alignLabelWithHint: true,
-                    border: OutlineInputBorder(
-                      borderRadius: WingRadius.control,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  key: const ValueKey('profile-soul-field'),
-                  controller: _soul,
-                  enabled: !_saving,
-                  minLines: 10,
-                  maxLines: 30,
-                  decoration: const InputDecoration(
-                    labelText: 'SOUL',
-                    hintText: 'Instructions that shape this profile',
-                    alignLabelWithHint: true,
-                    border: OutlineInputBorder(
-                      borderRadius: WingRadius.control,
-                    ),
-                  ),
-                ),
-                if (_notice case final notice?) ...[
-                  const SizedBox(height: 12),
-                  Text(notice),
-                ],
-                if (_error case final error?) ...[
                   const SizedBox(height: 8),
-                  StudioError(error),
-                ],
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.icon(
-                    onPressed: _dirty && !_saving ? _save : null,
-                    icon: _saving
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.save_outlined),
-                    label: const Text('Save'),
+                  const Text(
+                    'A short description helps you recognize this profile. Its SOUL gives the agent instructions about how to work.',
                   ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+                  const SizedBox(height: 8),
+                  Text(
+                    'Stored for this profile on $_connectionLabel.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 24),
+                  if (_notice != null) AdminNotice(_notice!),
+                  if (_error != null) AdminNotice.error(_error!),
+                  TextField(
+                    key: const ValueKey('profile-description-field'),
+                    controller: _description,
+                    enabled: !_saving,
+                    minLines: 2,
+                    maxLines: 6,
+                    decoration: const InputDecoration(
+                      labelText: 'Description',
+                      hintText: 'What this profile is for',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  TextField(
+                    key: const ValueKey('profile-soul-field'),
+                    controller: _soul,
+                    enabled: !_saving,
+                    minLines: 12,
+                    maxLines: null,
+                    decoration: const InputDecoration(
+                      labelText: 'SOUL',
+                      hintText: 'Instructions that shape this profile',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+    ),
+  );
 }
 
 String _fieldLabels(Set<String> fields) => [

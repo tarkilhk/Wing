@@ -1,9 +1,11 @@
+import 'dart:async';
 import '../../widgets/server_connection_label.dart';
-import '../../widgets/studio_select.dart';
+import '../../widgets/studio_selection_tile.dart';
+import 'admin_profile_overview.dart';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 import '../../services/profile_workspace_controller.dart';
-import '../../widgets/profile_editor_sheet.dart';
+import 'admin_identity_page.dart';
 import '../profile_capabilities_screen.dart';
 import 'admin_widgets.dart';
 import 'admin_settings_page.dart';
@@ -47,9 +49,11 @@ class _HermesAdministrationContentState
         connectionStatus: widget.controller.connectionStatus,
       );
   String _search = '';
+  final _searchInput = TextEditingController();
   @override
   void dispose() {
     _tabs.dispose();
+    _searchInput.dispose();
     if (widget.repository == null) _server.close();
     super.dispose();
   }
@@ -70,25 +74,66 @@ class _HermesAdministrationContentState
         'No available profiles. Server controls remain accessible.',
       );
     }
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: StudioSelect<String>(
-        key: ValueKey(name),
-        value: name,
-        label: 'Profile',
-        options: [for (final p in profiles) (value: p.name, label: p.label)],
-        onChanged: widget.controller.switching
-            ? null
-            : (value) {
-                if (value != null) widget.controller.switchProfile(value);
-              },
-      ),
+    final selected = profiles.where((p) => p.name == name).firstOrNull;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            selected?.label ?? 'Choose a profile',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+        ),
+        TextButton(
+          onPressed: widget.controller.switching
+              ? null
+              : () async {
+                  final choice = await showModalBottomSheet<String>(
+                    context: context,
+                    isScrollControlled: true,
+                    useSafeArea: true,
+                    builder: (context) => DraggableScrollableSheet(
+                      expand: false,
+                      initialChildSize: .5,
+                      minChildSize: .25,
+                      builder: (context, scroll) => RadioGroup<String>(
+                        groupValue: name,
+                        onChanged: (value) => Navigator.pop(context, value),
+                        child: ListView(
+                          controller: scroll,
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            Text(
+                              'Choose profile',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 12),
+                            for (final profile in profiles)
+                              StudioRadioTile<String>(
+                                value: profile.name,
+                                title: Text(profile.label),
+                                subtitle: profile.description == null
+                                    ? null
+                                    : Text(profile.description!),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                  if (choice != null && mounted) {
+                    await widget.controller.switchProfile(choice);
+                    if (mounted) setState(() {});
+                  }
+                },
+          child: const Text('Change'),
+        ),
+      ],
     );
   }
 
   Future<void> _identity(ProfileAdministration profile) async {
     final workspace = widget.controller.current;
-    final changed = await showProfileEditorSheet(
+    final changed = await showAdminIdentityEditor(
       context,
       gateway: workspace?.scope == profile.scope
           ? workspace!.gateway
@@ -100,13 +145,19 @@ class _HermesAdministrationContentState
     }
   }
 
-  void _settings(
+  Future<void> _settings(
     ProfileAdministration p,
     String title,
-    List<AdminField> fields,
-  ) => adminPush(
+    List<AdminField> fields, {
+    String? initialField,
+  }) => adminPush(
     context,
-    AdminSettingsPage(profile: p, title: title, fields: fields),
+    AdminSettingsPage(
+      profile: p,
+      title: title,
+      fields: fields,
+      initialField: initialField,
+    ),
   );
 
   Widget _menu(String title, String scope, List<Widget> rows) => AdminPage(
@@ -135,7 +186,7 @@ class _HermesAdministrationContentState
   List<_Destination> _destinations(ProfileAdministration? p) => [
     _Destination(
       'Profile',
-      'Defaults',
+      'Models and reasoning',
       'Model, reasoning, helper models and fallbacks',
       Icons.tune,
       p == null
@@ -165,47 +216,19 @@ class _HermesAdministrationContentState
           ? null
           : () => adminPush(
               context,
-              _menu('Skills and tools', p.label, [
-                AdminRow(
-                  title: 'Enabled capabilities',
-                  subtitle: 'Skills, toolsets and individual switches',
-                  icon: Icons.toggle_on_outlined,
-                  onTap: () => adminPush(
-                    context,
-                    ProfileCapabilitiesScreen(
-                      gateway: p.gateway,
-                      connectionLabel: _server.connectionLabel,
-                    ),
-                  ),
+              ProfileCapabilitiesScreen(
+                gateway: p.gateway,
+                connectionLabel: _server.connectionLabel,
+                onToolSetup: (name) => adminPush(
+                  context,
+                  AdminToolSetupPage(profile: p, name: name),
                 ),
-                AdminRow(
-                  title: 'Skill library',
-                  subtitle: 'Usage, instructions and local corrections',
-                  icon: Icons.menu_book_outlined,
-                  onTap: () =>
-                      adminPush(context, AdminSkillLibraryPage(profile: p)),
-                ),
-                AdminRow(
-                  title: 'Skill Hub',
-                  subtitle: 'Preview, install and update skills',
-                  icon: Icons.download_outlined,
-                  onTap: () =>
-                      adminPush(context, AdminSkillHubPage(profile: p)),
-                ),
-                AdminRow(
-                  title: 'Tool setup',
-                  subtitle: 'Providers, keys, models and requirements',
-                  icon: Icons.build_outlined,
-                  onTap: () =>
-                      adminPush(context, AdminToolSetupList(profile: p)),
-                ),
-                AdminRow(
-                  title: 'Agent plugins',
-                  subtitle: 'Inventory and individual enablement',
-                  icon: Icons.extension_outlined,
-                  onTap: () => adminPush(context, AdminPluginsPage(profile: p)),
-                ),
-              ]),
+                onLibrary: () =>
+                    adminPush(context, AdminSkillLibraryPage(profile: p)),
+                onHub: () => adminPush(context, AdminSkillHubPage(profile: p)),
+                onPlugins: () =>
+                    adminPush(context, AdminPluginsPage(profile: p)),
+              ),
             ),
     ),
     _Destination(
@@ -218,7 +241,7 @@ class _HermesAdministrationContentState
           : () {
               final root = ModalRoute.of(context);
               final navigator = Navigator.of(context);
-              adminPush(
+              return adminPush(
                 context,
                 AdminScheduledTasksPage(
                   profile: p,
@@ -361,7 +384,14 @@ class _HermesAdministrationContentState
           field.label,
           group.key,
           Icons.tune,
-          p == null ? null : () => _settings(p, group.key, group.value),
+          p == null
+              ? null
+              : () => _settings(
+                  p,
+                  group.key,
+                  group.value,
+                  initialField: field.key,
+                ),
         ),
     _Destination(
       'Profile',
@@ -446,9 +476,21 @@ class _HermesAdministrationContentState
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: TextField(
-                  decoration: const InputDecoration(
+                  controller: _searchInput,
+                  decoration: InputDecoration(
                     hintText: 'Search settings',
-                    prefixIcon: Icon(Icons.search),
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _search.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Clear search',
+                            icon: const Icon(Icons.close),
+                            onPressed: () {
+                              _searchInput.clear();
+                              setState(() => _search = '');
+                              FocusScope.of(context).unfocus();
+                            },
+                          ),
                   ),
                   onChanged: (v) => setState(() => _search = v),
                 ),
@@ -458,25 +500,25 @@ class _HermesAdministrationContentState
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      if (!_searchDestinations(p).any(
-                        (d) => '${d.title} ${d.subtitle}'
-                            .toLowerCase()
-                            .contains(_search.toLowerCase()),
-                      ))
+                      if (!_searchDestinations(
+                        p,
+                      ).any((d) => d.matches(_search)))
                         const AdminNotice(
                           'No matching settings. Try a feature name such as memory or providers.',
                         ),
-                      for (final d in _searchDestinations(p).where(
-                        (d) => '${d.title} ${d.subtitle}'
-                            .toLowerCase()
-                            .contains(_search.toLowerCase()),
-                      ))
+                      for (final d in _searchDestinations(
+                        p,
+                      ).where((d) => d.matches(_search)))
                         AdminRow(
                           title: d.title,
                           subtitle:
-                              '${d.tab} · ${d.tab.startsWith('Profile') ? '${_server.connectionLabel} / ${p?.name ?? 'Select a profile'}' : _server.connectionLabel}',
+                              '${d.tab} › ${d.subtitle}\n${d.tab.startsWith('Profile') ? '${_server.connectionLabel} / ${p?.name ?? 'Select a profile'}' : _server.connectionLabel}',
                           icon: d.icon,
-                          onTap: d.open,
+                          onTap: d.open == null
+                              ? null
+                              : () async {
+                                  await d.open!();
+                                },
                         ),
                     ],
                   ),
@@ -494,29 +536,30 @@ class _HermesAdministrationContentState
                   child: TabBarView(
                     controller: _tabs,
                     children: [
-                      ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          _selector(),
-                          if (p == null)
+                      if (p != null)
+                        AdminProfileOverview(
+                          key: ValueKey(p.scope.storageNamespace),
+                          profile: p,
+                          metadata: widget.controller.discovery?.named(p.name),
+                          preferences: widget.controller.preferences,
+                          selector: _selector(),
+                          destinations: {
+                            for (final d in destinations.where(
+                              (d) => d.tab == 'Profile',
+                            ))
+                              d.title: d.open,
+                          },
+                        )
+                      else
+                        ListView(
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            _selector(),
                             const AdminNotice(
                               'Choose an available profile to manage its settings.',
                             ),
-                          AdminGroup(
-                            children: [
-                              for (final d in destinations.where(
-                                (d) => d.tab == 'Profile',
-                              ))
-                                AdminRow(
-                                  title: d.title,
-                                  subtitle: d.subtitle,
-                                  icon: d.icon,
-                                  onTap: d.open,
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
                       ListView(
                         padding: const EdgeInsets.all(16),
                         children: [
@@ -529,7 +572,11 @@ class _HermesAdministrationContentState
                                   title: d.title,
                                   subtitle: d.subtitle,
                                   icon: d.icon,
-                                  onTap: d.open,
+                                  onTap: d.open == null
+                                      ? null
+                                      : () async {
+                                          await d.open!();
+                                        },
                                 ),
                             ],
                           ),
@@ -557,6 +604,20 @@ class _HermesAdministrationContentState
 class _Destination {
   final String tab, title, subtitle;
   final IconData icon;
-  final VoidCallback? open;
+  final FutureOr<void> Function()? open;
   const _Destination(this.tab, this.title, this.subtitle, this.icon, this.open);
+  bool matches(String query) {
+    final vocabulary = switch (title) {
+      'Providers' ||
+      'Access and connectors' => 'API key credentials login sign-in account',
+      'Behavior' => 'timeout voice approvals compression limits',
+      'Models and reasoning' => 'models intelligence reasoning speed',
+      'Run time budget' || 'Subagent timeout' => 'timeout duration seconds',
+      'Skill Hub' => 'install discover skills',
+      _ => '',
+    };
+    return '$title $subtitle $vocabulary'.toLowerCase().contains(
+      query.trim().toLowerCase(),
+    );
+  }
 }

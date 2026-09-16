@@ -108,7 +108,7 @@ void main() {
       'three administration tabs fit ${brightness.name} and preserve ownership',
       (tester) async {
         await show(tester, brightness);
-        expect(find.text('Defaults'), findsOneWidget);
+        expect(find.text('Models and reasoning'), findsOneWidget);
         expect(find.text('Identity'), findsOneWidget);
         await screenshot(tester, '${brightness.name}-profile');
         await tester.tap(find.text('Server'));
@@ -120,8 +120,19 @@ void main() {
         await screenshot(tester, '${brightness.name}-server');
         await tester.tap(find.text('Health'));
         await tester.pumpAndSettle();
-        expect(find.text('Runtime profile: Shared root'), findsOneWidget);
         expect(find.text('Selected profile'), findsOneWidget);
+        await screenshot(tester, '${brightness.name}-health-profile');
+        await tester.scrollUntilVisible(
+          find.text('Runtime'),
+          250,
+          scrollable: find
+              .byWidgetPredicate(
+                (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Runtime profile: Shared root'), findsOneWidget);
         expect(
           admin.requests.where((r) => r.$2 == 'profiles/active').last.$3,
           isEmpty,
@@ -158,7 +169,10 @@ void main() {
       'Memory budget',
     );
     await tester.pumpAndSettle();
-    expect(find.text('Profile · Server A / personal'), findsOneWidget);
+    expect(
+      find.text('Profile › Memory settings\nServer A / personal'),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Memory budget').last);
     await tester.pumpAndSettle();
     expect(find.text('Server A / personal'), findsOneWidget);
@@ -185,7 +199,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('personal').first);
     await tester.pumpAndSettle();
-    expect(find.text('Defaults'), findsOneWidget);
+    expect(find.text('Models and reasoning'), findsOneWidget);
     expect(find.text('Create profile'), findsNothing);
   });
 
@@ -242,6 +256,16 @@ void main() {
       await show(tester, Brightness.dark);
       await tester.tap(find.text('Health'));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Doctor'),
+        250,
+        scrollable: find
+            .byWidgetPredicate(
+              (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
       expect(find.text('Profile scope unavailable'), findsOneWidget);
       expect(find.text('Doctor'), findsOneWidget);
       expect(find.text('Logs'), findsOneWidget);
@@ -255,7 +279,16 @@ void main() {
     await show(tester, Brightness.light);
     final selected = controller.current!.scope.profileName;
     admin.override = (method, path, query, body) async => {'data': []};
-    await tester.ensureVisible(find.text('Scheduled tasks'));
+    await tester.scrollUntilVisible(
+      find.text('Scheduled tasks'),
+      250,
+      scrollable: find
+          .byWidgetPredicate(
+            (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Scheduled tasks'));
     await tester.pumpAndSettle();
     expect(
@@ -264,11 +297,13 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(admin.requests.last.$2, 'cron/jobs');
-    expect(admin.requests.last.$3['profile'], selected);
+    expect(
+      admin.requests.where((r) => r.$2 == 'cron/jobs').last.$3['profile'],
+      selected,
+    );
     expect(find.text('Server A / $selected'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('Defaults'), findsOneWidget);
+    expect(find.text('Models and reasoning'), findsOneWidget);
   });
 }

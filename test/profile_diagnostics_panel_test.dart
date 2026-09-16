@@ -120,7 +120,7 @@ void main() {
     expect(
       find.text(
         'No provider credential is configured. '
-        'Configure a provider on the Hermes server.',
+        'Open provider access to configure this profile.',
       ),
       findsOneWidget,
     );
@@ -200,7 +200,7 @@ void main() {
 
     await tester.pumpWidget(_app(host.workspace('work'), textScale: 2));
 
-    expect(find.text('Diagnostics'), findsOneWidget);
+    expect(find.text('Profile checks'), findsOneWidget);
     expect(find.text('Manage connections'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

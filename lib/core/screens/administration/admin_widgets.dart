@@ -1,8 +1,10 @@
+import 'dart:async';
 import '../../widgets/server_connection_label.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/administration_repository.dart';
 import '../../widgets/studio_error.dart';
+import '../../widgets/studio_action_label.dart';
 
 /// Inherit all Studio component states and the selected app accent.
 ThemeData administrationTheme(ThemeData base) => base;
@@ -71,26 +73,141 @@ class AdminGroup extends StatelessWidget {
   );
 }
 
-class AdminRow extends StatelessWidget {
+class AdminSectionLabel extends StatelessWidget {
+  const AdminSectionLabel(this.label, {super.key});
+  final String label;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(0, 20, 0, 8),
+    child: Semantics(
+      header: true,
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    ),
+  );
+}
+
+class AdminEditorActions extends StatelessWidget {
+  const AdminEditorActions({
+    super.key,
+    required this.dirtyCount,
+    required this.saving,
+    required this.onClose,
+    required this.onSave,
+  });
+  final int dirtyCount;
+  final bool saving;
+  final VoidCallback onClose;
+  final VoidCallback? onSave;
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    top: false,
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            dirtyCount == 0
+                ? 'No unsaved changes'
+                : '$dirtyCount unsaved ${dirtyCount == 1 ? 'change' : 'changes'}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: saving ? null : onClose,
+                  child: const Text('Close'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: saving ? null : onSave,
+                  child: StudioActionLabel('Save', busy: saving),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class AdminRow extends StatefulWidget {
   final String title;
   final String subtitle;
+  final bool emphasizeChanges;
   final IconData icon;
   final VoidCallback? onTap;
   const AdminRow({
     super.key,
     required this.title,
     required this.subtitle,
+    this.emphasizeChanges = false,
     required this.icon,
     this.onTap,
   });
   @override
-  Widget build(BuildContext context) => ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-    leading: Icon(icon, size: 22),
-    title: Text(title),
-    subtitle: Text(subtitle),
-    trailing: onTap == null ? null : const Icon(Icons.chevron_right, size: 20),
-    onTap: onTap,
+  State<AdminRow> createState() => _AdminRowState();
+}
+
+class _AdminRowState extends State<AdminRow> {
+  Timer? _timer;
+  bool _changed = false;
+  @override
+  void didUpdateWidget(AdminRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.emphasizeChanges &&
+        oldWidget.subtitle != widget.subtitle &&
+        !oldWidget.subtitle.startsWith('Loading') &&
+        !MediaQuery.disableAnimationsOf(context)) {
+      _timer?.cancel();
+      _changed = true;
+      _timer = Timer(const Duration(milliseconds: 1600), () {
+        if (mounted) setState(() => _changed = false);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedContainer(
+    duration: MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 180),
+    color: _changed ? Theme.of(context).colorScheme.primaryContainer : null,
+    child: ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      minTileHeight: 64,
+      minVerticalPadding: 8,
+      leading: Icon(widget.icon, size: 22),
+      title: Text(
+        widget.title,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        widget.subtitle,
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      trailing: widget.onTap == null
+          ? null
+          : const Icon(Icons.chevron_right, size: 20),
+      onTap: widget.onTap,
+    ),
   );
 }
 

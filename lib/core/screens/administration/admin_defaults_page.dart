@@ -4,6 +4,8 @@ import '../../widgets/chat_intelligence_picker.dart';
 import '../../widgets/profile_default_model_sheet.dart';
 import 'admin_widgets.dart';
 import 'admin_settings_page.dart';
+import 'admin_providers_page.dart';
+import '../../models/provider_access.dart';
 
 class AdminDefaultsPage extends StatefulWidget {
   final ProfileAdministration profile;
@@ -94,7 +96,7 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
 
   @override
   Widget build(BuildContext context) => AdminPage(
-    title: 'Defaults',
+    title: 'Models and reasoning',
     scope: _profile.label,
     child: AdminLoad(
       load: () async {
@@ -136,6 +138,9 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
           children: [
             if (_busy) const LinearProgressIndicator(),
             if (_error != null) AdminNotice.error(_error!),
+            const AdminNotice(
+              'Applies to new chats. Existing chats keep their own model choices.',
+            ),
             AdminGroup(
               children: [
                 AdminRow(
@@ -186,6 +191,40 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
                   ),
                 ),
               ],
+            ),
+            AdminLoad(
+              expand: false,
+              load: () => _profile.read('providers/oauth'),
+              builder: (context, accessData, refreshAccess) {
+                final providerRow = administrationRows(
+                  accessData['providers'],
+                ).where((row) => row['id'] == info['provider']).firstOrNull;
+                return AdminRow(
+                  title: 'Account access',
+                  icon: Icons.key_outlined,
+                  subtitle: providerRow == null
+                      ? 'Source unavailable · Review provider access'
+                      : '${providerInventoryStatus(ProviderAccess(providerRow))} · ${(providerRow['status'] as Map?)?['source_label'] ?? 'Source unavailable'}',
+                  onTap: () async {
+                    if (providerRow == null) {
+                      await adminPush(
+                        context,
+                        AdminProvidersPage(profile: _profile, shared: false),
+                      );
+                    } else {
+                      await adminPush(
+                        context,
+                        AdminProviderDetail(
+                          profile: _profile,
+                          shared: false,
+                          providerId: providerRow['id'] as String,
+                        ),
+                      );
+                    }
+                    refreshAccess();
+                  },
+                );
+              },
             ),
             if (fields.isEmpty)
               const AdminNotice(

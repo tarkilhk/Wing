@@ -31,6 +31,7 @@ class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
   var _provider = _DiagnosticResult.notChecked;
   var _runtime = _DiagnosticResult.notChecked;
   var _checking = false;
+  DateTime? _checkedAt;
   var _generation = 0;
 
   @override
@@ -41,6 +42,7 @@ class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
         oldWidget.connectionLabel != widget.connectionLabel) {
       _generation++;
       _checking = false;
+      _checkedAt = null;
       _dashboard = _DiagnosticResult.notChecked;
       _provider = _DiagnosticResult.notChecked;
       _runtime = _DiagnosticResult.notChecked;
@@ -83,7 +85,12 @@ class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
         gateway,
       ).then((result) => publish(result, (value) => _runtime = value)),
     ]);
-    if (current()) setState(() => _checking = false);
+    if (current()) {
+      setState(() {
+        _checking = false;
+        _checkedAt = DateTime.now();
+      });
+    }
   }
 
   Future<_DiagnosticResult> _checkDashboard(ProfileGateway gateway) async {
@@ -122,7 +129,7 @@ class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
         true => const _DiagnosticResult.ready('Provider is configured.'),
         false => const _DiagnosticResult.failed(
           'No provider credential is configured. '
-          'Configure a provider on the Hermes server.',
+          'Open provider access to configure this profile.',
         ),
         _ => const _DiagnosticResult.unknown(
           'Provider status was not returned.',
@@ -165,18 +172,63 @@ class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Diagnostics', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Profile checks',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 4),
             Text(
               '${widget.connectionLabel} · ${widget.workspace.scope.profileName}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _checkedAt == null
+                  ? 'No checks completed yet.'
+                  : 'Checked ${TimeOfDay.fromDateTime(_checkedAt!).format(context)}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Text(
+              'Access and credential checks · No model request',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
-            _DiagnosticRow(
-              label: 'Dashboard and authentication',
-              result: _dashboard,
-            ),
-            _DiagnosticRow(label: 'Provider setup', result: _provider),
-            _DiagnosticRow(label: 'Runtime readiness', result: _runtime),
+            for (final finding
+                in [
+                  (
+                    label: 'Server access',
+                    result: _dashboard,
+                    action: widget.onManageConnections,
+                    actionLabel: 'Review connection',
+                  ),
+                  (
+                    label: 'Provider setup',
+                    result: _provider,
+                    action: widget.onReviewProviderAccess,
+                    actionLabel: 'Resolve provider access',
+                  ),
+                  (
+                    label: 'Credential availability',
+                    result: _runtime,
+                    action: widget.onReviewProviderAccess,
+                    actionLabel: 'Review credentials',
+                  ),
+                ]..sort(
+                  (a, b) =>
+                      _findingRank(a.result).compareTo(_findingRank(b.result)),
+                )) ...[
+              _DiagnosticRow(label: finding.label, result: finding.result),
+              if (finding.action != null &&
+                  (finding.result.state == _DiagnosticState.failed ||
+                      finding.result.state == _DiagnosticState.unknown))
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: finding.action,
+                    child: Text(finding.actionLabel),
+                  ),
+                ),
+            ],
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
@@ -242,10 +294,15 @@ class _DiagnosticRow extends StatelessWidget {
       ),
     };
     return ListTile(
+      minTileHeight: 56,
+      minVerticalPadding: 4,
       contentPadding: EdgeInsets.zero,
       leading: Icon(icon, color: color),
       title: Text(label),
-      subtitle: Text(result.message),
+      subtitle: Text(
+        result.message,
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
     );
   }
 }
@@ -273,3 +330,11 @@ class _DiagnosticResult {
     'Checking…',
   );
 }
+
+int _findingRank(_DiagnosticResult result) => switch (result.state) {
+  _DiagnosticState.failed => 0,
+  _DiagnosticState.unknown => 1,
+  _DiagnosticState.checking => 2,
+  _DiagnosticState.notChecked => 3,
+  _DiagnosticState.ready => 4,
+};

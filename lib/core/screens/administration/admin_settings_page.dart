@@ -1,5 +1,5 @@
+import 'dart:async';
 import '../../widgets/studio_select.dart';
-import '../../widgets/studio_action_label.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/compact_switch.dart';
 import '../../services/administration_repository.dart';
@@ -53,6 +53,7 @@ const executionFields = [
     'agent.max_turns',
     'Maximum turns',
     AdminFieldKind.integer,
+    help: 'Limit the model turns in one agent run.',
     minimum: 1,
   ),
   AdminField(
@@ -66,6 +67,7 @@ const executionFields = [
     'agent.api_max_retries',
     'API retries',
     AdminFieldKind.integer,
+    help: 'How many times Hermes may retry a failed model request.',
     minimum: 0,
   ),
   AdminField(
@@ -78,6 +80,7 @@ const executionFields = [
     'delegation.max_concurrent_children',
     'Concurrent subagents',
     AdminFieldKind.integer,
+    help: 'Maximum child agents working at the same time.',
     minimum: 1,
   ),
   AdminField(
@@ -100,12 +103,15 @@ const approvalFields = [
     'Approval mode',
     AdminFieldKind.choice,
     choices: ['manual', 'smart', 'off'],
+    help:
+        'Controls the server approval policy. Explicit deny rules still apply.',
   ),
   AdminField(
     'approvals.timeout',
     'Approval timeout',
     AdminFieldKind.integer,
-    help: 'Seconds',
+    help:
+        'Seconds to wait for a decision. An unanswered gateway request times out; 0 gives no waiting time.',
     minimum: 0,
   ),
   AdminField(
@@ -130,7 +136,7 @@ const compressionFields = [
     'compression.threshold',
     'Compression threshold',
     AdminFieldKind.decimal,
-    help: 'Fraction of context capacity',
+    help: 'Percent of context capacity',
     minimum: 0,
     maximum: 1,
   ),
@@ -138,7 +144,7 @@ const compressionFields = [
     'compression.target_ratio',
     'Target after compression',
     AdminFieldKind.decimal,
-    help: 'Fraction of context capacity',
+    help: 'Percent of context capacity',
     minimum: 0,
     maximum: 1,
   ),
@@ -146,6 +152,7 @@ const compressionFields = [
     'compression.protect_last_n',
     'Protect recent messages',
     AdminFieldKind.integer,
+    help: 'Number of recent messages kept during compression.',
     minimum: 0,
   ),
 ];
@@ -186,6 +193,7 @@ class AdminSettingsPage extends StatefulWidget {
   final List<AdminField> fields;
   final String? explanation;
   final Future<void> Function()? beforeSave;
+  final String? initialField;
   const AdminSettingsPage({
     super.key,
     required this.profile,
@@ -193,6 +201,7 @@ class AdminSettingsPage extends StatefulWidget {
     required this.fields,
     this.explanation,
     this.beforeSave,
+    this.initialField,
   });
   @override
   State<AdminSettingsPage> createState() => _AdminSettingsPageState();
@@ -209,6 +218,57 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
   bool _saving = false;
   bool _loading = true;
   bool _leave = false;
+  final _anchors = <String, GlobalKey>{};
+  final _conflicts = <String, Object?>{};
+  bool _emphasizeField = false;
+  Timer? _emphasisTimer;
+  int get _dirtyCount => _saved == null
+      ? 0
+      : _values.entries
+            .where(
+              (entry) => !sameSetting(entry.value, setting(_saved!, entry.key)),
+            )
+            .length;
+
+  bool _percentage(AdminField field) =>
+      field.key == 'compression.threshold' ||
+      field.key == 'compression.target_ratio';
+  String _text(AdminField field, Object? value) => value is List
+      ? value.join('\n')
+      : _percentage(field) && value is num
+      ? shiftDecimal(value.toString(), 2)
+      : value?.toString() ?? '';
+
+  Future<void> _revealField() async {
+    await WidgetsBinding.instance.endOfFrame;
+    final target = _anchors[widget.initialField]?.currentContext;
+    if (!mounted || target == null || !target.mounted) return;
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    setState(() => _emphasizeField = !reduced);
+    await Scrollable.ensureVisible(
+      target,
+      alignment: .15,
+      duration: reduced ? Duration.zero : const Duration(milliseconds: 200),
+    );
+    if (!mounted || reduced) return;
+    _emphasisTimer?.cancel();
+    _emphasisTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _emphasizeField = false);
+    });
+  }
+
+  void _resolve(AdminField field, {required bool useServer}) {
+    final latest = _conflicts.remove(field.key);
+    setState(() {
+      setSetting(_saved!, field.key, latest);
+      if (useServer) {
+        _values[field.key] = latest;
+        _inputs[field.key]?.text = _text(field, latest);
+      }
+      if (_conflicts.isEmpty) _error = null;
+    });
+  }
+
   bool get _dirty =>
       _saved != null &&
       _values.entries.any(
@@ -222,6 +282,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
 
   @override
   void dispose() {
+    _emphasisTimer?.cancel();
     for (final input in _inputs.values) {
       input.dispose();
     }
@@ -256,13 +317,17 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
       for (final field in _fields) {
         final value = setting(config, field.key);
         _values[field.key] = value;
-        final text = value is List ? value.join('\n') : value?.toString() ?? '';
+        final text = _text(field, value);
+        _anchors.putIfAbsent(field.key, GlobalKey.new);
         (_inputs[field.key] ??= TextEditingController()).text = text;
       }
     } catch (e) {
       if (mounted) _error = administrationError(e);
     }
-    if (mounted) setState(() => _loading = false);
+    if (mounted) {
+      setState(() => _loading = false);
+      if (widget.initialField != null) _revealField();
+    }
   }
 
   Future<void> _close() async {
@@ -296,13 +361,16 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
       );
       await widget.beforeSave?.call();
       final latest = await _profile.config();
-      if (changes.keys.any(
-        (key) =>
-            !sameSetting(setting(latest, key), setting(_saved!, key)) &&
-            !sameSetting(setting(latest, key), changes[key]),
-      )) {
+      _conflicts.clear();
+      for (final key in changes.keys) {
+        if (!sameSetting(setting(latest, key), setting(_saved!, key)) &&
+            !sameSetting(setting(latest, key), changes[key])) {
+          _conflicts[key] = setting(latest, key);
+        }
+      }
+      if (_conflicts.isNotEmpty) {
         throw const AdministrationFailure(
-          'These settings changed elsewhere. Your edits are kept. Close and reopen the editor to review the latest values.',
+          'These settings changed elsewhere. Compare the values below, then save your choices.',
         );
       }
       await _profile.saveSettings(changes);
@@ -339,16 +407,41 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
     }
     if (field.kind == AdminFieldKind.choice) {
       final choices = {...field.choices, if (value is String) value}.toList();
-      return StudioSelect<String>(
-        value: value is String ? value : null,
-        label: field.label,
-        options: [
-          for (final v in choices)
-            (value: v, label: v.isEmpty ? 'Server default' : v),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          StudioSelect<String>(
+            value: value is String ? value : null,
+            label: field.label,
+            options: [
+              for (final v in choices)
+                (value: v, label: v.isEmpty ? 'Server default' : v),
+            ],
+            onChanged: _saving
+                ? null
+                : (v) => setState(() => _values[field.key] = v),
+          ),
+          if (field.key == 'approvals.mode')
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(switch (value) {
+                'manual' => 'Ask you when a flagged action requires approval.',
+                'smart' =>
+                  'Hermes uses its approval model to assess flagged actions.',
+                'off' =>
+                  'Skip the recoverable approval prompts. Hard blocks and explicit deny rules still apply.',
+                _ => 'This approval mode was not recognized.',
+              }, style: Theme.of(context).textTheme.bodySmall),
+            ),
+          if (field.help.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                field.help,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
         ],
-        onChanged: _saving
-            ? null
-            : (v) => setState(() => _values[field.key] = v),
       );
     }
     final numeric = {
@@ -360,6 +453,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
       enabled: !_saving,
       decoration: InputDecoration(
         labelText: field.label,
+        suffixText: _percentage(field) ? '%' : null,
         helperText: field.help.isEmpty ? null : field.help,
         helperMaxLines: 3,
       ),
@@ -375,20 +469,24 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
         }
         final number = field.kind == AdminFieldKind.integer
             ? int.tryParse(text ?? '')
-            : double.tryParse(text ?? '');
+            : double.tryParse(
+                _percentage(field) ? shiftDecimal(text ?? '', -2) : text ?? '',
+              );
         if (number == null || !number.isFinite) return 'Enter a valid number';
         if (field.minimum != null && number < field.minimum!) {
-          return 'Minimum: ${field.minimum}';
+          return 'Minimum: ${_text(field, field.minimum)}${_percentage(field) ? '%' : ''}';
         }
         if (field.maximum != null && number > field.maximum!) {
-          return 'Maximum: ${field.maximum}';
+          return 'Maximum: ${_text(field, field.maximum)}${_percentage(field) ? '%' : ''}';
         }
         return null;
       },
       onChanged: (text) => setState(() {
         _values[field.key] = switch (field.kind) {
           AdminFieldKind.integer => int.tryParse(text),
-          AdminFieldKind.decimal => double.tryParse(text),
+          AdminFieldKind.decimal => double.tryParse(
+            _percentage(field) ? shiftDecimal(text, -2) : text,
+          ),
           AdminFieldKind.lines =>
             text
                 .split('\n')
@@ -401,6 +499,76 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
     );
   }
 
+  Widget _comparison(AdminField field) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Current server value: ${_text(field, _conflicts[field.key])}',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        Text(
+          'Your value: ${_text(field, _values[field.key])}',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        Wrap(
+          spacing: 8,
+          children: [
+            OutlinedButton(
+              onPressed: _saving
+                  ? null
+                  : () => _resolve(field, useServer: false),
+              child: const Text('Keep my value'),
+            ),
+            TextButton(
+              onPressed: _saving
+                  ? null
+                  : () => _resolve(field, useServer: true),
+              child: const Text('Use server value'),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+  Widget _compressionDiagram() => Padding(
+    padding: const EdgeInsets.only(bottom: 24),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Make room in long conversations',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Compression starts at the threshold and aims for the target below. Recent protected messages stay in context.',
+        ),
+        for (final (key, label) in [
+          ('compression.threshold', 'Start at'),
+          ('compression.target_ratio', 'Target'),
+        ])
+          if (_values[key] case final num value) ...[
+            const SizedBox(height: 12),
+            Text('$label ${shiftDecimal(value.toString(), 2)}%'),
+            const SizedBox(height: 4),
+            LinearProgressIndicator(
+              value: value.toDouble().clamp(0, 1),
+              semanticsLabel:
+                  '$label ${shiftDecimal(value.toString(), 2)} percent of capacity',
+            ),
+          ],
+        const SizedBox(height: 8),
+        Text(
+          'Configured limits · Not live usage',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: _leave || (!_dirty && !_saving),
@@ -412,24 +580,11 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
       scope: _profile.label,
       bottomNavigationBar: _loading || _saved == null
           ? null
-          : SafeArea(
-              top: false,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: Row(
-                  children: [
-                    TextButton(
-                      onPressed: _saving ? null : _close,
-                      child: const Text('Close'),
-                    ),
-                    const Spacer(),
-                    FilledButton(
-                      onPressed: _saving || !_dirty ? null : _save,
-                      child: StudioActionLabel('Save', busy: _saving),
-                    ),
-                  ],
-                ),
-              ),
+          : AdminEditorActions(
+              dirtyCount: _dirtyCount,
+              saving: _saving,
+              onClose: _close,
+              onSave: _dirty && _conflicts.isEmpty ? _save : null,
             ),
       child: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -446,22 +601,52 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                 Expanded(
                   child: Form(
                     key: _form,
-                    child: ListView(
+                    child: SingleChildScrollView(
                       padding: const EdgeInsets.all(16),
-                      children: [
-                        if (widget.explanation != null)
-                          AdminNotice(widget.explanation!),
-                        if (_error != null) AdminNotice.error(_error!),
-                        if (_fields.length < widget.fields.length)
-                          const AdminNotice(
-                            'Some settings are not exposed by this server.',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'Saved for this profile. Existing chats may keep their current settings.',
                           ),
-                        for (final field in _fields)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 20),
-                            child: _field(field),
-                          ),
-                      ],
+                          const SizedBox(height: 16),
+                          if (widget.fields.any((field) => _percentage(field)))
+                            _compressionDiagram(),
+                          if (widget.explanation != null)
+                            AdminNotice(widget.explanation!),
+                          if (_error != null) AdminNotice.error(_error!),
+                          if (_fields.length < widget.fields.length)
+                            const AdminNotice(
+                              'Some settings are not exposed by this server.',
+                            ),
+                          for (final field in _fields)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 20),
+                              child: Container(
+                                key: _anchors[field.key],
+                                decoration: BoxDecoration(
+                                  color:
+                                      _emphasizeField &&
+                                          widget.initialField == field.key
+                                      ? Theme.of(
+                                          context,
+                                        ).colorScheme.primaryContainer
+                                      : null,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    _field(field),
+                                    if (_conflicts.containsKey(field.key))
+                                      _comparison(field),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -469,4 +654,30 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
             ),
     ),
   );
+}
+
+/// Shift decimal text without introducing binary floating-point display noise.
+/// Invalid input stays invalid for the field validator.
+String shiftDecimal(String input, int places) {
+  final match = RegExp(
+    r'^([+-]?)([0-9]*)(?:\.([0-9]*))?(?:[eE]([+-]?[0-9]+))?$',
+  ).firstMatch(input.trim());
+  if (match == null) return input;
+  final whole = match[2]!;
+  final digits = whole + (match[3] ?? '');
+  if (digits.isEmpty) return input;
+  final position = whole.length + places + int.parse(match[4] ?? '0');
+  if (position.abs() > 1000) return input;
+  var result = position <= 0
+      ? '0.${'0' * -position}$digits'
+      : position >= digits.length
+      ? '$digits${'0' * (position - digits.length)}'
+      : '${digits.substring(0, position)}.${digits.substring(position)}';
+  result = result.replaceFirst(RegExp(r'^0+(?=[0-9])'), '');
+  if (result.contains('.')) {
+    result = result
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
+  }
+  return '${match[1]}$result';
 }
