@@ -89,8 +89,9 @@ class AdministrationFixture {
       };
     }
     if (path == 'learning/graph') return {'memory': [], 'nodes': []};
-    if (path == 'model/info')
+    if (path == 'model/info') {
       return {'provider': 'Example provider', 'model': 'Research model'};
+    }
     if (path == 'tools/toolsets') return {'data': []};
     if (path == 'cron/jobs') return {'data': []};
     if (path == 'mcp/servers') return {'servers': []};

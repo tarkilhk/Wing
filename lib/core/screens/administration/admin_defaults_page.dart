@@ -138,9 +138,11 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
           children: [
             if (_busy) const LinearProgressIndicator(),
             if (_error != null) AdminNotice.error(_error!),
-            const AdminNotice(
-              'Applies to new chats. Existing chats keep their own model choices.',
+            Text(
+              'New-chat defaults · Existing chats keep their model choices.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
+            const SizedBox(height: 12),
             AdminGroup(
               children: [
                 AdminRow(

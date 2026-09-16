@@ -99,7 +99,15 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('1234567890123456789'),
+        find.text('example/long-production-model'),
+        120,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('example/long-production-model'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('1,234,567,890,123,456,789'),
         120,
         scrollable: find.byType(Scrollable).last,
       );
@@ -167,6 +175,7 @@ void main() {
           120,
           scrollable: find.byType(Scrollable).first,
         );
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Start sign-in'));
         await tester.pumpAndSettle();
         await tester.scrollUntilVisible(
@@ -315,6 +324,7 @@ void main() {
           160,
           scrollable: find.byType(Scrollable).first,
         );
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Refresh'));
         await tester.pumpAndSettle();
         expect(

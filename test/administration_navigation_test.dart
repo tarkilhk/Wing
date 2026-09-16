@@ -228,25 +228,60 @@ void main() {
   );
 
   for (final brightness in Brightness.values) {
-    testWidgets(
-      'administration preserves the Iris accent in ${brightness.name}',
-      (tester) async {
-        await show(tester, brightness, accent: WorkspaceAccent.iris);
-        final theme = Theme.of(tester.element(find.byType(TabBar)));
-        expect(
-          theme.colorScheme.primary,
-          brightness == Brightness.dark
-              ? WorkspaceAccent.iris.dark
-              : WorkspaceAccent.iris.light,
-        );
-        expect(
-          theme.filledButtonTheme.style!.minimumSize!.resolve({}),
-          const Size(48, 40),
-        );
-        await screenshot(tester, '${brightness.name}-iris-profile');
-      },
-    );
+    for (final accent in WorkspaceAccent.values) {
+      testWidgets(
+        'administration preserves the ${accent.name} accent in ${brightness.name}',
+        (tester) async {
+          await show(tester, brightness, accent: accent);
+          final theme = Theme.of(tester.element(find.byType(TabBar)));
+          expect(
+            theme.colorScheme.primary,
+            brightness == Brightness.dark ? accent.dark : accent.light,
+          );
+          expect(
+            theme.filledButtonTheme.style!.minimumSize!.resolve({}),
+            const Size(48, 40),
+          );
+          await screenshot(tester, '${brightness.name}-${accent.name}-profile');
+        },
+      );
+    }
   }
+
+  testWidgets(
+    'Health findings and originating tab survive search and editor return',
+    (tester) async {
+      await show(tester, Brightness.dark);
+      await tester.tap(find.text('Health'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Run checks'),
+        200,
+        scrollable: find
+            .byWidgetPredicate(
+              (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Run checks'));
+      await tester.pumpAndSettle();
+      expect(find.text('Check again'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).first, 'Memory budget');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Memory budget').last);
+      await tester.pumpAndSettle();
+      expect(tester.testTextInput.isVisible, isFalse);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Clear search'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 2);
+      expect(find.text('Check again'), findsOneWidget);
+      expect(find.text('Run checks'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'runtime metadata failure does not hide supported server health actions',

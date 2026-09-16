@@ -37,14 +37,16 @@ const memoryFields = [
     'memory.memory_char_limit',
     'Memory budget',
     AdminFieldKind.integer,
-    help: 'Characters',
+    help:
+        'Characters retained for this profile; this is a budget, not current usage.',
     minimum: 1,
   ),
   AdminField(
     'memory.user_char_limit',
     'User preference budget',
     AdminFieldKind.integer,
-    help: 'Characters',
+    help:
+        'Characters retained for this profile; this is a budget, not current usage.',
     minimum: 1,
   ),
 ];
@@ -60,7 +62,7 @@ const executionFields = [
     'agent.run_budget_seconds',
     'Run time budget',
     AdminFieldKind.integer,
-    help: 'Seconds',
+    help: 'Seconds per agent turn. 0 removes the time budget.',
     minimum: 0,
   ),
   AdminField(
@@ -74,6 +76,7 @@ const executionFields = [
     'delegation.max_iterations',
     'Subagent iterations',
     AdminFieldKind.integer,
+    help: 'Maximum iterations available to each child agent.',
     minimum: 1,
   ),
   AdminField(
@@ -87,14 +90,17 @@ const executionFields = [
     'delegation.max_spawn_depth',
     'Subagent depth',
     AdminFieldKind.integer,
-    minimum: 0,
+    help:
+        '1 allows one level of children. Extra levels allow children to delegate and can multiply cost.',
+    minimum: 1,
   ),
   AdminField(
     'delegation.child_timeout_seconds',
     'Subagent timeout',
     AdminFieldKind.integer,
-    help: 'Seconds',
-    minimum: 1,
+    help:
+        'Seconds per child. 0 disables the timeout; positive values have a 30-second minimum on Hermes.',
+    minimum: 0,
   ),
 ];
 const approvalFields = [
@@ -395,6 +401,29 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
   Widget _field(AdminField field) {
     final value = _values[field.key];
     if (field.kind == AdminFieldKind.toggle) {
+      if (value is! bool) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(field.label, style: Theme.of(context).textTheme.bodyLarge),
+            const Text(
+              'Current value unavailable. Choose explicitly to set it.',
+            ),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final enabled in [true, false])
+                  OutlinedButton(
+                    onPressed: _saving
+                        ? null
+                        : () => setState(() => _values[field.key] = enabled),
+                    child: Text(enabled ? 'Enable' : 'Disable'),
+                  ),
+              ],
+            ),
+          ],
+        );
+      }
       return CompactSwitchListTile(
         contentPadding: EdgeInsets.zero,
         title: Text(field.label),
@@ -448,14 +477,16 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
       AdminFieldKind.integer,
       AdminFieldKind.decimal,
     }.contains(field.kind);
-    return TextFormField(
+    final largeText = MediaQuery.textScalerOf(context).scale(16) >= 24;
+    final input = TextFormField(
+      key: ValueKey('setting:${field.key}'),
       controller: _inputs[field.key],
       enabled: !_saving,
       decoration: InputDecoration(
-        labelText: field.label,
+        labelText: largeText ? null : field.label,
         suffixText: _percentage(field) ? '%' : null,
         helperText: field.help.isEmpty ? null : field.help,
-        helperMaxLines: 3,
+        helperMaxLines: 8,
       ),
       minLines: field.kind == AdminFieldKind.lines ? 3 : 1,
       maxLines: field.kind == AdminFieldKind.lines ? 6 : 1,
@@ -496,6 +527,15 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
           _ => text,
         };
       }),
+    );
+    if (!largeText) return input;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(field.label, style: Theme.of(context).textTheme.bodyLarge),
+        const SizedBox(height: 8),
+        Semantics(label: field.label, child: input),
+      ],
     );
   }
 

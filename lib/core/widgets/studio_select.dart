@@ -18,6 +18,7 @@ class StudioSelect<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) => DropdownMenu<T>(
     initialSelection: value,
+    maxLines: null,
     label: Text(label),
     enabled: onChanged != null,
     selectOnly: true,

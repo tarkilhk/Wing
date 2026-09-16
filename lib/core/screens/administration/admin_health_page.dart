@@ -62,13 +62,20 @@ class AdminHealthContent extends StatelessWidget {
       const SizedBox(height: 8),
       AdminLoad(
         expand: false,
-        load: server.runtimeIdentity,
+        load: () async => {
+          ...await server.runtimeIdentity(),
+          'observedAt': DateTime.now(),
+        },
         builder: (context, identity, refresh) {
           final label = identity['label'] as String;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(label),
+              Text(
+                'Identity checked ${TimeOfDay.fromDateTime(identity['observedAt'] as DateTime).format(context)} · Diagnostics run on request',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               if (identity['unavailable'] == true)
                 TextButton(
                   onPressed: refresh,
@@ -254,7 +261,7 @@ class _AdminUsagePageState extends State<AdminUsagePage> {
                                     semanticsLabel:
                                         '${model['model']} share of reported estimated cost',
                                     semanticsValue:
-                                        '${((model['estimated_cost'] as num) / total * 100).toStringAsFixed(1)} percent',
+                                        '${((model['estimated_cost'] as num) / total * 100).toStringAsFixed(1)}%',
                                   ),
                                 ],
                               ],

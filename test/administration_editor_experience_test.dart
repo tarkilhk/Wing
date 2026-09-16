@@ -89,7 +89,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 2));
       expect(
-        find.widgetWithText(TextFormField, 'Subagent timeout').hitTestable(),
+        find
+            .byKey(const ValueKey('setting:delegation.child_timeout_seconds'))
+            .hitTestable(),
         findsOneWidget,
       );
       expect(tester.testTextInput.isVisible, isFalse);

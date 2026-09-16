@@ -146,7 +146,7 @@ void main() {
       expect(VoicePreferences.read(prefs).input, VoiceProcessing.local);
       expect(VoicePreferences.read(prefs).output, VoiceProcessing.hermes);
       expect(find.text('Android voice'), findsNothing);
-      expect(find.textContaining('configured on the server'), findsOneWidget);
+      expect(find.textContaining('belong to the selected server profile'), findsOneWidget);
       await tester.ensureVisible(find.text('Open profile speech settings'));
       await tester.tap(find.text('Open profile speech settings'));
       expect(links, 1);

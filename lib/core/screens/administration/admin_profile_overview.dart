@@ -15,12 +15,14 @@ class AdminProfileOverview extends StatefulWidget {
   const AdminProfileOverview({
     super.key,
     required this.profile,
+    this.revision = 0,
     required this.metadata,
     required this.preferences,
     required this.selector,
     required this.destinations,
   });
   final ProfileAdministration profile;
+  final int revision;
   final HermesProfile? metadata;
   final SharedPreferences preferences;
   final Widget selector;
@@ -44,6 +46,16 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !tasks.loading) tasks.refresh();
     });
+  }
+
+  @override
+  void didUpdateWidget(AdminProfileOverview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.revision != widget.revision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refresh();
+      });
+    }
   }
 
   @override

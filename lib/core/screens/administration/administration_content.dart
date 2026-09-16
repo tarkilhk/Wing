@@ -49,6 +49,7 @@ class _HermesAdministrationContentState
         connectionStatus: widget.controller.connectionStatus,
       );
   String _search = '';
+  int _overviewRevision = 0;
   final _searchInput = TextEditingController();
   @override
   void dispose() {
@@ -495,104 +496,125 @@ class _HermesAdministrationContentState
                   onChanged: (v) => setState(() => _search = v),
                 ),
               ),
-              if (_search.isNotEmpty)
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      if (!_searchDestinations(
-                        p,
-                      ).any((d) => d.matches(_search)))
-                        const AdminNotice(
-                          'No matching settings. Try a feature name such as memory or providers.',
-                        ),
-                      for (final d in _searchDestinations(
-                        p,
-                      ).where((d) => d.matches(_search)))
-                        AdminRow(
-                          title: d.title,
-                          subtitle:
-                              '${d.tab} › ${d.subtitle}\n${d.tab.startsWith('Profile') ? '${_server.connectionLabel} / ${p?.name ?? 'Select a profile'}' : _server.connectionLabel}',
-                          icon: d.icon,
-                          onTap: d.open == null
-                              ? null
-                              : () async {
-                                  await d.open!();
-                                },
-                        ),
-                    ],
-                  ),
-                )
-              else ...[
-                TabBar(
-                  controller: _tabs,
-                  tabs: const [
-                    Tab(text: 'Profile'),
-                    Tab(text: 'Server'),
-                    Tab(text: 'Health'),
-                  ],
-                ),
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabs,
-                    children: [
-                      if (p != null)
-                        AdminProfileOverview(
-                          key: ValueKey(p.scope.storageNamespace),
-                          profile: p,
-                          metadata: widget.controller.discovery?.named(p.name),
-                          preferences: widget.controller.preferences,
-                          selector: _selector(),
-                          destinations: {
-                            for (final d in destinations.where(
-                              (d) => d.tab == 'Profile',
-                            ))
-                              d.title: d.open,
-                          },
-                        )
-                      else
-                        ListView(
-                          padding: const EdgeInsets.all(16),
-                          children: [
-                            _selector(),
-                            const AdminNotice(
-                              'Choose an available profile to manage its settings.',
-                            ),
-                          ],
-                        ),
-                      ListView(
-                        padding: const EdgeInsets.all(16),
+              Expanded(
+                child: Stack(
+                  children: [
+                    Visibility(
+                      visible: _search.isEmpty,
+                      maintainState: true,
+                      child: Column(
                         children: [
-                          AdminGroup(
-                            children: [
-                              for (final d in destinations.where(
-                                (d) => d.tab == 'Server',
-                              ))
-                                AdminRow(
-                                  title: d.title,
-                                  subtitle: d.subtitle,
-                                  icon: d.icon,
-                                  onTap: d.open == null
-                                      ? null
-                                      : () async {
-                                          await d.open!();
-                                        },
-                                ),
+                          TabBar(
+                            controller: _tabs,
+                            tabs: const [
+                              Tab(text: 'Profile'),
+                              Tab(text: 'Server'),
+                              Tab(text: 'Health'),
                             ],
+                          ),
+                          Expanded(
+                            child: TabBarView(
+                              controller: _tabs,
+                              children: <Widget>[
+                                if (p != null)
+                                  AdminProfileOverview(
+                                    key: ValueKey(p.scope.storageNamespace),
+                                    profile: p,
+                                    revision: _overviewRevision,
+                                    metadata: widget.controller.discovery
+                                        ?.named(p.name),
+                                    preferences: widget.controller.preferences,
+                                    selector: _selector(),
+                                    destinations: {
+                                      for (final d in destinations.where(
+                                        (d) => d.tab == 'Profile',
+                                      ))
+                                        d.title: d.open,
+                                    },
+                                  )
+                                else
+                                  ListView(
+                                    padding: const EdgeInsets.all(16),
+                                    children: [
+                                      _selector(),
+                                      const AdminNotice(
+                                        'Choose an available profile to manage its settings.',
+                                      ),
+                                    ],
+                                  ),
+                                ListView(
+                                  padding: const EdgeInsets.all(16),
+                                  children: [
+                                    AdminGroup(
+                                      children: [
+                                        for (final d in destinations.where(
+                                          (d) => d.tab == 'Server',
+                                        ))
+                                          AdminRow(
+                                            title: d.title,
+                                            subtitle: d.subtitle,
+                                            icon: d.icon,
+                                            onTap: d.open == null
+                                                ? null
+                                                : () async {
+                                                    await d.open!();
+                                                    if (mounted) {
+                                                      setState(
+                                                        () =>
+                                                            _overviewRevision++,
+                                                      );
+                                                    }
+                                                  },
+                                          ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                AdminHealthContent(
+                                  server: _server,
+                                  profile: p,
+                                  profileSelector: _selector(),
+                                  workspace: widget.controller.current,
+                                  onConnections: widget.onConnections,
+                                ),
+                              ].map((child) => _AdministrationTab(child: child)).toList(),
+                            ),
                           ),
                         ],
                       ),
-                      AdminHealthContent(
-                        server: _server,
-                        profile: p,
-                        profileSelector: _selector(),
-                        workspace: widget.controller.current,
-                        onConnections: widget.onConnections,
+                    ),
+                    if (_search.isNotEmpty)
+                      ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          if (!_searchDestinations(
+                            p,
+                          ).any((d) => d.matches(_search)))
+                            const AdminNotice(
+                              'No matching settings. Try a feature name such as memory or providers.',
+                            ),
+                          for (final d in _searchDestinations(
+                            p,
+                          ).where((d) => d.matches(_search)))
+                            AdminRow(
+                              title: d.title,
+                              subtitle:
+                                  '${d.tab} › ${d.subtitle}\n${d.tab.startsWith('Profile') ? '${_server.connectionLabel} / ${p?.name ?? 'Select a profile'}' : _server.connectionLabel}',
+                              icon: d.icon,
+                              onTap: d.open == null
+                                  ? null
+                                  : () async {
+                                      await d.open!();
+                                      if (mounted) {
+                                        setState(() => _overviewRevision++);
+                                      }
+                                    },
+                            ),
+                        ],
                       ),
-                    ],
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ],
           );
         },
@@ -619,5 +641,25 @@ class _Destination {
     return '$title $subtitle $vocabulary'.toLowerCase().contains(
       query.trim().toLowerCase(),
     );
+  }
+}
+
+/// Keep the originating tab's observations, findings and scroll context while
+/// searching or visiting another owner. No background operational checks run.
+class _AdministrationTab extends StatefulWidget {
+  const _AdministrationTab({required this.child});
+  final Widget child;
+  @override
+  State<_AdministrationTab> createState() => _AdministrationTabState();
+}
+
+class _AdministrationTabState extends State<_AdministrationTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }

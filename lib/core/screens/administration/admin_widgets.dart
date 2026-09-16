@@ -28,7 +28,15 @@ class AdminPage extends StatelessWidget {
     data: administrationTheme(Theme.of(context)),
     child: Builder(
       builder: (context) => Scaffold(
-        appBar: AppBar(title: Text(title), actions: actions),
+        appBar: AppBar(
+          toolbarHeight: adminToolbarHeight(
+            context,
+            title,
+            actions: actions.length,
+          ),
+          title: Text(title, maxLines: 6, softWrap: true),
+          actions: actions,
+        ),
         bottomNavigationBar: bottomNavigationBar == null
             ? null
             : Padding(
@@ -55,6 +63,33 @@ class AdminPage extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// Let long page titles grow at large text sizes instead of silently truncating.
+double adminToolbarHeight(
+  BuildContext context,
+  String title, {
+  int actions = 0,
+}) {
+  final theme = Theme.of(context);
+  final painter =
+      TextPainter(
+        text: TextSpan(
+          text: title,
+          style: theme.appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge,
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 6,
+      )..layout(
+        maxWidth: (MediaQuery.sizeOf(context).width - 88 - actions * 48).clamp(
+          80,
+          double.infinity,
+        ),
+      );
+  final height = (painter.height + 16).clamp(kToolbarHeight, double.infinity);
+  painter.dispose();
+  return height;
 }
 
 class AdminGroup extends StatelessWidget {
@@ -122,14 +157,28 @@ class AdminEditorActions extends StatelessWidget {
           Row(
             children: [
               Expanded(
+                flex: 2,
                 child: TextButton(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
                   onPressed: saving ? null : onClose,
                   child: const Text('Close'),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
+                flex: 3,
                 child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
                   onPressed: saving ? null : onSave,
                   child: StudioActionLabel('Save', busy: saving),
                 ),
@@ -168,7 +217,8 @@ class _AdminRowState extends State<AdminRow> {
     super.didUpdateWidget(oldWidget);
     if (widget.emphasizeChanges &&
         oldWidget.subtitle != widget.subtitle &&
-        !oldWidget.subtitle.startsWith('Loading') &&
+        !oldWidget.subtitle.toLowerCase().contains('loading') &&
+        !oldWidget.subtitle.contains('Schedules unavailable') &&
         !MediaQuery.disableAnimationsOf(context)) {
       _timer?.cancel();
       _changed = true;
@@ -185,11 +235,13 @@ class _AdminRowState extends State<AdminRow> {
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedContainer(
-    duration: MediaQuery.disableAnimationsOf(context)
+  Widget build(BuildContext context) => Material(
+    animationDuration: MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : const Duration(milliseconds: 180),
-    color: _changed ? Theme.of(context).colorScheme.primaryContainer : null,
+    color: _changed
+        ? Theme.of(context).colorScheme.primaryContainer
+        : Colors.transparent,
     child: ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 12),
       minTileHeight: 64,

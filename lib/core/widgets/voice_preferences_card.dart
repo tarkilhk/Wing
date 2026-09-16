@@ -227,161 +227,154 @@ class _VoicePreferencesCardState extends State<VoicePreferencesCard>
   @override
   Widget build(BuildContext context) {
     final voices = _capabilities?.voices ?? [];
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _engine(
-              'Voice input',
-              VoicePreferences.inputKey,
-              _preferences.input,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              _preferences.input == VoiceProcessing.local
-                  ? 'Transcribe on this phone. Review the text before sending.'
-                  : 'Send a recording to the selected Hermes profile and its speech provider. Review the text before sending.',
-            ),
-            if (_preferences.input == VoiceProcessing.local) ...[
-              const SizedBox(height: 12),
-              if (_capabilities?.recognitionAvailable == false)
-                const Text(
-                  'On-device recognition is unavailable. It requires Android 12 or later and a supported speech service.',
-                )
-              else if (!_loading)
-                _languageChoice(),
-            ],
-            const SizedBox(height: 24),
-            _engine(
-              'Voice output',
-              VoicePreferences.outputKey,
-              _preferences.output,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              _preferences.output == VoiceProcessing.local
-                  ? 'Read aloud with an installed offline Android voice.'
-                  : 'Send reply text to the selected Hermes profile for speech generation.',
-            ),
-            if (_preferences.output == VoiceProcessing.local && !_loading) ...[
-              const SizedBox(height: 12),
-              StudioSelect<String>(
-                key: ValueKey('android-voice-${_preferences.voice}'),
-                label: 'Android voice',
-                value: _preferences.voice,
-                options: [
-                  const (value: '', label: 'Offline voice for device language'),
-                  for (final voice in voices)
-                    (value: voice.id, label: voice.label),
-                  if (_preferences.voice.isNotEmpty &&
-                      !voices.any((v) => v.id == _preferences.voice))
-                    (
-                      value: _preferences.voice,
-                      label: '${_preferences.voice} · unavailable',
-                    ),
-                ],
-                onChanged: _saving
-                    ? null
-                    : (value) {
-                        if (value != null) {
-                          _save(VoicePreferences.voiceKey, value);
-                        }
-                      },
-              ),
-              if (voices.isEmpty)
-                const Text(
-                  'No installed offline voices found. Install voice data in Android text-to-speech settings, then refresh.',
-                ),
-              const SizedBox(height: 12),
-              StudioSelect<String>(
-                key: ValueKey('voice-rate-${_preferences.rate}'),
-                label: 'Speaking speed',
-                value: _preferences.rate.toString(),
-                options: const [
-                  (value: '0.8', label: 'Slower'),
-                  (value: '1.0', label: 'Normal'),
-                  (value: '1.2', label: 'Faster'),
-                ],
-                onChanged: _saving
-                    ? null
-                    : (value) {
-                        if (value != null) {
-                          _save(VoicePreferences.rateKey, value);
-                        }
-                      },
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: _saving || voices.isEmpty
-                      ? null
-                      : () {
-                          if (_preview.owner != null) {
-                            _preview.stop();
-                          } else {
-                            _preview.speak(
-                              'preview',
-                              'This is the voice Wing will use to read replies aloud.',
-                              VoicePreferences(
-                                voice: _preferences.voice,
-                                rate: _preferences.rate,
-                              ),
-                              () => throw StateError(
-                                'Local preview cannot use Hermes.',
-                              ),
-                            );
-                          }
-                        },
-                  icon: Icon(
-                    _preview.owner == null
-                        ? Icons.volume_up_outlined
-                        : Icons.stop,
-                  ),
-                  label: Text(
-                    _preview.owner == null
-                        ? 'Preview Android voice'
-                        : 'Stop preview',
-                  ),
-                ),
-              ),
-              if (_preview.error != null) StudioError(_preview.error!),
-            ],
-            if (_preferences.input == VoiceProcessing.hermes ||
-                _preferences.output == VoiceProcessing.hermes) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Hermes voices, languages and providers are configured on the server for each profile, in Server administration. ${widget.hermesProfileLabel == null ? 'Connect to a profile to open its settings.' : 'Current profile: ${widget.hermesProfileLabel}.'}',
-              ),
-              if (widget.openHermesSettings != null)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: () async {
-                      await _preview.stop();
-                      if (mounted) widget.openHermesSettings?.call();
-                    },
-                    child: const Text('Open profile speech settings'),
-                  ),
-                ),
-            ],
-            const SizedBox(height: 12),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Saved on this phone',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 16),
+        _engine('Voice input', VoicePreferences.inputKey, _preferences.input),
+        const SizedBox(height: 12),
+        Text(
+          _preferences.input == VoiceProcessing.local
+              ? 'Transcribe on this phone. Review the text before sending.'
+              : 'Send a recording to the selected Hermes profile and its speech provider. Review the text before sending.',
+        ),
+        if (_preferences.input == VoiceProcessing.local) ...[
+          const SizedBox(height: 12),
+          if (_capabilities?.recognitionAvailable == false)
             const Text(
-              'Input and output are independent. Wing never switches processing engines automatically.',
+              'On-device recognition is unavailable. It requires Android 12 or later and a supported speech service.',
+            )
+          else if (!_loading)
+            _languageChoice(),
+        ],
+        const SizedBox(height: 24),
+        _engine(
+          'Voice output',
+          VoicePreferences.outputKey,
+          _preferences.output,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          _preferences.output == VoiceProcessing.local
+              ? 'Read aloud with an installed offline Android voice.'
+              : 'Send reply text to the selected Hermes profile for speech generation.',
+        ),
+        if (_preferences.output == VoiceProcessing.local && !_loading) ...[
+          const SizedBox(height: 12),
+          StudioSelect<String>(
+            key: ValueKey('android-voice-${_preferences.voice}'),
+            label: 'Android voice',
+            value: _preferences.voice,
+            options: [
+              const (value: '', label: 'Offline voice for device language'),
+              for (final voice in voices) (value: voice.id, label: voice.label),
+              if (_preferences.voice.isNotEmpty &&
+                  !voices.any((v) => v.id == _preferences.voice))
+                (
+                  value: _preferences.voice,
+                  label: '${_preferences.voice} · unavailable',
+                ),
+            ],
+            onChanged: _saving
+                ? null
+                : (value) {
+                    if (value != null) {
+                      _save(VoicePreferences.voiceKey, value);
+                    }
+                  },
+          ),
+          if (voices.isEmpty)
+            const Text(
+              'No installed offline voices found. Install voice data in Android text-to-speech settings, then refresh.',
             ),
-            if (_loading) const LinearProgressIndicator(),
-            if (_error != null) StudioError(_error!),
+          const SizedBox(height: 12),
+          StudioSelect<String>(
+            key: ValueKey('voice-rate-${_preferences.rate}'),
+            label: 'Speaking speed',
+            value: _preferences.rate.toString(),
+            options: const [
+              (value: '0.8', label: 'Slower'),
+              (value: '1.0', label: 'Normal'),
+              (value: '1.2', label: 'Faster'),
+            ],
+            onChanged: _saving
+                ? null
+                : (value) {
+                    if (value != null) {
+                      _save(VoicePreferences.rateKey, value);
+                    }
+                  },
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _saving || voices.isEmpty
+                  ? null
+                  : () {
+                      if (_preview.owner != null) {
+                        _preview.stop();
+                      } else {
+                        _preview.speak(
+                          'preview',
+                          'This is the voice Wing will use to read replies aloud.',
+                          VoicePreferences(
+                            voice: _preferences.voice,
+                            rate: _preferences.rate,
+                          ),
+                          () => throw StateError(
+                            'Local preview cannot use Hermes.',
+                          ),
+                        );
+                      }
+                    },
+              icon: Icon(
+                _preview.owner == null ? Icons.volume_up_outlined : Icons.stop,
+              ),
+              label: Text(
+                _preview.owner == null
+                    ? 'Preview Android voice'
+                    : 'Stop preview',
+              ),
+            ),
+          ),
+          if (_preview.error != null) StudioError(_preview.error!),
+        ],
+        if (_preferences.input == VoiceProcessing.hermes ||
+            _preferences.output == VoiceProcessing.hermes) ...[
+          const SizedBox(height: 12),
+          Text(
+            'Hermes speech settings belong to the selected server profile. ${widget.hermesProfileLabel == null ? 'Connect to a profile to open its settings.' : 'Current profile: ${widget.hermesProfileLabel}.'}',
+          ),
+          if (widget.openHermesSettings != null)
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton(
-                onPressed: _loading ? null : _load,
-                child: const Text('Refresh Android voices and languages'),
+                onPressed: () async {
+                  await _preview.stop();
+                  if (mounted) widget.openHermesSettings?.call();
+                },
+                child: const Text('Open profile speech settings'),
               ),
             ),
-          ],
+        ],
+        const SizedBox(height: 12),
+        const Text(
+          'Input and output are independent. Wing never switches processing engines automatically.',
         ),
-      ),
+        if (_loading) const LinearProgressIndicator(),
+        if (_error != null) StudioError(_error!),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: _loading ? null : _load,
+            child: const Text('Refresh Android voices and languages'),
+          ),
+        ),
+      ],
     );
   }
 }

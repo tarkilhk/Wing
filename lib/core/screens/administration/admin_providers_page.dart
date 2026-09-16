@@ -75,7 +75,7 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                       .toLowerCase()
                       .contains(_query.toLowerCase()) &&
                   (_filter == 'All' ||
-                      (_filter == 'Connected' &&
+                      (_filter == 'Stored' &&
                           p.state == ProviderAccessState.connected) ||
                       (_filter == 'Needs attention' && p.needsAttention)),
             )
@@ -94,10 +94,11 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            AdminNotice(
+            Text(
               widget.shared
                   ? 'Shared sign-ins for profiles on this server.'
-                  : 'This profile can use shared sign-ins or its own credentials.',
+                  : 'Shared or profile credentials · Availability is not a model test.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             if (!widget.shared)
               TextButton(
@@ -136,7 +137,7 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
               children: [
                 for (final (label, count) in [
                   ('All', providers.length),
-                  ('Connected', connected),
+                  ('Stored', connected),
                   ('Needs attention', attention),
                 ])
                   ChoiceChip(
@@ -162,12 +163,6 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                 ),
               ],
             ),
-            const Padding(
-              padding: EdgeInsets.only(bottom: 12),
-              child: Text(
-                'Several providers can be connected at once. Status reflects stored credentials.',
-              ),
-            ),
             if (selections['profiles'] is! List)
               const AdminNotice(
                 'Profile selections could not be loaded. Refresh to retry.',
@@ -185,6 +180,7 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                     ),
                     subtitle: Text(
                       '${providerInventoryStatus(access)} · ${access.external ? 'Managed externally' : access.status['source_label'] ?? 'Source not reported'}',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,

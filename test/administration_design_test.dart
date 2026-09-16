@@ -1,0 +1,173 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wing/core/screens/administration/admin_defaults_page.dart';
+import 'package:wing/core/screens/administration/admin_health_page.dart';
+import 'package:wing/core/screens/administration/admin_identity_page.dart';
+import 'package:wing/core/screens/administration/admin_memory_page.dart';
+import 'package:wing/core/screens/administration/admin_providers_page.dart';
+import 'package:wing/core/screens/administration/admin_settings_page.dart';
+import 'package:wing/core/screens/profile_capabilities_screen.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/profile_workspace_theme.dart';
+import 'package:wing/core/widgets/voice_preferences_card.dart';
+import 'support/administration_design_fixture.dart';
+import 'support/voice_fixture.dart';
+
+void main() {
+  const capture = bool.fromEnvironment('CAPTURE_ADMINISTRATION');
+  setUpAll(() async {
+    if (!capture) return;
+    const root = String.fromEnvironment('CAPTURE_FONT_DIR');
+    for (final font in {
+      'Roboto': 'roboto-regular.ttf',
+      'MaterialIcons': 'materialicons-regular.otf',
+    }.entries) {
+      await (FontLoader(font.key)..addFont(
+            File(
+              '$root/${font.value}',
+            ).readAsBytes().then((b) => b.buffer.asByteData()),
+          ))
+          .load();
+    }
+  });
+  Future<void> snapshot(WidgetTester tester, String name) async {
+    if (!capture) return;
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(const ValueKey('capture')),
+    );
+    await tester.runAsync(() async {
+      final image = await boundary.toImage(pixelRatio: 1.5);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      final file = File('build/administration-preview/$name.png');
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(data!.buffer.asUint8List());
+      image.dispose();
+    });
+  }
+
+  for (final mode in ['light', 'dark', 'narrow', 'wide']) {
+    for (final family in [
+      'models',
+      'identity',
+      'memory',
+      'memory-detail',
+      'providers',
+      'provider-detail',
+      'service-keys',
+      'capabilities',
+      'compression',
+      'usage',
+      'voice',
+    ]) {
+      testWidgets('$family layout $mode', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        final preferences = await SharedPreferences.getInstance();
+        final fixture = AdministrationDesignFixture();
+        final profile = fixture.server.profile('personal');
+        final narrow = mode == 'narrow';
+        tester.view.physicalSize = Size(
+          narrow
+              ? 320
+              : mode == 'wide'
+              ? 840
+              : 390,
+          844,
+        );
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final page = switch (family) {
+          'models' => AdminDefaultsPage(profile: profile),
+          'identity' => AdminIdentityPage(
+            gateway: fixture.identityGateway(),
+            connectionLabel: 'Home server',
+          ),
+          'memory' => AdminMemoryPage(profile: profile),
+          'memory-detail' => AdminMemoryDetail(
+            profile: profile,
+            id: 'memory:MEMORY.md:0',
+          ),
+          'providers' => AdminProvidersPage(profile: profile, shared: false),
+          'provider-detail' => AdminProviderDetail(
+            profile: profile,
+            shared: false,
+            providerId: 'research',
+          ),
+          'service-keys' => AdminServiceKeyCatalog(
+            profile: profile,
+            shared: false,
+          ),
+          'capabilities' => ProfileCapabilitiesScreen(
+            gateway: profile.gateway,
+            connectionLabel: 'Home server',
+            onToolSetup: (_) async {},
+            onLibrary: () async {},
+            onHub: () async {},
+            onPlugins: () async {},
+          ),
+          'compression' => AdminSettingsPage(
+            profile: profile,
+            title: 'Compression',
+            fields: compressionFields,
+          ),
+          'usage' => AdminUsagePage(profile: profile),
+          _ => Scaffold(
+            appBar: AppBar(title: const Text('Voice')),
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: VoicePreferencesCard(
+                preferences: preferences,
+                device: VoiceDeviceFixture(),
+              ),
+            ),
+          ),
+        };
+        await tester.pumpWidget(
+          MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: profileWorkspaceTheme(
+              wingTheme(
+                mode == 'light' || mode == 'wide'
+                    ? Brightness.light
+                    : Brightness.dark,
+              ),
+              accent: mode == 'wide'
+                  ? WorkspaceAccent.gold
+                  : WorkspaceAccent.mint,
+            ),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(narrow ? 2 : 1),
+                disableAnimations: narrow,
+              ),
+              child: RepaintBoundary(
+                key: const ValueKey('capture'),
+                child: child!,
+              ),
+            ),
+            home: page,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await snapshot(tester, '$mode-$family');
+        // Exercise the full scrollable extent, including controls outside the capture.
+        final scrolls = find.byType(Scrollable);
+        if (scrolls.evaluate().isNotEmpty) {
+          for (var step = 0; step < 8; step++) {
+            await tester.drag(scrolls.first, const Offset(0, -500));
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+          }
+          await snapshot(tester, '$mode-$family-bottom');
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      });
+    }
+  }
+}

@@ -62,7 +62,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Connected (2)'), findsOneWidget);
+      expect(find.text('Stored (2)'), findsOneWidget);
       expect(find.text('Needs attention (1)'), findsOneWidget);
       expect(
         tester.getTopLeft(find.byKey(const ValueKey('provider-expired'))).dy,
@@ -71,7 +71,7 @@ void main() {
         ),
       );
       expect(find.byTooltip('Renew expired sign-in'), findsOneWidget);
-      await tester.tap(find.text('Connected (2)'));
+      await tester.tap(find.text('Stored (2)'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Sign-in expired'), findsNothing);
       await tester.tap(find.text('alpha'));
@@ -100,11 +100,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('Last checked'), findsOneWidget);
       await tester.scrollUntilVisible(
-        find.text('Connected (2)'),
+        find.text('Stored (2)'),
         -250,
         scrollable: pageScroll,
       );
-      expect(find.text('Connected (2)'), findsOneWidget);
+      expect(find.text('Stored (2)'), findsOneWidget);
       expect(fixture.requests.every((r) => r.$1 == 'GET'), isTrue);
       expect(tester.takeException(), isNull);
     },

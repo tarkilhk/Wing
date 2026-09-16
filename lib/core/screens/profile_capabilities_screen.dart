@@ -1,3 +1,4 @@
+import 'administration/admin_widgets.dart';
 import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
 
@@ -200,7 +201,12 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
         .toList();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Skills and tools'),
+        toolbarHeight: adminToolbarHeight(
+          context,
+          'Skills and tools',
+          actions: 1,
+        ),
+        title: const Text('Skills and tools', maxLines: 6, softWrap: true),
         actions: [
           IconButton(
             tooltip: 'Refresh capabilities',
