@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Restore the conversation's Unassigned/project selector as a separate action from connection details. Add searchable Studio project selection, refreshed connection status details, accessible header actions and enlarged-text layouts.
 - Filter chats in place by tapping a project, with a selected background shade and tap-again clearing. Keep Recents unchanged, hide empty pinned sections, and create new chats in the selected project.
 - Show the saved connection icon, then the status light and connection name in Chats and conversation headers, matching the other connection rows.
 - Remove the redundant Edit button from the connection address card; use Back to return to the address step.

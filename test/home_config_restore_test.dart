@@ -151,7 +151,7 @@ void main() {
     await tester.tap(icon);
     await tester.pumpAndSettle();
     expect(find.text('Connection icon'), findsOneWidget);
-    expect(find.text('Server access: Not checked'), findsNothing);
+    expect(find.text('Server access'), findsNothing);
     expect(find.byType(ProfileWorkspaceScreen), findsNothing);
     await tester.tap(find.byKey(const ValueKey('connection-icon-home')));
     await tester.tap(find.text('Save icon'));
@@ -159,7 +159,7 @@ void main() {
     expect(manager.getConnections().single.icon, ConnectionIcon.home);
     await tester.tap(led);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Server access:'), findsOneWidget);
+    expect(find.text('Server access'), findsOneWidget);
     expect(find.text('Connection icon'), findsNothing);
     expect(find.byType(ProfileWorkspaceScreen), findsNothing);
   });

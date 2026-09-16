@@ -1,4 +1,6 @@
 import '../widgets/studio_error.dart';
+import '../theme/wing_theme.dart';
+import 'profile_project_actions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/hermes_profile.dart';
@@ -217,105 +219,305 @@ Future<void> showChatProjectPicker(
       .toList();
   // A row can disappear when its project reloads after a successful move.
   final messenger = ScaffoldMessenger.of(context);
-  var moving = false;
-  String? error;
-  final target = await showDialog<Map<String, dynamic>>(
+  final currentProject = resource.projects
+      .where(
+        (project) =>
+            project['id'] == currentProjectId ||
+            (cwd != null && ProfileGateway.projectDirectory(project) == cwd),
+      )
+      .firstOrNull;
+  final target = await showModalBottomSheet<Map<String, dynamic>>(
     context: context,
-    barrierDismissible: false,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => PopScope(
-        canPop: !moving,
-        child: AlertDialog(
-          title: const Text('Move to project'),
-          content: SizedBox(
-            width: 360,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Projects in ${resource.scope.profileName}. This changes the chat\'s working folder.',
-                ),
-                const SizedBox(height: 16),
-                if (error != null) ...[
-                  StudioError(error!),
-                  const SizedBox(height: 12),
-                ],
-                if (moving) ...[
-                  const LinearProgressIndicator(),
-                  const SizedBox(height: 12),
-                ],
-                if (projects.isEmpty)
-                  const Text(
-                    'No other projects with a working folder are available.',
-                  )
-                else
-                  Flexible(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: projects.length,
-                      itemBuilder: (context, index) {
-                        final project = projects[index];
-                        return ListTile(
-                          key: ValueKey('move-project-${project['id']}'),
-                          enabled: !moving,
-                          leading: const Icon(Icons.folder_outlined),
-                          title: Text(project['name'] as String),
-                          subtitle: Text(
-                            ProfileGateway.projectDirectory(project),
-                          ),
-                          onTap: moving
-                              ? null
-                              : () async {
-                                  setState(() {
-                                    moving = true;
-                                    error = null;
-                                  });
-                                  try {
-                                    final moved = await controller
-                                        .moveSessionToProject(key, project);
-                                    if (!context.mounted) return;
-                                    if (moved) {
-                                      Navigator.pop(context, project);
-                                    } else {
-                                      setState(() {
-                                        moving = false;
-                                        error =
-                                            'A change to this chat is already in progress. Try again.';
-                                      });
-                                    }
-                                  } catch (e) {
-                                    if (!context.mounted) return;
-                                    setState(() {
-                                      moving = false;
-                                      error = switch (e) {
-                                        StateError e => e.message.toString(),
-                                        FormatException e => e.message,
-                                        _ => 'Could not move this chat. $e',
-                                      };
-                                    });
-                                  }
-                                },
-                        );
-                      },
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: moving ? null : () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-          ],
-        ),
-      ),
+    isScrollControlled: true,
+    useSafeArea: true,
+    isDismissible: false,
+    enableDrag: false,
+    constraints: const BoxConstraints(maxWidth: 640),
+    builder: (context) => _ChatProjectSheet(
+      projects: projects,
+      currentProject: currentProject,
+      profileName: resource.scope.profileName,
+      move: (project) => controller.moveSessionToProject(key, project),
     ),
   );
   if (target != null && messenger.mounted) {
     messenger.showSnackBar(
       SnackBar(content: Text('Moved to ${target['name']}')),
+    );
+  }
+}
+
+class _ChatProjectSheet extends StatefulWidget {
+  const _ChatProjectSheet({
+    required this.projects,
+    required this.currentProject,
+    required this.profileName,
+    required this.move,
+  });
+
+  final List<Map<String, dynamic>> projects;
+  final Map<String, dynamic>? currentProject;
+  final String profileName;
+  final Future<bool> Function(Map<String, dynamic>) move;
+
+  @override
+  State<_ChatProjectSheet> createState() => _ChatProjectSheetState();
+}
+
+class _ChatProjectSheetState extends State<_ChatProjectSheet> {
+  final search = TextEditingController();
+  Map<String, dynamic>? moving;
+  String? error;
+
+  @override
+  void dispose() {
+    search.dispose();
+    super.dispose();
+  }
+
+  Future<void> move(Map<String, dynamic> project) async {
+    if (moving != null) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      moving = project;
+      error = null;
+    });
+    try {
+      final moved = await widget.move(project);
+      if (!mounted) return;
+      if (moved) {
+        Navigator.pop(context, project);
+        return;
+      }
+      setState(() {
+        moving = null;
+        error = 'A change to this chat is already in progress. Try again.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        moving = null;
+        error = switch (e) {
+          StateError e => e.message.toString(),
+          FormatException e => e.message,
+          _ => 'Could not move this chat. $e',
+        };
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final query = search.text.trim().toLowerCase();
+    final projects = widget.projects
+        .where(
+          (project) =>
+              project['name'].toString().toLowerCase().contains(query) ||
+              ProfileGateway.projectDirectory(
+                project,
+              ).toLowerCase().contains(query),
+        )
+        .toList();
+    final current = widget.currentProject;
+    return PopScope(
+      canPop: moving == null,
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: SafeArea(
+          top: false,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight:
+                  MediaQuery.sizeOf(context).height * .85 -
+                  MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: Padding(
+              key: const ValueKey('chat-project-sheet'),
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Move to project',
+                            style: theme.textTheme.headlineSmall,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Projects in ${widget.profileName}',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                          const SizedBox(height: 16),
+                          Semantics(
+                            selected: true,
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primaryContainer,
+                                borderRadius: WingRadius.card,
+                              ),
+                              child: Row(
+                                children: [
+                                  if (current != null)
+                                    projectAvatar(context, current, size: 32)
+                                  else
+                                    const Icon(
+                                      Icons.folder_open_outlined,
+                                      size: 24,
+                                    ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Current project',
+                                          style: theme.textTheme.labelSmall,
+                                        ),
+                                        Text(
+                                          current?['name'] as String? ??
+                                              'Unassigned',
+                                          style: theme.textTheme.titleSmall,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Choose a project to change this chat’s working folder.',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                          const SizedBox(height: 16),
+                          if (widget.projects.isNotEmpty) ...[
+                            TextField(
+                              key: const ValueKey('project-picker-search'),
+                              controller: search,
+                              enabled: moving == null,
+                              onChanged: (_) => setState(() {}),
+                              decoration: InputDecoration(
+                                hintText: 'Find a project',
+                                prefixIcon: const Icon(Icons.search),
+                                suffixIcon: search.text.isEmpty
+                                    ? null
+                                    : IconButton(
+                                        tooltip: 'Clear search',
+                                        onPressed: moving == null
+                                            ? () {
+                                                search.clear();
+                                                setState(() {});
+                                              }
+                                            : null,
+                                        icon: const Icon(Icons.close),
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          if (error != null) ...[
+                            Semantics(
+                              liveRegion: true,
+                              child: StudioError(error!),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          if (projects.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              child: Text(
+                                widget.projects.isEmpty
+                                    ? 'No other projects with a working folder are available.'
+                                    : 'No matching projects. Try another name or folder.',
+                              ),
+                            )
+                          else
+                            Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: theme.colorScheme.outlineVariant,
+                                ),
+                                borderRadius: WingRadius.card,
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: Column(
+                                children: [
+                                  for (var i = 0; i < projects.length; i++) ...[
+                                    if (i > 0) const Divider(height: 1),
+                                    ListTile(
+                                      key: ValueKey(
+                                        'move-project-${projects[i]['id']}',
+                                      ),
+                                      enabled: moving == null,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 4,
+                                          ),
+                                      minTileHeight: 64,
+                                      leading: projectAvatar(
+                                        context,
+                                        projects[i],
+                                        size: 32,
+                                      ),
+                                      title: Text(
+                                        projects[i]['name'] as String,
+                                      ),
+                                      subtitle: Text(
+                                        ProfileGateway.projectDirectory(
+                                          projects[i],
+                                        ),
+                                        style: theme.textTheme.bodySmall,
+                                      ),
+                                      trailing: moving == projects[i]
+                                          ? const SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                semanticsLabel: 'Moving chat',
+                                              ),
+                                            )
+                                          : null,
+                                      onTap: moving == null
+                                          ? () => move(projects[i])
+                                          : null,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: moving == null
+                          ? () => Navigator.pop(context)
+                          : null,
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

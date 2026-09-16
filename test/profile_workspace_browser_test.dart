@@ -79,7 +79,7 @@ void main() {
     await tester.pumpAndSettle();
     final header = find.descendant(
       of: find.byType(AppBar),
-      matching: find.text('Prestige · Mobile app'),
+      matching: find.text('Mobile app'),
     );
     expect(header, findsOneWidget);
     expect(find.byTooltip('Switch profile'), findsNothing);
@@ -104,7 +104,7 @@ void main() {
     );
     await show(tester);
     await tester.pumpAndSettle();
-    expect(find.text('Prestige · Mobile app'), findsOneWidget);
+    expect(find.text('Mobile app'), findsOneWidget);
     expect(controller.current!.chat!.projectId, 'p2');
   });
 
@@ -117,7 +117,7 @@ void main() {
     );
     await show(tester);
     await tester.pumpAndSettle();
-    expect(find.text('Prestige · Unassigned'), findsOneWidget);
+    expect(find.text('Unassigned'), findsOneWidget);
   });
 
   testWidgets('project lookup failure keeps the chat accessible', (
@@ -129,7 +129,7 @@ void main() {
     );
     await show(tester);
     await tester.pumpAndSettle();
-    expect(find.text('Prestige · Project unavailable'), findsOneWidget);
+    expect(find.text('Project unavailable'), findsOneWidget);
     expect(find.byTooltip('Back to sessions'), findsOneWidget);
   });
 

@@ -6,6 +6,63 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
 
 void main() {
+  testWidgets('connection details retain live status and retry behavior', (
+    tester,
+  ) async {
+    final status = ServerConnectionStatus('Claw');
+    addTearDown(status.dispose);
+    status.liveChanged('chat', false);
+    var retries = 0;
+    status.retry = () async {
+      retries++;
+      status.beginRecovery('chat');
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: ServerConnectionLabel(label: 'Claw', status: status),
+        ),
+      ),
+    );
+    final semantics = tester.ensureSemantics();
+    expect(
+      tester.getSemantics(find.byType(ServerConnectionLabel)),
+      matchesSemantics(
+        label: 'Claw, Disconnected. Connection details',
+        isButton: true,
+        isFocusable: true,
+        hasTapAction: true,
+      ),
+    );
+    semantics.dispose();
+    await tester.tap(find.byType(ServerConnectionLabel));
+    await tester.pumpAndSettle();
+    expect(find.text('Disconnected'), findsOneWidget);
+    await tester.tap(find.text('Retry connection'));
+    await tester.pumpAndSettle();
+    expect(retries, 1);
+    expect(find.text('Reconnecting'), findsOneWidget);
+    expect(
+      tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed,
+      isNull,
+    );
+    status.accessAvailable();
+    status.liveChanged('chat', true);
+    status.endRecovery('chat');
+    await tester.pumpAndSettle();
+    expect(find.text('Connected'), findsOneWidget);
+    expect(find.text('Available'), findsNWidgets(2));
+    expect(find.text('Retry connection'), findsNothing);
+    await tester.tap(find.byTooltip('Close connection details'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connection details'), findsNothing);
+  });
+
   for (final brightness in Brightness.values) {
     testWidgets(
       'server label and details fit narrow enlarged ${brightness.name}',
@@ -19,21 +76,22 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             theme: wingTheme(brightness),
-            home: MediaQuery(
+            builder: (context, child) => MediaQuery(
               data: const MediaQueryData(
                 size: Size(320, 700),
                 textScaler: TextScaler.linear(2),
                 disableAnimations: true,
               ),
-              child: Scaffold(
-                body: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: ServerConnectionLabel(
-                    label: status.label,
-                    icon: ConnectionIcon.rocket,
-                    status: status,
-                    suffix: 'Travel',
-                  ),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: Padding(
+                padding: const EdgeInsets.all(16),
+                child: ServerConnectionLabel(
+                  label: status.label,
+                  icon: ConnectionIcon.rocket,
+                  status: status,
+                  suffix: 'Travel',
                 ),
               ),
             ),
@@ -58,8 +116,8 @@ void main() {
         expect(fade.opacity.value, 1);
         await tester.tap(find.byType(ServerConnectionLabel));
         await tester.pumpAndSettle();
-        expect(find.text('Server access: Not checked'), findsOneWidget);
-        expect(find.text('Live chat: Not checked'), findsOneWidget);
+        expect(find.text('Server access'), findsOneWidget);
+        expect(find.text('Live chat'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
         status.dispose();

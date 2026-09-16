@@ -230,6 +230,24 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         );
       }
       final parentSessionId = controller.parentSessionId(chat);
+      final stackChatScope =
+          MediaQuery.textScalerOf(context).scale(12) > 18 &&
+          MediaQuery.sizeOf(context).width < 480;
+      final canMoveProject =
+          !chat.opening &&
+          !chat.offlineSnapshot &&
+          !controller.switching &&
+          !(current?.mutatingSessions.contains(chat.key.sessionId) ?? false);
+      void openProjectPicker() => unawaited(
+        _run(
+          () => showChatProjectPicker(
+            context,
+            controller,
+            chat.key,
+            currentProjectId: chat.projectId,
+          ),
+        ),
+      );
       return PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
@@ -248,7 +266,9 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           drawer: _drawer(),
           appBar: AppBar(
             toolbarHeight:
-                96 + (MediaQuery.textScalerOf(context).scale(20) - 20),
+                96 +
+                (MediaQuery.textScalerOf(context).scale(20) - 20) +
+                (stackChatScope ? 48 : 0),
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
               tooltip: 'Back to sessions',
@@ -260,27 +280,8 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 Tooltip(
                   message: 'Move to project',
                   child: InkWell(
-                    key: const ValueKey('chat-project-picker'),
-                    borderRadius: BorderRadius.circular(8),
-                    onTap:
-                        chat.opening ||
-                            chat.offlineSnapshot ||
-                            controller.switching ||
-                            (current?.mutatingSessions.contains(
-                                  chat.key.sessionId,
-                                ) ??
-                                false)
-                        ? null
-                        : () => unawaited(
-                            _run(
-                              () => showChatProjectPicker(
-                                context,
-                                controller,
-                                chat.key,
-                                currentProjectId: chat.projectId,
-                              ),
-                            ),
-                          ),
+                    borderRadius: WingRadius.card,
+                    onTap: canMoveProject ? openProjectPicker : null,
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(
                         minHeight: 48,
@@ -301,15 +302,81 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     ),
                   ),
                 ),
-                ServerConnectionLabel(
-                  alignment: Alignment.topLeft,
-                  label: controller.connection.label,
-                  icon: controller.connection.icon,
-                  status: controller.connectionStatus,
-                  suffix: chat.opening || chat.offlineSnapshot
-                      ? chat.key.workspace.profileName
-                      : controller.chatProjectLabel(chat),
-                  style: Theme.of(context).textTheme.labelMedium,
+                Flex(
+                  direction: stackChatScope ? Axis.vertical : Axis.horizontal,
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Flexible(
+                      child: ServerConnectionLabel(
+                        alignment: Alignment.topLeft,
+                        label: controller.connection.label,
+                        icon: controller.connection.icon,
+                        status: controller.connectionStatus,
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Tooltip(
+                        message: 'Move to project',
+                        child: Semantics(
+                          button: true,
+                          enabled: canMoveProject,
+                          focusable: canMoveProject,
+                          onTap: canMoveProject ? openProjectPicker : null,
+                          label:
+                              '${controller.chatProjectLabel(chat)}. Move to project',
+                          excludeSemantics: true,
+                          child: InkWell(
+                            key: const ValueKey('chat-project-picker'),
+                            borderRadius: WingRadius.control,
+                            onTap: canMoveProject ? openProjectPicker : null,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                minHeight: 48,
+                                minWidth: 48,
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        chat.opening || chat.offlineSnapshot
+                                            ? chat.key.workspace.profileName
+                                            : controller.chatProjectLabel(chat),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelMedium
+                                            ?.copyWith(
+                                              color: canMoveProject
+                                                  ? Theme.of(
+                                                      context,
+                                                    ).colorScheme.primary
+                                                  : Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurfaceVariant,
+                                            ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 2),
+                                    const Icon(Icons.expand_more, size: 16),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
