@@ -935,6 +935,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                 if (resource != null)
                   WorkspaceConnectionStatus(
                     status: controller.connectionStatus,
+                    reserveSpace: false,
                   ),
                 if (controller.error != null)
                   ListTile(

@@ -377,6 +377,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               if (controller.switching) const LinearProgressIndicator(),
               WorkspaceConnectionStatus(
                 status: controller.connectionStatus,
+                reserveSpace: true,
                 showHint: !chat.opening || chat.messages.isNotEmpty,
               ),
               if (controller.error != null)
@@ -1906,7 +1907,10 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               ),
             ),
           if (_destination != AppDestination.settings)
-            WorkspaceConnectionStatus(status: controller.connectionStatus),
+            WorkspaceConnectionStatus(
+              status: controller.connectionStatus,
+              reserveSpace: false,
+            ),
           if (controller.error != null &&
               _destination != AppDestination.settings)
             ListTile(

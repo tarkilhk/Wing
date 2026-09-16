@@ -2,13 +2,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/server_connection_status.dart';
 
-/// Reserve a quiet line so delayed recovery feedback never shifts the reader.
+/// Quiet recovery feedback, with space reserved only when reading a transcript.
 class WorkspaceConnectionStatus extends StatefulWidget {
   final ServerConnectionStatus status;
+  final bool reserveSpace;
   final bool showHint;
   const WorkspaceConnectionStatus({
     super.key,
     required this.status,
+    required this.reserveSpace,
     this.showHint = true,
   });
   @override
@@ -64,7 +66,9 @@ class _WorkspaceConnectionStatusState extends State<WorkspaceConnectionStatus> {
   @override
   Widget build(BuildContext context) => SizedBox(
     key: const ValueKey('workspace-connection-status'),
-    height: MediaQuery.textScalerOf(context).scale(16) + 8,
+    height: widget.reserveSpace || (_show && widget.showHint)
+        ? MediaQuery.textScalerOf(context).scale(16) + 8
+        : 0,
     child: _show && widget.showHint
         ? Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
