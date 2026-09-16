@@ -16,16 +16,19 @@ import 'admin_connectors_page.dart';
 import 'admin_tool_setup_page.dart';
 import 'admin_skills_page.dart';
 import 'admin_operations_page.dart';
+import 'admin_scheduled_tasks_page.dart';
 
 class HermesAdministrationContent extends StatefulWidget {
   final ProfileWorkspaceController controller;
   final VoidCallback? onConnections;
   final AdministrationRepository? repository;
+  final Future<void> Function(ProfileSessionKey) onOpenSession;
   const HermesAdministrationContent({
     super.key,
     required this.controller,
     this.onConnections,
     this.repository,
+    required this.onOpenSession,
   });
   @override
   State<HermesAdministrationContent> createState() =>
@@ -204,6 +207,31 @@ class _HermesAdministrationContentState
                 ),
               ]),
             ),
+    ),
+    _Destination(
+      'Profile',
+      'Scheduled tasks',
+      'Schedules, runs and results',
+      Icons.event_repeat_outlined,
+      p == null
+          ? null
+          : () {
+              final root = ModalRoute.of(context);
+              final navigator = Navigator.of(context);
+              adminPush(
+                context,
+                AdminScheduledTasksPage(
+                  profile: p,
+                  preferences: widget.controller.preferences,
+                  onOpenSession: (key) async {
+                    await widget.onOpenSession(key);
+                    if (navigator.mounted) {
+                      navigator.popUntil((route) => route == root);
+                    }
+                  },
+                ),
+              );
+            },
     ),
     _Destination(
       'Profile',

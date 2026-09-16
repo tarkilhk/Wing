@@ -42,6 +42,12 @@ Respond to supported approval scopes and structured clarification. Dedicated sud
 
 Administration separates Profile, Server and Health. It includes supported model defaults, SOUL/description, skills/toolsets, shared provider accounts and explicit overrides, MCP controls, profile lifecycle, settings, diagnostics, logs and usage. Unsupported writes are labelled, including individual memory edits and per-tool MCP changes. Eligible backend updates support deliberate single-host or selected-host actions with separate outcomes.
 
+Profile / Scheduled tasks manages server-run routines. Create a task or start from
+a template, choose its schedule, model and result destinations, pause/resume it,
+run it now, and open recent run conversations. Hermes runs the schedule while
+Wing is closed. Interrupted requests keep an explicit uncertainty state instead
+of automatically submitting duplicate work.
+
 App settings groups device preferences into Appearance, Chat, Notifications and About. Appearance includes a live chat preview, paired light/dark themes, accent colors and text size. Chat explains the default action during work; Notifications groups alert preferences and delivery recovery. About contains the installed version, release links and offline privacy policy. Configuration export/import transfers connections, credentials and allowlisted preferences; it is not a full draft/app backup.
 
 The Connections toolbar provides Backup configuration and Restore configuration, in that order. Backup offers an optional passphrase before sharing the file. Leave it blank for a plain JSON backup, including readable credentials, or enter and confirm a passphrase to encrypt it. Restore accepts either format and only needs a passphrase for encrypted files. Restore is also available before adding a first connection.

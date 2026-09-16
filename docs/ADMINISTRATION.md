@@ -1,6 +1,6 @@
 # Administration
 
-Administration uses Profile, Server and Health tabs. The selected server stays visible. Profile has Defaults, Identity, Memory, Skills and tools, Access and connectors, and Behavior. Server has Connection, Providers, Profiles and Runtime. Health separates runtime observations from selected-profile diagnostics and usage.
+Administration uses Profile, Server and Health tabs. The selected server stays visible. Profile has Defaults, Identity, Memory, Skills and tools, Scheduled tasks, Access and connectors, and Behavior. Server has Connection, Providers, Profiles and Runtime. Health separates runtime observations from selected-profile diagnostics and usage.
 
 Read the [ownership handoff](design/2026-09-14-administration-handoff.md) before changing these flows. The [roadmap](ADMINISTRATION_ROADMAP.md) preserves selected priorities and exclusions.
 
@@ -32,6 +32,42 @@ Read the [ownership handoff](design/2026-09-14-administration-handoff.md) before
 | A42 | Rolling 1/7/30/90/365-day usage with per-model sessions, calls, tokens and estimated cost | Hermes estimates, not provider invoices. Missing usage is not invented. |
 | A44 | Guided STT/TTS provider setup and supported model/voice/language/automatic-speech defaults | Basic schema-supported portion only. Engine installation and advanced tuning are excluded. |
 | A45 | Settings search across owning destinations and supported field labels | Import/export/reset remain P2. |
+| A48–A49 | Profile-owned scheduled tasks: search/filter, details, create/edit, templates, model/delivery choices, pause/resume/run/delete and recent run conversations | Hermes executes schedules. One-time completion may remove the task. Script-only tasks may have no conversation. No Android scheduler or new notification subscription is created. |
+
+## Scheduled tasks
+
+Open Profile / Scheduled tasks to manage the selected profile's routines. Each
+task shows its next run and state. Tap it for instructions, delivery, model,
+last-run details and recent conversations. Search and All / Active / Paused /
+Needs attention filters affect only this list. Opening a run works independently
+of the Chats “Include automated chats” filter.
+
+New task supports daily, weekday, weekly, monthly, hourly and interval schedules,
+one-time dates/delays, and custom expressions. Server templates provide starting
+points. Recurrences use Hermes' effective timezone; Wing labels it as Hermes time
+when the server does not establish its name. Run timestamps use phone time.
+One-time dates chosen on the phone are sent as explicit UTC instants. Editing a
+name or instructions leaves an unchanged schedule's anchor intact.
+
+“Save on server” stores results in Hermes, not on the phone. Other choices come
+from the connected server's delivery catalog, which is not a claim that every
+profile has its own configured channel. Destinations missing a home channel
+need server setup. Missing catalog entries are not silently removed from an
+existing task. A model override is paired with its provider; Profile default
+resolves at run time. Custom endpoint routing and script/skill execution settings
+remain server-managed; common-field edits do not erase them.
+
+Run now can take as long as the task itself. Leaving its detail screen does not
+resubmit or cancel it. Running a paused task explicitly confirms “Resume and
+run”; pausing a schedule does not stop a run already underway. A lost response
+keeps an uncertainty notice and blocks another request until reconciliation or
+explicit review. Only task IDs, operation names and prior run timestamps are
+journaled locally, not instructions. Partial scheduler registration failures
+retain the saved task identity and prevent duplicate creation.
+
+Recent runs starts with 20 conversations and can expand to the latest 100.
+Failures remain distinct from an empty history. No task-specific Stop command,
+script upload, workflow builder or unlimited history is provided.
 
 ## Ownership and credentials
 

@@ -76,6 +76,7 @@ void main() {
           home: Scaffold(
             appBar: AppBar(title: const Text('Administration')),
             body: HermesAdministrationContent(
+              onOpenSession: (_) async {},
               controller: controller,
               repository: admin.server,
               onConnections: () {},
@@ -247,4 +248,27 @@ void main() {
       expect(find.text('Retry runtime identity'), findsOneWidget);
     },
   );
+
+  testWidgets('scheduled tasks opens from Profile with captured ownership', (
+    tester,
+  ) async {
+    await show(tester, Brightness.light);
+    final selected = controller.current!.scope.profileName;
+    admin.override = (method, path, query, body) async => {'data': []};
+    await tester.ensureVisible(find.text('Scheduled tasks'));
+    await tester.tap(find.text('Scheduled tasks'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'No scheduled tasks for this profile. Start with a morning briefing or a weekly review.',
+      ),
+      findsOneWidget,
+    );
+    expect(admin.requests.last.$2, 'cron/jobs');
+    expect(admin.requests.last.$3['profile'], selected);
+    expect(find.text('Server A / $selected'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Defaults'), findsOneWidget);
+  });
 }

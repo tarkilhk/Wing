@@ -22,6 +22,7 @@ Keep logs and generated captures under ignored `build/`. Record source revision,
 | Launcher shortcuts | `test/android_launcher_shortcut_contract_test.dart`, `test/android_launch_intent_service_test.dart`, `test/home_config_restore_test.dart`, `tools/qa/check_launcher_shortcut.py` |
 | Slash profile scope | `test/slash_profile_live_contract_test.dart`, `integration_test/slash_commands_live_test.dart` |
 | Connection setup | `test/connection_address_test.dart`, `test/connection_setup_probe_test.dart`, `test/connection_setup_transport_test.dart`, `test/connection_setup_screen_test.dart` |
+| Scheduled tasks | `test/scheduled_tasks_*_test.dart`, `integration_test/scheduled_tasks_native_test.dart` |
 | Design renders | `test/studio_layout_test.dart`, `test/studio_controls_test.dart`, `test/studio_layout_regressions_test.dart`, `test/administration_navigation_test.dart` |
 
 Read a driver's environment flags, mutations and cleanup before running it. Use disposable profiles/chats and owned fixtures on an authorized server. Live tests may invoke models, modify profile settings or start host tools. Restore changed values and independently verify cleanup; a green assertion that records `backend_limited` is not successful feature acceptance.
@@ -44,6 +45,27 @@ Connection journey renders use `test/connection_setup_screen_test.dart` with
 `--dart-define=CAPTURE_FONT_DIR=<Flutter SDK>/bin/cache/artifacts/material_fonts`.
 Captures go under `build/connection-review/`. The transport test uses a disposable
 local HTTP/WebSocket server and sends no model message.
+
+Scheduled-task renders use `test/scheduled_tasks_screens_test.dart` with
+`--dart-define=CAPTURE_SCHEDULED_TASKS=true` and
+`--dart-define=CAPTURE_FONT_DIR=<Flutter SDK>/bin/cache/artifacts/material_fonts`.
+This renderer loads the SDK's case-sensitive `Roboto-Regular.ttf` and
+`MaterialIcons-Regular.otf` files. Captures go to `build/scheduled-tasks-review/`.
+It covers both themes, all five accents, and 320 dp at 200% text. The native
+integration driver uses production screens with an in-memory transport on a
+disposable emulator; it does not contact a real agent.
+
+`test/scheduled_tasks_live_test.dart` is separately opt-in via
+`--dart-define=SCHEDULED_TASKS_LIVE=true`. It targets loopback port 9847 (override
+with `SCHEDULED_TASKS_PORT`) using the normal local dashboard handshake. Start
+the unchanged Hermes server with an isolated disposable `HERMES_HOME`, a
+`mobile-test` profile, and `scripts/probe.sh` inside that profile containing only
+`printf 'Scheduled task acceptance passed\n'`. Headless Hermes serves the local
+token handshake without a web build. The driver creates paused agent tasks,
+runs only the harmless script task, briefly creates/pauses a template, then
+deletes and verifies removal of its owned jobs. Do not use a production data
+directory. This establishes scheduling API and script execution behavior; it
+does not establish paid model inference or external messaging delivery.
 
 The control and layout regression suites export with
 `--dart-define=STUDIO_AUDIT_REVIEW=true` and

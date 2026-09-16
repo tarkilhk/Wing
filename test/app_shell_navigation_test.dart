@@ -159,6 +159,7 @@ void main() {
     await show(tester);
     await navigate(tester, AppDestination.administration);
     await tester.ensureVisible(find.text('Behavior'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Behavior'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Execution'));

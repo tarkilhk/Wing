@@ -1966,6 +1966,13 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               _ => HermesAdministrationContent(
                 key: ValueKey(controller.connectionIdentity),
                 controller: controller,
+                onOpenSession: (key) async {
+                  await controller.openSession(
+                    key,
+                    propagateHistoryFailure: true,
+                  );
+                  if (mounted) _selectDestination(AppDestination.chats);
+                },
                 onConnections: () =>
                     _selectDestination(AppDestination.connections),
               ),

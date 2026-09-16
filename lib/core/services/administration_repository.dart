@@ -23,6 +23,9 @@ class AdministrationRepository {
   final AdministrationRequest request;
   final ProfileGateway Function(String name) gateway;
   final void Function() _close;
+  int _leases = 0;
+  bool _closing = false;
+  bool _closed = false;
 
   AdministrationRepository({
     required this.connectionId,
@@ -55,6 +58,11 @@ class AdministrationRepository {
       connectionIdentity: identity,
       connectionLabel: connection.label,
       request: (method, endpoint, query, body) async {
+        if (endpoint.startsWith('cron/')) {
+          return connectionStatus.observeAccess(
+            () => dashboard.cronRequest(method, endpoint, query, body),
+          );
+        }
         final path = Uri.parse(
           endpoint,
         ).replace(queryParameters: query.isEmpty ? null : query).toString();
@@ -93,7 +101,23 @@ class AdministrationRepository {
     );
   }
 
-  void close() => _close();
+  void retain() {
+    if (_closed) throw StateError('Administration connection is closed');
+    _leases++;
+  }
+
+  void release() {
+    _leases--;
+    if (_closing && _leases == 0) close();
+  }
+
+  void close() {
+    _closing = true;
+    if (_leases == 0 && !_closed) {
+      _closed = true;
+      _close();
+    }
+  }
 
   Future<Map<String, dynamic>> read(
     String endpoint, [

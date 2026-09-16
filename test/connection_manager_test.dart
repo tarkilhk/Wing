@@ -782,14 +782,6 @@ void main() {
   });
 
   group('DashboardClient', () {
-    test('wraps cron job updates for dashboard endpoint', () {
-      final updates = {'name': 'Daily', 'no_agent': true};
-
-      expect(DashboardClient.buildCronUpdateBody(updates), {
-        'updates': updates,
-      });
-    });
-
     test(
       'logs in and authenticates /api calls with the session cookie',
       () async {

@@ -147,6 +147,7 @@ void main() {
         home: Scaffold(
           appBar: AppBar(title: const Text('Administration')),
           body: HermesAdministrationContent(
+            onOpenSession: (_) async {},
             controller: controller,
             onConnections: () {},
           ),

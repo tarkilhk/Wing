@@ -92,6 +92,30 @@ class DashboardHttpException implements Exception {
   String toString() => 'HTTP $statusCode';
 }
 
+class CronHttpException extends DashboardHttpException {
+  const CronHttpException(super.statusCode, super.endpoint, this.detail);
+  final Object? detail;
+  bool get uncertain => statusCode >= 500 || statusCode == 408;
+  String get description {
+    if (statusCode == 424) {
+      return 'The task was saved, but its schedule could not be registered. Review it before creating another.';
+    }
+    if (statusCode == 404) {
+      return 'This task or scheduling feature is no longer available. Refresh the list.';
+    }
+    if (statusCode == 401 || statusCode == 403) {
+      return 'Sign in to this server again to manage scheduled tasks.';
+    }
+    if ({400, 409, 422}.contains(statusCode) && detail is String) {
+      final text = (detail as String)
+          .replaceAll(RegExp(r'[\x00-\x08\x0b-\x1f]'), '')
+          .trim();
+      return text.length > 500 ? '${text.substring(0, 500)}…' : text;
+    }
+    return 'The server could not confirm this request (HTTP $statusCode).';
+  }
+}
+
 class DashboardResponseTooLargeException implements Exception {
   final int maxBytes;
 
@@ -1544,46 +1568,47 @@ class DashboardClient {
     body: {'scope': scope, 'provider': provider, 'model': model},
   );
 
-  // ── Cron job management ──────────────────────────────────────────────
-
-  Future<Map<String, dynamic>> createJob({
-    required String prompt,
-    required String schedule,
-    String name = '',
-    String deliver = 'local',
-  }) => apiPost(
-    'cron/jobs',
-    body: {
-      'prompt': prompt,
-      'schedule': schedule,
-      'name': name,
-      'deliver': deliver,
-    },
-  );
-
-  static Map<String, dynamic> buildCronUpdateBody(
-    Map<String, dynamic> updates,
-  ) => {'updates': updates};
-
-  Future<Map<String, dynamic>> updateJob(
-    String jobId,
-    Map<String, dynamic> updates, {
+  /// Current cron API, with structured rejection details and a timeout scoped
+  /// to the synchronous trigger operation. No transport retry after uncertainty.
+  Future<Map<String, dynamic>> cronRequest(
+    String method,
+    String endpoint,
+    Map<String, String> query,
+    Map<String, dynamic>? body, {
     bool retried = false,
   }) async {
-    final headers = await _authHeaders();
-    final res = await _http.put(
-      Uri.parse('$_baseUrl/api/cron/jobs/$jobId'),
-      headers: headers,
-      body: jsonEncode(buildCronUpdateBody(updates)),
-    );
-    if (res.statusCode == 401 && !retried) {
+    final uri = Uri.parse(
+      '$_baseUrl/api/$endpoint',
+    ).replace(queryParameters: query);
+    final request = http.Request(method, uri)
+      ..headers.addAll(
+        await _authHeaders().timeout(const Duration(seconds: 45)),
+      );
+    if (body != null) request.body = jsonEncode(body);
+    final timeout =
+        method == 'POST' &&
+            RegExp(r'^cron/jobs/[^/]+/trigger$').hasMatch(endpoint)
+        ? const Duration(hours: 24)
+        : const Duration(seconds: 45);
+    final response = await _http
+        .send(request)
+        .then(http.Response.fromStream)
+        .timeout(timeout);
+    if (response.statusCode == 401 && !retried) {
       _resetAuth();
-      return updateJob(jobId, updates, retried: true);
+      return cronRequest(method, endpoint, query, body, retried: true);
     }
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw Exception('HTTP ${res.statusCode}');
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      Object? detail;
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map) detail = decoded['detail'];
+      } on FormatException {
+        // HTML proxy errors are not safe or useful UI copy.
+      }
+      throw CronHttpException(response.statusCode, endpoint, detail);
     }
-    return jsonDecode(res.body) as Map<String, dynamic>;
+    return _decodeMapResponse(response);
   }
 
   void close() => _http.close();

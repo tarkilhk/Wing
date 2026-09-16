@@ -55,8 +55,8 @@ P0 covers frequent phone work or unblocking a task. P1 covers recovery and occas
 | A45 | Settings search, scoped import/export/reset | P1/P2 |
 | A46 | Messaging channel health, pairing approve/revoke | Separate candidate |
 | A47 | Channel enablement/credentials/configuration/restart and Telegram onboarding | Separate candidate |
-| A48 | Cron list/search/history/pause/resume/run-now/delete | Separate candidate |
-| A49 | Cron authoring/editing/blueprints/delivery/model overrides | Separate candidate |
+| A48 | Cron list/search/history/pause/resume/run-now/delete | Implemented under Profile / Scheduled tasks |
+| A49 | Cron authoring/editing/blueprints/delivery/model overrides | Implemented; advanced execution/custom endpoint settings remain server-managed |
 | A50 | Webhook service/subscriptions/configuration/one-time secrets/delivery | Separate candidate |
 | A51 | Bots, canonical chats, groups and memberships | Separate candidate |
 | A52 | Plugin-gated Kanban boards/tasks/runs/orchestration | Separate candidate |
@@ -73,6 +73,6 @@ Shared provider accounts belong under Server. Profile holds default models, effe
 
 For mixed P1/P2 rows, keep implemented narrow settings distinct from advanced configuration. Raw MCP import, mixture-of-agents, memory-provider reset, curator controls, vault record administration, billing, broad import/export and installation flows remain subject to their stated priority and actual backend support.
 
-A46–A52 remain separate candidates. A53–A55 remain excluded from this administration scope. A56 covers local alerts only; see [Notifications](BACKGROUND_NOTIFICATIONS.md).
+A46–A47 and A50–A52 remain separate candidates. A48–A49 are implemented under Profile / Scheduled tasks; see [Administration](ADMINISTRATION.md#scheduled-tasks) for contract boundaries. A53–A55 remain excluded from this administration scope. A56 covers local alerts only; see [Notifications](BACKGROUND_NOTIFICATIONS.md).
 
 Use the [testing guide](TESTING.md) for recorded acceptance boundaries. New provider sign-ins, SDK installs and backend self-updates need their own verification; passing settings readback does not establish those operations.

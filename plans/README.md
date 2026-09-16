@@ -1,4 +1,15 @@
-# Notification proposal
+# Implementation plans
+
+| Plan | Priority | Effort | Dependencies | Status |
+| --- | --- | --- | --- | --- |
+| [002: Profile scheduled tasks](002-profile-scheduled-tasks.md) | P1 | L | None | DONE — scoped tests, native and local backend acceptance |
+
+Plan 002 implements desktop scheduling features in a Studio administration flow.
+Verified on 17 September 2026 with focused regressions, rendered review, native
+checks and an isolated local Hermes server. Its verification record identifies
+unrelated full-suite failures and live model/delivery limits.
+
+## Notification proposal
 
 Prepared with the improve skill on 2026-09-16; refined after the owner requested
 simpler scope. Implemented and verified on 2026-09-16.

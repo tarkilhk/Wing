@@ -10,6 +10,7 @@ This is the current ownership contract for the Profile, Server and Health design
 | Profile / Identity | Description and SOUL; link to Server / Profiles for lifecycle |
 | Profile / Memory | Search/read, enablement and character budgets; unavailable edit/delete until safe IDs exist |
 | Profile / Skills and tools | Installed skills, provenance, instructions, usage, local edits/archive, Hub, toolsets and a distinct agent-plugin page |
+| Profile / Scheduled tasks | Per-profile schedules, task editing/templates, execution actions and recent run conversations; connected-server delivery discovery |
 | Profile / Access and connectors | Effective provider access, links to shared account owners, explicit credential overrides and profile MCP configuration |
 | Profile / Behavior | Supported execution limits, approval policy, basic compression, reach/recovery policy and backend voice defaults |
 | Server / Connection | Device-held endpoint/password/headers and connection test/repair |
@@ -20,6 +21,12 @@ This is the current ownership contract for the Profile, Server and Health design
 | Health / Selected profile | Scoped readiness and usage; recovery links to the owning editor |
 
 Keep tab roots short. Use categorized rows and drill-downs, sheets for short choices and dedicated screens for inventories and long editors. Search results identify the owner and navigate to the single editor. Health links to settings; it does not duplicate their forms.
+
+The owner approved scheduled-task implementation on 17 September 2026 and asked
+for a polished, focused surface independent of a future administration redesign.
+Its dedicated list/detail/editor uses Studio tokens, a prominent next-run line,
+readable instructions and reachable actions. Do not expand this change into
+restyling the other administration destinations.
 
 Keep the connection visible across tabs. Profile selection belongs in Profile and the selected-profile section of Health. Server writes must not appear profile-scoped. Android appearance, notifications, dictation/playback and composer preferences stay in App settings.
 
