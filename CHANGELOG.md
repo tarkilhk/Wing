@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Remove the redundant Edit button from the connection address card; use Back to return to the address step.
 - Choose from 16 Studio-style connection icons during setup or from the connection's Appearance menu. Store each choice locally and include it in configuration exports and imports; existing connections and older backups use the standard server icon.
 - Increase spacing between connection status lights and connection names.
 

@@ -461,10 +461,6 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
                   ),
                 ),
               ),
-              TextButton(
-                onPressed: _saving ? null : () => _go(_Step.address),
-                child: const Text('Edit'),
-              ),
             ],
           ),
           if (_access.chatUrl.isNotEmpty) ...[
