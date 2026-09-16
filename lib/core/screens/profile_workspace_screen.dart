@@ -366,8 +366,6 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                             ),
                                       ),
                                     ),
-                                    const SizedBox(width: 2),
-                                    const Icon(Icons.expand_more, size: 16),
                                   ],
                                 ),
                               ),
