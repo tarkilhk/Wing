@@ -8,12 +8,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:url_launcher_platform_interface/link.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
+import 'package:wing/core/config/support_wing.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/support_wing_section.dart';
 
-// A real public service homepage used only with a fake platform launcher.
-// This is not a contribution destination and is never configured in the app.
-final _testUri = Uri.https('ko-fi.com');
+// Uses the configured destination with a fake launcher; makes no network calls.
+final _testUri = wingSupportUri;
 const _frame = Key('support-frame');
 const _capture = bool.fromEnvironment('CAPTURE_SUPPORT');
 
@@ -115,6 +115,18 @@ void main() {
     UrlLauncherPlatform.instance = browser;
   });
   tearDown(() => UrlLauncherPlatform.instance = original);
+
+  test('app, README and GitHub funding use the supplied Ko-fi account', () {
+    expect(wingSupportUri.toString(), 'https://ko-fi.com/tarkil');
+    expect(
+      File('README.md').readAsStringSync(),
+      contains('[Buy me a coffee](https://ko-fi.com/tarkil)'),
+    );
+    expect(
+      File('.github/FUNDING.yml').readAsStringSync().trim(),
+      'ko_fi: tarkil',
+    );
+  });
 
   testWidgets('opens only on request, externally, without extra data', (
     tester,

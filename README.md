@@ -90,8 +90,7 @@ If Wing is useful in your day, you can buy me a coffee and help me keep improvin
 
 Completely optional. Every feature is available either way.
 
-The Ko-fi page is not set up yet, so contributions are not available. The app's
-support entry stays hidden until the owner supplies the real page URL.
+[Buy me a coffee](https://ko-fi.com/tarkil)
 
 ## Support and provenance
 

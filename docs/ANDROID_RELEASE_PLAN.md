@@ -125,12 +125,10 @@ If building or verification fails, fix the cause before retrying. If a failed pu
 
 ### Optional Support Wing contributions
 
-The owner has no Ko-fi account yet. `lib/core/config/support_wing.dart` leaves
-the destination unset and App settings / About hides the support entry.
-Do not substitute an example URL. Once the owner supplies the real page URL,
-set that destination, link **Buy me a coffee** in README.md, and put the matching
-account name under `ko_fi` in `.github/FUNDING.yml` (replacing its empty mapping).
-The entry then remains permanently available in About, with no reminders or
+The owner supplied [the Ko-fi page](https://ko-fi.com/tarkil).
+`lib/core/config/support_wing.dart`, README.md and `.github/FUNDING.yml` point
+to this same account. Keep all three in sync if the destination changes.
+The Support Wing entry remains permanently available in About, with no reminders or
 feature differences. The existing URL launcher opens the external browser;
 no payment SDK, tracking or backend integration is involved.
 
@@ -160,8 +158,8 @@ Before a Play submission, recheck those current rules against the real page,
 account mode, recipient, platform/processor deductions and any benefits offered.
 Record the verification date, evidence and eligibility decision with the release
 candidate; keep financial details private. Resolve any ambiguity, including fee
-treatment, with Play support before enabling the link for Play. Leave the
-destination unset in a Play candidate while verification remains incomplete.
+treatment, with Play support before enabling the link for Play. Exclude the
+support entry from a Play candidate while verification remains incomplete.
 This source change does not certify eligibility or configure the owner's account.
 
 ### Bundle and store preparation

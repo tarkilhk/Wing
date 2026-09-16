@@ -388,10 +388,8 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                             ),
                           ),
                         ),
-                        if (wingSupportUri case final uri?) ...[
-                          const Divider(height: 1),
-                          SupportWingSection(uri: uri),
-                        ],
+                        const Divider(height: 1),
+                        SupportWingSection(uri: wingSupportUri),
                       ],
                     ),
                   ),

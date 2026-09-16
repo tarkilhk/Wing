@@ -1,4 +1,3 @@
-/// Set only to the owner's real Ko-fi page once supplied. No account exists yet.
-/// Keep README.md and .github/FUNDING.yml in sync when enabling contributions.
+/// The owner's Ko-fi page. Keep README.md and .github/FUNDING.yml in sync.
 /// Review docs/ANDROID_RELEASE_PLAN.md before including it in a Play release.
-final Uri? wingSupportUri = null;
+final Uri wingSupportUri = Uri.https('ko-fi.com', '/tarkil');

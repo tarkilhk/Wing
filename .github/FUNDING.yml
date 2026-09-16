@@ -1,4 +1,1 @@
-# No funding destination yet: the owner has not created a Ko-fi account.
-# Add ko_fi with the real account name when the owner supplies the page URL.
-# Update lib/core/config/support_wing.dart and README.md at the same time.
-{}
+ko_fi: tarkil

@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/app_settings_content.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/support_wing_section.dart';
 
 const _capture = bool.fromEnvironment('CAPTURE_SETTINGS');
 const _frame = Key('settings-frame');
@@ -103,14 +104,21 @@ void main() {
   });
 
   testWidgets(
-    'no contribution entry is exposed before an account is configured',
+    'About permanently exposes the supplied contribution destination',
     (tester) async {
       final preferences = await SharedPreferences.getInstance();
       await _show(tester, preferences);
-      await tester.ensureVisible(find.byKey(const ValueKey('privacy-policy')));
+      await tester.ensureVisible(find.text('Buy me a coffee'));
       await tester.pumpAndSettle();
-      expect(find.text('Support Wing'), findsNothing);
-      expect(find.text('Buy me a coffee'), findsNothing);
+      expect(find.text('Support Wing'), findsOneWidget);
+      expect(find.text('Buy me a coffee'), findsOneWidget);
+      expect(
+        tester
+            .widget<SupportWingSection>(find.byType(SupportWingSection))
+            .uri
+            .toString(),
+        'https://ko-fi.com/tarkil',
+      );
     },
   );
 
@@ -191,6 +199,9 @@ void main() {
         );
         await tester.pumpAndSettle();
         await _captureFrame(tester, '${brightness.name}-$scale-about');
+        await tester.ensureVisible(find.text('Buy me a coffee'));
+        await tester.pumpAndSettle();
+        await _captureFrame(tester, '${brightness.name}-$scale-support');
         expect(tester.takeException(), isNull);
       });
     }
