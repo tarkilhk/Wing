@@ -8,16 +8,13 @@ void main() {
       'android/app/src/main/AndroidManifest.xml',
     ).readAsString();
     final shortcuts = await File(
-      'android/app/src/main/res/xml/shortcuts.xml',
+      'android/app/src/main/shortcuts.xml.template',
     ).readAsString();
 
     expect(manifest, contains('android.app.shortcuts'));
     expect(manifest, contains('@xml/shortcuts'));
     expect(shortcuts, contains('android:shortcutId="new_quick_chat"'));
-    expect(
-      shortcuts,
-      contains('android:targetPackage="@string/wing_application_id"'),
-    );
+    expect(shortcuts, contains('android:targetPackage="@APPLICATION_ID@"'));
     expect(
       shortcuts,
       contains('android:targetClass="com.tarkilhk.wing.MainActivity"'),
@@ -34,11 +31,10 @@ void main() {
         contains('variant.applicationId.set("com.tarkilhk.wing")'),
       );
       expect(gradle, contains('manifestPlaceholders["appLabel"] = "Wing"'));
-      expect(
-        gradle,
-        contains('"wing_application_id", "com.tarkilhk.wing.dev"'),
-      );
-      expect(gradle, contains('"wing_application_id", "com.tarkilhk.wing"'));
+      expect(gradle, contains('applicationIdSuffix = ".dev"'));
+      expect(gradle, contains('applicationId.set(variant.applicationId)'));
+      expect(gradle, contains('addGeneratedSourceDirectory'));
+      expect(gradle, isNot(contains('wing_application_id')));
     },
   );
 

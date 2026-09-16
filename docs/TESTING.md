@@ -19,11 +19,14 @@ Keep logs and generated captures under ignored `build/`. Record source revision,
 | Sensitive input, goals and projects | `integration_test/backend_acceptance_live_test.dart` and its profile-specific companion drivers |
 | Vault, approvals, loops and child-only work | `integration_test/remaining_product_live_test.dart` |
 | Notifications | `test/chat_notification_test.dart`, `test/plugin_turn_notification_sink_test.dart`, `test/profile_notification_live_test.dart`, `test/profile_notification_coverage_test.dart`, `integration_test/profile_notification_test.dart`, `tools/qa/check_background_monitoring.py` |
+| Launcher Quick Chat | `test/android_launcher_shortcut_contract_test.dart`, `test/android_launch_intent_service_test.dart`, `test/home_config_restore_test.dart`, `tools/qa/check_launcher_shortcut.py` |
 | Slash profile scope | `test/slash_profile_live_contract_test.dart`, `integration_test/slash_commands_live_test.dart` |
 | Connection setup | `test/connection_address_test.dart`, `test/connection_setup_probe_test.dart`, `test/connection_setup_transport_test.dart`, `test/connection_setup_screen_test.dart` |
 | Design renders | `test/studio_layout_test.dart`, `test/studio_controls_test.dart`, `test/studio_layout_regressions_test.dart`, `test/administration_navigation_test.dart` |
 
 Read a driver's environment flags, mutations and cleanup before running it. Use disposable profiles/chats and owned fixtures on an authorized server. Live tests may invoke models, modify profile settings or start host tools. Restore changed values and independently verify cleanup; a green assertion that records `backend_limited` is not successful feature acceptance.
+
+After installing an APK on an emulator, run `python3 tools/qa/check_launcher_shortcut.py --serial <emulator-id> --package com.tarkilhk.wing.dev` (use `com.tarkilhk.wing` for release or signed development builds). This read-only check verifies Android's registered Quick Chat intent and resolves its activity. Gradle generates `xml/shortcuts.xml` from `android/app/src/main/shortcuts.xml.template` using each variant's application ID; intent targets must be literal package names because Android parses them with system resources. Flutter tests cover the subsequent cold/warm launch handoff and Quick Chat navigation.
 
 For a compatible local backend/emulator, the basic connection pattern is:
 

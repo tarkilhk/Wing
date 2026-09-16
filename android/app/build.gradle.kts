@@ -7,6 +7,27 @@ plugins {
    id("dev.flutter.flutter-gradle-plugin")
 }
 
+abstract class GenerateLauncherShortcuts : DefaultTask() {
+    @get:Input
+    abstract val applicationId: Property<String>
+
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val template: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val output = outputDirectory.file("xml/shortcuts.xml").get().asFile
+        output.parentFile.mkdirs()
+        output.writeText(
+            template.get().asFile.readText().replace("@APPLICATION_ID@", applicationId.get())
+        )
+    }
+}
+
 val keystoreProperties = Properties()
 val keystorePath = rootProject.projectDir.parentFile.resolve("key.properties")
 val minimumInstalledVersionCode = 2127
@@ -40,9 +61,6 @@ check(!wingDevelopment || signingEnvironment.keys.all {
 android {
    namespace = "com.tarkilhk.wing"
    compileSdk = 36
-   buildFeatures {
-       resValues = true
-   }
 
    compileOptions {
        sourceCompatibility = JavaVersion.VERSION_17
@@ -82,9 +100,7 @@ android {
            applicationIdSuffix = ".dev"
            versionNameSuffix = "-dev"
            manifestPlaceholders["appLabel"] = "Wing Dev"
-           resValue("string", "wing_application_id", "com.tarkilhk.wing.dev")
            if (wingDevelopment) {
-               resValue("string", "wing_application_id", "com.tarkilhk.wing")
                signingConfig = signingConfigs.getByName("release")
            }
        }
@@ -94,7 +110,6 @@ android {
            // key: leave the APK explicitly unsigned until the real
            // key.properties file is supplied.
            manifestPlaceholders["appLabel"] = "Wing"
-           resValue("string", "wing_application_id", "com.tarkilhk.wing")
            if (hasReleaseSigning) {
                signingConfig = signingConfigs.getByName("release")
            }
@@ -111,6 +126,20 @@ androidComponents {
     }
     onVariants(selector().withBuildType("release")) { variant ->
         variant.applicationId.set("com.tarkilhk.wing")
+    }
+    onVariants { variant ->
+        // Android parses shortcut intents with system resources, so the target
+        // package must be a literal, not an app string resource or placeholder.
+        val generateShortcuts = tasks.register<GenerateLauncherShortcuts>(
+            "generate${variant.name.replaceFirstChar { it.uppercase() }}LauncherShortcuts"
+        ) {
+            applicationId.set(variant.applicationId)
+            template.set(layout.projectDirectory.file("src/main/shortcuts.xml.template"))
+            outputDirectory.set(layout.buildDirectory.dir("generated/launcherShortcuts/${variant.name}"))
+        }
+        variant.sources.res?.addGeneratedSourceDirectory(
+            generateShortcuts, GenerateLauncherShortcuts::outputDirectory
+        )
     }
 }
 

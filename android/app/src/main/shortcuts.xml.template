@@ -8,7 +8,7 @@
         android:shortcutLongLabel="@string/shortcut_quick_chat_long">
         <intent
             android:action="com.tarkilhk.wing.action.QUICK_CHAT"
-            android:targetPackage="@string/wing_application_id"
+            android:targetPackage="@APPLICATION_ID@"
             android:targetClass="com.tarkilhk.wing.MainActivity" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
