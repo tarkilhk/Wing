@@ -14,6 +14,7 @@ import '../widgets/support_wing_section.dart';
 import '../widgets/text_size_settings_card.dart';
 import '../widgets/installed_app_version_card.dart';
 import '../widgets/composer_action_settings.dart';
+import '../widgets/voice_preferences_card.dart';
 import 'privacy_policy_screen.dart';
 
 /// Existing device preferences, shared by connected and disconnected navigation.
@@ -25,6 +26,8 @@ class AppSettingsContent extends StatefulWidget {
     this.enableNotifications,
     this.backgroundMonitoringState,
     this.openMonitoringBatterySettings,
+    this.openHermesVoiceSettings,
+    this.hermesVoiceProfileLabel,
   });
 
   final SharedPreferences preferences;
@@ -32,6 +35,8 @@ class AppSettingsContent extends StatefulWidget {
   final Future<void> Function()? enableNotifications;
   final ValueListenable<BackgroundMonitoringState>? backgroundMonitoringState;
   final Future<void> Function()? openMonitoringBatterySettings;
+  final VoidCallback? openHermesVoiceSettings;
+  final String? hermesVoiceProfileLabel;
 
   @override
   State<AppSettingsContent> createState() => _AppSettingsContentState();
@@ -358,6 +363,29 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                     ),
                   ),
 
+                _SettingsSection(
+                  title: 'Voice',
+                  child: Card(
+                    child: ListTile(
+                      key: const ValueKey('voice-settings'),
+                      leading: const Icon(Icons.mic_none),
+                      title: const Text('Voice input and output'),
+                      subtitle: const Text(
+                        'Processing, Android voices and read-aloud.',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) => VoicePreferencesPage(
+                            preferences: widget.preferences,
+                            openHermesSettings: widget.openHermesVoiceSettings,
+                            hermesProfileLabel: widget.hermesVoiceProfileLabel,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
                 _SettingsSection(
                   title: 'About',
                   child: Card(

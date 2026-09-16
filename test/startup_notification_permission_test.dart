@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/main.dart';
+import 'package:wing/core/services/android_voice.dart';
+import 'package:wing/core/services/microphone_permission.dart';
 
 import 'profile_connection_identity_test.dart' show MemoryIdentityStore;
 
@@ -32,6 +34,13 @@ void main() {
     enabled = false;
     granted = true;
     failRequest = false;
+    messenger.setMockMethodCallHandler(AndroidVoice.channel, (call) async {
+      if (call.method == 'requestPermission') {
+        calls.add('microphone');
+        return granted;
+      }
+      return null;
+    });
     messenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call.method);
       switch (call.method) {
@@ -51,6 +60,7 @@ void main() {
   });
 
   tearDown(() {
+    messenger.setMockMethodCallHandler(AndroidVoice.channel, null);
     messenger.setMockMethodCallHandler(channel, null);
   });
 
@@ -63,6 +73,24 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   }
+
+  testWidgets(
+    'microphone follows notifications and is not requested again on restart',
+    (tester) async {
+      granted = false;
+      await launch(tester);
+      expect(calls.where((call) => call == 'microphone'), hasLength(1));
+      expect(
+        calls.indexOf('microphone'),
+        greaterThan(calls.indexOf('requestNotificationsPermission')),
+      );
+      expect(manager.prefs.getBool(microphonePermissionRequestedKey), true);
+      await close(tester);
+      await launch(tester);
+      expect(calls.where((call) => call == 'microphone'), hasLength(1));
+      await close(tester);
+    },
+  );
 
   for (final allow in [true, false]) {
     testWidgets(
@@ -79,9 +107,7 @@ void main() {
         expect(calls, isNot(contains('show')));
         expect(tester.takeException(), isNull);
 
-        tester.binding.handleAppLifecycleStateChanged(
-          AppLifecycleState.paused,
-        );
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
         tester.binding.handleAppLifecycleStateChanged(
           AppLifecycleState.resumed,
         );

@@ -43,6 +43,7 @@ class MainActivity : FlutterActivity() {
     private var fileDeliveryChannel: MethodChannel? = null
     private var pdfPreviewChannel: PdfPreviewChannel? = null
     private var mediaPreviewChannel: MediaPreviewChannel? = null
+    private var voiceChannel: VoiceChannel? = null
     private var imageClipboardChannel: ImageClipboardChannel? = null
     private var initialShareIntent: Intent? = null
     private var initialLaunchAction: String? = null
@@ -68,6 +69,8 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MonitoringRuntime.attach(this, flutterEngine)
+        voiceChannel?.close()
+        voiceChannel = VoiceChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         networkAvailability?.close()
         networkAvailability = NetworkAvailabilityChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         imageClipboardChannel = ImageClipboardChannel(
@@ -245,6 +248,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        voiceChannel?.close()
+        voiceChannel = null
         networkAvailability?.close()
         networkAvailability = null
         shareChannel?.setMethodCallHandler(null)
@@ -289,9 +294,15 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onPause() {
+        voiceChannel?.pause()
         activityResumed = false
         MonitoringRuntime.activityVisible = false
         super.onPause()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        if (voiceChannel?.permissionResult(requestCode, grantResults) == true) return
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
 
     override fun onNewIntent(intent: Intent) {

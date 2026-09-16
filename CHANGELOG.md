@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add independent Local/Hermes dictation and read-aloud choices in App settings, offline Android voice/language controls, and a link to profile-owned Hermes speech settings. Request microphone permission after notifications on first launch; preserve editable drafts and cancel audio when leaving the foreground or changing chats. Live-provider and human speech-quality UAT remain pending.
 - Restore the conversation's Unassigned/project selector as a separate action from connection details. Add searchable Studio project selection, refreshed connection status details, accessible header actions and enlarged-text layouts.
 - Filter chats in place by tapping a project, with a selected background shade and tap-again clearing. Keep Recents unchanged, hide empty pinned sections, and create new chats in the selected project.
 - Show the saved connection icon, then the status light and connection name in Chats and conversation headers, matching the other connection rows.
