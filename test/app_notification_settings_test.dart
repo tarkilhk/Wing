@@ -41,9 +41,10 @@ void main() {
       CompactSwitchListTile,
       'Completed work',
     );
+    // Scroll to the target, independent of the sections following it.
     await tester.scrollUntilVisible(completion, 300);
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, -160));
     await tester.pumpAndSettle();
+    expect(completion.hitTestable(), findsOneWidget);
     await tester.tap(completion);
     await tester.pumpAndSettle();
     expect(preferences.getBool(completionNotificationsKey), isFalse);
@@ -61,12 +62,16 @@ void main() {
       'Show message previews',
     );
     await tester.scrollUntilVisible(previews, 250);
+    await tester.pumpAndSettle();
+    expect(previews.hitTestable(), findsOneWidget);
     expect(tester.widget<CompactSwitchListTile>(previews).value, isTrue);
     await tester.tap(previews);
     await tester.pumpAndSettle();
     expect(preferences.getBool(notificationPreviewsKey), isFalse);
     final permission = find.text('Test notification');
     await tester.scrollUntilVisible(permission, 250);
+    await tester.pumpAndSettle();
+    expect(permission.hitTestable(), findsOneWidget);
     await tester.tap(permission);
     await tester.pumpAndSettle();
     expect(permissionRequests, 1);
