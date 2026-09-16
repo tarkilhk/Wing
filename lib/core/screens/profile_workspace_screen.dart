@@ -271,18 +271,22 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                         minWidth: 48,
                       ),
                       child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          chat.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium,
+                        alignment: Alignment.bottomLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            chat.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
                 ServerConnectionLabel(
+                  alignment: Alignment.topLeft,
                   label: controller.connection.label,
                   status: controller.connectionStatus,
                   suffix: chat.opening || chat.offlineSnapshot

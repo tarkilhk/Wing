@@ -23,12 +23,14 @@ class ServerConnectionLabel extends StatelessWidget {
   final String label;
   final String? suffix;
   final TextStyle? style;
+  final AlignmentGeometry alignment;
   const ServerConnectionLabel({
     super.key,
     required this.label,
     this.status,
     this.suffix,
     this.style,
+    this.alignment = Alignment.centerLeft,
   });
   @override
   Widget build(BuildContext context) {
@@ -48,22 +50,27 @@ class ServerConnectionLabel extends StatelessWidget {
         ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _ConnectionLed(
-                phase: status?.phase ?? ServerConnectionPhase.unchecked,
-              ),
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  '$label${suffix == null || suffix!.isEmpty ? '' : ' · $suffix'}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: style ?? Theme.of(context).textTheme.bodySmall,
+          child: Align(
+            alignment: alignment,
+            widthFactor: 1,
+            heightFactor: 1,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _ConnectionLed(
+                  phase: status?.phase ?? ServerConnectionPhase.unchecked,
                 ),
-              ),
-            ],
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    '$label${suffix == null || suffix!.isEmpty ? '' : ' · $suffix'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: style ?? Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
