@@ -202,6 +202,9 @@ void main() {
             ),
             findsOneWidget,
           );
+          // Large text can place the action below the viewport.
+          await tester.ensureVisible(find.byType(OutlinedButton));
+          await tester.pumpAndSettle();
           expect(
             tester.getSemantics(find.byType(OutlinedButton)),
             matchesSemantics(
