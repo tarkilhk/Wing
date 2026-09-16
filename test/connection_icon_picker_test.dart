@@ -86,39 +86,53 @@ void main() {
   });
 
   for (final brightness in Brightness.values) {
-    testWidgets('connection appearance render ${brightness.name}', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(390, 844);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      await tester.pumpWidget(
-        RepaintBoundary(
-          key: _frame,
-          child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            theme: wingTheme(brightness),
-            home: Scaffold(
-              appBar: AppBar(title: const Text('Connections')),
-              body: Builder(
-                builder: (context) => Card(
-                  margin: const EdgeInsets.all(16),
-                  child: ListTile(
-                    horizontalTitleGap: 16,
-                    leading: const ServerConnectionIndicator(
-                      label: 'Claw',
-                      icon: ConnectionIcon.rocket,
-                    ),
-                    title: const Text('Claw'),
-                    subtitle: const Text('hermes.hollinger.asia:443'),
-                    trailing: IconButton(
-                      tooltip: 'Appearance',
-                      icon: const Icon(Icons.more_vert),
-                      onPressed: () => showConnectionIconPicker(
-                        context,
-                        connectionName: 'Claw',
-                        initialIcon: ConnectionIcon.rocket,
-                        onSave: (_) async {},
+    for (final width in [390.0, 320.0]) {
+      testWidgets('connection appearance render ${brightness.name} at $width', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(width, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: _frame,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(width == 320 ? 2 : 1)),
+                child: child!,
+              ),
+              home: Scaffold(
+                appBar: AppBar(title: const Text('Connections')),
+                body: Builder(
+                  builder: (context) => Card(
+                    margin: const EdgeInsets.all(16),
+                    child: ListTile(
+                      horizontalTitleGap: 0,
+                      leading: ServerConnectionIndicator(
+                        label: 'Claw',
+                        icon: ConnectionIcon.rocket,
+                        onIconPressed: () => showConnectionIconPicker(
+                          context,
+                          connectionName: 'Claw',
+                          initialIcon: ConnectionIcon.rocket,
+                          onSave: (_) async {},
+                        ),
+                      ),
+                      title: const Text('Claw'),
+                      subtitle: const Text('hermes.hollinger.asia:443'),
+                      trailing: IconButton(
+                        tooltip: 'Appearance',
+                        icon: const Icon(Icons.more_vert),
+                        onPressed: () => showConnectionIconPicker(
+                          context,
+                          connectionName: 'Claw',
+                          initialIcon: ConnectionIcon.rocket,
+                          onSave: (_) async {},
+                        ),
                       ),
                     ),
                   ),
@@ -126,19 +140,22 @@ void main() {
               ),
             ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final led = tester.getRect(
-        find.byKey(const ValueKey('server-connection-led')),
-      );
-      expect(tester.getRect(find.text('Claw')).left - led.right, 16);
-      await capture(tester, 'connection-icons-row-${brightness.name}');
-      await tester.tap(find.byTooltip('Appearance'));
-      await tester.pumpAndSettle();
-      await capture(tester, 'connection-icons-picker-${brightness.name}');
-      expect(tester.takeException(), isNull);
-    });
+        );
+        await tester.pumpAndSettle();
+        final led = tester.getRect(
+          find.byKey(const ValueKey('server-connection-led')),
+        );
+        expect(tester.getRect(find.text('Claw')).left - led.right, 16);
+        await capture(tester, 'connection-icons-row-${brightness.name}-$width');
+        await tester.tap(find.byTooltip('Change connection icon'));
+        await tester.pumpAndSettle();
+        await capture(
+          tester,
+          'connection-icons-picker-${brightness.name}-$width',
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
   }
 
   for (final brightness in Brightness.values) {

@@ -738,7 +738,7 @@ class HomeScreenState extends State<HomeScreen> {
                         ),
                         for (final connection in _connections)
                           ListTile(
-                            horizontalTitleGap: 16,
+                            horizontalTitleGap: 0,
                             leading: _serverIndicator(connection),
                             title: Text(connection.label),
                             onTap: () => Navigator.pop(context, connection),
@@ -961,6 +961,9 @@ class HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(
         builder: (_) => ConnectionSetupScreen(
           initialConnection: existing,
+          onSaveIcon: existing == null
+              ? null
+              : (icon) => _saveConnectionIcon(existing, icon),
           onSave: (candidate) async {
             if (existing == null) {
               return widget.connManager.saveConnection(
@@ -1016,6 +1019,23 @@ class HomeScreenState extends State<HomeScreen> {
 
   final _connectionOwners =
       <SavedConnection, Future<ProfileWorkspaceController>>{};
+
+  Future<void> _saveConnectionIcon(
+    SavedConnection connection,
+    ConnectionIcon icon,
+  ) async {
+    await widget.connManager.updateConnectionIcon(connection.id, icon);
+    if (mounted) _refresh();
+  }
+
+  Future<void> _pickConnectionIcon(SavedConnection connection) =>
+      showConnectionIconPicker(
+        context,
+        connectionName: connection.label,
+        initialIcon: connection.icon,
+        onSave: (icon) => _saveConnectionIcon(connection, icon),
+      );
+
   Widget _serverIndicator(SavedConnection connection) =>
       FutureBuilder<ProfileWorkspaceController>(
         key: ValueKey(connection),
@@ -1028,6 +1048,7 @@ class HomeScreenState extends State<HomeScreen> {
         builder: (context, snapshot) => ServerConnectionIndicator(
           label: connection.label,
           icon: connection.icon,
+          onIconPressed: () => _pickConnectionIcon(connection),
           status: snapshot.data?.connectionStatus,
         ),
       );
@@ -1036,7 +1057,7 @@ class HomeScreenState extends State<HomeScreen> {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: ListTile(
-        horizontalTitleGap: 16,
+        horizontalTitleGap: 0,
         leading: _serverIndicator(conn),
         title: Text(conn.label),
         subtitle: Text(
@@ -1063,21 +1084,10 @@ class HomeScreenState extends State<HomeScreen> {
               }
             } else if (v == 'edit') {
               _editConnection(conn);
-            } else if (v == 'appearance') {
-              await showConnectionIconPicker(
-                context,
-                connectionName: conn.label,
-                initialIcon: conn.icon,
-                onSave: (icon) async {
-                  await widget.connManager.updateConnectionIcon(conn.id, icon);
-                  if (mounted) _refresh();
-                },
-              );
             }
           },
           itemBuilder: (_) => [
             const PopupMenuItem(value: 'edit', child: Text('Edit connection')),
-            const PopupMenuItem(value: 'appearance', child: Text('Appearance')),
             PopupMenuItem(
               value: 'delete',
               child: Text(

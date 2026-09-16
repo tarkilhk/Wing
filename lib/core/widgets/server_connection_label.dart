@@ -91,9 +91,11 @@ class ServerConnectionIndicator extends StatelessWidget {
   final String label;
   final ServerConnectionStatus? status;
   final ConnectionIcon icon;
+  final VoidCallback onIconPressed;
   const ServerConnectionIndicator({
     super.key,
     required this.label,
+    required this.onIconPressed,
     this.status,
     this.icon = ConnectionIcon.server,
   });
@@ -114,21 +116,30 @@ class ServerConnectionIndicator extends StatelessWidget {
         child: SizedBox(
           width: 48,
           height: 48,
-          child: Row(
-            children: [
-              ConnectionIconBadge(icon: icon),
-              const SizedBox(width: 8),
-              _ConnectionLed(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _ConnectionLed(
                 phase: status?.phase ?? ServerConnectionPhase.unchecked,
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
-    return status == null
-        ? contents()
-        : ListenableBuilder(listenable: status!, builder: (_, _) => contents());
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ConnectionIconButton(icon: icon, onPressed: onIconPressed),
+        status == null
+            ? contents()
+            : ListenableBuilder(
+                listenable: status!,
+                builder: (_, _) => contents(),
+              ),
+      ],
+    );
   }
 }
 

@@ -17,13 +17,18 @@ import 'connection_guide_screen.dart';
 class ConnectionSetupScreen extends StatefulWidget {
   const ConnectionSetupScreen({
     required this.onSave,
+    required this.onSaveIcon,
     this.initialConnection,
     this.createProbe = DashboardConnectionProbe.new,
     super.key,
-  });
+  }) : assert(initialConnection == null || onSaveIcon != null);
 
   final SavedConnection? initialConnection;
   final Future<SavedConnection> Function(SavedConnection candidate) onSave;
+
+  /// Existing connections save appearance independently of access verification.
+  /// New connections keep their icon in the draft until the final save.
+  final Future<void> Function(ConnectionIcon icon)? onSaveIcon;
   final ConnectionProbe Function(SavedConnection) createProbe;
 
   @override
@@ -438,6 +443,20 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
     MaterialPageRoute<void>(builder: (_) => const ConnectionGuideScreen()),
   );
 
+  Future<void> _pickIcon() => showConnectionIconPicker(
+    context,
+    connectionName: _name.text.trim(),
+    initialIcon: _icon,
+    onSave: (icon) async {
+      if (widget.onSaveIcon != null) await widget.onSaveIcon!(icon);
+      if (!mounted) return;
+      setState(() {
+        _icon = icon;
+        if (!_editing) _dirty = true;
+      });
+    },
+  );
+
   Widget _destination() => Padding(
     padding: const EdgeInsets.only(bottom: 20),
     child: _panel(
@@ -447,9 +466,9 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
-                padding: EdgeInsets.only(top: 12),
-                child: Icon(Icons.dns_outlined, size: 20),
+              ConnectionIconButton(
+                icon: _icon,
+                onPressed: _saving ? null : _pickIcon,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -725,19 +744,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           subtitle: Text(_icon.label),
           trailing: const Icon(Icons.chevron_right),
           enabled: !_saving,
-          onTap: _saving
-              ? null
-              : () => showConnectionIconPicker(
-                  context,
-                  connectionName: _name.text.trim(),
-                  initialIcon: _icon,
-                  onSave: (icon) async {
-                    setState(() {
-                      _icon = icon;
-                      _dirty = true;
-                    });
-                  },
-                ),
+          onTap: _saving ? null : _pickIcon,
         ),
         const SizedBox(height: 16),
         if (!_editing)

@@ -135,7 +135,33 @@ Future<void> pumpHome(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Appearance changes the saved connection icon without setup', (
+  testWidgets('connection icon edits appearance while the LED opens status', (
+    tester,
+  ) async {
+    final manager = await buildManager();
+    await manager.saveConnection('Claw', 'host', 8642, 'key');
+    await pumpHome(tester, manager);
+    final icon = find.byTooltip('Change connection icon');
+    final led = find.byKey(const ValueKey('server-connection-led'));
+    final iconRect = tester.getRect(find.byType(ConnectionIconButton));
+    expect(iconRect.size, const Size(48, 48));
+    await tester.tap(icon);
+    await tester.pumpAndSettle();
+    expect(find.text('Connection icon'), findsOneWidget);
+    expect(find.text('Server access: Not checked'), findsNothing);
+    expect(find.byType(ProfileWorkspaceScreen), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('connection-icon-home')));
+    await tester.tap(find.text('Save icon'));
+    await tester.pumpAndSettle();
+    expect(manager.getConnections().single.icon, ConnectionIcon.home);
+    await tester.tap(led);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Server access:'), findsOneWidget);
+    expect(find.text('Connection icon'), findsNothing);
+    expect(find.byType(ProfileWorkspaceScreen), findsNothing);
+  });
+
+  testWidgets('tapping an icon saves and reopens its selection without setup', (
     tester,
   ) async {
     final manager = await buildManager();
@@ -148,7 +174,12 @@ void main() {
     await pumpHome(tester, manager);
     await tester.tap(find.byType(PopupMenuButton<String>));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Appearance'));
+    expect(find.text('Appearance'), findsNothing);
+    expect(find.text('Edit connection'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
+    await tester.tapAt(const Offset(10, 300));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Change connection icon'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('connection-icon-rocket')));
     await tester.tap(find.text('Save icon'));
@@ -159,9 +190,7 @@ void main() {
       tester.widget<ConnectionIconBadge>(find.byType(ConnectionIconBadge)).icon,
       ConnectionIcon.rocket,
     );
-    await tester.tap(find.byType(PopupMenuButton<String>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Appearance'));
+    await tester.tap(find.byTooltip('Change connection icon'));
     await tester.pumpAndSettle();
     expect(
       tester

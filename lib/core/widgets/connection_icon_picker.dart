@@ -68,6 +68,30 @@ class ConnectionIconBadge extends StatelessWidget {
   );
 }
 
+/// A decorative 32 dp badge inside its own 48 dp editing target.
+class ConnectionIconButton extends StatelessWidget {
+  const ConnectionIconButton({
+    super.key,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final ConnectionIcon icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: 'Change connection icon',
+    onPressed: onPressed,
+    style: IconButton.styleFrom(
+      minimumSize: const Size(48, 48),
+      padding: const EdgeInsets.all(8),
+      shape: const RoundedRectangleBorder(borderRadius: WingRadius.control),
+    ),
+    icon: ConnectionIconBadge(icon: icon),
+  );
+}
+
 Future<void> showConnectionIconPicker(
   BuildContext context, {
   required String connectionName,

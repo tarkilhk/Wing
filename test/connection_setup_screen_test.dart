@@ -13,6 +13,7 @@ import 'package:wing/core/services/profiles_repository.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/playful_portrait.dart';
+import 'package:wing/core/widgets/connection_icon_picker.dart';
 import 'package:wing/core/widgets/wing_wordmark.dart';
 
 import 'support/connection_probe_fixture.dart';
@@ -46,6 +47,7 @@ Future<void> _pump(
   WidgetTester tester, {
   ConnectionProbeFixture? fixture,
   Future<SavedConnection> Function(SavedConnection)? save,
+  Future<void> Function(ConnectionIcon)? saveIcon,
   void Function(SavedConnection)? candidate,
   SavedConnection? initial,
   Brightness brightness = Brightness.light,
@@ -68,6 +70,7 @@ Future<void> _pump(
         ),
         home: ConnectionSetupScreen(
           initialConnection: initial,
+          onSaveIcon: initial == null ? null : saveIcon ?? (_) async {},
           createProbe: (connection) {
             candidate?.call(connection);
             return fixture ?? ConnectionProbeFixture();
@@ -140,6 +143,99 @@ void main() {
       }
       await loader.load();
     }
+  });
+
+  testWidgets(
+    'sign-in icon saves an existing connection without verification',
+    (tester) async {
+      final initial = SavedConnection(
+        id: 'saved',
+        label: 'Office',
+        host: 'hermes.example.com',
+        port: 443,
+        useHttps: true,
+        apiKey: '',
+        icon: ConnectionIcon.cloud,
+      );
+      final fixture = ConnectionProbeFixture();
+      var savedIcon = initial.icon;
+      var saves = 0;
+      var fail = true;
+      await _pump(
+        tester,
+        initial: initial,
+        fixture: fixture,
+        save: (c) async {
+          saves++;
+          return c;
+        },
+        saveIcon: (icon) async {
+          if (fail) throw StateError('disk unavailable');
+          savedIcon = icon;
+        },
+      );
+      await _tap(tester, 'Continue');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Change connection icon'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('connection-icon-rocket')));
+      await _tap(tester, 'Save icon');
+      await tester.pumpAndSettle();
+      expect(savedIcon, ConnectionIcon.cloud);
+      expect(find.text('Couldn’t save this icon. Try again.'), findsOneWidget);
+      fail = false;
+      await _tap(tester, 'Save icon');
+      await tester.pumpAndSettle();
+      expect(savedIcon, ConnectionIcon.rocket);
+      expect(
+        tester
+            .widget<ConnectionIconBadge>(find.byType(ConnectionIconBadge))
+            .icon,
+        ConnectionIcon.rocket,
+      );
+      expect(fixture.calls, isEmpty);
+      expect(saves, 0);
+      await tester.tap(find.byTooltip('Change connection icon'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const ValueKey('connection-icon-rocket')),
+            )
+            .isSelected,
+        isTrue,
+      );
+      await _tap(tester, 'Cancel');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(savedIcon, ConnectionIcon.rocket);
+    },
+  );
+
+  testWidgets('a new connection keeps its sign-in icon until final save', (
+    tester,
+  ) async {
+    SavedConnection? saved;
+    await _pump(
+      tester,
+      save: (c) async {
+        saved = c;
+        return c;
+      },
+    );
+    await _signIn(tester);
+    await tester.tap(find.byTooltip('Change connection icon'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('connection-icon-home')));
+    await _tap(tester, 'Save icon');
+    await tester.pumpAndSettle();
+    expect(saved, isNull);
+    await _tap(tester, 'Check connection');
+    await tester.pumpAndSettle();
+    await _tap(tester, 'Save and open');
+    await tester.pumpAndSettle();
+    expect(saved?.icon, ConnectionIcon.home);
   });
 
   testWidgets(
