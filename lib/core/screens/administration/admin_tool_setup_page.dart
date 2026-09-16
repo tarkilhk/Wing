@@ -390,6 +390,11 @@ class AdminVoicePage extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const AdminNotice(
+              'These speech settings belong to this server profile. Changes to '
+              'providers, language or voice affect every client using this profile. '
+              'Choose Local or Hermes processing and Android voices in App settings.',
+            ),
             AdminGroup(
               children: [
                 AdminRow(

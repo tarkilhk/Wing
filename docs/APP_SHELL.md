@@ -32,6 +32,14 @@ Create a project using an absolute folder on the host. Repository discovery is a
 
 Move chat uses `workspace.move` with the durable session key, destination working folder and profile. It is not a file move or cross-profile transfer. The app freshly resumes and verifies a uniquely owned idle runtime before the mutation, then refreshes the lists and preserves the open draft. The chosen working folder is the primary project path, falling back to its first repository.
 
+In a conversation, tap **Unassigned** or the project name beside the server to
+open the project selector. The Studio sheet shows the current project and lets
+you search destinations by name or working folder. Choosing a destination moves
+the chat; Cancel makes no change. A failed move stays open for retry, and controls
+are disabled while a move is pending. The server icon, connection indicator and
+server name remain a separate target for connection details, including server
+access, live-chat availability and connection retry.
+
 Deleting a chat first verifies and closes its known idle runtime, then deletes the saved server chat. Unknown, busy or ambiguous ownership blocks the action. Only after server deletion and durable draft removal may its owned staged files be cleaned up.
 
 These preflight checks cannot make separate server operations atomic. A runtime can change between the check and mutation. The app must surface a failed or uncertain result instead of claiming a guaranteed transaction.

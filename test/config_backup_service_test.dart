@@ -79,7 +79,7 @@ void main() {
         'theme_mode': 'dark',
         'verbose_mode': true,
         'app_text_size_preference': 1.15,
-        'voice_name': 'fr-CH-x-fra',
+        'voice.android_voice': 'fr-CH-x-fra',
         'session_search.abc.mode': 'ai',
       });
 
@@ -88,7 +88,7 @@ void main() {
       expect(backup.preferences['theme_mode'], 'dark');
       expect(backup.preferences['verbose_mode'], true);
       expect(backup.preferences['app_text_size_preference'], 1.15);
-      expect(backup.preferences['voice_name'], 'fr-CH-x-fra');
+      expect(backup.preferences['voice.android_voice'], 'fr-CH-x-fra');
       expect(backup.preferences['session_search.abc.mode'], 'ai');
     });
 
@@ -237,6 +237,36 @@ void main() {
       expect(result.preferencesSkipped, 3);
       expect(result.preferencesApplied, 1);
     });
+
+    test(
+      'rejects invalid voice choices and device permission markers',
+      () async {
+        final backup = ConfigBackup(
+          createdAt: DateTime.utc(2026),
+          appVersion: 'test',
+          connections: const <SavedConnection>[],
+          preferences: const <String, Object>{
+            'voice.input': 'unknown',
+            'voice.output': 'hermes',
+            'voice.android_voice': true,
+            'voice.android_rate': '99',
+            'microphone_permission_requested': true,
+          },
+        );
+        final (service, _, prefs) = await buildService(<String, Object>{});
+        final result = await service.import(
+          backup,
+          mode: ConfigImportMode.merge,
+        );
+        expect(prefs.getString('voice.output'), 'hermes');
+        expect(prefs.get('voice.input'), isNull);
+        expect(prefs.get('voice.android_voice'), isNull);
+        expect(prefs.get('voice.android_rate'), isNull);
+        expect(prefs.get('microphone_permission_requested'), isNull);
+        expect(result.preferencesSkipped, 4);
+        expect(result.preferencesApplied, 1);
+      },
+    );
 
     test('survives a full export → import → export round trip', () async {
       final (source, sourceManager, _) = await buildService(<String, Object>{

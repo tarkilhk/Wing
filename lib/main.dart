@@ -26,6 +26,7 @@ import 'core/services/profile_workspace_controller.dart';
 import 'core/services/profile_connection_identity.dart';
 import 'core/services/profile_workspace_registry.dart';
 import 'core/services/turn_notification_service.dart';
+import 'core/services/microphone_permission.dart';
 import 'core/services/background_monitoring_service.dart';
 import 'core/services/notification_delivery_ledger.dart';
 import 'core/theme/wing_theme.dart';
@@ -300,6 +301,9 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     unawaited(
       WidgetsBinding.instance.endOfFrame.then((_) async {
         await _requestStartupNotificationPermission();
+        if (mounted) {
+          await requestStartupMicrophonePermission(widget.connManager.prefs);
+        }
         await _syncBackgroundMonitoring();
       }),
     );

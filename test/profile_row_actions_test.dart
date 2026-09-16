@@ -689,6 +689,21 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('Unassigned opens projects independently of connection details', (
+    tester,
+  ) async {
+    await controller.createChat();
+    await show(tester);
+    await tester.tap(find.textContaining('Unassigned'));
+    await tester.pumpAndSettle();
+    expect(find.text('Move to project'), findsOneWidget);
+    expect(find.byKey(const ValueKey('move-project-p2')), findsOneWidget);
+    expect(find.text('Connection details'), findsNothing);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(host.moves, isEmpty);
+  });
+
   testWidgets('chat header moves an open chat and keeps its draft on reopen', (
     tester,
   ) async {
@@ -705,7 +720,7 @@ void main() {
     expect(host.closes, isEmpty);
     expect(controller.chatProjectLabel(chat), 'Mobile app');
     expect(chat.composerText, 'Unsent draft');
-    expect(find.textContaining('· Mobile app'), findsOneWidget);
+    expect(find.text('Mobile app'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('chat-project-picker')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('move-project-p2')), findsNothing);
@@ -744,7 +759,7 @@ void main() {
     expect(host.moves.single.$2['session_key'], 'new-chat');
     expect(host.changes['personal']!['new-chat']!['cwd'], '/Mobile app');
     expect(controller.chatProjectLabel(chat), 'Mobile app');
-    expect(find.textContaining('· Mobile app'), findsOneWidget);
+    expect(find.text('Mobile app'), findsOneWidget);
     expect(host.closes, isEmpty);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -762,7 +777,7 @@ void main() {
       await tester.tap(destination);
       await tester.pumpAndSettle();
       expect(find.text('Move rejected'), findsOneWidget);
-      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-project-sheet')), findsOneWidget);
       expect(host.changes['personal']?['newest']?['cwd'], isNull);
       host.failMutation = false;
       host.mutationDelay = Completer<void>();
@@ -774,7 +789,7 @@ void main() {
       expect(tester.widget<ListTile>(destination).enabled, false);
       host.mutationDelay!.complete();
       await tester.pumpAndSettle();
-      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byKey(const ValueKey('chat-project-sheet')), findsNothing);
       expect(find.text('Moved to Mobile app'), findsOneWidget);
       expect(host.changes['personal']!['newest']!['cwd'], '/Mobile app');
       expect(tester.takeException(), isNull);

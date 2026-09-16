@@ -23,6 +23,7 @@ Keep logs and generated captures under ignored `build/`. Record source revision,
 | Slash profile scope | `test/slash_profile_live_contract_test.dart`, `integration_test/slash_commands_live_test.dart` |
 | Connection setup | `test/connection_address_test.dart`, `test/connection_setup_probe_test.dart`, `test/connection_setup_transport_test.dart`, `test/connection_setup_screen_test.dart` |
 | Scheduled tasks | `test/scheduled_tasks_*_test.dart`, `integration_test/scheduled_tasks_native_test.dart` |
+| Voice | `test/voice_*_test.dart`, `test/hermes_voice_test.dart`, `test/microphone_permission_test.dart`, `test/startup_notification_permission_test.dart`, `integration_test/voice_*_test.dart` |
 | Design renders | `test/studio_layout_test.dart`, `test/studio_controls_test.dart`, `test/studio_layout_regressions_test.dart`, `test/administration_navigation_test.dart` |
 
 Read a driver's environment flags, mutations and cleanup before running it. Use disposable profiles/chats and owned fixtures on an authorized server. Live tests may invoke models, modify profile settings or start host tools. Restore changed values and independently verify cleanup; a green assertion that records `backend_limited` is not successful feature acceptance.
@@ -77,6 +78,55 @@ adds theme/accent switches and locally generated playback, diagram, HTML and
 error fixtures. `profile_device_ui_check.dart` supplies clarification retry
 and 200% text scenarios with an injected gateway. Restore the normal debug
 APK after using either target.
+
+## Voice acceptance
+
+Voice host tests cover all four Local/Hermes input/output combinations, preference
+persistence and failed saves, profile-scoped authentication, stale callbacks,
+permissions, draft insertion without sending, read-aloud prose, and cancellation.
+Run settings/composer renders with `--dart-define=VOICE_REVIEW=true` and
+`--dart-define=CAPTURE_FONT_DIR=<Flutter SDK>/bin/cache/artifacts/material_fonts`.
+Inspect `build/voice-review/` in both themes at 320 dp and 200% text.
+
+On a disposable emulator with microphone permission granted, run
+`flutter test integration_test/voice_native_test.dart -d <serial> --no-uninstall`.
+It exercises real AAC recording, cancellation, MediaPlayer decoding/interruption,
+and five offline TTS samples when an offline voice is installed. It reports TTS
+start-callback timing, not measured speaker latency. Verify `cache/voice` is empty
+afterward using `adb -s <serial> shell run-as com.tarkilhk.wing.dev ls cache/voice`.
+Restore the normal debug APK after using the integration target.
+
+`integration_test/voice_permission_native_test.dart` exercises Android's real
+denial, retry/grant and background cancellation. On a disposable emulator, revoke
+`RECORD_AUDIO` and clear its `user-set`/`user-fixed` permission flags before running
+the driver. Follow its printed markers: deny the first dialog, grant the second,
+then press Home after `VOICE_BACKGROUND_READY`. The driver expects the recorder
+to stop and its file to be removed; resume the app to finish the test.
+
+Complete separate human/native and live-provider acceptance before claiming voice
+quality or full feature validation:
+
+- On a fresh disposable install, decline notifications, then microphone. Confirm
+  startup works, relaunch does not repeat either prompt, and tapping Dictate can
+  request microphone access. Check denial and subsequent grant.
+- Use a compatible server/profile with transcription and synthesis configured.
+  Record the server revision, phone/Android version, installed voice and language,
+  and provider names. The app must send no per-request remote voice override.
+- Try Local/Local, Local/Hermes, Hermes/Local and Hermes/Hermes. For each input
+  engine, dictate at least five samples: a short request, a longer paragraph,
+  punctuation, names/numbers, and speech with background noise. Record original
+  wording, returned text, corrections needed, and end-of-speech-to-final-text time.
+- For each output engine, listen to at least five replies, including long prose,
+  punctuation, names/numbers and Markdown/code. Check intelligibility and record
+  request-to-first-audible-speech time. Android TTS callback timestamps alone do
+  not establish intelligibility or audible latency.
+- During capture, transcription, synthesis and playback, cancel, switch chats or
+  profiles, and background the app. Verify no stale draft insertion or late audio.
+  Interrupt playback with audio focus loss/headphone removal. Exercise unavailable
+  local languages/voices and remote provider/network failures. Check drafts and
+  temporary-file cleanup; process-death leftovers are cleared on next app launch.
+
+Synthetic tones and mock transcripts do not satisfy these speech-quality checks.
 
 ## Recorded live baseline
 

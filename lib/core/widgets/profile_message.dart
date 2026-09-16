@@ -22,12 +22,16 @@ class ProfileMessage extends StatelessWidget {
   final bool streaming;
   final Future<void> Function(ChatOutput output)? onOpenRemoteFile;
   final UserAttachmentImageLoader? loadAttachmentImage;
+  final VoidCallback? onReadAloud;
+  final bool readingAloud;
   const ProfileMessage({
     super.key,
     required this.message,
     this.streaming = false,
     this.onOpenRemoteFile,
     this.loadAttachmentImage,
+    this.onReadAloud,
+    this.readingAloud = false,
   });
 
   static Uri? externalLink(String href) => externalWebLink(href);
@@ -229,6 +233,17 @@ class ProfileMessage extends StatelessWidget {
                           : FittedBox(fit: BoxFit.scaleDown, child: timestamp),
                     ),
                   ),
+                  if (!streaming && role == 'assistant' && onReadAloud != null)
+                    IconButton(
+                      tooltip: readingAloud
+                          ? 'Stop reading aloud'
+                          : 'Read aloud',
+                      onPressed: onReadAloud,
+                      icon: Icon(
+                        readingAloud ? Icons.stop : Icons.volume_up_outlined,
+                        size: 18,
+                      ),
+                    ),
                   if (!streaming) _copy(context, content),
                 ],
               ),

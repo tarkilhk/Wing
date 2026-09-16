@@ -53,6 +53,12 @@ import 'chat_outputs_screen.dart';
 import '../widgets/app_drawer.dart';
 import 'app_settings_content.dart';
 import 'workspace_overview_content.dart';
+import '../controllers/voice_input_controller.dart';
+import '../controllers/voice_output_controller.dart';
+import '../services/android_voice.dart';
+import '../services/hermes_voice.dart';
+import '../services/voice_preferences.dart';
+import 'administration/voice_settings_navigation.dart';
 
 enum _AttachmentChoice { camera, photos, files }
 
@@ -69,6 +75,7 @@ class ProfileWorkspaceScreen extends StatefulWidget {
   final VoidCallback? onPreferencesChanged;
   final Future<void> Function(ProfileSessionKey)? onCapturePhoto;
   final AppDestination initialDestination;
+  final VoiceDevice? voiceDevice;
   const ProfileWorkspaceScreen({
     super.key,
     required this.controller,
@@ -81,6 +88,7 @@ class ProfileWorkspaceScreen extends StatefulWidget {
     this.onPreferencesChanged,
     this.onCapturePhoto,
     this.initialDestination = AppDestination.chats,
+    this.voiceDevice,
   });
   @override
   State<ProfileWorkspaceScreen> createState() => _ProfileWorkspaceScreenState();
@@ -101,6 +109,178 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   int? _findHistoryGeneration;
   int _findRequestGeneration = 0;
   bool _launchingCamera = false;
+  ProfileSessionKey? _voiceOwner;
+  late final _voiceInput = VoiceInputController(
+    device: widget.voiceDevice ?? AndroidVoice.instance,
+    createRemote: () => HermesVoice.forConnection(
+      controller.connection,
+      _voiceOwner!.workspace.profileName,
+    ),
+  );
+  late final _voiceOutput = VoiceOutputController(
+    widget.voiceDevice ?? AndroidVoice.instance,
+  );
+
+  void _voiceWorkspaceChanged() {
+    final current = controller.notificationChat ?? controller.current?.chat;
+    if (_voiceOwner != null &&
+        (_voiceOwner != current?.key ||
+            controller.switching ||
+            current?.editingQueuedPrompt != null)) {
+      _cancelVoice();
+    }
+  }
+
+  void _cancelVoice() {
+    _voiceOwner = null;
+    unawaited(_voiceInput.cancel().catchError((Object _) {}));
+    unawaited(_voiceOutput.stop().catchError((Object _) {}));
+  }
+
+  VoidCallback? _hermesSpeechSettingsLink(BuildContext context) {
+    final profile = controller.current?.scope.profileName;
+    if (profile == null) return null;
+    final connection = controller.connection;
+    final identity = controller.connectionIdentity;
+    final status = controller.connectionStatus;
+    return () => unawaited(
+      _run(
+        () => openProfileVoiceSettings(
+          context,
+          connection: connection,
+          connectionIdentity: identity,
+          connectionStatus: status,
+          profileName: profile,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _dictate(ProfileChat chat) async {
+    await _voiceOutput.stop();
+    if (!mounted ||
+        (controller.notificationChat ?? controller.current?.chat) != chat ||
+        controller.switching) {
+      return;
+    }
+    _voiceOwner = chat.key;
+    final original = _composer.value;
+    _composerFocus.unfocus();
+    await _voiceInput.start(
+      VoicePreferences.read(controller.preferences),
+      original,
+      (result) {
+        final current = controller.notificationChat ?? controller.current?.chat;
+        if (!mounted ||
+            _voiceOwner != chat.key ||
+            current != chat ||
+            _destination != AppDestination.chats) {
+          return;
+        }
+        if (_composer.text != original.text) {
+          showStudioError(
+            context,
+            'The draft changed while recording. Please dictate again.',
+          );
+          return;
+        }
+        _composer.value = result;
+        unawaited(_run(() => controller.updateDraft(chat, result.text)));
+      },
+    );
+  }
+
+  Future<void> _readAloud(
+    ProfileChat chat,
+    Map<String, dynamic> message,
+  ) async {
+    final owner = (chat.key, answerMessageId(message) ?? message);
+    if (_voiceOutput.owner == owner) {
+      await _voiceOutput.stop();
+      return;
+    }
+    await _voiceInput.cancel();
+    if (!mounted ||
+        (controller.notificationChat ?? controller.current?.chat) != chat) {
+      return;
+    }
+    _voiceOwner = chat.key;
+    final connection = controller.connection;
+    final profile = chat.key.workspace.profileName;
+    await _voiceOutput.speak(
+      owner,
+      answerMessageText(message),
+      VoicePreferences.read(controller.preferences),
+      () => HermesVoice.forConnection(connection, profile),
+    );
+  }
+
+  Widget _voiceActivity() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      if (_voiceInput.active)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Semantics(
+                liveRegion: true,
+                child: Text(switch (_voiceInput.phase) {
+                  VoiceInputPhase.starting => 'Opening microphone…',
+                  VoiceInputPhase.recording =>
+                    'Recording · ${_voiceInput.seconds}s / 120s',
+                  VoiceInputPhase.transcribing => 'Transcribing…',
+                  VoiceInputPhase.idle => '',
+                }),
+              ),
+              if (_voiceInput.partial.isNotEmpty)
+                Text(
+                  _voiceInput.partial,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  if (_voiceInput.phase == VoiceInputPhase.recording)
+                    TextButton(
+                      onPressed: _voiceInput.stop,
+                      child: const Text('Stop recording'),
+                    ),
+                  TextButton(
+                    onPressed: _voiceInput.cancel,
+                    child: const Text('Cancel recording'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      if (_voiceOutput.owner != null)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            children: [
+              Text(
+                _voiceOutput.preparing ? 'Preparing speech…' : 'Reading aloud',
+              ),
+              TextButton(
+                onPressed: _voiceOutput.stop,
+                child: const Text('Stop speech'),
+              ),
+            ],
+          ),
+        ),
+      if (_voiceInput.error != null || _voiceOutput.error != null)
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: StudioError(_voiceInput.error ?? _voiceOutput.error!),
+        ),
+    ],
+  );
 
   bool _canPasteImage(ProfileChat chat) =>
       controller.canAddAttachment(chat) &&
@@ -115,6 +295,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   void initState() {
     super.initState();
     _destination = widget.initialDestination;
+    controller.addListener(_voiceWorkspaceChanged);
     WidgetsBinding.instance.addObserver(this);
     controller.visible = _destination == AppDestination.chats;
     // Shortcut navigation can reuse an owner still observed by the outgoing
@@ -149,6 +330,13 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if ({
+      AppLifecycleState.paused,
+      AppLifecycleState.hidden,
+      AppLifecycleState.detached,
+    }.contains(state)) {
+      _cancelVoice();
+    }
     controller.visible =
         state == AppLifecycleState.resumed &&
         _destination == AppDestination.chats;
@@ -180,6 +368,9 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   @override
   void dispose() {
+    controller.removeListener(_voiceWorkspaceChanged);
+    _voiceInput.dispose();
+    _voiceOutput.dispose();
     controller.visible = false;
     WidgetsBinding.instance.removeObserver(this);
     _composer.dispose();
@@ -203,7 +394,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   );
 
   Widget _buildWorkspace(BuildContext context) => ListenableBuilder(
-    listenable: controller,
+    listenable: Listenable.merge([controller, _voiceInput, _voiceOutput]),
     builder: (context, _) {
       final current = controller.current;
       final chat = controller.notificationChat ?? current?.chat;
@@ -230,6 +421,24 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         );
       }
       final parentSessionId = controller.parentSessionId(chat);
+      final stackChatScope =
+          MediaQuery.textScalerOf(context).scale(12) > 18 &&
+          MediaQuery.sizeOf(context).width < 480;
+      final canMoveProject =
+          !chat.opening &&
+          !chat.offlineSnapshot &&
+          !controller.switching &&
+          !(current?.mutatingSessions.contains(chat.key.sessionId) ?? false);
+      void openProjectPicker() => unawaited(
+        _run(
+          () => showChatProjectPicker(
+            context,
+            controller,
+            chat.key,
+            currentProjectId: chat.projectId,
+          ),
+        ),
+      );
       return PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
@@ -248,7 +457,9 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           drawer: _drawer(),
           appBar: AppBar(
             toolbarHeight:
-                96 + (MediaQuery.textScalerOf(context).scale(20) - 20),
+                96 +
+                (MediaQuery.textScalerOf(context).scale(20) - 20) +
+                (stackChatScope ? 48 : 0),
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
               tooltip: 'Back to sessions',
@@ -260,27 +471,8 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 Tooltip(
                   message: 'Move to project',
                   child: InkWell(
-                    key: const ValueKey('chat-project-picker'),
-                    borderRadius: BorderRadius.circular(8),
-                    onTap:
-                        chat.opening ||
-                            chat.offlineSnapshot ||
-                            controller.switching ||
-                            (current?.mutatingSessions.contains(
-                                  chat.key.sessionId,
-                                ) ??
-                                false)
-                        ? null
-                        : () => unawaited(
-                            _run(
-                              () => showChatProjectPicker(
-                                context,
-                                controller,
-                                chat.key,
-                                currentProjectId: chat.projectId,
-                              ),
-                            ),
-                          ),
+                    borderRadius: WingRadius.card,
+                    onTap: canMoveProject ? openProjectPicker : null,
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(
                         minHeight: 48,
@@ -301,15 +493,82 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     ),
                   ),
                 ),
-                ServerConnectionLabel(
-                  alignment: Alignment.topLeft,
-                  label: controller.connection.label,
-                  icon: controller.connection.icon,
-                  status: controller.connectionStatus,
-                  suffix: chat.opening || chat.offlineSnapshot
-                      ? chat.key.workspace.profileName
-                      : controller.chatProjectLabel(chat),
-                  style: Theme.of(context).textTheme.labelMedium,
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final scopeStyle = Theme.of(context).textTheme.labelMedium
+                        ?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w400,
+                        );
+                    final projectLabel = chat.opening || chat.offlineSnapshot
+                        ? chat.key.workspace.profileName
+                        : controller.chatProjectLabel(chat);
+                    final server = ServerConnectionLabel(
+                      alignment: Alignment.topLeft,
+                      label: controller.connection.label,
+                      icon: controller.connection.icon,
+                      status: controller.connectionStatus,
+                      style: scopeStyle,
+                    );
+                    final project = Tooltip(
+                      message: 'Move to project: $projectLabel',
+                      child: Semantics(
+                        button: true,
+                        enabled: canMoveProject,
+                        focusable: canMoveProject,
+                        onTap: canMoveProject ? openProjectPicker : null,
+                        label: '$projectLabel. Move to project',
+                        excludeSemantics: true,
+                        child: InkWell(
+                          key: const ValueKey('chat-project-picker'),
+                          borderRadius: WingRadius.control,
+                          onTap: canMoveProject ? openProjectPicker : null,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              minHeight: 48,
+                              minWidth: 48,
+                            ),
+                            child: Align(
+                              alignment: Alignment.topLeft,
+                              widthFactor: 1,
+                              heightFactor: 1,
+                              child: Text(
+                                projectLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: scopeStyle,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                    if (stackChatScope) {
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [server, project],
+                      );
+                    }
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: constraints.maxWidth * .5,
+                          ),
+                          child: server,
+                        ),
+                        ExcludeSemantics(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Text('·', style: scopeStyle),
+                          ),
+                        ),
+                        Expanded(child: project),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -659,6 +918,12 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         else
           ProfileMessage(
             message: message,
+            onReadAloud: message['role'] == 'assistant'
+                ? () => _run(() => _readAloud(chat, message))
+                : null,
+            readingAloud:
+                _voiceOutput.owner ==
+                (chat.key, answerMessageId(message) ?? message),
             loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
             onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
           ),
@@ -1122,11 +1387,13 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                       ),
                                     ),
                                   ),
+                                _voiceActivity(),
                                 TextField(
                                   key: const Key('profile-message-composer'),
                                   controller: _composer,
                                   focusNode: _composerFocus,
                                   enabled:
+                                      !_voiceInput.active &&
                                       !chat.commandRunning &&
                                       !(chat.editingQueuedPrompt != null &&
                                           (chat.queueMutating ||
@@ -1359,6 +1626,18 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                 }
                                               }),
                                       ),
+                                      IconButton(
+                                        tooltip: 'Dictate message',
+                                        icon: const Icon(Icons.mic_none),
+                                        onPressed:
+                                            _voiceInput.active ||
+                                                controller.switching ||
+                                                chat.opening ||
+                                                chat.commandRunning ||
+                                                chat.changingAnswer
+                                            ? null
+                                            : () => _run(() => _dictate(chat)),
+                                      ),
                                       ContextRing(occupancy: chat.context),
                                       Expanded(
                                         child: Align(
@@ -1470,6 +1749,12 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       );
 
   Map<ComposerAction, String?> _composerActions(ProfileChat chat) {
+    if (_voiceInput.active) {
+      return {
+        for (final action in ComposerAction.values)
+          action: 'Finish or cancel dictation first',
+      };
+    }
     if (controller.recovering || chat.opening || chat.offlineSnapshot) {
       return {
         for (final action in ComposerAction.values)
@@ -1862,6 +2147,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   );
 
   void _selectDestination(AppDestination destination) {
+    _cancelVoice();
     FocusManager.instance.primaryFocus?.unfocus();
     if (destination == AppDestination.connections) {
       if (widget.onConnections != null) {
@@ -1945,6 +2231,8 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             child: switch (_destination) {
               AppDestination.settings => AppSettingsContent(
                 preferences: controller.preferences,
+                hermesVoiceProfileLabel: controller.current?.scope.profileName,
+                openHermesVoiceSettings: _hermesSpeechSettingsLink(context),
                 enableNotifications: widget.enableNotifications,
                 backgroundMonitoringState: widget.backgroundMonitoringState,
                 openMonitoringBatterySettings:

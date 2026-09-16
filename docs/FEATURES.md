@@ -26,7 +26,13 @@ See [Conversation actions](CONVERSATION_ACTIONS_AND_READING.md), [composer gestu
 
 ## Send attachments and use results
 
-Add Camera, Photos or Files, paste a supported clipboard image, or share content into Hermes from Android. A photo taken with Camera inside a chat attaches directly to that chat's draft. External shares open a review to choose their destination and content; Send is separate. Dictation uses the device's speech-recognition service to produce text for review.
+Add Camera, Photos or Files, paste a supported clipboard image, or share content into Hermes from Android. A photo taken with Camera inside a chat attaches directly to that chat's draft. External shares open a review to choose their destination and content; Send is separate.
+
+App settings / Voice independently selects Local or Hermes for dictation and read-aloud. Local is the default: input uses explicitly on-device Android recognition, and output uses an installed offline Android voice, with preview and speaking speed. On-device recognition requires Android 12 or later and a supported recognition service/language. Unavailable engines show an error; Wing never silently switches processing engines.
+
+Tap the composer microphone, speak, then Stop recording to put the transcript into the editable draft. Cancel keeps the original draft. Recording is capped at two minutes and never submits automatically. Tap Read aloud on an assistant reply to speak its prose; Stop speech cancels pending synthesis or playback. Reasoning, tool activity and code are omitted. Capture and playback stop when leaving the foreground or changing chats/profiles. Continuous conversation and automatic spoken replies are not included.
+
+Hermes uses the selected server profile's speech providers, languages and voice. These cannot be overridden in App settings: its direct link opens the owning profile's speech administration page, which warns that edits affect every client using that profile. Microphone permission is requested on first launch after notification permission; denial leaves other app features usable. The microphone action can request it again.
 
 Sent images appear below your message on your side of the chat. Previews are capped at 240 × 320 dp; long screenshots show a crop from the top. Tap to view and zoom the full image. Other attachments appear as file cards with their name and extension. Saved history retains previews when its image content or server file remains available. An unavailable image shows a retry control.
 
@@ -48,7 +54,7 @@ run it now, and open recent run conversations. Hermes runs the schedule while
 Wing is closed. Interrupted requests keep an explicit uncertainty state instead
 of automatically submitting duplicate work.
 
-App settings groups device preferences into Appearance, Chat, Notifications and About. Appearance includes a live chat preview, paired light/dark themes, accent colors and text size. Chat explains the default action during work; Notifications groups alert preferences and delivery recovery. About contains the installed version, release links and offline privacy policy. Configuration export/import transfers connections, credentials and allowlisted preferences; it is not a full draft/app backup.
+App settings groups device preferences into Appearance, Chat, Notifications, Voice and About. Appearance includes a live chat preview, paired light/dark themes, accent colors and text size. Chat explains the default action during work; Notifications groups alert preferences and delivery recovery. Voice opens independent input/output processing and Android speech choices. About contains the installed version, release links and offline privacy policy. Configuration export/import transfers connections, credentials and allowlisted preferences, including voice choices; it is not a full draft/app backup. Android permission decisions remain on the device. Restored Android voices/languages must be installed on the destination phone; unavailable choices show an error without switching engines.
 
 The Connections toolbar provides Backup configuration and Restore configuration, in that order. Backup offers an optional passphrase before sharing the file. Leave it blank for a plain JSON backup, including readable credentials, or enter and confirm a passphrase to encrypt it. Restore accepts either format and only needs a passphrase for encrypted files. Restore is also available before adding a first connection.
 

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'config_backup.dart';
 import 'connection_manager.dart';
+import 'voice_preferences.dart';
 
 /// How an imported backup is applied to the connections already on the device.
 enum ConfigImportMode {
@@ -53,8 +54,7 @@ class ConfigBackupService {
   static const Set<String> exactPreferenceKeys = <String>{
     'theme_mode',
     'verbose_mode',
-    'voice_name',
-    'voice_locale',
+    ...VoicePreferences.keys,
     'app_text_size_preference',
   };
 
@@ -145,7 +145,9 @@ class ConfigBackupService {
     var applied = 0;
     var skipped = 0;
     for (final entry in backup.preferences.entries) {
-      if (!isBackedUpKey(entry.key)) {
+      if (!isBackedUpKey(entry.key) ||
+          (VoicePreferences.keys.contains(entry.key) &&
+              !VoicePreferences.accepts(entry.key, entry.value))) {
         skipped++;
         continue;
       }

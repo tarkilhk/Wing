@@ -3,6 +3,7 @@ import '../models/connection_icon.dart';
 import '../services/server_connection_status.dart';
 import '../theme/wing_theme.dart';
 import 'connection_icon_picker.dart';
+import 'studio_error.dart';
 
 class ServerConnectionScope extends InheritedWidget {
   final ServerConnectionStatus status;
@@ -38,20 +39,22 @@ class ServerConnectionLabel extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
+    void openDetails() => showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => _ConnectionDetails(label: label, status: status),
+    );
     Widget labelBody() => Semantics(
       button: true,
       label:
           '$label, ${status?.description ?? 'Not checked'}. Connection details',
+      focusable: true,
+      onTap: openDetails,
       excludeSemantics: true,
       child: InkWell(
-        borderRadius: BorderRadius.circular(6),
-        onTap: () => showModalBottomSheet<void>(
-          context: context,
-          isScrollControlled: true,
-          useSafeArea: true,
-          builder: (context) =>
-              _ConnectionDetails(label: label, status: status),
-        ),
+        borderRadius: WingRadius.control,
+        onTap: openDetails,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
           child: Align(
@@ -113,18 +116,21 @@ class ServerConnectionIndicator extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
+    void openDetails() => showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _ConnectionDetails(label: label, status: status),
+    );
     Widget contents() => Semantics(
       button: true,
       label:
           '$label, ${status?.description ?? 'Not checked'}. Connection details',
+      focusable: true,
+      onTap: openDetails,
       excludeSemantics: true,
       child: InkWell(
-        onTap: () => showModalBottomSheet<void>(
-          context: context,
-          isScrollControlled: true,
-          useSafeArea: true,
-          builder: (_) => _ConnectionDetails(label: label, status: status),
-        ),
+        onTap: openDetails,
         child: SizedBox(
           width: 48,
           height: 48,
@@ -238,43 +244,97 @@ class _ConnectionDetails extends StatelessWidget {
   };
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     Widget contents() => SafeArea(
+      top: false,
       child: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(label, style: Theme.of(context).textTheme.titleLarge),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Connection details',
+                      style: theme.textTheme.titleLarge?.copyWith(fontSize: 20),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close connection details',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(label, style: theme.textTheme.titleMedium),
               const SizedBox(height: 8),
-              Text(status?.description ?? 'Not checked'),
-              const SizedBox(height: 16),
-              Text('Server access: ${availability(status?.access)}'),
-              const SizedBox(height: 8),
-              Text('Live chat: ${availability(status?.live)}'),
+              Semantics(
+                liveRegion: true,
+                child: Row(
+                  children: [
+                    _ConnectionLed(
+                      phase: status?.phase ?? ServerConnectionPhase.unchecked,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        status?.description ?? 'Not checked',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                  borderRadius: WingRadius.card,
+                ),
+                child: Column(
+                  children: [
+                    _ConnectionAvailabilityRow(
+                      icon: Icons.dns_outlined,
+                      title: 'Server access',
+                      value: availability(status?.access),
+                    ),
+                    const Divider(height: 1),
+                    _ConnectionAvailabilityRow(
+                      icon: Icons.forum_outlined,
+                      title: 'Live chat',
+                      value: availability(status?.live),
+                    ),
+                  ],
+                ),
+              ),
               if (status?.problem != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
-                  child: Text(status!.problem!),
+                  child: StudioError(status!.problem!),
                 ),
               if (status?.phase == ServerConnectionPhase.disconnected)
-                const Padding(
-                  padding: EdgeInsets.only(top: 16),
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
                   child: Text(
                     'We’ll try again when your network returns or you reopen Wing. You can also retry now.',
+                    style: theme.textTheme.bodySmall,
                   ),
                 ),
               if (status?.retry != null &&
                   status?.phase != ServerConnectionPhase.connected)
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
-                  child: TextButton(
+                  child: OutlinedButton.icon(
                     onPressed:
                         status?.phase == ServerConnectionPhase.reconnecting
                         ? null
                         : () => status!.retry!(),
-                    child: const Text('Retry connection'),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry connection'),
                   ),
                 ),
             ],
@@ -286,4 +346,41 @@ class _ConnectionDetails extends StatelessWidget {
         ? contents()
         : ListenableBuilder(listenable: status!, builder: (_, _) => contents());
   }
+}
+
+class _ConnectionAvailabilityRow extends StatelessWidget {
+  const _ConnectionAvailabilityRow({
+    required this.icon,
+    required this.title,
+    required this.value,
+  });
+  final IconData icon;
+  final String title;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => MergeSemantics(
+    child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 20,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.bodyMedium),
+                Text(value, style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
