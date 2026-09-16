@@ -84,6 +84,15 @@ The approved wordmark uses lowercase **wing**; the app name is **Wing**, or **Wi
 
 </details>
 
+## Support Wing
+
+If Wing is useful in your day, you can buy me a coffee and help me keep improving it.
+
+Completely optional. Every feature is available either way.
+
+The Ko-fi page is not set up yet, so contributions are not available. The app's
+support entry stays hidden until the owner supplies the real page URL.
+
 ## Support and provenance
 
 Found a client problem? [Open an issue](https://github.com/tarkilhk/wing/issues) with reproducible steps, following the [redaction guidance](SECURITY.md). The [privacy policy](PRIVACY.md) covers storage, server processing, dictation and deletion, and is available offline in App settings.

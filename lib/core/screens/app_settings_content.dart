@@ -3,12 +3,14 @@ import '../widgets/compact_switch.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/support_wing.dart';
 import '../theme/profile_workspace_theme.dart';
 import '../theme/wing_theme.dart';
 import '../services/turn_notification_service.dart';
 import '../services/background_monitoring_service.dart';
 import '../services/device_preference.dart';
 import '../widgets/studio_error.dart';
+import '../widgets/support_wing_section.dart';
 import '../widgets/text_size_settings_card.dart';
 import '../widgets/installed_app_version_card.dart';
 import '../widgets/composer_action_settings.dart';
@@ -386,6 +388,10 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                             ),
                           ),
                         ),
+                        if (wingSupportUri case final uri?) ...[
+                          const Divider(height: 1),
+                          SupportWingSection(uri: uri),
+                        ],
                       ],
                     ),
                   ),

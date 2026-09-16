@@ -123,6 +123,49 @@ If building or verification fails, fix the cause before retrying. If a failed pu
 
 ## Google Play preparation
 
+### Optional Support Wing contributions
+
+The owner has no Ko-fi account yet. `lib/core/config/support_wing.dart` leaves
+the destination unset and App settings / About hides the support entry.
+Do not substitute an example URL. Once the owner supplies the real page URL,
+set that destination, link **Buy me a coffee** in README.md, and put the matching
+account name under `ko_fi` in `.github/FUNDING.yml` (replacing its empty mapping).
+The entry then remains permanently available in About, with no reminders or
+feature differences. The existing URL launcher opens the external browser;
+no payment SDK, tracking or backend integration is involved.
+
+Account setup and financial information are the owner's responsibility. Use
+Ko-fi Free for one-time tips, with Standard / Contributor mode disabled. In the
+current UI, review **Settings → Payment → Get all of Ko-fi** and opt out.
+New accounts default to Standard, which charges 5% even on one-time tips;
+creating a free account alone does not select the 0% option.
+Confirm the actual account and checkout offer one-time contributions without
+memberships, paid content, badges or other benefits. Ko-fi's
+[fee documentation](https://help.ko-fi.com/hc/en-us/articles/360002506494-Does-Ko-fi-take-a-fee)
+and [pricing](https://ko-fi.com/pricing), checked on 17 September 2026, distinguish
+Free's 0% one-time-tip platform fee from Standard's 5%. PayPal or Stripe
+processing fees still apply; this is not a claim that contributions are fee-free.
+
+**Play eligibility is unverified. Do not include the external contribution link
+in a Google Play release until the actual arrangement has been checked.**
+Google's [Payments policy](https://support.google.com/googleplay/android-developer/answer/9858738)
+and [tips/contributions explanation](https://support.google.com/googleplay/android-developer/answer/10281818),
+checked on 17 September 2026, describe a peer-to-peer exception when the creator
+receives the whole contribution and the payment grants no digital content or
+services. A voluntary label or external browser alone does not establish that
+exception. The cited explanation does not expressly resolve processing-fee
+deductions for this Ko-fi arrangement.
+
+Before a Play submission, recheck those current rules against the real page,
+account mode, recipient, platform/processor deductions and any benefits offered.
+Record the verification date, evidence and eligibility decision with the release
+candidate; keep financial details private. Resolve any ambiguity, including fee
+treatment, with Play support before enabling the link for Play. Leave the
+destination unset in a Play candidate while verification remains incomplete.
+This source change does not certify eligibility or configure the owner's account.
+
+### Bundle and store preparation
+
 The existing workflow does not upload to Play Console. A Play release needs an Android App Bundle:
 
 ```sh

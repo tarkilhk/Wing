@@ -103,6 +103,18 @@ void main() {
   });
 
   testWidgets(
+    'no contribution entry is exposed before an account is configured',
+    (tester) async {
+      final preferences = await SharedPreferences.getInstance();
+      await _show(tester, preferences);
+      await tester.ensureVisible(find.byKey(const ValueKey('privacy-policy')));
+      await tester.pumpAndSettle();
+      expect(find.text('Support Wing'), findsNothing);
+      expect(find.text('Buy me a coffee'), findsNothing);
+    },
+  );
+
+  testWidgets(
     'saved theme and accent update the preview and survive reopening',
     (tester) async {
       final preferences = await SharedPreferences.getInstance();
