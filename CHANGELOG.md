@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Choose from 16 Studio-style connection icons during setup or from the connection's Appearance menu. Store each choice locally and include it in configuration exports and imports; existing connections and older backups use the standard server icon.
+- Increase spacing between connection status lights and connection names.
+
 ## [1.0.1] - 2026-09-16
 
 Wing 1.0.1 refines the first-run experience, reorganizes device settings, improves attachments and chat alerts, and keeps notification monitoring active only while chats are working. This changelog covers all changes since the `v1.0.0` source tag.

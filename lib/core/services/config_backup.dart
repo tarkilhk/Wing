@@ -99,6 +99,7 @@ class ConfigBackup {
     return <String, dynamic>{
       'id': connection.id,
       'label': connection.label,
+      'icon': connection.icon.name,
       'host': connection.host,
       'port': connection.port,
       'api_key': connection.apiKey,
@@ -123,6 +124,7 @@ class ConfigBackup {
     return SavedConnection(
       id: map['id'] as String,
       label: map['label'] as String,
+      icon: ConnectionIcon.fromStored(map['icon']),
       host: map['host'] as String,
       port: (map['port'] as int?) ?? 8642,
       apiKey: (map['api_key'] as String?) ?? '',

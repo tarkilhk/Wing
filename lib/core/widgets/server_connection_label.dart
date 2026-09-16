@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../models/connection_icon.dart';
 import '../services/server_connection_status.dart';
 import '../theme/wing_theme.dart';
+import 'connection_icon_picker.dart';
 
 class ServerConnectionScope extends InheritedWidget {
   final ServerConnectionStatus status;
@@ -60,7 +62,7 @@ class ServerConnectionLabel extends StatelessWidget {
                 _ConnectionLed(
                   phase: status?.phase ?? ServerConnectionPhase.unchecked,
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 16),
                 Flexible(
                   child: Text(
                     '$label${suffix == null || suffix!.isEmpty ? '' : ' · $suffix'}',
@@ -88,10 +90,12 @@ class ServerConnectionLabel extends StatelessWidget {
 class ServerConnectionIndicator extends StatelessWidget {
   final String label;
   final ServerConnectionStatus? status;
+  final ConnectionIcon icon;
   const ServerConnectionIndicator({
     super.key,
     required this.label,
     this.status,
+    this.icon = ConnectionIcon.server,
   });
   @override
   Widget build(BuildContext context) {
@@ -110,11 +114,14 @@ class ServerConnectionIndicator extends StatelessWidget {
         child: SizedBox(
           width: 48,
           height: 48,
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: _ConnectionLed(
-              phase: status?.phase ?? ServerConnectionPhase.unchecked,
-            ),
+          child: Row(
+            children: [
+              ConnectionIconBadge(icon: icon),
+              const SizedBox(width: 8),
+              _ConnectionLed(
+                phase: status?.phase ?? ServerConnectionPhase.unchecked,
+              ),
+            ],
           ),
         ),
       ),

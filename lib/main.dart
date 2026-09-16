@@ -1,4 +1,5 @@
 import 'core/widgets/server_connection_label.dart';
+import 'core/widgets/connection_icon_picker.dart';
 import 'core/services/network_availability.dart';
 import 'core/screens/connection_setup_screen.dart';
 import 'core/widgets/studio_error.dart';
@@ -737,7 +738,7 @@ class HomeScreenState extends State<HomeScreen> {
                         ),
                         for (final connection in _connections)
                           ListTile(
-                            horizontalTitleGap: 4,
+                            horizontalTitleGap: 16,
                             leading: _serverIndicator(connection),
                             title: Text(connection.label),
                             onTap: () => Navigator.pop(context, connection),
@@ -967,6 +968,7 @@ class HomeScreenState extends State<HomeScreen> {
                 candidate.baseUrl,
                 candidate.port,
                 '',
+                icon: candidate.icon,
                 dashboardPrefix: candidate.dashboardPrefix,
                 dashboardProxied: candidate.dashboardProxied,
                 desktopGatewayUrl: candidate.desktopGatewayUrl,
@@ -982,6 +984,7 @@ class HomeScreenState extends State<HomeScreen> {
               candidate.baseUrl,
               candidate.port,
               '',
+              icon: candidate.icon,
               gatewayPrefix: '',
               dashboardPrefix: candidate.dashboardPrefix ?? '',
               dashboardProxied: candidate.dashboardProxied,
@@ -1024,6 +1027,7 @@ class HomeScreenState extends State<HomeScreen> {
               ),
         builder: (context, snapshot) => ServerConnectionIndicator(
           label: connection.label,
+          icon: connection.icon,
           status: snapshot.data?.connectionStatus,
         ),
       );
@@ -1032,7 +1036,7 @@ class HomeScreenState extends State<HomeScreen> {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: ListTile(
-        horizontalTitleGap: 4,
+        horizontalTitleGap: 16,
         leading: _serverIndicator(conn),
         title: Text(conn.label),
         subtitle: Text(
@@ -1059,10 +1063,21 @@ class HomeScreenState extends State<HomeScreen> {
               }
             } else if (v == 'edit') {
               _editConnection(conn);
+            } else if (v == 'appearance') {
+              await showConnectionIconPicker(
+                context,
+                connectionName: conn.label,
+                initialIcon: conn.icon,
+                onSave: (icon) async {
+                  await widget.connManager.updateConnectionIcon(conn.id, icon);
+                  if (mounted) _refresh();
+                },
+              );
             }
           },
           itemBuilder: (_) => [
             const PopupMenuItem(value: 'edit', child: Text('Edit connection')),
+            const PopupMenuItem(value: 'appearance', child: Text('Appearance')),
             PopupMenuItem(
               value: 'delete',
               child: Text(

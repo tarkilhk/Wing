@@ -1,3 +1,7 @@
+import 'connection_icon.dart';
+
+export 'connection_icon.dart';
+
 /// Connection model for remote Hermes Gateway API Server.
 class NormalizedConnectionHost {
   final String host;
@@ -108,6 +112,7 @@ List<List<String>> canonicalGatewayHeaders(Map<String, String> headers) {
 class SavedConnection {
   final String id;
   final String label;
+  final ConnectionIcon icon;
   final String host;
   final int port;
   final String apiKey;
@@ -140,6 +145,7 @@ class SavedConnection {
     required this.host,
     required this.port,
     required this.apiKey,
+    this.icon = ConnectionIcon.server,
     this.useHttps = false,
     this.gatewayPrefix,
     this.dashboardPrefix,
@@ -231,6 +237,7 @@ class SavedConnection {
     final m = <String, dynamic>{
       'id': id,
       'label': label,
+      'icon': icon.name,
       'host': host,
       'port': port,
       'use_https': useHttps,
@@ -263,6 +270,7 @@ class SavedConnection {
     return SavedConnection(
       id: map['id'] as String,
       label: map['label'] as String,
+      icon: ConnectionIcon.fromStored(map['icon']),
       host: map['host'] as String,
       port: (map['port'] as int?) ?? 8642,
       // Legacy plaintext fields are accepted only so ConnectionManager can
@@ -284,6 +292,7 @@ class SavedConnection {
   /// distinguish "leave unchanged" from "clear").
   SavedConnection copyWith({
     String? label,
+    ConnectionIcon? icon,
     String? host,
     int? port,
     String? apiKey,
@@ -306,6 +315,7 @@ class SavedConnection {
     return SavedConnection(
       id: id,
       label: label ?? this.label,
+      icon: icon ?? this.icon,
       host: host ?? this.host,
       port: port ?? this.port,
       apiKey: apiKey ?? this.apiKey,

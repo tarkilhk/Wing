@@ -51,6 +51,10 @@ void main() {
       original,
     );
     expect(store.writes, 1);
+    expect(
+      await restored.resolve(connection.copyWith(icon: ConnectionIcon.rocket)),
+      original,
+    );
     expect(original, matches(RegExp(r'^[a-f0-9]{64}$')));
     expect(jsonEncode(store.values), isNot(contains('private-')));
     expect(

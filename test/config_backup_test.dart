@@ -16,6 +16,7 @@ void main() {
         SavedConnection(
           id: 'conn-1',
           label: 'Miniserver',
+          icon: ConnectionIcon.rocket,
           host: 'carlos-miniserver.ts.net',
           port: 8642,
           apiKey: 'sk-secret-key',
@@ -97,6 +98,26 @@ void main() {
   });
 
   group('ConfigBackup serialization', () {
+    test('older backups without icons use the standard server icon', () {
+      final json = sampleBackup().toJson();
+      (json['connections'] as List).single.remove('icon');
+      expect(
+        ConfigBackup.fromJson(json).connections.single.icon,
+        ConnectionIcon.server,
+      );
+    });
+
+    test('invalid icon values reject the backup', () {
+      for (final invalid in ['unknown-icon', '', 42]) {
+        final json = sampleBackup().toJson();
+        (json['connections'] as List).single['icon'] = invalid;
+        expect(
+          () => ConfigBackup.fromJson(json),
+          throwsA(isA<ConfigBackupException>()),
+        );
+      }
+    });
+
     test('round-trips connections including secrets', () {
       final restored = ConfigBackup.fromJson(sampleBackup().toJson());
 
@@ -104,6 +125,7 @@ void main() {
       final conn = restored.connections.single;
       expect(conn.id, 'conn-1');
       expect(conn.label, 'Miniserver');
+      expect(conn.icon, ConnectionIcon.rocket);
       expect(conn.host, 'carlos-miniserver.ts.net');
       expect(conn.port, 8642);
       expect(conn.useHttps, isTrue);

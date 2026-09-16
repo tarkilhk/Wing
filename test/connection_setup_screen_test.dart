@@ -174,9 +174,15 @@ void main() {
       expect(checked?.apiKey, isEmpty);
       expect(saved, isNull);
       await tester.enterText(find.byKey(const Key('connection-name')), 'Home');
+      await _tap(tester, 'Connection icon');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('connection-icon-home')));
+      await _tap(tester, 'Save icon');
+      await tester.pumpAndSettle();
       await _tap(tester, 'Save and open');
       await tester.pumpAndSettle();
       expect(saved?.label, 'Home');
+      expect(saved?.icon, ConnectionIcon.home);
       expect(fixture.calls, ConnectionCheck.values);
     },
   );

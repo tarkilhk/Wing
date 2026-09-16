@@ -319,6 +319,7 @@ class ConnectionManager {
     String host,
     int port,
     String apiKey, {
+    ConnectionIcon icon = ConnectionIcon.server,
     String? gatewayPrefix,
     String? dashboardPrefix,
     bool dashboardProxied = false,
@@ -332,6 +333,7 @@ class ConnectionManager {
     final conn = SavedConnection(
       id: _uuid.v4(),
       label: label,
+      icon: icon,
       host: normalized.host,
       port: normalized.port,
       apiKey: apiKey,
@@ -367,6 +369,7 @@ class ConnectionManager {
     String host,
     int port,
     String apiKey, {
+    ConnectionIcon? icon,
     String? gatewayPrefix,
     String? dashboardPrefix,
     bool dashboardProxied = false,
@@ -397,6 +400,7 @@ class ConnectionManager {
 
     current[idx] = current[idx].copyWith(
       label: label,
+      icon: icon,
       host: normalized.host,
       port: normalized.port,
       apiKey: apiKey,
@@ -426,6 +430,24 @@ class ConnectionManager {
       nextCredentials: _ConnectionCredentials.fromConnection(current[idx]),
       connections: current,
     );
+  }
+
+  /// Changes only device-owned appearance, without touching credentials or
+  /// contacting the server.
+  Future<void> updateConnectionIcon(String connId, ConnectionIcon icon) async {
+    final current = getConnections();
+    final index = current.indexWhere((connection) => connection.id == connId);
+    if (index < 0) throw StateError('Connection no longer exists.');
+    current[index] = current[index].copyWith(icon: icon);
+    try {
+      await _saveAll(current);
+    } catch (_) {
+      // SharedPreferences updates its cache before the platform write finishes.
+      // Restore the persisted value so reopening Appearance cannot show a
+      // selection whose save failed.
+      await prefs.reload();
+      rethrow;
+    }
   }
 
   /// Updates the dashboard port + basic-auth credentials on an existing

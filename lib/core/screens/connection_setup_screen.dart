@@ -5,6 +5,7 @@ import '../services/connection_manager.dart';
 import '../services/connection_setup_probe.dart';
 import '../theme/wing_theme.dart';
 import '../widgets/compact_switch.dart';
+import '../widgets/connection_icon_picker.dart';
 import '../widgets/gateway_headers_editor.dart';
 import '../widgets/playful_portrait.dart';
 import '../widgets/studio_action_label.dart';
@@ -42,6 +43,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
   late final TextEditingController _name;
   late final ConnectionSetupProbe _probe;
   late _AccessSettings _access;
+  late ConnectionIcon _icon;
   _Step _step = _Step.address;
   SavedConnection? _checkedConnection;
   bool _revealPassword = false;
@@ -57,6 +59,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
   void initState() {
     super.initState();
     final initial = widget.initialConnection;
+    _icon = initial?.icon ?? ConnectionIcon.server;
     _address = TextEditingController(
       text: initial == null
           ? ''
@@ -152,7 +155,10 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
     if (_saving || !_probe.verified || !_nameForm.currentState!.validate()) {
       return;
     }
-    final candidate = _checkedConnection!.copyWith(label: _name.text.trim());
+    final candidate = _checkedConnection!.copyWith(
+      label: _name.text.trim(),
+      icon: _icon,
+    );
     setState(() {
       _saving = true;
       _saveError = null;
@@ -715,6 +721,29 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
               : null,
         ),
         const SizedBox(height: 24),
+        ListTile(
+          key: const Key('connection-appearance'),
+          contentPadding: EdgeInsets.zero,
+          leading: ConnectionIconBadge(icon: _icon),
+          title: const Text('Connection icon'),
+          subtitle: Text(_icon.label),
+          trailing: const Icon(Icons.chevron_right),
+          enabled: !_saving,
+          onTap: _saving
+              ? null
+              : () => showConnectionIconPicker(
+                  context,
+                  connectionName: _name.text.trim(),
+                  initialIcon: _icon,
+                  onSave: (icon) async {
+                    setState(() {
+                      _icon = icon;
+                      _dirty = true;
+                    });
+                  },
+                ),
+        ),
+        const SizedBox(height: 16),
         if (!_editing)
           Text(
             'Opens with profile ${_probe.discovery!.serverPreferred.label}',

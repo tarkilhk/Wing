@@ -44,6 +44,8 @@ App settings groups device preferences into Appearance, Chat, Notifications and 
 
 The Connections toolbar provides Backup configuration and Restore configuration, in that order. Backup offers an optional passphrase before sharing the file. Leave it blank for a plain JSON backup, including readable credentials, or enter and confirm a passphrase to encrypt it. Restore accepts either format and only needs a passphrase for encrypted files. Restore is also available before adding a first connection.
 
+Each connection has a selectable icon. Choose it on the final setup screen or use the connection’s ellipsis menu → Appearance to change it without checking the server again. Icons are Wing-owned, saved locally with the connection, and included in both plain and encrypted configuration backups. Existing connections and older backups without an icon use the standard server icon. The status light stays separate from the icon, with a 16 dp gap before the connection name.
+
 See [Administration](ADMINISTRATION.md), [session controls](SESSION_CONTROLS.md), [subagents](SUBAGENT_SUPERVISION.md) and [notifications](BACKGROUND_NOTIFICATIONS.md).
 
 Accepted work continues on Hermes when the phone leaves. Background monitoring retains the connected client while chats are working, with an ongoing notification and an optional battery exemption for screen-off delivery. When every chat is finished or waiting for input, monitoring stops and the chat notifications remain. Local queues and alerts still stop if Android terminates the process. Firebase delivery, cold sensitive/side-task recovery and synchronized answer versions are not current features. The [product plan](PRODUCT_PLAN.md) separates selected work from exclusions.

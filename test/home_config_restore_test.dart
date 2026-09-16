@@ -13,6 +13,7 @@ import 'package:wing/core/services/android_share_intent_service.dart';
 import 'package:wing/core/services/config_backup_service.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/main.dart';
+import 'package:wing/core/widgets/connection_icon_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _MemoryCredentialStore implements CredentialStore {
@@ -133,6 +134,45 @@ Future<void> pumpHome(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('Appearance changes the saved connection icon without setup', (
+    tester,
+  ) async {
+    final manager = await buildManager();
+    final connection = await manager.saveConnection(
+      'Claw',
+      'host',
+      8642,
+      'key',
+    );
+    await pumpHome(tester, manager);
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Appearance'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('connection-icon-rocket')));
+    await tester.tap(find.text('Save icon'));
+    await tester.pumpAndSettle();
+    expect(manager.getConnections().single.icon, ConnectionIcon.rocket);
+    expect(manager.getConnections().single.id, connection.id);
+    expect(
+      tester.widget<ConnectionIconBadge>(find.byType(ConnectionIconBadge)).icon,
+      ConnectionIcon.rocket,
+    );
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Appearance'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const ValueKey('connection-icon-rocket')),
+          )
+          .isSelected,
+      isTrue,
+    );
+    expect(find.text('Check connection'), findsNothing);
+  });
 
   testWidgets('a device with no connections can still reach restore', (
     tester,

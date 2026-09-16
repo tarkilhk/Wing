@@ -43,7 +43,7 @@ void main() {
         );
         final name = tester.getRect(find.text('${status.label} · Travel'));
         expect(led.size, const Size(8, 8));
-        expect(name.left - led.right, 4);
+        expect(name.left - led.right, 16);
         expect(
           tester.getSize(find.byType(InkWell)).height,
           greaterThanOrEqualTo(48),
