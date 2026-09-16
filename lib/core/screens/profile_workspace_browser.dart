@@ -788,6 +788,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
               ),
               ServerConnectionLabel(
                 label: controller.connection.label,
+                icon: controller.connection.icon,
                 status: controller.connectionStatus,
                 suffix: project == null ? null : resource!.scope.profileName,
                 style: TextStyle(

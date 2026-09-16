@@ -23,12 +23,14 @@ class ServerConnectionScope extends InheritedWidget {
 class ServerConnectionLabel extends StatelessWidget {
   final ServerConnectionStatus? status;
   final String label;
+  final ConnectionIcon? icon;
   final String? suffix;
   final TextStyle? style;
   final AlignmentGeometry alignment;
   const ServerConnectionLabel({
     super.key,
     required this.label,
+    this.icon,
     this.status,
     this.suffix,
     this.style,
@@ -63,6 +65,16 @@ class ServerConnectionLabel extends StatelessWidget {
                   phase: status?.phase ?? ServerConnectionPhase.unchecked,
                 ),
                 const SizedBox(width: 16),
+                if (icon != null) ...[
+                  Icon(
+                    icon!.glyph,
+                    size: 16,
+                    color:
+                        style?.color ??
+                        Theme.of(context).textTheme.bodySmall?.color,
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 Flexible(
                   child: Text(
                     '$label${suffix == null || suffix!.isEmpty ? '' : ' · $suffix'}',

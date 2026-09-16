@@ -288,6 +288,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 ServerConnectionLabel(
                   alignment: Alignment.topLeft,
                   label: controller.connection.label,
+                  icon: controller.connection.icon,
                   status: controller.connectionStatus,
                   suffix: chat.opening || chat.offlineSnapshot
                       ? chat.key.workspace.profileName

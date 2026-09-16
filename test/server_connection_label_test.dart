@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wing/core/models/connection_icon.dart';
 import 'package:wing/core/services/server_connection_status.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
@@ -29,6 +30,7 @@ void main() {
                   padding: const EdgeInsets.all(16),
                   child: ServerConnectionLabel(
                     label: status.label,
+                    icon: ConnectionIcon.rocket,
                     status: status,
                     suffix: 'Travel',
                   ),
@@ -42,8 +44,10 @@ void main() {
           find.byKey(const ValueKey('server-connection-led')),
         );
         final name = tester.getRect(find.text('${status.label} · Travel'));
+        final icon = tester.getRect(find.byIcon(Icons.rocket_launch_outlined));
         expect(led.size, const Size(8, 8));
-        expect(name.left - led.right, 16);
+        expect(icon.left - led.right, 16);
+        expect(name.left - icon.right, 8);
         expect(
           tester.getSize(find.byType(InkWell)).height,
           greaterThanOrEqualTo(48),
