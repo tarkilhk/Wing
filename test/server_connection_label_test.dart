@@ -46,8 +46,8 @@ void main() {
         final name = tester.getRect(find.text('${status.label} · Travel'));
         final icon = tester.getRect(find.byIcon(Icons.rocket_launch_outlined));
         expect(led.size, const Size(8, 8));
-        expect(icon.left - led.right, 16);
-        expect(name.left - icon.right, 8);
+        expect(led.left - icon.right, 8);
+        expect(name.left - led.right, 16);
         expect(
           tester.getSize(find.byType(InkWell)).height,
           greaterThanOrEqualTo(48),

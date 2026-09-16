@@ -61,10 +61,6 @@ class ServerConnectionLabel extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _ConnectionLed(
-                  phase: status?.phase ?? ServerConnectionPhase.unchecked,
-                ),
-                const SizedBox(width: 16),
                 if (icon != null) ...[
                   Icon(
                     icon!.glyph,
@@ -75,6 +71,10 @@ class ServerConnectionLabel extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                 ],
+                _ConnectionLed(
+                  phase: status?.phase ?? ServerConnectionPhase.unchecked,
+                ),
+                const SizedBox(width: 16),
                 Flexible(
                   child: Text(
                     '$label${suffix == null || suffix!.isEmpty ? '' : ' · $suffix'}',

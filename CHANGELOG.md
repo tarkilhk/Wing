@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Show the saved connection icon beside the status light and connection name in Chats and conversation headers.
+- Show the saved connection icon, then the status light and connection name in Chats and conversation headers, matching the other connection rows.
 - Remove the redundant Edit button from the connection address card; use Back to return to the address step.
 - Tap a connection icon on Connections or beside the address during setup to choose from 16 Studio-style icons. Save existing connection icons immediately without a server check; keep new choices with the setup draft. Store each choice locally and include it in configuration exports and imports; existing connections and older backups use the standard server icon. Remove the redundant Appearance menu item and keep the status light's details action separate.
 - Increase spacing between connection status lights and connection names.
