@@ -628,10 +628,10 @@ class HomeScreenState extends State<HomeScreen> {
     _refresh();
     widget.shareIntents?.pendingShare.addListener(_onSharedText);
     widget.shareIntents?.intakeError.addListener(_onShareError);
-    widget.launchIntents?.pendingQuickChat.addListener(_onQuickChat);
+    widget.launchIntents?.pendingAction.addListener(_onLauncherAction);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onShareError();
-      _onQuickChat();
+      _onLauncherAction();
     });
     final ready = widget.startupExternalNavigationReady;
     if (ready == null) {
@@ -770,10 +770,10 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _onQuickChat() {
+  void _onLauncherAction() {
     if (!mounted ||
         _settingUpConnection ||
-        widget.launchIntents?.pendingQuickChat.value != true) {
+        widget.launchIntents?.pendingAction.value == null) {
       return;
     }
     final connection = _connectionForExternalAction();
@@ -786,7 +786,7 @@ class HomeScreenState extends State<HomeScreen> {
   void dispose() {
     widget.shareIntents?.pendingShare.removeListener(_onSharedText);
     widget.shareIntents?.intakeError.removeListener(_onShareError);
-    widget.launchIntents?.pendingQuickChat.removeListener(_onQuickChat);
+    widget.launchIntents?.pendingAction.removeListener(_onLauncherAction);
     super.dispose();
   }
 
@@ -803,7 +803,7 @@ class HomeScreenState extends State<HomeScreen> {
     // The share listener owns this route so the regular last-connection
     // auto-navigation cannot stack a second Workspace above the shared draft.
     if (widget.shareIntents?.pendingShare.value != null ||
-        widget.launchIntents?.pendingQuickChat.value == true) {
+        widget.launchIntents?.pendingAction.value != null) {
       return;
     }
     final lastId = widget.connManager.prefs.getString(_lastConnectionKey);
@@ -915,10 +915,24 @@ class HomeScreenState extends State<HomeScreen> {
         );
       }
     }
-    final initialQuickChat =
-        widget.launchIntents?.takePendingQuickChat() == true &&
-        sharedPayload == null;
-    if (sharedPayload?.target != null) {
+    final launchAction = sharedPayload == null
+        ? widget.launchIntents?.takePendingAction()
+        : null;
+    final initialQuickChat = launchAction == AndroidLaunchAction.quickChat;
+    if (launchAction != null) {
+      final departingRoutes = <Future<dynamic>>[];
+      setState(() => _opening = true);
+      Navigator.of(context).popUntil((route) {
+        if (route.isFirst) return true;
+        if (route is TransitionRoute) departingRoutes.add(route.completed);
+        return false;
+      });
+      // Let the previous screen release the shared controller before the new
+      // screen claims its visibility and search focus.
+      await Future.wait(departingRoutes);
+      if (!mounted) return;
+      setState(() => _opening = false);
+    } else if (sharedPayload?.target != null) {
       Navigator.of(context).popUntil((route) => route.isFirst);
     }
     Navigator.push(
@@ -932,9 +946,12 @@ class HomeScreenState extends State<HomeScreen> {
           enableNotifications: widget.enableProfileNotifications,
           backgroundMonitoringState: widget.backgroundMonitoringState,
           openMonitoringBatterySettings: widget.openMonitoringBatterySettings,
-          initialDestination: sharedPayload != null || initialQuickChat
-              ? AppDestination.chats
-              : destination,
+          initialDestination: switch (launchAction) {
+            AndroidLaunchAction.activity => AppDestination.activity,
+            AndroidLaunchAction.quickChat ||
+            AndroidLaunchAction.searchChats => AppDestination.chats,
+            null => sharedPayload != null ? AppDestination.chats : destination,
+          },
           onConnections: () {
             if (mounted) {
               setState(() => _destination = AppDestination.connections);
@@ -943,9 +960,11 @@ class HomeScreenState extends State<HomeScreen> {
           },
           onPreferencesChanged: widget.onPreferencesChanged,
           initialQuickChat: initialQuickChat,
+          initialSearchChats: launchAction == AndroidLaunchAction.searchChats,
         ),
       ),
     );
+    _onLauncherAction();
   }
 
   void _addConnection() => _setupConnection();
@@ -1014,7 +1033,7 @@ class HomeScreenState extends State<HomeScreen> {
       }
     }
     _onSharedText();
-    _onQuickChat();
+    _onLauncherAction();
   }
 
   final _connectionOwners =

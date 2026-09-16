@@ -3,6 +3,44 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'all launcher shortcuts publish distinct actions for MainActivity',
+    () async {
+      final template = await File(
+        'android/app/src/main/shortcuts.xml.template',
+      ).readAsString();
+      final manifest = await File(
+        'android/app/src/main/AndroidManifest.xml',
+      ).readAsString();
+      final activity = await File(
+        'android/app/src/main/kotlin/com/tarkilhk/wing/MainActivity.kt',
+      ).readAsString();
+      final shortcuts = RegExp(
+        r'<shortcut\s[\s\S]*?</shortcut>',
+      ).allMatches(template).map((match) => match.group(0)!).toList();
+      const actions = {
+        'new_quick_chat': 'QUICK_CHAT',
+        'activity': 'ACTIVITY',
+        'search_chats': 'SEARCH_CHATS',
+      };
+      expect(shortcuts, hasLength(actions.length));
+      for (final entry in actions.entries) {
+        final shortcut = shortcuts.singleWhere(
+          (xml) => xml.contains('android:shortcutId="${entry.key}"'),
+        );
+        expect(shortcut, contains('android:targetPackage="@APPLICATION_ID@"'));
+        expect(
+          shortcut,
+          contains('android:targetClass="com.tarkilhk.wing.MainActivity"'),
+        );
+        final action = 'com.tarkilhk.wing.action.${entry.value}';
+        expect(shortcut, contains(action));
+        expect(manifest, contains(action));
+        expect(activity, contains(action));
+      }
+    },
+  );
+
   test('Android publishes a static New Quick Chat launcher shortcut', () async {
     final manifest = await File(
       'android/app/src/main/AndroidManifest.xml',

@@ -12,4 +12,26 @@
             android:targetClass="com.tarkilhk.wing.MainActivity" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
+    <shortcut
+        android:shortcutId="activity"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_activity"
+        android:shortcutShortLabel="@string/shortcut_activity_short"
+        android:shortcutLongLabel="@string/shortcut_activity_long">
+        <intent
+            android:action="com.tarkilhk.wing.action.ACTIVITY"
+            android:targetPackage="@APPLICATION_ID@"
+            android:targetClass="com.tarkilhk.wing.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="search_chats"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_search"
+        android:shortcutShortLabel="@string/shortcut_search_short"
+        android:shortcutLongLabel="@string/shortcut_search_long">
+        <intent
+            android:action="com.tarkilhk.wing.action.SEARCH_CHATS"
+            android:targetPackage="@APPLICATION_ID@"
+            android:targetClass="com.tarkilhk.wing.MainActivity" />
+    </shortcut>
 </shortcuts>

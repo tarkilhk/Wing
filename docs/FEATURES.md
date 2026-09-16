@@ -1,5 +1,7 @@
 # Feature guide
 
+Long-press Wing's Android launcher icon for **New Quick Chat**, **Activity** or **Search chats**. Activity opens the existing activity screen; Search chats opens the current profile's Chats list with the search field and keyboard ready. Shortcuts use the last selected connection, or the only saved connection. If neither identifies a connection, choose one first. Opening a shortcut keeps existing conversation drafts.
+
 Start with [Getting started](GETTING_STARTED.md) to install and connect. The controls below are reachable in the current profile workspace; individual operations depend on the connected server. Read [Known limitations](KNOWN_LIMITATIONS.md) before relying on recovery or background alerts.
 
 ## Find your work

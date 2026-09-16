@@ -24,11 +24,13 @@ class ProfileWorkspaceBrowser extends StatefulWidget {
   final ProfileWorkspaceController controller;
   final Future<void> Function() newProject;
   final Widget? drawer;
+  final FocusNode? searchFocusNode;
   const ProfileWorkspaceBrowser({
     super.key,
     required this.controller,
     required this.newProject,
     this.drawer,
+    this.searchFocusNode,
   });
   @override
   State<ProfileWorkspaceBrowser> createState() =>
@@ -927,6 +929,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                   child: TextField(
                     key: const ValueKey('workspace-search'),
                     controller: _search,
+                    focusNode: widget.searchFocusNode,
                     onChanged: _setQuery,
                     decoration: InputDecoration(
                       hintText: _view == 'projects'

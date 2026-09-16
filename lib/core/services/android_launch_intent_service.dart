@@ -1,13 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+enum AndroidLaunchAction { quickChat, activity, searchChats }
+
 /// Bridges Android launcher actions into the Flutter navigation lifecycle.
 class AndroidLaunchIntentService {
   static const channelName = 'com.tarkilhk.wing/launch';
-  static const _quickChatAction = 'quickChat';
 
   final MethodChannel _channel;
-  final ValueNotifier<bool> pendingQuickChat = ValueNotifier(false);
+  final pendingAction = ValueNotifier<AndroidLaunchAction?>(null);
   bool _initialized = false;
 
   AndroidLaunchIntentService({MethodChannel? channel})
@@ -32,17 +33,20 @@ class AndroidLaunchIntentService {
   }
 
   void _publish(String? action) {
-    if (action == _quickChatAction) pendingQuickChat.value = true;
+    final parsed = AndroidLaunchAction.values
+        .where((value) => value.name == action)
+        .firstOrNull;
+    if (parsed != null) pendingAction.value = parsed;
   }
 
-  bool takePendingQuickChat() {
-    final pending = pendingQuickChat.value;
-    if (pending) pendingQuickChat.value = false;
+  AndroidLaunchAction? takePendingAction() {
+    final pending = pendingAction.value;
+    pendingAction.value = null;
     return pending;
   }
 
   void dispose() {
     _channel.setMethodCallHandler(null);
-    pendingQuickChat.dispose();
+    pendingAction.dispose();
   }
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check Android's installed Quick Chat shortcut, including its resolved target."""
+"""Check Android's installed launcher shortcuts and their resolved targets."""
 
 import argparse
 import re
@@ -13,25 +13,32 @@ def check_shortcut(adb, serial, package):
         )
 
     dump = shell("dumpsys", "shortcut")
-    shortcuts = re.findall(r"ShortcutInfo \{id=new_quick_chat,.*?iconRes=.*?\}", dump, re.S)
-    matches = [
-        shortcut for shortcut in shortcuts
-        if re.search(r"packageName=" + re.escape(package) + r"\s", shortcut)
-    ]
-    if len(matches) != 1:
-        raise ValueError(f"Expected one Quick Chat shortcut for {package}, found {len(matches)}")
-    shortcut = matches[0]
-    component = re.search(r"\bcmp=([^\s}]+)", shortcut)
-    actual = component.group(1) if component else None
+    expected_actions = {
+        "new_quick_chat": "QUICK_CHAT",
+        "activity": "ACTIVITY",
+        "search_chats": "SEARCH_CHATS",
+    }
     expected = f"{package}/com.tarkilhk.wing.MainActivity"
-    if actual != expected:
-        raise ValueError(f"Quick Chat targets {actual!r}; expected {expected!r}")
-    if "act=com.tarkilhk.wing.action.QUICK_CHAT " not in shortcut:
-        raise ValueError("Quick Chat action is missing")
-    resolved = shell("cmd", "package", "resolve-activity", "--brief", "-n", actual)
-    if "com.tarkilhk.wing.MainActivity" not in resolved and f"{package}/.MainActivity" not in resolved:
-        raise ValueError(f"Quick Chat target does not resolve: {resolved.strip()}")
-    print(f"PASS: New Quick Chat resolves to {expected}")
+    for shortcut_id, action in expected_actions.items():
+        matches = [
+            match.group(0)
+            for match in re.finditer(r"ShortcutInfo \{id=([^,]+),.*?iconRes=.*?\}", dump, re.S)
+            if match.group(1) == shortcut_id
+            and re.search(r"packageName=" + re.escape(package) + r"\s", match.group(0))
+        ]
+        if len(matches) != 1:
+            raise ValueError(f"Expected one {shortcut_id} shortcut for {package}, found {len(matches)}")
+        shortcut = matches[0]
+        component = re.search(r"\bcmp=([^\s}]+)", shortcut)
+        actual = component.group(1) if component else None
+        if actual != expected:
+            raise ValueError(f"{shortcut_id} targets {actual!r}; expected {expected!r}")
+        if f"act=com.tarkilhk.wing.action.{action} " not in shortcut:
+            raise ValueError(f"{shortcut_id} action is missing")
+        resolved = shell("cmd", "package", "resolve-activity", "--brief", "-n", actual)
+        if "com.tarkilhk.wing.MainActivity" not in resolved and f"{package}/.MainActivity" not in resolved:
+            raise ValueError(f"{shortcut_id} target does not resolve: {resolved.strip()}")
+        print(f"PASS: {shortcut_id} resolves to {expected} with action {action}")
 
 
 if __name__ == "__main__":

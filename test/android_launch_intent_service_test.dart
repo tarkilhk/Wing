@@ -11,37 +11,52 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
-  test('initializes from a cold-start Quick Chat shortcut once', () async {
+  for (final action in AndroidLaunchAction.values) {
+    test('consumes cold-start ${action.name} once', () async {
+      var calls = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            expect(call.method, 'getInitialLaunchAction');
+            calls++;
+            return action.name;
+          });
+      final service = AndroidLaunchIntentService();
+      addTearDown(service.dispose);
+      await service.initialize();
+      await service.initialize();
+      expect(calls, 1);
+      expect(service.pendingAction.value, action);
+      expect(service.takePendingAction(), action);
+      expect(service.takePendingAction(), isNull);
+    });
+
+    test('receives repeated warm ${action.name} launches', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (_) async => null);
+      final service = AndroidLaunchIntentService();
+      addTearDown(service.dispose);
+      await service.initialize();
+      for (var i = 0; i < 2; i++) {
+        await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .handlePlatformMessage(
+              channel.name,
+              channel.codec.encodeMethodCall(
+                MethodCall('launchAction', action.name),
+              ),
+              (_) {},
+            );
+        expect(service.takePendingAction(), action);
+        expect(service.takePendingAction(), isNull);
+      }
+    });
+  }
+
+  test('ignores unknown Android actions', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
-          expect(call.method, 'getInitialLaunchAction');
-          return 'quickChat';
-        });
-
+        .setMockMethodCallHandler(channel, (_) async => 'unknown');
     final service = AndroidLaunchIntentService();
+    addTearDown(service.dispose);
     await service.initialize();
-
-    expect(service.pendingQuickChat.value, isTrue);
-    expect(service.takePendingQuickChat(), isTrue);
-    expect(service.takePendingQuickChat(), isFalse);
-  });
-
-  test('receives a warm Quick Chat shortcut from Android', () async {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (_) async => null);
-    final service = AndroidLaunchIntentService();
-    await service.initialize();
-
-    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .handlePlatformMessage(
-          channel.name,
-          channel.codec.encodeMethodCall(
-            const MethodCall('launchAction', 'quickChat'),
-          ),
-          (_) {},
-        );
-
-    expect(service.takePendingQuickChat(), isTrue);
-    expect(service.takePendingQuickChat(), isFalse);
+    expect(service.pendingAction.value, isNull);
   });
 }

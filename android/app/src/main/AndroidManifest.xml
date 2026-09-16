@@ -51,6 +51,8 @@
             </intent-filter>
             <intent-filter>
                 <action android:name="com.tarkilhk.wing.action.QUICK_CHAT" />
+                <action android:name="com.tarkilhk.wing.action.ACTIVITY" />
+                <action android:name="com.tarkilhk.wing.action.SEARCH_CHATS" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <intent-filter>

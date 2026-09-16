@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/screens/workspace_overview_content.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profiles_repository.dart';
@@ -114,11 +115,13 @@ Future<void> pumpHome(
   importBackup,
   AndroidShareIntentService? shareIntents,
   AndroidLaunchIntentService? launchIntents,
+  ProfileWorkspaceController? workspaceController,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
       home: HomeScreen(
-        profileController: (conn) => profileController(conn, manager.prefs),
+        profileController: (conn) =>
+            workspaceController ?? profileController(conn, manager.prefs),
         connManager: manager,
         shareIntents: shareIntents,
         launchIntents: launchIntents,
@@ -262,8 +265,122 @@ void main() {
 
     expect(find.byType(ProfileWorkspaceScreen), findsOneWidget);
     expect(find.byKey(const Key('profile-message-composer')), findsOneWidget);
-    expect(launchIntents.pendingQuickChat.value, isFalse);
+    expect(launchIntents.pendingAction.value, isNull);
   });
+
+  for (final action in [
+    AndroidLaunchAction.activity,
+    AndroidLaunchAction.searchChats,
+  ]) {
+    testWidgets('${action.name} waits for a connection choice', (tester) async {
+      final service = AndroidLaunchIntentService();
+      service.pendingAction.value = action;
+      addTearDown(service.dispose);
+      final manager = await buildManager();
+      await manager.saveConnection('First server', 'first', 8642, 'key');
+      final chosen = await manager.saveConnection(
+        'Chosen server',
+        'chosen',
+        8642,
+        'key',
+      );
+      await pumpHome(tester, manager, launchIntents: service);
+      expect(find.byType(ProfileWorkspaceScreen), findsNothing);
+      expect(service.pendingAction.value, action);
+      await tester.tap(find.text('Chosen server'));
+      await tester.pumpAndSettle();
+      final screen = tester.widget<ProfileWorkspaceScreen>(
+        find.byType(ProfileWorkspaceScreen),
+      );
+      expect(screen.controller.connection.id, chosen.id);
+      expect(service.pendingAction.value, isNull);
+      if (action == AndroidLaunchAction.activity) {
+        expect(find.byType(WorkspaceActivityContent), findsOneWidget);
+      } else {
+        expect(
+          tester
+              .widget<TextField>(find.byKey(const ValueKey('workspace-search')))
+              .focusNode!
+              .hasFocus,
+          isTrue,
+        );
+      }
+    });
+
+    for (final cold in [true, false]) {
+      testWidgets(
+        '${cold ? "cold" : "warm"} ${action.name} shortcut opens its destination',
+        (tester) async {
+          const channel = MethodChannel(AndroidLaunchIntentService.channelName);
+          final messenger =
+              TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+          messenger.setMockMethodCallHandler(
+            channel,
+            (_) async => cold ? action.name : null,
+          );
+          addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+          final service = AndroidLaunchIntentService();
+          await service.initialize();
+          addTearDown(service.dispose);
+          final manager = await buildManager();
+          final connection = await manager.saveConnection(
+            'Miniserver',
+            'host',
+            8642,
+            'key',
+          );
+          final controller = profileController(connection, manager.prefs);
+          await pumpHome(
+            tester,
+            manager,
+            launchIntents: service,
+            workspaceController: controller,
+          );
+          if (!cold) {
+            await tester.tap(find.text('Miniserver'));
+            await tester.pumpAndSettle();
+            await controller.createChat();
+            await tester.pumpAndSettle();
+            await tester.enterText(
+              find.byKey(const Key('profile-message-composer')),
+              'Keep this draft',
+            );
+            await tester.pump();
+            final chat = controller.current!.chat!;
+            await messenger.handlePlatformMessage(
+              channel.name,
+              channel.codec.encodeMethodCall(
+                MethodCall('launchAction', action.name),
+              ),
+              (_) {},
+            );
+            await tester.pumpAndSettle();
+            expect(chat.composerText, 'Keep this draft');
+          }
+          await tester.pumpAndSettle();
+          expect(
+            find.byType(ProfileWorkspaceScreen, skipOffstage: false),
+            findsOneWidget,
+          );
+          expect(service.pendingAction.value, isNull);
+          expect(controller.visible, action == AndroidLaunchAction.searchChats);
+          if (action == AndroidLaunchAction.activity) {
+            expect(find.byType(WorkspaceActivityContent), findsOneWidget);
+          } else {
+            final search = find.byKey(const ValueKey('workspace-search'));
+            expect(search, findsOneWidget);
+            expect(
+              tester.widget<TextField>(search).focusNode!.hasFocus,
+              isTrue,
+            );
+            expect(tester.testTextInput.isVisible, isTrue);
+            expect(controller.current!.selectedProject, isNull);
+            expect(controller.current!.archivedOnly, isFalse);
+          }
+        },
+      );
+    }
+  }
 
   testWidgets(
     'a cold-start share is reviewed before its draft is acknowledged',

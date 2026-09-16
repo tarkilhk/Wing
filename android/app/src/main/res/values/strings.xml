@@ -2,4 +2,8 @@
 <resources>
     <string name="shortcut_quick_chat_short">New Quick Chat</string>
     <string name="shortcut_quick_chat_long">Start a new Wing Quick Chat</string>
+    <string name="shortcut_activity_short">Activity</string>
+    <string name="shortcut_activity_long">View Wing activity</string>
+    <string name="shortcut_search_short">Search chats</string>
+    <string name="shortcut_search_long">Search Wing chats</string>
 </resources>

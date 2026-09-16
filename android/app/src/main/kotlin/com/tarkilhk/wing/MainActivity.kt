@@ -26,6 +26,8 @@ class MainActivity : FlutterActivity() {
     private val launchChannelName = "com.tarkilhk.wing/launch"
     private val fileDeliveryChannelName = "com.tarkilhk.wing/file_delivery"
     private val quickChatAction = "com.tarkilhk.wing.action.QUICK_CHAT"
+    private val activityAction = "com.tarkilhk.wing.action.ACTIVITY"
+    private val searchChatsAction = "com.tarkilhk.wing.action.SEARCH_CHATS"
     private val intakePreferencesName = "pending_share_intake"
     private val intakeQueueKey = "queue"
     private val pendingCameraKey = "pending_camera"
@@ -313,8 +315,12 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun launchActionFor(intent: Intent?): String? =
-        if (intent?.action == quickChatAction) "quickChat" else null
+    private fun launchActionFor(intent: Intent?): String? = when (intent?.action) {
+        quickChatAction -> "quickChat"
+        activityAction -> "activity"
+        searchChatsAction -> "searchChats"
+        else -> null
+    }
 
     private fun isShareIntent(intent: Intent?): Boolean =
         intent?.action == Intent.ACTION_SEND || intent?.action == Intent.ACTION_SEND_MULTIPLE

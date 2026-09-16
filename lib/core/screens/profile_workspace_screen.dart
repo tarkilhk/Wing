@@ -61,6 +61,7 @@ enum _AttachmentChoice { camera, photos, files }
 class ProfileWorkspaceScreen extends StatefulWidget {
   final ProfileWorkspaceController controller;
   final bool initialQuickChat;
+  final bool initialSearchChats;
   final Future<void> Function()? enableNotifications;
   final ValueListenable<BackgroundMonitoringState>? backgroundMonitoringState;
   final Future<void> Function()? openMonitoringBatterySettings;
@@ -72,6 +73,7 @@ class ProfileWorkspaceScreen extends StatefulWidget {
     super.key,
     required this.controller,
     this.initialQuickChat = false,
+    this.initialSearchChats = false,
     this.enableNotifications,
     this.backgroundMonitoringState,
     this.openMonitoringBatterySettings,
@@ -89,6 +91,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   ProfileWorkspaceController get controller => widget.controller;
   final _composer = TextEditingController();
   final _composerFocus = FocusNode();
+  final _chatSearchFocus = FocusNode();
   final _queuedEditErrors = <ProfileSessionKey, String>{};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   ProfileSessionKey? _composerKey;
@@ -114,7 +117,11 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     _destination = widget.initialDestination;
     WidgetsBinding.instance.addObserver(this);
     controller.visible = _destination == AppDestination.chats;
-    unawaited(_enter());
+    // Shortcut navigation can reuse an owner still observed by the outgoing
+    // route. Start its notifications after both routes finish building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_enter());
+    });
   }
 
   Future<void> _enter() async {
@@ -124,6 +131,13 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     if (!mounted || controller.current == null) return;
     if (_destination == AppDestination.activity) {
       await controller.refreshActivity();
+    }
+    if (widget.initialSearchChats) {
+      await controller.navigateProfile(controller.current!.scope.profileName);
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _chatSearchFocus.requestFocus();
+      });
     }
     if (widget.initialQuickChat) {
       await _run(() async {
@@ -170,6 +184,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     WidgetsBinding.instance.removeObserver(this);
     _composer.dispose();
     _composerFocus.dispose();
+    _chatSearchFocus.dispose();
     super.dispose();
   }
 
@@ -211,6 +226,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           controller: controller,
           newProject: _projectDialog,
           drawer: _drawer(),
+          searchFocusNode: _chatSearchFocus,
         );
       }
       final parentSessionId = controller.parentSessionId(chat);
