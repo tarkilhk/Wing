@@ -3,51 +3,68 @@ import 'package:wing/core/services/doctor_diagnostic.dart';
 
 void main() {
   final divider = '─' * 60;
-  test(
-    'extracts the final report, removing terminal colors and indentation',
-    () {
-      expect(
-        doctorDiagnosticSummary([
-          '  ✓ Profiles checked',
-          '\x1b[33m$divider\x1b[0m',
-          '\x1b[33m\x1b[1m  Found 3 issue(s) to address:\x1b[0m',
-          '',
-          '  1. state.db is large — enable sessions.auto_prune in config.yaml',
-          '  2. Browser tools (agent-browser) has 2 npm vulnerabilities',
-          '  3. web workspace has 6 npm vulnerabilities',
-          '',
-          "  Tip: run 'hermes doctor --fix' to auto-fix what's possible.",
-          '',
-        ]),
-        'Found 3 issue(s) to address:\n\n'
-        '1. state.db is large — enable sessions.auto_prune in config.yaml\n'
-        '2. Browser tools (agent-browser) has 2 npm vulnerabilities\n'
-        '3. web workspace has 6 npm vulnerabilities\n\n'
-        "Tip: run 'hermes doctor --fix' to auto-fix what's possible.",
-      );
-    },
-  );
-  test('uses only the latest report from an appended action log', () {
-    expect(
-      doctorDiagnosticSummary([
-        divider,
-        'Found 3 issue(s) to address:',
-        '=== doctor started 2026-09-18 01:15:00 ===',
-        divider,
-        '  All checks passed! 🎉',
-      ]),
-      'All checks passed! 🎉',
-    );
+  test('turns colored findings into titles and supporting details', () {
+    final report = DoctorDiagnostic.fromLines([
+      '  ✓ Profiles checked',
+      '\x1b[33m$divider\x1b[0m',
+      '\x1b[33m\x1b[1m  Found 3 issue(s) to address:\x1b[0m',
+      '',
+      '  1. state.db is large — enable sessions.auto_prune in config.yaml',
+      '  2. Browser tools (agent-browser) has 2 npm vulnerabilities',
+      '  3. web workspace has 6 npm vulnerabilities',
+      '',
+      "  Tip: run 'hermes doctor --fix' to auto-fix what's possible.",
+    ])!;
+    expect(report.title, '3 issues found');
+    expect(report.findings.map((f) => f.title), [
+      'state.db is large',
+      'Browser tools (agent-browser)',
+      'web workspace',
+    ]);
+    expect(report.findings.map((f) => f.detail), [
+      'enable sessions.auto_prune in config.yaml',
+      '2 npm vulnerabilities',
+      '6 npm vulnerabilities',
+    ]);
   });
-  test('does not mistake an old report or partial output for a diagnosis', () {
+  test('keeps arbitrary findings and multiline details intact', () {
+    final report = DoctorDiagnostic.fromLines([
+      divider,
+      'Found 1 issue(s) to address:',
+      '1. Something needs attention',
+      '  More information from the server.',
+    ])!;
+    expect(report.title, '1 issue found');
+    expect(
+      report.findings.single.title,
+      'Something needs attention More information from the server.',
+    );
+    expect(report.findings.single.detail, isNull);
+  });
+  test('uses only the latest report from an appended action log', () {
+    final report = DoctorDiagnostic.fromLines([
+      divider,
+      'Found 3 issue(s) to address:',
+      '=== doctor started 2026-09-18 01:15:00 ===',
+      divider,
+      '  All checks passed! 🎉',
+    ])!;
+    expect(report.title, 'No issues found');
+    expect(report.hasIssues, isFalse);
+  });
+  test('does not turn missing or incomplete findings into a diagnosis', () {
     for (final lines in [
       <String>[],
       ['  ✓ Profiles checked'],
       [divider, ''],
       [divider, 'All checks passed!', '=== doctor started today ===', 'Error'],
       ['┌${'─' * 60}┐', 'Doctor', '└${'─' * 60}┘'],
+      [divider, 'Found 2 issue(s) to address:', '1. Only one item received'],
+      [divider, 'Found 1 issue(s) to address:', '2. First item missing'],
+      [divider, 'Found 0 issue(s) to address:'],
+      [divider, 'Unrecognized report'],
     ]) {
-      expect(doctorDiagnosticSummary(lines), isNull);
+      expect(DoctorDiagnostic.fromLines(lines), isNull);
     }
   });
 }

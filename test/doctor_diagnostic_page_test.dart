@@ -88,9 +88,13 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.text(summary), findsOneWidget);
+        expect(find.text('3 issues found'), findsOneWidget);
         expect(find.text(lines.join('\n')), findsNothing);
-        expect(find.text('Completed'), findsOneWidget);
+        expect(find.text('Completed'), findsNothing);
+        expect(find.text('state.db is large'), findsOneWidget);
+        expect(find.text('2 npm vulnerabilities'), findsOneWidget);
+        expect(find.text('Check progress'), findsNothing);
+        expect(find.text(summary), findsNothing);
         expect(tester.takeException(), isNull);
         await snapshot(tester, '${brightness.name}-$scale');
 
@@ -107,19 +111,62 @@ void main() {
         await tester.tap(find.text('Diagnostic output'));
         await tester.pumpAndSettle();
 
-        await tester.scrollUntilVisible(
-          find.text('Check progress'),
-          300,
-          scrollable: find.byType(Scrollable).first,
-        );
         await tester.pumpAndSettle();
         await snapshot(tester, '${brightness.name}-$scale-bottom');
         failRead = true;
-        await tester.tap(find.text('Check progress'));
+        await tester.tap(find.byTooltip('Refresh result'));
         await tester.pumpAndSettle();
-        expect(find.text(summary), findsOneWidget);
+        expect(find.text('3 issues found'), findsOneWidget);
         expect(fixture.requests.where((r) => r.$1 != 'GET'), isEmpty);
         expect(tester.takeException(), isNull);
+        await tester.drag(find.byType(Scrollable).first, const Offset(0, 2000));
+        await tester.pumpAndSettle();
+        await snapshot(tester, '${brightness.name}-$scale-read-error');
+      });
+    }
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final failed in [false, true]) {
+      testWidgets('Doctor outcome ${brightness.name} failed=$failed', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final fixture = AdministrationFixture();
+        fixture.override = (method, path, query, body) async => {
+          'pid': 7,
+          'running': false,
+          'exit_code': failed ? 1 : 0,
+          'lines': failed
+              ? ['Doctor could not finish: configuration is unreadable.']
+              : ['─' * 60, 'All checks passed! 🎉'],
+        };
+        await tester.pumpWidget(
+          MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: wingTheme(brightness),
+            builder: (context, child) =>
+                RepaintBoundary(key: const ValueKey('capture'), child: child!),
+            home: AdminActionPage(
+              server: fixture.server,
+              action: const AdministrationAction('doctor', 7),
+              title: 'Doctor',
+              scope: 'Runtime profile: default',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text(failed ? 'Failed' : 'No issues found'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await snapshot(
+          tester,
+          '${brightness.name}-${failed ? 'failed' : 'healthy'}',
+        );
       });
     }
   }

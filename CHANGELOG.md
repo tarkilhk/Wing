@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Show Doctor's final diagnosis directly in readable text, with detailed checks available in expandable output.
+- Present Doctor's diagnosis as a grouped findings list with clear titles, supporting details, a compact status heading and expandable full output.
 
 - Move Manage profiles into its own pill after the last profile in Administration's scrolling profile row.
 

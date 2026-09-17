@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 import 'admin_widgets.dart';
+import 'admin_doctor_diagnosis.dart';
 
 class AdminActionPage extends StatefulWidget {
   final AdministrationRepository server;
@@ -66,7 +67,7 @@ class _AdminActionPageState extends State<AdminActionPage> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _error = administrationError(e, writing: true));
+        setState(() => _error = administrationError(e));
       }
     } finally {
       if (mounted) {
@@ -85,13 +86,21 @@ class _AdminActionPageState extends State<AdminActionPage> {
 
   @override
   Widget build(BuildContext context) {
-    final summary =
+    final diagnosis =
         widget.action.name == 'doctor' && _status?['running'] == false
-        ? doctorDiagnosticSummary(_status?['lines'] as List? ?? [])
+        ? DoctorDiagnostic.fromLines(_status?['lines'] as List? ?? [])
         : null;
     return AdminPage(
       title: widget.title,
       scope: widget.scope,
+      actions: [
+        if (diagnosis != null)
+          IconButton(
+            tooltip: 'Refresh result',
+            onPressed: _loading ? null : _check,
+            icon: const Icon(Icons.refresh),
+          ),
+      ],
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -101,7 +110,7 @@ class _AdminActionPageState extends State<AdminActionPage> {
               _status?['exit_code'] != null &&
               _status!['exit_code'] != 0)
             const StudioError('Failed')
-          else
+          else if (diagnosis == null)
             Text(
               _status == null
                   ? 'Checking operation…'
@@ -113,7 +122,7 @@ class _AdminActionPageState extends State<AdminActionPage> {
                   ? 'Outcome unavailable'
                   : 'Failed',
             ),
-          if (summary == null) ...[
+          if (diagnosis == null) ...[
             const SizedBox(height: 16),
             Text(
               AdminDiagnosticObservation(
@@ -123,22 +132,19 @@ class _AdminActionPageState extends State<AdminActionPage> {
               ).nextStep,
             ),
           ],
-          if (_checkedAt != null) ...[
+          if (_checkedAt != null && diagnosis == null) ...[
             const SizedBox(height: 8),
             Text(
               'Checked ${TimeOfDay.fromDateTime(_checkedAt!).format(context)}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
-          if (summary != null) ...[
-            const SizedBox(height: 24),
-            SelectableText(
-              summary,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
+          if (diagnosis != null) ...[
+            AdminDoctorDiagnosis(diagnosis: diagnosis, checkedAt: _checkedAt),
+            const SizedBox(height: WingSpacing.lg),
           ],
           ExpansionTile(
+            tilePadding: diagnosis == null ? null : EdgeInsets.zero,
             title: const Text('Diagnostic output'),
             children: [
               SelectableText(
@@ -147,10 +153,11 @@ class _AdminActionPageState extends State<AdminActionPage> {
               ),
             ],
           ),
-          TextButton(
-            onPressed: _loading ? null : _check,
-            child: const Text('Check progress'),
-          ),
+          if (diagnosis == null)
+            TextButton(
+              onPressed: _loading ? null : _check,
+              child: const Text('Check progress'),
+            ),
         ],
       ),
     );

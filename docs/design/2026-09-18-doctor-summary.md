@@ -1,19 +1,30 @@
 # Doctor diagnostic summary
 
-The Doctor result displays the final report below Hermes' horizontal divider
-immediately, in Studio body typography. Runtime scope and completion time stay
-subordinate; detailed checks remain in the Diagnostic output disclosure. Process
-completion is separate from the findings, so a zero exit code still shows issues.
+The Doctor result turns the final report below Hermes' horizontal divider into
+a findings list. A compact warning icon and “3 issues found” heading lead, with
+the observation time below in metadata text. Findings occupy one Studio group
+with thin separators, semibold titles and muted supporting details. Detailed
+checks and the CLI repair tip remain in the Diagnostic output disclosure.
+Successful process completion no longer competes with reported issues.
 
-Two layouts were considered: summary → output disclosure → progress action, or
-separate Summary and Output tabs. The single page keeps the diagnosis visible
-without a tab switch or a second navigation layer. It uses existing Studio colors,
-sans body text, spacing and scroll behavior, retaining monospace for raw output.
+The initial plain-text presentation was rejected by the owner after phone use.
+For the revision, two arrangements were considered: a large count card followed
+by separate issue cards, or a compact heading followed by one divided group.
+The divided group avoids repeated framing and keeps the actual findings dominant.
+The page uses Studio's navy/cream canvas, raised surface, border, muted text and
+semantic warning/success tokens. Roboto title/body/metadata roles establish
+hierarchy; monospace is reserved for raw output. No decorative numbering is added.
+Refresh result is a 48 dp app-bar action; completed results do not show a
+misleading Check progress button. Running and unavailable outcomes retain progress
+access. All findings and details remain selectable.
 
 The parser strips terminal color codes, extracts text after the final 60-character
-divider, and excludes reports before the latest action-start marker. While a run
-is active, no final summary is displayed. Missing reports keep the existing
-operation state and raw output available; no successful diagnosis is invented.
+divider, and excludes reports before the latest action-start marker. Numbered
+findings become rows, with em-dash guidance or npm vulnerability counts separated
+as supporting detail. Unknown finding wording remains intact. The returned
+finding count and sequence must match the report before rendering it. While a
+run is active, no final diagnosis is displayed. Missing/incomplete reports keep
+the operation state and raw output available; no successful diagnosis is invented.
 
 ## Stock Hermes verification
 
@@ -36,9 +47,8 @@ official server lacks repair support. No repair or copy-command button is added.
 
 ## Validation
 
-22 Doctor and health tests pass, covering colored output, appended logs, absent
-summaries, running operations, retained results after read errors, and disclosure
-and progress controls. Rendered screens were inspected in light and dark themes
-at 390 dp / normal text and 320 dp / 200% text, including scrolled action access.
-Static analysis reports no issues. This verification uses client fixtures;
-no live server operation or repair was performed.
+Doctor tests cover colored output, appended logs, incomplete findings, running
+operations, retained results after read errors, and disclosure/refresh controls.
+Rendered screens are inspected in light and dark themes at 390 dp / normal text
+and 320 dp / 200% text, including scrolled action access, clean diagnoses and
+errors. This verification uses client fixtures; no repair is performed.
