@@ -20,6 +20,12 @@ class AdminProfileOverview extends StatefulWidget {
     required this.metadata,
     required this.preferences,
     required this.selector,
+    required this.search,
+    this.searchResults,
+    this.titleBeforeSelector,
+    this.onOverviewChanged,
+    this.onTasksChanged,
+    this.onRefreshCompleted,
     required this.destinations,
   });
   final ProfileAdministration profile;
@@ -28,6 +34,12 @@ class AdminProfileOverview extends StatefulWidget {
   final HermesProfile? metadata;
   final SharedPreferences preferences;
   final Widget selector;
+  final Widget search;
+  final Widget? searchResults;
+  final Widget? titleBeforeSelector;
+  final ValueChanged<AdministrationOverview>? onOverviewChanged;
+  final ValueChanged<ScheduledTasksController>? onTasksChanged;
+  final Future<void> Function()? onRefreshCompleted;
   final Map<String, FutureOr<void> Function()?> destinations;
 
   @override
@@ -41,10 +53,30 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
     widget.preferences,
   );
 
+  final _scrollController = ScrollController();
+  double? _overviewScrollOffset;
+  bool _notificationPending = false;
+
+  // The header consumes the same observations as this body. Defer delivery so
+  // synchronous loading notifications cannot rebuild an ancestor during build.
+  void _publishObservations() {
+    if (_notificationPending) return;
+    _notificationPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _notificationPending = false;
+      if (!mounted) return;
+      widget.onOverviewChanged?.call(overview);
+      widget.onTasksChanged?.call(tasks);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
+    overview.addListener(_publishObservations);
+    tasks.addListener(_publishObservations);
     overview.refresh();
+    _publishObservations();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !tasks.loading) tasks.refresh();
     });
@@ -53,6 +85,23 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
   @override
   void didUpdateWidget(AdminProfileOverview oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.searchResults == null && widget.searchResults != null) {
+      _overviewScrollOffset = _scrollController.hasClients
+          ? _scrollController.offset
+          : null;
+    } else if (oldWidget.searchResults != null &&
+        widget.searchResults == null) {
+      final offset = _overviewScrollOffset;
+      _overviewScrollOffset = null;
+      if (offset != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_scrollController.hasClients) return;
+          _scrollController.jumpTo(
+            offset.clamp(0, _scrollController.position.maxScrollExtent),
+          );
+        });
+      }
+    }
     if (oldWidget.revision != widget.revision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -67,8 +116,11 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
 
   @override
   void dispose() {
+    overview.removeListener(_publishObservations);
+    tasks.removeListener(_publishObservations);
     overview.dispose();
     tasks.release();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -77,6 +129,7 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
       overview.refresh(),
       if (!tasks.loading) tasks.refresh(),
     ]);
+    if (mounted) await widget.onRefreshCompleted?.call();
   }
 
   String _summary(String key, String Function(Map<String, dynamic>) describe) {
@@ -162,6 +215,7 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
     } else if (_readsByDestination[name] case final keys?) {
       await overview.refresh(keys: keys);
     }
+    if (mounted) await widget.onRefreshCompleted?.call();
   }
 
   String? _attention(String name) {
@@ -205,91 +259,105 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
     return null;
   }
 
-  Widget _brief(BuildContext context) {
-    final description = widget.metadata?.description?.trim();
-    final edit = widget.destinations['Identity'];
-    return Semantics(
-      container: true,
-      label:
-          'Profile brief for ${widget.metadata?.label ?? widget.profile.name}',
-      child: Container(
-        key: const ValueKey('profile-brief'),
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outlineVariant,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            widget.selector,
-            const SizedBox(height: 4),
-            InkWell(
-              onTap: edit == null
-                  ? null
-                  : () async {
-                      await edit();
-                    },
-              borderRadius: BorderRadius.circular(6),
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 48),
-                padding: const EdgeInsets.symmetric(
-                  vertical: 12,
-                  horizontal: 4,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        description == null || description.isEmpty
-                            ? 'Describe this agent'
-                            : description,
-                        maxLines:
-                            MediaQuery.textScalerOf(context).scale(16) >= 24
-                            ? null
-                            : 1,
-                        overflow:
-                            MediaQuery.textScalerOf(context).scale(16) >= 24
-                            ? null
-                            : TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Icon(
-                      Icons.edit_outlined,
-                      size: 18,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  Future<void> _openDestination(String name) async {
+    await widget.destinations[name]?.call();
+    if (mounted) await _refreshDestination(name);
   }
 
-  Widget _row(String name, String summary, IconData icon) => AdminRow(
+  Widget _modelBrief(BuildContext context) {
+    final theme = Theme.of(context);
+    final modelObservation = overview.observations['model'];
+    final name = modelObservation?.data?['model'];
+    final model = name is String && name.isNotEmpty
+        ? name
+        : modelObservation?.loading == true
+        ? 'Loading…'
+        : 'Model unavailable';
+    final metadata = _summary('model', (data) {
+      final provider = data['provider'];
+      return '${provider is String && provider.isNotEmpty ? provider : 'Provider unavailable'} · ${_summary('config', (config) {
+        final effort = setting(config, 'agent.reasoning_effort');
+        return effort is String && effort.isNotEmpty ? 'Reasoning $effort' : 'Reasoning not specified';
+      })}';
+    });
+    final attention = _attention('Models and reasoning');
+    return _group([
+      InkWell(
+        key: const ValueKey('Models and reasoning'),
+        onTap: widget.destinations['Models and reasoning'] == null
+            ? null
+            : () => _openDestination('Models and reasoning'),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Models and reasoning',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  if (widget.destinations['Models and reasoning'] != null)
+                    const Icon(Icons.chevron_right, size: 20),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                model,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(metadata, style: theme.textTheme.bodySmall),
+              if (attention != null) ...[
+                const SizedBox(height: 4),
+                AdminAttention(attention),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _group(List<Widget> children) => Material(
+    color: Theme.of(context).colorScheme.surfaceContainerLow,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(8),
+      side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: Column(
+      children: [
+        for (var index = 0; index < children.length; index++) ...[
+          if (index > 0) const Divider(height: 1),
+          children[index],
+        ],
+      ],
+    ),
+  );
+
+  Widget _heading(String title) => Padding(
+    padding: const EdgeInsets.only(top: 20, bottom: 8),
+    child: Semantics(
+      header: true,
+      child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+    ),
+  );
+
+  Widget _row(String name, String summary) => _ProfileOverviewRow(
     key: ValueKey(name),
-    emphasizeChanges: true,
     attention: _attention(name),
     detail: name == 'Scheduled tasks' ? _nextTaskTitle : null,
     title: name,
     subtitle: summary,
-    icon: icon,
     onTap: widget.destinations[name] == null
         ? null
-        : () async {
-            await widget.destinations[name]!();
-            if (mounted) await _refreshDestination(name);
-          },
+        : () => _openDestination(name),
   );
 
   @override
@@ -298,57 +366,52 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
     builder: (context, _) => RefreshIndicator(
       onRefresh: _refresh,
       child: ListView(
+        controller: _scrollController,
         key: PageStorageKey(
           'admin-overview:${widget.profile.scope.storageNamespace}',
         ),
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
-          _brief(context),
-          const AdminSectionLabel('Agent setup'),
-          AdminGroup(
-            children: [
-              _row(
-                'Models and reasoning',
-                _summary('model', (data) {
-                  final model = data['model'];
-                  final provider = data['provider'];
-                  return model is String && model.isNotEmpty
-                      ? '${provider is String ? '$provider / ' : ''}$model · ${_summary('config', (config) {
-                          final effort = setting(config, 'agent.reasoning_effort');
-                          return effort is String && effort.isNotEmpty ? 'Reasoning: $effort' : 'Reasoning not specified';
-                        })}'
-                      : 'Model unavailable';
-                }),
-                Icons.auto_awesome_outlined,
+          ?widget.titleBeforeSelector,
+          widget.selector,
+          if (widget.metadata?.description?.trim() case final description?
+              when description.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                description,
+                style: Theme.of(context).textTheme.bodySmall,
               ),
-              _row(
-                'Identity',
-                'Description and agent instructions',
-                Icons.person_outline,
-              ),
+            ),
+          const SizedBox(height: 12),
+          widget.search,
+          if (widget.searchResults case final results?)
+            results
+          else ...[
+            const SizedBox(height: 20),
+            _modelBrief(context),
+            _heading('Agent setup'),
+            _group([
+              _row('Identity', 'Description and agent instructions'),
               _row(
                 'Memory',
                 _summary('config', (data) {
                   final retained = setting(data, 'memory.memory_enabled');
                   final budget = setting(data, 'memory.memory_char_limit');
-                  return '${retained is bool ? (retained ? 'Retaining memories' : 'Retention off') : 'Retention unavailable'}${budget is num ? ' · $budget characters' : ''}';
+                  return '${budget is num ? '${budget == budget.roundToDouble() ? MaterialLocalizations.of(context).formatDecimal(budget.toInt()) : budget}-character budget' : 'Memory budget unavailable'} · ${retained is bool ? (retained ? 'Retention on' : 'Retention off') : 'Retention unavailable'}';
                 }),
-                Icons.bookmark_border,
               ),
               _row(
                 'Behavior',
                 _summary('config', (data) {
                   final approval = setting(data, 'approvals.mode');
-                  return '${approval is String ? 'Approvals: $approval' : 'Approval mode unavailable'} · ${_config('compression.enabled', 'Compression on', 'Compression off')}';
+                  return '${approval is String ? 'Approvals $approval' : 'Approval mode unavailable'} · ${_config('compression.enabled', 'Compression on', 'Compression off')}';
                 }),
-                Icons.tune,
               ),
-            ],
-          ),
-          const AdminSectionLabel('Capabilities and automation'),
-          AdminGroup(
-            children: [
+            ]),
+            _heading('Capabilities and automation'),
+            _group([
               _row(
                 'Skills and tools',
                 _summary('skills', (data) {
@@ -363,7 +426,6 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
                     return '$enabled ${enabled == 1 ? 'toolset' : 'toolsets'} enabled${rows.any((row) => row['enabled'] is! bool || row['configured'] is! bool) ? ' · Some tool states unavailable' : ''}';
                   })}';
                 }),
-                Icons.extension_outlined,
               ),
               _row(
                 'Access and connectors',
@@ -379,15 +441,96 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
                       .where((row) => row.id == selected)
                       .firstOrNull;
                   final source = access?.status['source_label'];
-                  return '$stored sign-ins reported · ${source is String && source.isNotEmpty ? source : 'Access source unavailable'} · ${_summary('connectors', (data) => '${administrationRows(data['servers']).length} connectors')}';
+                  return '$stored ${stored == 1 ? 'sign-in' : 'sign-ins'} reported · ${source is String && source.isNotEmpty ? source : 'Access source unavailable'} · ${_summary('connectors', (data) => '${administrationRows(data['servers']).length} ${administrationRows(data['servers']).length == 1 ? 'connector' : 'connectors'}')}';
                 }),
-                Icons.link,
               ),
-              _row('Scheduled tasks', _nextTask(), Icons.event_repeat_outlined),
-            ],
-          ),
+              _row('Scheduled tasks', _nextTask()),
+            ]),
+          ],
         ],
       ),
     ),
   );
+}
+
+/// Compact grouped rows keep changed observations visible without moving the
+/// destination, and let task details and large text grow naturally.
+class _ProfileOverviewRow extends StatefulWidget {
+  const _ProfileOverviewRow({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    this.attention,
+    this.detail,
+    this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final String? attention;
+  final String? detail;
+  final VoidCallback? onTap;
+
+  @override
+  State<_ProfileOverviewRow> createState() => _ProfileOverviewRowState();
+}
+
+class _ProfileOverviewRowState extends State<_ProfileOverviewRow> {
+  Timer? _timer;
+  bool _changed = false;
+
+  @override
+  void didUpdateWidget(_ProfileOverviewRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.subtitle != widget.subtitle &&
+        !oldWidget.subtitle.toLowerCase().contains('loading') &&
+        !oldWidget.subtitle.contains('Schedules unavailable') &&
+        !MediaQuery.disableAnimationsOf(context)) {
+      _timer?.cancel();
+      _changed = true;
+      _timer = Timer(const Duration(milliseconds: 1600), () {
+        if (mounted) setState(() => _changed = false);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      animationDuration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 180),
+      color: _changed ? theme.colorScheme.primaryContainer : Colors.transparent,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        minTileHeight: 56,
+        minVerticalPadding: 8,
+        title: Text(widget.title, style: theme.textTheme.titleSmall),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.attention case final attention?) ...[
+              const SizedBox(height: 4),
+              AdminAttention(attention),
+              const SizedBox(height: 4),
+            ],
+            if (widget.detail case final detail?)
+              Text(detail, style: theme.textTheme.bodySmall),
+            Text(widget.subtitle, style: theme.textTheme.bodySmall),
+          ],
+        ),
+        trailing: widget.onTap == null
+            ? null
+            : const Icon(Icons.chevron_right, size: 20),
+        onTap: widget.onTap,
+      ),
+    );
+  }
 }

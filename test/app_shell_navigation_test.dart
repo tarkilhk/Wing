@@ -79,24 +79,25 @@ void main() {
   ) async {
     await show(tester);
     await navigate(tester, AppDestination.administration);
-    final before = tester
-        .widget<HermesAdministrationContent>(
-          find.byType(HermesAdministrationContent),
-        )
-        .refreshRevision;
-    await tester.tap(find.byTooltip('Refresh administration'));
-    // This shell fixture has no administration HTTP server. Verify the header
-    // signal independently from the endpoint refresh covered by navigation tests.
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(
-      tester
-          .widget<HermesAdministrationContent>(
-            find.byType(HermesAdministrationContent),
-          )
-          .refreshRevision,
-      before + 1,
-    );
+    final before = fixture.reads.length + fixture.calls.length;
+    await tester.runAsync(() async {
+      await Function.apply(
+        tester
+            .widget<IconButton>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is IconButton &&
+                    widget.tooltip == 'Refresh administration',
+              ),
+            )
+            .onPressed!,
+        const [],
+      );
+    });
+    await tester.pumpAndSettle();
+    expect(fixture.reads.length + fixture.calls.length, greaterThan(before));
+    expect(find.byKey(const ValueKey('administration-health')), findsOneWidget);
+    expect(find.byType(TabBar), findsNothing);
     expect(find.text('Refresh overview', skipOffstage: false), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -201,7 +202,9 @@ void main() {
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.text('Models and reasoning'), findsOneWidget);
+    expect(find.byType(HermesAdministrationContent), findsOneWidget);
+    expect(find.byKey(const ValueKey('administration-health')), findsOneWidget);
+    expect(find.byTooltip('Refresh administration'), findsOneWidget);
     expect(find.byType(AppDrawer), findsNothing);
     expect(
       calls.where((call) => call.method == 'SystemNavigator.pop'),
@@ -231,10 +234,12 @@ void main() {
       await navigate(tester, AppDestination.administration);
       expect(find.byType(HermesAdministrationContent), findsOneWidget);
       expect(find.text('Models and reasoning'), findsOneWidget);
-      await tester.tap(find.text('Health'));
+      await tester.tap(find.byKey(const ValueKey('administration-health')));
       await tester.pumpAndSettle();
       expect(find.text('Selected profile'), findsOneWidget);
       expect(controller.current!.chat, same(chat));
+      await tester.pageBack();
+      await tester.pumpAndSettle();
       await navigate(tester, AppDestination.chats);
       expect(find.text('Keep this unsent'), findsOneWidget);
       expect(fixture.calls.length, callsBefore);

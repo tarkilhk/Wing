@@ -15,6 +15,7 @@ import 'package:wing/core/screens/administration/admin_providers_page.dart';
 import 'package:wing/core/screens/administration/admin_settings_page.dart';
 import 'package:wing/core/screens/profile_capabilities_screen.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/services/administration_health.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/widgets/voice_preferences_card.dart';
 import 'support/administration_design_fixture.dart';
@@ -72,6 +73,8 @@ void main() {
         final preferences = await SharedPreferences.getInstance();
         final fixture = AdministrationDesignFixture();
         final profile = fixture.server.profile('personal');
+        final health = AdministrationHealth(fixture.server);
+        if (family == 'runtime-health') await health.refreshRuntimeIdentity();
         final narrow = mode == 'narrow';
         tester.view.physicalSize = Size(
           narrow
@@ -88,7 +91,7 @@ void main() {
             appBar: AppBar(title: const Text('Runtime health')),
             body: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
-              child: AdminRuntimeHealth(server: fixture.server),
+              child: AdminRuntimeHealth(health: health),
             ),
           ),
           'models' => AdminDefaultsPage(profile: profile),
@@ -230,6 +233,7 @@ void main() {
           await snapshot(tester, '$mode-$family-bottom');
         }
         await tester.pumpWidget(const SizedBox.shrink());
+        health.dispose();
         await tester.pumpAndSettle();
       });
     }

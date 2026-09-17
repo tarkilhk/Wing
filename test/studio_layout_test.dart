@@ -417,20 +417,21 @@ void main() {
                 tester,
                 '${brightness.name}-administration-profile$adminSuffix',
               );
-              for (final tab in ['Health', 'Profile']) {
-                await tester.ensureVisible(find.widgetWithText(Tab, tab));
-                await tester.pumpAndSettle();
-                await tester.tap(find.widgetWithText(Tab, tab));
-                await tester.pumpAndSettle();
-                await _capture(
-                  tester,
-                  '${brightness.name}-administration-${tab.toLowerCase()}$adminSuffix',
-                );
-              }
+              expect(find.byType(TabBar), findsNothing);
+              await tester.tap(
+                find.byKey(const ValueKey('administration-health')),
+              );
+              await tester.pumpAndSettle();
+              await _capture(
+                tester,
+                '${brightness.name}-administration-health$adminSuffix',
+              );
+              await tester.pageBack();
+              await tester.pumpAndSettle();
               expect(
                 fixture.calls.length,
                 callsBefore,
-                reason: 'Tab navigation must not execute server operations',
+                reason: 'Health navigation must not execute server operations',
               );
               expect(controller.current!.chat, same(chat));
               await tester.tap(find.byTooltip('Open navigation menu'));

@@ -1,8 +1,9 @@
 import '../../widgets/studio_select.dart';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
+import '../../services/administration_health.dart';
+import 'admin_health_button.dart';
 import '../../widgets/profile_diagnostics_panel.dart';
-import '../../services/profile_workspace_controller.dart';
 import 'admin_widgets.dart';
 import 'admin_runtime_health.dart';
 import 'admin_providers_page.dart';
@@ -10,62 +11,185 @@ import 'admin_connectors_page.dart';
 
 class AdminHealthContent extends StatelessWidget {
   final AdministrationRepository server;
-  final int refreshRevision;
+  final AdministrationHealth health;
   final ProfileAdministration? profile;
   final Widget profileSelector;
-  final ProfileWorkspaceData? workspace;
+  final ProfileDiagnosticsController? accessChecks;
   final VoidCallback? onConnections;
+  final Future<void> Function() onRefresh;
+  final Future<void> Function(String destination) onOpenDestination;
   const AdminHealthContent({
     super.key,
     required this.server,
-    this.refreshRevision = 0,
+    required this.health,
     required this.profile,
     required this.profileSelector,
-    this.workspace,
+    required this.onRefresh,
+    required this.onOpenDestination,
+    this.accessChecks,
     this.onConnections,
   });
+
   @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(16),
-    children: [
-      Text('Selected profile', style: Theme.of(context).textTheme.titleMedium),
-      profileSelector,
-      if (profile == null)
-        const AdminNotice('Select an available profile to view its health.')
-      else ...[
-        if (workspace != null && onConnections != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: ProfileDiagnosticsPanel(
-              workspace: workspace!,
-              connectionLabel: server.connectionLabel,
-              onManageConnections: onConnections!,
-              onReviewProviderAccess: () => adminPush(
-                context,
-                AdminProvidersPage(profile: profile!, shared: false),
-              ),
-              onReviewConnectors: () =>
-                  adminPush(context, AdminConnectorsPage(profile: profile!)),
-            ),
-          ),
-        const SizedBox(height: 12),
-        AdminGroup(
+  Widget build(BuildContext context) {
+    final findings = health.profileFindings;
+    final problems =
+        findings
+            .where((f) => f.status != AdministrationHealthStatus.healthy)
+            .toList()
+          ..sort((a, b) => _priority(a.status).compareTo(_priority(b.status)));
+    final checked =
+        findings.map((f) => f.checkedAt).whereType<DateTime>().toList()..sort();
+    return ListView(
+      key: const PageStorageKey('administration-health-findings'),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AdminRow(
-              title: 'Usage',
-              subtitle: 'Rolling time ranges and model detail',
-              icon: Icons.bar_chart,
-              onTap: () =>
-                  adminPush(context, AdminUsagePage(profile: profile!)),
+            Icon(
+              health.status == AdministrationHealthStatus.healthy
+                  ? Icons.favorite_border
+                  : health.status == AdministrationHealthStatus.unknown
+                  ? Icons.help_outline
+                  : Icons.error_outline,
+              color: administrationHealthColor(context, health.status),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(switch (health.status) {
+                AdministrationHealthStatus.healthy => 'No issues found',
+                AdministrationHealthStatus.warning => 'Needs attention',
+                AdministrationHealthStatus.failure => 'Action required',
+                AdministrationHealthStatus.unknown => 'Not fully checked',
+              }, style: Theme.of(context).textTheme.headlineSmall),
             ),
           ],
         ),
+        const SizedBox(height: 8),
+        if (health.status == AdministrationHealthStatus.healthy ||
+            health.status == AdministrationHealthStatus.unknown)
+          Text(
+            health.statusLabel,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        if (checked.isNotEmpty)
+          Text(
+            'Profile observations from ${TimeOfDay.fromDateTime(checked.first).format(context)}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        const AdminSectionLabel('Selected profile'),
+        profileSelector,
+        if (profile == null)
+          const AdminNotice('Select an available profile to view its health.')
+        else ...[
+          for (final finding in problems) _finding(context, finding),
+        ],
+        const AdminSectionLabel('Runtime'),
+        AdminRuntimeHealth(health: health),
+        if (profile != null) ...[
+          ExpansionTile(
+            key: PageStorageKey('health-observed-settings:${profile?.name}'),
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Observed settings'),
+            subtitle: Text(
+              'Current profile: ${profile!.name}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            children: [
+              for (final finding in findings.where(
+                (f) => f.status == AdministrationHealthStatus.healthy,
+              ))
+                _finding(context, finding),
+            ],
+          ),
+          AdminGroup(
+            children: [
+              if (accessChecks != null && onConnections != null)
+                AdminRow(
+                  title: 'Access checks',
+                  subtitle: 'Check access and provider credentials',
+                  icon: Icons.key_outlined,
+                  onTap: () => adminPush(
+                    context,
+                    AdminPage(
+                      title: 'Access checks',
+                      scope: profile!.label,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: ProfileDiagnosticsPanel(
+                          controller: accessChecks!,
+                          onManageConnections: onConnections!,
+                          onReviewProviderAccess: () => adminPush(
+                            context,
+                            AdminProvidersPage(
+                              profile: profile!,
+                              shared: false,
+                            ),
+                          ),
+                          onReviewConnectors: () => adminPush(
+                            context,
+                            AdminConnectorsPage(profile: profile!),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              AdminRow(
+                title: 'Usage',
+                subtitle: 'Time ranges and model detail',
+                icon: Icons.bar_chart,
+                onTap: () =>
+                    adminPush(context, AdminUsagePage(profile: profile!)),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 16),
+        OutlinedButton.icon(
+          onPressed: onRefresh,
+          icon: const Icon(Icons.refresh),
+          label: const Text('Refresh observations'),
+        ),
       ],
-      const AdminSectionLabel('Runtime'),
-      AdminRuntimeHealth(server: server, refreshRevision: refreshRevision),
-      const SizedBox(height: 20),
-    ],
-  );
+    );
+  }
+
+  int _priority(AdministrationHealthStatus status) => switch (status) {
+    AdministrationHealthStatus.failure => 0,
+    AdministrationHealthStatus.warning => 1,
+    AdministrationHealthStatus.unknown => 2,
+    AdministrationHealthStatus.healthy => 3,
+  };
+
+  Widget _finding(BuildContext context, AdministrationHealthFinding finding) =>
+      ListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Text(
+          finding.title,
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        subtitle: Text(
+          finding.detail,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        leading: finding.status == AdministrationHealthStatus.healthy
+            ? null
+            : Icon(
+                finding.status == AdministrationHealthStatus.unknown
+                    ? Icons.help_outline
+                    : Icons.error_outline,
+                color: administrationHealthColor(context, finding.status),
+                size: 20,
+              ),
+        trailing: finding.destination == null
+            ? null
+            : const Icon(Icons.chevron_right),
+        onTap: finding.destination == null
+            ? null
+            : () => onOpenDestination(finding.destination!),
+      );
 }
 
 class AdminUsagePage extends StatefulWidget {

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:wing/core/screens/administration/admin_identity_page.dart';
 import 'package:wing/core/screens/administration/admin_runtime_health.dart';
+import 'package:wing/core/services/administration_health.dart';
 import 'package:wing/core/screens/administration/admin_providers_page.dart';
 import 'package:wing/core/screens/administration/admin_settings_page.dart';
 import 'package:wing/core/screens/administration/admin_widgets.dart';
@@ -20,13 +21,16 @@ void main() {
     tester,
   ) async {
     final fixture = AdministrationDesignFixture();
+    final health = AdministrationHealth(fixture.server);
+    addTearDown(health.dispose);
+    await health.refreshRuntimeIdentity();
     await tester.pumpWidget(
       MaterialApp(
         theme: wingTheme(Brightness.dark),
         home: Scaffold(
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
-            child: AdminRuntimeHealth(server: fixture.server),
+            child: AdminRuntimeHealth(health: health),
           ),
         ),
       ),
@@ -232,6 +236,12 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: wingTheme(Brightness.dark),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
           home: ProfileCapabilitiesScreen(
             gateway: profile.gateway,
             connectionLabel: 'Home server',

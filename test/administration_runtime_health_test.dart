@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_runtime_health.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/services/administration_health.dart';
 import 'support/administration_fixture.dart';
 
 void main() {
@@ -10,6 +11,7 @@ void main() {
       'runtime retains outcome $exitCode and reviews the same operation',
       (tester) async {
         final fixture = AdministrationFixture();
+        final health = AdministrationHealth(fixture.server);
         var failRead = false;
         fixture.override = (method, path, query, body) async => switch (path) {
           'profiles/active' => {'current': 'default'},
@@ -28,20 +30,18 @@ void main() {
           },
           _ => throw StateError('Unexpected $method $path'),
         };
-        Future<void> render(int revision) => tester.pumpWidget(
+        Future<void> render() => tester.pumpWidget(
           MaterialApp(
             theme: wingTheme(Brightness.dark),
             home: Scaffold(
               body: SingleChildScrollView(
-                child: AdminRuntimeHealth(
-                  server: fixture.server,
-                  refreshRevision: revision,
-                ),
+                child: AdminRuntimeHealth(health: health),
               ),
             ),
           ),
         );
-        await render(0);
+        await health.refreshRuntimeIdentity();
+        await render();
         await tester.pumpAndSettle();
         expect(fixture.requests.where((r) => r.$1 == 'POST'), isEmpty);
         expect(find.text('Not checked'), findsNWidgets(2));
@@ -63,7 +63,8 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text(outcome), findsOneWidget);
         expect(find.textContaining('Checked '), findsOneWidget);
-        await render(1);
+        await health.refreshRuntimeIdentity();
+        await render();
         await tester.pumpAndSettle();
         expect(find.text(outcome), findsOneWidget);
         expect(
@@ -101,6 +102,8 @@ void main() {
         expect(find.textContaining('Checked '), findsOneWidget);
         expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(1));
         expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        health.dispose();
       },
     );
   }

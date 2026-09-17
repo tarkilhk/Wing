@@ -1,0 +1,582 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
+import '../models/hermes_profile.dart';
+import '../models/provider_access.dart';
+import 'administration_overview.dart';
+import 'administration_repository.dart';
+import 'scheduled_tasks_controller.dart';
+import 'server_connection_status.dart';
+
+enum AdministrationHealthStatus { healthy, warning, failure, unknown }
+
+class AdministrationHealthFinding {
+  const AdministrationHealthFinding({
+    required this.title,
+    required this.detail,
+    required this.status,
+    this.destination,
+    this.checkedAt,
+    this.stale = false,
+  });
+  final String title, detail;
+  final AdministrationHealthStatus status;
+  final String? destination;
+  final DateTime? checkedAt;
+  final bool stale;
+}
+
+/// An explicit access check remains attached to its captured workspace.
+class AdministrationProfileHealthObservation {
+  const AdministrationProfileHealthObservation(this.scope, this.finding);
+  final WorkspaceScope scope;
+  final AdministrationHealthFinding? finding;
+}
+
+/// Connection-owned, bounded observations. Reading this model never performs
+/// diagnostics or duplicates the selected profile's overview requests.
+class AdministrationHealth extends ChangeNotifier {
+  AdministrationHealth(
+    this.server, {
+    this.maxAge = const Duration(minutes: 5),
+    this.connectionStatus,
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now {
+    connectionStatus?.addListener(_changed);
+  }
+
+  final AdministrationRepository server;
+  final Duration maxAge;
+  final ServerConnectionStatus? connectionStatus;
+  final DateTime Function() _now;
+  AdministrationOverview? _overview;
+  AdministrationHealthFinding? _tasks;
+  AdministrationHealthFinding? _profileChecks;
+  Timer? _expiry;
+  bool _disposed = false;
+  int _runtimeGeneration = 0;
+  int _profileGeneration = 0;
+  final _readiness = AdministrationObservation();
+  final _diagnosticGenerations = <String, int>{};
+  final _diagnostics = <String, AdminDiagnosticObservation>{};
+  final _diagnosticScopes = <String, String>{};
+  final _pendingScopes = <String, String>{};
+  final _starting = <String>{};
+  Map<String, dynamic>? runtimeIdentity;
+  DateTime? runtimeCheckedAt;
+  bool runtimeLoading = false;
+
+  AdministrationOverview? get overview => _overview;
+  String? get profileName => _overview?.profile.name;
+  Map<String, AdminDiagnosticObservation> get diagnostics =>
+      Map.unmodifiable(_diagnostics);
+  Set<String> get starting => Set.unmodifiable(_starting);
+  String? diagnosticScope(String path) => _diagnosticScopes[path];
+  bool isStale(DateTime? at) =>
+      at == null || _now().isBefore(at) || !_now().isBefore(at.add(maxAge));
+
+  /// Detach immediately during a profile switch. Old overview completions can
+  /// no longer notify this controller or recolor the new profile's entry.
+  void selectProfile(AdministrationOverview? overview) {
+    if (_disposed || identical(overview, _overview)) return;
+    if (overview != null &&
+        (overview.profile.server.connectionId != server.connectionId ||
+            overview.profile.server.connectionIdentity !=
+                server.connectionIdentity)) {
+      throw ArgumentError('Health observations belong to another connection');
+    }
+    _overview?.removeListener(_changed);
+    _overview = overview;
+    _profileGeneration++;
+    _readiness.data = null;
+    _readiness.checkedAt = null;
+    _readiness.error = null;
+    _readiness.loading = false;
+    _tasks = null;
+    _profileChecks = null;
+    overview?.addListener(_changed);
+    _changed();
+  }
+
+  void updateProfileChecks(AdministrationProfileHealthObservation observation) {
+    if (_disposed || observation.scope != _overview?.profile.scope) return;
+    _profileChecks = observation.finding;
+    _changed();
+  }
+
+  /// Stock setup.status only observes configuration in the canonical profile's
+  /// secret scope. It neither probes a model nor creates provider credentials.
+  /// Inspected upstream 98f758ae7e8db83c2bb9214c3b35adf41df15f03:
+  /// tui_gateway/methods_config.py:268; hermes_cli/main.py:1009.
+  Future<void> refreshReadiness() async {
+    final profile = _overview?.profile;
+    if (_disposed || profile == null) return;
+    final generation = ++_profileGeneration;
+    _readiness.loading = true;
+    _readiness.error = null;
+    _changed();
+    try {
+      final data = await profile.rpc('setup.status');
+      if (data['profile'] != profile.name ||
+          data['provider_configured'] is! bool) {
+        throw const FormatException('Incomplete profile readiness');
+      }
+      if (_disposed || generation != _profileGeneration) return;
+      _readiness.data = data;
+      _readiness.checkedAt = _now();
+    } on Object catch (error) {
+      if (_disposed || generation != _profileGeneration) return;
+      _readiness.error = administrationError(error);
+    } finally {
+      if (!_disposed && generation == _profileGeneration) {
+        _readiness.loading = false;
+        _changed();
+      }
+    }
+  }
+
+  void updateTasks(ScheduledTasksController source) {
+    if (_disposed ||
+        source.repository.profile.scope != _overview?.profile.scope) {
+      return;
+    }
+    final count = source.tasks?.where((task) => task.needsAttention).length;
+    _tasks = _finding(
+      'Scheduled tasks',
+      count == null
+          ? AdministrationHealthStatus.unknown
+          : count > 0 || source.uncertain.isNotEmpty
+          ? AdministrationHealthStatus.warning
+          : AdministrationHealthStatus.healthy,
+      count == null
+          ? 'Schedules unavailable'
+          : count == 1
+          ? '1 task needs attention'
+          : count > 0
+          ? '$count tasks need attention'
+          : source.uncertain.isNotEmpty
+          ? 'A task action needs review'
+          : 'No attention flags in listed tasks',
+      at: source.checkedAt,
+      loading: source.loading,
+      error: source.error,
+      destination: 'Scheduled tasks',
+    );
+    _changed();
+  }
+
+  AdministrationHealthFinding _finding(
+    String title,
+    AdministrationHealthStatus status,
+    String detail, {
+    DateTime? at,
+    bool loading = false,
+    String? error,
+    String? destination,
+  }) {
+    final stale = isStale(at);
+    final unknown = stale || loading || error != null;
+    return AdministrationHealthFinding(
+      title: title,
+      detail:
+          '$detail${loading
+              ? ' · Refreshing'
+              : error != null
+              ? ' · Refresh unavailable'
+              : stale && at != null
+              ? ' · Stale observation'
+              : ''}',
+      status: unknown && status == AdministrationHealthStatus.healthy
+          ? AdministrationHealthStatus.unknown
+          : status,
+      checkedAt: at,
+      stale: stale,
+      destination: destination,
+    );
+  }
+
+  List<AdministrationHealthFinding> get profileFindings {
+    if (_overview == null) {
+      return const [
+        AdministrationHealthFinding(
+          title: 'Selected profile',
+          detail: 'Select an available profile',
+          status: AdministrationHealthStatus.unknown,
+        ),
+      ];
+    }
+    final findings = <AdministrationHealthFinding>[];
+    final connection = connectionStatus;
+    if (connection != null &&
+        (connection.phase == ServerConnectionPhase.unchecked ||
+            connection.phase == ServerConnectionPhase.reconnecting ||
+            connection.access == ConnectionAvailability.unavailable ||
+            connection.live == ConnectionAvailability.unavailable)) {
+      findings.add(
+        AdministrationHealthFinding(
+          title: 'Connection',
+          detail: connection.description,
+          status: AdministrationHealthStatus.unknown,
+        ),
+      );
+    }
+    final configured = _readiness.data?['provider_configured'];
+    findings.add(
+      _finding(
+        'Provider configuration',
+        configured == true
+            ? AdministrationHealthStatus.healthy
+            : configured == false
+            ? AdministrationHealthStatus.warning
+            : AdministrationHealthStatus.unknown,
+        configured == true
+            ? 'Provider configuration detected; no model request'
+            : configured == false
+            ? 'No provider configuration detected'
+            : 'Provider configuration has not been established',
+        at: _readiness.checkedAt,
+        loading: _readiness.loading,
+        error: _readiness.error,
+        destination: 'Access and connectors',
+      ),
+    );
+    for (final key in ['model', 'access', 'tools', 'connectors']) {
+      final observation = _overview!.observations[key];
+      final data = observation?.data;
+      final title = switch (key) {
+        'model' => 'Model selection',
+        'access' => 'Provider access',
+        'tools' => 'Tool setup',
+        _ => 'Connector settings',
+      };
+      final destination = switch (key) {
+        'model' => 'Models and reasoning',
+        'tools' => 'Skills and tools',
+        _ => 'Access and connectors',
+      };
+      var status = AdministrationHealthStatus.unknown;
+      var detail = 'Information unavailable';
+      if (data != null) {
+        try {
+          (status, detail) = switch (key) {
+            'model' => _model(data),
+            'access' => _access(data),
+            'tools' => _tools(data),
+            _ => _connectors(data),
+          };
+        } on Object {
+          detail = 'Incomplete observation; refresh to check again';
+        }
+      }
+      findings.add(
+        _finding(
+          title,
+          status,
+          detail,
+          at: observation?.checkedAt,
+          loading: observation?.loading == true,
+          error: observation?.error,
+          destination: destination,
+        ),
+      );
+    }
+    if (_tasks case final task?) {
+      findings.add(
+        _finding(
+          task.title,
+          task.status,
+          task.detail,
+          at: task.checkedAt,
+          destination: task.destination,
+        ),
+      );
+    }
+    if (_profileChecks case final checks?) {
+      findings.add(
+        _finding(
+          checks.title,
+          checks.status,
+          checks.detail,
+          at: checks.checkedAt,
+          destination: checks.destination,
+        ),
+      );
+    }
+    return findings;
+  }
+
+  (AdministrationHealthStatus, String) _model(Map<String, dynamic> data) {
+    final model = data['model'], provider = data['provider'];
+    if (model is! String || provider is! String) {
+      return (
+        AdministrationHealthStatus.unknown,
+        'Model selection unavailable',
+      );
+    }
+    if (model.trim().isEmpty || provider.trim().isEmpty) {
+      return (
+        AdministrationHealthStatus.warning,
+        'Choose a model and provider',
+      );
+    }
+    return (AdministrationHealthStatus.healthy, '$model · $provider');
+  }
+
+  (AdministrationHealthStatus, String) _access(Map<String, dynamic> data) {
+    final providers = administrationRows(
+      data['providers'],
+    ).map((row) => ProviderAccess(row, now: _now())).toList();
+    final expired = providers
+        .where((p) => p.state == ProviderAccessState.expired)
+        .toList();
+    if (expired.isNotEmpty) {
+      final name = expired.length == 1
+          ? _observedName(expired.single.row, const ['name', 'id'])
+          : null;
+      return (
+        AdministrationHealthStatus.failure,
+        expired.length == 1
+            ? '${name ?? '1 provider'} sign-in expired'
+            : '${expired.length} provider sign-ins expired',
+      );
+    }
+    if (providers.any(
+      (p) =>
+          p.state == ProviderAccessState.unknown ||
+          p.state == ProviderAccessState.external ||
+          p.status['expires_at'] != null && p.expiresAt == null,
+    )) {
+      return (
+        AdministrationHealthStatus.unknown,
+        'Provider readiness is not fully observed',
+      );
+    }
+    return (
+      AdministrationHealthStatus.healthy,
+      'Listed provider sign-ins observed; no model request',
+    );
+  }
+
+  (AdministrationHealthStatus, String) _tools(Map<String, dynamic> data) {
+    final rows = administrationRows(data['data']);
+    final setup = rows
+        .where((r) => r['enabled'] == true && r['configured'] == false)
+        .toList();
+    if (setup.isNotEmpty) {
+      final name = setup.length == 1
+          ? _observedName(setup.single, const ['display_name', 'label', 'name'])
+          : null;
+      return (
+        AdministrationHealthStatus.warning,
+        setup.length == 1
+            ? '${name ?? '1 enabled tool'} needs setup'
+            : '${setup.length} enabled tools need setup',
+      );
+    }
+    if (rows.any(
+      (r) =>
+          r['enabled'] is! bool ||
+          r['enabled'] == true && r['configured'] is! bool,
+    )) {
+      return (
+        AdministrationHealthStatus.unknown,
+        'Tool setup is not fully observed',
+      );
+    }
+    return (
+      AdministrationHealthStatus.healthy,
+      'No setup gaps reported for enabled tools',
+    );
+  }
+
+  String? _observedName(Map<String, dynamic> row, List<String> keys) {
+    for (final key in keys) {
+      final value = row[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
+  }
+
+  (AdministrationHealthStatus, String) _connectors(Map<String, dynamic> data) {
+    final rows = administrationRows(data['servers']);
+    if (rows.any((r) => r['name'] is! String || r['enabled'] is! bool)) {
+      return (
+        AdministrationHealthStatus.unknown,
+        'Connector settings are incomplete',
+      );
+    }
+    return (
+      AdministrationHealthStatus.healthy,
+      '${rows.length} connector settings observed; connections not checked',
+    );
+  }
+
+  AdministrationHealthStatus get status {
+    final values = [
+      for (final finding in profileFindings) finding.status,
+      for (final observation in _diagnostics.values)
+        observation.failed
+            ? AdministrationHealthStatus.failure
+            : AdministrationHealthStatus.unknown,
+      if (_starting.isNotEmpty) AdministrationHealthStatus.unknown,
+    ];
+    for (final severity in [
+      AdministrationHealthStatus.failure,
+      AdministrationHealthStatus.warning,
+      AdministrationHealthStatus.unknown,
+    ]) {
+      if (values.contains(severity)) return severity;
+    }
+    return AdministrationHealthStatus.healthy;
+  }
+
+  String get statusLabel => switch (status) {
+    AdministrationHealthStatus.failure =>
+      'Action required in reported findings',
+    AdministrationHealthStatus.warning => 'Setup or access needs attention',
+    AdministrationHealthStatus.unknown => 'Health observations are incomplete',
+    AdministrationHealthStatus.healthy => 'No issues in available observations',
+  };
+
+  String get diagnosticCoverage {
+    if (_diagnostics.isEmpty) return 'Doctor and security audit not run';
+    final unchecked = [
+      if (!_diagnostics.containsKey('ops/doctor')) 'Doctor not run',
+      if (!_diagnostics.containsKey('ops/security-audit'))
+        'Security audit not run',
+    ];
+    return [
+      ...unchecked,
+      'Diagnostic output needs review; completion does not establish runtime health',
+    ].join(' · ');
+  }
+
+  Future<void> refreshRuntimeIdentity() async {
+    if (_disposed) return;
+    final generation = ++_runtimeGeneration;
+    runtimeLoading = true;
+    _changed();
+    final identity = await server.runtimeIdentity();
+    if (_disposed || generation != _runtimeGeneration) return;
+    runtimeIdentity = identity;
+    runtimeCheckedAt = _now();
+    runtimeLoading = false;
+    _changed();
+  }
+
+  int? beginDiagnostic(String path, {String? scope}) {
+    if (_disposed || _starting.contains(path)) return null;
+    if (!{'ops/doctor', 'ops/security-audit'}.contains(path)) {
+      throw ArgumentError('Unknown diagnostic');
+    }
+    final previous = _diagnostics[path];
+    if (previous != null &&
+        (previous.status['running'] != false ||
+            previous.status['exit_code'] is! int)) {
+      return null;
+    }
+    _starting.add(path);
+    if (scope != null) _pendingScopes[path] = scope;
+    final generation = _diagnosticGenerations.update(
+      path,
+      (n) => n + 1,
+      ifAbsent: () => 1,
+    );
+    _changed();
+    return generation;
+  }
+
+  int diagnosticGeneration(String path) => _diagnosticGenerations[path] ?? 0;
+
+  void observeDiagnostic(
+    String path,
+    AdminDiagnosticObservation value, {
+    required int generation,
+  }) {
+    if (_disposed || generation != _diagnosticGenerations[path]) return;
+    _diagnostics[path] = value;
+    if (_pendingScopes[path] case final scope?) _diagnosticScopes[path] = scope;
+    _changed();
+  }
+
+  void finishDiagnostic(String path, int generation) {
+    if (_disposed || generation != _diagnosticGenerations[path]) return;
+    _starting.remove(path);
+    _pendingScopes.remove(path);
+    _changed();
+  }
+
+  void _changed() {
+    if (_disposed) return;
+    _expiry?.cancel();
+    final futureExpiries = [
+      for (final value
+          in _overview?.observations.values ?? <AdministrationObservation>[])
+        if (value.checkedAt != null) value.checkedAt!.add(maxAge),
+      if (_tasks?.checkedAt != null) _tasks!.checkedAt!.add(maxAge),
+      if (_profileChecks?.checkedAt != null)
+        _profileChecks!.checkedAt!.add(maxAge),
+      if (_readiness.checkedAt != null) _readiness.checkedAt!.add(maxAge),
+      if (runtimeCheckedAt != null) runtimeCheckedAt!.add(maxAge),
+      for (final diagnostic in _diagnostics.values)
+        if (diagnostic.checkedAt != null) diagnostic.checkedAt!.add(maxAge),
+      ..._providerExpiries(),
+    ].where((time) => time.isAfter(_now())).toList()..sort();
+    if (futureExpiries.isNotEmpty) {
+      _expiry = Timer(futureExpiries.first.difference(_now()), _changed);
+    }
+    notifyListeners();
+  }
+
+  Iterable<DateTime> _providerExpiries() sync* {
+    final rows = _overview?.observations['access']?.data?['providers'];
+    if (rows is! List) return;
+    for (final row in rows) {
+      if (row is! Map || row['status'] is! Map) continue;
+      final expiry = providerStatusDate(row['status']['expires_at']);
+      if (expiry != null) yield expiry;
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _expiry?.cancel();
+    _overview?.removeListener(_changed);
+    connectionStatus?.removeListener(_changed);
+    super.dispose();
+  }
+}
+
+/// A reported operation result, never a verdict that the server is healthy.
+class AdminDiagnosticObservation {
+  const AdminDiagnosticObservation(
+    this.action,
+    this.status,
+    this.checkedAt, {
+    this.readError,
+  });
+  final AdministrationAction action;
+  final Map<String, dynamic> status;
+  final DateTime? checkedAt;
+  final String? readError;
+  bool get failed =>
+      status['running'] == false &&
+      status['exit_code'] is int &&
+      status['exit_code'] != 0;
+  String get outcome => status['running'] == true
+      ? 'Running'
+      : status['running'] == false && status['exit_code'] == 0
+      ? 'Completed'
+      : failed
+      ? 'Failed'
+      : 'Outcome unavailable';
+  String get nextStep => status['running'] == true
+      ? 'The operation is still running. Open progress to check its result.'
+      : failed
+      ? 'The operation reported a failure. Review the output to see what completed before retrying.'
+      : status['running'] == false && status['exit_code'] == 0
+      ? 'The operation completed. Its output may still contain warnings or findings.'
+      : 'A final outcome has not been reported. Check progress to retrieve the result.';
+}

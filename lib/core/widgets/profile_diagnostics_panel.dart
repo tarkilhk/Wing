@@ -2,31 +2,28 @@ import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 
 import '../services/connection_manager.dart';
+import '../services/administration_health.dart';
 import '../services/profile_gateway.dart';
 import '../services/profile_workspace_controller.dart';
 
-class ProfileDiagnosticsPanel extends StatefulWidget {
-  final ProfileWorkspaceData workspace;
-  final String connectionLabel;
-  final VoidCallback onManageConnections;
-  final VoidCallback? onReviewProviderAccess;
-  final VoidCallback? onReviewConnectors;
+/// Explicit access-check state owned by Administration, independently of routes.
+class ProfileDiagnosticsController extends ChangeNotifier {
+  ProfileDiagnosticsController({
+    required ProfileWorkspaceData workspace,
+    required String connectionLabel,
+    // Keep ownership private: callers must use updateWorkspace to invalidate checks.
+    // ignore: prefer_initializing_formals
+  }) : _workspace = workspace,
+       // ignore: prefer_initializing_formals
+       _connectionLabel = connectionLabel;
 
-  const ProfileDiagnosticsPanel({
-    super.key,
-    required this.workspace,
-    required this.connectionLabel,
-    required this.onManageConnections,
-    this.onReviewProviderAccess,
-    this.onReviewConnectors,
-  });
+  ProfileWorkspaceData _workspace;
+  String _connectionLabel;
+  bool _disposed = false;
 
-  @override
-  State<ProfileDiagnosticsPanel> createState() =>
-      _ProfileDiagnosticsPanelState();
-}
+  ProfileWorkspaceData get workspace => _workspace;
+  String get connectionLabel => _connectionLabel;
 
-class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
   var _dashboard = _DiagnosticResult.notChecked;
   var _provider = _DiagnosticResult.notChecked;
   var _runtime = _DiagnosticResult.notChecked;
@@ -34,44 +31,95 @@ class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
   DateTime? _checkedAt;
   var _generation = 0;
 
-  @override
-  void didUpdateWidget(ProfileDiagnosticsPanel oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.workspace.gateway, widget.workspace.gateway) ||
-        oldWidget.workspace.scope != widget.workspace.scope ||
-        oldWidget.connectionLabel != widget.connectionLabel) {
-      _generation++;
-      _checking = false;
-      _checkedAt = null;
-      _dashboard = _DiagnosticResult.notChecked;
-      _provider = _DiagnosticResult.notChecked;
-      _runtime = _DiagnosticResult.notChecked;
+  AdministrationProfileHealthObservation get healthObservation {
+    final results = [_dashboard, _provider, _runtime];
+    if (results.every(
+      (result) => result.state == _DiagnosticState.notChecked,
+    )) {
+      return AdministrationProfileHealthObservation(_workspace.scope, null);
     }
+    final failure = results
+        .where((result) => result.state == _DiagnosticState.failed)
+        .firstOrNull;
+    final unknown = results.any(
+      (result) => result.state != _DiagnosticState.ready,
+    );
+    return AdministrationProfileHealthObservation(
+      _workspace.scope,
+      AdministrationHealthFinding(
+        title: 'Access checks',
+        detail:
+            failure?.message ??
+            (_checking
+                ? 'Checking access and provider credentials'
+                : unknown
+                ? 'Access checks are incomplete'
+                : 'Access and provider credentials checked; no model request'),
+        status: failure != null
+            ? AdministrationHealthStatus.failure
+            : unknown
+            ? AdministrationHealthStatus.unknown
+            : AdministrationHealthStatus.healthy,
+        checkedAt: _checkedAt,
+        destination: failure == _provider || failure == _runtime
+            ? 'Access and connectors'
+            : null,
+      ),
+    );
   }
 
-  Future<void> _check() async {
-    final gateway = widget.workspace.gateway;
-    final scope = widget.workspace.scope;
+  void updateWorkspace({
+    required ProfileWorkspaceData workspace,
+    required String connectionLabel,
+  }) {
+    if (_disposed) return;
+    final changed =
+        !identical(_workspace.gateway, workspace.gateway) ||
+        _workspace.scope != workspace.scope ||
+        _connectionLabel != connectionLabel;
+    _workspace = workspace;
+    _connectionLabel = connectionLabel;
+    if (!changed) return;
+    _generation++;
+    _checking = false;
+    _checkedAt = null;
+    _dashboard = _DiagnosticResult.notChecked;
+    _provider = _DiagnosticResult.notChecked;
+    _runtime = _DiagnosticResult.notChecked;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _generation++;
+    super.dispose();
+  }
+
+  Future<void> check() async {
+    if (_disposed || _checking) return;
+    final gateway = _workspace.gateway;
+    final scope = _workspace.scope;
     final generation = ++_generation;
-    setState(() {
-      _checking = true;
-      _dashboard = _DiagnosticResult.checking;
-      _provider = _DiagnosticResult.checking;
-      _runtime = _DiagnosticResult.checking;
-    });
+    _checking = true;
+    _dashboard = _DiagnosticResult.checking;
+    _provider = _DiagnosticResult.checking;
+    _runtime = _DiagnosticResult.checking;
+    notifyListeners();
 
     bool current() =>
-        mounted &&
+        !_disposed &&
         generation == _generation &&
-        identical(widget.workspace.gateway, gateway) &&
-        widget.workspace.scope == scope;
+        identical(_workspace.gateway, gateway) &&
+        _workspace.scope == scope;
 
     void publish(
       _DiagnosticResult result,
       void Function(_DiagnosticResult result) apply,
     ) {
       if (!current()) return;
-      setState(() => apply(result));
+      apply(result);
+      notifyListeners();
     }
 
     await Future.wait([
@@ -86,10 +134,9 @@ class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
       ).then((result) => publish(result, (value) => _runtime = value)),
     ]);
     if (current()) {
-      setState(() {
-        _checking = false;
-        _checkedAt = DateTime.now();
-      });
+      _checking = false;
+      _checkedAt = DateTime.now();
+      notifyListeners();
     }
   }
 
@@ -163,9 +210,29 @@ class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
       );
     }
   }
+}
+
+class ProfileDiagnosticsPanel extends StatelessWidget {
+  final ProfileDiagnosticsController controller;
+  final VoidCallback onManageConnections;
+  final VoidCallback? onReviewProviderAccess;
+  final VoidCallback? onReviewConnectors;
+
+  const ProfileDiagnosticsPanel({
+    super.key,
+    required this.controller,
+    required this.onManageConnections,
+    this.onReviewProviderAccess,
+    this.onReviewConnectors,
+  });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: controller,
+    builder: (context, _) => _buildChecks(context),
+  );
+
+  Widget _buildChecks(BuildContext context) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -178,14 +245,14 @@ class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
             ),
             const SizedBox(height: 4),
             Text(
-              '${widget.connectionLabel} · ${widget.workspace.scope.profileName}',
+              '${controller.connectionLabel} · ${controller.workspace.scope.profileName}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
             Text(
-              _checkedAt == null
+              controller._checkedAt == null
                   ? 'No checks completed yet.'
-                  : 'Checked ${TimeOfDay.fromDateTime(_checkedAt!).format(context)}',
+                  : 'Checked ${TimeOfDay.fromDateTime(controller._checkedAt!).format(context)}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             Text(
@@ -197,20 +264,20 @@ class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
                 in [
                   (
                     label: 'Server access',
-                    result: _dashboard,
-                    action: widget.onManageConnections,
+                    result: controller._dashboard,
+                    action: onManageConnections,
                     actionLabel: 'Review connection',
                   ),
                   (
                     label: 'Provider setup',
-                    result: _provider,
-                    action: widget.onReviewProviderAccess,
+                    result: controller._provider,
+                    action: onReviewProviderAccess,
                     actionLabel: 'Resolve provider access',
                   ),
                   (
                     label: 'Credential availability',
-                    result: _runtime,
-                    action: widget.onReviewProviderAccess,
+                    result: controller._runtime,
+                    action: onReviewProviderAccess,
                     actionLabel: 'Review credentials',
                   ),
                 ]..sort(
@@ -235,15 +302,15 @@ class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
               runSpacing: 8,
               children: [
                 FilledButton.icon(
-                  onPressed: _checking ? null : _check,
-                  icon: _checking
+                  onPressed: controller._checking ? null : controller.check,
+                  icon: controller._checking
                       ? const SizedBox.square(
                           dimension: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.health_and_safety_outlined),
                   label: Text(
-                    _dashboard.state == _DiagnosticState.notChecked
+                    controller._dashboard.state == _DiagnosticState.notChecked
                         ? 'Run checks'
                         : 'Check again',
                   ),
@@ -254,11 +321,11 @@ class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
                   onSelected: (action) {
                     switch (action) {
                       case 'connections':
-                        widget.onManageConnections();
+                        onManageConnections();
                       case 'providers':
-                        widget.onReviewProviderAccess?.call();
+                        onReviewProviderAccess?.call();
                       case 'connectors':
-                        widget.onReviewConnectors?.call();
+                        onReviewConnectors?.call();
                     }
                   },
                   itemBuilder: (_) => [
@@ -266,12 +333,12 @@ class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
                       value: 'connections',
                       child: Text('Manage connections'),
                     ),
-                    if (widget.onReviewProviderAccess != null)
+                    if (onReviewProviderAccess != null)
                       const PopupMenuItem(
                         value: 'providers',
                         child: Text('Review provider access'),
                       ),
-                    if (widget.onReviewConnectors != null)
+                    if (onReviewConnectors != null)
                       const PopupMenuItem(
                         value: 'connectors',
                         child: Text('Review MCP connectors'),

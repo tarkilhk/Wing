@@ -144,13 +144,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: wingTheme(Brightness.dark),
-        home: Scaffold(
-          appBar: AppBar(title: const Text('Administration')),
-          body: HermesAdministrationContent(
-            onOpenSession: (_) async {},
-            controller: controller,
-            onConnections: () {},
-          ),
+        home: HermesAdministrationContent(
+          onOpenMenu: () {},
+          onOpenSession: (_) async {},
+          controller: controller,
+          onConnections: () {},
         ),
       ),
     );
@@ -182,7 +180,7 @@ void main() {
     tester,
   ) async {
     await show(tester);
-    await tap(tester, 'Defaults');
+    await tap(tester, 'Models and reasoning');
     expect(find.text('Default model'), findsOneWidget);
     await tap(tester, 'Default model');
     await tap(tester, 'Cancel');
@@ -373,7 +371,7 @@ void main() {
         expect((await server.discover()).named(value), isNull);
       }
       await tap(tester, 'admin-live-b');
-      expect(find.text('Defaults'), findsOneWidget);
+      expect(find.text('Models and reasoning'), findsOneWidget);
       expect(controller.current?.scope.profileName, 'admin-live-b');
     },
   );
@@ -382,11 +380,11 @@ void main() {
     tester,
   ) async {
     await show(tester);
-    await tap(tester, 'Health');
-    expect(
-      find.text((await server.runtimeIdentity())['label'] as String),
-      findsOneWidget,
-    );
+    await tester.tap(find.byKey(const ValueKey('administration-health')));
+    await idle(tester);
+    final runtimeLabel = (await server.runtimeIdentity())['label'] as String;
+    await visible(tester, find.text(runtimeLabel));
+    expect(find.text(runtimeLabel), findsOneWidget);
     await tap(tester, 'Usage');
     for (final label in [
       'Last 24 hours',
@@ -414,7 +412,7 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await idle(tester);
     await back(tester);
-    await tap(tester, 'Profile');
+    await back(tester);
     await tap(tester, 'Access and connectors');
     await tap(tester, 'MCP connectors');
     await tap(tester, 'Reload server connectors');
@@ -578,7 +576,7 @@ void main() {
     'model defaults helper assignments reset and ordered fallbacks persist',
     (tester) async {
       await show(tester);
-      await tap(tester, 'Defaults');
+      await tap(tester, 'Models and reasoning');
       await tap(tester, 'Default model');
       final options = administrationRows(
         (await profile.read('model/options', {
@@ -717,9 +715,10 @@ void main() {
     'Doctor and security audit execute and report terminal action state',
     (tester) async {
       await show(tester);
-      await tap(tester, 'Health');
+      await tester.tap(find.byKey(const ValueKey('administration-health')));
+      await idle(tester);
       for (final label in ['Doctor', 'Security audit']) {
-        await tap(tester, label);
+        await tap(tester, 'Run $label');
         await tap(tester, 'Run');
         await until(
           tester,
