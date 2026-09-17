@@ -35,6 +35,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
   String profileDescription = 'Roadmap profile';
   String profileSoul = 'Be exact.';
   int updateCheckCount = 0;
+  bool updateAvailable = true;
   bool answerActionsEnabled = false;
   bool supervisionEnabled = false;
   int _nextAnswerChild = 0;
@@ -78,38 +79,36 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
       connect: base.connect,
       close: base.close,
       get: (path, query) async {
-        if (path == 'analytics/usage') {
+        if (path == 'analytics/models') {
           administrationReads.add((path, Map<String, String>.from(query)));
           return {
-            'period_days': 30,
-            'totals': const {
-              'total_sessions': 12,
-              'total_api_calls': 34,
-              'total_input': 5600,
-              'total_output': 780,
-              'total_estimated_cost': 1.25,
-            },
-            'by_model': const [
+            'models': const [
               {
                 'model': 'openai-codex/gpt-6-astra',
+                'provider': 'openai-codex',
+                'sessions': 12,
+                'api_calls': 34,
                 'input_tokens': 5600,
                 'output_tokens': 780,
                 'estimated_cost': 1.25,
               },
+              {'model': 'local/missing-cost', 'sessions': 1},
             ],
           };
         }
         if (path == 'hermes/update/check') {
           administrationReads.add((path, Map<String, String>.from(query)));
           updateCheckCount++;
-          final available = updateCheckCount == 1;
           return {
             'current_version': '1.2.3',
             'install_method': 'pipx',
-            'behind': available ? 2 : 0,
-            'update_available': available,
+            'behind': updateAvailable ? 2 : 0,
+            'update_available': updateAvailable,
             'can_apply': true,
           };
+        }
+        if (path == 'health') {
+          return {'ok': true, 'version': '1.2.3'};
         }
         if (path == 'model/info') {
           return {'model': 'gpt-6-astra', 'provider': 'openai-codex'};
@@ -126,6 +125,12 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
           };
         }
         return base.read(path, query);
+      },
+      patch: (path, body) async {
+        if (!path.startsWith('sessions/') || body['unread'] != false) {
+          throw StateError('Unexpected journey mutation: $path');
+        }
+        return {'ok': true, ...body};
       },
       post: (path, body) async {
         backendUpdatePosts.add((path, Map<String, dynamic>.from(body)));

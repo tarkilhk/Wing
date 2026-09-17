@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:wing/core/services/android_voice.dart';
@@ -42,16 +43,33 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 150));
     await device.stopPlayback('native-interrupt');
     await playing;
-    if (capabilities.voices.isEmpty) {
-      await expectLater(
-        device.speak('native-unavailable', 'Hello', voice: '', rate: 1),
-        throwsA(anything),
-      );
+    // The Android TTS service can finish initializing after the first probe.
+    // Pin the rejection check to an absent voice rather than a stale snapshot.
+    await expectLater(
+      device.speak(
+        'native-unavailable',
+        'Hello',
+        voice: 'wing-test-voice-that-is-not-installed',
+        rate: 1,
+      ),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          'voice_playback',
+        ),
+      ),
+    );
+    final speechCapabilities = await device.capabilities().timeout(
+      const Duration(seconds: 12),
+    );
+    debugPrint('VOICE_OFFLINE_VOICES ${speechCapabilities.voices.length}');
+    if (speechCapabilities.voices.isEmpty) {
       debugPrint(
         'VOICE_LIMITATION no installed offline Android voice; speech-quality acceptance remains outstanding',
       );
     } else {
-      final voice = capabilities.voices.first.id;
+      final voice = speechCapabilities.voices.first.id;
       const samples = [
         'Your connection is ready.',
         'The task finished successfully. You can review the changes.',

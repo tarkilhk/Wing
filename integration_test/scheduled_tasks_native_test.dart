@@ -38,9 +38,23 @@ void main() {
         find.widgetWithText(TextFormField, 'Name (optional)'),
         'Android acceptance',
       );
+      await tester.pumpAndSettle();
+      final nameField = find.widgetWithText(TextFormField, 'Name (optional)');
+      final keyboardDeadline = DateTime.now().add(const Duration(seconds: 10));
+      while (View.of(tester.element(nameField)).viewInsets.bottom == 0 &&
+          DateTime.now().isBefore(keyboardDeadline)) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(
+        View.of(tester.element(nameField)).viewInsets.bottom,
+        greaterThan(0),
+      );
+      await tester.pumpAndSettle();
       await tester.ensureVisible(
         find.widgetWithText(TextFormField, 'Instructions'),
       );
+      // Lay out the revealed field before changing focus and scheduling its caret.
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Instructions'),
         'Prepare a daily summary.',

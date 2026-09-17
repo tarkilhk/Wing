@@ -15,6 +15,7 @@ import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/composer_action_button.dart';
 
 import '../test/support/profile_actions_fixture.dart';
 
@@ -95,7 +96,9 @@ void main() {
     }
     final bytes = await binding.takeScreenshot(name);
     final directory = await getExternalStorageDirectory();
-    await File('${directory!.path}/$name.png').writeAsBytes(bytes);
+    final frame = File('${directory!.path}/$name.png');
+    await frame.writeAsBytes(bytes);
+    debugPrint('Native frame: ${frame.path}');
   }
 
   Future<AttachmentDraft> file(String name) async {
@@ -182,11 +185,21 @@ void main() {
       await launch(tester);
       expect(find.byTooltip('Message actions'), findsNothing);
       expect(find.byIcon(Icons.more_horiz), findsNothing);
-      await tester.longPress(find.byTooltip('Stop'));
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(ComposerActionButton)),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
       await frames(tester);
-      expect(find.text('Queue for the next turn'), findsOneWidget);
-      Navigator.of(tester.element(find.text('Queue for the next turn'))).pop();
+      expect(
+        find.byKey(const ValueKey('composer-choice-queue')),
+        findsOneWidget,
+      );
+      await gesture.cancel();
       await frames(tester);
+      expect(
+        find.byKey(const ValueKey('composer-action-selector')),
+        findsNothing,
+      );
       await edit(tester, 'Review the layout');
       // No synthetic viewInsets: this is the real Android IME after focus.
       final keyboardDeadline = DateTime.now().add(const Duration(seconds: 10));
