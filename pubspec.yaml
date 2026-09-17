@@ -23,7 +23,7 @@ dependencies:
   flutter_secure_storage: 10.3.1
   path_provider: ^2.1.6
   image: ^4.10.1
-  file_picker: 10.3.3
+  file_picker: 13.1.0
 
   # Data models
   uuid: ^4.6.0
@@ -31,8 +31,8 @@ dependencies:
 
   # Misc
   url_launcher: ^6.3.0
-  package_info_plus: ^9.0.1
-  share_plus: ^12.0.1
+  package_info_plus: ^10.2.1
+  share_plus: ^13.3.0
 
   # Markdown syntax highlighting
   highlight: ^0.7.0
