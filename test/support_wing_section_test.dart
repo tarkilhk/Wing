@@ -13,7 +13,15 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/support_wing_section.dart';
 
 // Uses the configured destination with a fake launcher; makes no network calls.
-final _testUri = wingSupportUri;
+final _destinations = [
+  (
+    label: 'Sponsor on GitHub',
+    platform: 'GitHub Sponsors',
+    uri: wingGitHubSponsorsUri,
+  ),
+  (label: 'Buy me a coffee', platform: 'Ko-fi', uri: wingKoFiUri),
+];
+Finder _row(String label) => find.widgetWithText(ListTile, label);
 const _frame = Key('support-frame');
 const _capture = bool.fromEnvironment('CAPTURE_SUPPORT');
 
@@ -59,7 +67,12 @@ Future<void> _show(
                   style: wingTheme(brightness).textTheme.titleMedium,
                 ),
                 const SizedBox(height: WingSpacing.md),
-                Card(child: SupportWingSection(uri: _testUri)),
+                Card(
+                  child: SupportWingSection(
+                    githubUri: wingGitHubSponsorsUri,
+                    koFiUri: wingKoFiUri,
+                  ),
+                ),
               ],
             ),
           ),
@@ -116,46 +129,79 @@ void main() {
   });
   tearDown(() => UrlLauncherPlatform.instance = original);
 
-  testWidgets('opens only on request, externally, without extra data', (
-    tester,
-  ) async {
-    await _show(tester);
-    expect(browser.calls, isEmpty);
-    await tester.tap(find.byType(OutlinedButton));
-    await tester.pumpAndSettle();
-    expect(browser.calls.single.$1, _testUri.toString());
-    final options = browser.calls.single.$2;
-    expect(options.mode, PreferredLaunchMode.externalApplication);
-    expect(options.webViewConfiguration.headers, isEmpty);
-  });
-
-  for (final throws in [false, true]) {
-    testWidgets('browser failure (throws: $throws) allows retry', (
+  for (final destination in _destinations) {
+    testWidgets('${destination.platform} opens only on request, externally', (
       tester,
     ) async {
-      browser.result = () async {
-        if (throws) throw PlatformException(code: 'ACTIVITY_NOT_FOUND');
-        return false;
-      };
       await _show(tester);
-      await tester.tap(find.byType(OutlinedButton));
+      expect(browser.calls, isEmpty);
+      await tester.tap(_row(destination.label));
       await tester.pumpAndSettle();
-      expect(
-        find.textContaining('Could not open your browser.'),
-        findsOneWidget,
-      );
-      expect(
-        find.widgetWithText(SelectableText, _testUri.toString()),
-        findsOneWidget,
-      );
-      expect(tester.takeException(), isNull);
-      browser.result = () async => true;
-      await tester.tap(find.byType(OutlinedButton));
-      await tester.pumpAndSettle();
-      expect(browser.calls, hasLength(2));
-      expect(find.textContaining('Could not open your browser.'), findsNothing);
+      expect(browser.calls.single.$1, destination.uri.toString());
+      final options = browser.calls.single.$2;
+      expect(options.mode, PreferredLaunchMode.externalApplication);
+      expect(options.webViewConfiguration.headers, isEmpty);
     });
+
+    for (final throws in [false, true]) {
+      testWidgets(
+        '${destination.platform} failure (throws: $throws) allows retry',
+        (tester) async {
+          browser.result = () async {
+            if (throws) throw PlatformException(code: 'ACTIVITY_NOT_FOUND');
+            return false;
+          };
+          await _show(tester);
+          await tester.tap(_row(destination.label));
+          await tester.pumpAndSettle();
+          expect(
+            find.textContaining('Could not open your browser.'),
+            findsOneWidget,
+          );
+          expect(
+            find.widgetWithText(SelectableText, destination.uri.toString()),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+          browser.result = () async => true;
+          await tester.tap(_row(destination.label));
+          await tester.pumpAndSettle();
+          expect(browser.calls.map((call) => call.$1), [
+            destination.uri.toString(),
+            destination.uri.toString(),
+          ]);
+          expect(
+            find.textContaining('Could not open your browser.'),
+            findsNothing,
+          );
+        },
+      );
+    }
   }
+
+  testWidgets('choosing another provider replaces the failed destination', (
+    tester,
+  ) async {
+    browser.result = () async => false;
+    await _show(tester);
+    await tester.tap(_row(_destinations.first.label));
+    await tester.pumpAndSettle();
+    final pending = Completer<bool>();
+    browser.result = () => pending.future;
+    await tester.tap(_row(_destinations.last.label));
+    await tester.pump();
+    expect(find.byType(SelectableText), findsNothing);
+    pending.complete(false);
+    await tester.pumpAndSettle();
+    expect(
+      find.widgetWithText(SelectableText, wingKoFiUri.toString()),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(SelectableText, wingGitHubSponsorsUri.toString()),
+      findsNothing,
+    );
+  });
 
   testWidgets('pending launch prevents duplicates and tolerates leaving', (
     tester,
@@ -163,13 +209,15 @@ void main() {
     final pending = Completer<bool>();
     browser.result = () => pending.future;
     await _show(tester);
-    await tester.tap(find.byType(OutlinedButton));
+    final before = tester.getRect(_row(_destinations.first.label));
+    await tester.tap(_row(_destinations.first.label));
     await tester.pump();
-    expect(
-      tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed,
-      isNull,
-    );
-    await tester.tap(find.byType(OutlinedButton));
+    expect(tester.getRect(_row(_destinations.first.label)), before);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    for (final destination in _destinations) {
+      expect(tester.widget<ListTile>(_row(destination.label)).onTap, isNull);
+      await tester.tap(_row(destination.label));
+    }
     expect(browser.calls, hasLength(1));
     await tester.pumpWidget(const SizedBox());
     pending.complete(false);
@@ -183,7 +231,7 @@ void main() {
         tester,
       ) async {
         tester.view.devicePixelRatio = 1;
-        tester.view.physicalSize = const Size(320, 1000);
+        tester.view.physicalSize = const Size(320, 740);
         addTearDown(tester.view.reset);
         final semantics = tester.ensureSemantics();
         try {
@@ -202,33 +250,44 @@ void main() {
             ),
             findsOneWidget,
           );
-          // Large text can place the action below the viewport.
-          await tester.ensureVisible(find.byType(OutlinedButton));
-          await tester.pumpAndSettle();
-          expect(
-            tester.getSemantics(find.byType(OutlinedButton)),
-            matchesSemantics(
-              label: 'Buy me a coffee',
-              hint: 'Opens Ko-fi in your browser',
-              isButton: true,
-              isEnabled: true,
-              hasEnabledState: true,
-              isFocusable: true,
-              hasTapAction: true,
-              hasFocusAction: true,
-            ),
-          );
-          await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
-          await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
-          await expectLater(tester, meetsGuideline(textContrastGuideline));
-          await _captureFrame(tester, '${brightness.name}-$scale');
-          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-          await tester.pump();
-          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-          await tester.pumpAndSettle();
-          expect(browser.calls, hasLength(1));
+          await _captureFrame(tester, '${brightness.name}-$scale-top');
+          for (final destination in _destinations) {
+            // Large text can place the actions below the viewport.
+            await tester.ensureVisible(_row(destination.label));
+            await tester.pumpAndSettle();
+            expect(
+              tester.getSemantics(_row(destination.label)),
+              matchesSemantics(
+                label: destination.label,
+                hint: 'Opens ${destination.platform} in your browser',
+                isButton: true,
+                isEnabled: true,
+                hasEnabledState: true,
+                hasSelectedState: true,
+                isFocusable: true,
+                hasTapAction: true,
+                hasFocusAction: true,
+              ),
+            );
+            await expectLater(
+              tester,
+              meetsGuideline(androidTapTargetGuideline),
+            );
+            await expectLater(
+              tester,
+              meetsGuideline(labeledTapTargetGuideline),
+            );
+            await expectLater(tester, meetsGuideline(textContrastGuideline));
+            await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+            await tester.pump();
+            await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+            await tester.pumpAndSettle();
+            expect(browser.calls.last.$1, destination.uri.toString());
+          }
+          expect(browser.calls, hasLength(2));
+          await _captureFrame(tester, '${brightness.name}-$scale-actions');
           browser.result = () async => false;
-          await tester.tap(find.byType(OutlinedButton));
+          await tester.tap(_row(_destinations.last.label));
           await tester.pumpAndSettle();
           await tester.ensureVisible(find.byType(SelectableText));
           await tester.pumpAndSettle();

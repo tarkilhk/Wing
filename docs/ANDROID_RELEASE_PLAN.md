@@ -125,11 +125,14 @@ If building or verification fails, fix the cause before retrying. If a failed pu
 
 ### Optional Support Wing contributions
 
-The owner supplied [the Ko-fi page](https://ko-fi.com/tarkil).
+The owner supplied [the Ko-fi page](https://ko-fi.com/tarkil) and enabled
+[GitHub Sponsors](https://github.com/sponsors/tarkilhk).
 `lib/core/config/support_wing.dart`, README.md and `.github/FUNDING.yml` point
-to this same account. Keep all three in sync if the destination changes.
+to these accounts. Keep all three in sync if either destination changes.
 The Support Wing entry remains permanently available in About, with no reminders or
-feature differences. The existing URL launcher opens the external browser;
+feature differences. GitHub Sponsors appears first as an accent-colored row with
+a heart icon; Ko-fi follows as a neutral row with a coffee-cup icon. The existing
+URL launcher opens the external browser;
 no payment SDK, tracking or backend integration is involved.
 
 Account setup and financial information are the owner's responsibility. Use
@@ -144,8 +147,8 @@ and [pricing](https://ko-fi.com/pricing), checked on 17 September 2026, distingu
 Free's 0% one-time-tip platform fee from Standard's 5%. PayPal or Stripe
 processing fees still apply; this is not a claim that contributions are fee-free.
 
-**Play eligibility is unverified. Do not include the external contribution link
-in a Google Play release until the actual arrangement has been checked.**
+**Play eligibility is unverified. Do not include either external contribution link
+in a Google Play release until each actual arrangement has been checked.**
 Google's [Payments policy](https://support.google.com/googleplay/android-developer/answer/9858738)
 and [tips/contributions explanation](https://support.google.com/googleplay/android-developer/answer/10281818),
 checked on 17 September 2026, describe a peer-to-peer exception when the creator
@@ -154,7 +157,7 @@ services. A voluntary label or external browser alone does not establish that
 exception. The cited explanation does not expressly resolve processing-fee
 deductions for this Ko-fi arrangement.
 
-Before a Play submission, recheck those current rules against the real page,
+Before a Play submission, recheck those current rules for each provider's real page,
 account mode, recipient, platform/processor deductions and any benefits offered.
 Record the verification date, evidence and eligibility decision with the release
 candidate; keep financial details private. Resolve any ambiguity, including fee

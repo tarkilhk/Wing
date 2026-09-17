@@ -408,7 +408,10 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                           ),
                         ),
                         const Divider(height: 1),
-                        SupportWingSection(uri: wingSupportUri),
+                        SupportWingSection(
+                          githubUri: wingGitHubSponsorsUri,
+                          koFiUri: wingKoFiUri,
+                        ),
                       ],
                     ),
                   ),

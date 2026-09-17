@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wing/core/config/support_wing.dart';
 import 'package:wing/core/screens/app_settings_content.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -103,24 +104,29 @@ void main() {
     );
   });
 
-  testWidgets(
-    'About permanently exposes the supplied contribution destination',
-    (tester) async {
-      final preferences = await SharedPreferences.getInstance();
-      await _show(tester, preferences);
-      await tester.ensureVisible(find.text('Buy me a coffee'));
-      await tester.pumpAndSettle();
-      expect(find.text('Support Wing'), findsOneWidget);
-      expect(find.text('Buy me a coffee'), findsOneWidget);
-      expect(
-        tester
-            .widget<SupportWingSection>(find.byType(SupportWingSection))
-            .uri
-            .toString(),
-        'https://ko-fi.com/tarkil',
-      );
-    },
-  );
+  testWidgets('About permanently exposes both contribution destinations', (
+    tester,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    await _show(tester, preferences);
+    await tester.ensureVisible(find.text('Buy me a coffee'));
+    await tester.pumpAndSettle();
+    expect(find.text('Support Wing'), findsOneWidget);
+    expect(find.text('Buy me a coffee'), findsOneWidget);
+    expect(find.text('Sponsor on GitHub'), findsOneWidget);
+    expect(
+      tester
+          .widget<SupportWingSection>(find.byType(SupportWingSection))
+          .koFiUri,
+      wingKoFiUri,
+    );
+    expect(
+      tester
+          .widget<SupportWingSection>(find.byType(SupportWingSection))
+          .githubUri,
+      wingGitHubSponsorsUri,
+    );
+  });
 
   testWidgets(
     'saved theme and accent update the preview and survive reopening',

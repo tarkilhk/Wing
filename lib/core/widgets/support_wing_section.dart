@@ -7,38 +7,85 @@ import 'studio_error.dart';
 
 /// Optional contributions, shown only in App settings / About.
 class SupportWingSection extends StatefulWidget {
-  const SupportWingSection({super.key, required this.uri});
+  const SupportWingSection({
+    super.key,
+    required this.githubUri,
+    required this.koFiUri,
+  });
 
-  final Uri uri;
+  final Uri githubUri;
+  final Uri koFiUri;
 
   @override
   State<SupportWingSection> createState() => _SupportWingSectionState();
 }
 
 class _SupportWingSectionState extends State<SupportWingSection> {
-  bool _opening = false;
-  bool _failed = false;
+  Uri? _opening;
+  Uri? _failed;
 
-  Future<void> _open() async {
-    if (_opening) return;
+  Future<void> _open(Uri uri) async {
+    if (_opening != null) return;
     setState(() {
-      _opening = true;
-      _failed = false;
+      _opening = uri;
+      _failed = null;
     });
     var opened = false;
     try {
-      opened = await launchUrl(
-        widget.uri,
-        mode: LaunchMode.externalApplication,
-      );
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (_) {
       // A missing browser or platform failure must leave settings usable.
     }
     if (!mounted) return;
     setState(() {
-      _opening = false;
-      _failed = !opened;
+      _opening = null;
+      _failed = opened ? null : uri;
     });
+  }
+
+  Widget _supportRow({
+    required Uri uri,
+    required String label,
+    required String platform,
+    required IconData icon,
+    required bool primary,
+  }) {
+    final theme = Theme.of(context);
+    final tokens = WingTokens.of(context);
+    final enabled = _opening == null;
+    final color = !enabled
+        ? tokens.muted
+        : primary
+        ? tokens.accent
+        : tokens.onSurface;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      minTileHeight: 48,
+      enabled: enabled,
+      textColor: color,
+      titleTextStyle:
+          (primary
+                  ? theme.textTheme.titleMedium
+                  : theme.listTileTheme.titleTextStyle)
+              ?.copyWith(color: color),
+      title: Semantics(
+        hint: 'Opens $platform in your browser',
+        child: IconTheme(
+          data: IconThemeData(color: primary ? color : tokens.muted),
+          child: StudioActionLabel.row(
+            label,
+            busy: _opening == uri,
+            icon: icon,
+          ),
+        ),
+      ),
+      trailing: Icon(
+        Icons.open_in_new,
+        size: 18,
+        color: primary ? color : tokens.muted,
+      ),
+      onTap: enabled ? () => _open(uri) : null,
+    );
   }
 
   @override
@@ -65,23 +112,28 @@ class _SupportWingSectionState extends State<SupportWingSection> {
             ),
           ),
           const SizedBox(height: WingSpacing.md),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton(
-              onPressed: _opening ? null : _open,
-              child: Semantics(
-                hint: 'Opens Ko-fi in your browser',
-                child: StudioActionLabel('Buy me a coffee', busy: _opening),
-              ),
-            ),
+          _supportRow(
+            uri: widget.githubUri,
+            label: 'Sponsor on GitHub',
+            platform: 'GitHub Sponsors',
+            icon: Icons.favorite_border,
+            primary: true,
           ),
-          if (_failed) ...[
+          const Divider(height: 1),
+          _supportRow(
+            uri: widget.koFiUri,
+            label: 'Buy me a coffee',
+            platform: 'Ko-fi',
+            icon: Icons.coffee_outlined,
+            primary: false,
+          ),
+          if (_failed != null) ...[
             const SizedBox(height: WingSpacing.md),
             const StudioError(
               'Could not open your browser. Please try again or open this link in a browser:',
             ),
             const SizedBox(height: WingSpacing.sm),
-            SelectableText(widget.uri.toString()),
+            SelectableText(_failed.toString()),
           ],
         ],
       ),
