@@ -61,21 +61,10 @@ class ConfigBackupIo {
   }
 
   Future<String?> pickBackupFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-      allowMultiple: false,
-      withData: true,
-    );
-    final picked = result?.files.firstOrNull;
+    final picked = await FilePicker.pickFile(type: FileType.any);
     if (picked == null) return null;
 
-    final bytes = picked.bytes;
-    if (bytes != null) return utf8.decode(bytes, allowMalformed: true);
-    final path = picked.path;
-    if (path == null) {
-      throw const ConfigBackupException('That file could not be read.');
-    }
-    return File(path).readAsString();
+    return utf8.decode(await picked.readAsBytes(), allowMalformed: true);
   }
 
   Future<ConfigImportResult> importBackup(
