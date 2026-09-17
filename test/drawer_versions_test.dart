@@ -39,56 +39,65 @@ void main() {
   );
 
   for (final section in VersionsSection.values) {
-    testWidgets(
-      '${section.name} entry opens shared updates page without applying anything',
-      (tester) async {
-        final server = connection('Home server');
-        var reads = 0;
-        VersionsController factory(SavedConnection? value) =>
-            VersionsController(
-              gateway: gateway(value!, () async {
-                reads++;
-                return {
-                  'current_version': '1.2.3',
-                  'update_available': true,
-                  'behind': 2,
-                };
-              }),
-            );
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              appBar: AppBar(),
-              drawer: AppDrawer(
-                selected: AppDestination.chats,
-                onSelected: (_) {},
-                connection: server,
-                versionsControllerFactory: factory,
-              ),
+    testWidgets('${section.name} entry preserves its intended interaction', (
+      tester,
+    ) async {
+      final server = connection('Home server');
+      var reads = 0;
+      VersionsController factory(SavedConnection? value) => VersionsController(
+        gateway: gateway(value!, () async {
+          reads++;
+          return {
+            'current_version': '1.2.3',
+            'update_available': true,
+            'behind': 2,
+          };
+        }),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            appBar: AppBar(),
+            drawer: AppDrawer(
+              selected: AppDestination.chats,
+              onSelected: (_) {},
+              connection: server,
+              versionsControllerFactory: factory,
             ),
           ),
+        ),
+      );
+      await tester.tap(find.byTooltip('Open navigation menu'));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.sync), findsOneWidget);
+      await tester.ensureVisible(
+        find.byKey(ValueKey('menu-${section.name}-version')),
+      );
+      await tester.tap(find.byKey(ValueKey('menu-${section.name}-version')));
+      await tester.pumpAndSettle();
+      if (section == VersionsSection.client) {
+        expect(find.byType(VersionsUpdatesScreen), findsNothing);
+        expect(find.byType(Drawer), findsOneWidget);
+        final tile = tester.widget<ListTile>(
+          find.byKey(const ValueKey('menu-client-version')),
         );
-        await tester.tap(find.byTooltip('Open navigation menu'));
-        await tester.pumpAndSettle();
-        expect(find.byIcon(Icons.sync), findsOneWidget);
-        await tester.ensureVisible(
-          find.byKey(ValueKey('menu-${section.name}-version')),
-        );
-        await tester.tap(find.byKey(ValueKey('menu-${section.name}-version')));
-        await tester.pumpAndSettle();
-        expect(find.byType(VersionsUpdatesScreen), findsOneWidget);
-        expect(find.text('Versions & updates'), findsOneWidget);
-        expect(find.text('Version 1.0.1'), findsOneWidget);
-        expect(find.text('Check for updates'), findsOneWidget);
-        expect(find.text('View release'), findsNothing);
-        expect(find.text('Releases'), findsNothing);
-        expect(find.text('Home server'), findsOneWidget);
-        expect(reads, 2);
-        await tester.pageBack();
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull);
-      },
-    );
+        expect(tile.onTap, isNull);
+        expect(tile.trailing, isNull);
+        expect(reads, 1);
+        return;
+      }
+      expect(find.byType(VersionsUpdatesScreen), findsOneWidget);
+      expect(find.text('Versions & updates'), findsOneWidget);
+      expect(find.text('Version 1.0.1'), findsNothing);
+      expect(find.text('Check for updates'), findsOneWidget);
+      expect(find.text('View release'), findsNothing);
+      expect(find.text('Releases'), findsNothing);
+      expect(find.text('Home server'), findsOneWidget);
+      expect(reads, 2);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
   }
 
   testWidgets(
@@ -117,7 +126,7 @@ void main() {
         tester
             .widget<ListTile>(find.byKey(const ValueKey('menu-client-version')))
             .onTap,
-        isNotNull,
+        isNull,
       );
     },
   );

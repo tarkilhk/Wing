@@ -96,6 +96,7 @@ class _DrawerVersionsState extends State<DrawerVersions> {
           icon: Icons.dns_outlined,
           updateAvailable: _versions.server?.check?.updateAvailable == true,
           enabled: widget.connection != null,
+          onTap: widget.connection != null ? _open : null,
         ),
       ],
     ),
@@ -108,6 +109,7 @@ class _DrawerVersionsState extends State<DrawerVersions> {
     required IconData icon,
     required bool updateAvailable,
     bool enabled = true,
+    VoidCallback? onTap,
   }) {
     final colors = Theme.of(context).colorScheme;
     final largeText = MediaQuery.textScalerOf(context).scale(16) > 24;
@@ -128,8 +130,10 @@ class _DrawerVersionsState extends State<DrawerVersions> {
                 semanticLabel: 'Update available',
               ),
             )
-          : const Icon(Icons.chevron_right, size: 20),
-      onTap: enabled ? _open : null,
+          : onTap != null
+          ? const Icon(Icons.chevron_right, size: 20)
+          : null,
+      onTap: onTap,
     );
   }
 }

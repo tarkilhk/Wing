@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../models/connection.dart';
 import '../services/versions_controller.dart';
 import '../widgets/backend_version_card.dart';
-import '../widgets/installed_app_version_card.dart';
 
 class VersionsUpdatesScreen extends StatefulWidget {
   const VersionsUpdatesScreen({
@@ -56,8 +55,6 @@ class _VersionsUpdatesScreenState extends State<VersionsUpdatesScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Card(child: InstalledAppVersionCard(showLinks: false)),
-              const SizedBox(height: 16),
               if (server != null) ...[
                 Padding(
                   padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),

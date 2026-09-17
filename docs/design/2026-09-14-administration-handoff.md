@@ -14,11 +14,11 @@ This is the ownership contract for Administration, updated on 17 September 2026 
 | Profile / Access and connectors | Profile provider accounts and API keys, observed credential sources and profile MCP configuration |
 | Profile / Behavior | Supported execution limits, approval policy, basic compression, reach/recovery policy and backend voice defaults |
 | Profile / Manage profiles | Collection lifecycle; compact action beside the profile selector |
-| Global menu / Client version and Server version | Both open Versions & updates; client identity is local only, server upstream availability is checked on entry |
+| Global menu / Client version and Server version | Client version is non-interactive local identity; only Server version opens Versions & updates and checks upstream availability |
 | Health / Runtime | Runtime/launch-profile observations, bounded logs, Doctor/security audit and action results |
 | Health / Selected profile | Scoped readiness and usage; recovery links to the owning editor |
 
-MCP connectors owns Reload server connectors, with confirmation that it reconnects tools across all server profiles and can invalidate prompt caches. Versions & updates contains installed client identity and server update controls. Only the server has an upstream update check and circular-arrows availability indicator. Check update progress appears after an update request; it reads the running update action, while Check for updates compares installed code with upstream.
+MCP connectors owns Reload server connectors, with confirmation that it reconnects tools across all server profiles and can invalidate prompt caches. Versions & updates contains server identity and update controls. Only the server has an upstream update check and circular-arrows availability indicator. Check update progress appears after an update request; it reads the running update action, while Check for updates compares installed code with upstream.
 
 Keep tab roots short. Use categorized rows and drill-downs, sheets for short choices and dedicated screens for inventories and long editors. Search results identify the owner and navigate to the single editor. Health links to settings; it does not duplicate their forms.
 

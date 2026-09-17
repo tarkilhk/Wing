@@ -10,7 +10,7 @@ only reads; the existing server update confirmation remains required.
 Two side-by-side tiles:
 
 ```text
-[Client 1.0.1 ›] [Server 1.2.3 ↻]
+[Client 1.0.1] [Server 1.2.3 ↻]
 ```
 
 Two stacked rows, selected:
@@ -19,13 +19,13 @@ Two stacked rows, selected:
 … primary navigation …
 
 ─────────────────────────
-phone  Client version   ›
+phone  Client version
        1.0.1
 server Server version   ↻
        1.2.3
 ```
 
-The stacked rows give each entry a full-width touch target, preserve room for
+The stacked rows give the server entry a full-width touch target, preserve room for
 versions and text scaling, and use the existing menu rhythm. They sit at the
 bottom when space permits; the whole menu scrolls on short screens or enlarged
 text. Avoid a fixed footer that would crowd the navigation at 200% text.
@@ -37,14 +37,14 @@ Light: white panel, #1B2D36 text, #586970 metadata, #126D70 accent, #D6E0E1 divi
 Dark: #192934 panel, #EBF1F2 text, #ADBDC4 metadata, #65C7BC accent, #344C58 divider.
 Respect the selected accent family. The identifying detail is the small static
 circular-arrows icon on the server row. It is not a spinner. Tooltip and semantics
-say Update available. Ordinary rows have a disclosure arrow. No update-count badge,
+say Update available. The server row has a disclosure arrow when no update is known. The client row has no arrow or tap action. No update-count badge,
 extra heading or permanent Up to date message is needed in the menu.
 
-Both rows open Versions & updates, with installed app identity and
-captured server identity/update controls. The client version is informational;
+Only the server row opens Versions & updates, with captured server identity and
+update controls. The client version is informational;
 there are no client update checks or client update controls. Server actions retain their
-host-wide confirmation and action tracking. No connection leaves the client row
-available and labels the server row No server selected.
+host-wide confirmation and action tracking. No connection leaves the client version
+visible and labels the server row No server selected.
 
 ## Data contract verified
 
