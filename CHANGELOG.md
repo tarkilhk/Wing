@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Combine Hermes speech provider and voice selection in one compact screen, with adjacent Play/Stop and a direct App settings link. Keep the sample sentence hidden and show setup only for the selected provider.
+
 - Add an autosaving profile voice picker with Play/Stop for the Wing sample sentence, Edge suggestions, ElevenLabs account voices and advanced custom IDs, using vanilla Hermes APIs.
 - Keep one Administration refresh button in the header. Refresh overview data and runtime identity together while preserving tabs and diagnostic results; remove the duplicate footer action.
 

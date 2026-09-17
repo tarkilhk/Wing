@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wing/core/screens/administration/admin_profile_voice_page.dart';
+import 'package:wing/core/screens/administration/admin_speech_synthesis_page.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/voice_sample.dart';
+import 'package:wing/core/widgets/studio_select.dart';
+import 'package:wing/core/screens/administration/admin_tool_setup_page.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'support/profile_voice_fixture.dart';
@@ -50,10 +52,14 @@ void main() {
         home: RepaintBoundary(
           key: frame,
           child: MediaQuery(
-            data: MediaQueryData(textScaler: TextScaler.linear(scale)),
-            child: AdminProfileVoicePage(
+            data: MediaQueryData(
+              size: tester.view.physicalSize / tester.view.devicePixelRatio,
+              textScaler: TextScaler.linear(scale),
+            ),
+            child: AdminSpeechSynthesisPage(
               profile: f.server.profile('personal'),
               device: device,
+              openModels: (_) async {},
             ),
           ),
         ),
@@ -71,6 +77,23 @@ void main() {
     await tester.pumpAndSettle();
     await Scrollable.ensureVisible(tester.element(target), alignment: 0.5);
     await tester.pumpAndSettle();
+  }
+
+  Future<void> chooseVoice(WidgetTester tester, String name) async {
+    final selector = find.byWidgetPredicate(
+      (widget) =>
+          widget is InputDecorator && widget.decoration.labelText == 'Voice',
+    );
+    await reveal(tester, selector);
+    await tester.tap(selector);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text(name).last,
+      180,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(name).last);
   }
 
   Future<void> captureFrame(WidgetTester tester, String name) async {
@@ -97,11 +120,17 @@ void main() {
       addTearDown(device.stream.close);
       await show(tester, f, device);
       expect(find.text('Save'), findsNothing);
-      expect(find.text(voiceSampleText), findsOneWidget);
-      await reveal(tester, find.text('Jenny'));
-      await tester.tap(find.text('Jenny'));
+      expect(find.text(voiceSampleText), findsNothing);
+      expect(find.text('Saved'), findsNothing);
+      await chooseVoice(tester, 'Jenny');
       await tester.pump();
       expect(find.text('Saving…'), findsOneWidget);
+      expect(
+        tester
+            .widget<StudioSelect<String>>(find.byType(StudioSelect<String>))
+            .onChanged,
+        isNull,
+      );
       expect(
         tester
             .widget<TextButton>(find.widgetWithText(TextButton, 'Play'))
@@ -149,8 +178,7 @@ void main() {
         case 'stop':
           await tester.tap(find.text('Stop'));
         case 'select':
-          await reveal(tester, find.text('Jenny'));
-          await tester.tap(find.text('Jenny'));
+          await chooseVoice(tester, 'Jenny');
         case 'background':
           tester.binding.handleAppLifecycleStateChanged(
             AppLifecycleState.inactive,
@@ -176,22 +204,31 @@ void main() {
     final device = VoiceDeviceFixture();
     addTearDown(device.stream.close);
     await show(tester, f, device);
-    await reveal(tester, find.text('Jenny'));
-    await tester.tap(find.text('Jenny'));
+    await chooseVoice(tester, 'Jenny');
     await tester.pumpAndSettle();
     expect(
       find.text('Save not confirmed. Refresh before trying again.'),
       findsOneWidget,
     );
-    expect(find.text('Refresh required'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Play'))
+          .onPressed,
+      isNull,
+    );
     expect(
       setting(f.configs['personal']!, 'tts.edge.voice'),
       'en-US-AriaNeural',
     );
     f.reject = false;
-    await tester.tap(find.byTooltip('Refresh voices'));
+    await tester.tap(find.byTooltip('Refresh speech settings'));
     await tester.pumpAndSettle();
-    expect(find.text('Saved'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Play'))
+          .onPressed,
+      isNotNull,
+    );
   });
 
   testWidgets('custom IDs autosave and ElevenLabs voices come from account', (
@@ -202,7 +239,7 @@ void main() {
     final device = VoiceDeviceFixture();
     addTearDown(device.stream.close);
     await show(tester, f, device);
-    expect(find.text('Storyteller'), findsOneWidget);
+    expect(find.text('Narrator'), findsOneWidget);
     await reveal(tester, find.text('Advanced'));
     await tester.tap(find.text('Advanced'));
     await tester.pumpAndSettle();
@@ -215,12 +252,153 @@ void main() {
       setting(f.configs['personal']!, 'tts.elevenlabs.voice_id'),
       'account-voice-123',
     );
-    await reveal(tester, find.text('Storyteller'));
-    await tester.tap(find.text('Storyteller'));
+    await chooseVoice(tester, 'Storyteller');
     await tester.pumpAndSettle();
     expect(
       setting(f.configs['personal']!, 'tts.elevenlabs.voice_id'),
       'custom-b',
+    );
+  });
+
+  testWidgets('administration opens the combined editor without a voice page', (
+    tester,
+  ) async {
+    final f = ProfileVoiceFixture();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.light),
+        home: AdminVoicePage(profile: f.server.profile('personal')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Profile voice'), findsNothing);
+    await tester.tap(find.text('Speech synthesis provider'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AdminSpeechSynthesisPage), findsOneWidget);
+    expect(find.text('Aria'), findsOneWidget);
+    expect(find.text(voiceSampleText), findsNothing);
+  });
+
+  testWidgets('large account catalogue is searchable inside the picker', (
+    tester,
+  ) async {
+    final f = ProfileVoiceFixture();
+    setSetting(f.configs['personal']!, 'tts.provider', 'elevenlabs');
+    f.catalogue = {
+      'available': true,
+      'voices': [
+        for (var index = 0; index < 30; index++)
+          {
+            'voice_id': 'v$index',
+            'name': 'Narrator $index',
+            'label': 'Narrator $index',
+          },
+      ],
+    };
+    final device = VoiceDeviceFixture();
+    addTearDown(device.stream.close);
+    await show(tester, f, device);
+    expect(find.text('Search voices'), findsNothing);
+    await tester.tap(find.text('custom-a'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Search voices'),
+      'Narrator 27',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Narrator 1'), findsNothing);
+    await tester.tap(find.text('Narrator 27').last);
+    await tester.pumpAndSettle();
+    expect(setting(f.configs['personal']!, 'tts.elevenlabs.voice_id'), 'v27');
+  });
+
+  for (final brightness in Brightness.values) {
+    testWidgets('normal phone layout $brightness', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.reset);
+      final device = VoiceDeviceFixture();
+      addTearDown(device.stream.close);
+      await show(tester, ProfileVoiceFixture(), device, brightness: brightness);
+      expect(tester.takeException(), isNull);
+      await captureFrame(tester, '${brightness.name}-phone');
+      await chooseVoice(tester, 'Jenny');
+      await tester.pumpAndSettle();
+      expect(find.text('Jenny'), findsOneWidget);
+    });
+  }
+
+  testWidgets('provider changes reload voices and cancel pending speech', (
+    tester,
+  ) async {
+    final f = ProfileVoiceFixture()..audioGate = Completer();
+    final device = VoiceDeviceFixture();
+    addTearDown(device.stream.close);
+    await show(tester, f, device);
+    await tester.tap(find.text('Play'));
+    await tester.pumpAndSettle();
+    tester
+        .widget<StudioSelect<String>>(find.byType(StudioSelect<String>))
+        .onChanged!('ElevenLabs');
+    await tester.pumpAndSettle();
+    expect(find.text('Narrator'), findsOneWidget);
+    expect(find.text('Aria'), findsNothing);
+    expect(setting(f.configs['personal']!, 'tts.provider'), 'elevenlabs');
+    f.audioGate!.complete(f.audio);
+    await tester.pumpAndSettle();
+    expect(device.calls, isNot(contains('play')));
+    await chooseVoice(tester, 'Storyteller');
+    await tester.pumpAndSettle();
+    expect(
+      setting(f.configs['personal']!, 'tts.elevenlabs.voice_id'),
+      'custom-b',
+    );
+  });
+
+  testWidgets('missing credentials show setup before voice controls', (
+    tester,
+  ) async {
+    final f = ProfileVoiceFixture()..elevenLabsReady = false;
+    setSetting(f.configs['personal']!, 'tts.provider', 'elevenlabs');
+    final device = VoiceDeviceFixture();
+    addTearDown(device.stream.close);
+    await show(tester, f, device);
+    expect(find.text('API key'), findsOneWidget);
+    expect(find.text('Play'), findsNothing);
+    f.elevenLabsReady = true;
+    await tester.tap(find.byTooltip('Refresh speech settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Play'), findsOneWidget);
+  });
+
+  testWidgets('unconfirmed provider save disables playback until refresh', (
+    tester,
+  ) async {
+    final f = ProfileVoiceFixture()..ignoreSave = true;
+    final device = VoiceDeviceFixture();
+    addTearDown(device.stream.close);
+    await show(tester, f, device);
+    tester
+        .widget<StudioSelect<String>>(find.byType(StudioSelect<String>))
+        .onChanged!('ElevenLabs');
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Provider selection could not be confirmed'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Play'))
+          .onPressed,
+      isNull,
+    );
+    await tester.tap(find.byTooltip('Refresh speech settings'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Play'))
+          .onPressed,
+      isNotNull,
     );
   });
 
@@ -248,14 +426,6 @@ void main() {
         );
         expect(tester.takeException(), isNull);
         await captureFrame(tester, '${brightness.name}-${accent.name}-top');
-        await tester.scrollUntilVisible(
-          find.text('Jenny'),
-          250,
-          scrollable: find.byType(Scrollable).first,
-        );
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull);
-        await captureFrame(tester, '${brightness.name}-${accent.name}-choices');
         await tester.scrollUntilVisible(
           find.text('Advanced'),
           250,

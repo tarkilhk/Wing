@@ -358,7 +358,7 @@ class _VoicePreferencesCardState extends State<VoicePreferencesCard>
                   await _preview.stop();
                   if (mounted) widget.openHermesSettings?.call();
                 },
-                child: const Text('Open profile speech settings'),
+                child: const Text('Open speech synthesis'),
               ),
             ),
         ],

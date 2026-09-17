@@ -1,12 +1,22 @@
 # Profile voice
 
-Administration → Profile → Voice → Profile voice opens the single voice editor.
+Administration → Profile → Voice → Speech synthesis provider opens the combined
+provider and voice editor. App settings links directly to it.
+Choose a provider, then use the compact voice selector and adjacent Play button.
+Credentials/setup appear for the selected provider when needed; voice controls
+appear once it is ready. Models, existing credentials and custom voice IDs live
+under Advanced. The separate voice page, visible sample script and permanent
+Saved status have been removed.
+
 Selecting a voice saves it immediately. Play reads the approved Wing sample using
 the confirmed selection; Stop cancels pending or active playback. Android engine
 and local voice choices remain in App settings.
 
 The page captures its connection/profile and uses only vanilla Hermes APIs:
 
+- GET `tools/toolsets/tts/config` and PUT `tools/toolsets/tts/provider`:
+  provider discovery/readiness and confirmed provider selection. Existing
+  credentials, setup and model editors retain their stock APIs.
 - GET `config` and `config/schema`: current provider and editable voice field.
 - PUT `config`: sparse update of that provider's voice field, followed by readback.
 - GET `audio/elevenlabs/voices`: the account's ElevenLabs catalogue.
@@ -33,7 +43,9 @@ concurrency is still limited by that contract.
   rejected/unconfirmed saves, external edits, ElevenLabs catalogue failures,
   text-only synthesis and finishing queued saves after closing the editor.
 - `test/profile_voice_page_test.dart`: autosave/Play/Stop, cancellation, custom
-  IDs, recovery and all five accents in light/dark at 320 dp and 200% text.
+  IDs, provider switching, readiness, unconfirmed saves, catalogue search,
+  recovery, ordinary phone layouts and all five accents in light/dark at
+  320 dp and 200% text.
 - `test/profile_voice_live_test.dart`: opt-in real HTTP test against a disposable
   local stock server with a `voice_review` profile and Edge installed. Run with
   `--dart-define=VOICE_REVIEW_PORT=<port>`. It changes that disposable profile and

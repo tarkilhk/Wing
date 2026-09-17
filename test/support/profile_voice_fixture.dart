@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:wing/core/services/administration_repository.dart';
 import 'administration_fixture.dart';
 
 class ProfileVoiceFixture extends AdministrationFixture {
@@ -10,6 +11,7 @@ class ProfileVoiceFixture extends AdministrationFixture {
     };
   }
   Completer<void>? putStarted;
+  bool elevenLabsReady = true;
   Completer<Map<String, dynamic>>? audioGate;
   Map<String, dynamic> catalogue = {
     'available': true,
@@ -34,6 +36,37 @@ class ProfileVoiceFixture extends AdministrationFixture {
     Map<String, String> query,
     Map<String, dynamic>? body,
   ) async {
+    if (path.startsWith('tools/toolsets/tts/')) {
+      requests.add((method, path, {...query}, body));
+      if (path.endsWith('/provider')) {
+        if (reject) return {'ok': false};
+        if (!ignoreSave) {
+          setSetting(
+            configs[query['profile']]!,
+            'tts.provider',
+            body!['provider'] == 'Edge' ? 'edge' : 'elevenlabs',
+          );
+        }
+        return {'ok': true};
+      }
+      return {
+        'providers': [
+          {'name': 'Edge', 'tts_provider': 'edge', 'status': 'ready'},
+          {
+            'name': 'ElevenLabs',
+            'tts_provider': 'elevenlabs',
+            'status': elevenLabsReady ? 'ready' : 'needs_keys',
+            'env_vars': [
+              {
+                'key': 'ELEVENLABS_API_KEY',
+                'prompt': 'API key',
+                'is_set': elevenLabsReady,
+              },
+            ],
+          },
+        ],
+      };
+    }
     if (method == 'PUT' &&
         path == 'config' &&
         putStarted?.isCompleted == false) {

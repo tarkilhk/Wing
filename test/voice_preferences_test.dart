@@ -147,8 +147,8 @@ void main() {
       expect(VoicePreferences.read(prefs).output, VoiceProcessing.hermes);
       expect(find.text('Android voice'), findsNothing);
       expect(find.textContaining('belong to the selected server profile'), findsOneWidget);
-      await tester.ensureVisible(find.text('Open profile speech settings'));
-      await tester.tap(find.text('Open profile speech settings'));
+      await tester.ensureVisible(find.text('Open speech synthesis'));
+      await tester.tap(find.text('Open speech synthesis'));
       expect(links, 1);
       await tester.pumpWidget(const SizedBox());
       await show(tester, prefs, device);

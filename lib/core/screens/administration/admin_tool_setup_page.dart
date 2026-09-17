@@ -4,7 +4,7 @@ import 'admin_widgets.dart';
 import 'admin_operations_page.dart';
 import 'admin_providers_page.dart';
 import 'admin_settings_page.dart';
-import 'admin_profile_voice_page.dart';
+import 'admin_speech_synthesis_page.dart';
 
 class AdminToolSetupList extends StatelessWidget {
   final ProfileAdministration profile;
@@ -167,7 +167,24 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
   }
 
   @override
-  Widget build(BuildContext context) => AdminPage(
+  Widget build(BuildContext context) {
+    if (widget.name == 'tts') {
+      return AdminSpeechSynthesisPage(
+        profile: _profile,
+        openModels: (provider) => adminPush(
+          context,
+          AdminToolModelsPage(
+            profile: _profile,
+            tool: 'tts',
+            provider: provider,
+          ),
+        ),
+      );
+    }
+    return _toolSetup(context);
+  }
+
+  Widget _toolSetup(BuildContext context) => AdminPage(
     title: '${widget.name} setup',
     scope: _profile.label,
     child: AdminLoad(
@@ -409,15 +426,6 @@ class AdminVoicePage extends StatelessWidget {
                   onTap: () => adminPush(
                     context,
                     AdminToolSetupPage(profile: profile, name: 'tts'),
-                  ),
-                ),
-                AdminRow(
-                  title: 'Profile voice',
-                  subtitle: 'Choose a voice and play a sample',
-                  icon: Icons.record_voice_over_outlined,
-                  onTap: () => adminPush(
-                    context,
-                    AdminProfileVoicePage(profile: profile),
                   ),
                 ),
                 AdminRow(

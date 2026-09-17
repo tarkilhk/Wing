@@ -24,7 +24,10 @@ Future<void> openProfileVoiceSettings(
       MaterialPageRoute(
         builder: (_) => ServerConnectionScope(
           status: connectionStatus,
-          child: AdminVoicePage(profile: repository.profile(profileName)),
+          child: AdminToolSetupPage(
+            profile: repository.profile(profileName),
+            name: 'tts',
+          ),
         ),
       ),
     );
