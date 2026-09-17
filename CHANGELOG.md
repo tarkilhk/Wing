@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replace Administration Runtime with Versions & updates, load backend version and upstream update availability automatically, and show an update indicator. Remove Connection from Server, move server-wide connector reload into MCP connectors, and distinguish update checks, installation progress and update logs.
+
 - Fix speech provider selection confusing Nous Subscription with direct OpenAI. Confirm the saved provider route independently of its speech engine, and keep Nous voice edits in the OpenAI voice settings used by Hermes.
 - Combine Hermes speech provider and voice selection in one compact screen, with adjacent Play/Stop and a direct App settings link. Keep the sample sentence hidden and show setup only for the selected provider.
 

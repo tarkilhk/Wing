@@ -1,6 +1,6 @@
 # Administration
 
-Administration uses Profile, Server and Health tabs. The selected server stays visible. Profile opens with a compact profile brief and current-value navigation: Models and reasoning, Identity, Memory and Behavior under Agent setup; Skills and tools, Access and connectors and Scheduled tasks under Capabilities and automation. Server has Connection, Providers, Profiles and Runtime. Health separates runtime observations from selected-profile diagnostics and usage.
+Administration uses Profile, Server and Health tabs. The selected server stays visible. Profile opens with a compact profile brief and current-value navigation: Models and reasoning, Identity, Memory and Behavior under Agent setup; Skills and tools, Access and connectors and Scheduled tasks under Capabilities and automation. Server has Providers, Profiles and Versions & updates. Version and upstream update availability load automatically; an update icon marks newer backend code. Health separates runtime observations from selected-profile diagnostics and usage.
 
 Read the [ownership handoff](design/2026-09-14-administration-handoff.md) before changing these flows. The [roadmap](ADMINISTRATION_ROADMAP.md) preserves selected priorities and exclusions.
 
@@ -62,7 +62,7 @@ total draws no shares, and unreported cost remains unavailable.
 | A18–A19 | Recorded skill usage ordering, provenance, complete instructions, edit/archive agent-owned skills | Bundled instructions are read-only. Existing changed content is detected before saving; this is not a server compare-and-swap guarantee. |
 | A20 | Official Hub/search, provenance preview, install, uninstall and group update | Tracks returned background action identity and actual exit status. Install/update acceptance requires an authorized target and actual action result. |
 | A22 | Scoped toolset providers, effective key readiness, model selection, explicit post-setup action | Setup explains host requirements and tracks the returned action. An effective inherited key is not offered as removable from the profile. |
-| A24–A25 | MCP inventory/enablement, cached status, explicit Test, returned tool details and prompt/resource counts, browser OAuth, remove; global reload under Server / Runtime | Per-tool edits remain unavailable because the backend replaces the whole map. Missing cached status is not disconnected. OAuth uses the configured server callback. Runtime reload is process-wide. |
+| A24–A25 | MCP inventory/enablement, cached status, explicit Test, returned tool details and prompt/resource counts, browser OAuth, remove; Reload server connectors under MCP connectors (all server profiles) | Per-tool edits remain unavailable because the backend replaces the whole map. Missing cached status is not disconnected. OAuth uses the configured server callback. Runtime reload is process-wide. |
 | A27 | Agent-plugin inventory/status and individual enablement | Selected P1 portion only. Install/remove/update and Desktop UI extensions are outside this slice. |
 | A28 | Memory enablement and character budgets | Exact retained-file sizes lack an arbitrary-profile contract and are explicitly unavailable. |
 | A31 | Compression percentages, capacity illustration, enablement and protected recent messages | Schema-supported basic controls only; advanced context-engine work remains P2. |
@@ -70,7 +70,7 @@ total draws no shares, and unreported cost remains unavailable.
 | A33 | Secret redaction, private-URL access and checkpoint enablement | Uses `security.allow_private_urls`; browser-profile grants and advanced recovery remain P2. |
 | A36–A37 | Existing connection management and authenticated profile diagnostics | Device connection settings and backend policy remain separate. |
 | A38–A39 | Bounded log categories/severity/search; explicit Doctor and security audit with action status | Runtime scope is independent of mobile selection. No automatic repair or new restart action. |
-| A41 | Existing backend version and eligible-update flow under Runtime | Request acceptance does not prove a completed update. |
+| A41 | Backend version and update flow under Versions & updates; automatic checks and a Server-list update indicator | Request acceptance does not prove a completed update. |
 | A42 | Rolling 1/7/30/90/365-day usage with per-model sessions, calls, tokens and estimated cost | Hermes estimates, not provider invoices. Missing usage is not invented. |
 | A44 | Guided STT setup, combined speech synthesis provider/voice selection with Play/Stop, and supported model/language/automatic-speech defaults | Vanilla APIs only. Edge uses suggested voices; ElevenLabs loads the account list. Custom voice IDs live under Advanced. Engine installation and advanced tuning are excluded. See [profile voice](PROFILE_VOICE.md). |
 | A45 | Searchable owner paths and task vocabulary with exact-field scrolling, emphasis and explicit clearing | Import/export/reset remain P2. |

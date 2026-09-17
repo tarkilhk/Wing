@@ -102,7 +102,6 @@ void main() {
   }
 
   Future<void> check(WidgetTester tester) async {
-    await tester.tap(find.text('Check for updates'));
     await tester.pumpAndSettle();
   }
 
@@ -111,15 +110,12 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('shows version information only after a manual check', (
+  testWidgets('loads version and upstream status automatically on opening', (
     tester,
   ) async {
     final host = _UpdateHost()
       ..checkResponse = {..._available, 'behind': 0, 'update_available': false};
     await showCard(tester, host);
-    expect(host.reads, isEmpty);
-    expect(find.text('Current version unavailable'), findsOneWidget);
-
     await check(tester);
 
     expect(host.reads, hasLength(1));
@@ -129,6 +125,11 @@ void main() {
     expect(find.text('Install method: pipx'), findsOneWidget);
     expect(find.text('Up to date'), findsOneWidget);
     expect(find.text('Update backend'), findsNothing);
+    expect(find.text('Check update progress'), findsNothing);
+
+    await tester.tap(find.text('Check for updates'));
+    await tester.pumpAndSettle();
+    expect(host.reads, hasLength(2));
   });
 
   testWidgets('keeps malformed availability unknown and shows host guidance', (
@@ -144,7 +145,7 @@ void main() {
     await showCard(tester, host);
     await check(tester);
 
-    expect(find.text('Update status unavailable.'), findsOneWidget);
+    expect(find.text('Update availability unknown.'), findsOneWidget);
     expect(
       find.text('Updates must be applied from the server host.'),
       findsOneWidget,
@@ -189,9 +190,7 @@ void main() {
     expect(host.posts, hasLength(1));
     expect(host.posts.single.$1, 'hermes/update?profile=work');
     expect(
-      find.text(
-        'Backend update started for this host. Refresh status to follow it.',
-      ),
+      find.text('Backend update started. Check update progress to follow it.'),
       findsOneWidget,
     );
   });
@@ -229,7 +228,7 @@ void main() {
     await tester.pumpAndSettle();
     host.statusFails = true;
 
-    await tester.tap(find.text('Refresh update status'));
+    await tester.tap(find.text('Check update progress'));
     await tester.pumpAndSettle();
 
     expect(
@@ -264,14 +263,14 @@ void main() {
       'summary': 'partial',
     };
 
-    await tester.tap(find.text('Refresh update status'));
+    await tester.tap(find.text('Check update progress'));
     await tester.pumpAndSettle();
 
     expect(
       find.text('The backend update completed only partially.'),
       findsOneWidget,
     );
-    await tester.tap(find.text('Recent update output'));
+    await tester.tap(find.text('Update logs'));
     await tester.pumpAndSettle();
     expect(
       find.text('Downloading\nApplied core\nSkipped optional'),
@@ -386,11 +385,11 @@ void main() {
   ) async {
     final pending = Completer<Map<String, dynamic>>();
     final first = _UpdateHost()..pendingCheck = pending;
-    final second = _UpdateHost();
+    final second = _UpdateHost()
+      ..checkResponse = {..._available, 'current_version': '4.5.6'};
     await tester.pumpWidget(
       MaterialApp(home: BackendVersionCard(gateway: first.gateway)),
     );
-    await tester.tap(find.text('Check for updates'));
     await tester.pump();
 
     await tester.pumpWidget(
@@ -400,7 +399,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('1.2.3'), findsNothing);
-    expect(find.text('Current version unavailable'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('4.5.6'), findsOneWidget);
   });
 
   testWidgets('disposed card ignores a late check response', (tester) async {
@@ -409,7 +409,6 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: BackendVersionCard(gateway: host.gateway)),
     );
-    await tester.tap(find.text('Check for updates'));
     await tester.pump();
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
     pending.complete(_available);

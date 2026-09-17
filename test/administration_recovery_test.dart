@@ -16,6 +16,42 @@ Map<String, dynamic> profiles({String display = 'Shared root'}) => {
 
 void main() {
   testWidgets(
+    'MCP reload belongs to connectors and confirms server-wide scope',
+    (tester) async {
+      final fixture = AdministrationFixture();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AdminConnectorsPage(
+            profile: fixture.server.profile('personal'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Backend version'), findsNothing);
+      await tester.tap(find.text('Reload server connectors'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('all profiles on this server'),
+        findsOneWidget,
+      );
+      expect(fixture.rpcRequests, isEmpty);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(fixture.rpcRequests, isEmpty);
+      await tester.tap(find.text('Reload server connectors'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reload'));
+      await tester.pumpAndSettle();
+      expect(fixture.rpcRequests, [('default', 'reload.mcp')]);
+      expect(find.text('Server connectors reloaded.'), findsOneWidget);
+      expect(
+        fixture.requests.any((request) => request.$2.contains('update')),
+        isFalse,
+      );
+    },
+  );
+
+  testWidgets(
     'device-code recovery captures owner, avoids duplicate start and cancels exact session',
     (tester) async {
       final f = AdministrationFixture();

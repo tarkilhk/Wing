@@ -6,6 +6,7 @@ import 'package:wing/core/services/profile_gateway.dart';
 
 class AdministrationFixture {
   final String id;
+  final rpcRequests = <(String, String)>[];
   final requests =
       <(String, String, Map<String, String>, Map<String, dynamic>?)>[];
   final configs = <String, Map<String, dynamic>>{
@@ -20,6 +21,13 @@ class AdministrationFixture {
     'work': {
       'memory': {'memory_enabled': false, 'memory_char_limit': 3000},
     },
+  };
+  Map<String, dynamic> updateCheck = {
+    'current_version': '1.2.3',
+    'install_method': 'git',
+    'behind': 3,
+    'update_available': true,
+    'can_apply': true,
   };
   bool reject = false;
   bool ignoreSave = false;
@@ -41,7 +49,14 @@ class AdministrationFixture {
         Uri.parse(path).queryParameters,
         body,
       ),
-      rpc: (method, params) async => {'plugins': [], 'servers': []},
+      rpc: (method, params) async {
+        rpcRequests.add((name, method));
+        return {
+          'plugins': [],
+          'servers': [],
+          if (method == 'reload.mcp') 'status': 'reloaded',
+        };
+      },
       discover: () => server.discover(),
     ),
   );
@@ -55,6 +70,7 @@ class AdministrationFixture {
     requests.add((method, path, {...query}, body == null ? null : {...body}));
     if (override != null) return override!(method, path, query, body);
     if (method == 'GET' && failReads) throw StateError('Offline');
+    if (path == 'hermes/update/check') return updateCheck;
     if (path == 'profiles') {
       return {
         'profiles': [

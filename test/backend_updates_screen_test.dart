@@ -115,15 +115,15 @@ void main() {
       await _tapSelection(tester, 'b');
       await _tapShared(tester, 'backend-updates-check-selected');
       await tester.pumpAndSettle();
-      expect(hosts['a']!.reads, isEmpty);
-      expect(hosts['b']!.reads, hasLength(1));
+      expect(hosts['a']!.reads, hasLength(1));
+      expect(hosts['b']!.reads, hasLength(2));
 
       await _tapSelection(tester, 'c');
       expect(_selected(tester, 'c'), isTrue);
       await _tapShared(tester, 'backend-updates-check-selected');
       await tester.pumpAndSettle();
-      expect(hosts['b']!.reads, hasLength(2));
-      expect(hosts['c']!.reads, hasLength(1));
+      expect(hosts['b']!.reads, hasLength(3));
+      expect(hosts['c']!.reads, hasLength(2));
       expect(tester.takeException(), isNull);
     },
   );
@@ -149,13 +149,10 @@ void main() {
     await _tapShared(tester, 'backend-updates-check-selected');
     await tester.pumpAndSettle();
 
-    expect(hosts['a']!.reads.single.$1, 'hermes/update/check');
-    expect(hosts['a']!.reads.single.$2, {
-      'force': 'true',
-      'profile': 'default',
-    });
-    expect(hosts['b']!.reads, isEmpty);
-    expect(hosts['c']!.reads, hasLength(1));
+    expect(hosts['a']!.reads.last.$1, 'hermes/update/check');
+    expect(hosts['a']!.reads.last.$2, {'force': 'true', 'profile': 'default'});
+    expect(hosts['b']!.reads, hasLength(1));
+    expect(hosts['c']!.reads, hasLength(2));
     expect(scopes.map((scope) => scope.profileName), everyElement('default'));
 
     hosts['c']!.check = {..._available, 'update_available': false};
@@ -180,7 +177,7 @@ void main() {
     );
   });
 
-  testWidgets('an individual card check enables the selected batch action', (
+  testWidgets('automatic card check enables the selected batch action', (
     tester,
   ) async {
     final host = _Host();
@@ -193,18 +190,7 @@ void main() {
       ),
     );
     await _tapSelection(tester, 'a');
-    expect(
-      tester
-          .widget<FilledButton>(
-            find.byKey(const ValueKey('backend-updates-update-selected')),
-          )
-          .onPressed,
-      isNull,
-    );
-
-    await tester.tap(find.widgetWithText(TextButton, 'Check for updates'));
-    await tester.pumpAndSettle();
-
+    expect(host.reads.single.$1, 'hermes/update/check');
     expect(
       tester
           .widget<FilledButton>(
@@ -257,7 +243,7 @@ void main() {
       find.text('The backend update completed only partially.'),
       findsOneWidget,
     );
-    expect(find.text('Recent update output'), findsOneWidget);
+    expect(find.text('Update logs'), findsOneWidget);
   });
 
   testWidgets('late check completion after close is ignored', (tester) async {
@@ -270,8 +256,6 @@ void main() {
         ),
       ),
     );
-    await _tapSelection(tester, 'a');
-    await _tapShared(tester, 'backend-updates-check-selected');
     await tester.pump();
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
     host.pendingCheck!.complete(_available);

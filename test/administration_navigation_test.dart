@@ -234,6 +234,74 @@ void main() {
   }
 
   for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('versions and updates ${brightness.name} at $scale text', (
+        tester,
+      ) async {
+        await show(
+          tester,
+          brightness,
+          scale: scale,
+          width: scale == 2 ? 320 : 390,
+        );
+        await tester.ensureVisible(find.text('Server'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Server'));
+        await tester.pumpAndSettle();
+        expect(find.text('Connection'), findsNothing);
+        expect(find.text('Runtime'), findsNothing);
+        expect(find.text('Update available'), findsOneWidget);
+        expect(find.byIcon(Icons.system_update_alt), findsOneWidget);
+        await screenshot(tester, '${brightness.name}-$scale-versions-entry');
+        final checksBefore = admin.requests
+            .where((r) => r.$2 == 'hermes/update/check')
+            .length;
+        await tester.tap(find.text('Versions & updates'));
+        await tester.pumpAndSettle();
+        expect(find.text('1.2.3'), findsOneWidget);
+        expect(
+          find.text('Update available · 3 commits behind'),
+          findsOneWidget,
+        );
+        expect(find.text('Reload server connectors'), findsNothing);
+        expect(find.text('Check update progress'), findsNothing);
+        expect(
+          admin.requests.where((r) => r.$2 == 'hermes/update/check').length,
+          checksBefore + 1,
+        );
+        await screenshot(tester, '${brightness.name}-$scale-versions');
+        expect(tester.takeException(), isNull);
+        await tester.ensureVisible(find.text('Update backend'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  testWidgets(
+    'update indicator refreshes and failed checks never imply up to date',
+    (tester) async {
+      await show(tester, Brightness.dark);
+      await tester.tap(find.text('Server'));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.system_update_alt), findsOneWidget);
+      admin.updateCheck = {
+        ...admin.updateCheck,
+        'behind': 0,
+        'update_available': false,
+      };
+      await show(tester, Brightness.dark, refreshRevision: 1);
+      expect(find.text('Up to date'), findsOneWidget);
+      expect(find.byIcon(Icons.system_update_alt), findsNothing);
+      admin.failReads = true;
+      await show(tester, Brightness.dark, refreshRevision: 2);
+      expect(find.text('Up to date'), findsNothing);
+      expect(find.text('Update availability unknown'), findsOneWidget);
+      expect(find.byIcon(Icons.system_update_alt), findsNothing);
+    },
+  );
+
+  for (final brightness in Brightness.values) {
     testWidgets(
       'three administration tabs fit ${brightness.name} and preserve ownership',
       (tester) async {
@@ -241,6 +309,8 @@ void main() {
         expect(find.text('Models and reasoning'), findsOneWidget);
         expect(find.text('Identity'), findsOneWidget);
         await screenshot(tester, '${brightness.name}-profile');
+        await tester.ensureVisible(find.text('Server'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Server'));
         await tester.pumpAndSettle();
         expect(find.text('Providers'), findsOneWidget);

@@ -13,12 +13,13 @@ This is the current ownership contract for the Profile, Server and Health design
 | Profile / Scheduled tasks | Per-profile schedules, task editing/templates, execution actions and recent run conversations; connected-server delivery discovery |
 | Profile / Access and connectors | Effective provider access, links to shared account owners, explicit credential overrides and profile MCP configuration |
 | Profile / Behavior | Supported execution limits, approval policy, basic compression, reach/recovery policy and backend voice defaults |
-| Server / Connection | Device-held endpoint/password/headers and connection test/repair |
 | Server / Providers | Shared root provider accounts and owner-aware recovery |
 | Server / Profiles | Collection lifecycle; opening an individual profile selects Profile |
-| Server / Runtime | Backend identity/update and process-wide MCP reload |
+| Server / Versions & updates | Backend version and upstream update availability, checked automatically on entry |
 | Health / Runtime | Runtime/launch-profile observations, bounded logs, Doctor/security audit and action results |
 | Health / Selected profile | Scoped readiness and usage; recovery links to the owning editor |
+
+MCP connectors owns Reload server connectors, with confirmation that it reconnects tools across all server profiles and can invalidate prompt caches. Versions & updates contains only backend version and update controls. Check update progress appears after an update request; it reads the running update action, while Check for updates compares installed code with upstream.
 
 Keep tab roots short. Use categorized rows and drill-downs, sheets for short choices and dedicated screens for inventories and long editors. Search results identify the owner and navigate to the single editor. Health links to settings; it does not duplicate their forms.
 

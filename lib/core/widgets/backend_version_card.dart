@@ -33,6 +33,7 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
     _controller =
         widget.updateController ?? BackendUpdateController(widget.gateway);
     _ownsController = widget.updateController == null;
+    _checkOnOpen();
   }
 
   @override
@@ -53,9 +54,21 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
     _controller =
         widget.updateController ?? BackendUpdateController(widget.gateway);
     _ownsController = widget.updateController == null;
+    _checkOnOpen();
     if (disposedByCard) {
       oldController.dispose();
     }
+  }
+
+  void _checkOnOpen() {
+    final controller = _controller;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          identical(controller, _controller) &&
+          (_ownsController || controller.phase == BackendUpdatePhase.idle)) {
+        controller.checkForUpdate();
+      }
+    });
   }
 
   @override
@@ -128,11 +141,20 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                 ],
               ),
               const SizedBox(height: 4),
-              Text(check?.currentVersion ?? 'Current version unavailable'),
+              Text(
+                check?.currentVersion ??
+                    (controller.checking
+                        ? 'Loading version…'
+                        : 'Current version unavailable'),
+              ),
               if (check?.installMethod case final method?)
                 Text('Install method: $method'),
               const SizedBox(height: 4),
-              Text(_checkStatus(check, controller.phase)),
+              Text(
+                controller.checking
+                    ? 'Checking for updates…'
+                    : _checkStatus(check, controller.phase),
+              ),
               if (check?.canApply == false)
                 const Text('Updates must be applied from the server host.'),
               if (controller.phase != BackendUpdatePhase.idle &&
@@ -153,7 +175,7 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                   childrenPadding: const EdgeInsets.only(bottom: 8),
                   shape: const Border(),
                   collapsedShape: const Border(),
-                  title: const Text('Recent update output'),
+                  title: const Text('Update logs'),
                   subtitle: Text('${lines.length} lines'),
                   children: [
                     Container(
@@ -193,18 +215,20 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                       icon: const Icon(Icons.system_update_alt, size: 18),
                       label: const Text('Update backend'),
                     ),
-                  TextButton.icon(
-                    onPressed: controller.statusLoading || controller.starting
-                        ? null
-                        : controller.refreshStatus,
-                    icon: controller.statusLoading
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.refresh, size: 18),
-                    label: const Text('Refresh update status'),
-                  ),
+                  if (controller.requestOutstanding ||
+                      controller.status != null)
+                    TextButton.icon(
+                      onPressed: controller.statusLoading || controller.starting
+                          ? null
+                          : controller.refreshStatus,
+                      icon: controller.statusLoading
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.refresh, size: 18),
+                      label: const Text('Check update progress'),
+                    ),
                 ],
               ),
             ],
@@ -219,7 +243,7 @@ String _checkStatus(BackendUpdateCheck? check, BackendUpdatePhase phase) {
   if (check == null) {
     return phase == BackendUpdatePhase.unknown
         ? 'Could not check for updates.'
-        : 'Update status unavailable.';
+        : 'Update availability unknown.';
   }
   if (check.updateAvailable == true) {
     final behind = check.behind;
@@ -229,11 +253,11 @@ String _checkStatus(BackendUpdateCheck? check, BackendUpdatePhase phase) {
   }
   return check.updateAvailable == false && check.behind == 0
       ? 'Up to date'
-      : 'Update status unavailable.';
+      : 'Update availability unknown.';
 }
 
 String _phaseLabel(BackendUpdatePhase phase) => switch (phase) {
-  BackendUpdatePhase.idle => 'Update status unavailable.',
+  BackendUpdatePhase.idle => 'Update availability unknown.',
   BackendUpdatePhase.ready => 'Update check complete',
   BackendUpdatePhase.starting => 'Starting backend update…',
   BackendUpdatePhase.running => 'Backend update running',

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../../widgets/compact_switch.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/administration_repository.dart';
-import '../../widgets/backend_version_card.dart';
 import 'admin_widgets.dart';
 
 class AdminConnectorsPage extends StatefulWidget {
@@ -43,7 +42,7 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
       if (mounted) {
         adminMessage(
           context,
-          'Saved for new sessions. Runtime reload is a separate server action.',
+          'Saved for new sessions. Reload server connectors to apply to existing sessions.',
         );
       }
     } catch (e) {
@@ -70,7 +69,7 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
           padding: const EdgeInsets.all(16),
           children: [
             const AdminNotice(
-              'Connector configuration belongs to this profile. Runtime status may be unavailable until a session connects.',
+              'Connector settings belong to this profile. Connection status may be unavailable until a session connects.',
             ),
             TextButton(
               onPressed: _busy ? null : refresh,
@@ -80,6 +79,7 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
               const AdminNotice(
                 'No MCP connectors configured for this profile.',
               ),
+            AdminReloadConnectorsButton(server: _profile.server),
             AdminGroup(
               children: [
                 for (final row in rows)
@@ -259,15 +259,6 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
         ],
         const AdminNotice(
           'Per-tool access changes are read only until the server supports safe concurrent updates.',
-        ),
-        TextButton(
-          onPressed: _busy
-              ? null
-              : () => adminPush(
-                  context,
-                  AdminRuntimePage(server: _profile.server),
-                ),
-          child: const Text('Open server runtime'),
         ),
         TextButton(
           onPressed: _busy ? null : _remove,
@@ -522,20 +513,22 @@ class _AdminPluginsPageState extends State<AdminPluginsPage> {
   );
 }
 
-class AdminRuntimePage extends StatefulWidget {
+class AdminReloadConnectorsButton extends StatefulWidget {
   final AdministrationRepository server;
-  const AdminRuntimePage({super.key, required this.server});
+  const AdminReloadConnectorsButton({super.key, required this.server});
   @override
-  State<AdminRuntimePage> createState() => _AdminRuntimePageState();
+  State<AdminReloadConnectorsButton> createState() =>
+      _AdminReloadConnectorsButtonState();
 }
 
-class _AdminRuntimePageState extends State<AdminRuntimePage> {
+class _AdminReloadConnectorsButtonState
+    extends State<AdminReloadConnectorsButton> {
   bool _busy = false;
   Future<void> _reload() async {
     if (!await adminConfirm(
       context,
-      'Reload runtime connectors?',
-      'This changes the running server registry and can invalidate prompt caches for its sessions.',
+      'Reload server connectors?',
+      'Reconnect MCP tools for all profiles on this server. Existing sessions reload their tools; their next message may resend the full conversation to the model.',
       action: 'Reload',
     )) {
       return;
@@ -550,7 +543,7 @@ class _AdminRuntimePageState extends State<AdminRuntimePage> {
         if (!mounted ||
             !await adminConfirm(
               context,
-              'Confirm runtime reload',
+              'Confirm connector reload',
               '${result['message'] ?? 'The next message may resend full input tokens.'}',
               action: 'Reload',
             )) {
@@ -560,10 +553,10 @@ class _AdminRuntimePageState extends State<AdminRuntimePage> {
       }
       if (result['status'] != 'reloaded') {
         throw const AdministrationFailure(
-          'Runtime reload could not be confirmed.',
+          'Connector reload could not be confirmed.',
         );
       }
-      if (mounted) adminMessage(context, 'Runtime connectors reloaded.');
+      if (mounted) adminMessage(context, 'Server connectors reloaded.');
     } catch (e) {
       if (mounted) {
         adminMessage(
@@ -578,22 +571,8 @@ class _AdminRuntimePageState extends State<AdminRuntimePage> {
   }
 
   @override
-  Widget build(BuildContext context) => AdminPage(
-    title: 'Runtime',
-    scope: widget.server.connectionLabel,
-    child: ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        BackendVersionCard(
-          gateway: widget.server.gateway('default'),
-          connectionLabel: widget.server.connectionLabel,
-        ),
-        const SizedBox(height: 16),
-        OutlinedButton(
-          onPressed: _busy ? null : _reload,
-          child: StudioActionLabel('Reload runtime connectors', busy: _busy),
-        ),
-      ],
-    ),
+  Widget build(BuildContext context) => OutlinedButton(
+    onPressed: _busy ? null : _reload,
+    child: StudioActionLabel('Reload server connectors', busy: _busy),
   );
 }

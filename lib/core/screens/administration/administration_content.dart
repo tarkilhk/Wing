@@ -1,4 +1,6 @@
 import 'dart:async';
+import '../../services/backend_update_controller.dart';
+import 'admin_versions_page.dart';
 import '../../services/administration_overview.dart';
 import '../../widgets/server_connection_label.dart';
 import '../../widgets/profile_selector.dart';
@@ -51,6 +53,29 @@ class _HermesAdministrationContentState
         widget.controller.connectionIdentity,
         connectionStatus: widget.controller.connectionStatus,
       );
+  late final _updates = BackendUpdateController(_server.gateway('default'));
+
+  @override
+  void initState() {
+    super.initState();
+    _updates.addListener(_updateChanged);
+    unawaited(_updates.checkForUpdate());
+  }
+
+  void _updateChanged() {
+    if (mounted) setState(() {});
+  }
+
+  String get _updateSummary {
+    if (_updates.checking) return 'Checking for updates…';
+    final check = _updates.check;
+    if (check?.updateAvailable == true) return 'Update available';
+    if (check?.updateAvailable == false && check?.behind == 0) {
+      return 'Up to date';
+    }
+    return 'Update availability unknown';
+  }
+
   String _search = '';
   int _overviewRevision = 0;
   Set<String> _overviewKeys = const {};
@@ -68,12 +93,15 @@ class _HermesAdministrationContentState
     if (widget.refreshRevision != oldWidget.refreshRevision) {
       _overviewKeys = {...AdministrationOverview.endpoints.keys, 'tasks'};
       _overviewRevision++;
+      unawaited(_updates.checkForUpdate());
     }
   }
 
   final _searchInput = TextEditingController();
   @override
   void dispose() {
+    _updates.removeListener(_updateChanged);
+    _updates.dispose();
     _tabs.dispose();
     _searchInput.dispose();
     if (widget.repository == null) _server.close();
@@ -308,13 +336,6 @@ class _HermesAdministrationContentState
     ),
     _Destination(
       'Server',
-      'Connection',
-      'Saved connection and device-held access details',
-      Icons.dns_outlined,
-      widget.onConnections,
-    ),
-    _Destination(
-      'Server',
       'Providers',
       'Shared accounts and service credentials',
       Icons.key_outlined,
@@ -340,10 +361,15 @@ class _HermesAdministrationContentState
     ),
     _Destination(
       'Server',
-      'Runtime',
-      'Backend version and eligible updates',
-      Icons.memory,
-      () => adminPush(context, AdminRuntimePage(server: _server)),
+      'Versions & updates',
+      _updateSummary,
+      _updates.check?.updateAvailable == true
+          ? Icons.system_update_alt
+          : Icons.info_outline,
+      () => adminPush(
+        context,
+        AdminVersionsPage(server: _server, updateController: _updates),
+      ),
     ),
   ];
 

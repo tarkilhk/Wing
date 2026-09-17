@@ -50,6 +50,7 @@ class BackendUpdateController extends ChangeNotifier {
       phase = BackendUpdatePhase.ready;
     } catch (_) {
       if (!_currentCheck(generation)) return;
+      check = null;
       phase = BackendUpdatePhase.unknown;
       message = 'Update availability could not be checked. Try again.';
     } finally {
@@ -127,7 +128,7 @@ class BackendUpdateController extends ChangeNotifier {
       phase = BackendUpdatePhase.running;
       message = alreadyRunning
           ? 'A backend update is already running on this host. Its status is now tracked.'
-          : 'Backend update started for this host. Refresh status to follow it.';
+          : 'Backend update started. Check update progress to follow it.';
       return true;
     } catch (_) {
       if (!_currentCheck(generation)) return false;
