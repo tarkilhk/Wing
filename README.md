@@ -90,7 +90,7 @@ If Wing is useful in your day, you can buy me a coffee and help me keep improvin
 
 Completely optional. Every feature is available either way.
 
-[Buy me a coffee](https://ko-fi.com/tarkil)
+[Sponsor on GitHub](https://github.com/sponsors/tarkilhk) · [Buy me a coffee](https://ko-fi.com/tarkil)
 
 ## Support and provenance
 
