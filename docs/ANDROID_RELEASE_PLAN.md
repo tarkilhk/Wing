@@ -1,6 +1,6 @@
 # Android release guide
 
-This guide covers Wing's build identity and release checks. Source versions do not imply published artifacts. Check [the releases page](https://github.com/tarkilhk/wing/releases) for published APKs and [the changelog](../CHANGELOG.md) for release changes.
+This guide covers Wing's build identity and release checks. Source versions do not imply published artifacts. Check [the releases page](https://github.com/tarkilhk/Wing/releases) for published APKs and [the changelog](../CHANGELOG.md) for release changes.
 
 ## Identity and versioning
 

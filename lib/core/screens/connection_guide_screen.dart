@@ -173,7 +173,7 @@ class ConnectionGuideScreen extends StatelessWidget {
                         onPressed: () async {
                           final opened = await openWebPreview(
                             Uri.parse(
-                              'https://github.com/tarkilhk/wing/blob/main/docs/GETTING_STARTED.md',
+                              'https://github.com/tarkilhk/Wing/blob/main/docs/GETTING_STARTED.md',
                             ),
                           );
                           if (!opened && context.mounted) {

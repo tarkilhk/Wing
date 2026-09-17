@@ -197,7 +197,7 @@ Wing 1.0.0 is the first release under the Wing name: an independent Android clie
 
 Wing requires a compatible modern Hermes dashboard and gateway; individual controls depend on the server's capabilities. Accepted work continues on Hermes when the phone leaves, but local queues and alerts need a running, connected client. Firebase push delivery and synchronized older answer alternatives are not part of this release. Configuration exports do not back up drafts or the full app state.
 
-The [full development changelog](https://github.com/tarkilhk/wing/blob/main/CHANGELOG.md) retains the detailed intermediate entries. See the [v1.0.0 known limitations](https://github.com/tarkilhk/wing/blob/v1.0.0/docs/KNOWN_LIMITATIONS.md) for recovery, file and backend boundaries.
+The [full development changelog](https://github.com/tarkilhk/Wing/blob/main/CHANGELOG.md) retains the detailed intermediate entries. See the [v1.0.0 known limitations](https://github.com/tarkilhk/Wing/blob/v1.0.0/docs/KNOWN_LIMITATIONS.md) for recovery, file and backend boundaries.
 
 ## [2.36.15+2232] - 2026-09-15
 

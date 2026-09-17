@@ -3,6 +3,9 @@
 Approved on 15 September 2026, extending the [identity](2026-09-15-wing-identity.md)
 and [Studio design system](../DESIGN_SYSTEM.md).
 
+The owner requested the capital-W **Wing** wordmark on 17 September 2026.
+The concept board and widget renders below use that spelling.
+
 ## Selected concept
 
 ![Approved launch and light/dark welcome concepts](images/wing-arrival-concepts.png)

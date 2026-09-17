@@ -10,7 +10,7 @@ Continue conversations, check on running work, and send your next idea from your
 
 Wing connects to your own [Hermes Agent](https://github.com/NousResearch/hermes-agent) server. You'll need Android 7.0 or later and a compatible server to get started.
 
-[**Download for Android**](https://github.com/tarkilhk/wing/releases/latest) · [Setup guide](docs/GETTING_STARTED.md) · [Documentation](docs/README.md)
+[**Download for Android**](https://github.com/tarkilhk/Wing/releases/latest) · [Setup guide](docs/GETTING_STARTED.md) · [Documentation](docs/README.md)
 
 <a id="screenshots"></a>
 
@@ -31,7 +31,7 @@ Wing connects to your own [Hermes Agent](https://github.com/NousResearch/hermes-
   </tr>
 </table>
 
-App previews rendered from Wing's Flutter interface with sample data on 16 September 2026. Both light and dark themes are available.
+App previews rendered from Wing's Flutter interface: conversation with sample data on 16 September 2026, welcome with the updated Wing wordmark on 17 September. Both light and dark themes are available.
 
 ## What you can do
 
@@ -45,7 +45,7 @@ App previews rendered from Wing's Flutter interface with sample data on 16 Septe
 ## Get started
 
 1. Have a compatible Hermes server reachable from your phone.
-2. Install a signed APK from the [latest release](https://github.com/tarkilhk/wing/releases/latest). Choose **arm64-v8a** for most current phones; other builds and checksums are listed with the release.
+2. Install a signed APK from the [latest release](https://github.com/tarkilhk/Wing/releases/latest). Choose **arm64-v8a** for most current phones; other builds and checksums are listed with the release.
 3. Follow the [setup guide](docs/GETTING_STARTED.md) to start the authenticated dashboard, add a connection and send your first message.
 
 The modern dashboard and Desktop Gateway are required. An API key for the older API-only transport is not sufficient. Use HTTPS or an encrypted private network for remote access.
@@ -72,12 +72,12 @@ For design contributions, see the [Wing identity and artwork](docs/design/2026-0
 <details>
 <summary>App identity and the repository name</summary>
 
-The approved wordmark uses lowercase **wing**; the app name is **Wing**, or **Wing Dev** for development builds.
+The official name and wordmark are **Wing**, with a capital **W**. Development builds use **Wing Dev**. Package identifiers remain lowercase.
 
 - Release package: `com.tarkilhk.wing`.
 - Ordinary debug package: `com.tarkilhk.wing.dev`. Signed development builds can use the release package, as described in the [release guide](docs/ANDROID_RELEASE_PLAN.md#identity-and-versioning).
 - Wing uses a new application ID with separate local data. Backups and recovery journals from the previous identity are not migrated.
-- Repository: `tarkilhk/wing`.
+- Repository: `tarkilhk/Wing`.
 - Wing's package and signing identity are separate from the original Hermes Android client.
 
 [pubspec.yaml](pubspec.yaml) declares the source version. App settings shows the installed version. Source changes do not imply a published APK.
@@ -94,6 +94,6 @@ Completely optional. Every feature is available either way.
 
 ## Support and provenance
 
-Found a client problem? [Open an issue](https://github.com/tarkilhk/wing/issues) with reproducible steps, following the [redaction guidance](SECURITY.md). The [privacy policy](PRIVACY.md) covers storage, server processing, dictation and deletion, and is available offline in App settings.
+Found a client problem? [Open an issue](https://github.com/tarkilhk/Wing/issues) with reproducible steps, following the [redaction guidance](SECURITY.md). The [privacy policy](PRIVACY.md) covers storage, server processing, dictation and deletion, and is available offline in App settings.
 
 Wing is an independently developed Android companion for Hermes Agent, built on the open-source work of [rusty4444](https://github.com/rusty4444) and the Hermes Android contributors. Licensed under [MIT](LICENSE). See [NOTICE.md](NOTICE.md) for credits and third-party notices.

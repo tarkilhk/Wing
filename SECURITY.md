@@ -1,8 +1,8 @@
 # Security and support
 
-Report reproducible client bugs through [Wing's GitHub issues](https://github.com/tarkilhk/wing/issues).
+Report reproducible client bugs through [Wing's GitHub issues](https://github.com/tarkilhk/Wing/issues).
 
-For a suspected vulnerability, [report it privately](https://github.com/tarkilhk/wing/security/advisories/new). Do not post exploit details or credentials in public issues. Wing's maintainers can coordinate any server-related findings.
+For a suspected vulnerability, [report it privately](https://github.com/tarkilhk/Wing/security/advisories/new). Do not post exploit details or credentials in public issues. Wing's maintainers can coordinate any server-related findings.
 
 Before sharing logs, screenshots or diagnostics:
 

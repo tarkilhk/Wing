@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Drawn lettering and feather accents from the approved Wing identity.
+/// Title-case Wing lettering and feathers from the approved identity.
 /// Kept as paths so the mark remains sharp at every display density.
 class WingWordmark extends StatelessWidget {
   const WingWordmark({super.key, this.width = 200});
@@ -41,13 +41,13 @@ class _WingPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round;
     canvas.drawPath(
       Path()
-        ..moveTo(20, 91)
+        ..moveTo(20, 40)
         ..lineTo(53, 173)
         ..quadraticBezierTo(57, 183, 61, 173)
-        ..lineTo(96, 92)
+        ..lineTo(93, 65)
         ..lineTo(131, 173)
         ..quadraticBezierTo(135, 183, 139, 173)
-        ..lineTo(174, 91),
+        ..lineTo(164, 40),
       stroke,
     );
     canvas.drawLine(const Offset(216, 92), const Offset(216, 175), stroke);

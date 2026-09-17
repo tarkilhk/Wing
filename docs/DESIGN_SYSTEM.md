@@ -17,9 +17,12 @@ The [product plan](PRODUCT_PLAN.md) owns functionality. This document owns the a
 
 ## App and notification identity
 
-The app is **Wing** in prose, Android labels and accessibility text. The
-approved wordmark reads **wing** in lowercase. The owner selected the compact
-feather-accent board on 15 September 2026. See the
+The official app name and wordmark are **Wing**, with a capital **W** and
+lowercase **ing**, in artwork, prose, Android labels and accessibility text.
+The owner requested this capitalization across the design language on
+17 September 2026, superseding the lowercase wordmark selected on
+15 September. Keep the compact feather accents and lowercase technical
+identifiers, including `com.tarkilhk.wing` and the Dart package `wing`. See the
 [Wing identity specification](design/2026-09-15-wing-identity.md) for the board,
 wordmark rules, decorative feather system and application identity decisions.
 
@@ -52,7 +55,7 @@ history loading or errors, and active work; keep it scrollable on short screens.
 
 The owner approved the [Wing arrival screens](design/2026-09-15-wing-arrival.md)
 on 15 September 2026. First connection now uses a 144 dp circular portrait,
-the scalable lowercase wordmark and the tagline, with Connect your agent,
+the scalable title-case Wing wordmark and the tagline, with Connect your agent,
 Restore configuration and an offline Connection guide. This supersedes the
 112 dp first-connection placement above. Keep the existing drawer reachable.
 Use Studio screen and action tokens in both themes; preserve text scaling and

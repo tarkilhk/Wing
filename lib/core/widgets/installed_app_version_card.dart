@@ -5,8 +5,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../services/web_preview.dart';
 import 'playful_portrait.dart';
 
-const _changelogUrl = 'https://github.com/tarkilhk/wing/blob/main/CHANGELOG.md';
-const _releasesUrl = 'https://github.com/tarkilhk/wing/releases';
+const _changelogUrl = 'https://github.com/tarkilhk/Wing/blob/main/CHANGELOG.md';
+const _releasesUrl = 'https://github.com/tarkilhk/Wing/releases';
 
 typedef AppVersionLinkOpener = Future<bool> Function(Uri uri);
 
