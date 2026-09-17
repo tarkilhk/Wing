@@ -4,15 +4,15 @@ These issues track documented client defects and backend reliability gaps. Statu
 
 | ID | GitHub issue | Status at this cleanup |
 | --- | --- | --- |
-| R1 | [Prevent dashboard redirects from forwarding session credentials](https://github.com/tarkilhk/wing/issues/15) | Fixed in source |
-| B2 | [Prevent queued attachments from being consumed by an unacknowledged send](https://github.com/tarkilhk/wing/issues/16) | Fixed in source |
-| B1 | [Persist normal-send uncertainty before dispatch so process death cannot restore a misleading draft](https://github.com/tarkilhk/wing/issues/17) | Open |
-| R2 | [Bound dashboard discovery and download requests with cancellation and deadlines](https://github.com/tarkilhk/wing/issues/18) | Open |
-| HUP-001 | [[Backend] Browser and vault target different tabs](https://github.com/tarkilhk/wing/issues/19) | Open |
-| HUP-002 | [[Backend] Non-default profile loop command/control mismatch](https://github.com/tarkilhk/wing/issues/20) | Open |
-| HUP-003 | [[Backend] Global activity omits child-only work](https://github.com/tarkilhk/wing/issues/21) | Open |
-| HUP-004 | [[Backend] Windows profile deletion fails after MCP activity](https://github.com/tarkilhk/wing/issues/22) | Open |
-| N1 | [Connected-app notifications can miss turns between status snapshots](https://github.com/tarkilhk/wing/issues/23) | Open |
+| R1 | [Prevent dashboard redirects from forwarding session credentials](https://github.com/tarkilhk/wing/issues/1) | Fixed in source |
+| B2 | [Prevent queued attachments from being consumed by an unacknowledged send](https://github.com/tarkilhk/wing/issues/2) | Fixed in source |
+| B1 | [Persist normal-send uncertainty before dispatch so process death cannot restore a misleading draft](https://github.com/tarkilhk/wing/issues/3) | Open |
+| R2 | [Bound dashboard discovery and download requests with cancellation and deadlines](https://github.com/tarkilhk/wing/issues/4) | Open |
+| HUP-001 | [[Backend] Browser and vault target different tabs](https://github.com/tarkilhk/wing/issues/5) | Open |
+| HUP-002 | [[Backend] Non-default profile loop command/control mismatch](https://github.com/tarkilhk/wing/issues/6) | Open |
+| HUP-003 | [[Backend] Global activity omits child-only work](https://github.com/tarkilhk/wing/issues/7) | Open |
+| HUP-004 | [[Backend] Windows profile deletion fails after MCP activity](https://github.com/tarkilhk/wing/issues/8) | Open |
+| N1 | [Connected-app notifications can miss turns between status snapshots](https://github.com/tarkilhk/wing/issues/9) | Open |
 
 The credential redirect and queued attachment fixes passed regression tests in this checkout. Their issues link to the commit that integrates the fixes. This record does not claim a published release.
 

@@ -4,7 +4,7 @@
 
 Draft text and staged files persist per connection identity, canonical profile and durable chat. Navigation and restart preserve unsent work. Missing local files must not erase the text. An accepted send clears only its submitted snapshot; newer typing and attachments stay in the composer.
 
-Restore server history and status before continuing work. Do not automatically resend after an uncertain acknowledgement. Normal sends still have a process-death window where a retained draft can return without an uncertainty warning; check history before resending. See [issue #17](https://github.com/tarkilhk/wing/issues/17).
+Restore server history and status before continuing work. Do not automatically resend after an uncertain acknowledgement. Normal sends still have a process-death window where a retained draft can return without an uncertainty warning; check history before resending. See [issue #3](https://github.com/tarkilhk/wing/issues/3).
 
 Saved drafts remain discoverable when their chat is absent from a loaded server page. Recover to a new chat only after a confirmed missing-session result, not an ambiguous request failure. Move the draft in one durable storage operation, reset old upload receipts, pause queues and require explicit Send.
 

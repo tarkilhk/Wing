@@ -29,7 +29,7 @@ These IDs preserve the original scope references. They describe outcomes, not in
 | Device preferences | S08, S10 | Installed app identity/version, update links, theme, text size and reading preferences. |
 | Administration | A01–A45, A56 as qualified in the [administration roadmap](ADMINISTRATION_ROADMAP.md) | Profile, Server and Health, with explicit account/configuration ownership. Mixed P1/P2 items do not make every advanced operation an immediate commitment. |
 
-Queue entries are unsent local work, matching Desktop's composer queue. Drain them only while the client is running and connected, after refreshing server status. Pause on stop, failure or an uncertain acknowledgement. Do not silently replay a potentially accepted prompt. The normal-send process-death gap is tracked in issue #17, linked from the limitations guide.
+Queue entries are unsent local work, matching Desktop's composer queue. Drain them only while the client is running and connected, after refreshing server status. Pause on stop, failure or an uncertain acknowledgement. Do not silently replay a potentially accepted prompt. The normal-send process-death gap is tracked in issue #3, linked from the limitations guide.
 
 The busy composer defaults to Steer; the device setting can choose Queue or Stop. Holding and sliding selects a one-time alternative. Idle chats and slash drafts use Send. See [composer actions](COMPOSER_ACTION_GESTURE.md).
 
