@@ -2175,7 +2175,8 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           : AppBar(
               title: Text(_destination.label),
               actions: [
-                if (_destination != AppDestination.settings)
+                if (_destination != AppDestination.settings &&
+                    _destination != AppDestination.health)
                   IconButton(
                     tooltip: _destination == AppDestination.activity
                         ? 'Refresh activity'
@@ -2200,7 +2201,8 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               _destination != AppDestination.settings &&
               _destination != AppDestination.administration)
             const LinearProgressIndicator(),
-          if (_destination == AppDestination.activity)
+          if (_destination == AppDestination.activity ||
+              _destination == AppDestination.health)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Align(
@@ -2250,6 +2252,20 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   );
                   if (mounted) _selectDestination(AppDestination.chats);
                 }),
+              ),
+              AppDestination.health => HermesHealthContent(
+                onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
+                key: ValueKey(controller.connectionIdentity),
+                controller: controller,
+                onOpenSession: (key) async {
+                  await controller.openSession(
+                    key,
+                    propagateHistoryFailure: true,
+                  );
+                  if (mounted) _selectDestination(AppDestination.chats);
+                },
+                onConnections: () =>
+                    _selectDestination(AppDestination.connections),
               ),
               _ => HermesAdministrationContent(
                 onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),

@@ -2,12 +2,25 @@ import '../../widgets/studio_select.dart';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 import '../../services/administration_health.dart';
-import 'admin_health_button.dart';
+import '../../theme/wing_theme.dart';
 import '../../widgets/profile_diagnostics_panel.dart';
 import 'admin_widgets.dart';
 import 'admin_runtime_health.dart';
 import 'admin_providers_page.dart';
 import 'admin_connectors_page.dart';
+
+Color administrationHealthColor(
+  BuildContext context,
+  AdministrationHealthStatus status,
+) {
+  final tokens = WingTokens.of(context);
+  return switch (status) {
+    AdministrationHealthStatus.healthy => tokens.success,
+    AdministrationHealthStatus.warning => tokens.warning,
+    AdministrationHealthStatus.failure => tokens.danger,
+    AdministrationHealthStatus.unknown => Theme.of(context).colorScheme.outline,
+  };
+}
 
 class AdminHealthContent extends StatelessWidget {
   final AdministrationRepository server;

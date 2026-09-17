@@ -7,8 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/administration/administration_content.dart';
-import 'package:wing/core/screens/administration/admin_health_button.dart';
-import 'package:wing/core/services/administration_health.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
@@ -232,7 +230,7 @@ void main({
                   home: Scaffold(
                     key: scaffold,
                     drawer: const Drawer(child: Text('Navigation')),
-                    body: HermesAdministrationContent(
+                    body: HermesHealthContent(
                       controller: fixture.workspace,
                       repository: fixture.repository,
                       onOpenMenu: () => scaffold.currentState!.openDrawer(),
@@ -244,34 +242,12 @@ void main({
               ),
             );
             await tester.pumpAndSettle();
-            final expected = switch (status) {
-              'green' => AdministrationHealthStatus.healthy,
-              'amber' => AdministrationHealthStatus.warning,
-              'red' => AdministrationHealthStatus.failure,
-              _ => AdministrationHealthStatus.unknown,
-            };
-            expect(
-              tester
-                  .widget<AdminHealthButton>(find.byType(AdminHealthButton))
-                  .health
-                  .status,
-              expected,
-            );
+            expect(find.byType(HermesHealthContent), findsOneWidget);
+            expect(find.text('Selected profile'), findsAtLeastNWidgets(1));
             expect(find.byType(TabBar), findsNothing);
-            expect(find.byTooltip('Refresh administration'), findsOneWidget);
-            final target = tester.getSize(
-              find.byKey(const ValueKey('administration-health')),
-            );
-            expect(target.width, greaterThanOrEqualTo(48));
-            expect(target.height, greaterThanOrEqualTo(48));
             final name =
                 '$status-${brightness.name}-${large ? 'large' : 'phone'}';
             await snapshot(tester, '$name-overview');
-            await tester.tap(
-              find.byKey(const ValueKey('administration-health')),
-            );
-            await tester.pumpAndSettle();
-            expect(find.widgetWithText(AppBar, 'Health'), findsOneWidget);
             await snapshot(tester, '$name-health');
             final vertical = find
                 .byWidgetPredicate(
@@ -282,43 +258,11 @@ void main({
             await tester.drag(vertical, const Offset(0, -700));
             await tester.pumpAndSettle();
             await snapshot(tester, '$name-health-lower');
-            await tester.pageBack();
-            await tester.pumpAndSettle();
-            expect(
-              find.byKey(const ValueKey('profile-default')),
-              findsOneWidget,
-            );
-            if (!large && status == 'green') {
-              await Scrollable.ensureVisible(
-                tester.element(
-                  find.byKey(const ValueKey('profile-research-and-writing')),
-                ),
-                alignment: .5,
-              );
-              await tester.pumpAndSettle();
-              await tester.tap(
-                find.byKey(const ValueKey('profile-research-and-writing')),
-              );
-              await tester.pumpAndSettle();
+            if (!large) {
               expect(
-                fixture.workspace.current?.scope.profileName,
-                'research-and-writing',
-              );
-              await tester.enterText(find.byType(TextField), 'memory');
-              await tester.pumpAndSettle();
-              await snapshot(tester, '$name-search');
-              await tester.tap(find.byTooltip('Clear search'));
-              await tester.pumpAndSettle();
-              await tester.tap(
-                find.byKey(const ValueKey('administration-health')),
-              );
-              await tester.pumpAndSettle();
-              expect(
-                find.textContaining('Current profile: research-and-writing'),
+                find.byKey(const ValueKey('profile-default')),
                 findsOneWidget,
               );
-              await tester.pageBack();
-              await tester.pumpAndSettle();
             }
             expect(
               fixture.requests.where(

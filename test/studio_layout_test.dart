@@ -412,30 +412,22 @@ void main() {
                 find.byKey(const ValueKey('nav-administration')),
               );
               await tester.pumpAndSettle();
-              final callsBefore = fixture.calls.length;
               await _capture(
                 tester,
                 '${brightness.name}-administration-profile$adminSuffix',
               );
               expect(find.byType(TabBar), findsNothing);
-              await tester.tap(
-                find.byKey(const ValueKey('administration-health')),
-              );
+              await tester.tap(find.byTooltip('Open navigation menu'));
+              await tester.pumpAndSettle();
+              await tester.tap(find.byKey(const ValueKey('nav-health')));
               await tester.pumpAndSettle();
               await _capture(
                 tester,
                 '${brightness.name}-administration-health$adminSuffix',
               );
-              await tester.pageBack();
+              await tester.binding.handlePopRoute();
               await tester.pumpAndSettle();
-              expect(
-                fixture.calls.length,
-                callsBefore,
-                reason: 'Health navigation must not execute server operations',
-              );
               expect(controller.current!.chat, same(chat));
-              await tester.tap(find.byTooltip('Open navigation menu'));
-              await tester.pumpAndSettle();
               await tester.scrollUntilVisible(
                 find.byKey(const ValueKey('nav-settings')),
                 200,

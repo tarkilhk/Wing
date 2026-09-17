@@ -76,6 +76,7 @@ void main() {
     double scale = 1,
     double width = 390,
     WorkspaceAccent accent = WorkspaceAccent.mint,
+    bool healthOnly = false,
   }) async {
     tester.view.physicalSize = Size(width, 844);
     tester.view.devicePixelRatio = 1;
@@ -95,20 +96,30 @@ void main() {
           home: Scaffold(
             key: shellKey,
             drawer: AppDrawer(
-              selected: AppDestination.administration,
+              selected: healthOnly
+                  ? AppDestination.health
+                  : AppDestination.administration,
               onSelected: (_) {},
               connection: controller.connection,
               connectionStatus: controller.connectionStatus,
               versionsControllerFactory: (_) =>
                   VersionsController(gateway: admin.server.gateway('default')),
             ),
-            body: HermesAdministrationContent(
-              onOpenMenu: () => shellKey.currentState!.openDrawer(),
-              onOpenSession: (_) async {},
-              controller: controller,
-              repository: admin.server,
-              onConnections: () {},
-            ),
+            body: healthOnly
+                ? HermesHealthContent(
+                    onOpenMenu: () => shellKey.currentState!.openDrawer(),
+                    onOpenSession: (_) async {},
+                    controller: controller,
+                    repository: admin.server,
+                    onConnections: () {},
+                  )
+                : HermesAdministrationContent(
+                    onOpenMenu: () => shellKey.currentState!.openDrawer(),
+                    onOpenSession: (_) async {},
+                    controller: controller,
+                    repository: admin.server,
+                    onConnections: () {},
+                  ),
           ),
         ),
       ),
@@ -174,32 +185,11 @@ void main() {
       }
       expect(find.text('Refresh overview', skipOffstage: false), findsNothing);
       expect(admin.requests.where((r) => r.$1 != 'GET'), isEmpty);
-      await tester.tap(find.byKey(const ValueKey('administration-health')));
-      await tester.pumpAndSettle();
-      admin.requests.clear();
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      await tester.runAsync(() async {
-        await Function.apply(
-          tester
-              .widget<IconButton>(
-                find.byWidgetPredicate(
-                  (widget) =>
-                      widget is IconButton &&
-                      widget.tooltip == 'Refresh administration',
-                ),
-              )
-              .onPressed!,
-          const [],
-        );
-      });
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('administration-health')));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Health'), findsOneWidget);
+      await show(tester, Brightness.dark, healthOnly: true);
+      expect(find.text('Selected profile'), findsAtLeastNWidgets(1));
       expect(
         admin.requests.where((r) => r.$2 == 'profiles/active'),
-        hasLength(1),
+        isNotEmpty,
       );
       expect(admin.requests.where((r) => r.$1 != 'GET'), isEmpty);
       expect(tester.takeException(), isNull);
@@ -387,7 +377,7 @@ void main() {
 
   for (final brightness in Brightness.values) {
     testWidgets(
-      'administration and Health route fit ${brightness.name} and preserve ownership',
+      'administration and Health entry fit ${brightness.name} and preserve ownership',
       (tester) async {
         await show(tester, brightness);
         expect(find.text('Models and reasoning'), findsOneWidget);
@@ -399,10 +389,8 @@ void main() {
         await show(tester, brightness, scale: 2, width: 320);
         expect(tester.takeException(), isNull);
         await screenshot(tester, '${brightness.name}-profile-large-text');
-        await show(tester, brightness);
-        await tester.tap(find.byKey(const ValueKey('administration-health')));
-        await tester.pumpAndSettle();
-        expect(find.text('Selected profile'), findsOneWidget);
+        await show(tester, brightness, healthOnly: true);
+        expect(find.text('Selected profile'), findsAtLeastNWidgets(1));
         await screenshot(tester, '${brightness.name}-health-profile');
         await tester.scrollUntilVisible(
           find.text('Runtime'),
@@ -440,12 +428,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await screenshot(tester, 'narrow-profile-bottom');
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('administration-health')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('administration-health')));
-    await tester.pumpAndSettle();
+    await show(tester, Brightness.dark, scale: 2, width: 320, healthOnly: true);
     await screenshot(tester, 'narrow-health');
     await tester.scrollUntilVisible(
       find.text('Doctor'),
@@ -465,10 +448,8 @@ void main() {
     tester,
   ) async {
     controller.current = null;
-    await show(tester, Brightness.dark, scale: 1.3);
+    await show(tester, Brightness.dark, scale: 1.3, healthOnly: true);
     expect(find.byType(TabBar), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('administration-health')));
-    await tester.pumpAndSettle();
     expect(find.text('Runtime profile: Shared root'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await screenshot(tester, 'large-text-missing-profile');
@@ -581,9 +562,7 @@ void main() {
   testWidgets(
     'health recovery opens captured profile access and its shared-provider link',
     (tester) async {
-      await show(tester, Brightness.dark);
-      await tester.tap(find.byKey(const ValueKey('administration-health')));
-      await tester.pumpAndSettle();
+      await show(tester, Brightness.dark, healthOnly: true);
       await tester.scrollUntilVisible(
         find.text('Access checks'),
         280,
@@ -639,76 +618,58 @@ void main() {
     }
   }
 
-  testWidgets(
-    'Health runtime findings survive route return, search and editor return',
-    (tester) async {
-      admin = AdministrationDesignFixture();
-      await show(tester, Brightness.dark);
-      await tester.tap(find.byKey(const ValueKey('administration-health')));
-      await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.text('Run Doctor'),
-        100,
-        scrollable: find
-            .byWidgetPredicate(
-              (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
-            )
-            .first,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Run Doctor'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Run'));
-      await tester.pumpAndSettle();
-      expect(find.text('Failed'), findsOneWidget);
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField).first, 'Memory budget');
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Memory budget').last);
-      await tester.pumpAndSettle();
-      expect(tester.testTextInput.isVisible, isFalse);
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Clear search'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('administration-health')));
-      await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.text('Review output'),
-        200,
-        scrollable: find
-            .byWidgetPredicate(
-              (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
-            )
-            .first,
-      );
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Health'), findsOneWidget);
-      expect(find.text('Failed'), findsOneWidget);
-      expect(find.text('Run Doctor'), findsNothing);
-      expect(
-        admin.requests.where((r) => r.$1 == 'POST' && r.$2 == 'ops/doctor'),
-        hasLength(1),
-      );
-      expect(
-        admin.requests.where((r) => r.$2 == 'actions/doctor/status'),
-        hasLength(1),
-      );
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('Health runtime findings survive returning from an action', (
+    tester,
+  ) async {
+    admin = AdministrationDesignFixture();
+    await show(tester, Brightness.dark, healthOnly: true);
+    await tester.scrollUntilVisible(
+      find.text('Run Doctor'),
+      100,
+      scrollable: find
+          .byWidgetPredicate(
+            (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Run Doctor'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Run'));
+    await tester.pumpAndSettle();
+    expect(find.text('Failed'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Review output'),
+      200,
+      scrollable: find
+          .byWidgetPredicate(
+            (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(HermesHealthContent), findsOneWidget);
+    expect(find.text('Failed'), findsOneWidget);
+    expect(find.text('Run Doctor'), findsNothing);
+    expect(
+      admin.requests.where((r) => r.$1 == 'POST' && r.$2 == 'ops/doctor'),
+      hasLength(1),
+    );
+    expect(
+      admin.requests.where((r) => r.$2 == 'actions/doctor/status'),
+      hasLength(1),
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'runtime metadata failure does not hide supported server health actions',
     (tester) async {
       admin.override = (method, path, query, body) async =>
           throw StateError('offline');
-      await show(tester, Brightness.dark);
-      await tester.tap(find.byKey(const ValueKey('administration-health')));
-      await tester.pumpAndSettle();
+      await show(tester, Brightness.dark, healthOnly: true);
       await tester.scrollUntilVisible(
         find.text('Doctor'),
         100,

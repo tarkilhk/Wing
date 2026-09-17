@@ -96,7 +96,7 @@ void main() {
     });
     await tester.pumpAndSettle();
     expect(fixture.reads.length + fixture.calls.length, greaterThan(before));
-    expect(find.byKey(const ValueKey('administration-health')), findsOneWidget);
+    expect(find.byKey(const ValueKey('administration-health')), findsNothing);
     expect(find.byType(TabBar), findsNothing);
     expect(find.text('Refresh overview', skipOffstage: false), findsNothing);
     expect(tester.takeException(), isNull);
@@ -141,6 +141,7 @@ void main() {
     AppDestination.activity,
     AppDestination.settings,
     AppDestination.administration,
+    AppDestination.health,
   ]) {
     testWidgets('${destination.label} Back opens the menu, then exits', (
       tester,
@@ -203,7 +204,7 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.byType(HermesAdministrationContent), findsOneWidget);
-    expect(find.byKey(const ValueKey('administration-health')), findsOneWidget);
+    expect(find.byType(HermesHealthContent), findsNothing);
     expect(find.byTooltip('Refresh administration'), findsOneWidget);
     expect(find.byType(AppDrawer), findsNothing);
     expect(
@@ -234,11 +235,11 @@ void main() {
       await navigate(tester, AppDestination.administration);
       expect(find.byType(HermesAdministrationContent), findsOneWidget);
       expect(find.text('Models and reasoning'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('administration-health')));
+      await navigate(tester, AppDestination.health);
       await tester.pumpAndSettle();
-      expect(find.text('Selected profile'), findsOneWidget);
+      expect(find.text('Selected profile'), findsAtLeastNWidgets(1));
       expect(controller.current!.chat, same(chat));
-      await tester.pageBack();
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       await navigate(tester, AppDestination.chats);
       expect(find.text('Keep this unsent'), findsOneWidget);
@@ -400,6 +401,7 @@ void main() {
       AppDestination.chats,
       AppDestination.activity,
       AppDestination.administration,
+      AppDestination.health,
     ]) {
       expect(
         tester

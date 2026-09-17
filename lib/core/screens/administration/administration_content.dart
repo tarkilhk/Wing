@@ -1,7 +1,6 @@
 import 'dart:async';
 import '../../services/administration_overview.dart';
 import '../../services/administration_health.dart';
-import 'admin_health_button.dart';
 import '../../widgets/profile_diagnostics_panel.dart';
 import '../../widgets/workspace_connection_status.dart';
 import '../../widgets/studio_error.dart';
@@ -33,6 +32,7 @@ class HermesAdministrationContent extends StatefulWidget {
   final VoidCallback? onConnections;
   final AdministrationRepository? repository;
   final Future<void> Function(ProfileSessionKey) onOpenSession;
+  final bool healthOnly;
   const HermesAdministrationContent({
     super.key,
     required this.controller,
@@ -40,6 +40,7 @@ class HermesAdministrationContent extends StatefulWidget {
     this.onConnections,
     this.repository,
     required this.onOpenSession,
+    this.healthOnly = false,
   });
   @override
   State<HermesAdministrationContent> createState() =>
@@ -151,35 +152,6 @@ class _HermesAdministrationContentState
       if (mounted) setState(() => _refreshing = false);
     }
   }
-
-  Future<void> _openHealth() => adminPush(
-    context,
-    ListenableBuilder(
-      listenable: Listenable.merge([widget.controller, _health]),
-      builder: (context, _) => AdminPage(
-        title: 'Health',
-        scope: _server.connectionLabel,
-        child: AdminHealthContent(
-          server: _server,
-          health: _health,
-          profile: _profile,
-          profileSelector: _selector(),
-          accessChecks: _checksForCurrentProfile(),
-          onConnections: widget.onConnections,
-          onRefresh: _refresh,
-          onOpenDestination: (title) async {
-            final destination = _destinations(
-              _profile,
-            ).where((d) => d.title == title).firstOrNull;
-            if (destination?.open != null) {
-              await destination!.open!();
-              if (mounted) _refreshAfter(destination);
-            }
-          },
-        ),
-      ),
-    ),
-  );
 
   final _searchInput = TextEditingController();
   @override
@@ -591,10 +563,33 @@ class _HermesAdministrationContentState
 
   @override
   Widget build(BuildContext context) {
+    if (widget.healthOnly) {
+      return ListenableBuilder(
+        listenable: Listenable.merge([widget.controller, _health]),
+        builder: (context, _) => AdminHealthContent(
+          server: _server,
+          health: _health,
+          profile: _profile,
+          profileSelector: _selector(),
+          accessChecks: _checksForCurrentProfile(),
+          onConnections: widget.onConnections,
+          onRefresh: _refresh,
+          onOpenDestination: (title) async {
+            final destination = _destinations(
+              _profile,
+            ).where((d) => d.title == title).firstOrNull;
+            if (destination?.open != null) {
+              await destination!.open!();
+              if (mounted) _refreshAfter(destination);
+            }
+          },
+        ),
+      );
+    }
     final profile = _profile;
     final large =
         MediaQuery.textScalerOf(context).scale(16) >= 24 ||
-        adminToolbarHeight(context, 'Administration', actions: 2) >
+        adminToolbarHeight(context, 'Administration', actions: 1) >
             kToolbarHeight;
     final title = large
         ? const Padding(
@@ -620,11 +615,6 @@ class _HermesAdministrationContentState
             onPressed: _refreshing || widget.controller.switching
                 ? null
                 : _refresh,
-          ),
-          ListenableBuilder(
-            listenable: _health,
-            builder: (context, _) =>
-                AdminHealthButton(health: _health, onPressed: _openHealth),
           ),
           const SizedBox(width: 8),
         ],
@@ -700,6 +690,19 @@ class _HermesAdministrationContentState
       ),
     );
   }
+}
+
+/// The dedicated Health destination keeps the same retained observations and
+/// profile-scoped actions as Administration without nesting Health there.
+class HermesHealthContent extends HermesAdministrationContent {
+  const HermesHealthContent({
+    super.key,
+    required super.controller,
+    required super.onOpenMenu,
+    super.onConnections,
+    super.repository,
+    required super.onOpenSession,
+  }) : super(healthOnly: true);
 }
 
 class _Destination {

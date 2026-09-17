@@ -12,7 +12,8 @@ enum AppDestination {
   activity('Activity', Icons.pending_actions_outlined),
   connections('Connections', Icons.dns_outlined),
   settings('App settings', Icons.tune_outlined),
-  administration('Hermes administration', Icons.manage_accounts_outlined);
+  administration('Hermes administration', Icons.manage_accounts_outlined),
+  health('Hermes health', Icons.health_and_safety_outlined);
 
   const AppDestination(this.label, this.icon);
   final String label;
