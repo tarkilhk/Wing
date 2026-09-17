@@ -1,6 +1,6 @@
 # Administration experience: approved direction
 
-Status: Refinements implemented and verified following the delivery audit; signed build ready; phone installation pending. See Plan 003.
+Status: Refinements implemented and verified following the delivery audit; build 22542 installed; on-phone visual review pending. See Plan 003.
 
 On 17 September 2026, the owner accepted all ten recommendations from the
 administration design review and requested documents and a goal definition

@@ -1,6 +1,6 @@
 # Plan 003: Complete the administration experience redesign
 
-Status: Design corrections verified and signed build ready; phone installation pending.
+Status: Design corrections verified and build 22542 installed; on-phone visual review pending.
 The original completion claim was overstated; see the reopened acceptance record below.
 
 The owner requested completion after a source/render audit on 17 September 2026.
@@ -418,8 +418,8 @@ installation, without changing any backend contract or adding compatibility code
 
 ### Follow-up verification
 
-Design, host, native and signed-build verification are complete. Phone installation
-remains pending; this is not a completed deployment record.
+Design, host, native and signed-build verification are complete. Build 22542 is
+installed on the owner’s phone. The final on-phone visual review remains pending.
 
 - Final host suite: **2,013 passed, 11 opt-in live tests skipped**. Final analysis
   clean. Includes selected-profile visibility without vertical page movement,
@@ -448,13 +448,23 @@ Evidence boundaries: diagnostics used fixtures on the disposable emulator; no re
 Doctor, security audit, provider sign-in or configuration writes were performed to
 review presentation. Runtime observations persist during the Administration
 session/tab/editor journey, not across app termination. They report operation
-outcomes, not an inference test or a blanket health verdict. Phone verification
-remains pending: the previously paired Samsung phone disconnected during this run,
-and its prior wireless-debugging address `10.30.1.2:39457` refuses connections.
-No phone data was cleared and no installation of this build is claimed. The owner
-was asked for the current wireless-debugging address. Resume with an in-place
-`adb install -r`, verify version and preserved first-install time, and inspect the
-real administration screen before closing the goal.
+outcomes, not an inference test or a blanket health verdict.
+
+### Phone installation, 17 September 2026
+
+The owner supplied `10.30.1.2:39347`. The APK hash and production certificate were
+rechecked before `adb install -r`, which returned Success. Package readback confirms
+version **22542**, upgraded from **22532**. First-install time remains
+`2026-09-16 00:04:35`; update time is `2026-09-17 11:38:07`. No uninstall or data
+clear was performed. Wing’s main activity launched with Status ok and its process
+was running afterward. This uses vanilla Hermes; no backend changes were made.
+
+The phone then went offline before screenshot capture. A reconnect to the supplied
+address was refused and no replacement phone service was advertised. Installation
+is complete; on-phone visual review remains pending. The owner was asked to keep
+wireless debugging enabled and provide a changed address if necessary. Resume with
+read-only Administration navigation and capture; do not reinstall or clear data
+merely to complete that visual check.
 
 ### Signed follow-up build
 
