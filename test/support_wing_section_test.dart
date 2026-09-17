@@ -116,15 +116,19 @@ void main() {
   });
   tearDown(() => UrlLauncherPlatform.instance = original);
 
-  test('app, README and GitHub funding use the supplied Ko-fi account', () {
+  test('support destinations use the supplied Ko-fi and GitHub accounts', () {
     expect(wingSupportUri.toString(), 'https://ko-fi.com/tarkil');
     expect(
       File('README.md').readAsStringSync(),
       contains('[Buy me a coffee](https://ko-fi.com/tarkil)'),
     );
     expect(
-      File('.github/FUNDING.yml').readAsStringSync().trim(),
-      'ko_fi: tarkil',
+      File('README.md').readAsStringSync(),
+      contains('[Sponsor on GitHub](https://github.com/sponsors/tarkilhk)'),
+    );
+    expect(
+      File('.github/FUNDING.yml').readAsLinesSync(),
+      containsAll(['github: tarkilhk', 'ko_fi: tarkil']),
     );
   });
 
