@@ -42,6 +42,7 @@ void main() {
   }
   late ProfileWorkspaceController controller;
   late AdministrationFixture admin;
+  late GlobalKey<ScaffoldState> shellKey;
   setUp(() async {
     PackageInfo.setMockInitialValues(
       appName: 'Wing',
@@ -53,15 +54,16 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final fixture = ProfileBrowserFixture();
     admin = AdministrationFixture();
+    shellKey = GlobalKey<ScaffoldState>();
     controller = ProfileWorkspaceController(
       connection: SavedConnection(
-        id: 'host',
+        id: admin.server.connectionId,
         label: 'Home server',
         host: 'localhost',
         port: 1,
         apiKey: '',
       ),
-      connectionIdentity: 'settings',
+      connectionIdentity: admin.server.connectionIdentity,
       preferences: await SharedPreferences.getInstance(),
       gatewayFactory: fixture.gateway,
     );
@@ -73,7 +75,6 @@ void main() {
     Brightness brightness, {
     double scale = 1,
     double width = 390,
-    int refreshRevision = 0,
     WorkspaceAccent accent = WorkspaceAccent.mint,
   }) async {
     tester.view.physicalSize = Size(width, 844);
@@ -92,7 +93,7 @@ void main() {
             child: child!,
           ),
           home: Scaffold(
-            appBar: AppBar(title: const Text('Administration')),
+            key: shellKey,
             drawer: AppDrawer(
               selected: AppDestination.administration,
               onSelected: (_) {},
@@ -102,7 +103,7 @@ void main() {
                   VersionsController(gateway: admin.server.gateway('default')),
             ),
             body: HermesAdministrationContent(
-              refreshRevision: refreshRevision,
+              onOpenMenu: () => shellKey.currentState!.openDrawer(),
               onOpenSession: (_) async {},
               controller: controller,
               repository: admin.server,
@@ -141,7 +142,21 @@ void main() {
     (tester) async {
       await show(tester, Brightness.dark);
       admin.requests.clear();
-      await show(tester, Brightness.dark, refreshRevision: 1);
+      await tester.runAsync(() async {
+        await Function.apply(
+          tester
+              .widget<IconButton>(
+                find.byWidgetPredicate(
+                  (widget) =>
+                      widget is IconButton &&
+                      widget.tooltip == 'Refresh administration',
+                ),
+              )
+              .onPressed!,
+          const [],
+        );
+      });
+      await tester.pumpAndSettle();
       for (final endpoint in [
         'config',
         'model/info',
@@ -159,11 +174,29 @@ void main() {
       }
       expect(find.text('Refresh overview', skipOffstage: false), findsNothing);
       expect(admin.requests.where((r) => r.$1 != 'GET'), isEmpty);
-      await tester.tap(find.text('Health'));
+      await tester.tap(find.byKey(const ValueKey('administration-health')));
       await tester.pumpAndSettle();
       admin.requests.clear();
-      await show(tester, Brightness.dark, refreshRevision: 2);
-      expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 1);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await Function.apply(
+          tester
+              .widget<IconButton>(
+                find.byWidgetPredicate(
+                  (widget) =>
+                      widget is IconButton &&
+                      widget.tooltip == 'Refresh administration',
+                ),
+              )
+              .onPressed!,
+          const [],
+        );
+      });
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('administration-health')));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppBar, 'Health'), findsOneWidget);
       expect(
         admin.requests.where((r) => r.$2 == 'profiles/active'),
         hasLength(1),
@@ -233,13 +266,9 @@ void main() {
         width: mode == 'narrow' ? 320 : 390,
         scale: mode == 'narrow' ? 2 : 1,
       );
-      expect(
-        find.descendant(
-          of: find.byKey(const ValueKey('profile-brief')),
-          matching: find.text(fixture.description),
-        ),
-        findsOneWidget,
-      );
+      expect(find.text(fixture.description), findsOneWidget);
+      expect(find.byKey(const ValueKey('profile-brief')), findsNothing);
+      expect(find.text('Describe this agent'), findsNothing);
       await screenshot(tester, '$mode-profile-brief');
       await tester.scrollUntilVisible(
         find.text('Access and connectors'),
@@ -358,20 +387,20 @@ void main() {
 
   for (final brightness in Brightness.values) {
     testWidgets(
-      'two administration tabs fit ${brightness.name} and preserve ownership',
+      'administration and Health route fit ${brightness.name} and preserve ownership',
       (tester) async {
         await show(tester, brightness);
         expect(find.text('Models and reasoning'), findsOneWidget);
         expect(find.text('Identity'), findsOneWidget);
         await screenshot(tester, '${brightness.name}-profile');
-        expect(find.widgetWithText(Tab, 'Server'), findsNothing);
+        expect(find.byType(TabBar), findsNothing);
         expect(find.text('Profiles'), findsNothing);
         expect(find.text('Versions & updates'), findsNothing);
         await show(tester, brightness, scale: 2, width: 320);
         expect(tester.takeException(), isNull);
         await screenshot(tester, '${brightness.name}-profile-large-text');
         await show(tester, brightness);
-        await tester.tap(find.text('Health'));
+        await tester.tap(find.byKey(const ValueKey('administration-health')));
         await tester.pumpAndSettle();
         expect(find.text('Selected profile'), findsOneWidget);
         await screenshot(tester, '${brightness.name}-health-profile');
@@ -411,14 +440,16 @@ void main() {
     );
     await tester.pumpAndSettle();
     await screenshot(tester, 'narrow-profile-bottom');
-    await tester.ensureVisible(find.text('Health'));
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('administration-health')),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Health'));
+    await tester.tap(find.byKey(const ValueKey('administration-health')));
     await tester.pumpAndSettle();
     await screenshot(tester, 'narrow-health');
     await tester.scrollUntilVisible(
       find.text('Doctor'),
-      300,
+      100,
       scrollable: find
           .byWidgetPredicate(
             (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
@@ -435,8 +466,8 @@ void main() {
   ) async {
     controller.current = null;
     await show(tester, Brightness.dark, scale: 1.3);
-    expect(find.widgetWithText(Tab, 'Server'), findsNothing);
-    await tester.tap(find.text('Health'));
+    expect(find.byType(TabBar), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('administration-health')));
     await tester.pumpAndSettle();
     expect(find.text('Runtime profile: Shared root'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -500,7 +531,7 @@ void main() {
     tester,
   ) async {
     await show(tester, Brightness.light);
-    expect(find.widgetWithText(Tab, 'Server'), findsNothing);
+    expect(find.byType(TabBar), findsNothing);
     await tester.tap(find.byTooltip('Manage profiles'));
     await tester.pumpAndSettle();
     expect(find.text('Create profile'), findsOneWidget);
@@ -514,7 +545,19 @@ void main() {
     'health recovery opens captured profile access and its shared-provider link',
     (tester) async {
       await show(tester, Brightness.dark);
-      await tester.tap(find.text('Health'));
+      await tester.tap(find.byKey(const ValueKey('administration-health')));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Access checks'),
+        280,
+        scrollable: find
+            .byWidgetPredicate(
+              (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Access checks'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.byTooltip('More health actions'),
@@ -542,7 +585,9 @@ void main() {
         'administration preserves the ${accent.name} accent in ${brightness.name}',
         (tester) async {
           await show(tester, brightness, accent: accent);
-          final theme = Theme.of(tester.element(find.byType(TabBar)));
+          final theme = Theme.of(
+            tester.element(find.byType(HermesAdministrationContent)),
+          );
           expect(
             theme.colorScheme.primary,
             brightness == Brightness.dark ? accent.dark : accent.light,
@@ -558,14 +603,15 @@ void main() {
   }
 
   testWidgets(
-    'Health findings and originating tab survive search and editor return',
+    'Health runtime findings survive route return, search and editor return',
     (tester) async {
+      admin = AdministrationDesignFixture();
       await show(tester, Brightness.dark);
-      await tester.tap(find.text('Health'));
+      await tester.tap(find.byKey(const ValueKey('administration-health')));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('Run checks'),
-        200,
+        find.text('Run Doctor'),
+        100,
         scrollable: find
             .byWidgetPredicate(
               (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
@@ -573,9 +619,15 @@ void main() {
             .first,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Run checks'));
+      await tester.tap(find.text('Run Doctor'));
       await tester.pumpAndSettle();
-      expect(find.text('Check again'), findsOneWidget);
+      await tester.tap(find.text('Run'));
+      await tester.pumpAndSettle();
+      expect(find.text('Failed'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, 'Memory budget');
       await tester.pumpAndSettle();
       await tester.tap(find.text('Memory budget').last);
@@ -585,9 +637,29 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Clear search'));
       await tester.pumpAndSettle();
-      expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 1);
-      expect(find.text('Check again'), findsOneWidget);
-      expect(find.text('Run checks'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('administration-health')));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Review output'),
+        200,
+        scrollable: find
+            .byWidgetPredicate(
+              (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppBar, 'Health'), findsOneWidget);
+      expect(find.text('Failed'), findsOneWidget);
+      expect(find.text('Run Doctor'), findsNothing);
+      expect(
+        admin.requests.where((r) => r.$1 == 'POST' && r.$2 == 'ops/doctor'),
+        hasLength(1),
+      );
+      expect(
+        admin.requests.where((r) => r.$2 == 'actions/doctor/status'),
+        hasLength(1),
+      );
       expect(tester.takeException(), isNull);
     },
   );
@@ -598,11 +670,11 @@ void main() {
       admin.override = (method, path, query, body) async =>
           throw StateError('offline');
       await show(tester, Brightness.dark);
-      await tester.tap(find.text('Health'));
+      await tester.tap(find.byKey(const ValueKey('administration-health')));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.text('Doctor'),
-        250,
+        100,
         scrollable: find
             .byWidgetPredicate(
               (w) => w is Scrollable && w.axisDirection == AxisDirection.down,

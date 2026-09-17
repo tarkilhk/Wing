@@ -50,16 +50,23 @@ class _DiagnosticsHost {
 Widget _app(
   ProfileWorkspaceData workspace, {
   VoidCallback? onManage,
+  ProfileDiagnosticsController? controller,
   double textScale = 1,
 }) {
+  final diagnostics =
+      controller ??
+      ProfileDiagnosticsController(
+        workspace: workspace,
+        connectionLabel: 'Home server',
+      );
+  if (controller == null) addTearDown(diagnostics.dispose);
   return MaterialApp(
     home: MediaQuery(
       data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
       child: Scaffold(
         body: SingleChildScrollView(
           child: ProfileDiagnosticsPanel(
-            workspace: workspace,
-            connectionLabel: 'Home server',
+            controller: diagnostics,
             onManageConnections: onManage ?? () {},
           ),
         ),
@@ -165,12 +172,23 @@ void main() {
     oldHost.onRead = (_, _) => dashboard.future;
     oldHost.onCall = (method, _) =>
         method == 'setup.status' ? setup.future : runtime.future;
-    await tester.pumpWidget(_app(oldHost.workspace('old')));
+    final oldWorkspace = oldHost.workspace('old');
+    final controller = ProfileDiagnosticsController(
+      workspace: oldWorkspace,
+      connectionLabel: 'Home server',
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(_app(oldWorkspace, controller: controller));
     await tester.tap(find.text('Run checks'));
     await tester.pump();
 
     final newHost = _DiagnosticsHost();
-    await tester.pumpWidget(_app(newHost.workspace('new')));
+    final newWorkspace = newHost.workspace('new');
+    controller.updateWorkspace(
+      workspace: newWorkspace,
+      connectionLabel: 'Home server',
+    );
+    await tester.pumpWidget(_app(newWorkspace, controller: controller));
     dashboard.complete({});
     setup.complete({'provider_configured': true});
     runtime.complete({'ok': true});
@@ -180,20 +198,122 @@ void main() {
     expect(find.text('Authenticated dashboard API responded.'), findsNothing);
   });
 
-  testWidgets('disposed panel ignores late results', (tester) async {
+  testWidgets('disposed controller ignores late results', (tester) async {
     final pending = Completer<Map<String, dynamic>>();
     final host = _DiagnosticsHost();
     host.onRead = (_, _) => pending.future;
     host.onCall = (_, _) => pending.future;
-    await tester.pumpWidget(_app(host.workspace('work')));
+    final workspace = host.workspace('work');
+    final controller = ProfileDiagnosticsController(
+      workspace: workspace,
+      connectionLabel: 'Home server',
+    );
+    await tester.pumpWidget(_app(workspace, controller: controller));
     await tester.tap(find.text('Run checks'));
     await tester.pump();
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    controller.dispose();
 
     pending.complete({'provider_configured': true, 'ok': true});
     await tester.pump();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('completed checks survive reopening without additional calls', (
+    tester,
+  ) async {
+    final host = _DiagnosticsHost();
+    final workspace = host.workspace('work');
+    final controller = ProfileDiagnosticsController(
+      workspace: workspace,
+      connectionLabel: 'Home server',
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(_app(workspace, controller: controller));
+    await tester.tap(find.text('Run checks'));
+    await tester.pumpAndSettle();
+    final checkedLabel = tester
+        .widget<Text>(find.textContaining('Checked '))
+        .data;
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    controller.updateWorkspace(
+      workspace: workspace,
+      connectionLabel: 'Home server',
+    );
+    await tester.pumpWidget(_app(workspace, controller: controller));
+
+    expect(find.text('Authenticated dashboard API responded.'), findsOneWidget);
+    expect(find.text('Provider is configured.'), findsOneWidget);
+    expect(find.text('Provider credentials are available.'), findsOneWidget);
+    expect(find.text(checkedLabel!), findsOneWidget);
+    expect(host.reads, hasLength(1));
+    expect(host.calls, hasLength(2));
+  });
+
+  testWidgets('pending checks complete while the panel is closed', (
+    tester,
+  ) async {
+    final pending = Completer<Map<String, dynamic>>();
+    final host = _DiagnosticsHost();
+    host.onRead = (_, _) => pending.future;
+    host.onCall = (_, _) => pending.future;
+    final workspace = host.workspace('work');
+    final controller = ProfileDiagnosticsController(
+      workspace: workspace,
+      connectionLabel: 'Home server',
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(_app(workspace, controller: controller));
+    await tester.tap(find.text('Run checks'));
+    await tester.pump();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    pending.complete({'provider_configured': true, 'ok': true});
+    await tester.pump();
+    await tester.pumpWidget(_app(workspace, controller: controller));
+
+    expect(find.text('Provider credentials are available.'), findsOneWidget);
+    expect(find.textContaining('Checked '), findsOneWidget);
+    expect(host.reads, hasLength(1));
+    expect(host.calls, hasLength(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'replaced gateway invalidates pending results for the same profile',
+    (tester) async {
+      final pending = Completer<Map<String, dynamic>>();
+      final oldHost = _DiagnosticsHost();
+      oldHost.onRead = (_, _) => pending.future;
+      oldHost.onCall = (_, _) => pending.future;
+      final oldWorkspace = oldHost.workspace('work');
+      final controller = ProfileDiagnosticsController(
+        workspace: oldWorkspace,
+        connectionLabel: 'Home server',
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(_app(oldWorkspace, controller: controller));
+      await tester.tap(find.text('Run checks'));
+      await tester.pump();
+      final newHost = _DiagnosticsHost();
+      final newWorkspace = newHost.workspace('work');
+      controller.updateWorkspace(
+        workspace: newWorkspace,
+        connectionLabel: 'Home server',
+      );
+      await tester.pumpWidget(_app(newWorkspace, controller: controller));
+      pending.complete({'provider_configured': true, 'ok': true});
+      await tester.pump();
+
+      expect(find.text('Not checked.'), findsNWidgets(3));
+      expect(find.text('No checks completed yet.'), findsOneWidget);
+      expect(newHost.reads, isEmpty);
+      expect(newHost.calls, isEmpty);
+      await tester.tap(find.text('Run checks'));
+      await tester.pumpAndSettle();
+      expect(find.text('Provider is configured.'), findsOneWidget);
+    },
+  );
 
   testWidgets('fits a 320 pixel screen with large text', (tester) async {
     tester.view.physicalSize = const Size(320, 700);

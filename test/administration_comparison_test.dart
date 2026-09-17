@@ -105,13 +105,22 @@ void main() {
               metadata: null,
               preferences: await SharedPreferences.getInstance(),
               selector: const Text('Personal'),
+              search: const TextField(
+                decoration: InputDecoration(hintText: 'Search settings'),
+              ),
               destinations: const {},
             ),
           ),
         ),
       );
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.text('Actual next task'), 300);
+      await tester.scrollUntilVisible(
+        find.text('Actual next task'),
+        160,
+        scrollable: find.byWidgetPredicate(
+          (widget) => widget is Scrollable && widget.axisDirection == AxisDirection.down,
+        ).first,
+      );
       expect(find.textContaining('1 running'), findsOneWidget);
       expect(find.textContaining('Last listed run'), findsOneWidget);
       expect(find.textContaining('Outcome unavailable'), findsOneWidget);

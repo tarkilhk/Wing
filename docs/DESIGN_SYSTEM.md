@@ -12,7 +12,7 @@ The [product plan](PRODUCT_PLAN.md) owns functionality. This document owns the a
 - Use the compact context ring beside the model selector, confirmed by the owner after comparing it with the fuse. Do not allocate a row to token-count text or retain the fuse alongside it.
 - Keep familiar model/reasoning selection and Queue, Steer and Fork flows.
 - Design dark mode fully and use coherent accents throughout.
-- Administration uses Profile / Health. Keep the selected connection visible and classify each operation by its actual ownership. See the [administration handoff](design/2026-09-14-administration-handoff.md) for navigation and unsupported memory/MCP writes.
+- Administration opens directly on Profile without tabs. A pharmacy-cross action in the top bar opens the dedicated Health route. Keep the selected connection visible and classify each operation by its actual ownership. See the [administration handoff](design/2026-09-14-administration-handoff.md) for navigation and unsupported memory/MCP writes.
 - Provider accounts and keys belong to the selected profile, including `default`. The global menu has a larger portrait aligned with Wing and a low, borderless split footer: saved connection icon, name and status LED on the left; server version and conditional update icon on the right. Connection identity opens details; server version opens Versions & updates. Client identity stays in App settings; upstream update checks and the circular-arrows indicator apply only to the server. Manage profiles sits beside the Profile selector. Follow the [administration ownership contract](design/2026-09-14-administration-handoff.md) for credential-source distinctions and pending editor corrections.
 
 ## App and notification identity
@@ -191,12 +191,13 @@ HTML, diagrams, images and video retain their content-specific appearance.
 
 ## Administration refinement, 17 September 2026
 
-Profile / Health is the administration structure; version access lives in the global menu. Profile uses a small
-identity brief, two purpose-based groups and observed-value rows. Quiet metadata
+Administration opens on the profile overview without ownership tabs. The top-bar
+pharmacy cross opens Health; version access stays in the global menu. Profile uses
+a small identity brief, two purpose-based groups and observed-value rows. Quiet metadata
 supports stronger destination titles; exception states retain their semantic colors.
 Administration and Chats share the same directly tappable profile chips; do not
 add a separate Change action or administration-only profile picker. Keep search
-and the ownership tabs separated by 16 dp, with matching 16 dp page gutters.
+and the profile brief within the shared 16 dp page gutters.
 Group profile choices and the purpose/description in one compact panel, with a
 direct Identity edit or Describe this agent action. Keep configuration in the
 rows below and setup/access exceptions on distinct semantic status lines.
@@ -207,6 +208,16 @@ observation times and explicit check coverage; reviewing output does not rerun a
 diagnostic. Identity is a full-screen editor; settings show dirty counts, sparse-save
 feedback and deliberate field conflict resolution. Percent diagrams describe
 configuration and usage bars describe reported costs, never inferred activity.
+
+The Health cross uses semantic red for reported failures or expired sign-ins, amber
+for setup or task attention, neutral for incomplete, refreshing or stale coverage,
+and green only when all required observations are current and clear. Retained
+failures and warnings remain visible when refresh is unavailable. Green means no
+issues in the available observations; provider configuration does not establish
+inference or runtime health. Give the cross a Health tooltip with its current
+status and a 48 dp target. Opening Health performs no diagnostics or writes. Keep
+Doctor/audit results and captured scope across close/reopen and profile changes;
+never treat process completion as proof that its output contains no findings.
 
 Growing select-only values, page titles and large-text field labels must remain
 readable at 320 dp/200%. Keep 48 dp controls and keyboard-safe editor actions.

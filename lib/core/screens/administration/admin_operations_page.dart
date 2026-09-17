@@ -1,3 +1,4 @@
+import '../../services/administration_health.dart';
 import '../../theme/wing_theme.dart';
 import '../../widgets/studio_select.dart';
 import '../../widgets/studio_error.dart';
@@ -5,38 +6,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 import 'admin_widgets.dart';
-
-/// A reported operation result, never a verdict that the server is healthy.
-class AdminDiagnosticObservation {
-  const AdminDiagnosticObservation(
-    this.action,
-    this.status,
-    this.checkedAt, {
-    this.readError,
-  });
-  final AdministrationAction action;
-  final Map<String, dynamic> status;
-  final DateTime? checkedAt;
-  final String? readError;
-  bool get failed =>
-      status['running'] != true &&
-      status['exit_code'] != null &&
-      status['exit_code'] != 0;
-  String get outcome => status['running'] == true
-      ? 'Running'
-      : status['exit_code'] == 0
-      ? 'Completed'
-      : failed
-      ? 'Failed'
-      : 'Outcome unavailable';
-  String get nextStep => status['running'] == true
-      ? 'The operation is still running. Open progress to check its result.'
-      : failed
-      ? 'The operation reported a failure. Review the output to see what completed before retrying.'
-      : status['exit_code'] == 0
-      ? 'The operation completed. Its output may still contain warnings or findings.'
-      : 'A final outcome has not been reported. Check progress to retrieve the result.';
-}
 
 class AdminActionPage extends StatefulWidget {
   final AdministrationRepository server;

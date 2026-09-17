@@ -1,6 +1,6 @@
 # Administration
 
-Administration uses Profile and Health tabs. The selected server stays visible. Profile opens with a compact profile brief and current-value navigation: Models and reasoning, Identity, Memory and Behavior under Agent setup; Skills and tools, Access and connectors and Scheduled tasks under Capabilities and automation. Manage profiles sits beside the Profile selector. The global menu shows a larger Wing identity above a low server footer. The connection icon, name and LED open connection details; the server version opens Versions & updates. Back restores the open menu. Client version remains in App settings. Provider settings remain under Profile / Access and connectors. Version and upstream update availability load automatically; an update icon marks newer backend code. Health separates runtime observations from selected-profile diagnostics and usage.
+Administration opens directly on the profile overview without tabs. The pharmacy-cross action in the top bar opens a dedicated Health route. The selected server stays visible. Profile opens with a compact profile brief and current-value navigation: Models and reasoning, Identity, Memory and Behavior under Agent setup; Skills and tools, Access and connectors and Scheduled tasks under Capabilities and automation. Manage profiles sits beside the Profile selector. The global menu shows a larger Wing identity above a low server footer. The connection icon, name and LED open connection details; the server version opens Versions & updates. Back restores the open menu. Client version remains in App settings. Provider settings remain under Profile / Access and connectors. Version and upstream update availability load automatically; an update icon marks newer backend code. Health separates runtime observations from selected-profile diagnostics and usage.
 
 Read the [ownership handoff](design/2026-09-14-administration-handoff.md) before changing these flows. The [roadmap](ADMINISTRATION_ROADMAP.md) preserves selected priorities and exclusions.
 
@@ -14,8 +14,8 @@ reflect the older design and need a separate correction.
 ## Overview and navigation
 
 The header contains the single visible Refresh administration action. It updates
-workspace/profile discovery, overview observations and runtime identity. It preserves
-the selected tab and diagnostic results, and does not run operational checks.
+workspace/profile discovery, overview observations, scoped provider configuration
+and runtime identity. It preserves diagnostic results and does not run operational checks.
 Pull-to-refresh remains available on the Profile list.
 
 Overview reads are independent observations for a captured profile. A failed read
@@ -26,8 +26,8 @@ and direct Identity edit, or Describe this agent when absent. Selected profiles 
 kept in view. Setup needs, expired sign-ins and schedule issues use separate semantic
 attention labels; task names stay on one line with run time/outcome beneath.
 Returning from an editor refreshes only the affected observations and briefly emphasizes changed values;
-reduced motion suppresses the emphasis. Tabs and search preserve their observations
-and scroll context. Search shows the full owner/editor/field path and opens the exact field without
+reduced motion suppresses the emphasis. Health visits and search preserve profile
+observations and scroll context. Search shows the full owner/editor/field path and opens the exact field without
 focusing its keyboard.
 
 Skills and tools opens Capabilities first, grouped into Needs setup, Enabled
@@ -41,14 +41,40 @@ and an explicit Add service key catalog. Account details explain the observed so
 and link to the canonical shared account. Memory leads with retained entries and a
 short read-only disclosure; source metadata is shown only when reported.
 
-Health places selected-profile findings before usage and runtime utilities. Check
-coverage and freshness describe access/setup/credential observations; they do not
-certify inference. Findings retain their state through owning-editor visits and
-search, with explicit recheck. Runtime Health retains Doctor/audit observations and their timestamps while
-reviewing results or switching tabs. Reviewing output reads the same operation;
-Run again is separate and unavailable until its prior outcome is known. A failed
-refresh retains the last output and observation time. Results lead with the outcome
-and next step, with raw output disclosed below; completion does not certify health.
+## Health observations
+
+Health leads with selected-profile findings and recovery links, followed by usage
+and runtime utilities. The toolbar cross summarizes only the available observations:
+
+- Red: a reported failure or expired provider sign-in.
+- Amber: setup gaps or scheduled tasks needing attention.
+- Neutral: missing, malformed, refreshing, interrupted or stale coverage.
+- Green: all required profile observations are fresh and clear, with no retained runtime or explicit access-check problem.
+
+Known failures and warnings retain priority when a refresh fails. Clear observations
+expire after five minutes; profile changes immediately discard the prior profile's
+status, and late responses cannot replace the current selection. Names identify
+known affected providers and tools. Green means “No issues in available observations,”
+not successful inference or a healthy runtime. Connector configuration is separate
+from connection testing. Doctor and security audit are optional explicit actions;
+their unrun coverage is visible and does not block otherwise complete observations.
+
+Runtime results retain their action identity, captured scope, output and timestamps
+across closing/reopening Health, editor visits and profile switches. Reviewing output
+reads the same operation. Run again is separate and unavailable until its prior
+outcome is known. A failed refresh retains the last output and observation time.
+Process exit zero can still contain findings, so completion never establishes health.
+Opening Health performs no diagnostic, model request, connector test or write.
+
+Verified on 17 September 2026 against stock upstream
+[`98f758ae7e8db83c2bb9214c3b35adf41df15f03`](https://github.com/NousResearch/hermes-agent/commit/98f758ae7e8db83c2bb9214c3b35adf41df15f03):
+profile-scoped [`setup.status`](https://github.com/NousResearch/hermes-agent/blob/98f758ae7e8db83c2bb9214c3b35adf41df15f03/tui_gateway/methods_config.py#L268)
+reads provider configuration through the
+[strict-profile helper](https://github.com/NousResearch/hermes-agent/blob/98f758ae7e8db83c2bb9214c3b35adf41df15f03/hermes_cli/main.py#L1009),
+which does not create credentials. Wing validates the returned canonical profile
+and boolean before using it. This is configuration evidence, not confirmation that
+the selected model can serve a request. Existing overview observations are reused.
+
 Usage compares sortable model totals with formatted calls, input/output tokens and estimated USD costs before expansion.
 Cost bars use only known, finite, nonnegative costs and state their coverage; a zero
 total draws no shares, and unreported cost remains unavailable.

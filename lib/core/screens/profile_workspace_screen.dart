@@ -102,7 +102,6 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   final _chatSearchFocus = FocusNode();
   final _queuedEditErrors = <ProfileSessionKey, String>{};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
-  int _administrationRefreshRevision = 0;
   ProfileSessionKey? _composerKey;
   ProfileSessionKey? _loadingIntelligence;
   ChatFindResult? _findResult;
@@ -2172,38 +2171,35 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     child: Scaffold(
       key: _scaffoldKey,
       drawer: _drawer(),
-      appBar: AppBar(
-        title: Text(
-          _destination == AppDestination.administration
-              ? 'Administration'
-              : _destination.label,
-        ),
-        actions: [
-          if (_destination != AppDestination.settings)
-            IconButton(
-              tooltip: _destination == AppDestination.activity
-                  ? 'Refresh activity'
-                  : 'Refresh administration',
-              icon: const Icon(Icons.refresh),
-              onPressed:
-                  controller.switching ||
-                      (_destination == AppDestination.activity &&
-                          controller.activityLoading)
-                  ? null
-                  : () => _run(
-                      _destination == AppDestination.activity
-                          ? controller.refreshActivity
-                          : () async {
-                              setState(() => _administrationRefreshRevision++);
-                              await controller.refresh();
-                            },
-                    ),
+      appBar: _destination == AppDestination.administration
+          ? null
+          : AppBar(
+              title: Text(_destination.label),
+              actions: [
+                if (_destination != AppDestination.settings)
+                  IconButton(
+                    tooltip: _destination == AppDestination.activity
+                        ? 'Refresh activity'
+                        : 'Refresh administration',
+                    icon: const Icon(Icons.refresh),
+                    onPressed:
+                        controller.switching ||
+                            (_destination == AppDestination.activity &&
+                                controller.activityLoading)
+                        ? null
+                        : () => _run(
+                            _destination == AppDestination.activity
+                                ? controller.refreshActivity
+                                : controller.refresh,
+                          ),
+                  ),
+              ],
             ),
-        ],
-      ),
       body: Column(
         children: [
-          if (controller.switching && _destination != AppDestination.settings)
+          if (controller.switching &&
+              _destination != AppDestination.settings &&
+              _destination != AppDestination.administration)
             const LinearProgressIndicator(),
           if (_destination == AppDestination.activity)
             Padding(
@@ -2216,13 +2212,15 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 ),
               ),
             ),
-          if (_destination != AppDestination.settings)
+          if (_destination != AppDestination.settings &&
+              _destination != AppDestination.administration)
             WorkspaceConnectionStatus(
               status: controller.connectionStatus,
               reserveSpace: false,
             ),
           if (controller.error != null &&
-              _destination != AppDestination.settings)
+              _destination != AppDestination.settings &&
+              _destination != AppDestination.administration)
             ListTile(
               title: StudioError(controller.error!),
               trailing: TextButton(
@@ -2255,7 +2253,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 }),
               ),
               _ => HermesAdministrationContent(
-                refreshRevision: _administrationRefreshRevision,
+                onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
                 key: ValueKey(controller.connectionIdentity),
                 controller: controller,
                 onOpenSession: (key) async {

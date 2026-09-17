@@ -1,5 +1,10 @@
 import 'dart:async';
 import '../../services/administration_overview.dart';
+import '../../services/administration_health.dart';
+import 'admin_health_button.dart';
+import '../../widgets/profile_diagnostics_panel.dart';
+import '../../widgets/workspace_connection_status.dart';
+import '../../widgets/studio_error.dart';
 import '../../widgets/server_connection_label.dart';
 import '../../widgets/profile_selector.dart';
 import 'admin_profile_overview.dart';
@@ -23,14 +28,14 @@ import 'admin_scheduled_tasks_page.dart';
 
 class HermesAdministrationContent extends StatefulWidget {
   final ProfileWorkspaceController controller;
-  final int refreshRevision;
+  final VoidCallback onOpenMenu;
   final VoidCallback? onConnections;
   final AdministrationRepository? repository;
   final Future<void> Function(ProfileSessionKey) onOpenSession;
   const HermesAdministrationContent({
     super.key,
     required this.controller,
-    this.refreshRevision = 0,
+    required this.onOpenMenu,
     this.onConnections,
     this.repository,
     required this.onOpenSession,
@@ -41,9 +46,7 @@ class HermesAdministrationContent extends StatefulWidget {
 }
 
 class _HermesAdministrationContentState
-    extends State<HermesAdministrationContent>
-    with SingleTickerProviderStateMixin {
-  late final _tabs = TabController(length: 2, vsync: this);
+    extends State<HermesAdministrationContent> {
   late final _server =
       widget.repository ??
       AdministrationRepository.forConnection(
@@ -56,27 +59,140 @@ class _HermesAdministrationContentState
   Set<String> _overviewKeys = const {};
 
   void _refreshAfter(_Destination destination) {
+    unawaited(_health.refreshReadiness());
     setState(() {
       _overviewKeys = destination.summaryKeys;
       _overviewRevision++;
     });
   }
 
+  late final _health = AdministrationHealth(
+    _server,
+    connectionStatus: widget.controller.connectionStatus,
+  );
+  String? _healthProfileName;
+  bool _refreshing = false;
+  final _accessChecks = <String, ProfileDiagnosticsController>{};
+
   @override
-  void didUpdateWidget(HermesAdministrationContent oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.refreshRevision != oldWidget.refreshRevision) {
-      _overviewKeys = {...AdministrationOverview.endpoints.keys, 'tasks'};
-      _overviewRevision++;
+  void initState() {
+    super.initState();
+    _healthProfileName = _profile?.name;
+    widget.controller.addListener(_workspaceChanged);
+    unawaited(_health.refreshRuntimeIdentity());
+  }
+
+  void _workspaceChanged() {
+    if (!mounted) return;
+    final name = _profile?.name;
+    if (name != _healthProfileName) {
+      _healthProfileName = name;
+      _health.selectProfile(null);
+    }
+    _checksForCurrentProfile();
+    setState(() {});
+  }
+
+  ProfileDiagnosticsController? _checksForCurrentProfile() {
+    final workspace = widget.controller.current;
+    if (workspace == null || workspace.scope != _profile?.scope) return null;
+    final checks = _accessChecks.putIfAbsent(
+      workspace.scope.storageNamespace,
+      () {
+        final checks = ProfileDiagnosticsController(
+          workspace: workspace,
+          connectionLabel: _server.connectionLabel,
+        );
+        checks.addListener(() {
+          if (mounted) _health.updateProfileChecks(checks.healthObservation);
+        });
+        return checks;
+      },
+    );
+    checks.updateWorkspace(
+      workspace: workspace,
+      connectionLabel: _server.connectionLabel,
+    );
+    return checks;
+  }
+
+  void _observeOverview(AdministrationOverview overview) {
+    if (!mounted || overview.profile.scope != _profile?.scope) return;
+    final changed = !identical(_health.overview, overview);
+    _health.selectProfile(overview);
+    if (changed) {
+      final checks = _checksForCurrentProfile();
+      if (checks != null) _health.updateProfileChecks(checks.healthObservation);
+      unawaited(_health.refreshReadiness());
     }
   }
+
+  Future<void> _refresh() async {
+    if (_refreshing) return;
+    setState(() {
+      _refreshing = true;
+      _overviewKeys = {...AdministrationOverview.endpoints.keys, 'tasks'};
+      _overviewRevision++;
+    });
+    try {
+      await Future.wait([
+        widget.controller.refresh(),
+        _health.refreshRuntimeIdentity(),
+        _health.refreshReadiness(),
+      ]);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(administrationError(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  Future<void> _openHealth() => adminPush(
+    context,
+    ListenableBuilder(
+      listenable: Listenable.merge([widget.controller, _health]),
+      builder: (context, _) => AdminPage(
+        title: 'Health',
+        scope: _server.connectionLabel,
+        child: AdminHealthContent(
+          server: _server,
+          health: _health,
+          profile: _profile,
+          profileSelector: _selector(),
+          accessChecks: _checksForCurrentProfile(),
+          onConnections: widget.onConnections,
+          onRefresh: _refresh,
+          onOpenDestination: (title) async {
+            final destination = _destinations(
+              _profile,
+            ).where((d) => d.title == title).firstOrNull;
+            if (destination?.open != null) {
+              await destination!.open!();
+              if (mounted) _refreshAfter(destination);
+            }
+          },
+        ),
+      ),
+    ),
+  );
 
   final _searchInput = TextEditingController();
   @override
   void dispose() {
-    _tabs.dispose();
+    widget.controller.removeListener(_workspaceChanged);
+    _health.dispose();
+    for (final checks in _accessChecks.values) {
+      checks.dispose();
+    }
     _searchInput.dispose();
-    if (widget.repository == null) _server.close();
+    if (widget.repository == null) {
+      final server = _server;
+      scheduleMicrotask(server.close);
+    }
     super.dispose();
   }
 
@@ -96,7 +212,6 @@ class _HermesAdministrationContentState
         onOpenProfile: (name) async {
           await widget.controller.switchProfile(name);
           final opened = widget.controller.current?.scope.profileName == name;
-          if (mounted && opened) _tabs.animateTo(0);
           return opened;
         },
       ),
@@ -249,7 +364,7 @@ class _HermesAdministrationContentState
     _Destination(
       'Profile',
       'Access and connectors',
-      'Shared access, overrides and profile connectors',
+      'Provider accounts, API keys and profile connectors',
       Icons.link,
       p == null
           ? null
@@ -258,7 +373,7 @@ class _HermesAdministrationContentState
               _menu('Access and connectors', p.label, [
                 AdminRow(
                   title: 'Provider access',
-                  subtitle: 'Effective access and explicit profile overrides',
+                  subtitle: 'Accounts and API keys for this profile',
                   icon: Icons.key_outlined,
                   onTap: () => adminPush(
                     context,
@@ -405,174 +520,168 @@ class _HermesAdministrationContentState
     ),
   ];
 
+  Widget _searchField() => TextField(
+    controller: _searchInput,
+    decoration: InputDecoration(
+      hintText: MediaQuery.textScalerOf(context).scale(16) >= 24
+          ? 'Search'
+          : 'Search settings',
+      prefixIcon: const Icon(Icons.search),
+      suffixIcon: _search.isEmpty
+          ? null
+          : IconButton(
+              tooltip: 'Clear search',
+              icon: const Icon(Icons.close),
+              onPressed: () {
+                _searchInput.clear();
+                setState(() => _search = '');
+                FocusScope.of(context).unfocus();
+              },
+            ),
+    ),
+    onChanged: (value) => setState(() => _search = value),
+  );
+
+  Widget? _searchResults(ProfileAdministration? profile) {
+    if (_search.isEmpty) return null;
+    final matches = _searchDestinations(
+      profile,
+    ).where((d) => d.matches(_search)).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (matches.isEmpty)
+          const AdminNotice(
+            'No matching settings. Try a feature name such as memory or providers.',
+          ),
+        for (final destination in matches)
+          AdminRow(
+            title: destination.title,
+            subtitle:
+                '${destination.path}\n${destination.tab.startsWith('Profile') ? '${_server.connectionLabel} / ${profile?.name ?? 'Select a profile'}' : _server.connectionLabel}',
+            icon: destination.icon,
+            onTap: destination.open == null
+                ? null
+                : () async {
+                    await destination.open!();
+                    if (mounted) _refreshAfter(destination);
+                  },
+          ),
+      ],
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => Theme(
-    data: administrationTheme(Theme.of(context)),
-    child: DefaultTabController(
-      length: 2,
-      child: Builder(
-        builder: (context) {
-          final p = _profile;
-          final destinations = _destinations(p);
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+  Widget build(BuildContext context) {
+    final profile = _profile;
+    final large =
+        MediaQuery.textScalerOf(context).scale(16) >= 24 ||
+        adminToolbarHeight(context, 'Administration', actions: 2) >
+            kToolbarHeight;
+    final title = large
+        ? const Padding(
+            padding: EdgeInsets.only(bottom: 12),
+            child: Text(
+              'Administration',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+          )
+        : null;
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'Open navigation menu',
+          icon: const Icon(Icons.menu),
+          onPressed: widget.onOpenMenu,
+        ),
+        title: large ? null : const Text('Administration'),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh administration',
+            icon: const Icon(Icons.refresh),
+            onPressed: _refreshing || widget.controller.switching
+                ? null
+                : _refresh,
+          ),
+          ListenableBuilder(
+            listenable: _health,
+            builder: (context, _) =>
+                AdminHealthButton(health: _health, onPressed: _openHealth),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.controller.switching) const LinearProgressIndicator(),
+          WorkspaceConnectionStatus(
+            status: widget.controller.connectionStatus,
+            reserveSpace: false,
+          ),
+          if (widget.controller.error != null)
+            ListTile(
+              title: StudioError(widget.controller.error!),
+              trailing: TextButton(
+                onPressed: widget.controller.retry,
+                child: const Text('Retry'),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 40),
+              child: Align(
+                alignment: Alignment.centerLeft,
                 child: ServerConnectionLabel(
                   label: _server.connectionLabel,
+                  suffix: profile?.name,
+                  style: Theme.of(context).textTheme.bodySmall,
                   icon: widget.controller.connection.icon,
                   status: widget.controller.connectionStatus,
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: TextField(
-                  controller: _searchInput,
-                  decoration: InputDecoration(
-                    hintText: MediaQuery.textScalerOf(context).scale(16) >= 24
-                        ? 'Search'
-                        : 'Search settings',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _search.isEmpty
-                        ? null
-                        : IconButton(
-                            tooltip: 'Clear search',
-                            icon: const Icon(Icons.close),
-                            onPressed: () {
-                              _searchInput.clear();
-                              setState(() => _search = '');
-                              FocusScope.of(context).unfocus();
-                            },
-                          ),
+            ),
+          ),
+          Expanded(
+            child: profile == null
+                ? ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      ?title,
+                      _selector(manage: true),
+                      const SizedBox(height: 12),
+                      _searchField(),
+                      ?_searchResults(profile),
+                      if (_search.isEmpty)
+                        const AdminNotice(
+                          'Choose an available profile to manage its settings. Health remains accessible.',
+                        ),
+                    ],
+                  )
+                : AdminProfileOverview(
+                    key: ValueKey(profile.scope.storageNamespace),
+                    profile: profile,
+                    revision: _overviewRevision,
+                    refreshKeys: _overviewKeys,
+                    metadata: widget.controller.discovery?.named(profile.name),
+                    preferences: widget.controller.preferences,
+                    selector: _selector(manage: true),
+                    search: _searchField(),
+                    searchResults: _searchResults(profile),
+                    titleBeforeSelector: title,
+                    onOverviewChanged: _observeOverview,
+                    onRefreshCompleted: _health.refreshReadiness,
+                    onTasksChanged: _health.updateTasks,
+                    destinations: {
+                      for (final d in _destinations(profile)) d.title: d.open,
+                    },
                   ),
-                  onChanged: (v) => setState(() => _search = v),
-                ),
-              ),
-              Expanded(
-                child: Stack(
-                  children: [
-                    Visibility(
-                      visible: _search.isEmpty,
-                      maintainState: true,
-                      child: Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: TabBar(
-                              dividerHeight: 0,
-                              isScrollable:
-                                  MediaQuery.textScalerOf(context).scale(14) >=
-                                  21,
-                              tabAlignment:
-                                  MediaQuery.textScalerOf(context).scale(14) >=
-                                      21
-                                  ? TabAlignment.start
-                                  : TabAlignment.fill,
-                              controller: _tabs,
-                              tabs: const [
-                                Tab(text: 'Profile'),
-                                Tab(text: 'Health'),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Expanded(
-                            child: TabBarView(
-                              controller: _tabs,
-                              children:
-                                  <Widget>[
-                                        if (p != null)
-                                          AdminProfileOverview(
-                                            key: ValueKey(
-                                              p.scope.storageNamespace,
-                                            ),
-                                            profile: p,
-                                            revision: _overviewRevision,
-                                            refreshKeys: _overviewKeys,
-                                            metadata: widget
-                                                .controller
-                                                .discovery
-                                                ?.named(p.name),
-                                            preferences:
-                                                widget.controller.preferences,
-                                            selector: _selector(manage: true),
-                                            destinations: {
-                                              for (final d
-                                                  in destinations.where(
-                                                    (d) => d.tab == 'Profile',
-                                                  ))
-                                                d.title: d.open,
-                                            },
-                                          )
-                                        else
-                                          ListView(
-                                            padding: const EdgeInsets.all(16),
-                                            children: [
-                                              _selector(manage: true),
-                                              const AdminNotice(
-                                                'Choose an available profile to manage its settings.',
-                                              ),
-                                            ],
-                                          ),
-                                        AdminHealthContent(
-                                          refreshRevision:
-                                              widget.refreshRevision,
-                                          server: _server,
-                                          profile: p,
-                                          profileSelector: _selector(),
-                                          workspace: widget.controller.current,
-                                          onConnections: widget.onConnections,
-                                        ),
-                                      ]
-                                      .map(
-                                        (child) =>
-                                            _AdministrationTab(child: child),
-                                      )
-                                      .toList(),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (_search.isNotEmpty)
-                      ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          if (!_searchDestinations(
-                            p,
-                          ).any((d) => d.matches(_search)))
-                            const AdminNotice(
-                              'No matching settings. Try a feature name such as memory or providers.',
-                            ),
-                          for (final d in _searchDestinations(
-                            p,
-                          ).where((d) => d.matches(_search)))
-                            AdminRow(
-                              title: d.title,
-                              subtitle:
-                                  '${d.path}\n${d.tab.startsWith('Profile') ? '${_server.connectionLabel} / ${p?.name ?? 'Select a profile'}' : _server.connectionLabel}',
-                              icon: d.icon,
-                              onTap: d.open == null
-                                  ? null
-                                  : () async {
-                                      await d.open!();
-                                      if (mounted) {
-                                        _refreshAfter(d);
-                                      }
-                                    },
-                            ),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
+          ),
+        ],
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _Destination {
@@ -642,25 +751,5 @@ class _Destination {
     return '$title $subtitle $vocabulary'.toLowerCase().contains(
       query.trim().toLowerCase(),
     );
-  }
-}
-
-/// Keep the originating tab's observations, findings and scroll context while
-/// searching or visiting another owner. No background operational checks run.
-class _AdministrationTab extends StatefulWidget {
-  const _AdministrationTab({required this.child});
-  final Widget child;
-  @override
-  State<_AdministrationTab> createState() => _AdministrationTabState();
-}
-
-class _AdministrationTabState extends State<_AdministrationTab>
-    with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    return widget.child;
   }
 }
