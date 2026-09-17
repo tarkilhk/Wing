@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a native backend changelog under Changes in this update, using the commit summaries already returned by Hermes. Show dates, optional commit details and partial-history counts without additional backend requests.
+
 - Replace Administration Runtime with Versions & updates, load backend version and upstream update availability automatically, and show an update indicator. Remove Connection from Server, move server-wide connector reload into MCP connectors, and distinguish update checks, installation progress and update logs.
 
 - Fix speech provider selection confusing Nous Subscription with direct OpenAI. Confirm the saved provider route independently of its speech engine, and keep Nous voice edits in the OpenAI voice settings used by Hermes.

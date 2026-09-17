@@ -16,6 +16,7 @@ class BackendUpdateCheck {
   final int? behind;
   final bool? updateAvailable;
   final bool? canApply;
+  final List<BackendUpdateCommit> commits;
 
   const BackendUpdateCheck({
     required this.currentVersion,
@@ -23,6 +24,7 @@ class BackendUpdateCheck {
     required this.behind,
     required this.updateAvailable,
     required this.canApply,
+    required this.commits,
   });
 
   factory BackendUpdateCheck.fromJson(Map<String, dynamic> value) {
@@ -42,10 +44,49 @@ class BackendUpdateCheck {
           ? value['update_available'] as bool
           : null,
       canApply: value['can_apply'] is bool ? value['can_apply'] as bool : null,
+      commits: List.unmodifiable([
+        if (value['commits'] case final List rows)
+          for (final row in rows.take(20))
+            ?BackendUpdateCommit.fromJson(row),
+      ]),
     );
   }
 
   bool get canStart => canApply == true && updateAvailable == true;
+}
+
+class BackendUpdateCommit {
+  final String summary;
+  final String? sha;
+  final String? author;
+  final DateTime? date;
+
+  const BackendUpdateCommit({
+    required this.summary,
+    required this.sha,
+    required this.author,
+    required this.date,
+  });
+
+  static BackendUpdateCommit? fromJson(dynamic value) {
+    if (value is! Map) return null;
+    String? text(String key) {
+      final raw = value[key];
+      return raw is String && raw.trim().isNotEmpty ? raw.trim() : null;
+    }
+
+    final summary = text('summary');
+    if (summary == null) return null;
+    final at = value['at'];
+    return BackendUpdateCommit(
+      summary: summary,
+      sha: text('sha'),
+      author: text('author'),
+      date: at is int && at > 0 && at <= 253402300799
+          ? DateTime.fromMillisecondsSinceEpoch(at * 1000, isUtc: true)
+          : null,
+    );
+  }
 }
 
 class BackendUpdateReceipt {

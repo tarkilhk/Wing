@@ -3,6 +3,7 @@ import 'studio_error.dart';
 import 'package:flutter/material.dart';
 
 import '../models/backend_update.dart';
+import '../screens/backend_update_changes_screen.dart';
 import '../services/backend_update_controller.dart';
 import '../services/profile_gateway.dart';
 
@@ -123,6 +124,7 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
       final controller = _controller;
       final check = controller.check;
       final status = controller.status;
+      final connectionLabel = widget.connectionLabel ?? 'Hermes backend';
       final busy =
           controller.checking ||
           controller.starting ||
@@ -157,6 +159,21 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
               ),
               if (check?.canApply == false)
                 const Text('Updates must be applied from the server host.'),
+              if (check?.updateAvailable == true)
+                TextButton.icon(
+                  onPressed: controller.checking || controller.starting
+                      ? null
+                      : () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => BackendUpdateChangesScreen(
+                              check: check!,
+                              connectionLabel: connectionLabel,
+                            ),
+                          ),
+                        ),
+                  icon: const Icon(Icons.notes_outlined, size: 18),
+                  label: const Text('Changes in this update'),
+                ),
               if (controller.phase != BackendUpdatePhase.idle &&
                   controller.phase != BackendUpdatePhase.ready &&
                   controller.message == null)

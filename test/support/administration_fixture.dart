@@ -28,6 +28,21 @@ class AdministrationFixture {
     'behind': 3,
     'update_available': true,
     'can_apply': true,
+    'commits': [
+      {
+        'summary': 'Keep scheduled tasks running after reconnecting',
+        'sha': 'abc1234',
+        'author': 'Example contributor',
+        'at': 1789646400,
+      },
+      {
+        'summary':
+            'Improve tool discovery for profiles with their own connectors',
+        'sha': 'def5678',
+        'author': 'Another contributor',
+        'at': 1789560000,
+      },
+    ],
   };
   bool reject = false;
   bool ignoreSave = false;

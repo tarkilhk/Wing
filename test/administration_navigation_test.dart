@@ -26,6 +26,7 @@ void main() {
       for (final font in {
         'Roboto': 'roboto-regular.ttf',
         'MaterialIcons': 'materialicons-regular.otf',
+        'monospace': 'monospace.ttf',
       }.entries) {
         await (FontLoader(font.key)..addFont(
               File(
@@ -270,6 +271,30 @@ void main() {
           checksBefore + 1,
         );
         await screenshot(tester, '${brightness.name}-$scale-versions');
+        await tester.ensureVisible(find.text('Changes in this update'));
+        await tester.pumpAndSettle();
+        final requestCount = admin.requests.length;
+        await tester.tap(find.text('Changes in this update'));
+        await tester.pumpAndSettle();
+        expect(find.text('Showing 2 of 3 commits'), findsOneWidget);
+        expect(
+          find.text('Keep scheduled tasks running after reconnecting'),
+          findsOneWidget,
+        );
+        expect(find.text('Commit: abc1234'), findsNothing);
+        expect(admin.requests, hasLength(requestCount));
+        await screenshot(tester, '${brightness.name}-$scale-changes');
+        await tester.tap(find.text('Commit details'));
+        await tester.pumpAndSettle();
+        expect(find.text('Commit: abc1234'), findsOneWidget);
+        await screenshot(tester, '${brightness.name}-$scale-changes-details');
+        await tester.drag(find.byType(Scrollable).first, const Offset(0, -500));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await screenshot(tester, '${brightness.name}-$scale-changes-bottom');
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+
         expect(tester.takeException(), isNull);
         await tester.ensureVisible(find.text('Update backend'));
         await tester.pumpAndSettle();

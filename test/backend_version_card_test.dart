@@ -124,6 +124,7 @@ void main() {
     expect(find.text('1.2.3'), findsOneWidget);
     expect(find.text('Install method: pipx'), findsOneWidget);
     expect(find.text('Up to date'), findsOneWidget);
+    expect(find.text('Changes in this update'), findsNothing);
     expect(find.text('Update backend'), findsNothing);
     expect(find.text('Check update progress'), findsNothing);
 
@@ -131,6 +132,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(host.reads, hasLength(2));
   });
+
+  testWidgets(
+    'missing change details do not block updating or trigger requests',
+    (tester) async {
+      final host = _UpdateHost();
+      await showCard(tester, host);
+      await tester.pumpAndSettle();
+      final reads = host.reads.length;
+      await tester.tap(find.text('Changes in this update'));
+      await tester.pumpAndSettle();
+      expect(find.text('Production host'), findsOneWidget);
+      expect(
+        find.text(
+          'Change details are unavailable. Go back and check for updates to try again.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Commit details'), findsNothing);
+      expect(host.reads, hasLength(reads));
+      expect(host.posts, isEmpty);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Update backend'), findsOneWidget);
+    },
+  );
 
   testWidgets('keeps malformed availability unknown and shows host guidance', (
     tester,
