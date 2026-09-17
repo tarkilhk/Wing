@@ -23,7 +23,7 @@ Keep logs and generated captures under ignored `build/`. Record source revision,
 | Slash profile scope | `test/slash_profile_live_contract_test.dart`, `integration_test/slash_commands_live_test.dart` |
 | Connection setup | `test/connection_address_test.dart`, `test/connection_setup_probe_test.dart`, `test/connection_setup_transport_test.dart`, `test/connection_setup_screen_test.dart` |
 | Scheduled tasks | `test/scheduled_tasks_*_test.dart`, `integration_test/scheduled_tasks_native_test.dart` |
-| Voice | `test/voice_*_test.dart`, `test/hermes_voice_test.dart`, `test/microphone_permission_test.dart`, `test/startup_notification_permission_test.dart`, `integration_test/voice_*_test.dart` |
+| Voice | `test/voice_*_test.dart`, `test/profile_voice*_test.dart`, `test/hermes_voice_test.dart`, `test/microphone_permission_test.dart`, `test/startup_notification_permission_test.dart`, `integration_test/voice_*_test.dart`; [profile voice checks](PROFILE_VOICE.md#verification) |
 | Design renders | `test/studio_layout_test.dart`, `test/studio_controls_test.dart`, `test/studio_layout_regressions_test.dart`, `test/administration_navigation_test.dart` |
 
 Read a driver's environment flags, mutations and cleanup before running it. Use disposable profiles/chats and owned fixtures on an authorized server. Live tests may invoke models, modify profile settings or start host tools. Restore changed values and independently verify cleanup; a green assertion that records `backend_limited` is not successful feature acceptance.

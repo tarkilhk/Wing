@@ -4,6 +4,7 @@ import '../controllers/voice_output_controller.dart';
 import '../services/android_voice.dart';
 import '../services/device_preference.dart';
 import '../services/voice_preferences.dart';
+import '../services/voice_sample.dart';
 import 'studio_error.dart';
 import 'studio_select.dart';
 
@@ -320,8 +321,7 @@ class _VoicePreferencesCardState extends State<VoicePreferencesCard>
                       } else {
                         _preview.speak(
                           'preview',
-                          'Hello, welcome to Wing. '
-                              'A familiar face, now with a voice to match.',
+                          voiceSampleText,
                           VoicePreferences(
                             voice: _preferences.voice,
                             rate: _preferences.rate,

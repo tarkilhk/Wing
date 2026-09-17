@@ -72,7 +72,7 @@ total draws no shares, and unreported cost remains unavailable.
 | A38–A39 | Bounded log categories/severity/search; explicit Doctor and security audit with action status | Runtime scope is independent of mobile selection. No automatic repair or new restart action. |
 | A41 | Existing backend version and eligible-update flow under Runtime | Request acceptance does not prove a completed update. |
 | A42 | Rolling 1/7/30/90/365-day usage with per-model sessions, calls, tokens and estimated cost | Hermes estimates, not provider invoices. Missing usage is not invented. |
-| A44 | Guided STT/TTS provider setup and supported model/voice/language/automatic-speech defaults | Basic schema-supported portion only. Engine installation and advanced tuning are excluded. |
+| A44 | Guided STT/TTS provider setup, autosaving profile voice picker with Play/Stop, and supported model/language/automatic-speech defaults | Vanilla APIs only. Edge uses suggested voices; ElevenLabs loads the account list. Custom voice IDs live under Advanced. Engine installation and advanced tuning are excluded. See [profile voice](PROFILE_VOICE.md). |
 | A45 | Searchable owner paths and task vocabulary with exact-field scrolling, emphasis and explicit clearing | Import/export/reset remain P2. |
 | A48–A49 | Profile-owned scheduled tasks: search/filter, details, create/edit, templates, model/delivery choices, pause/resume/run/delete and recent run conversations | Hermes executes schedules. One-time completion may remove the task. Script-only tasks may have no conversation. No Android scheduler or new notification subscription is created. |
 

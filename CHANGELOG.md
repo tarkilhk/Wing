@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add an autosaving profile voice picker with Play/Stop for the Wing sample sentence, Edge suggestions, ElevenLabs account voices and advanced custom IDs, using vanilla Hermes APIs.
 - Keep one Administration refresh button in the header. Refresh overview data and runtime identity together while preserving tabs and diagnostic results; remove the duplicate footer action.
 
 - Complete the administration design refinements: composed profile brief, distinct setup/access warnings, concise scheduled-task summaries, retained runtime diagnostic results, capability-first browsing, visible provider expiry and usage tokens, content-first memory, full search paths and targeted overview refresh.

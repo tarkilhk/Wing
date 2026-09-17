@@ -4,6 +4,7 @@ import 'admin_widgets.dart';
 import 'admin_operations_page.dart';
 import 'admin_providers_page.dart';
 import 'admin_settings_page.dart';
+import 'admin_profile_voice_page.dart';
 
 class AdminToolSetupList extends StatelessWidget {
   final ProfileAdministration profile;
@@ -390,11 +391,6 @@ class AdminVoicePage extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const AdminNotice(
-              'These speech settings belong to this server profile. Changes to '
-              'providers, language or voice affect every client using this profile. '
-              'Choose Local or Hermes processing and Android voices in App settings.',
-            ),
             AdminGroup(
               children: [
                 AdminRow(
@@ -416,8 +412,17 @@ class AdminVoicePage extends StatelessWidget {
                   ),
                 ),
                 AdminRow(
+                  title: 'Profile voice',
+                  subtitle: 'Choose a voice and play a sample',
+                  icon: Icons.record_voice_over_outlined,
+                  onTap: () => adminPush(
+                    context,
+                    AdminProfileVoicePage(profile: profile),
+                  ),
+                ),
+                AdminRow(
                   title: 'Speech defaults',
-                  subtitle: 'Language, voice, model and automatic speech',
+                  subtitle: 'Language, model and automatic speech',
                   icon: Icons.tune,
                   onTap: () => adminPush(
                     context,
@@ -426,7 +431,10 @@ class AdminVoicePage extends StatelessWidget {
                       title: 'Speech defaults',
                       fields: [
                         ...voiceFields.where((f) => f.key != 'tts.provider'),
-                        for (final key in keys)
+                        for (final key in keys.where(
+                          (key) =>
+                              !RegExp(r'\.(voice|voice_id)$').hasMatch(key),
+                        ))
                           AdminField(
                             key,
                             key.split('.').skip(1).join(' '),
