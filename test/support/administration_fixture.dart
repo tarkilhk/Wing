@@ -85,6 +85,9 @@ class AdministrationFixture {
     requests.add((method, path, {...query}, body == null ? null : {...body}));
     if (override != null) return override!(method, path, query, body);
     if (method == 'GET' && failReads) throw StateError('Offline');
+    if (path == 'health') {
+      return {'ok': true, 'version': updateCheck['current_version']};
+    }
     if (path == 'hermes/update/check') return updateCheck;
     if (path == 'profiles') {
       return {

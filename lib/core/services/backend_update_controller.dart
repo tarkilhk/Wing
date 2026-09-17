@@ -1,12 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/backend_update.dart';
 import 'profile_gateway.dart';
+import 'workspace_connection_failure.dart';
 
 class BackendUpdateController extends ChangeNotifier {
   final ProfileGateway gateway;
 
   BackendUpdateCheck? check;
+  String? installedVersion;
+  bool versionLoading = false;
+  bool versionStale = false;
+
   BackendUpdateStatus? status;
   BackendUpdatePhase phase = BackendUpdatePhase.idle;
   String? message;
@@ -16,6 +23,7 @@ class BackendUpdateController extends ChangeNotifier {
 
   bool _disposed = false;
   bool _requestOutstanding = false;
+  int _versionObservation = 0;
   int _checkGeneration = 0;
   int _statusGeneration = 0;
   String? _actionId;
@@ -30,7 +38,59 @@ class BackendUpdateController extends ChangeNotifier {
       phase != BackendUpdatePhase.running &&
       check?.canStart == true;
 
+  /// Installed identity must not wait for the host's remote GitHub comparison.
+  Future<void> _readInstalledVersion() async {
+    if (versionLoading || _disposed) return;
+    final observation = _versionObservation;
+    versionLoading = true;
+    _notify();
+    try {
+      for (var attempt = 0; attempt < 2; attempt++) {
+        try {
+          final health = await gateway
+              .read('health')
+              .timeout(const Duration(seconds: 5));
+          if (_disposed || observation != _versionObservation) return;
+          final version = health['version'];
+          if (health['ok'] != true ||
+              version is! String ||
+              version.trim().isEmpty) {
+            throw const FormatException('Missing server version');
+          }
+          _versionObservation++;
+          installedVersion = version.trim();
+          versionStale = false;
+          return;
+        } catch (error) {
+          if (_disposed || observation != _versionObservation) return;
+          if (attempt == 1 || !isTemporaryWorkspaceFailure(error)) {
+            versionStale = installedVersion != null;
+            return;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+          if (_disposed || observation != _versionObservation) return;
+        }
+      }
+    } finally {
+      if (!_disposed) {
+        versionLoading = false;
+        _notify();
+      }
+    }
+  }
+
   Future<void> checkForUpdate() async {
+    if (checking ||
+        starting ||
+        _requestOutstanding ||
+        phase == BackendUpdatePhase.running ||
+        _disposed) {
+      return;
+    }
+    await Future.wait([_readInstalledVersion(), _checkForUpdate()]);
+  }
+
+  Future<void> _checkForUpdate() async {
     if (checking ||
         starting ||
         _requestOutstanding ||
@@ -47,6 +107,11 @@ class BackendUpdateController extends ChangeNotifier {
       );
       if (!_currentCheck(generation)) return;
       check = next;
+      if (next.currentVersion case final version?) {
+        _versionObservation++;
+        installedVersion = version;
+        versionStale = false;
+      }
       phase = BackendUpdatePhase.ready;
     } catch (_) {
       if (!_currentCheck(generation)) return;
@@ -85,6 +150,11 @@ class BackendUpdateController extends ChangeNotifier {
       );
       if (!_currentCheck(generation)) return false;
       check = fresh;
+      if (fresh.currentVersion case final version?) {
+        _versionObservation++;
+        installedVersion = version;
+        versionStale = false;
+      }
       if (!fresh.canStart) {
         phase = BackendUpdatePhase.refused;
         message = fresh.canApply != true

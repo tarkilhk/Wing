@@ -49,6 +49,7 @@ class _UpdateHost {
     get: (endpoint, query) async {
       reads.add((endpoint, query));
       return switch (endpoint) {
+        'health' => {'ok': true, 'version': checkResponse['current_version']},
         'hermes/update/check' => checkResponse,
         'hermes/update/receipt' => receiptResponse,
         _ => pendingStatus?.future ?? statusResponse,
@@ -89,7 +90,10 @@ void main() {
       hasLength(2),
     );
     for (final call in host.reads) {
-      expect(call.$2, {'force': 'true', 'profile': 'work'});
+      expect(call.$2, {
+        if (call.$1 == 'hermes/update/check') 'force': 'true',
+        'profile': 'work',
+      });
     }
     expect(host.posts, hasLength(1));
     expect(host.posts.single.$1, 'hermes/update?profile=work');

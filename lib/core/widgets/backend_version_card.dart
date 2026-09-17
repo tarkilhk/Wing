@@ -144,11 +144,13 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
               ),
               const SizedBox(height: 4),
               Text(
-                check?.currentVersion ??
-                    (controller.checking
+                controller.installedVersion ??
+                    (controller.versionLoading
                         ? 'Loading version…'
                         : 'Current version unavailable'),
               ),
+              if (controller.versionStale)
+                const Text('Last known version · server could not be reached'),
               if (check?.installMethod case final method?)
                 Text('Install method: $method'),
               const SizedBox(height: 4),

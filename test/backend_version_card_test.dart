@@ -47,6 +47,9 @@ class _UpdateHost {
     scope: WorkspaceScope(connectionId: 'host', profileName: 'work'),
     get: (endpoint, query) async {
       reads.add((endpoint, query));
+      if (endpoint == 'health') {
+        return {'ok': true, 'version': checkResponse['current_version']};
+      }
       if (endpoint == 'hermes/update/check') {
         return pendingCheck?.future ?? checkResponse;
       }
@@ -118,9 +121,9 @@ void main() {
     await showCard(tester, host);
     await check(tester);
 
-    expect(host.reads, hasLength(1));
-    expect(host.reads.single.$1, 'hermes/update/check');
-    expect(host.reads.single.$2, {'force': 'true', 'profile': 'work'});
+    expect(host.reads, hasLength(2));
+    expect(host.reads.last.$1, 'hermes/update/check');
+    expect(host.reads.last.$2, {'force': 'true', 'profile': 'work'});
     expect(find.text('1.2.3'), findsOneWidget);
     expect(find.text('Install method: pipx'), findsOneWidget);
     expect(find.text('Up to date'), findsOneWidget);
@@ -130,7 +133,7 @@ void main() {
 
     await tester.tap(find.text('Check for updates'));
     await tester.pumpAndSettle();
-    expect(host.reads, hasLength(2));
+    expect(host.reads, hasLength(4));
   });
 
   testWidgets(

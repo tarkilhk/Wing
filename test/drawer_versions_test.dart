@@ -33,7 +33,12 @@ void main() {
     Future<Map<String, dynamic>> Function() read,
   ) => ProfileGateway(
     scope: WorkspaceScope(connectionId: server.id, profileName: 'default'),
-    get: (_, _) => read(),
+    get: (endpoint, _) async {
+      final response = await read();
+      return endpoint == 'health'
+          ? {'ok': true, 'version': response['current_version']}
+          : response;
+    },
     rpc: (_, _) async => {},
     discover: () => throw UnimplementedError(),
   );
@@ -70,6 +75,15 @@ void main() {
       await tester.tap(find.byTooltip('Open navigation menu'));
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.sync), findsOneWidget);
+      final clientRect = tester.getRect(
+        find.byKey(const ValueKey('menu-client-version')),
+      );
+      final serverRect = tester.getRect(
+        find.byKey(const ValueKey('menu-server-version')),
+      );
+      expect(clientRect.top, serverRect.top);
+      expect(clientRect.right, lessThan(serverRect.left));
+      expect(serverRect.height, greaterThanOrEqualTo(48));
       await tester.ensureVisible(
         find.byKey(ValueKey('menu-${section.name}-version')),
       );
@@ -78,12 +92,11 @@ void main() {
       if (section == VersionsSection.client) {
         expect(find.byType(VersionsUpdatesScreen), findsNothing);
         expect(find.byType(Drawer), findsOneWidget);
-        final tile = tester.widget<ListTile>(
+        final tile = tester.widget<InkWell>(
           find.byKey(const ValueKey('menu-client-version')),
         );
         expect(tile.onTap, isNull);
-        expect(tile.trailing, isNull);
-        expect(reads, 1);
+        expect(reads, 2);
         return;
       }
       expect(find.byType(VersionsUpdatesScreen), findsOneWidget);
@@ -93,9 +106,13 @@ void main() {
       expect(find.text('View release'), findsNothing);
       expect(find.text('Releases'), findsNothing);
       expect(find.text('Home server'), findsOneWidget);
-      expect(reads, 2);
+      expect(reads, 4);
       await tester.pageBack();
       await tester.pumpAndSettle();
+      expect(
+        tester.state<ScaffoldState>(find.byType(Scaffold).first).isDrawerOpen,
+        isTrue,
+      );
       expect(tester.takeException(), isNull);
     });
   }
@@ -113,18 +130,18 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('1.0.1'), findsOneWidget);
+      expect(find.text('v1.0.1'), findsOneWidget);
       expect(find.byIcon(Icons.sync), findsNothing);
-      expect(find.text('No server selected'), findsOneWidget);
+      expect(find.byTooltip('No server selected: Unavailable'), findsOneWidget);
       expect(
         tester
-            .widget<ListTile>(find.byKey(const ValueKey('menu-server-version')))
+            .widget<InkWell>(find.byKey(const ValueKey('menu-server-version')))
             .onTap,
         isNull,
       );
       expect(
         tester
-            .widget<ListTile>(find.byKey(const ValueKey('menu-client-version')))
+            .widget<InkWell>(find.byKey(const ValueKey('menu-client-version')))
             .onTap,
         isNull,
       );
@@ -167,8 +184,8 @@ void main() {
     await versions.refresh();
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.sync), findsNothing);
-    expect(find.text('Unavailable'), findsOneWidget);
-    expect(find.text('1.0.1'), findsOneWidget);
+    expect(find.text('v1.2.3'), findsOneWidget);
+    expect(find.text('v1.0.1'), findsOneWidget);
   });
 
   testWidgets('switching servers ignores an earlier server response', (
@@ -209,8 +226,8 @@ void main() {
       'behind': 3,
     });
     await tester.pumpAndSettle();
-    expect(find.text('2.0.0'), findsOneWidget);
-    expect(find.text('1.0.0'), findsNothing);
+    expect(find.text('v2.0.0'), findsOneWidget);
+    expect(find.text('v1.0.0'), findsNothing);
     expect(find.byIcon(Icons.sync), findsNothing);
     expect(tester.takeException(), isNull);
   });
