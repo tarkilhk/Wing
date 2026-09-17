@@ -1611,11 +1611,10 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                         _AttachmentChoice.photos
                                                     ? FileType.image
                                                     : FileType.any;
-                                                final result = await FilePicker
-                                                    .platform
-                                                    .pickFiles(type: type);
                                                 final file =
-                                                    result?.files.single;
+                                                    await FilePicker.pickFile(
+                                                      type: type,
+                                                    );
                                                 if (file?.path != null) {
                                                   await controller
                                                       .addAttachment(
