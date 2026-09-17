@@ -46,6 +46,10 @@ const _continuationHeader =
     'do not start over.]';
 const _continuationEnvelope =
     '$_continuationHeader\nPlease diagnose the browser/vault failure on this VM.';
+const _rawDelegationEnvelope =
+    '[ASYNC DELEGATION BATCH COMPLETE — deleg_22411d56]\n'
+    'A background fan-out unit you dispatched earlier — 2 subagent(s) — '
+    'has finished; its consolidated results are below. Any other units from the sa';
 
 class _NoticeHistory extends ProfileHistoryFixture {
   @override
@@ -66,11 +70,12 @@ class _NoticeHistory extends ProfileHistoryFixture {
     {'id': 9, 'role': 'user', 'content': processBatchEnvelope},
     {'id': 10, 'role': 'user', 'content': snapshot},
     {'id': 11, 'role': 'user', 'content': _continuationEnvelope},
+    {'id': 12, 'role': 'user', 'content': _rawDelegationEnvelope},
   ];
 }
 
 void main() {
-  test('continuation reminders are hidden across message encodings', () {
+  test('technical envelopes are hidden across message encodings', () {
     for (final fields in <Map<String, dynamic>>[
       {'content': _continuationEnvelope},
       {'text': _continuationEnvelope},
@@ -80,6 +85,16 @@ void main() {
       {
         'content': [
           {'type': 'text', 'text': _continuationEnvelope},
+        ],
+      },
+      {'content': _rawDelegationEnvelope},
+      {'text': _rawDelegationEnvelope},
+      {'content': _rawDelegationEnvelope.replaceAll('\n', '\r\n')},
+      {'content': '  $_rawDelegationEnvelope\n'},
+      {'content': 'wire payload', 'display_content': _rawDelegationEnvelope},
+      {
+        'content': [
+          {'type': 'text', 'text': _rawDelegationEnvelope},
         ],
       },
     ]) {
@@ -269,6 +284,8 @@ void main() {
         expect(find.byKey(const ValueKey('edit-message-10')), findsNothing);
         expect(find.textContaining(_continuationHeader), findsNothing);
         expect(find.byKey(const ValueKey('edit-message-11')), findsNothing);
+        expect(find.textContaining('deleg_22411d56'), findsNothing);
+        expect(find.byKey(const ValueKey('edit-message-12')), findsNothing);
         // Retain server history and IDs for paging/rewind; filter only the view.
         expect(chat.messages.map((row) => row['id']), [
           1,
@@ -282,6 +299,7 @@ void main() {
           9,
           10,
           11,
+          12,
         ]);
         await controller.refreshHistory(chat);
         await tester.pumpAndSettle();
@@ -309,6 +327,9 @@ void main() {
     await tester.pump();
     expect(find.textContaining('Private instructions'), findsNothing);
     expect(find.text('Private hidden instructions'), findsNothing);
+    expect(find.text('View in chat'), findsNothing);
+    await tester.enterText(find.byType(TextField), 'deleg_22411d56');
+    await tester.pump();
     expect(find.text('View in chat'), findsNothing);
     await tester.enterText(find.byType(TextField), 'Quiesce processing');
     await tester.pump();
@@ -631,17 +652,29 @@ void main() {
         _envelope,
         'Why does this appear?\n$_envelope',
         '```text\n$_envelope\n```',
+        'Why does this appear?\n$_rawDelegationEnvelope',
+        '```text\n$_rawDelegationEnvelope\n```',
+        '> $_rawDelegationEnvelope',
+        '[ASYNC DELEGATION BATCH COMPLETE — deleg_22411d56]',
         '[ASYNC DELEGATION COMPLETE]',
         'The model_switch event is useful to debug.',
       ]) {
         final row = {'role': 'user', 'content': text};
         expect(transcriptNoticeKind(row), isNull);
         expect(isAnswerPrompt(row), isTrue);
+        expect(isHiddenAnswerMessage(row), isFalse);
         expect(groupTranscriptSections([row]).single.messages.single, row);
       }
       expect(
         transcriptNoticeKind({'role': 'assistant', 'content': _envelope}),
         isNull,
+      );
+      expect(
+        isHiddenAnswerMessage({
+          'role': 'assistant',
+          'content': _rawDelegationEnvelope,
+        }),
+        isFalse,
       );
     },
   );

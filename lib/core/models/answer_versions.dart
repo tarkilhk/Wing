@@ -113,7 +113,20 @@ bool isHiddenAnswerMessage(Map<String, dynamic> message) =>
         (message['_todo_snapshot_synthetic'] == true ||
             answerMessageText(message).trimLeft().startsWith('[System:') ||
             _isTaskSnapshot(answerMessageDisplayText(message)) ||
-            _isContinuationReminder(answerMessageDisplayText(message))));
+            _isContinuationReminder(answerMessageDisplayText(message)) ||
+            (message['display_kind'] == null &&
+                _asyncDelegationBatch.hasMatch(
+                  answerMessageDisplayText(message).trimLeft(),
+                ))));
+
+// Stock Hermes _format_batch_delegation, inspected at upstream commit
+// c712f06dcdd24053a4118f38d2090ac53137ecfc. Match the producer header and
+// preamble together so quoted markers and ordinary discussion stay visible.
+final _asyncDelegationBatch = RegExp(
+  r'^\[ASYNC DELEGATION BATCH COMPLETE — deleg_[a-zA-Z0-9]+\]\r?\n'
+  r'A background fan-out unit you dispatched earlier — '
+  r'[^\r\n]+ — has finished; its consolidated results are below\.',
+);
 
 /// A compaction reminder repeats the active request for the agent. Recognize
 /// the complete standalone envelope, leaving quoted or partial markers visible.
