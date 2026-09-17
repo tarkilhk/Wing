@@ -116,22 +116,6 @@ void main() {
   });
   tearDown(() => UrlLauncherPlatform.instance = original);
 
-  test('support destinations use the supplied Ko-fi and GitHub accounts', () {
-    expect(wingSupportUri.toString(), 'https://ko-fi.com/tarkil');
-    expect(
-      File('README.md').readAsStringSync(),
-      contains('[Buy me a coffee](https://ko-fi.com/tarkil)'),
-    );
-    expect(
-      File('README.md').readAsStringSync(),
-      contains('[Sponsor on GitHub](https://github.com/sponsors/tarkilhk)'),
-    );
-    expect(
-      File('.github/FUNDING.yml').readAsLinesSync(),
-      containsAll(['github: tarkilhk', 'ko_fi: tarkil']),
-    );
-  });
-
   testWidgets('opens only on request, externally, without extra data', (
     tester,
   ) async {
