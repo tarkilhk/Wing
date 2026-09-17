@@ -47,6 +47,23 @@ void main() {
   );
 
   test(
+    'targeted refresh does not reread unrelated profile observations',
+    () async {
+      final fixture = AdministrationFixture();
+      final overview = AdministrationOverview(
+        fixture.server.profile('personal'),
+      );
+      addTearDown(overview.dispose);
+      await overview.refresh();
+      final model = overview.observations['model']!.checkedAt;
+      fixture.requests.clear();
+      await overview.refresh(keys: {'config'});
+      expect(fixture.requests.map((r) => r.$2), ['config']);
+      expect(overview.observations['model']!.checkedAt, model);
+    },
+  );
+
+  test(
     'older refresh and disposed observers cannot publish late results',
     () async {
       final fixture = AdministrationFixture();

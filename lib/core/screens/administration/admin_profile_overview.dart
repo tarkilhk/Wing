@@ -16,6 +16,7 @@ class AdminProfileOverview extends StatefulWidget {
     super.key,
     required this.profile,
     this.revision = 0,
+    this.refreshKeys = const {},
     required this.metadata,
     required this.preferences,
     required this.selector,
@@ -23,6 +24,7 @@ class AdminProfileOverview extends StatefulWidget {
   });
   final ProfileAdministration profile;
   final int revision;
+  final Set<String> refreshKeys;
   final HermesProfile? metadata;
   final SharedPreferences preferences;
   final Widget selector;
@@ -53,7 +55,12 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.revision != widget.revision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _refresh();
+        if (mounted) {
+          overview.refresh(keys: widget.refreshKeys);
+          if (widget.refreshKeys.contains('tasks') && !tasks.loading) {
+            tasks.refresh();
+          }
+        }
       });
     }
   }
@@ -109,32 +116,171 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
             )
             .toList()
           ..sort((a, b) => a.nextRun!.compareTo(b.nextRun!));
-    final running = tasks.tasks!.where((task) => task.running).length;
-    final attention = tasks.tasks!.where((task) => task.needsAttention).length;
     final latest = tasks.tasks!.where((task) => task.lastRun != null).toList()
       ..sort((a, b) => b.lastRun!.compareTo(a.lastRun!));
+    final running = tasks.tasks!.where((task) => task.running).length;
     final activity = [
-      if (running > 0) '$running running',
-      if (attention > 0) '$attention need attention',
       if (upcoming.isNotEmpty)
-        'Next: ${upcoming.first.title} · ${taskTime(context, upcoming.first.nextRun)}'
+        'Next ${taskTime(context, upcoming.first.nextRun)}${running > 0 ? ' · $running running' : ''}'
       else if (tasks.tasks!.isEmpty)
         'No scheduled tasks'
       else
         'No confirmed upcoming run',
       if (latest.isNotEmpty)
-        'Latest listed run: ${taskTime(context, latest.first.lastRun)} · ${latest.first.error.isNotEmpty ? 'Error reported' : 'Outcome unavailable'}',
-      if (tasks.tasks!.isNotEmpty && latest.isEmpty)
-        'No last run reported for listed tasks',
+        'Last listed run · ${latest.first.error.isNotEmpty ? 'Error reported' : 'Outcome unavailable'}',
     ].join('\n');
     return tasks.error == null
         ? activity
         : '$activity · ${tasks.checkedAt == null ? 'Last observation' : 'Last checked ${TimeOfDay.fromDateTime(tasks.checkedAt!).format(context)}'}; refresh unavailable';
   }
 
+  String? get _nextTaskTitle {
+    final upcoming =
+        tasks.tasks
+            ?.where(
+              (task) =>
+                  task.enabled &&
+                  {'scheduled', 'enabled'}.contains(task.state) &&
+                  task.nextRun != null,
+            )
+            .toList()
+          ?..sort((a, b) => a.nextRun!.compareTo(b.nextRun!));
+    return upcoming?.firstOrNull?.title;
+  }
+
+  static const _readsByDestination = <String, Set<String>>{
+    'Models and reasoning': {'model', 'config', 'access'},
+    'Memory': {'config'},
+    'Behavior': {'config'},
+    'Skills and tools': {'skills', 'tools', 'access'},
+    'Access and connectors': {'access', 'connectors'},
+  };
+
+  Future<void> _refreshDestination(String name) async {
+    if (name == 'Scheduled tasks') {
+      if (!tasks.loading) await tasks.refresh();
+    } else if (_readsByDestination[name] case final keys?) {
+      await overview.refresh(keys: keys);
+    }
+  }
+
+  String? _attention(String name) {
+    if (name == 'Skills and tools') {
+      final data = overview.observations['tools']?.data;
+      if (data != null) {
+        final setup = administrationRows(
+          data['data'],
+        ).where((r) => r['enabled'] == true && r['configured'] == false).length;
+        if (setup > 0) return setup == 1 ? 'Setup needed' : '$setup need setup';
+      }
+    }
+    if (name == 'Access and connectors') {
+      final data = overview.observations['access']?.data;
+      if (data != null) {
+        final expired = administrationRows(data['providers'])
+            .map(ProviderAccess.new)
+            .where((r) => r.state == ProviderAccessState.expired)
+            .length;
+        if (expired > 0) {
+          return expired == 1 ? 'Sign-in expired' : '$expired sign-ins expired';
+        }
+      }
+    }
+    if (name == 'Scheduled tasks') {
+      final count =
+          tasks.tasks?.where((task) => task.needsAttention).length ?? 0;
+      if (count > 0) {
+        return count == 1 ? 'Needs attention' : '$count need attention';
+      }
+      if (tasks.error != null) return 'Refresh unavailable';
+    }
+    for (final key in _readsByDestination[name] ?? <String>{}) {
+      final observation = overview.observations[key];
+      if (observation?.error != null) {
+        return observation?.data == null
+            ? 'Information unavailable'
+            : 'Refresh unavailable';
+      }
+    }
+    return null;
+  }
+
+  Widget _brief(BuildContext context) {
+    final description = widget.metadata?.description?.trim();
+    final edit = widget.destinations['Identity'];
+    return Semantics(
+      container: true,
+      label:
+          'Profile brief for ${widget.metadata?.label ?? widget.profile.name}',
+      child: Container(
+        key: const ValueKey('profile-brief'),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            widget.selector,
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: edit == null
+                  ? null
+                  : () async {
+                      await edit();
+                    },
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 48),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 4,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        description == null || description.isEmpty
+                            ? 'Describe this agent'
+                            : description,
+                        maxLines:
+                            MediaQuery.textScalerOf(context).scale(16) >= 24
+                            ? null
+                            : 1,
+                        overflow:
+                            MediaQuery.textScalerOf(context).scale(16) >= 24
+                            ? null
+                            : TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Icon(
+                      Icons.edit_outlined,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _row(String name, String summary, IconData icon) => AdminRow(
     key: ValueKey(name),
     emphasizeChanges: true,
+    attention: _attention(name),
+    detail: name == 'Scheduled tasks' ? _nextTaskTitle : null,
     title: name,
     subtitle: summary,
     icon: icon,
@@ -142,7 +288,7 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
         ? null
         : () async {
             await widget.destinations[name]!();
-            if (mounted) await _refresh();
+            if (mounted) await _refreshDestination(name);
           },
   );
 
@@ -158,17 +304,7 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
-          widget.selector,
-          if (widget.metadata?.description case final String description)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                description,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
+          _brief(context),
           const AdminSectionLabel('Agent setup'),
           AdminGroup(
             children: [
@@ -188,8 +324,7 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
               ),
               _row(
                 'Identity',
-                widget.metadata?.description ??
-                    'Description and agent instructions',
+                'Description and agent instructions',
                 Icons.person_outline,
               ),
               _row(
@@ -222,11 +357,10 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
                       .where((row) => row['enabled'] == true)
                       .length;
                   final unknown = rows.any((row) => row['enabled'] is! bool);
-                  return '$enabled skills enabled${unknown ? ' · Some states unavailable' : ''} · ${_summary('tools', (tools) {
+                  return '$enabled ${enabled == 1 ? 'skill' : 'skills'} enabled${unknown ? ' · Some states unavailable' : ''} · ${_summary('tools', (tools) {
                     final rows = administrationRows(tools['data']);
                     final enabled = rows.where((row) => row['enabled'] == true).length;
-                    final setup = rows.where((row) => row['enabled'] == true && row['configured'] == false).length;
-                    return '$enabled toolsets enabled${setup > 0 ? ' · $setup need setup' : ''}${rows.any((row) => row['enabled'] is! bool || row['configured'] is! bool) ? ' · Some tool states unavailable' : ''}';
+                    return '$enabled ${enabled == 1 ? 'toolset' : 'toolsets'} enabled${rows.any((row) => row['enabled'] is! bool || row['configured'] is! bool) ? ' · Some tool states unavailable' : ''}';
                   })}';
                 }),
                 Icons.extension_outlined,
@@ -237,9 +371,6 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
                   final rows = administrationRows(
                     data['providers'],
                   ).map(ProviderAccess.new).toList();
-                  final expired = rows
-                      .where((row) => row.state == ProviderAccessState.expired)
-                      .length;
 
                   final stored = rows.where((row) => row.hasCredential).length;
                   final selected =
@@ -248,7 +379,7 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
                       .where((row) => row.id == selected)
                       .firstOrNull;
                   final source = access?.status['source_label'];
-                  return '${expired > 0 ? '$expired sign-ins expired' : '$stored sign-ins reported'} · ${source is String && source.isNotEmpty ? source : 'Access source unavailable'} · ${_summary('connectors', (data) => '${administrationRows(data['servers']).length} connectors')}';
+                  return '$stored sign-ins reported · ${source is String && source.isNotEmpty ? source : 'Access source unavailable'} · ${_summary('connectors', (data) => '${administrationRows(data['servers']).length} connectors')}';
                 }),
                 Icons.link,
               ),

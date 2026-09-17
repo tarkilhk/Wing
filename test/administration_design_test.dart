@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/administration/admin_defaults_page.dart';
 import 'package:wing/core/screens/administration/admin_health_page.dart';
+import 'package:wing/core/screens/administration/admin_runtime_health.dart';
 import 'package:wing/core/screens/administration/admin_identity_page.dart';
 import 'package:wing/core/screens/administration/admin_memory_page.dart';
 import 'package:wing/core/screens/administration/admin_providers_page.dart';
@@ -63,6 +64,7 @@ void main() {
       'capabilities',
       'compression',
       'usage',
+      'runtime-health',
       'voice',
     ]) {
       testWidgets('$family layout $mode', (tester) async {
@@ -82,6 +84,13 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         final page = switch (family) {
+          'runtime-health' => Scaffold(
+            appBar: AppBar(title: const Text('Runtime health')),
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: AdminRuntimeHealth(server: fixture.server),
+            ),
+          ),
           'models' => AdminDefaultsPage(profile: profile),
           'identity' => AdminIdentityPage(
             gateway: fixture.identityGateway(),
@@ -156,6 +165,21 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         await snapshot(tester, '$mode-$family');
+        if (family == 'runtime-health') {
+          await tester.ensureVisible(find.text('Run Doctor'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Run Doctor'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Run'));
+          await tester.pumpAndSettle();
+          await snapshot(tester, '$mode-runtime-result');
+          await tester.pageBack();
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(find.text('Doctor'));
+          await tester.pumpAndSettle();
+          expect(find.text('Failed'), findsOneWidget);
+          await snapshot(tester, '$mode-runtime-findings');
+        }
         if (family == 'identity') {
           fixture.partialIdentity = true;
           await tester.enterText(

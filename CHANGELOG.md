@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Complete the administration design refinements: composed profile brief, distinct setup/access warnings, concise scheduled-task summaries, retained runtime diagnostic results, capability-first browsing, visible provider expiry and usage tokens, content-first memory, full search paths and targeted overview refresh.
+
 - Give Administration search and tabs consistent spacing and gutters. Select profiles directly with the same profile chips as Chats, replacing the separate Change action and picker sheet.
 - Redesign Administration with profile summaries, focused provider and capability inventories, full-screen identity editing, clearer settings conflicts, read-first memory, actionable health findings and contextual search. Keep Profile, Server and Health ownership visible and apply consistent Studio layouts across themes and enlarged text.
 - Add independent Local/Hermes dictation and read-aloud choices in App settings, offline Android voice/language controls, and a link to profile-owned Hermes speech settings. Request microphone permission after notifications on first launch; preserve editable drafts and cancel audio when leaving the foreground or changing chats. Live-provider and human speech-quality UAT remain pending.

@@ -151,7 +151,7 @@ The 17 September redesign is specified in
 behavior without contacting real profiles, speech providers or service accounts.
 
 ```bash
-flutter test test/administration_overview_test.dart test/administration_comparison_test.dart test/administration_editor_experience_test.dart test/administration_navigation_test.dart
+flutter test test/administration_overview_test.dart test/administration_runtime_health_test.dart test/administration_comparison_test.dart test/administration_editor_experience_test.dart test/administration_navigation_test.dart
 flutter test --dart-define=CAPTURE_ADMINISTRATION=true --dart-define=CAPTURE_FONT_DIR=/path/to/fonts test/administration_design_test.dart test/administration_navigation_test.dart
 flutter test integration_test/administration_native_test.dart -d <disposable-emulator> --no-uninstall
 ```
@@ -159,15 +159,17 @@ flutter test integration_test/administration_native_test.dart -d <disposable-emu
 The capture font directory contains `roboto-regular.ttf` and
 `materialicons-regular.otf`. Actual Flutter captures are written to ignored
 `build/administration-preview/`; the integrated project-picker test retains its
-own capture switch and directory. The matrix includes eleven detail/editor
+own capture switch and directory. The matrix includes twelve detail/editor
 families in light/dark, 320 dp at 200% text, a standard phone and an 840 dp layout;
-root checks cover all five accents. Pending/unconfirmed settings and partially
+root checks cover all five accents, populated profile briefs and explicit attention
+states. Runtime captures include retained results and supported next steps. Pending/unconfirmed settings and partially
 applied Identity writes use explicit fixture responses.
 
 Native tests exercise a semantics tap, the actual Android keyboard, deliberate
 remote-conflict resolution, discard protection, long Identity drafts, a canonical
 shared-account link, independent capability disclosure/toggle actions, 48 dp target
-edges and keyboard focus. `CAPTURE_NATIVE_ADMINISTRATION=true` adds a ten-second
+edges and keyboard focus. A fourth journey runs a fixture Doctor, returns to the
+retained failed observation, and reviews the same operation without another POST. `CAPTURE_NATIVE_ADMINISTRATION=true` adds a ten-second
 capture point after the capability checks for external `adb` screenshot/tree
 collection. This is fixture-based Android interaction evidence, not certification
 of a live backend, every installed screen reader or production account access.

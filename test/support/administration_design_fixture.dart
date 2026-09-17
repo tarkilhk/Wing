@@ -67,6 +67,15 @@ class AdministrationDesignFixture extends AdministrationFixture {
       return {'ok': true, 'name': 'web', 'enabled': toolEnabled};
     }
     final result = switch (path) {
+      'ops/doctor' => {'name': 'doctor', 'pid': 11},
+      'actions/doctor/status' => {
+        'pid': 11,
+        'running': false,
+        'exit_code': 1,
+        'lines': [
+          'A required dependency was not found. Inspect the server configuration before retrying.',
+        ],
+      },
       'cron/jobs' => {'data': jobs},
       'providers/oauth' => {
         'providers': [

@@ -12,6 +12,10 @@ import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/screens/administration/administration_content.dart';
 import 'package:wing/core/widgets/profile_selector.dart';
 import 'support/administration_fixture.dart';
+import 'support/administration_design_fixture.dart';
+import 'support/scheduled_tasks_fixture.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/profiles_repository.dart';
 import 'support/profile_browser_fixture.dart';
 
 void main() {
@@ -134,6 +138,62 @@ void main() {
     },
   );
 
+  for (final mode in ['light', 'dark', 'narrow']) {
+    testWidgets('profile brief and attention hierarchy $mode', (tester) async {
+      final fixture = AdministrationDesignFixture();
+      admin = fixture;
+      fixture.jobs.add(
+        taskJson(
+          id: 'next',
+          name: 'Morning research and a deliberately long project name',
+        )..['next_run_at'] = '2026-09-18T01:00:00Z',
+      );
+      controller.discovery = ProfileDiscovery(
+        profiles: [
+          HermesProfile(
+            name: 'personal',
+            displayName: 'Personal',
+            description: fixture.description,
+          ),
+          const HermesProfile(
+            name: 'work',
+            displayName: 'Client research and planning',
+          ),
+        ],
+        currentName: 'personal',
+        activeName: 'personal',
+      );
+      await show(
+        tester,
+        mode == 'light' ? Brightness.light : Brightness.dark,
+        width: mode == 'narrow' ? 320 : 390,
+        scale: mode == 'narrow' ? 2 : 1,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('profile-brief')),
+          matching: find.text(fixture.description),
+        ),
+        findsOneWidget,
+      );
+      await screenshot(tester, '$mode-profile-brief');
+      await tester.scrollUntilVisible(
+        find.text('Access and connectors'),
+        200,
+        scrollable: find
+            .byWidgetPredicate(
+              (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Setup needed'), findsOneWidget);
+      expect(find.text('Sign-in expired'), findsOneWidget);
+      await screenshot(tester, '$mode-profile-attention');
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final brightness in Brightness.values) {
     testWidgets(
       'three administration tabs fit ${brightness.name} and preserve ownership',
@@ -236,7 +296,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      find.text('Profile › Memory settings\nServer A / personal'),
+      find.text('Profile › Memory › Memory settings\nServer A / personal'),
       findsOneWidget,
     );
     await tester.tap(find.text('Memory budget').last);
@@ -276,7 +336,7 @@ void main() {
       await tester.tap(find.text('Health'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('Review provider access'),
+        find.byTooltip('More health actions'),
         280,
         scrollable: find
             .byWidgetPredicate(
@@ -284,6 +344,8 @@ void main() {
             )
             .first,
       );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('More health actions'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Review provider access'));
       await tester.pumpAndSettle();

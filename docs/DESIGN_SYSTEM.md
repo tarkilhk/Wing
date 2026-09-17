@@ -191,9 +191,14 @@ supports stronger destination titles; exception states retain their semantic col
 Administration and Chats share the same directly tappable profile chips; do not
 add a separate Change action or administration-only profile picker. Keep search
 and the ownership tabs separated by 16 dp, with matching 16 dp page gutters.
+Group profile choices and the purpose/description in one compact panel, with a
+direct Identity edit or Describe this agent action. Keep configuration in the
+rows below and setup/access exceptions on distinct semantic status lines.
 Providers use comparable rows with disclosure to account detail, and capabilities
-open directly to their inventory. Health leads with findings and explicit check
-coverage. Identity is a full-screen editor; settings show dirty counts, sparse-save
+open to capabilities grouped by setup need and enablement; installed skills and
+secondary management remain accessible. Health leads with retained findings,
+observation times and explicit check coverage; reviewing output does not rerun a
+diagnostic. Identity is a full-screen editor; settings show dirty counts, sparse-save
 feedback and deliberate field conflict resolution. Percent diagrams describe
 configuration and usage bars describe reported costs, never inferred activity.
 

@@ -1,6 +1,15 @@
 # Plan 003: Complete the administration experience redesign
 
-Status: DONE — accepted redesign implemented and verified on the isolated branch.
+Status: Design corrections verified and signed build ready; phone installation pending.
+The original completion claim was overstated; see the reopened acceptance record below.
+
+The owner requested completion after a source/render audit on 17 September 2026.
+The earlier Pass matrix below records technical evidence, not final design acceptance.
+Reopened: the composed profile brief, exception hierarchy, runtime findings and
+recovery, capability organisation, provider expiry in inventory, memory-first layout,
+complete search paths, visible usage tokens, concise task summaries and targeted
+refresh. Preserve the subsequently approved shared tappable profile chips.
+Each item needs implementation and an inspected rendered outcome before closing.
 
 Worktree: `/home/dev/projects/hermes-android/administration-experience`; branch:
 `codex/administration-experience`. Starting revision: `28b7f61`. The original
@@ -218,7 +227,7 @@ goal complete when every required acceptance item and evidence condition is met.
 
 ## Acceptance and evidence matrix
 
-All acceptance rows are complete. References below identify implementation and
+Historical technical verification (not final design acceptance). References identify implementation and
 verification; the execution record distinguishes host, rendered and native evidence.
 
 | Requirement | Observable completion criterion | Status / evidence |
@@ -383,3 +392,80 @@ not activated. No real provider inference, account changes, deployment, release 
 phone installation was performed for this redesign. Native fixture acceptance and
 Android accessibility-tree inspection do not certify every screen-reader product
 or a live backend. These are the agreed evidence boundaries, not omitted UI work.
+
+## Reopened design acceptance, 17 September 2026
+
+The owner correctly challenged the earlier completion claim: functional coverage
+and passing tests did not establish the promised composition or hierarchy. The
+previous matrix and verification remain historical records, not proof that the
+first delivery satisfied every design outcome. The owner subsequently authorized
+committing/pushing main and installing on their phone; that supersedes the original
+no-deployment boundary. The follow-up goal covers both the corrections and that
+installation, without changing any backend contract or adding compatibility code.
+
+| Original intent | Gap in the first delivery | Implemented correction and evidence |
+| --- | --- | --- |
+| R1: compact profile brief | Selector and optional description did not form an identity panel | Shared Chats chips and purpose/description now form one quiet Studio panel. Missing descriptions offer Describe this agent; the selected chip is revealed horizontally. Identity opens from the description. `admin_profile_overview.dart`, `profile_selector.dart`; populated light/dark/narrow root captures. |
+| R2: emphasis for exceptions | Setup and access issues were ordinary metadata | Separate semantic warning labels for setup, expired sign-in, task attention and read failures. No issue is inferred from an unknown response. `AdminAttention`; populated attention captures. |
+| R3: explicit ownership | Substantially delivered; preserve it | Profile / Server / Health remains. Captured owners, source labels, shared-account routing and separate runtime identity are retained; full host/native ownership regressions. |
+| R4: findings before utilities and return/recheck | Runtime Health was a utility list and forgot observations | Retained Doctor/audit outcomes, observed times, next steps, same-operation review and separate explicit rerun. Unknown/running operations cannot be rerun. Failed refresh preserves output/time. Raw output remains disclosed, never parsed into invented diagnoses. `admin_runtime_health.dart`, runtime regression and fourth native journey; runtime-result/findings renders. |
+| R5: scannable source/expiry | Expiry required opening detail | Rows show local expiry/expired time or Expiry not reported beside existing status/source. Renewal and secret-safe catalog retained; provider captures/regressions. |
+| R6: task-oriented capabilities | Skills opened first, with several competing secondary controls | Capabilities opens first, grouped into Needs setup, Enabled capabilities and Not enabled. Installed skills is adjacent; library, discovery and plugins move to a labeled overflow menu. Selector stacks when space/text requires. Independent disclosure/toggle/setup retained; capability host/native tests and renders. |
+| R7: understandable editors | Substantially delivered; preserve it | Percentage diagram, sparse saves, repeated-conflict handling and full-screen Identity retained. Existing meaningful editor tests and native keyboard/conflict/discard journeys rerun. |
+| R8: memories before explanation | Read-only explanation and refresh dominated the entry | Search, a quiet Read only label and actual entries come first. Refresh and Why read only? follow the collection. Complete detail/copy/settings remain reachable; memory renders/regressions. |
+| R9: meaningful search paths and comparable usage | Intermediate editor path missing; tokens hidden | Search includes owner, editor and field. Input/output token totals now sit beside calls/cost before expansion; existing cost coverage/ranges preserved. Navigation and usage tests; usage renders. |
+| R10: continuity and concise summaries | Long task metadata and broad return refresh | Single-line next task name, concise next run/latest listed outcome, honest unavailable outcome. Returning editors refresh only affected endpoints; per-endpoint generations retain independent in-flight reads. Scheduled controller lifetime preserved. Overview/comparison regressions and attention renders. |
+
+### Follow-up verification
+
+Design, host, native and signed-build verification are complete. Phone installation
+remains pending; this is not a completed deployment record.
+
+- Final host suite: **2,013 passed, 11 opt-in live tests skipped**. Final analysis
+  clean. Includes selected-profile visibility without vertical page movement,
+  retained runtime outcomes across failed reads, and existing Studio/ownership
+  and scheduling regressions. The earlier 2,012-pass run preceded the final
+  responsive-selector and result-retention corrections.
+- Final root/detail captures: 72 passed, followed by 52 passing responsive
+  capability/detail checks after correcting the large-text selector. These include
+  12 detail/editor families across light/dark, 320 dp/200% and wide layouts, plus
+  populated profile briefs and explicit exceptions. Inspected actual Flutter images
+  are in `build/administration-preview/`.
+- Native acceptance: **4 passed** on disposable API 36 emulator-5558 at 320 ×
+  640 dp. Exercised the real Android keyboard, semantics entry, repeated conflict
+  resolution, long Identity draft/back protection, canonical shared-account link
+  at 200% text, independent capability disclosure/toggle/setup and retained runtime
+  output without a second operation. Initial runner interruptions required an
+  emulator restart; large-text tests were corrected to scroll to lazy list content
+  and target the correct scrollable. The final complete run is green. The isolated
+  emulator was stopped afterward.
+- Runtime result retention additionally passed all three outcome cases (success,
+  failure, unknown), including failed refresh on reopening and no duplicate POST.
+- Logs are retained under `build/administration-refinement/`; generated artifacts
+  are intentionally ignored. Test entry points are documented in `docs/TESTING.md`.
+
+Evidence boundaries: diagnostics used fixtures on the disposable emulator; no real
+Doctor, security audit, provider sign-in or configuration writes were performed to
+review presentation. Runtime observations persist during the Administration
+session/tab/editor journey, not across app termination. They report operation
+outcomes, not an inference test or a blanket health verdict. Phone verification
+remains pending: the previously paired Samsung phone disconnected during this run,
+and its prior wireless-debugging address `10.30.1.2:39457` refuses connections.
+No phone data was cleared and no installation of this build is claimed. The owner
+was asked for the current wireless-debugging address. Resume with an in-place
+`adb install -r`, verify version and preserved first-install time, and inspect the
+real administration screen before closing the goal.
+
+### Signed follow-up build
+
+- Source version `1.0.1+2254`; ARM64 production APK version code **22542**.
+- Normal `lib/main.dart` entry point, release mode, non-debuggable,
+  `com.tarkilhk.wing`, production certificate matches the repository pin.
+- Built with `--split-per-abi --split-debug-info=build/wing-symbols` and
+  `--android-project-arg=shrink=false`, the existing local phone-build procedure.
+  This is a signed local upgrade, not a tagged public release.
+- APK: `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` (29.6 MB).
+- SHA-256: `dbccb36471055acefeaea5297ac018d0d474d0c1e76cb55e5cf34f5546cd7d76`.
+- Verification JSON and build log: `build/administration-refinement/`.
+- Main was current through `405710e` before this change; no concurrent commits
+  remained to integrate. The original busy main checkout was left untouched.

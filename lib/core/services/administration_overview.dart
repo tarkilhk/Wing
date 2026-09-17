@@ -16,7 +16,7 @@ class AdministrationOverview extends ChangeNotifier {
   final ProfileAdministration profile;
   final observations = <String, AdministrationObservation>{};
   bool _disposed = false;
-  int _generation = 0;
+  final _generations = <String, int>{};
   static const endpoints = {
     'config': 'config',
     'model': 'model/info',
@@ -26,11 +26,15 @@ class AdministrationOverview extends ChangeNotifier {
     'connectors': 'mcp/servers',
   };
 
-  Future<void> refresh() async {
-    final generation = ++_generation;
+  Future<void> refresh({Set<String>? keys}) async {
     await Future.wait([
       for (final entry in endpoints.entries)
-        _read(entry.key, entry.value, generation),
+        if (keys == null || keys.contains(entry.key))
+          _read(
+            entry.key,
+            entry.value,
+            _generations.update(entry.key, (n) => n + 1, ifAbsent: () => 1),
+          ),
     ]);
   }
 
@@ -52,14 +56,14 @@ class AdministrationOverview extends ChangeNotifier {
         _ => null,
       };
       if (collection != null) administrationRows(data[collection]);
-      if (_disposed || generation != _generation) return;
+      if (_disposed || generation != _generations[key]) return;
       observation.data = data;
       observation.checkedAt = DateTime.now();
     } catch (error) {
-      if (_disposed || generation != _generation) return;
+      if (_disposed || generation != _generations[key]) return;
       observation.error = administrationError(error);
     } finally {
-      if (!_disposed && generation == _generation) {
+      if (!_disposed && generation == _generations[key]) {
         observation.loading = false;
         notifyListeners();
       }
@@ -69,7 +73,6 @@ class AdministrationOverview extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _generation++;
     super.dispose();
   }
 }

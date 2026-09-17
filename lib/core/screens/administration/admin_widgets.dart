@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../theme/wing_theme.dart';
 import '../../widgets/server_connection_label.dart';
 import 'package:flutter/material.dart';
 
@@ -195,6 +196,8 @@ class AdminRow extends StatefulWidget {
   final String title;
   final String subtitle;
   final bool emphasizeChanges;
+  final String? attention;
+  final String? detail;
   final IconData icon;
   final VoidCallback? onTap;
   const AdminRow({
@@ -202,6 +205,8 @@ class AdminRow extends StatefulWidget {
     required this.title,
     required this.subtitle,
     this.emphasizeChanges = false,
+    this.attention,
+    this.detail,
     required this.icon,
     this.onTap,
   });
@@ -251,9 +256,23 @@ class _AdminRowState extends State<AdminRow> {
         widget.title,
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
-      subtitle: Text(
-        widget.subtitle,
-        style: Theme.of(context).textTheme.bodySmall,
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.attention != null) ...[
+            const SizedBox(height: 4),
+            AdminAttention(widget.attention!),
+            const SizedBox(height: 4),
+          ],
+          if (widget.detail != null)
+            Text(
+              widget.detail!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          Text(widget.subtitle, style: Theme.of(context).textTheme.bodySmall),
+        ],
       ),
       trailing: widget.onTap == null
           ? null
@@ -261,6 +280,31 @@ class _AdminRowState extends State<AdminRow> {
       onTap: widget.onTap,
     ),
   );
+}
+
+/// A finding stays distinct from ordinary configuration metadata.
+class AdminAttention extends StatelessWidget {
+  const AdminAttention(this.label, {super.key});
+  final String label;
+  @override
+  Widget build(BuildContext context) {
+    final color = WingTokens.of(context).warning;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.error_outline, size: 16, color: color),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.labelMedium?.copyWith(color: color),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class AdminNotice extends StatelessWidget {

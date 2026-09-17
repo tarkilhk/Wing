@@ -9,14 +9,22 @@ Read the [ownership handoff](design/2026-09-14-administration-handoff.md) before
 Overview reads are independent observations for a captured profile. A failed read
 retains its last confirmed value and freshness; missing configuration stays
 unavailable. Entry performs no inference, installations, connector tests or Doctor.
-Returning from an editor refreshes summaries and briefly emphasizes changed values;
+The profile brief groups the shared Chats profile chips with a one-line description
+and direct Identity edit, or Describe this agent when absent. Selected profiles are
+kept in view. Setup needs, expired sign-ins and schedule issues use separate semantic
+attention labels; task names stay on one line with run time/outcome beneath.
+Returning from an editor refreshes only the affected observations and briefly emphasizes changed values;
 reduced motion suppresses the emphasis. Tabs and search preserve their observations
-and scroll context. Search opens the exact field without focusing its keyboard.
+and scroll context. Search shows the full owner/editor/field path and opens the exact field without
+focusing its keyboard.
 
-Skills and tools opens the capability inventory directly. Tool details combine
+Skills and tools opens Capabilities first, grouped into Needs setup, Enabled
+capabilities and Not enabled. Installed skills is the adjacent view; the selector
+stacks at narrow widths or enlarged text. Tool details combine
 separate enablement/setup/platform facts with the owning setup route. Skill library,
-Discover skills and Agent plugins remain distinct secondary destinations.
-Provider inventories use compact status/source rows, direct expired-sign-in renewal
+Discover skills and Agent plugins remain distinct secondary destinations in the
+Browse and manage skills menu.
+Provider inventories use compact status/source/expiry rows, direct expired-sign-in renewal
 and an explicit Add service key catalog. Account details explain the observed source
 and link to the canonical shared account. Memory leads with retained entries and a
 short read-only disclosure; source metadata is shown only when reported.
@@ -24,9 +32,12 @@ short read-only disclosure; source metadata is shown only when reported.
 Health places selected-profile findings before usage and runtime utilities. Check
 coverage and freshness describe access/setup/credential observations; they do not
 certify inference. Findings retain their state through owning-editor visits and
-search, with explicit recheck. Doctor/audit results disclose their raw output and
-report the operation's outcome without inventing a whole-server health verdict.
-Usage compares sortable model totals with formatted counts and estimated USD costs.
+search, with explicit recheck. Runtime Health retains Doctor/audit observations and their timestamps while
+reviewing results or switching tabs. Reviewing output reads the same operation;
+Run again is separate and unavailable until its prior outcome is known. A failed
+refresh retains the last output and observation time. Results lead with the outcome
+and next step, with raw output disclosed below; completion does not certify health.
+Usage compares sortable model totals with formatted calls, input/output tokens and estimated USD costs before expansion.
 Cost bars use only known, finite, nonnegative costs and state their coverage; a zero
 total draws no shares, and unreported cost remains unavailable.
 

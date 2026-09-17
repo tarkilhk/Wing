@@ -6,17 +6,53 @@ import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 import 'admin_widgets.dart';
 
+/// A reported operation result, never a verdict that the server is healthy.
+class AdminDiagnosticObservation {
+  const AdminDiagnosticObservation(
+    this.action,
+    this.status,
+    this.checkedAt, {
+    this.readError,
+  });
+  final AdministrationAction action;
+  final Map<String, dynamic> status;
+  final DateTime? checkedAt;
+  final String? readError;
+  bool get failed =>
+      status['running'] != true &&
+      status['exit_code'] != null &&
+      status['exit_code'] != 0;
+  String get outcome => status['running'] == true
+      ? 'Running'
+      : status['exit_code'] == 0
+      ? 'Completed'
+      : failed
+      ? 'Failed'
+      : 'Outcome unavailable';
+  String get nextStep => status['running'] == true
+      ? 'The operation is still running. Open progress to check its result.'
+      : failed
+      ? 'The operation reported a failure. Review the output to see what completed before retrying.'
+      : status['exit_code'] == 0
+      ? 'The operation completed. Its output may still contain warnings or findings.'
+      : 'A final outcome has not been reported. Check progress to retrieve the result.';
+}
+
 class AdminActionPage extends StatefulWidget {
   final AdministrationRepository server;
   final AdministrationAction action;
   final String title;
   final String scope;
+  final ValueChanged<AdminDiagnosticObservation>? onObservation;
+  final AdminDiagnosticObservation? initialObservation;
   const AdminActionPage({
     super.key,
     required this.server,
     required this.action,
     required this.title,
     required this.scope,
+    this.onObservation,
+    this.initialObservation,
   });
   @override
   State<AdminActionPage> createState() => _AdminActionPageState();
@@ -27,9 +63,12 @@ class _AdminActionPageState extends State<AdminActionPage> {
   String? _error;
   Timer? _timer;
   bool _loading = false;
+  DateTime? _checkedAt;
   @override
   void initState() {
     super.initState();
+    _status = widget.initialObservation?.status;
+    _checkedAt = widget.initialObservation?.checkedAt;
     _check();
   }
 
@@ -48,7 +87,10 @@ class _AdminActionPageState extends State<AdminActionPage> {
     try {
       final status = await widget.action.status(widget.server);
       if (!mounted) return;
-      setState(() => _status = status);
+      setState(() {
+        _status = status;
+        _checkedAt = DateTime.now();
+      });
       if (status['running'] == true) {
         _timer = Timer(const Duration(seconds: 3), _check);
       }
@@ -57,7 +99,17 @@ class _AdminActionPageState extends State<AdminActionPage> {
         setState(() => _error = administrationError(e, writing: true));
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        widget.onObservation?.call(
+          AdminDiagnosticObservation(
+            widget.action,
+            _status ?? const {},
+            _checkedAt,
+            readError: _error,
+          ),
+        );
+      }
     }
   }
 
@@ -87,9 +139,20 @@ class _AdminActionPageState extends State<AdminActionPage> {
                 : 'Failed',
           ),
         const SizedBox(height: 16),
-        const Text(
-          'This result describes the diagnostic operation. Review its output for findings.',
+        Text(
+          AdminDiagnosticObservation(
+            widget.action,
+            _status ?? const {},
+            _checkedAt,
+          ).nextStep,
         ),
+        if (_checkedAt != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Checked ${TimeOfDay.fromDateTime(_checkedAt!).format(context)}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
         ExpansionTile(
           title: const Text('Diagnostic output'),
           children: [
@@ -113,8 +176,9 @@ Future<void> startAdminOperation(
   AdministrationRepository server,
   String path,
   String title,
-  String scope,
-) async {
+  String scope, {
+  ValueChanged<AdminDiagnosticObservation>? onObservation,
+}) async {
   if (!await adminConfirm(
     context,
     title,
@@ -126,6 +190,7 @@ Future<void> startAdminOperation(
   try {
     final result = await server.write('POST', path);
     final action = AdministrationAction.fromJson(result);
+    onObservation?.call(AdminDiagnosticObservation(action, const {}, null));
     if (context.mounted) {
       await adminPush(
         context,
@@ -134,6 +199,7 @@ Future<void> startAdminOperation(
           action: action,
           title: title,
           scope: scope,
+          onObservation: onObservation,
         ),
       );
     }

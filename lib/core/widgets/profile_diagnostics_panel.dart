@@ -248,20 +248,36 @@ class _ProfileDiagnosticsPanelState extends State<ProfileDiagnosticsPanel> {
                         : 'Check again',
                   ),
                 ),
-                OutlinedButton(
-                  onPressed: widget.onManageConnections,
-                  child: const Text('Manage connections'),
+                PopupMenuButton<String>(
+                  tooltip: 'More health actions',
+                  icon: const Icon(Icons.more_horiz),
+                  onSelected: (action) {
+                    switch (action) {
+                      case 'connections':
+                        widget.onManageConnections();
+                      case 'providers':
+                        widget.onReviewProviderAccess?.call();
+                      case 'connectors':
+                        widget.onReviewConnectors?.call();
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: 'connections',
+                      child: Text('Manage connections'),
+                    ),
+                    if (widget.onReviewProviderAccess != null)
+                      const PopupMenuItem(
+                        value: 'providers',
+                        child: Text('Review provider access'),
+                      ),
+                    if (widget.onReviewConnectors != null)
+                      const PopupMenuItem(
+                        value: 'connectors',
+                        child: Text('Review MCP connectors'),
+                      ),
+                  ],
                 ),
-                if (widget.onReviewProviderAccess != null)
-                  TextButton(
-                    onPressed: widget.onReviewProviderAccess,
-                    child: const Text('Review provider access'),
-                  ),
-                if (widget.onReviewConnectors != null)
-                  TextButton(
-                    onPressed: widget.onReviewConnectors,
-                    child: const Text('Review MCP connectors'),
-                  ),
               ],
             ),
           ],

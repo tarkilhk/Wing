@@ -14,14 +14,19 @@ const _profiles = ProfileDiscovery(
   activeName: 'default',
 );
 
-ProfileGateway _gateway({required ScopedGet get, ScopedPost? put}) =>
-    ProfileGateway(
-      scope: _scope,
-      get: get,
-      put: put,
-      rpc: (_, _) async => {},
-      discover: () async => _profiles,
-    );
+ProfileGateway _gateway({
+  required ScopedGet get,
+  ScopedPost? put,
+  bool skillsOnly = true,
+}) => ProfileGateway(
+  scope: _scope,
+  get: (path, query) => skillsOnly && path == 'tools/toolsets'
+      ? Future.value({'data': []})
+      : get(path, query),
+  put: put,
+  rpc: (_, _) async => {},
+  discover: () async => _profiles,
+);
 
 Future<void> _show(WidgetTester tester, ProfileGateway gateway) async {
   await tester.pumpWidget(
@@ -36,6 +41,8 @@ Future<void> _show(WidgetTester tester, ProfileGateway gateway) async {
       ),
     ),
   );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Installed skills'));
   await tester.pumpAndSettle();
 }
 
@@ -121,6 +128,7 @@ void main() {
             onPlugins: () {},
             connectionLabel: 'Server A',
             gateway: _gateway(
+              skillsOnly: false,
               get: (path, _) => path == 'skills'
                   ? skills.future
                   : Future.value({
@@ -144,7 +152,9 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.tap(find.text('Tools'));
+      await tester.tap(find.text('Installed skills'));
+      await tester.pump();
+      await tester.tap(find.text('Capabilities'));
       await tester.pumpAndSettle();
       skills.complete({
         'data': [
@@ -154,7 +164,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Browser'), findsOneWidget);
       expect(find.text('wrong-old-result'), findsNothing);
-      expect(find.text('Setup needed'), findsOneWidget);
+      expect(find.textContaining('Setup needed'), findsOneWidget);
       await tester.tap(find.byType(Switch));
       await tester.pumpAndSettle();
       expect(find.textContaining('existing setup process'), findsOneWidget);

@@ -51,20 +51,8 @@ class _AdminMemoryPageState extends State<AdminMemoryPage> {
               onChanged: (v) => setState(() => _query = v),
             ),
             const SizedBox(height: 12),
-            ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              title: const Text('Read only'),
-              subtitle: const Text('Browse what this profile remembers'),
-              children: const [
-                Padding(
-                  padding: EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    'Editing and deleting need server support for safe concurrent changes. Memory budgets are configured in characters; actual retained-file sizes are not reported for this profile.',
-                  ),
-                ),
-              ],
-            ),
-            TextButton(onPressed: refresh, child: const Text('Refresh')),
+            Text('Read only', style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 8),
             if (rows.isEmpty)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -116,6 +104,35 @@ class _AdminMemoryPageState extends State<AdminMemoryPage> {
                   ),
                 ),
               ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              children: [
+                TextButton.icon(
+                  onPressed: refresh,
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Refresh memories'),
+                ),
+                TextButton(
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Why read only?'),
+                      content: const Text(
+                        'You can read and copy these memories. This server does not support safely editing or deleting them from Wing. Retention and character budgets are available in Memory settings.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Close'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  child: const Text('Why read only?'),
+                ),
+              ],
+            ),
           ],
         );
       },

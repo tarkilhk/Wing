@@ -100,6 +100,10 @@ void main() {
     expect(find.text('Provider is configured.'), findsOneWidget);
     expect(find.text('Provider credentials are available.'), findsOneWidget);
 
+    await tester.ensureVisible(find.byTooltip('More health actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('More health actions'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Manage connections'));
     expect(managed, isTrue);
   });
@@ -201,6 +205,10 @@ void main() {
     await tester.pumpWidget(_app(host.workspace('work'), textScale: 2));
 
     expect(find.text('Profile checks'), findsOneWidget);
+    await tester.ensureVisible(find.byTooltip('More health actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('More health actions'));
+    await tester.pumpAndSettle();
     expect(find.text('Manage connections'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

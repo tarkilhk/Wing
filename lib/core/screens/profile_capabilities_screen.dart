@@ -33,7 +33,7 @@ class ProfileCapabilitiesScreen extends StatefulWidget {
 
 class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
   late final _gateway = widget.gateway;
-  _CapabilityKind _kind = _CapabilityKind.skills;
+  _CapabilityKind _kind = _CapabilityKind.tools;
   List<Map<String, dynamic>> _rows = [];
   bool _loading = true;
   bool _saving = false;
@@ -182,6 +182,9 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
     }
   }
 
+  int _rank(Map<String, dynamic> row) =>
+      row['enabled'] == true ? (row['configured'] == false ? 0 : 1) : 2;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -199,15 +202,43 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                   .contains(_query.toLowerCase()),
         )
         .toList();
+    if (!_skills) {
+      rows.sort((a, b) {
+        final byState = _rank(a).compareTo(_rank(b));
+        return byState != 0
+            ? byState
+            : '${a['label'] ?? a['name']}'.compareTo(
+                '${b['label'] ?? b['name']}',
+              );
+      });
+    }
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: adminToolbarHeight(
           context,
           'Skills and tools',
-          actions: 1,
+          actions: 2,
         ),
         title: const Text('Skills and tools', maxLines: 6, softWrap: true),
         actions: [
+          PopupMenuButton<String>(
+            tooltip: 'Browse and manage skills',
+            onSelected: (value) {
+              switch (value) {
+                case 'discover':
+                  widget.onHub();
+                case 'library':
+                  widget.onLibrary();
+                case 'plugins':
+                  widget.onPlugins();
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'discover', child: Text('Discover skills')),
+              PopupMenuItem(value: 'library', child: Text('Skill library')),
+              PopupMenuItem(value: 'plugins', child: Text('Agent plugins')),
+            ],
+          ),
           IconButton(
             tooltip: 'Refresh capabilities',
             onPressed: _loading || _saving ? null : _load,
@@ -235,52 +266,46 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                         style: metadataStyle,
                       ),
                       const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          TextButton(
-                            onPressed: widget.onLibrary,
-                            child: const Text('Skill library'),
-                          ),
-                          TextButton(
-                            onPressed: widget.onHub,
-                            child: const Text('Discover skills'),
-                          ),
-                          TextButton(
-                            onPressed: widget.onPlugins,
-                            child: const Text('Agent plugins'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      SegmentedButton<_CapabilityKind>(
-                        showSelectedIcon: false,
-                        segments: const [
-                          ButtonSegment(
-                            value: _CapabilityKind.skills,
-                            label: Text('Skills'),
-                          ),
-                          ButtonSegment(
-                            value: _CapabilityKind.tools,
-                            label: Text('Tools'),
-                          ),
-                        ],
-                        selected: {_kind},
-                        onSelectionChanged: _saving
-                            ? null
-                            : (value) {
-                                setState(() {
-                                  _kind = value.single;
-                                  _rows = [];
-                                  _notice = null;
-                                });
-                                _load();
-                              },
+                      LayoutBuilder(
+                        builder: (context, constraints) =>
+                            SegmentedButton<_CapabilityKind>(
+                              showSelectedIcon: false,
+                              direction:
+                                  constraints.maxWidth <
+                                      MediaQuery.textScalerOf(
+                                        context,
+                                      ).scale(300)
+                                  ? Axis.vertical
+                                  : Axis.horizontal,
+                              segments: const [
+                                ButtonSegment(
+                                  value: _CapabilityKind.tools,
+                                  label: Text('Capabilities'),
+                                ),
+                                ButtonSegment(
+                                  value: _CapabilityKind.skills,
+                                  label: Text('Installed skills'),
+                                ),
+                              ],
+                              selected: {_kind},
+                              onSelectionChanged: _saving
+                                  ? null
+                                  : (value) {
+                                      setState(() {
+                                        _kind = value.single;
+                                        _rows = [];
+                                        _notice = null;
+                                      });
+                                      _load();
+                                    },
+                            ),
                       ),
                       const SizedBox(height: 12),
                       TextField(
-                        decoration: const InputDecoration(
-                          hintText: 'Search capabilities',
+                        decoration: InputDecoration(
+                          hintText: _kind == _CapabilityKind.tools
+                              ? 'Find a capability'
+                              : 'Find a skill',
                           prefixIcon: Icon(Icons.search),
                         ),
                         onChanged: (value) => setState(() => _query = value),
@@ -329,52 +354,74 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                 final name = row['name'] as String;
                 final title = row['label']?.toString() ?? name;
                 final tools = row['tools'];
-                return ExpansionTile(
-                  key: ValueKey((_kind, name)),
-                  tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-                  minTileHeight: 56,
-                  childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  title: Text(title, style: theme.textTheme.bodyLarge),
-                  subtitle: Text(
-                    _skills
-                        ? '${row['category'] ?? 'Skill'} · ${row['provenance'] ?? 'Installed'}'
-                        : '${row['configured'] is! bool
-                              ? 'Setup status unavailable'
-                              : row['configured'] == true
-                              ? 'Configured'
-                              : 'Setup needed'}${row['platform_label'] == null ? '' : ' · ${row['platform_label']}'}',
-                    style: metadataStyle,
-                  ),
-                  trailing: CompactSwitch(
-                    semanticLabel: 'Enable $title',
-                    value: row['enabled'] == true,
-                    onChanged: _loading || _saving || row['enabled'] is! bool
-                        ? null
-                        : (value) => _toggle(row, value),
-                  ),
-                  expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                final group = _rank(row);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(row['description']?.toString() ?? ''),
-                    if (_skills)
-                      TextButton(
-                        onPressed: () => _readSkill(name),
-                        child: const Text('Read instructions'),
+                    if (!_skills &&
+                        (index == 0 || _rank(rows[index - 1]) != group))
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                        child: Text(
+                          switch (group) {
+                            0 => 'Needs setup',
+                            1 => 'Enabled capabilities',
+                            _ => 'Not enabled',
+                          },
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                       ),
-                    if (!_skills)
-                      TextButton.icon(
-                        onPressed: _saving
+                    ExpansionTile(
+                      key: ValueKey((_kind, name)),
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+                      minTileHeight: 56,
+                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      title: Text(title, style: theme.textTheme.bodyLarge),
+                      subtitle: Text(
+                        _skills
+                            ? '${row['category'] ?? 'Skill'} · ${row['provenance'] ?? 'Installed'}'
+                            : '${row['enabled'] == true ? 'Enabled' : 'Off'} · ${row['configured'] is! bool
+                                  ? 'Setup status unavailable'
+                                  : row['configured'] == true
+                                  ? 'Configured'
+                                  : 'Setup needed'}${row['platform_label'] == null ? '' : ' · ${row['platform_label']}'}',
+                        style: metadataStyle,
+                      ),
+                      trailing: CompactSwitch(
+                        semanticLabel: 'Enable $title',
+                        value: row['enabled'] == true,
+                        onChanged:
+                            _loading || _saving || row['enabled'] is! bool
                             ? null
-                            : () async {
-                                await widget.onToolSetup(name);
-                                if (mounted) await _load();
-                              },
-                        icon: const Icon(Icons.tune, size: 18),
-                        label: const Text('Setup and providers'),
+                            : (value) => _toggle(row, value),
                       ),
-                    if (!_skills && tools is List) ...[
-                      const SizedBox(height: 8),
-                      SelectableText(tools.join(', ')),
-                    ],
+                      expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(row['description']?.toString() ?? ''),
+                        if (_skills)
+                          TextButton(
+                            onPressed: () => _readSkill(name),
+                            child: const Text('Read instructions'),
+                          ),
+                        if (!_skills)
+                          TextButton.icon(
+                            onPressed: _saving
+                                ? null
+                                : () async {
+                                    await widget.onToolSetup(name);
+                                    if (mounted) await _load();
+                                  },
+                            icon: const Icon(Icons.tune, size: 18),
+                            label: const Text('Setup and providers'),
+                          ),
+                        if (!_skills && tools is List) ...[
+                          const SizedBox(height: 8),
+                          SelectableText(tools.join(', ')),
+                        ],
+                      ],
+                    ),
                   ],
                 );
               },

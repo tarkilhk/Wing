@@ -4,7 +4,7 @@ import '../../services/administration_repository.dart';
 import '../../widgets/profile_diagnostics_panel.dart';
 import '../../services/profile_workspace_controller.dart';
 import 'admin_widgets.dart';
-import 'admin_operations_page.dart';
+import 'admin_runtime_health.dart';
 import 'admin_providers_page.dart';
 import 'admin_connectors_page.dart';
 
@@ -46,6 +46,7 @@ class AdminHealthContent extends StatelessWidget {
                   adminPush(context, AdminConnectorsPage(profile: profile!)),
             ),
           ),
+        const SizedBox(height: 12),
         AdminGroup(
           children: [
             AdminRow(
@@ -58,71 +59,8 @@ class AdminHealthContent extends StatelessWidget {
           ],
         ),
       ],
-      Text('Runtime', style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: 8),
-      AdminLoad(
-        expand: false,
-        load: () async => {
-          ...await server.runtimeIdentity(),
-          'observedAt': DateTime.now(),
-        },
-        builder: (context, identity, refresh) {
-          final label = identity['label'] as String;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(label),
-              Text(
-                'Identity checked ${TimeOfDay.fromDateTime(identity['observedAt'] as DateTime).format(context)} · Diagnostics run on request',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              if (identity['unavailable'] == true)
-                TextButton(
-                  onPressed: refresh,
-                  child: const Text('Retry runtime identity'),
-                ),
-              const SizedBox(height: 8),
-              AdminGroup(
-                children: [
-                  AdminRow(
-                    title: 'Logs',
-                    subtitle: 'Recent errors and bounded log search',
-                    icon: Icons.subject,
-                    onTap: () => adminPush(
-                      context,
-                      AdminLogsPage(server: server, runtimeLabel: label),
-                    ),
-                  ),
-                  AdminRow(
-                    title: 'Doctor',
-                    subtitle: 'Run diagnostics without automatic repairs',
-                    icon: Icons.health_and_safety_outlined,
-                    onTap: () => startAdminOperation(
-                      context,
-                      server,
-                      'ops/doctor',
-                      'Doctor',
-                      label,
-                    ),
-                  ),
-                  AdminRow(
-                    title: 'Security audit',
-                    subtitle: 'Inspect backend policy and configuration',
-                    icon: Icons.health_and_safety_outlined,
-                    onTap: () => startAdminOperation(
-                      context,
-                      server,
-                      'ops/security-audit',
-                      'Security audit',
-                      label,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
+      const AdminSectionLabel('Runtime'),
+      AdminRuntimeHealth(server: server),
       const SizedBox(height: 20),
     ],
   );
@@ -195,7 +133,7 @@ class _AdminUsagePageState extends State<AdminUsagePage> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 children: [
                   Text(
-                    'Where your agent spends its time',
+                    'Model usage',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const AdminNotice(
@@ -247,6 +185,9 @@ class _AdminUsagePageState extends State<AdminUsagePage> {
                                 const SizedBox(height: 4),
                                 Text(
                                   '${number(context, model['api_calls'])} calls · ${number(context, model['estimated_cost'], money: true)}',
+                                ),
+                                Text(
+                                  '${number(context, model['input_tokens'])} in · ${number(context, model['output_tokens'])} out tokens',
                                 ),
                                 if (valid(model['estimated_cost']) &&
                                     total > 0 &&

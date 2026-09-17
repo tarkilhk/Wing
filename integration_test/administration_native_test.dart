@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:wing/core/screens/administration/admin_identity_page.dart';
+import 'package:wing/core/screens/administration/admin_runtime_health.dart';
 import 'package:wing/core/screens/administration/admin_providers_page.dart';
 import 'package:wing/core/screens/administration/admin_settings_page.dart';
 import 'package:wing/core/screens/administration/admin_widgets.dart';
@@ -15,6 +16,47 @@ import 'package:wing/core/widgets/compact_switch.dart';
 /// Production widgets on disposable Android with in-memory observations only.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('Android runtime findings survive reviewing the same operation', (
+    tester,
+  ) async {
+    final fixture = AdministrationDesignFixture();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: AdminRuntimeHealth(server: fixture.server),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Run Doctor'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Run Doctor'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Run'));
+    await tester.pumpAndSettle();
+    expect(find.text('Failed'), findsOneWidget);
+    await tester.tap(find.text('Diagnostic output'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('A required dependency'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Failed'), findsOneWidget);
+    await tester.ensureVisible(find.text('Review output'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Review output'));
+    await tester.pumpAndSettle();
+    expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(1));
+    expect(
+      fixture.requests.where((r) => r.$2 == 'actions/doctor/status'),
+      hasLength(2),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'Android editors: keyboard, conflict, accessibility action and discard',
     (tester) async {
@@ -173,7 +215,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Manage shared account'));
+      await tester.scrollUntilVisible(find.text('Manage shared account'), 200);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Manage shared account'));
       await tester.pumpAndSettle();
@@ -203,9 +245,18 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Tools'));
+      await tester.tap(find.text('Capabilities'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Web search and research'));
+      await tester.scrollUntilVisible(
+        find.text('Web search and research'),
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byType(CustomScrollView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       await tester.tap(find.text('Web search and research'));
       await tester.pumpAndSettle();
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);

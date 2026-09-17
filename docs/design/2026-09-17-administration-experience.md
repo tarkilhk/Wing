@@ -1,6 +1,6 @@
 # Administration experience: approved direction
 
-Status: IMPLEMENTED AND VERIFIED — see Plan 003 for acceptance evidence.
+Status: Refinements implemented and verified following the delivery audit; signed build ready; phone installation pending. See Plan 003.
 
 On 17 September 2026, the owner accepted all ten recommendations from the
 administration design review and requested documents and a goal definition
@@ -39,10 +39,14 @@ sub-item is in scope; prioritization in the plan changes order, not inclusion.
 ### R1. Profile brief and informative navigation
 
 - R1a: Replace the oversized form-like profile selector with a compact identity
-  treatment: display name, one-line description when available, and an explicit
-  change-profile action. Keep the selected server visible across all three tabs.
+  treatment: shared tappable profile choices and a one-line purpose/description
+  inside one compact brief. The owner subsequently rejected the separate Change
+  action: reuse Chats’ profile chips and keep the selected choice in view. When no
+  description exists, offer Describe this agent without inventing one. Keep the
+  selected server visible across all three tabs.
 - R1b: Profile rows show real current configuration: model/reasoning, identity
-  description, memory retention and character budget, behavior, skills/tool
+  editing entry (the description is in the brief), memory retention and character
+  budget, behavior, skills/tool
   enablement and known setup issues, effective access/connectors, and scheduled
   tasks' next run and latest known outcome. Select the most useful concise facts;
   details remain available in the owning screen.
@@ -63,14 +67,14 @@ Administration
 [Search settings]
 Profile               Server               Health
 
-Personal                                   Change
-Research, planning and everyday questions
+[Personal] [Other profile]
+Research, planning and everyday questions       Edit
 
 Agent setup
 Models and reasoning                            ›
 [Current model] · [Supported reasoning setting]
 Identity                                        ›
-[Profile description]
+Description and agent instructions
 Memory                                          ›
 [Retention setting] · [Budget in characters]
 Behavior                                        ›

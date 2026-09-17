@@ -179,7 +179,7 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                     subtitle: Text(
-                      '${providerInventoryStatus(access)} · ${access.external ? 'Managed externally' : access.status['source_label'] ?? 'Source not reported'}',
+                      '${providerInventoryStatus(access)} · ${access.external ? 'Managed externally' : access.status['source_label'] ?? 'Source not reported'}${access.hasCredential ? '\n${providerExpiryLabel(context, access)}' : ''}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     trailing: Row(
@@ -270,6 +270,14 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
       },
     ),
   );
+}
+
+String providerExpiryLabel(BuildContext context, ProviderAccess access) {
+  final expiry = access.expiresAt?.toLocal();
+  if (expiry == null) return 'Expiry not reported';
+  final date = MaterialLocalizations.of(context).formatMediumDate(expiry);
+  final time = TimeOfDay.fromDateTime(expiry).format(context);
+  return '${access.state == ProviderAccessState.expired ? 'Expired' : 'Expires'} $date · $time';
 }
 
 String providerInventoryStatus(ProviderAccess access) => switch (access.state) {

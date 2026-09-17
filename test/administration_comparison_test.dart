@@ -111,16 +111,11 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.textContaining('Next: Actual next task'),
-        300,
-      );
-      expect(
-        find.textContaining('1 running\nNext: Actual next task'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('Latest listed run:'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Actual next task'), 300);
+      expect(find.textContaining('1 running'), findsOneWidget);
+      expect(find.textContaining('Last listed run'), findsOneWidget);
       expect(find.textContaining('Outcome unavailable'), findsOneWidget);
+      expect(find.text('Later task'), findsNothing);
       expect(find.textContaining('Success'), findsNothing);
       expect(fixture.requests.every((r) => r.$1 == 'GET'), isTrue);
       expect(fixture.requests.where((r) => r.$2 == 'cron/jobs'), hasLength(1));
