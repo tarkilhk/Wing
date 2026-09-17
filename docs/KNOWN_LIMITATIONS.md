@@ -6,13 +6,13 @@ These limits describe the current client. The [product plan](PRODUCT_PLAN.md) co
 
 The app requires the modern Hermes dashboard, profile/session APIs and Desktop Gateway. Older API-only/SSE installations are not supported by the active workspace. Capabilities depend on the server and provider. A slash command appearing in a catalog does not establish that it works from Android. Terminal-only, messaging-only and host-microphone operations retain those restrictions.
 
-Some dashboard requests still lack a transport deadline. A host that accepts a connection but never answers can leave connection setup or a download pending. Tracked in [issue #4](https://github.com/tarkilhk/wing/issues/4).
+Some dashboard requests still lack a transport deadline. A host that accepts a connection but never answers can leave connection setup or a download pending. Tracked in [issue #4](https://github.com/tarkilhk/Wing/issues/4).
 
 ## Leaving the app and recovering work
 
 Hermes runs accepted work on the server. The phone must be running and connected to drain its unsent follow-up queue or generate local alerts. Foreground monitoring keeps the app engine and opened connections alive while chats are working; waiting questions keep their notifications after monitoring stops. Work started elsewhere while Wing is idle cannot wake it. Screen-off delivery requires allowing background battery use. Unopened chats still have limited event coverage. Force-stop, process termination, reboot and connectivity loss can interrupt monitoring. See [background notifications](BACKGROUND_NOTIFICATIONS.md).
 
-If Android closes after a normal send reaches Hermes but before its acknowledgement arrives, the retained draft can return without an uncertainty warning. Check server history before sending that draft again. The client does not automatically resend it. This affects the acknowledgement window; it does not mean every reconnect duplicates a message. Tracked in [issue #3](https://github.com/tarkilhk/wing/issues/3).
+If Android closes after a normal send reaches Hermes but before its acknowledgement arrives, the retained draft can return without an uncertainty warning. Check server history before sending that draft again. The client does not automatically resend it. This affects the acknowledgement window; it does not mean every reconnect duplicates a message. Tracked in [issue #3](https://github.com/tarkilhk/Wing/issues/3).
 
 Pending sensitive requests, side tasks and synchronized answer-version recovery depend on server capabilities. See [Sensitive input and side questions](SUPERVISION_AND_QUEUES.md#sensitive-input-and-approvals) and [Server chat relationships](SERVER_CHAT_RELATIONSHIPS.md). Client fixtures do not establish live-server support.
 

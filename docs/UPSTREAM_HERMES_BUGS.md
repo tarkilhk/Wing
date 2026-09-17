@@ -6,10 +6,10 @@ Last verified: 2026-09-14, local Hermes 0.21.2, installed source commit `e16f686
 
 | ID | Priority | Issue | Status | Upstream issue | Local issue |
 | --- | --- | --- | --- | --- | --- |
-| HUP-001 | High | Browser and vault target different tabs | Open, reproduced | Not filed | [#5](https://github.com/tarkilhk/wing/issues/5) |
-| HUP-002 | Medium | Non-default profile loop command/control mismatch | Open, reproduced | Not filed | [#6](https://github.com/tarkilhk/wing/issues/6) |
-| HUP-003 | Medium | Global activity omits child-only work | Open, reproduced contract gap | Not filed | [#7](https://github.com/tarkilhk/wing/issues/7) |
-| HUP-004 | Medium | Windows profile deletion fails with an open MCP log handle | Open, fix proposed | [Issue #110953](https://github.com/NousResearch/hermes-agent/issues/110953), [PR #110954](https://github.com/NousResearch/hermes-agent/pull/110954) | [#8](https://github.com/tarkilhk/wing/issues/8) |
+| HUP-001 | High | Browser and vault target different tabs | Open, reproduced | Not filed | [#5](https://github.com/tarkilhk/Wing/issues/5) |
+| HUP-002 | Medium | Non-default profile loop command/control mismatch | Open, reproduced | Not filed | [#6](https://github.com/tarkilhk/Wing/issues/6) |
+| HUP-003 | Medium | Global activity omits child-only work | Open, reproduced contract gap | Not filed | [#7](https://github.com/tarkilhk/Wing/issues/7) |
+| HUP-004 | Medium | Windows profile deletion fails with an open MCP log handle | Open, fix proposed | [Issue #110953](https://github.com/NousResearch/hermes-agent/issues/110953), [PR #110954](https://github.com/NousResearch/hermes-agent/pull/110954) | [#8](https://github.com/tarkilhk/Wing/issues/8) |
 
 Priorities reflect mobile impact. Close an entry only after its acceptance criteria pass against a recorded backend version. Add the upstream issue URL and fix commit when available; a newer version alone does not establish a fix.
 

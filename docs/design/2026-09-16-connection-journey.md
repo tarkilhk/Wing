@@ -36,7 +36,7 @@ These are illustrative addresses, not discovered hosts. A URL without an explici
 
 ### Entry
 
-The approved Wing arrival screen remains the first-connection entry point: portrait, lowercase wordmark, tagline and **Connect your agent**. **Restore configuration**, the offline **Connection guide**, and drawer access stay available. This proposal begins when Connect your agent is tapped. Connections → Add connection opens the same journey without repeating the welcome screen.
+The approved Wing arrival screen remains the first-connection entry point: portrait, title-case Wing wordmark, tagline and **Connect your agent**. **Restore configuration**, the offline **Connection guide**, and drawer access stay available. This proposal begins when Connect your agent is tapped. Connections → Add connection opens the same journey without repeating the welcome screen.
 
 ### 1. Address
 

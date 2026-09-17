@@ -1,6 +1,6 @@
 # Attribution and license
 
-Wing is an independently developed Android companion for Hermes Agent, maintained in [`tarkilhk/wing`](https://github.com/tarkilhk/wing). It began with [rusty4444](https://github.com/rusty4444)'s open-source Android client and continues with its own design, features and releases. Wing is not an official Hermes Agent or Nous Research product.
+Wing is an independently developed Android companion for Hermes Agent, maintained in [`tarkilhk/Wing`](https://github.com/tarkilhk/Wing). It began with [rusty4444](https://github.com/rusty4444)'s open-source Android client and continues with its own design, features and releases. Wing is not an official Hermes Agent or Nous Research product.
 
 The original Android client identifies its license as MIT. Wing continues under MIT and retains attribution to the original authors. See [LICENSE](LICENSE) for the full license text. Preserve applicable copyright and permission notices when redistributing.
 

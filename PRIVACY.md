@@ -2,7 +2,7 @@
 
 Effective date: 17 September 2026.
 
-This policy covers Wing (`com.tarkilhk.wing`), maintained by [tarkilhk and the Wing contributors](https://github.com/tarkilhk/wing). It is an independent Android client for a Hermes server you choose. The app does not require an account with Wing's maintainer. Your Hermes host, model providers, and services used by your agent have their own data practices.
+This policy covers Wing (`com.tarkilhk.wing`), maintained by [tarkilhk and the Wing contributors](https://github.com/tarkilhk/Wing). It is an independent Android client for a Hermes server you choose. The app does not require an account with Wing's maintainer. Your Hermes host, model providers, and services used by your agent have their own data practices.
 
 ## Data the app handles
 
@@ -43,8 +43,8 @@ Configuration exports contain saved connections and credentials. A passphrase is
 
 ## Contact and policy changes
 
-For general privacy questions, contact the maintainer through [Wing's GitHub issues](https://github.com/tarkilhk/wing/issues). Do not post passwords, private server addresses, personal files or conversation contents publicly. Ask for a private contact route before sharing sensitive details.
+For general privacy questions, contact the maintainer through [Wing's GitHub issues](https://github.com/tarkilhk/Wing/issues). Do not post passwords, private server addresses, personal files or conversation contents publicly. Ask for a private contact route before sharing sensitive details.
 
-For a suspected security vulnerability, use [GitHub's private vulnerability reporting](https://github.com/tarkilhk/wing/security/advisories/new). GitHub processes information you submit through these channels under its own privacy policy.
+For a suspected security vulnerability, use [GitHub's private vulnerability reporting](https://github.com/tarkilhk/Wing/security/advisories/new). GitHub processes information you submit through these channels under its own privacy policy.
 
 The effective date above changes when this policy changes. The app bundles the policy so you can read it in App settings without connecting to a server. The repository contains the policy for the source version you are viewing; a different release or independently configured build may have different behavior.

@@ -42,7 +42,7 @@ Keep the process running. From the phone's browser, open the dashboard address a
 
 ## 3. Install the Android app
 
-Download an appropriate signed APK from [Wing's latest release](https://github.com/tarkilhk/wing/releases/latest). Use ARM64 for a compatible phone. Open the APK in Android and allow installation from that browser or file manager when prompted. Updates must use Wing's package and signing identity.
+Download an appropriate signed APK from [Wing's latest release](https://github.com/tarkilhk/Wing/releases/latest). Use ARM64 for a compatible phone. Open the APK in Android and allow installation from that browser or file manager when prompted. Updates must use Wing's package and signing identity.
 
 Open Wing. The welcome screen offers **Connect your agent**, **Restore configuration** and an offline **Connection guide**. App settings are available from the drawer before connecting a server.
 

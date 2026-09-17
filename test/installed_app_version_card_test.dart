@@ -84,8 +84,8 @@ void main() {
     await tester.pump();
 
     expect(opened, [
-      Uri.parse('https://github.com/tarkilhk/wing/blob/main/CHANGELOG.md'),
-      Uri.parse('https://github.com/tarkilhk/wing/releases'),
+      Uri.parse('https://github.com/tarkilhk/Wing/blob/main/CHANGELOG.md'),
+      Uri.parse('https://github.com/tarkilhk/Wing/releases'),
     ]);
   });
 
