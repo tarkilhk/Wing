@@ -53,6 +53,8 @@ void main() {
       }
       expect(posted.map((alert) => alert['id']).toSet(), hasLength(2));
       for (final alert in posted) {
+        expect(alert['title'], 'Finished working');
+        expect(alert['body'], 'Tap to open the chat.');
         expect((alert['platformSpecifics'] as Map)['icon'], 'ic_stat_wing');
         final android = alert['platformSpecifics'] as Map;
         expect(android['visibility'], NotificationVisibility.private.index);
@@ -81,6 +83,21 @@ void main() {
       expect(opened, ['first-chat', 'second-chat']);
     },
   );
+
+  test('cancelling one alert forwards its ID to the native plugin', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    final sink = PluginTurnNotificationSink();
+
+    await sink.cancel(42);
+
+    expect(calls, hasLength(1));
+    expect(calls.single.method, 'cancel');
+    expect(calls.single.arguments, {'id': 42, 'tag': null});
+  });
 
   test(
     'show retries plugin initialization after a transient failure',

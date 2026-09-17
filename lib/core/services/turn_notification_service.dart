@@ -136,7 +136,7 @@ class PluginTurnNotificationSink implements TurnNotificationSink {
     );
 
     await _plugin.initialize(
-      settings,
+      settings: settings,
       onDidReceiveNotificationResponse: (response) {
         final payload = response.payload;
         if (payload != null) onOpen?.call(payload);
@@ -222,16 +222,16 @@ class PluginTurnNotificationSink implements TurnNotificationSink {
     );
 
     await _plugin.show(
-      notification.id,
-      notification.title,
-      notification.body,
-      details,
+      id: notification.id,
+      title: notification.title,
+      body: notification.body,
+      notificationDetails: details,
       payload: notification.payload,
     );
   }
 
   @override
-  Future<void> cancel(int id) => _plugin.cancel(id);
+  Future<void> cancel(int id) => _plugin.cancel(id: id);
 
   @override
   Future<void> cancelAll() => _plugin.cancelAll();
