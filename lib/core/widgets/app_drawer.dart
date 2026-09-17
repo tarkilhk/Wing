@@ -5,6 +5,7 @@ import '../services/server_connection_status.dart';
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 import 'playful_portrait.dart';
+import 'wing_wordmark.dart';
 
 enum AppDestination {
   chats('Chats', Icons.chat_bubble_outline),
@@ -64,16 +65,12 @@ class AppDrawer extends StatelessWidget {
                             PlayfulPortrait(size: largeText ? 64 : 96),
                             const SizedBox(width: 20),
                             Flexible(
-                              child: Text(
-                                'Wing',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineMedium
-                                    ?.copyWith(
-                                      fontSize: 32,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: -.8,
-                                    ),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: WingWordmark(
+                                  width: largeText ? 176 : 144,
+                                ),
                               ),
                             ),
                           ],

@@ -81,7 +81,9 @@ forms, specific failures and an explicit final save. No network check sends a
 chat message or establishes model readiness.
 
 The owner selected a portrait-led menu header on 17 September 2026: 96 dp artwork
-beside Wing, adapting to 64 dp at enlarged text to retain horizontal alignment.
+beside the shared Wing wordmark, adapting to 64 dp at enlarged text to retain
+horizontal alignment. Use the approved drawn lettering and feather accent in
+the header, rather than a plain text substitute.
 This supersedes the earlier 48 dp drawer placement. Keep only the app identity
 in this header. The low footer uses icon → connection name → LED on the left and
 version → update indicator on the right. See the [menu specification](design/2026-09-17-menu-versions.md).
