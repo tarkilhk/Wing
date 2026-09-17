@@ -957,7 +957,9 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                     await controller.createChat();
                   }
                 }),
-          child: const Icon(Icons.add_rounded),
+          child: Icon(
+            _view == 'projects' ? Icons.add_rounded : Icons.edit_outlined,
+          ),
         ),
       ),
     );

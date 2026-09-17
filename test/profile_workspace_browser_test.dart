@@ -137,6 +137,8 @@ void main() {
     'root shows five recent projects, then distinct pinned and recent chats',
     (tester) async {
       await show(tester);
+      expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.add_rounded), findsNothing);
       expect(controller.current!.projects.map((p) => p['name']), [
         'Mobile app',
         'Website',
