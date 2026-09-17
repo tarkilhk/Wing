@@ -10,6 +10,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/screens/administration/administration_content.dart';
+import 'package:wing/core/widgets/profile_selector.dart';
 import 'support/administration_fixture.dart';
 import 'support/profile_browser_fixture.dart';
 
@@ -103,6 +104,35 @@ void main() {
       image.dispose();
     });
   }
+
+  testWidgets(
+    'direct profile choices retain canonical administration ownership',
+    (tester) async {
+      await show(tester, Brightness.dark);
+      expect(find.byType(ProfileSelector), findsOneWidget);
+      expect(find.text('Change'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('profile-work')));
+      await tester.pumpAndSettle();
+      expect(controller.current?.scope.profileName, 'work');
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(
+        tester
+            .widget<ProfileSelector>(find.byType(ProfileSelector))
+            .selectedProfile,
+        'work',
+      );
+      await tester.tap(find.text('Memory'));
+      await tester.pumpAndSettle();
+      expect(
+        admin.requests
+            .where((r) => r.$2 == 'learning/graph')
+            .last
+            .$3['profile'],
+        'work',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   for (final brightness in Brightness.values) {
     testWidgets(

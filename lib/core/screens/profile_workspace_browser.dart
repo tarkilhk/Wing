@@ -1,5 +1,6 @@
 import '../services/server_connection_status.dart';
 import '../widgets/server_connection_label.dart';
+import '../widgets/profile_selector.dart';
 import '../widgets/studio_error.dart';
 import 'dart:async';
 
@@ -11,7 +12,6 @@ import '../services/profile_workspace_controller.dart';
 import '../models/session_visibility.dart';
 import '../services/profile_gateway.dart';
 import '../theme/wing_theme.dart';
-import '../theme/profile_workspace_theme.dart';
 import '../widgets/profile_chat_indicator.dart';
 import '../widgets/workspace_options_menu.dart';
 import '../widgets/workspace_connection_status.dart';
@@ -817,112 +817,19 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
             bottom: false,
             child: Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: SizedBox(
-                        key: const ValueKey('profile-selector'),
-                        height:
-                            48 +
-                            (MediaQuery.textScalerOf(context).scale(14) - 14),
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          children: [
-                            for (final profile
-                                in controller.discovery?.profiles ?? [])
-                              Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: Center(
-                                  child: TextButton(
-                                    key: ValueKey('profile-${profile.name}'),
-                                    style:
-                                        TextButton.styleFrom(
-                                          minimumSize: const Size(48, 36),
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.padded,
-                                          visualDensity: VisualDensity.standard,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                          ),
-                                          foregroundColor: profileAccent(
-                                            context,
-                                            profile.name,
-                                          ),
-                                          backgroundColor:
-                                              profileAccent(
-                                                context,
-                                                profile.name,
-                                              ).withValues(
-                                                alpha:
-                                                    resource
-                                                            ?.scope
-                                                            .profileName ==
-                                                        profile.name
-                                                    ? 0.22
-                                                    : 0.09,
-                                              ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: WingRadius.control,
-                                          ),
-                                        ).copyWith(
-                                          side: WidgetStateProperty.resolveWith(
-                                            (states) {
-                                              if (states.contains(
-                                                WidgetState.focused,
-                                              )) {
-                                                return BorderSide(
-                                                  color: Theme.of(
-                                                    context,
-                                                  ).colorScheme.primary,
-                                                  width: 3,
-                                                );
-                                              }
-                                              return BorderSide(
-                                                color: profileAccent(
-                                                  context,
-                                                  profile.name,
-                                                ).withValues(alpha: 0.28),
-                                              );
-                                            },
-                                          ),
-                                        ),
-                                    child: Semantics(
-                                      selected:
-                                          resource?.scope.profileName ==
-                                          profile.name,
-                                      child: Text(
-                                        profile.label,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ),
-                                    onPressed: () {
-                                      _searchDebounce?.cancel();
-                                      _search.clear();
-                                      setState(() {
-                                        _query = '';
-                                        _view = 'home';
-                                        _unreadOnly = false;
-                                      });
-                                      unawaited(
-                                        _run(
-                                          () => controller.navigateProfile(
-                                            profile.name,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                ProfileSelector(
+                  profiles: controller.discovery?.profiles ?? const [],
+                  selectedProfile: resource?.scope.profileName,
+                  onSelected: (name) {
+                    _searchDebounce?.cancel();
+                    _search.clear();
+                    setState(() {
+                      _query = '';
+                      _view = 'home';
+                      _unreadOnly = false;
+                    });
+                    unawaited(_run(() => controller.navigateProfile(name)));
+                  },
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),

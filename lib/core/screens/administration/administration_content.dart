@@ -1,6 +1,6 @@
 import 'dart:async';
 import '../../widgets/server_connection_label.dart';
-import '../../widgets/studio_selection_tile.dart';
+import '../../widgets/profile_selector.dart';
 import 'admin_profile_overview.dart';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
@@ -75,68 +75,16 @@ class _HermesAdministrationContentState
         'No available profiles. Server controls remain accessible.',
       );
     }
-    final selected = profiles.where((p) => p.name == name).firstOrNull;
-    final largeText = MediaQuery.textScalerOf(context).scale(16) >= 24;
-    return Flex(
-      direction: largeText ? Axis.vertical : Axis.horizontal,
-      crossAxisAlignment: largeText
-          ? CrossAxisAlignment.start
-          : CrossAxisAlignment.center,
-      mainAxisSize: largeText ? MainAxisSize.min : MainAxisSize.max,
-      children: [
-        Flexible(
-          flex: largeText ? 0 : 1,
-          fit: FlexFit.tight,
-          child: Text(
-            selected?.label ?? 'Choose a profile',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-        ),
-        TextButton(
-          onPressed: widget.controller.switching
-              ? null
-              : () async {
-                  final choice = await showModalBottomSheet<String>(
-                    context: context,
-                    isScrollControlled: true,
-                    useSafeArea: true,
-                    builder: (context) => DraggableScrollableSheet(
-                      expand: false,
-                      initialChildSize: .5,
-                      minChildSize: .25,
-                      builder: (context, scroll) => RadioGroup<String>(
-                        groupValue: name,
-                        onChanged: (value) => Navigator.pop(context, value),
-                        child: ListView(
-                          controller: scroll,
-                          padding: const EdgeInsets.all(16),
-                          children: [
-                            Text(
-                              'Choose profile',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                            const SizedBox(height: 12),
-                            for (final profile in profiles)
-                              StudioRadioTile<String>(
-                                value: profile.name,
-                                title: Text(profile.label),
-                                subtitle: profile.description == null
-                                    ? null
-                                    : Text(profile.description!),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                  if (choice != null && mounted) {
-                    await widget.controller.switchProfile(choice);
-                    if (mounted) setState(() {});
-                  }
-                },
-          child: const Text('Change'),
-        ),
-      ],
+    return ProfileSelector(
+      profiles: profiles,
+      selectedProfile: name,
+      padding: EdgeInsets.zero,
+      onSelected: widget.controller.switching
+          ? null
+          : (choice) async {
+              await widget.controller.switchProfile(choice);
+              if (mounted) setState(() {});
+            },
     );
   }
 
@@ -479,11 +427,12 @@ class _HermesAdministrationContentState
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: ServerConnectionLabel(
                   label: _server.connectionLabel,
+                  icon: widget.controller.connection.icon,
                   status: widget.controller.connectionStatus,
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 child: TextField(
                   controller: _searchInput,
                   decoration: InputDecoration(
@@ -514,21 +463,27 @@ class _HermesAdministrationContentState
                       maintainState: true,
                       child: Column(
                         children: [
-                          TabBar(
-                            isScrollable:
-                                MediaQuery.textScalerOf(context).scale(14) >=
-                                21,
-                            tabAlignment:
-                                MediaQuery.textScalerOf(context).scale(14) >= 21
-                                ? TabAlignment.start
-                                : TabAlignment.fill,
-                            controller: _tabs,
-                            tabs: const [
-                              Tab(text: 'Profile'),
-                              Tab(text: 'Server'),
-                              Tab(text: 'Health'),
-                            ],
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: TabBar(
+                              dividerHeight: 0,
+                              isScrollable:
+                                  MediaQuery.textScalerOf(context).scale(14) >=
+                                  21,
+                              tabAlignment:
+                                  MediaQuery.textScalerOf(context).scale(14) >=
+                                      21
+                                  ? TabAlignment.start
+                                  : TabAlignment.fill,
+                              controller: _tabs,
+                              tabs: const [
+                                Tab(text: 'Profile'),
+                                Tab(text: 'Server'),
+                                Tab(text: 'Health'),
+                              ],
+                            ),
                           ),
+                          const SizedBox(height: 8),
                           Expanded(
                             child: TabBarView(
                               controller: _tabs,

@@ -188,6 +188,9 @@ HTML, diagrams, images and video retain their content-specific appearance.
 Profile / Server / Health remains the ownership structure. Profile uses a small
 identity brief, two purpose-based groups and observed-value rows. Quiet metadata
 supports stronger destination titles; exception states retain their semantic colors.
+Administration and Chats share the same directly tappable profile chips; do not
+add a separate Change action or administration-only profile picker. Keep search
+and the ownership tabs separated by 16 dp, with matching 16 dp page gutters.
 Providers use comparable rows with disclosure to account detail, and capabilities
 open directly to their inventory. Health leads with findings and explicit check
 coverage. Identity is a full-screen editor; settings show dirty counts, sparse-save
