@@ -12,12 +12,14 @@ class ProfileSelector extends StatefulWidget {
     required this.selectedProfile,
     required this.onSelected,
     this.padding = const EdgeInsets.symmetric(horizontal: 16),
+    this.trailing,
   });
 
   final List<HermesProfile> profiles;
   final String? selectedProfile;
   final ValueChanged<String>? onSelected;
   final EdgeInsetsGeometry padding;
+  final Widget? trailing;
 
   @override
   State<ProfileSelector> createState() => _ProfileSelectorState();
@@ -120,6 +122,7 @@ class _ProfileSelectorState extends State<ProfileSelector> {
                 ),
               ),
             ),
+          if (widget.trailing != null) Center(child: widget.trailing!),
         ],
       ),
     ),

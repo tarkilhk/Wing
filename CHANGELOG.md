@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Move Manage profiles into its own pill after the last profile in Administration's scrolling profile row.
+
 - Open Administration directly on the profile overview without tabs. Add a pharmacy-cross Health action in the top bar with bounded green/amber/red/neutral status, freshness and links to affected settings. Retain runtime diagnostic results across Health visits and profile changes; opening Health runs no diagnostics or writes. Provider configuration observations do not certify inference or runtime health.
 
 - Add a native backend changelog under Changes in this update, using the commit summaries already returned by Hermes. Show dates, optional commit details and partial-history counts without additional backend requests.

@@ -7,13 +7,13 @@ This is the ownership contract for Administration, updated on 17 September 2026 
 | Destination | Owns |
 | --- | --- |
 | Profile / Defaults | Main model/provider, supported reasoning/speed, auxiliary assignments and fallback models |
-| Profile / Identity | Description and SOUL; Manage profiles beside the selector for lifecycle |
+| Profile / Identity | Description and SOUL; Manage profiles at the end of the scrolling selector for lifecycle |
 | Profile / Memory | Search/read, enablement and character budgets; unavailable edit/delete until safe IDs exist |
 | Profile / Skills and tools | Installed skills, provenance, instructions, usage, local edits/archive, Hub, toolsets and a distinct agent-plugin page |
 | Profile / Scheduled tasks | Per-profile schedules, task editing/templates, execution actions and recent run conversations; connected-server delivery discovery |
 | Profile / Access and connectors | Profile provider accounts and API keys, observed credential sources and profile MCP configuration |
 | Profile / Behavior | Supported execution limits, approval policy, basic compression, reach/recovery policy and backend voice defaults |
-| Profile / Manage profiles | Collection lifecycle; compact action beside the profile selector |
+| Profile / Manage profiles | Collection lifecycle; compact pill after the last profile, scrolling with the profile selector |
 | Global menu / Connection and Server version | Icon, connection name and LED open connection details; server version opens Versions & updates and checks upstream availability. Client version remains in App settings. |
 | Health / Runtime | Runtime/launch-profile observations, bounded logs, Doctor/security audit and action results |
 | Health / Selected profile | Scoped readiness and usage; recovery links to the owning editor |

@@ -527,19 +527,56 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('profile management stays reachable after removing Server tab', (
-    tester,
-  ) async {
-    await show(tester, Brightness.light);
-    expect(find.byType(TabBar), findsNothing);
-    await tester.tap(find.byTooltip('Manage profiles'));
-    await tester.pumpAndSettle();
-    expect(find.text('Create profile'), findsOneWidget);
-    await tester.tap(find.text('personal').first);
-    await tester.pumpAndSettle();
-    expect(find.text('Models and reasoning'), findsOneWidget);
-    expect(find.text('Create profile'), findsNothing);
-  });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'profile management scrolls after the last profile ${brightness.name} $scale',
+        (tester) async {
+          controller.discovery = const ProfileDiscovery(
+            profiles: [
+              HermesProfile(name: 'personal'),
+              HermesProfile(name: 'client-work'),
+              HermesProfile(name: 'reminder-inbox'),
+              HermesProfile(name: 'last-profile'),
+            ],
+            currentName: 'personal',
+            activeName: 'personal',
+          );
+          await show(
+            tester,
+            brightness,
+            scale: scale,
+            width: scale == 2 ? 320 : 390,
+          );
+          final manage = find.byTooltip('Manage profiles');
+          final selector = find.byKey(const ValueKey('profile-selector'));
+          final last = find.byKey(const ValueKey('profile-last-profile'));
+          expect(manage.hitTestable(), findsNothing);
+          await screenshot(
+            tester,
+            '${brightness.name}-$scale-profile-row-start',
+          );
+          await tester.drag(selector, const Offset(-1600, 0));
+          await tester.pumpAndSettle();
+          expect(manage.hitTestable(), findsOneWidget);
+          expect(
+            tester.getRect(manage).left,
+            greaterThan(tester.getRect(last).right),
+          );
+          expect(tester.getSize(manage).height, greaterThanOrEqualTo(48));
+          expect(tester.takeException(), isNull);
+          await screenshot(tester, '${brightness.name}-$scale-profile-row-end');
+          await tester.tap(manage);
+          await tester.pumpAndSettle();
+          expect(find.text('Create profile'), findsOneWidget);
+          await tester.tap(find.text('personal').first);
+          await tester.pumpAndSettle();
+          expect(find.text('Models and reasoning'), findsOneWidget);
+          expect(find.text('Create profile'), findsNothing);
+        },
+      );
+    }
+  }
 
   testWidgets(
     'health recovery opens captured profile access and its shared-provider link',

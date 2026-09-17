@@ -7,6 +7,7 @@ import '../../widgets/workspace_connection_status.dart';
 import '../../widgets/studio_error.dart';
 import '../../widgets/server_connection_label.dart';
 import '../../widgets/profile_selector.dart';
+import '../../theme/wing_theme.dart';
 import 'admin_profile_overview.dart';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
@@ -222,6 +223,26 @@ class _HermesAdministrationContentState
   Widget _selector({bool manage = false}) {
     final profiles = widget.controller.discovery?.profiles ?? [];
     final name = _profile?.name;
+    final colors = Theme.of(context).colorScheme;
+    final manageAction = manage
+        ? Tooltip(
+            message: 'Manage profiles',
+            child: TextButton(
+              style: TextButton.styleFrom(
+                minimumSize: const Size(48, 36),
+                tapTargetSize: MaterialTapTargetSize.padded,
+                visualDensity: VisualDensity.standard,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                foregroundColor: colors.onSurfaceVariant,
+                backgroundColor: colors.surfaceContainerLow,
+                side: BorderSide(color: colors.outlineVariant),
+                shape: RoundedRectangleBorder(borderRadius: WingRadius.control),
+              ),
+              onPressed: _manageProfiles,
+              child: const Icon(Icons.manage_accounts_outlined),
+            ),
+          )
+        : null;
     final selector = profiles.isEmpty
         ? const AdminNotice(
             'No available profiles. Runtime health remains accessible.',
@@ -230,6 +251,7 @@ class _HermesAdministrationContentState
             profiles: profiles,
             selectedProfile: name,
             padding: EdgeInsets.zero,
+            trailing: manageAction,
             onSelected: widget.controller.switching
                 ? null
                 : (choice) async {
@@ -237,15 +259,11 @@ class _HermesAdministrationContentState
                     if (mounted) setState(() {});
                   },
           );
-    if (!manage) return selector;
+    if (!manage || profiles.isNotEmpty) return selector;
     return Row(
       children: [
         Expanded(child: selector),
-        IconButton(
-          tooltip: 'Manage profiles',
-          icon: const Icon(Icons.manage_accounts_outlined),
-          onPressed: _manageProfiles,
-        ),
+        manageAction!,
       ],
     );
   }
