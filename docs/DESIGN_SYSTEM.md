@@ -29,6 +29,8 @@ wordmark rules, decorative feather system and application identity decisions.
 The owner's final 17 September selection uses a modest capital W with slimmer
 diagonals to match the optical weight of ing. Follow the approved README banner;
 uppercase must not make the initial heavier, fatter or disproportionately tall.
+In the Flutter wordmark, use the same stroke width for W and ing. The owner
+rejected the thinner W in the welcome screenshots; the banner remains selected.
 
 The owner selected the Playful portrait: a winking woman with a simple dark bob,
 mint headphones and a messenger wing on the earcup. Keep the navy, cream and

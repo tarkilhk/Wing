@@ -23,14 +23,17 @@ palette. Package identifiers, native channels and file names remain lowercase.
 - [Light welcome](images/wing-welcome-light.png) and
   [dark welcome](images/wing-welcome-dark.png): actual Flutter widget renders.
 - [Production wordmark](../../lib/core/widgets/wing_wordmark.dart): scalable
-  lettering shared by welcome and connection guide screens. The W uses a
-  28-unit stroke against the 36-unit lowercase stroke for equal optical weight.
+  lettering shared by welcome and connection guide screens. Every letter uses
+  the same 36-unit stroke. The owner rejected the thinner W in the welcome
+  screenshots; retain the modest capital height without reducing its weight.
 
 The portrait-only launcher and notification symbols contain no wordmark.
 Their production artwork remains the selected portrait, wing and caduceus.
 
 ## Validation
 
+- Full pre-install suite: 2,095 tests passed, with 12 opt-in skips. The welcome
+  interaction and render checks were repeated after the final stroke correction.
 - Ten existing welcome, release-link and application-identity tests passed
   against the current main dependencies.
 - Both existing first-connection render tests passed. Actual Flutter output was
