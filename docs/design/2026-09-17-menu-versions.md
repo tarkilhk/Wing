@@ -1,47 +1,64 @@
-# Versions in the global menu
+# Global menu: Wing identity and server footer
 
-The owner's revised 17 September direction uses two compact version pills on one
-row at the bottom of the global menu. Client identity is passive; the server pill
-opens Versions & updates. Administration retains Profile and Health only.
+The owner selected the portrait-led arrangement from the three rendered layouts,
+then specified the footer order as connection icon → name → status LED, with
+server version → update indicator on the right. The header contains only the
+larger portrait and Wing, aligned horizontally.
 
-## Arrangements considered
-
-Content-width pills, left aligned:
-
-```text
-[phone v1.0.1] [server v1.2.3 ↻]   …
-```
-
-Equal-width pills, selected:
+## Selected design
 
 ```text
-[ phone v1.0.1 ] [ server v1.2.3 ↻ ]
+[96 dp portrait]  Wing
+
+… navigation …
+
+connection-icon  Home server  ●        v1.2.3  ↻
 ```
 
-Equal widths give the server a predictable touch target, hold their positions
-while loading, and use one compact footer row. No headings, visible Client/Server
-labels, subtitles or disclosure arrows. The icons identify each version; tooltips
-and accessibility labels spell out the full identity and any update/stale state.
-The client pill has no action. Only confirmed server availability adds the small,
-static circular-arrows icon. No client release checks or update controls.
+The 96 dp portrait adapts to 64 dp at enlarged text, keeping the horizontal
+alignment. The Wing label uses Studio's Roboto, 32 sp and semibold weight. There
+is no connection/profile subtitle or client version in the header. Client version
+remains in App settings.
 
-## Visual and navigation contract
+The borderless footer sits about 8 dp above the safe area. Its two targets have
+minimum 48 dp height, extending upward from the visible content. No footer divider,
+pills, background fill or extra heading. The connection uses its saved icon,
+13 sp name and the shared live-status LED, in that exact order. The right side
+shows the installed server version and the existing conditional update indicator.
 
-Reuse Studio's theme colors and Roboto metadata typography. The owner's pills use
-stadium outlines, 8 dp separation, 16 dp icons and minimum 48 dp touch targets.
-Keep both pills on one row at enlarged text; unusually long version strings can
-ellipsize, with the full value in the tooltip and accessibility label. The entire
-menu remains scrollable on short screens and at enlarged text.
+Long connection names and unusually long versions ellipsize within their own
+side. Tooltips and accessibility labels expose the complete name/version. The
+connection name opens the existing connection-details sheet, including the full
+name and live status. Server version opens Versions & updates. These remain
+separate actions. The shared status owner drives the LED independently of version
+reads; successful version loading cannot imply a connected chat channel.
 
-Push the update screen over the open drawer, preserving both the underlying page
-and the drawer's scroll position. Back reveals that same open menu. Refresh the
-menu's version observations on return, including after a server update. The
-update screen captures its connection and retains the existing host-wide update
-confirmation and action tracking.
+Back from either destination reveals the same open menu. The update screen keeps
+its captured connection; its return refreshes the menu's version observations.
+No connection shows a quiet disabled No server selected identity and no update
+action. The drawer remains scrollable at enlarged text and on short screens.
+
+## Alternatives and decision evidence
+
+The owner rejected the version pills, explored three lower borderless arrangements,
+then requested larger Wing branding above one compact server footer. The final
+comparison covered left-aligned, centered and portrait-led compositions. The
+owner selected the rightmost / portrait-led layout, adding the connection name.
+Prototype source is captured on branch `prototype/menu-brand-server` at `6ec9e73`.
+The winning arrangement is implemented with the existing shared components;
+prototype switchers and fixture values are not shipped.
+
+## Verification
+
+Inspected actual Flutter renders at 390 × 844 in both themes, at 100% and 200%
+text size. The capture harness waits for portrait decoding before saving images.
+Widget coverage checks the saved icon/name/LED order, separate actions, open-menu
+return, long names at 320 dp, minimum touch targets, live status changes independent
+of version reads, and isolation between connections.
 
 ## Data contract verified
 
-Latest upstream Hermes main was rechecked at
+The unchanged server-read contract was verified against upstream Hermes main at
 `f5d192611032025d2757b07ad838921872126182`.
 
 - [GET /api/health](https://github.com/NousResearch/hermes-agent/blob/f5d192611032025d2757b07ad838921872126182/hermes_cli/web_routers/status.py#L114-L119)
@@ -61,19 +78,10 @@ neither read confirms it. Failed update checks clear the availability badge and
 update eligibility even when identity remains available. Disposed controllers
 ignore late responses, and connection changes create independent controllers.
 
-The client uses only local PackageInfo.version. No client network request,
+App settings shows the client version from local PackageInfo.version. The menu
+contains server identity only. No client network request,
 release comparison, update indicator or update action is part of this feature.
 Android's architecture-specific build number remains internal.
 
 Manage profiles stays beside the Profile selector. Removing the former Server tab
 must not remove the only existing profile CRUD entry point.
-
-## Verification
-
-124 targeted tests pass across drawer navigation, version loading, update safety,
-administration navigation, app shell and Studio layout. The version tests cover
-slow/failed upstream reads, transient identity retry, retained identity with
-cleared eligibility, late observations and connection replacement. Both themes
-were rendered and inspected at 390 dp/100% text and 320 dp/200% text using real
-Roboto and Material icons. Artifacts are under
-`build/administration-preview/{light,dark}-{1.0,2.0}-versions-entry.png`.

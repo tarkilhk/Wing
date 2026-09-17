@@ -14,7 +14,7 @@ This is the ownership contract for Administration, updated on 17 September 2026 
 | Profile / Access and connectors | Profile provider accounts and API keys, observed credential sources and profile MCP configuration |
 | Profile / Behavior | Supported execution limits, approval policy, basic compression, reach/recovery policy and backend voice defaults |
 | Profile / Manage profiles | Collection lifecycle; compact action beside the profile selector |
-| Global menu / Client version and Server version | Client version is non-interactive local identity; only Server version opens Versions & updates and checks upstream availability |
+| Global menu / Connection and Server version | Icon, connection name and LED open connection details; server version opens Versions & updates and checks upstream availability. Client version remains in App settings. |
 | Health / Runtime | Runtime/launch-profile observations, bounded logs, Doctor/security audit and action results |
 | Health / Selected profile | Scoped readiness and usage; recovery links to the owning editor |
 

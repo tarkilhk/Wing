@@ -1164,7 +1164,6 @@ class HomeScreenState extends State<HomeScreen> {
           builder: (context, snapshot) => AppDrawer(
             selected: _destination,
             connection: connection,
-            connectionLabel: connection?.label,
             connectionStatus: snapshot.data?.connectionStatus,
             hasConnection:
                 connection != null && widget.profileController != null,

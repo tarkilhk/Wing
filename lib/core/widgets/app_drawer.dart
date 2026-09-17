@@ -2,7 +2,6 @@ import '../models/connection.dart';
 import 'drawer_versions.dart';
 import '../services/versions_controller.dart';
 import '../services/server_connection_status.dart';
-import 'server_connection_label.dart';
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 import 'playful_portrait.dart';
@@ -25,59 +24,32 @@ class AppDrawer extends StatelessWidget {
     super.key,
     required this.selected,
     required this.onSelected,
-    this.connectionLabel,
     this.connection,
     this.versionsControllerFactory,
     this.connectionStatus,
-    this.profileLabel,
     this.hasConnection = true,
   });
 
   final AppDestination selected;
   final ValueChanged<AppDestination> onSelected;
-  final String? connectionLabel;
   final SavedConnection? connection;
   final VersionsControllerFactory? versionsControllerFactory;
   final ServerConnectionStatus? connectionStatus;
-  final String? profileLabel;
   final bool hasConnection;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final largeText = MediaQuery.textScalerOf(context).scale(16) > 24;
-    final identity = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Wing', style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 8),
-        if (connectionLabel != null)
-          ServerConnectionLabel(
-            label: connectionLabel!,
-            status: connectionStatus,
-            suffix: profileLabel,
-          )
-        else
-          Text(
-            [
-              connectionLabel ?? 'Your mobile workspace',
-              ?profileLabel,
-            ].join(' · '),
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-          ),
-      ],
-    );
     return Drawer(
       backgroundColor: colors.surfaceContainerLow,
       child: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) => SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+            padding: const EdgeInsets.fromLTRB(12, 20, 12, 4),
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                minHeight: constraints.maxHeight - 40,
+                minHeight: constraints.maxHeight - 24,
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -86,24 +58,24 @@ class AppDrawer extends StatelessWidget {
                   Column(
                     children: [
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                        child: Flex(
-                          direction: largeText
-                              ? Axis.vertical
-                              : Axis.horizontal,
-                          crossAxisAlignment: largeText
-                              ? CrossAxisAlignment.start
-                              : CrossAxisAlignment.center,
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+                        child: Row(
                           children: [
-                            const PlayfulPortrait(),
-                            SizedBox(
-                              width: WingSpacing.md,
-                              height: largeText ? WingSpacing.md : 0,
+                            PlayfulPortrait(size: largeText ? 64 : 96),
+                            const SizedBox(width: 20),
+                            Flexible(
+                              child: Text(
+                                'Wing',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: -.8,
+                                    ),
+                              ),
                             ),
-                            if (largeText)
-                              identity
-                            else
-                              Expanded(child: identity),
                           ],
                         ),
                       ),
@@ -145,6 +117,7 @@ class AppDrawer extends StatelessWidget {
                   ),
                   DrawerVersions(
                     connection: connection,
+                    connectionStatus: connectionStatus,
                     controllerFactory: versionsControllerFactory,
                   ),
                 ],

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../models/connection_icon.dart';
+import '../models/connection.dart';
 import '../services/server_connection_status.dart';
 import '../theme/wing_theme.dart';
 import 'connection_icon_picker.dart';
@@ -98,6 +98,86 @@ class ServerConnectionLabel extends StatelessWidget {
             listenable: status!,
             builder: (_, _) => labelBody(),
           );
+  }
+}
+
+/// Compact menu identity: icon, name, then LED. Version actions are separate.
+class DrawerConnectionLabel extends StatelessWidget {
+  const DrawerConnectionLabel({
+    super.key,
+    required this.connection,
+    this.status,
+  });
+  final SavedConnection? connection;
+  final ServerConnectionStatus? status;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = connection?.label ?? 'No server selected';
+    void openDetails() => showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _ConnectionDetails(label: label, status: status),
+    );
+    Widget contents() {
+      final description = '$label, ${status?.description ?? 'Not checked'}';
+      final onTap = connection == null ? null : openDetails;
+      return Semantics(
+        label:
+            '$description${connection == null ? '' : '. Connection details'}',
+        button: onTap != null,
+        onTap: onTap,
+        excludeSemantics: true,
+        child: Tooltip(
+          message: description,
+          child: InkWell(
+            key: const ValueKey('menu-connection'),
+            borderRadius: WingRadius.control,
+            onTap: onTap,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Align(
+                  alignment: Alignment.bottomLeft,
+                  heightFactor: 1,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        (connection?.icon ?? ConnectionIcon.server).glyph,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(fontSize: 13),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      _ConnectionLed(
+                        phase: status?.phase ?? ServerConnectionPhase.unchecked,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return status == null
+        ? contents()
+        : ListenableBuilder(listenable: status!, builder: (_, _) => contents());
   }
 }
 

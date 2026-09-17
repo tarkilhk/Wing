@@ -2142,9 +2142,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Widget _drawer() => AppDrawer(
     selected: _destination,
     connection: controller.connection,
-    connectionLabel: controller.connection.label,
     connectionStatus: controller.connectionStatus,
-    profileLabel: controller.current?.scope.profileName,
     onSelected: _selectDestination,
   );
 

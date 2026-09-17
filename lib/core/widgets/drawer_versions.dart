@@ -5,13 +5,20 @@ import 'package:flutter/material.dart';
 import '../models/connection.dart';
 import '../screens/versions_updates_screen.dart';
 import '../services/versions_controller.dart';
-
-enum VersionsSection { client, server }
+import '../services/server_connection_status.dart';
+import '../theme/wing_theme.dart';
+import 'server_connection_label.dart';
 
 class DrawerVersions extends StatefulWidget {
-  const DrawerVersions({super.key, this.connection, this.controllerFactory});
+  const DrawerVersions({
+    super.key,
+    this.connection,
+    this.connectionStatus,
+    this.controllerFactory,
+  });
 
   final SavedConnection? connection;
+  final ServerConnectionStatus? connectionStatus;
   final VersionsControllerFactory? controllerFactory;
 
   @override
@@ -70,98 +77,84 @@ class _DrawerVersionsState extends State<DrawerVersions> {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: _versions,
-    builder: (context, _) => Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Divider(height: 24),
-        Row(
+    builder: (context, _) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(
-              child: _entry(
-                section: VersionsSection.client,
-                title: 'Client version',
-                version: _versions.clientVersion,
-                loading: _versions.clientLoading,
-                icon: Icons.phone_android_outlined,
-                updateAvailable: false,
+              child: DrawerConnectionLabel(
+                connection: widget.connection,
+                status: widget.connectionStatus,
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _entry(
-                section: VersionsSection.server,
-                title: widget.connection == null
-                    ? 'No server selected'
-                    : 'Server version',
-                version: _versions.server?.installedVersion,
-                loading: _versions.server?.versionLoading == true,
-                stale: _versions.server?.versionStale == true,
-                icon: Icons.dns_outlined,
-                updateAvailable:
-                    _versions.server?.check?.updateAvailable == true,
-                onTap: widget.connection != null ? _open : null,
+            if (widget.connection != null) ...[
+              const SizedBox(width: 12),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: constraints.maxWidth * .46,
+                ),
+                child: _version(context),
               ),
-            ),
+            ],
           ],
         ),
-      ],
+      ),
     ),
   );
 
-  Widget _entry({
-    required VersionsSection section,
-    required String title,
-    required String? version,
-    required bool loading,
-    required IconData icon,
-    required bool updateAvailable,
-    bool stale = false,
-    VoidCallback? onTap,
-  }) {
+  Widget _version(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
+    final server = _versions.server;
+    final version = server?.installedVersion;
+    final updateAvailable = server?.check?.updateAvailable == true;
     final label = version == null
-        ? (loading ? '…' : '—')
+        ? (server?.versionLoading == true ? '…' : '—')
         : (version.startsWith('v') ? version : 'v$version');
     final description =
-        '$title: ${version ?? (loading ? 'Loading' : 'Unavailable')}'
-        '${stale ? ', last known version' : ''}'
+        'Server version: ${version ?? (server?.versionLoading == true ? 'Loading' : 'Unavailable')}'
+        '${server?.versionStale == true ? ', last known version' : ''}'
         '${updateAvailable ? ', update available' : ''}';
-    const shape = StadiumBorder();
     return Semantics(
       label: description,
-      button: onTap != null,
-      onTap: onTap,
+      button: true,
+      onTap: _open,
       excludeSemantics: true,
       child: Tooltip(
         message: description,
-        child: Material(
-          color: colors.surface,
-          shape: shape.copyWith(side: BorderSide(color: colors.outlineVariant)),
-          child: InkWell(
-            key: ValueKey('menu-${section.name}-version'),
-            customBorder: shape,
-            onTap: onTap,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 48),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: InkWell(
+          key: const ValueKey('menu-server-version'),
+          borderRadius: WingRadius.control,
+          onTap: _open,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Align(
+                alignment: Alignment.bottomRight,
+                widthFactor: 1,
+                heightFactor: 1,
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(icon, size: 16, color: colors.onSurfaceVariant),
-                    const SizedBox(width: 4),
                     Flexible(
                       child: Text(
                         label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                     if (updateAvailable) ...[
-                      const SizedBox(width: 4),
-                      Icon(Icons.sync, size: 16, color: colors.primary),
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.sync,
+                        size: 18,
+                        color: theme.colorScheme.primary,
+                      ),
                     ],
                   ],
                 ),

@@ -13,7 +13,7 @@ The [product plan](PRODUCT_PLAN.md) owns functionality. This document owns the a
 - Keep familiar model/reasoning selection and Queue, Steer and Fork flows.
 - Design dark mode fully and use coherent accents throughout.
 - Administration uses Profile / Health. Keep the selected connection visible and classify each operation by its actual ownership. See the [administration handoff](design/2026-09-14-administration-handoff.md) for navigation and unsupported memory/MCP writes.
-- Provider accounts and keys belong to the selected profile, including `default`. The global menu shows two compact version pills on one row: a non-interactive client pill and a server pill that opens Versions & updates. Client identity is local only; upstream update checks and the circular-arrows indicator apply only to the server. Manage profiles sits beside the Profile selector. Follow the [administration ownership contract](design/2026-09-14-administration-handoff.md) for credential-source distinctions and pending editor corrections.
+- Provider accounts and keys belong to the selected profile, including `default`. The global menu has a larger portrait aligned with Wing and a low, borderless split footer: saved connection icon, name and status LED on the left; server version and conditional update icon on the right. Connection identity opens details; server version opens Versions & updates. Client identity stays in App settings; upstream update checks and the circular-arrows indicator apply only to the server. Manage profiles sits beside the Profile selector. Follow the [administration ownership contract](design/2026-09-14-administration-handoff.md) for credential-source distinctions and pending editor corrections.
 
 ## App and notification identity
 
@@ -70,6 +70,12 @@ separate chat routing and access headers live under Sign in / Custom setup.
 Use the active Studio accent, tick-free stage statuses, scrollable growing
 forms, specific failures and an explicit final save. No network check sends a
 chat message or establishes model readiness.
+
+The owner selected a portrait-led menu header on 17 September 2026: 96 dp artwork
+beside Wing, adapting to 64 dp at enlarged text to retain horizontal alignment.
+This supersedes the earlier 48 dp drawer placement. Keep only the app identity
+in this header. The low footer uses icon → connection name → LED on the left and
+version → update indicator on the right. See the [menu specification](design/2026-09-17-menu-versions.md).
 
 ## Layout and controls
 

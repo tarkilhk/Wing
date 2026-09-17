@@ -97,7 +97,7 @@ void main() {
               selected: AppDestination.administration,
               onSelected: (_) {},
               connection: controller.connection,
-              connectionLabel: controller.connection.label,
+              connectionStatus: controller.connectionStatus,
               versionsControllerFactory: (_) =>
                   VersionsController(gateway: admin.server.gateway('default')),
             ),
@@ -117,6 +117,12 @@ void main() {
 
   Future<void> screenshot(WidgetTester tester, String name) async {
     if (!capture) return;
+    // Asset decoding runs outside the widget test's fake clock.
+    for (final element in find.byType(Image).evaluate()) {
+      final widget = element.widget as Image;
+      await tester.runAsync(() => precacheImage(widget.image, element));
+    }
+    await tester.pumpAndSettle();
     final boundary = tester.renderObject<RenderRepaintBoundary>(
       find.byKey(const ValueKey('admin-preview')),
     );
