@@ -1,4 +1,5 @@
 import '../../services/administration_health.dart';
+import '../../services/doctor_diagnostic.dart';
 import '../../theme/wing_theme.dart';
 import '../../widgets/studio_select.dart';
 import '../../widgets/studio_error.dart';
@@ -83,61 +84,77 @@ class _AdminActionPageState extends State<AdminActionPage> {
   }
 
   @override
-  Widget build(BuildContext context) => AdminPage(
-    title: widget.title,
-    scope: widget.scope,
-    child: ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        if (_loading) const LinearProgressIndicator(),
-        if (_error != null) AdminNotice.error(_error!),
-        if (_status?['running'] != true &&
-            _status?['exit_code'] != null &&
-            _status!['exit_code'] != 0)
-          const StudioError('Failed')
-        else
-          Text(
-            _status == null
-                ? 'Checking operation…'
-                : _status!['running'] == true
-                ? 'Running'
-                : _status!['exit_code'] == 0
-                ? 'Completed'
-                : _status!['exit_code'] == null
-                ? 'Outcome unavailable'
-                : 'Failed',
-          ),
-        const SizedBox(height: 16),
-        Text(
-          AdminDiagnosticObservation(
-            widget.action,
-            _status ?? const {},
-            _checkedAt,
-          ).nextStep,
-        ),
-        if (_checkedAt != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            'Checked ${TimeOfDay.fromDateTime(_checkedAt!).format(context)}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-        ExpansionTile(
-          title: const Text('Diagnostic output'),
-          children: [
-            SelectableText(
-              (_status?['lines'] as List? ?? []).join('\n'),
-              style: WingTokens.of(context).typography.mono,
+  Widget build(BuildContext context) {
+    final summary =
+        widget.action.name == 'doctor' && _status?['running'] == false
+        ? doctorDiagnosticSummary(_status?['lines'] as List? ?? [])
+        : null;
+    return AdminPage(
+      title: widget.title,
+      scope: widget.scope,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (_loading) const LinearProgressIndicator(),
+          if (_error != null) AdminNotice.error(_error!),
+          if (_status?['running'] != true &&
+              _status?['exit_code'] != null &&
+              _status!['exit_code'] != 0)
+            const StudioError('Failed')
+          else
+            Text(
+              _status == null
+                  ? 'Checking operation…'
+                  : _status!['running'] == true
+                  ? 'Running'
+                  : _status!['exit_code'] == 0
+                  ? 'Completed'
+                  : _status!['exit_code'] == null
+                  ? 'Outcome unavailable'
+                  : 'Failed',
+            ),
+          if (summary == null) ...[
+            const SizedBox(height: 16),
+            Text(
+              AdminDiagnosticObservation(
+                widget.action,
+                _status ?? const {},
+                _checkedAt,
+              ).nextStep,
             ),
           ],
-        ),
-        TextButton(
-          onPressed: _loading ? null : _check,
-          child: const Text('Check progress'),
-        ),
-      ],
-    ),
-  );
+          if (_checkedAt != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Checked ${TimeOfDay.fromDateTime(_checkedAt!).format(context)}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+          if (summary != null) ...[
+            const SizedBox(height: 24),
+            SelectableText(
+              summary,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+          ],
+          ExpansionTile(
+            title: const Text('Diagnostic output'),
+            children: [
+              SelectableText(
+                (_status?['lines'] as List? ?? []).join('\n'),
+                style: WingTokens.of(context).typography.mono,
+              ),
+            ],
+          ),
+          TextButton(
+            onPressed: _loading ? null : _check,
+            child: const Text('Check progress'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 Future<void> startAdminOperation(
