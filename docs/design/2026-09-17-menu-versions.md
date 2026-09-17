@@ -16,9 +16,12 @@ connection-icon  Home server  ●        v1.2.3  ↻
 ```
 
 The 96 dp portrait adapts to 64 dp at enlarged text, keeping the horizontal
-alignment. The Wing label uses Studio's Roboto, 32 sp and semibold weight. There
-is no connection/profile subtitle or client version in the header. Client version
-remains in App settings.
+alignment. The owner requested Wing's proper lettering in the menu title: use
+the shared `WingWordmark` with its feather accent and the same letter strokes as
+the welcome screen. Its preferred width is 144 dp, growing to 176 dp at enlarged
+text; scale the artwork proportionally to fit the available horizontal space.
+Keep its Wing accessibility label. There is no connection/profile subtitle or
+client version in the header. Client version remains in App settings.
 
 The borderless footer sits about 8 dp above the safe area. Its two targets have
 minimum 48 dp height, extending upward from the visible content. No footer divider,
