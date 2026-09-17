@@ -2,7 +2,7 @@
 
 | Plan | Priority | Effort | Dependencies | Status |
 | --- | --- | --- | --- | --- |
-| [003: Administration experience](003-administration-experience.md) | P1 | L | Completed voice/project work | Design corrections verified — build 22542 installed; on-phone visual review pending |
+| [003: Administration experience](003-administration-experience.md) | P1 | L | Completed voice/project work | REOPENED — owner requested a stronger visual redesign; duplicate refresh corrected |
 | [002: Profile scheduled tasks](002-profile-scheduled-tasks.md) | P1 | L | None | DONE — scoped tests, native and local backend acceptance |
 
 Plan 002 implements desktop scheduling features in a Studio administration flow.

@@ -28,16 +28,20 @@ void main() {
           },
           _ => throw StateError('Unexpected $method $path'),
         };
-        await tester.pumpWidget(
+        Future<void> render(int revision) => tester.pumpWidget(
           MaterialApp(
             theme: wingTheme(Brightness.dark),
             home: Scaffold(
               body: SingleChildScrollView(
-                child: AdminRuntimeHealth(server: fixture.server),
+                child: AdminRuntimeHealth(
+                  server: fixture.server,
+                  refreshRevision: revision,
+                ),
               ),
             ),
           ),
         );
+        await render(0);
         await tester.pumpAndSettle();
         expect(fixture.requests.where((r) => r.$1 == 'POST'), isEmpty);
         expect(find.text('Not checked'), findsNWidgets(2));
@@ -59,6 +63,9 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text(outcome), findsOneWidget);
         expect(find.textContaining('Checked '), findsOneWidget);
+        await render(1);
+        await tester.pumpAndSettle();
+        expect(find.text(outcome), findsOneWidget);
         expect(
           tester
                   .widget<TextButton>(

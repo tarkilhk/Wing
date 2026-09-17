@@ -62,6 +62,7 @@ void main() {
     Brightness brightness, {
     double scale = 1,
     double width = 390,
+    int refreshRevision = 0,
     WorkspaceAccent accent = WorkspaceAccent.mint,
   }) async {
     tester.view.physicalSize = Size(width, 844);
@@ -82,6 +83,7 @@ void main() {
           home: Scaffold(
             appBar: AppBar(title: const Text('Administration')),
             body: HermesAdministrationContent(
+              refreshRevision: refreshRevision,
               onOpenSession: (_) async {},
               controller: controller,
               repository: admin.server,
@@ -108,6 +110,43 @@ void main() {
       image.dispose();
     });
   }
+
+  testWidgets(
+    'header refresh reloads overview reads without duplicate action',
+    (tester) async {
+      await show(tester, Brightness.dark);
+      admin.requests.clear();
+      await show(tester, Brightness.dark, refreshRevision: 1);
+      for (final endpoint in [
+        'config',
+        'model/info',
+        'skills',
+        'tools/toolsets',
+        'providers/oauth',
+        'mcp/servers',
+        'cron/jobs',
+      ]) {
+        expect(
+          admin.requests.where((r) => r.$1 == 'GET' && r.$2 == endpoint),
+          hasLength(1),
+          reason: endpoint,
+        );
+      }
+      expect(find.text('Refresh overview', skipOffstage: false), findsNothing);
+      expect(admin.requests.where((r) => r.$1 != 'GET'), isEmpty);
+      await tester.tap(find.text('Health'));
+      await tester.pumpAndSettle();
+      admin.requests.clear();
+      await show(tester, Brightness.dark, refreshRevision: 2);
+      expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 2);
+      expect(
+        admin.requests.where((r) => r.$2 == 'profiles/active'),
+        hasLength(1),
+      );
+      expect(admin.requests.where((r) => r.$1 != 'GET'), isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'direct profile choices retain canonical administration ownership',

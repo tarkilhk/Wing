@@ -102,6 +102,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   final _chatSearchFocus = FocusNode();
   final _queuedEditErrors = <ProfileSessionKey, String>{};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  int _administrationRefreshRevision = 0;
   ProfileSessionKey? _composerKey;
   ProfileSessionKey? _loadingIntelligence;
   ChatFindResult? _findResult;
@@ -2183,7 +2184,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             IconButton(
               tooltip: _destination == AppDestination.activity
                   ? 'Refresh activity'
-                  : 'Refresh workspace',
+                  : 'Refresh administration',
               icon: const Icon(Icons.refresh),
               onPressed:
                   controller.switching ||
@@ -2193,7 +2194,10 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   : () => _run(
                       _destination == AppDestination.activity
                           ? controller.refreshActivity
-                          : controller.refresh,
+                          : () async {
+                              setState(() => _administrationRefreshRevision++);
+                              await controller.refresh();
+                            },
                     ),
             ),
         ],
@@ -2252,6 +2256,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 }),
               ),
               _ => HermesAdministrationContent(
+                refreshRevision: _administrationRefreshRevision,
                 key: ValueKey(controller.connectionIdentity),
                 controller: controller,
                 onOpenSession: (key) async {

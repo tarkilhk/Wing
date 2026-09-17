@@ -6,6 +6,11 @@ Read the [ownership handoff](design/2026-09-14-administration-handoff.md) before
 
 ## Overview and navigation
 
+The header contains the single visible Refresh administration action. It updates
+workspace/profile discovery, overview observations and runtime identity. It preserves
+the selected tab and diagnostic results, and does not run operational checks.
+Pull-to-refresh remains available on the Profile list.
+
 Overview reads are independent observations for a captured profile. A failed read
 retains its last confirmed value and freshness; missing configuration stays
 unavailable. Entry performs no inference, installations, connector tests or Doctor.

@@ -1,6 +1,6 @@
 # Plan 003: Complete the administration experience redesign
 
-Status: Design corrections verified and build 22542 installed; on-phone visual review pending.
+Status: REOPENED — owner review of installed build 22542 found the overview visually too close to the original. Duplicate refresh corrected; broader composition remains open.
 The original completion claim was overstated; see the reopened acceptance record below.
 
 The owner requested completion after a source/render audit on 17 September 2026.
@@ -479,3 +479,31 @@ merely to complete that visual check.
 - Verification JSON and build log: `build/administration-refinement/`.
 - Main was current through `405710e` before this change; no concurrent commits
   remained to integrate. The original busy main checkout was left untouched.
+
+### Owner review and single refresh correction
+
+The owner supplied a real screenshot of installed build 22542 and rejected the
+duplicate refresh actions. The screenshot also confirms that the overview’s
+composition remains close to the original. Do not equate the preceding technical
+verification with owner acceptance of the broader visual redesign.
+
+The header previously refreshed the workspace while the footer refreshed the
+overview’s separate reads. The header now signals an overview and runtime-identity
+refresh as well; the footer action is removed. Tab/search/scroll context and
+existing diagnostic observations are retained. Operational checks remain explicit.
+No backend change or compatibility behavior was introduced. The partially visible
+profile choices in the owner’s screenshot are scrolled list content beneath the
+fixed tabs; they are not evidence of a new layout overlap.
+
+Validation: clean analysis and 46 focused shell, overview, navigation, runtime and
+comparison tests. New assertions cover all overview endpoints, schedule refresh,
+Health identity refresh, retained selected tab and results, and no operation POST.
+Light/dark/enlarged-text overview renders were regenerated and the final scrolled
+overview was inspected. Build 22552 is the single-refresh follow-up; installation
+status is recorded separately. Broader visual composition remains an open design
+requirement, not closed by this correction.
+
+Single-refresh signed build: production package/certificate verified, non-debuggable
+ARM64 version **22552**, SHA-256 `a42eac1f1aa7282475211d562be35440a8bd130e306335d32101f7bc7461c79a`.
+Logs and verifier output are in `build/administration-single-refresh/`. Phone
+installation is pending because its last supplied address refuses connections.

@@ -386,17 +386,6 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
               _row('Scheduled tasks', _nextTask(), Icons.event_repeat_outlined),
             ],
           ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed:
-                  overview.observations.values.any((value) => value.loading)
-                  ? null
-                  : _refresh,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Refresh overview'),
-            ),
-          ),
         ],
       ),
     ),

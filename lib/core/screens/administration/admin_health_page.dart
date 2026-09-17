@@ -10,6 +10,7 @@ import 'admin_connectors_page.dart';
 
 class AdminHealthContent extends StatelessWidget {
   final AdministrationRepository server;
+  final int refreshRevision;
   final ProfileAdministration? profile;
   final Widget profileSelector;
   final ProfileWorkspaceData? workspace;
@@ -17,6 +18,7 @@ class AdminHealthContent extends StatelessWidget {
   const AdminHealthContent({
     super.key,
     required this.server,
+    this.refreshRevision = 0,
     required this.profile,
     required this.profileSelector,
     this.workspace,
@@ -60,7 +62,7 @@ class AdminHealthContent extends StatelessWidget {
         ),
       ],
       const AdminSectionLabel('Runtime'),
-      AdminRuntimeHealth(server: server),
+      AdminRuntimeHealth(server: server, refreshRevision: refreshRevision),
       const SizedBox(height: 20),
     ],
   );

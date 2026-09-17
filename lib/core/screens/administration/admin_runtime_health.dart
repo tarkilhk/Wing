@@ -5,8 +5,13 @@ import 'admin_widgets.dart';
 
 /// Keeps server observations while visiting results or switching profile tabs.
 class AdminRuntimeHealth extends StatefulWidget {
-  const AdminRuntimeHealth({super.key, required this.server});
+  const AdminRuntimeHealth({
+    super.key,
+    required this.server,
+    this.refreshRevision = 0,
+  });
   final AdministrationRepository server;
+  final int refreshRevision;
   @override
   State<AdminRuntimeHealth> createState() => _AdminRuntimeHealthState();
 }
@@ -111,6 +116,7 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
 
   @override
   Widget build(BuildContext context) => AdminLoad(
+    key: ValueKey(widget.refreshRevision),
     expand: false,
     load: () async => {
       ...await widget.server.runtimeIdentity(),

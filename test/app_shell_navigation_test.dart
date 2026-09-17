@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/screens/administration/administration_content.dart';
 import 'package:wing/core/screens/workspace_overview_content.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -72,6 +73,33 @@ void main() {
     await tester.tap(item);
     await tester.pumpAndSettle();
   }
+
+  testWidgets('administration header refresh reaches its current content', (
+    tester,
+  ) async {
+    await show(tester);
+    await navigate(tester, AppDestination.administration);
+    final before = tester
+        .widget<HermesAdministrationContent>(
+          find.byType(HermesAdministrationContent),
+        )
+        .refreshRevision;
+    await tester.tap(find.byTooltip('Refresh administration'));
+    // This shell fixture has no administration HTTP server. Verify the header
+    // signal independently from the endpoint refresh covered by navigation tests.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      tester
+          .widget<HermesAdministrationContent>(
+            find.byType(HermesAdministrationContent),
+          )
+          .refreshRevision,
+      before + 1,
+    );
+    expect(find.text('Refresh overview', skipOffstage: false), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   List<MethodCall> recordPlatformCalls(WidgetTester tester) {
     final calls = <MethodCall>[];

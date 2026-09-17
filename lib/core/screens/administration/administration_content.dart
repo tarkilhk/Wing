@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../services/administration_overview.dart';
 import '../../widgets/server_connection_label.dart';
 import '../../widgets/profile_selector.dart';
 import 'admin_profile_overview.dart';
@@ -22,12 +23,14 @@ import 'admin_scheduled_tasks_page.dart';
 
 class HermesAdministrationContent extends StatefulWidget {
   final ProfileWorkspaceController controller;
+  final int refreshRevision;
   final VoidCallback? onConnections;
   final AdministrationRepository? repository;
   final Future<void> Function(ProfileSessionKey) onOpenSession;
   const HermesAdministrationContent({
     super.key,
     required this.controller,
+    this.refreshRevision = 0,
     this.onConnections,
     this.repository,
     required this.onOpenSession,
@@ -57,6 +60,15 @@ class _HermesAdministrationContentState
       _overviewKeys = destination.summaryKeys;
       _overviewRevision++;
     });
+  }
+
+  @override
+  void didUpdateWidget(HermesAdministrationContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.refreshRevision != oldWidget.refreshRevision) {
+      _overviewKeys = {...AdministrationOverview.endpoints.keys, 'tasks'};
+      _overviewRevision++;
+    }
   }
 
   final _searchInput = TextEditingController();
@@ -558,6 +570,8 @@ class _HermesAdministrationContentState
                                           ],
                                         ),
                                         AdminHealthContent(
+                                          refreshRevision:
+                                              widget.refreshRevision,
                                           server: _server,
                                           profile: p,
                                           profileSelector: _selector(),
