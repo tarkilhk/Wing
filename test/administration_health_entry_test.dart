@@ -164,6 +164,7 @@ class _Fixture {
 
 void main({
   Future<void> Function(WidgetTester tester, String name)? nativeCapture,
+  bool useNativeViewport = false,
 }) {
   const capture = bool.fromEnvironment('CAPTURE_ADMIN_HEALTH');
   if (capture) {
@@ -208,11 +209,13 @@ void main({
             final fixture = _Fixture(status);
             await fixture.initialize();
             addTearDown(fixture.dispose);
-            tester.view.physicalSize = large
-                ? const Size(320, 640)
-                : const Size(412, 832);
-            tester.view.devicePixelRatio = 1;
-            addTearDown(tester.view.reset);
+            if (!useNativeViewport) {
+              tester.view.physicalSize = large
+                  ? const Size(320, 640)
+                  : const Size(412, 832);
+              tester.view.devicePixelRatio = 1;
+              addTearDown(tester.view.reset);
+            }
             final scaffold = GlobalKey<ScaffoldState>();
             await tester.pumpWidget(
               RepaintBoundary(

@@ -1,24 +1,29 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
+import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import '../test/administration_health_entry_test.dart' as health_entry;
 
-/// Production Android journeys with in-memory observations only.
+/// Production Android journeys with in-memory observations only. Export frames
+/// from the native Flutter renderer; no screenshot channel or fixture app route.
 void main() {
-  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  var converted = false;
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   health_entry.main(
+    useNativeViewport: true,
     nativeCapture: (tester, name) async {
-      if (!converted) {
-        await binding.convertFlutterSurfaceToImage();
-        converted = true;
-        await tester.pump();
-      }
-      final bytes = await binding.takeScreenshot(name);
-      await File(
-        '${Directory.systemTemp.path}/wing-health-$name.png',
-      ).writeAsBytes(bytes);
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(const ValueKey('health-capture')),
+      );
+      final frame = await boundary.toImage(pixelRatio: 1.5);
+      final bytes = await frame.toByteData(format: ui.ImageByteFormat.png);
+      final file = File('${Directory.systemTemp.path}/wing-health-$name.png');
+      await file.writeAsBytes(bytes!.buffer.asUint8List());
+      debugPrint('Native frame: ${file.path}');
+      frame.dispose();
     },
   );
 }
