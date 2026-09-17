@@ -139,7 +139,7 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                 children: [
                   Icon(Icons.cloud_outlined),
                   SizedBox(width: 12),
-                  Expanded(child: Text('Backend version')),
+                  Expanded(child: Text('Server version')),
                 ],
               ),
               const SizedBox(height: 4),

@@ -1,25 +1,24 @@
 # Administration ownership and design
 
-This is the current ownership contract for the Profile, Server and Health design selected on 14 September 2026. Use the shared [Studio tokens](../DESIGN_SYSTEM.md). [Administration](../ADMINISTRATION.md) lists implemented controls and backend limitations; the [roadmap](../ADMINISTRATION_ROADMAP.md) owns feature scope. Generated mockups are not evidence of implemented backend operations.
+This is the ownership contract for Administration, updated on 17 September 2026 to use Profile and Health with versions in the global menu, and provider ownership corrected to follow the latest-upstream policy in [AGENTS.md](../../AGENTS.md). Use the shared [Studio tokens](../DESIGN_SYSTEM.md). [Administration](../ADMINISTRATION.md) lists implemented controls and backend limitations; the [roadmap](../ADMINISTRATION_ROADMAP.md) owns feature scope. Generated mockups are not evidence of implemented backend operations.
 
 ## Navigation
 
 | Destination | Owns |
 | --- | --- |
 | Profile / Defaults | Main model/provider, supported reasoning/speed, auxiliary assignments and fallback models |
-| Profile / Identity | Description and SOUL; link to Server / Profiles for lifecycle |
+| Profile / Identity | Description and SOUL; Manage profiles beside the selector for lifecycle |
 | Profile / Memory | Search/read, enablement and character budgets; unavailable edit/delete until safe IDs exist |
 | Profile / Skills and tools | Installed skills, provenance, instructions, usage, local edits/archive, Hub, toolsets and a distinct agent-plugin page |
 | Profile / Scheduled tasks | Per-profile schedules, task editing/templates, execution actions and recent run conversations; connected-server delivery discovery |
-| Profile / Access and connectors | Effective provider access, links to shared account owners, explicit credential overrides and profile MCP configuration |
+| Profile / Access and connectors | Profile provider accounts and API keys, observed credential sources and profile MCP configuration |
 | Profile / Behavior | Supported execution limits, approval policy, basic compression, reach/recovery policy and backend voice defaults |
-| Server / Providers | Shared root provider accounts and owner-aware recovery |
-| Server / Profiles | Collection lifecycle; opening an individual profile selects Profile |
-| Server / Versions & updates | Backend version and upstream update availability, checked automatically on entry |
+| Profile / Manage profiles | Collection lifecycle; compact action beside the profile selector |
+| Global menu / Client version and Server version | Both open Versions & updates; client identity is local only, server upstream availability is checked on entry |
 | Health / Runtime | Runtime/launch-profile observations, bounded logs, Doctor/security audit and action results |
 | Health / Selected profile | Scoped readiness and usage; recovery links to the owning editor |
 
-MCP connectors owns Reload server connectors, with confirmation that it reconnects tools across all server profiles and can invalidate prompt caches. Versions & updates contains only backend version and update controls. Check update progress appears after an update request; it reads the running update action, while Check for updates compares installed code with upstream.
+MCP connectors owns Reload server connectors, with confirmation that it reconnects tools across all server profiles and can invalidate prompt caches. Versions & updates contains installed client identity and server update controls. Only the server has an upstream update check and circular-arrows availability indicator. Check update progress appears after an update request; it reads the running update action, while Check for updates compares installed code with upstream.
 
 Keep tab roots short. Use categorized rows and drill-downs, sheets for short choices and dedicated screens for inventories and long editors. Search results identify the owner and navigate to the single editor. Health links to settings; it does not duplicate their forms.
 
@@ -33,15 +32,24 @@ Keep the connection visible across tabs. Profile selection belongs in Profile an
 
 ## Account and runtime identity
 
-Hermes supports root fallback for [provider state](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/hermes_cli/auth.py#L773) and [credential pools](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/hermes_cli/auth.py#L893). Shared accounts belong under Server / Providers. Profile keeps model choices, effective-source information and explicit overrides. This supersedes the early boards that placed all accounts under Profile; MCP remains profile-owned.
+Provider accounts, API keys and model choices belong to the selected profile,
+including the canonical `default` profile. Upstream removed automatic root
+`auth.json` inheritance in commit `93889b7` on 16 September 2026 UTC. A blank
+profile needs provider access configured; cloning can copy API keys and settings,
+which is separate from inheritance. See the [verified ownership research](../research/2026-09-17-hermes-provider-ownership.md)
+for source evidence and provider-specific external/shared credential mechanisms.
 
-Target the verified canonical root explicitly for shared writes. Removing a profile override can restore shared access. Do not label it Disconnect everywhere or invent an affected-profile inventory. External CLI ownership remains distinct. Show credential provenance only when the backend establishes it.
+The Server / Providers entry has been removed; provider searches route to
+Profile / Access and connectors. Shared-account links within the provider editor
+still target `default` and need correction together with its shared-account labels. Removing profile credentials must not promise restored root
+access. External CLI ownership remains distinct. Show credential provenance only
+when the backend establishes it, and do not infer account use from provider names.
 
 Runtime health uses `profiles/active.current`, resolved through profile metadata. `active` is the sticky future-launch selection, not the runtime identity. Neither it nor the mobile selection may substitute for `current`. Unknown identity is shown as unavailable while independent server/runtime operations remain reachable.
 
 ## Edits and state
 
-Capture connection and canonical profile identity when opening an editor. Keep that target fixed and visible while editing. Selection changes or late responses must not redirect a save. Display-name changes do not change canonical identity. A missing profile should not disable unrelated Server or runtime Health views.
+Capture connection and canonical profile identity when opening an editor. Keep that target fixed and visible while editing. Selection changes or late responses must not redirect a save. Display-name changes do not change canonical identity. A missing profile should not disable unrelated Versions & updates or runtime Health views.
 
 Distinguish pending, stale, unavailable, offline, failed, uncertain and partially successful results. Keep edits after an unconfirmed save and show last-checked information for stale observations. Do not expose endpoint/PID bookkeeping in ordinary UI.
 

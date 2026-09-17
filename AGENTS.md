@@ -1,9 +1,14 @@
 # Hermes deployment constraint
 
-Wing runs against **unmodified, vanilla Hermes**. Implement features entirely in
-the Android client using APIs available on the user's existing server. Backend
-patches, forks, plugins, custom endpoints and required backend upgrades are out
-of scope. Backend checkouts are read-only references, not implementation targets.
+Wing targets **the latest upstream, unmodified Hermes**, including changes on
+upstream main. Before designing or implementing an integration, verify the current
+stock API and record the inspected commit; a local checkout or an older deployed
+server does not define the target. Implement features entirely in the Android
+client. Backward compatibility requires the user's explicit approval.
+
+Backend patches, forks, plugins and custom endpoints are out of scope. Backend
+checkouts are read-only references. Updating a deployed server is a separate
+deployment action; targeting current upstream does not authorize an upgrade.
 
 Verify the stock API before designing a feature. If it cannot support the requested
 behavior, state that limitation and discuss a client-only design. Never silently
@@ -13,7 +18,7 @@ change shared profile settings to simulate an unsaved voice preview.
 
 For UI work, read [the Studio design charter](docs/DESIGN_SYSTEM.md) before changing screens, components, themes, or interaction layouts. It owns the selected appearance, component rules, and behavior-preservation contract. Use its shared tokens for new and existing controls, including light and dark states.
 
-For administration UI, also read [the ownership handoff](docs/design/2026-09-14-administration-handoff.md). It distinguishes shared server providers, profile defaults and overrides, and runtime versus profile health. Planned capabilities and generated mockups are not evidence that a backend operation is implemented.
+For administration UI, also read [the ownership handoff](docs/design/2026-09-14-administration-handoff.md). It defines profile-owned provider credentials and defaults, server operations, and runtime versus profile health. Planned capabilities and generated mockups are not evidence that a backend operation is implemented.
 
 ## Design before implementation
 

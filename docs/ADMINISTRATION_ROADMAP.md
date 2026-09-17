@@ -67,9 +67,14 @@ P0 covers frequent phone work or unblocking a task. P1 covers recovery and occas
 
 ## Remaining boundaries
 
-The expanded Profile, Server and Health screens are implemented. Do not restart the historical first model-and-skills slice. Current limitations include positional memory IDs that prevent safe individual edits/deletes, whole-map MCP writes that prevent safe per-tool toggles, incomplete credential provenance and unavailable cold recovery for pending authentication/actions.
+Administration now uses Profile and Health. Client version and Server version live in the global menu; only the server checks for upstream updates. Profile lifecycle remains reachable beside the Profile selector. Do not restart the historical first model-and-skills slice. Current limitations include positional memory IDs that prevent safe individual edits/deletes, whole-map MCP writes that prevent safe per-tool toggles, incomplete credential provenance and unavailable cold recovery for pending authentication/actions.
 
-Shared provider accounts belong under Server. Profile holds default models, effective account-source information and explicit credential overrides. Removing an override can reveal shared access again. Scope must follow the owning resource rather than the existence of a profile parameter.
+Provider accounts, API keys and model defaults belong under Profile, including
+those owned by `default`. Follow the latest-upstream policy in [AGENTS.md](../AGENTS.md)
+and the corrected [ownership contract](design/2026-09-14-administration-handoff.md).
+The Server / Providers entry has been removed. Shared-account links and
+root-inheritance wording inside the provider editor still need correction. Scope must follow the
+owning resource rather than the existence of a profile parameter.
 
 For mixed P1/P2 rows, keep implemented narrow settings distinct from advanced configuration. Raw MCP import, mixture-of-agents, memory-provider reset, curator controls, vault record administration, billing, broad import/export and installation flows remain subject to their stated priority and actual backend support.
 

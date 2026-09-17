@@ -1,8 +1,15 @@
 # Administration
 
-Administration uses Profile, Server and Health tabs. The selected server stays visible. Profile opens with a compact profile brief and current-value navigation: Models and reasoning, Identity, Memory and Behavior under Agent setup; Skills and tools, Access and connectors and Scheduled tasks under Capabilities and automation. Server has Providers, Profiles and Versions & updates. Version and upstream update availability load automatically; an update icon marks newer backend code. Health separates runtime observations from selected-profile diagnostics and usage.
+Administration uses Profile and Health tabs. The selected server stays visible. Profile opens with a compact profile brief and current-value navigation: Models and reasoning, Identity, Memory and Behavior under Agent setup; Skills and tools, Access and connectors and Scheduled tasks under Capabilities and automation. Manage profiles sits beside the Profile selector. Client version and Server version entries at the bottom of the global menu open Versions & updates. The client entry reads installed app metadata only. Provider settings remain under Profile / Access and connectors. Version and upstream update availability load automatically; an update icon marks newer backend code. Health separates runtime observations from selected-profile diagnostics and usage.
 
 Read the [ownership handoff](design/2026-09-14-administration-handoff.md) before changing these flows. The [roadmap](ADMINISTRATION_ROADMAP.md) preserves selected priorities and exclusions.
+
+Target correction, 17 September 2026: Wing follows the latest upstream Hermes as
+specified in [AGENTS.md](../AGENTS.md). Provider credentials belong to profiles;
+upstream removed automatic root `auth.json` inheritance. The Providers entry has
+been removed from the Server tab and administration search routes provider queries
+to Profile. Shared-account links and wording inside the provider editor still
+reflect the older design and need a separate correction.
 
 ## Overview and navigation
 
@@ -58,7 +65,7 @@ total draws no shares, and unreported cost remains unavailable.
 | A13 | Auxiliary assignments, automatic choice, reset-all, unavailable-model warning, expensive-model confirmation | Reset-all discloses endpoint-credential clearing. Readback must match the affected tasks. |
 | A14 | Ordered fallback list with add/remove/reorder, schema-supported agent/subagent execution controls | Fallback edits check for an already-changed list and verify the saved result. Custom provider definitions remain P2. |
 | A16 | Dedicated full-screen description/SOUL editor under Identity | Uses the captured profile gateway; existing readback behavior is retained. |
-| A17 | Create, clone configuration, rename and delete under Server / Profiles | Default profile has presentation-only rename and no delete action. Creation/rename/deletion is followed by discovery. Unconfirmed outcomes remain unconfirmed. Full-data/channel cloning and optional multi-step setup are not offered. |
+| A17 | Create, clone configuration, rename and delete through Manage profiles beside the Profile selector | Default profile has presentation-only rename and no delete action. Creation/rename/deletion is followed by discovery. Unconfirmed outcomes remain unconfirmed. Full-data/channel cloning and optional multi-step setup are not offered. |
 | A18–A19 | Recorded skill usage ordering, provenance, complete instructions, edit/archive agent-owned skills | Bundled instructions are read-only. Existing changed content is detected before saving; this is not a server compare-and-swap guarantee. |
 | A20 | Official Hub/search, provenance preview, install, uninstall and group update | Tracks returned background action identity and actual exit status. Install/update acceptance requires an authorized target and actual action result. |
 | A22 | Scoped toolset providers, effective key readiness, model selection, explicit post-setup action | Setup explains host requirements and tracks the returned action. An effective inherited key is not offered as removable from the profile. |
@@ -70,7 +77,7 @@ total draws no shares, and unreported cost remains unavailable.
 | A33 | Secret redaction, private-URL access and checkpoint enablement | Uses `security.allow_private_urls`; browser-profile grants and advanced recovery remain P2. |
 | A36–A37 | Existing connection management and authenticated profile diagnostics | Device connection settings and backend policy remain separate. |
 | A38–A39 | Bounded log categories/severity/search; explicit Doctor and security audit with action status | Runtime scope is independent of mobile selection. No automatic repair or new restart action. |
-| A41 | Backend version and update flow under Versions & updates; automatic checks and a Server-list update indicator | Request acceptance does not prove a completed update. |
+| A41 | Backend version and update flow under Versions & updates; automatic server checks and a circular-arrows indicator in the global menu | Request acceptance does not prove a completed update. |
 | A42 | Rolling 1/7/30/90/365-day usage with per-model sessions, calls, tokens and estimated cost | Hermes estimates, not provider invoices. Missing usage is not invented. |
 | A44 | Guided STT setup, combined speech synthesis provider/voice selection with Play/Stop, and supported model/language/automatic-speech defaults | Vanilla APIs only. Edge uses suggested voices; ElevenLabs loads the account list. Custom voice IDs live under Advanced. Engine installation and advanced tuning are excluded. See [profile voice](PROFILE_VOICE.md). |
 | A45 | Searchable owner paths and task vocabulary with exact-field scrolling, emphasis and explicit clearing | Import/export/reset remain P2. |
@@ -115,9 +122,19 @@ script upload, workflow builder or unlimited history is provided.
 
 ## Ownership and credentials
 
-Shared provider accounts explicitly target the discovered canonical `default` root. An omitted or `current` profile can mean the dashboard's launch home, so it is not a substitute for verified root ownership.
+Profile / Provider access targets the selected profile, including `default`.
+The Server tab has been removed. The provider editor still exposes
+shared-account links targeting `default`; those links need correction alongside
+its inheritance wording. An omitted or `current` profile can mean the dashboard's
+launch home; use explicit canonical profile identity for credential operations.
 
-Profiles inherit root provider state when they have no local state. A nonempty local credential pool shadows that provider's root pool. Removing a profile override can expose shared access again; it must not promise to disconnect the provider everywhere. External CLI credentials have separate ownership, and not every Hermes Codex account is externally managed.
+The target ownership contract places accounts, keys and model defaults under
+Profile. Current upstream no longer falls back to root `auth.json` when a named
+profile lacks credentials. The UI's existing inheritance claims need correction.
+Credential sources still differ by provider: external CLI accounts and explicit
+shared-store mechanisms must be described according to verified backend behavior.
+See the [ownership research](research/2026-09-17-hermes-provider-ownership.md) for
+the exact upstream change, API limits and source-specific exceptions.
 
 Capture the connection and canonical profile when an editor opens. Profile writes recheck that identity and use it consistently in query and body. Server collection/runtime operations do not inherit the currently selected profile. Administration RPC transports must not replace chat event handlers.
 

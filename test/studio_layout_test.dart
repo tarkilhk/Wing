@@ -417,7 +417,9 @@ void main() {
                 tester,
                 '${brightness.name}-administration-profile$adminSuffix',
               );
-              for (final tab in ['Server', 'Health', 'Profile']) {
+              for (final tab in ['Health', 'Profile']) {
+                await tester.ensureVisible(find.widgetWithText(Tab, tab));
+                await tester.pumpAndSettle();
                 await tester.tap(find.widgetWithText(Tab, tab));
                 await tester.pumpAndSettle();
                 await _capture(

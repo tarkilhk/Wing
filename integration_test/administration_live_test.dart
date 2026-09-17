@@ -335,11 +335,11 @@ void main() {
   );
 
   testWidgets(
-    'Server profile create rename clone delete and open use real UI',
+    'Profile management create rename clone delete and open use real UI',
     (tester) async {
       await show(tester);
-      await tap(tester, 'Server');
-      await tap(tester, 'Profiles');
+      await tester.tap(find.byTooltip('Manage profiles'));
+      await idle(tester);
       Future<void> name(String value) async {
         await tester.enterText(
           find.descendant(
@@ -414,14 +414,15 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await idle(tester);
     await back(tester);
-    await tap(tester, 'Server');
-    await tap(tester, 'Runtime');
-    await tap(tester, 'Reload runtime connectors');
+    await tap(tester, 'Profile');
+    await tap(tester, 'Access and connectors');
+    await tap(tester, 'MCP connectors');
+    await tap(tester, 'Reload server connectors');
     await tap(tester, 'Reload');
     if (find.text('Confirm runtime reload').evaluate().isNotEmpty) {
       await tap(tester, 'Reload');
     }
-    expect(find.text('Runtime connectors reloaded.'), findsOneWidget);
+    expect(find.text('Server connectors reloaded.'), findsOneWidget);
   });
 
   testWidgets(

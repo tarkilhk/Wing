@@ -1,3 +1,6 @@
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:wing/core/widgets/app_drawer.dart';
+import 'package:wing/core/services/versions_controller.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -40,6 +43,13 @@ void main() {
   late ProfileWorkspaceController controller;
   late AdministrationFixture admin;
   setUp(() async {
+    PackageInfo.setMockInitialValues(
+      appName: 'Wing',
+      packageName: 'com.tarkilhk.wing',
+      version: '1.0.1',
+      buildNumber: '2260',
+      buildSignature: '',
+    );
     SharedPreferences.setMockInitialValues({});
     final fixture = ProfileBrowserFixture();
     admin = AdministrationFixture();
@@ -83,6 +93,14 @@ void main() {
           ),
           home: Scaffold(
             appBar: AppBar(title: const Text('Administration')),
+            drawer: AppDrawer(
+              selected: AppDestination.administration,
+              onSelected: (_) {},
+              connection: controller.connection,
+              connectionLabel: controller.connection.label,
+              versionsControllerFactory: (_) =>
+                  VersionsController(gateway: admin.server.gateway('default')),
+            ),
             body: HermesAdministrationContent(
               refreshRevision: refreshRevision,
               onOpenSession: (_) async {},
@@ -139,7 +157,7 @@ void main() {
       await tester.pumpAndSettle();
       admin.requests.clear();
       await show(tester, Brightness.dark, refreshRevision: 2);
-      expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 2);
+      expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 1);
       expect(
         admin.requests.where((r) => r.$2 == 'profiles/active'),
         hasLength(1),
@@ -245,19 +263,18 @@ void main() {
           scale: scale,
           width: scale == 2 ? 320 : 390,
         );
-        await tester.ensureVisible(find.text('Server'));
+        await tester.tap(find.byTooltip('Open navigation menu'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Server'));
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('menu-server-version')),
+        );
         await tester.pumpAndSettle();
-        expect(find.text('Connection'), findsNothing);
-        expect(find.text('Runtime'), findsNothing);
-        expect(find.text('Update available'), findsOneWidget);
-        expect(find.byIcon(Icons.system_update_alt), findsOneWidget);
+        expect(find.byIcon(Icons.sync), findsOneWidget);
         await screenshot(tester, '${brightness.name}-$scale-versions-entry');
         final checksBefore = admin.requests
             .where((r) => r.$2 == 'hermes/update/check')
             .length;
-        await tester.tap(find.text('Versions & updates'));
+        await tester.tap(find.byKey(const ValueKey('menu-server-version')));
         await tester.pumpAndSettle();
         expect(find.text('1.2.3'), findsOneWidget);
         expect(
@@ -277,6 +294,16 @@ void main() {
         await tester.tap(find.text('Changes in this update'));
         await tester.pumpAndSettle();
         expect(find.text('Showing 2 of 3 commits'), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.text('Keep scheduled tasks running after reconnecting'),
+          160,
+          scrollable: find
+              .byWidgetPredicate(
+                (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
         expect(
           find.text('Keep scheduled tasks running after reconnecting'),
           findsOneWidget,
@@ -284,7 +311,27 @@ void main() {
         expect(find.text('Commit: abc1234'), findsNothing);
         expect(admin.requests, hasLength(requestCount));
         await screenshot(tester, '${brightness.name}-$scale-changes');
+        await tester.scrollUntilVisible(
+          find.text('Commit details'),
+          -160,
+          scrollable: find
+              .byWidgetPredicate(
+                (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Commit details'));
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.text('Commit: abc1234'),
+          160,
+          scrollable: find
+              .byWidgetPredicate(
+                (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+              )
+              .first,
+        );
         await tester.pumpAndSettle();
         expect(find.text('Commit: abc1234'), findsOneWidget);
         await screenshot(tester, '${brightness.name}-$scale-changes-details');
@@ -303,46 +350,21 @@ void main() {
     }
   }
 
-  testWidgets(
-    'update indicator refreshes and failed checks never imply up to date',
-    (tester) async {
-      await show(tester, Brightness.dark);
-      await tester.tap(find.text('Server'));
-      await tester.pumpAndSettle();
-      expect(find.byIcon(Icons.system_update_alt), findsOneWidget);
-      admin.updateCheck = {
-        ...admin.updateCheck,
-        'behind': 0,
-        'update_available': false,
-      };
-      await show(tester, Brightness.dark, refreshRevision: 1);
-      expect(find.text('Up to date'), findsOneWidget);
-      expect(find.byIcon(Icons.system_update_alt), findsNothing);
-      admin.failReads = true;
-      await show(tester, Brightness.dark, refreshRevision: 2);
-      expect(find.text('Up to date'), findsNothing);
-      expect(find.text('Update availability unknown'), findsOneWidget);
-      expect(find.byIcon(Icons.system_update_alt), findsNothing);
-    },
-  );
-
   for (final brightness in Brightness.values) {
     testWidgets(
-      'three administration tabs fit ${brightness.name} and preserve ownership',
+      'two administration tabs fit ${brightness.name} and preserve ownership',
       (tester) async {
         await show(tester, brightness);
         expect(find.text('Models and reasoning'), findsOneWidget);
         expect(find.text('Identity'), findsOneWidget);
         await screenshot(tester, '${brightness.name}-profile');
-        await tester.ensureVisible(find.text('Server'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Server'));
-        await tester.pumpAndSettle();
-        expect(find.text('Providers'), findsOneWidget);
-        expect(find.text('Profiles'), findsOneWidget);
-        expect(find.byType(DropdownButtonFormField<String>), findsNothing);
-        expect(find.text('Memory'), findsNothing);
-        await screenshot(tester, '${brightness.name}-server');
+        expect(find.widgetWithText(Tab, 'Server'), findsNothing);
+        expect(find.text('Profiles'), findsNothing);
+        expect(find.text('Versions & updates'), findsNothing);
+        await show(tester, brightness, scale: 2, width: 320);
+        expect(tester.takeException(), isNull);
+        await screenshot(tester, '${brightness.name}-profile-large-text');
+        await show(tester, brightness);
         await tester.tap(find.text('Health'));
         await tester.pumpAndSettle();
         expect(find.text('Selected profile'), findsOneWidget);
@@ -402,26 +424,45 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'server controls and runtime health remain available without a selected profile',
-    (tester) async {
-      controller.current = null;
-      await show(tester, Brightness.dark, scale: 1.3);
-      await tester.tap(find.text('Server'));
-      await tester.pumpAndSettle();
-      expect(find.text('Providers'), findsOneWidget);
-      await tester.tap(find.text('Health'));
-      await tester.pumpAndSettle();
-      expect(find.text('Runtime profile: Shared root'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-      await screenshot(tester, 'large-text-missing-profile');
-    },
-  );
+  testWidgets('runtime health remains available without a selected profile', (
+    tester,
+  ) async {
+    controller.current = null;
+    await show(tester, Brightness.dark, scale: 1.3);
+    expect(find.widgetWithText(Tab, 'Server'), findsNothing);
+    await tester.tap(find.text('Health'));
+    await tester.pumpAndSettle();
+    expect(find.text('Runtime profile: Shared root'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await screenshot(tester, 'large-text-missing-profile');
+  });
 
   testWidgets('search shows owner and opens the one scoped editor', (
     tester,
   ) async {
     await show(tester, Brightness.light);
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) => widget is TextField && !widget.readOnly,
+      ),
+      'providers',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Providers'), findsNothing);
+    expect(
+      find.text('Profile › Access and connectors\nServer A / personal'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Access and connectors'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Provider access'));
+    await tester.pumpAndSettle();
+    expect(find.text('Profile access'), findsOneWidget);
+    expect(find.text('Server A / personal'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.byWidgetPredicate(
         (widget) => widget is TextField && !widget.readOnly,
@@ -449,14 +490,14 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('opening a server profile returns to the Profile tab', (
+  testWidgets('profile management stays reachable after removing Server tab', (
     tester,
   ) async {
     await show(tester, Brightness.light);
-    await tester.tap(find.text('Server'));
+    expect(find.widgetWithText(Tab, 'Server'), findsNothing);
+    await tester.tap(find.byTooltip('Manage profiles'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Profiles'));
-    await tester.pumpAndSettle();
+    expect(find.text('Create profile'), findsOneWidget);
     await tester.tap(find.text('personal').first);
     await tester.pumpAndSettle();
     expect(find.text('Models and reasoning'), findsOneWidget);
@@ -538,7 +579,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Clear search'));
       await tester.pumpAndSettle();
-      expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 2);
+      expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 1);
       expect(find.text('Check again'), findsOneWidget);
       expect(find.text('Run checks'), findsNothing);
       expect(tester.takeException(), isNull);

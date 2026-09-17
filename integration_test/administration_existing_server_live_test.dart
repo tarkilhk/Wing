@@ -33,13 +33,12 @@ void main() {
       addTearDown(controller.dispose);
       await controller.initialize();
       expect(await controller.switchProfile('android-qa-a'), isTrue);
-      var connectionsRequested = false;
       await tester.pumpWidget(
         MaterialApp(
           theme: wingTheme(Brightness.dark),
           home: ProfileWorkspaceScreen(
             controller: controller,
-            onConnections: () => connectionsRequested = true,
+            onConnections: () {},
           ),
         ),
       );
@@ -48,18 +47,16 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Hermes administration'));
       await tester.pumpAndSettle();
-      expect(find.text('Defaults'), findsOneWidget);
+      expect(find.text('Models and reasoning'), findsOneWidget);
       expect(find.text('Identity'), findsOneWidget);
-      await tester.tap(find.text('Server'));
+      expect(find.widgetWithText(Tab, 'Server'), findsNothing);
+      await tester.tap(find.byTooltip('Open navigation menu'));
       await tester.pumpAndSettle();
-      expect(find.text('Providers'), findsOneWidget);
-      expect(find.byType(DropdownButtonFormField<String>), findsNothing);
-      await tester.tap(find.text('Connection'));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('menu-server-version')),
+      );
+      await tester.tap(find.byKey(const ValueKey('menu-server-version')));
       await tester.pumpAndSettle();
-      expect(connectionsRequested, isTrue);
-      await tester.tap(find.text('Runtime'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Check for updates'));
       final deadline = DateTime.now().add(const Duration(seconds: 60));
       while (find.text('Current version unavailable').evaluate().isNotEmpty &&
           DateTime.now().isBefore(deadline)) {

@@ -12,9 +12,14 @@ typedef AppVersionLinkOpener = Future<bool> Function(Uri uri);
 
 /// Displays the installed application's identity from Android package metadata.
 class InstalledAppVersionCard extends StatefulWidget {
-  const InstalledAppVersionCard({super.key, this.openLink});
+  const InstalledAppVersionCard({
+    super.key,
+    this.openLink,
+    this.showLinks = true,
+  });
 
   final AppVersionLinkOpener? openLink;
+  final bool showLinks;
 
   @override
   State<InstalledAppVersionCard> createState() =>
@@ -77,23 +82,24 @@ class _InstalledAppVersionCardState extends State<InstalledAppVersionCard> {
                 ),
                 subtitle: Text('Version ${info.version}'),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                child: Wrap(
-                  alignment: WrapAlignment.end,
-                  spacing: 4,
-                  children: [
-                    TextButton(
-                      onPressed: () => _open(_changelogUrl),
-                      child: const Text("What's new"),
-                    ),
-                    TextButton(
-                      onPressed: () => _open(_releasesUrl),
-                      child: const Text('Releases'),
-                    ),
-                  ],
+              if (widget.showLinks)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 4,
+                    children: [
+                      TextButton(
+                        onPressed: () => _open(_changelogUrl),
+                        child: const Text("What's new"),
+                      ),
+                      TextButton(
+                        onPressed: () => _open(_releasesUrl),
+                        child: const Text('Releases'),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         );

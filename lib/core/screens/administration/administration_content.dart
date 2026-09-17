@@ -1,6 +1,4 @@
 import 'dart:async';
-import '../../services/backend_update_controller.dart';
-import 'admin_versions_page.dart';
 import '../../services/administration_overview.dart';
 import '../../widgets/server_connection_label.dart';
 import '../../widgets/profile_selector.dart';
@@ -9,13 +7,13 @@ import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 import '../../services/profile_workspace_controller.dart';
 import 'admin_identity_page.dart';
+import 'admin_profiles_page.dart';
 import '../profile_capabilities_screen.dart';
 import 'admin_widgets.dart';
 import 'admin_settings_page.dart';
 import 'admin_memory_page.dart';
 import 'admin_providers_page.dart';
 import 'admin_health_page.dart';
-import 'admin_profiles_page.dart';
 import 'admin_defaults_page.dart';
 import 'admin_connectors_page.dart';
 import 'admin_tool_setup_page.dart';
@@ -45,7 +43,7 @@ class HermesAdministrationContent extends StatefulWidget {
 class _HermesAdministrationContentState
     extends State<HermesAdministrationContent>
     with SingleTickerProviderStateMixin {
-  late final _tabs = TabController(length: 3, vsync: this);
+  late final _tabs = TabController(length: 2, vsync: this);
   late final _server =
       widget.repository ??
       AdministrationRepository.forConnection(
@@ -53,29 +51,6 @@ class _HermesAdministrationContentState
         widget.controller.connectionIdentity,
         connectionStatus: widget.controller.connectionStatus,
       );
-  late final _updates = BackendUpdateController(_server.gateway('default'));
-
-  @override
-  void initState() {
-    super.initState();
-    _updates.addListener(_updateChanged);
-    unawaited(_updates.checkForUpdate());
-  }
-
-  void _updateChanged() {
-    if (mounted) setState(() {});
-  }
-
-  String get _updateSummary {
-    if (_updates.checking) return 'Checking for updates…';
-    final check = _updates.check;
-    if (check?.updateAvailable == true) return 'Update available';
-    if (check?.updateAvailable == false && check?.behind == 0) {
-      return 'Up to date';
-    }
-    return 'Update availability unknown';
-  }
-
   String _search = '';
   int _overviewRevision = 0;
   Set<String> _overviewKeys = const {};
@@ -93,15 +68,12 @@ class _HermesAdministrationContentState
     if (widget.refreshRevision != oldWidget.refreshRevision) {
       _overviewKeys = {...AdministrationOverview.endpoints.keys, 'tasks'};
       _overviewRevision++;
-      unawaited(_updates.checkForUpdate());
     }
   }
 
   final _searchInput = TextEditingController();
   @override
   void dispose() {
-    _updates.removeListener(_updateChanged);
-    _updates.dispose();
     _tabs.dispose();
     _searchInput.dispose();
     if (widget.repository == null) _server.close();
@@ -116,24 +88,50 @@ class _HermesAdministrationContentState
     return _server.profile(name);
   }
 
-  Widget _selector() {
+  Future<void> _manageProfiles() async {
+    await adminPush(
+      context,
+      AdminProfilesPage(
+        server: _server,
+        onOpenProfile: (name) async {
+          await widget.controller.switchProfile(name);
+          final opened = widget.controller.current?.scope.profileName == name;
+          if (mounted && opened) _tabs.animateTo(0);
+          return opened;
+        },
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Widget _selector({bool manage = false}) {
     final profiles = widget.controller.discovery?.profiles ?? [];
     final name = _profile?.name;
-    if (profiles.isEmpty) {
-      return const AdminNotice(
-        'No available profiles. Server controls remain accessible.',
-      );
-    }
-    return ProfileSelector(
-      profiles: profiles,
-      selectedProfile: name,
-      padding: EdgeInsets.zero,
-      onSelected: widget.controller.switching
-          ? null
-          : (choice) async {
-              await widget.controller.switchProfile(choice);
-              if (mounted) setState(() {});
-            },
+    final selector = profiles.isEmpty
+        ? const AdminNotice(
+            'No available profiles. Runtime health remains accessible.',
+          )
+        : ProfileSelector(
+            profiles: profiles,
+            selectedProfile: name,
+            padding: EdgeInsets.zero,
+            onSelected: widget.controller.switching
+                ? null
+                : (choice) async {
+                    await widget.controller.switchProfile(choice);
+                    if (mounted) setState(() {});
+                  },
+          );
+    if (!manage) return selector;
+    return Row(
+      children: [
+        Expanded(child: selector),
+        IconButton(
+          tooltip: 'Manage profiles',
+          icon: const Icon(Icons.manage_accounts_outlined),
+          onPressed: _manageProfiles,
+        ),
+      ],
     );
   }
 
@@ -174,20 +172,6 @@ class _HermesAdministrationContentState
       children: [AdminGroup(children: rows)],
     ),
   );
-
-  Future<void> _providers() async {
-    try {
-      final root = await _server.sharedProviders();
-      if (mounted) {
-        await adminPush(
-          context,
-          AdminProvidersPage(profile: root, shared: true),
-        );
-      }
-    } catch (e) {
-      if (mounted) adminMessage(context, administrationError(e), isError: true);
-    }
-  }
 
   List<_Destination> _destinations(ProfileAdministration? p) => [
     _Destination(
@@ -334,43 +318,6 @@ class _HermesAdministrationContentState
               ]),
             ),
     ),
-    _Destination(
-      'Server',
-      'Providers',
-      'Shared accounts and service credentials',
-      Icons.key_outlined,
-      _providers,
-    ),
-    _Destination(
-      'Server',
-      'Profiles',
-      'Create, clone, rename and delete',
-      Icons.people_outline,
-      () => adminPush(
-        context,
-        AdminProfilesPage(
-          server: _server,
-          onOpenProfile: (name) async {
-            await widget.controller.switchProfile(name);
-            final opened = widget.controller.current?.scope.profileName == name;
-            if (mounted && opened) _tabs.animateTo(0);
-            return opened;
-          },
-        ),
-      ),
-    ),
-    _Destination(
-      'Server',
-      'Versions & updates',
-      _updateSummary,
-      _updates.check?.updateAvailable == true
-          ? Icons.system_update_alt
-          : Icons.info_outline,
-      () => adminPush(
-        context,
-        AdminVersionsPage(server: _server, updateController: _updates),
-      ),
-    ),
   ];
 
   List<_Destination> _searchDestinations(ProfileAdministration? p) => [
@@ -462,7 +409,7 @@ class _HermesAdministrationContentState
   Widget build(BuildContext context) => Theme(
     data: administrationTheme(Theme.of(context)),
     child: DefaultTabController(
-      length: 3,
+      length: 2,
       child: Builder(
         builder: (context) {
           final p = _profile;
@@ -525,7 +472,6 @@ class _HermesAdministrationContentState
                               controller: _tabs,
                               tabs: const [
                                 Tab(text: 'Profile'),
-                                Tab(text: 'Server'),
                                 Tab(text: 'Health'),
                               ],
                             ),
@@ -550,7 +496,7 @@ class _HermesAdministrationContentState
                                                 ?.named(p.name),
                                             preferences:
                                                 widget.controller.preferences,
-                                            selector: _selector(),
+                                            selector: _selector(manage: true),
                                             destinations: {
                                               for (final d
                                                   in destinations.where(
@@ -563,38 +509,12 @@ class _HermesAdministrationContentState
                                           ListView(
                                             padding: const EdgeInsets.all(16),
                                             children: [
-                                              _selector(),
+                                              _selector(manage: true),
                                               const AdminNotice(
                                                 'Choose an available profile to manage its settings.',
                                               ),
                                             ],
                                           ),
-                                        ListView(
-                                          padding: const EdgeInsets.all(16),
-                                          children: [
-                                            AdminGroup(
-                                              children: [
-                                                for (final d
-                                                    in destinations.where(
-                                                      (d) => d.tab == 'Server',
-                                                    ))
-                                                  AdminRow(
-                                                    title: d.title,
-                                                    subtitle: d.subtitle,
-                                                    icon: d.icon,
-                                                    onTap: d.open == null
-                                                        ? null
-                                                        : () async {
-                                                            await d.open!();
-                                                            if (mounted) {
-                                                              _refreshAfter(d);
-                                                            }
-                                                          },
-                                                  ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
                                         AdminHealthContent(
                                           refreshRevision:
                                               widget.refreshRevision,
@@ -676,7 +596,6 @@ class _Destination {
       'Memory' || 'Behavior' => {'config'},
       'Skills and tools' => {'skills', 'tools', 'access'},
       'Skill Hub' => {'skills'},
-      'Providers' => {'access'},
       'Access and connectors' => {'access', 'connectors'},
       'MCP connectors' => {'connectors'},
       'Scheduled tasks' => {'tasks'},
@@ -712,8 +631,8 @@ class _Destination {
 
   bool matches(String query) {
     final vocabulary = switch (title) {
-      'Providers' ||
-      'Access and connectors' => 'API key credentials login sign-in account',
+      'Access and connectors' =>
+        'providers API key credentials login sign-in account',
       'Behavior' => 'timeout voice approvals compression limits',
       'Models and reasoning' => 'models intelligence reasoning speed',
       'Run time budget' || 'Subagent timeout' => 'timeout duration seconds',

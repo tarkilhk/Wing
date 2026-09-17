@@ -12,8 +12,8 @@ The [product plan](PRODUCT_PLAN.md) owns functionality. This document owns the a
 - Use the compact context ring beside the model selector, confirmed by the owner after comparing it with the fuse. Do not allocate a row to token-count text or retain the fuse alongside it.
 - Keep familiar model/reasoning selection and Queue, Steer and Fork flows.
 - Design dark mode fully and use coherent accents throughout.
-- Administration uses Profile / Server / Health. Keep the selected connection visible and classify each operation by its actual ownership. See the [administration handoff](design/2026-09-14-administration-handoff.md) for navigation and unsupported memory/MCP writes.
-- Shared provider accounts belong under Server / Providers. Profile keeps model/provider choices, inherited-access information and any explicit profile-specific credential override. MCP stays profile-owned. A shared account reached from Profile opens its Server detail. Hermes supports [shared provider-state inheritance](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/hermes_cli/auth.py#L773) and [shared credential-pool fallback](https://github.com/NousResearch/hermes-agent/blob/e16f686706b1e0d5334fd1ae82190058d2a19694/hermes_cli/auth.py#L893). do not infer account ownership from the presence of a profile parameter.
+- Administration uses Profile / Health. Keep the selected connection visible and classify each operation by its actual ownership. See the [administration handoff](design/2026-09-14-administration-handoff.md) for navigation and unsupported memory/MCP writes.
+- Provider accounts and keys belong to the selected profile, including `default`. The global menu contains Client version and Server version rows that open Versions & updates. Client identity is local only; upstream update checks and the circular-arrows indicator apply only to the server. Manage profiles sits beside the Profile selector. Follow the [administration ownership contract](design/2026-09-14-administration-handoff.md) for credential-source distinctions and pending editor corrections.
 
 ## App and notification identity
 
@@ -185,7 +185,7 @@ HTML, diagrams, images and video retain their content-specific appearance.
 
 ## Administration refinement, 17 September 2026
 
-Profile / Server / Health remains the ownership structure. Profile uses a small
+Profile / Health is the administration structure; version access lives in the global menu. Profile uses a small
 identity brief, two purpose-based groups and observed-value rows. Quiet metadata
 supports stronger destination titles; exception states retain their semantic colors.
 Administration and Chats share the same directly tappable profile chips; do not

@@ -1,3 +1,6 @@
+import '../models/connection.dart';
+import 'drawer_versions.dart';
+import '../services/versions_controller.dart';
 import '../services/server_connection_status.dart';
 import 'server_connection_label.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +26,8 @@ class AppDrawer extends StatelessWidget {
     required this.selected,
     required this.onSelected,
     this.connectionLabel,
+    this.connection,
+    this.versionsControllerFactory,
     this.connectionStatus,
     this.profileLabel,
     this.hasConnection = true,
@@ -31,6 +36,8 @@ class AppDrawer extends StatelessWidget {
   final AppDestination selected;
   final ValueChanged<AppDestination> onSelected;
   final String? connectionLabel;
+  final SavedConnection? connection;
+  final VersionsControllerFactory? versionsControllerFactory;
   final ServerConnectionStatus? connectionStatus;
   final String? profileLabel;
   final bool hasConnection;
@@ -65,59 +72,85 @@ class AppDrawer extends StatelessWidget {
     return Drawer(
       backgroundColor: colors.surfaceContainerLow,
       child: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              child: Flex(
-                direction: largeText ? Axis.vertical : Axis.horizontal,
-                crossAxisAlignment: largeText
-                    ? CrossAxisAlignment.start
-                    : CrossAxisAlignment.center,
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight - 40,
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const PlayfulPortrait(),
-                  SizedBox(
-                    width: WingSpacing.md,
-                    height: largeText ? WingSpacing.md : 0,
+                  Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                        child: Flex(
+                          direction: largeText
+                              ? Axis.vertical
+                              : Axis.horizontal,
+                          crossAxisAlignment: largeText
+                              ? CrossAxisAlignment.start
+                              : CrossAxisAlignment.center,
+                          children: [
+                            const PlayfulPortrait(),
+                            SizedBox(
+                              width: WingSpacing.md,
+                              height: largeText ? WingSpacing.md : 0,
+                            ),
+                            if (largeText)
+                              identity
+                            else
+                              Expanded(child: identity),
+                          ],
+                        ),
+                      ),
+                      for (final destination in AppDestination.values) ...[
+                        if (destination == AppDestination.connections)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            child: Divider(),
+                          ),
+                        ListTile(
+                          key: ValueKey('nav-${destination.name}'),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: WingRadius.control,
+                          ),
+                          selected: selected == destination,
+                          selectedTileColor: colors.primaryContainer,
+                          leading: largeText ? null : Icon(destination.icon),
+                          title: largeText
+                              ? Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(destination.icon),
+                                    const SizedBox(height: 4),
+                                    Text(destination.label),
+                                  ],
+                                )
+                              : Text(destination.label),
+                          enabled:
+                              hasConnection ||
+                              destination == AppDestination.connections ||
+                              destination == AppDestination.settings,
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            onSelected(destination);
+                          },
+                        ),
+                      ],
+                    ],
                   ),
-                  if (largeText) identity else Expanded(child: identity),
+                  DrawerVersions(
+                    connection: connection,
+                    controllerFactory: versionsControllerFactory,
+                  ),
                 ],
               ),
             ),
-            for (final destination in AppDestination.values) ...[
-              if (destination == AppDestination.connections)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Divider(),
-                ),
-              ListTile(
-                key: ValueKey('nav-${destination.name}'),
-                shape: RoundedRectangleBorder(borderRadius: WingRadius.control),
-                selected: selected == destination,
-                selectedTileColor: colors.primaryContainer,
-                leading: largeText ? null : Icon(destination.icon),
-                title: largeText
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(destination.icon),
-                          const SizedBox(height: 4),
-                          Text(destination.label),
-                        ],
-                      )
-                    : Text(destination.label),
-                enabled:
-                    hasConnection ||
-                    destination == AppDestination.connections ||
-                    destination == AppDestination.settings,
-                onTap: () {
-                  Navigator.of(context).pop();
-                  onSelected(destination);
-                },
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
