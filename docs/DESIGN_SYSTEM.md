@@ -31,6 +31,8 @@ diagonals to match the optical weight of ing. Follow the approved README banner;
 uppercase must not make the initial heavier, fatter or disproportionately tall.
 In the Flutter wordmark, use the same stroke width for W and ing. The owner
 rejected the thinner W in the welcome screenshots; the banner remains selected.
+After reviewing the drawer, the owner requested a lighter overall weight: use
+32-unit strokes for every letter, reduced from 36, with the same geometry and size.
 
 The owner selected the Playful portrait: a winking woman with a simple dark bob,
 mint headphones and a messenger wing on the earcup. Keep the navy, cream and

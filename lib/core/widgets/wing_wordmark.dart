@@ -36,7 +36,7 @@ class _WingPainter extends CustomPainter {
     final stroke = Paint()
       ..color = ink
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 36
+      ..strokeWidth = 32
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
     // Keep the modest capital W at the same stroke weight as ing.
