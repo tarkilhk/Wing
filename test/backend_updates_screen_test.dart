@@ -48,9 +48,11 @@ class _Host {
     get: (endpoint, query) async {
       reads.add((endpoint, query));
       return switch (endpoint) {
+        'health' => {'ok': true, 'version': check['current_version']},
         'hermes/update/check' => pendingCheck?.future ?? check,
         'hermes/update/receipt' => receipt,
-        _ => status,
+        'actions/hermes-update/status' => status,
+        _ => throw StateError('Unexpected read: $endpoint'),
       };
     },
     post: (endpoint, body) async {
@@ -115,15 +117,15 @@ void main() {
       await _tapSelection(tester, 'b');
       await _tapShared(tester, 'backend-updates-check-selected');
       await tester.pumpAndSettle();
-      expect(hosts['a']!.reads, hasLength(1));
-      expect(hosts['b']!.reads, hasLength(2));
+      _expectVersionChecks(hosts['a']!, 1);
+      _expectVersionChecks(hosts['b']!, 2);
 
       await _tapSelection(tester, 'c');
       expect(_selected(tester, 'c'), isTrue);
       await _tapShared(tester, 'backend-updates-check-selected');
       await tester.pumpAndSettle();
-      expect(hosts['b']!.reads, hasLength(3));
-      expect(hosts['c']!.reads, hasLength(2));
+      _expectVersionChecks(hosts['b']!, 3);
+      _expectVersionChecks(hosts['c']!, 2);
       expect(tester.takeException(), isNull);
     },
   );
@@ -151,8 +153,8 @@ void main() {
 
     expect(hosts['a']!.reads.last.$1, 'hermes/update/check');
     expect(hosts['a']!.reads.last.$2, {'force': 'true', 'profile': 'default'});
-    expect(hosts['b']!.reads, hasLength(1));
-    expect(hosts['c']!.reads, hasLength(2));
+    _expectVersionChecks(hosts['b']!, 1);
+    _expectVersionChecks(hosts['c']!, 2);
     expect(scopes.map((scope) => scope.profileName), everyElement('default'));
 
     hosts['c']!.check = {..._available, 'update_available': false};
@@ -190,7 +192,7 @@ void main() {
       ),
     );
     await _tapSelection(tester, 'a');
-    expect(host.reads.single.$1, 'hermes/update/check');
+    _expectVersionChecks(host, 1);
     expect(
       tester
           .widget<FilledButton>(
@@ -264,6 +266,20 @@ void main() {
     expect(host.closed, isTrue);
     expect(tester.takeException(), isNull);
   });
+}
+
+// Assert both independent reads, including their captured profile scope, so
+// unrelated traffic cannot accidentally satisfy update-check count assertions.
+void _expectVersionChecks(_Host host, int count) {
+  expect(host.reads.map((read) => read.$1), [
+    for (var i = 0; i < count; i++) ...['health', 'hermes/update/check'],
+  ]);
+  for (final read in host.reads) {
+    expect(read.$2, {
+      'profile': 'default',
+      if (read.$1 == 'hermes/update/check') 'force': 'true',
+    });
+  }
 }
 
 bool _selected(WidgetTester tester, String id) => tester
