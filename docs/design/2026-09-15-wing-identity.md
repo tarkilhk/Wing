@@ -22,7 +22,7 @@ owns the source paths and Android usage.
 ## Name and wordmark
 
 - Write **Wing** in prose, app titles, launcher labels, store listings and accessibility labels. Use **Wing Dev** for development builds.
-- The drawn wordmark reads **Wing**: capital **W**, lowercase **ing**, with rounded letters. The W rises above the lowercase letter bodies. Keep all four letters; the W is a letter, not a rotated or crossed wing symbol. This owner decision of 17 September 2026 supersedes the earlier lowercase wordmark.
+- The drawn wordmark reads **Wing**: capital **W**, lowercase **ing**, with rounded letters. Use the owner's approved [slimmer-W banner](images/wing-readme-hero-slim-w.png) as the lettering reference. The W rises only modestly above the lowercase bodies; its slimmer diagonal strokes give it the same optical weight as ing. Keep its open internal spaces and avoid a heavier, fatter or oversized initial. The W is a letter, not a rotated or crossed wing symbol. This owner selection of 17 September 2026 supersedes the earlier wordmark treatments.
 - Above the i, use three solid, curved, pointed feather shapes derived from the original single-wing emblem. One small feather points up-left; two point up-right. The left feather is navy on cream and cream on navy. The two right feathers are mint.
 - Use the compact accent proportions in this board. The final refinement requested an approximately 18% reduction from the previous cluster and slightly tighter gaps. The accepted image is the visual reference; that percentage is an editing direction, not a measured vector specification.
 - Keep visible gaps between feathers and above the i stem. The word should read before the accent draws attention.

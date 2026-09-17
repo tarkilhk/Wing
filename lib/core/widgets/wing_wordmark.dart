@@ -36,20 +36,22 @@ class _WingPainter extends CustomPainter {
     final stroke = Paint()
       ..color = ink
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 36
+      ..strokeWidth = 28
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
+    // Slimmer diagonals give the capital W the same optical weight as ing.
     canvas.drawPath(
       Path()
-        ..moveTo(20, 40)
+        ..moveTo(20, 72)
         ..lineTo(53, 173)
         ..quadraticBezierTo(57, 183, 61, 173)
-        ..lineTo(93, 65)
+        ..lineTo(96, 83)
         ..lineTo(131, 173)
         ..quadraticBezierTo(135, 183, 139, 173)
-        ..lineTo(164, 40),
+        ..lineTo(174, 72),
       stroke,
     );
+    stroke.strokeWidth = 36;
     canvas.drawLine(const Offset(216, 92), const Offset(216, 175), stroke);
     canvas.drawPath(
       Path()
