@@ -133,7 +133,7 @@ class AdministrationRepository {
   ]) async {
     final result = await request(method, endpoint, const {}, body);
     if (result['ok'] == false) {
-      throw const AdministrationFailure('The server rejected this change.');
+      throw AdministrationFailure.rejected(result);
     }
     return result;
   }
@@ -217,7 +217,7 @@ class ProfileAdministration {
       {...body, 'profile': name},
     );
     if (result['ok'] == false && result['confirm_required'] != true) {
-      throw const AdministrationFailure('The server rejected this change.');
+      throw AdministrationFailure.rejected(result);
     }
     return result;
   }
@@ -231,7 +231,7 @@ class ProfileAdministration {
     await gateway.connect();
     final result = await gateway.call(method, params);
     if (result['ok'] == false) {
-      throw const AdministrationFailure('The server rejected this change.');
+      throw AdministrationFailure.rejected(result);
     }
     return result;
   }
@@ -256,7 +256,16 @@ class ProfileAdministration {
 
 class AdministrationFailure implements Exception {
   final String message;
-  const AdministrationFailure(this.message);
+  // Only operation-specific presenters should display this, after redaction.
+  final String? serverError;
+  const AdministrationFailure(this.message, {this.serverError});
+  factory AdministrationFailure.rejected(Map<String, dynamic> result) =>
+      AdministrationFailure(
+        'The server rejected this change.',
+        serverError: result['error'] is String
+            ? result['error'] as String
+            : null,
+      );
   @override
   String toString() => message;
 }

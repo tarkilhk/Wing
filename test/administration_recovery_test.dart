@@ -4,6 +4,7 @@ import 'package:wing/core/screens/administration/admin_connectors_page.dart';
 import 'package:wing/core/screens/administration/admin_defaults_page.dart';
 import 'package:wing/core/screens/administration/admin_profiles_page.dart';
 import 'package:wing/core/screens/administration/admin_providers_page.dart';
+import 'package:wing/core/services/ws_client.dart';
 import 'support/administration_fixture.dart';
 
 Map<String, dynamic> profiles({String display = 'Shared root'}) => {
@@ -15,6 +16,135 @@ Map<String, dynamic> profiles({String display = 'Shared root'}) => {
 };
 
 void main() {
+  for (final failure in [
+    JsonRpcError(
+      'reload.mcp',
+      'MCP discovery failed: fixture reason',
+      code: 5015,
+    ),
+    JsonRpcError('reload.mcp', 'Timeout', reason: 'request_timeout'),
+    JsonRpcError(
+      'reload.mcp',
+      'Connection unavailable',
+      reason: 'connection_closed',
+    ),
+  ]) {
+    testWidgets(
+      'MCP reload reports ${failure.reason ?? 'server error'} without retrying',
+      (tester) async {
+        final fixture = AdministrationFixture();
+        fixture.rpcOverride = (_, _) async => throw failure;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: AdminConnectorsPage(
+              profile: fixture.server.profile('personal'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Reload server connectors'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Reload'));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Your edits are kept'), findsNothing);
+        expect(find.text('Server connectors reloaded.'), findsNothing);
+        expect(
+          find.textContaining(switch (failure.reason) {
+            'request_timeout' => 'It may still be running',
+            'connection_closed' => 'connection closed',
+            _ => 'MCP discovery failed: fixture reason',
+          }),
+          findsOneWidget,
+        );
+        expect(fixture.rpcRequests, [('default', 'reload.mcp')]);
+        expect(
+          tester
+              .widget<OutlinedButton>(
+                find.widgetWithText(OutlinedButton, 'Reload server connectors'),
+              )
+              .onPressed,
+          isNotNull,
+        );
+      },
+    );
+  }
+
+  testWidgets('declining the server confirmation does not reload connectors', (
+    tester,
+  ) async {
+    final fixture = AdministrationFixture();
+    final requests = <Map<String, dynamic>>[];
+    fixture.rpcOverride = (_, params) async {
+      requests.add({...params});
+      return {
+        'status': 'confirm_required',
+        'message': 'Reload invalidates the prompt cache.',
+      };
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AdminConnectorsPage(profile: fixture.server.profile('personal')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reload server connectors'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reload'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(requests, [{}]);
+    expect(find.text('Server connectors reloaded.'), findsNothing);
+  });
+
+  testWidgets('MCP reload obeys the stock server-wide parameter contract', (
+    tester,
+  ) async {
+    final fixture = AdministrationFixture();
+    final requests = <Map<String, dynamic>>[];
+    fixture.rpcOverride = (method, params) async {
+      expect(method, 'reload.mcp');
+      requests.add({...params});
+      // ReloadMcpParams at upstream a566d20: extra fields are forbidden.
+      if (params.keys.any(
+        (key) => !{'session_id', 'confirm', 'always', 'rev'}.contains(key),
+      )) {
+        throw JsonRpcError(
+          method,
+          'Invalid params: profile: Extra inputs are not permitted',
+          code: 4000,
+        );
+      }
+      return params['confirm'] == true
+          ? {'status': 'reloaded'}
+          : {
+              'status': 'confirm_required',
+              'message': 'Reload invalidates the prompt cache.',
+            };
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AdminConnectorsPage(profile: fixture.server.profile('personal')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reload server connectors'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reload'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('Your edits are kept'), findsNothing);
+    expect(find.text('Confirm connector reload'), findsOneWidget);
+    await tester.tap(find.text('Reload'));
+    await tester.pumpAndSettle();
+    expect(requests, [
+      {},
+      {'confirm': true},
+    ]);
+    expect(find.text('Server connectors reloaded.'), findsOneWidget);
+  });
+
   testWidgets(
     'MCP reload belongs to connectors and confirms server-wide scope',
     (tester) async {

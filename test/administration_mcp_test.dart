@@ -1,0 +1,288 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:wing/core/screens/administration/admin_connectors_page.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/services/mcp_error.dart';
+import 'package:wing/core/services/ws_client.dart';
+import 'support/administration_fixture.dart';
+
+AdministrationFixture fixtureWith(Map<String, dynamic> result) {
+  final fixture = AdministrationFixture('Claw');
+  fixture.override = (method, path, query, body) async {
+    if (path == 'profiles') {
+      return {
+        'profiles': [
+          {'name': 'personal'},
+        ],
+      };
+    }
+    if (path == 'profiles/active') return {'current': 'personal'};
+    return Map<String, dynamic>.from(result);
+  };
+  return fixture;
+}
+
+Future<void> testConnection(WidgetTester tester) async {
+  await tester.scrollUntilVisible(find.text('Test connection'), 200);
+  await tester.tap(find.text('Test connection'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Test'));
+  await tester.pumpAndSettle();
+}
+
+void main() {
+  const capture = bool.fromEnvironment('CAPTURE_MCP');
+  setUpAll(() async {
+    if (!capture) return;
+    const root = String.fromEnvironment('CAPTURE_FONT_DIR');
+    for (final font in {
+      'Roboto': 'Roboto-Regular.ttf',
+      'MaterialIcons': 'MaterialIcons-Regular.otf',
+    }.entries) {
+      await (FontLoader(font.key)..addFont(
+            File(
+              '$root/${font.value}',
+            ).readAsBytes().then((b) => b.buffer.asByteData()),
+          ))
+          .load();
+    }
+  });
+
+  test('MCP errors redact credentials while retaining the failure reason', () {
+    final message = mcpErrorMessage(
+      'OAuth discovery failed: HTTP 401 at '
+      'https://owner:fixture-pass@example.test/mcp?token=fixture-query#fixture-fragment\n'
+      'Authorization: Bearer fixture-bearer\n'
+      'Cookie: session=fixture-cookie; second=fixture-second\n'
+      'client_secret="fixture-secret" access_token=fixture-token',
+      summary: 'Sign-in did not complete.',
+    );
+    expect(message, contains('OAuth discovery failed: HTTP 401'));
+    expect(message, contains('example.test/mcp'));
+    expect(message, isNot(contains('fixture-')));
+    for (final error in [
+      null,
+      '',
+      '  ',
+      {'token': 'fixture-token'},
+    ]) {
+      expect(mcpErrorMessage(error, summary: 'Failed.'), 'Failed.');
+    }
+  });
+
+  testWidgets(
+    'failed MCP probe shows the server reason in its captured profile',
+    (tester) async {
+      final fixture = fixtureWith({
+        'ok': false,
+        'error': 'OAuth authentication required — no token found.',
+        'tools': [],
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: AdminConnectorDetail(
+            profile: fixture.server.profile('personal'),
+            row: const {'name': 'aspire', 'auth': 'oauth'},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await testConnection(tester);
+      expect(
+        find.textContaining('OAuth authentication required'),
+        findsOneWidget,
+      );
+      expect(find.text('The server rejected this change.'), findsNothing);
+      expect(find.textContaining('Test succeeded'), findsNothing);
+      final request = fixture.requests.singleWhere((r) => r.$1 == 'POST');
+      expect(request.$2, 'mcp/servers/aspire/test');
+      expect(request.$3, {'profile': 'personal'});
+    },
+  );
+
+  for (final polled in [false, true]) {
+    testWidgets(
+      'MCP sign-in shows ${polled ? 'polled' : 'immediate'} error reason',
+      (tester) async {
+        final response = <String, dynamic>{
+          'flow_id': 'fixture-flow',
+          'status': polled ? 'authorization_required' : 'error',
+          'error': polled ? null : 'OAuth discovery failed: HTTP 404.',
+        };
+        final fixture = fixtureWith(response);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: AdminMcpSignIn(
+              profile: fixture.server.profile('personal'),
+              name: 'aspire',
+            ),
+          ),
+        );
+        await tester.tap(find.text('Start sign-in'));
+        await tester.pumpAndSettle();
+        if (polled) {
+          response['status'] = 'error';
+          response['error'] = 'OAuth discovery failed: HTTP 404.';
+          await tester.pump(const Duration(seconds: 3));
+          await tester.pumpAndSettle();
+        }
+        expect(
+          find.textContaining('OAuth discovery failed: HTTP 404.'),
+          findsOneWidget,
+        );
+        expect(find.text('Open sign-in page'), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  testWidgets('a failed retest clears the previous successful capabilities', (
+    tester,
+  ) async {
+    final response = <String, dynamic>{
+      'ok': true,
+      'tools': [
+        {'name': 'fixture_tool'},
+      ],
+      'prompts': 2,
+      'resources': 1,
+    };
+    final fixture = fixtureWith(response);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AdminConnectorDetail(
+          profile: fixture.server.profile('personal'),
+          row: const {'name': 'aspire'},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await testConnection(tester);
+    expect(find.textContaining('Test succeeded'), findsOneWidget);
+    response.addAll({
+      'ok': false,
+      'error': 'Connection timed out.',
+      'tools': [],
+    });
+    await testConnection(tester);
+    expect(find.textContaining('Connection timed out.'), findsOneWidget);
+    expect(find.textContaining('Test succeeded'), findsNothing);
+    expect(find.text('fixture_tool'), findsNothing);
+  });
+
+  for (final brightness in Brightness.values) {
+    for (final enlarged in [false, true]) {
+      for (final operation in ['test', 'signin', 'reload']) {
+        final signIn = operation == 'signin';
+        final reload = operation == 'reload';
+        final name =
+            '$operation-${brightness.name}-${enlarged ? 'large' : 'normal'}';
+        testWidgets('MCP failure layout $name', (tester) async {
+          tester.view.physicalSize = Size(enlarged ? 320 : 390, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = fixtureWith({
+            if (!signIn) 'ok': false,
+            'flow_id': 'fixture-flow',
+            'status': 'error',
+            'error':
+                'OAuth discovery failed: HTTP 404 at https://example.test/mcp.',
+            'tools': [],
+            'servers': [],
+          });
+          if (reload) {
+            fixture.rpcOverride = (method, _) async => throw JsonRpcError(
+              method,
+              'OAuth discovery failed: HTTP 404 at https://example.test/mcp.',
+              code: 5015,
+            );
+          }
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: const ValueKey('capture'),
+              child: MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(enlarged ? 2 : 1)),
+                  child: child!,
+                ),
+                home: reload
+                    ? AdminConnectorsPage(
+                        profile: fixture.server.profile('personal'),
+                      )
+                    : signIn
+                    ? AdminMcpSignIn(
+                        profile: fixture.server.profile('personal'),
+                        name: 'aspire',
+                      )
+                    : AdminConnectorDetail(
+                        profile: fixture.server.profile('personal'),
+                        row: const {'name': 'aspire', 'auth': 'oauth'},
+                      ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          if (reload) {
+            await tester.scrollUntilVisible(
+              find.widgetWithText(OutlinedButton, 'Reload server connectors'),
+              200,
+            );
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Reload server connectors'));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Reload'));
+            await tester.pumpAndSettle();
+          } else if (signIn) {
+            await tester.scrollUntilVisible(find.text('Start sign-in'), 200);
+            await tester.tap(find.text('Start sign-in'));
+            await tester.pumpAndSettle();
+          } else {
+            await testConnection(tester);
+          }
+          if (!reload) {
+            await tester.scrollUntilVisible(
+              find.textContaining('OAuth discovery failed'),
+              -200,
+            );
+            await tester.pumpAndSettle();
+          }
+          expect(find.textContaining('OAuth discovery failed'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          if (capture) {
+            final boundary = tester.renderObject<RenderRepaintBoundary>(
+              find.byKey(const ValueKey('capture')),
+            );
+            await tester.runAsync(() async {
+              final image = await boundary.toImage();
+              final bytes = await image.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              final file = File('build/mcp-review/$name.png');
+              await file.parent.create(recursive: true);
+              await file.writeAsBytes(bytes!.buffer.asUint8List());
+              image.dispose();
+            });
+          }
+          if (!reload) {
+            await tester.scrollUntilVisible(
+              find.text(signIn ? 'Close' : 'Remove connector'),
+              200,
+            );
+          }
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+        });
+      }
+    }
+  }
+}

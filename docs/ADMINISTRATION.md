@@ -113,6 +113,34 @@ submitted text search, a 100-line limit and explicit empty/error states.
 | A45 | Searchable owner paths and task vocabulary with exact-field scrolling, emphasis and explicit clearing | Import/export/reset remain P2. |
 | A48–A49 | Profile-owned scheduled tasks: search/filter, details, create/edit, templates, model/delivery choices, pause/resume/run/delete and recent run conversations | Hermes executes schedules. One-time completion may remove the task. Script-only tasks may have no conversation. No Android scheduler or new notification subscription is created. |
 
+## MCP connection failures
+
+Verified the stock API against upstream main commit
+`a566d20d226a8e2ef0747639dc8a3fc1c43f9dba` on 18 September 2026.
+The profile-scoped [test route](https://github.com/NousResearch/hermes-agent/blob/a566d20d226a8e2ef0747639dc8a3fc1c43f9dba/hermes_cli/web_routers/mcp.py)
+returns HTTP 200 with `ok: false`, `error` and an empty tool list when a probe
+fails. OAuth start and polling return a [flow snapshot](https://github.com/NousResearch/hermes-agent/blob/a566d20d226a8e2ef0747639dc8a3fc1c43f9dba/tools/mcp_dashboard_oauth.py)
+with `status: error` and `error` when sign-in fails.
+
+Wing displays those reasons in the existing error notices, redacting URL
+credentials/query strings, authorization/cookie headers and credential
+assignments. A new probe clears the previous successful capability result.
+`test/administration_mcp_test.dart` covers immediate and polled failures, profile
+scope, redaction, successful-then-failed probes, and both themes at normal and
+enlarged text. These fixtures establish error reporting, not successful sign-in
+to a particular deployed connector; that requires its actual server response.
+
+Reload uses the same upstream revision's strict
+[`ReloadMcpParams` contract](https://github.com/NousResearch/hermes-agent/blob/a566d20d226a8e2ef0747639dc8a3fc1c43f9dba/tui_gateway/contracts/tools_mcp_plugins.py):
+the server-wide `reload.mcp` command accepts `session_id`, `confirm`, `always`
+and `rev`, but no `profile`. Wing sends an empty initial request and only
+`confirm: true` after the server requests further confirmation. The previous
+profile-scoped call added `profile: default`, which stock parameter validation
+rejects before reloading. Reload errors now retain the redacted server reason;
+timeouts and disconnects report an uncertain outcome without automatically
+retrying. The recovery tests enforce the strict parameter contract and both
+confirmation cancellation paths.
+
 ## Scheduled tasks
 
 Open Profile / Scheduled tasks to manage the selected profile's routines. Each

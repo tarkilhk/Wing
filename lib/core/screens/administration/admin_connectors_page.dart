@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../widgets/compact_switch.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/administration_repository.dart';
+import '../../services/mcp_error.dart';
+import '../../services/ws_client.dart';
 import 'admin_widgets.dart';
 
 class AdminConnectorsPage extends StatefulWidget {
@@ -164,6 +166,7 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
     setState(() {
       _busy = true;
       _error = null;
+      _probe = null;
     });
     try {
       final result = await _profile.write(
@@ -176,7 +179,12 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
       if (mounted) setState(() => _probe = result);
     } catch (e) {
       if (mounted) {
-        setState(() => _error = administrationError(e, writing: true));
+        setState(
+          () => _error = mcpErrorMessage(
+            e is AdministrationFailure ? e.serverError : null,
+            summary: 'Connection test failed.',
+          ),
+        );
       }
     }
     if (mounted) setState(() => _busy = false);
@@ -390,8 +398,11 @@ class _AdminMcpSignInState extends State<AdminMcpSignIn> {
           if (_flow != null) ...[
             Text('Status: ${_flow!['status']}'),
             if (_flow!['status'] == 'error')
-              const AdminNotice.error(
-                'Sign-in did not complete. Check the connector configuration.',
+              AdminNotice.error(
+                mcpErrorMessage(
+                  _flow!['error'],
+                  summary: 'Sign-in did not complete.',
+                ),
               ),
             if (_pending) ...[
               FilledButton(
@@ -538,7 +549,7 @@ class _AdminReloadConnectorsButtonState
       // This RPC is process-wide; default here owns transport, not the operation.
       final gateway = widget.server.gateway('default');
       await gateway.connect();
-      var result = await gateway.call('reload.mcp');
+      var result = await gateway.reloadMcp();
       if (result['status'] == 'confirm_required') {
         if (!mounted ||
             !await adminConfirm(
@@ -549,7 +560,7 @@ class _AdminReloadConnectorsButtonState
             )) {
           return;
         }
-        result = await gateway.call('reload.mcp', {'confirm': true});
+        result = await gateway.reloadMcp(confirm: true);
       }
       if (result['status'] != 'reloaded') {
         throw const AdministrationFailure(
@@ -559,11 +570,20 @@ class _AdminReloadConnectorsButtonState
       if (mounted) adminMessage(context, 'Server connectors reloaded.');
     } catch (e) {
       if (mounted) {
-        adminMessage(
-          context,
-          administrationError(e, writing: true),
-          isError: true,
-        );
+        final message = switch (e) {
+          JsonRpcError(reason: 'request_timeout') || TimeoutException() =>
+            'Connector reload timed out. It may still be running on the server. Check connector status before retrying.',
+          JsonRpcError(reason: 'connection_closed') =>
+            'The connection closed before reload could be confirmed. Reconnect and check connector status before retrying.',
+          JsonRpcError() => mcpErrorMessage(
+            e.message,
+            summary: 'Connector reload failed.',
+          ),
+          AdministrationFailure() => e.message,
+          _ =>
+            'Connector reload could not be confirmed. Check the server connection before retrying.',
+        };
+        adminMessage(context, message, isError: true);
       }
     } finally {
       if (mounted) setState(() => _busy = false);

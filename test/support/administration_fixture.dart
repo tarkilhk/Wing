@@ -50,6 +50,7 @@ class AdministrationFixture {
   bool failReads = false;
   Completer<void>? writeGate;
   AdministrationRequest? override;
+  ScopedRpc? rpcOverride;
   late final AdministrationRepository server = AdministrationRepository(
     connectionId: id,
     connectionIdentity: '$id-endpoint',
@@ -66,6 +67,7 @@ class AdministrationFixture {
       ),
       rpc: (method, params) async {
         rpcRequests.add((name, method));
+        if (rpcOverride != null) return rpcOverride!(method, params);
         return {
           'plugins': [],
           'servers': [],

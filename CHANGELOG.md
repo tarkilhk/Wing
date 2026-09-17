@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix MCP connector reload requests rejected by stock Hermes. Show connection-test, sign-in and reload failure reasons with credential redaction, and clear stale successful test results before retesting.
+
 - Redesign Hermes health around Server and Profile: remove the global health verdict, load profile observations directly, consolidate provider access, and add an explicit Check profile action. Keep Usage scoped to profiles and Logs scoped to the server. Refine diagnostic, access, usage and log detail screens for both themes and enlarged text.
 
 - Present Doctor's diagnosis as a grouped findings list with clear titles, supporting details, a compact status heading and expandable full output.

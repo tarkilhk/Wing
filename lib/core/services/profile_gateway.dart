@@ -327,6 +327,11 @@ class ProfileGateway {
     Map<String, dynamic> params = const {},
   ]) => _rpc(method, {...params, 'profile': scope.profileName});
 
+  /// Reload is process-wide. Its stock schema forbids a profile parameter;
+  /// this gateway provides the connection, not the operation's scope.
+  Future<Map<String, dynamic>> reloadMcp({bool confirm = false}) =>
+      _rpc('reload.mcp', {if (confirm) 'confirm': true});
+
   Future<Map<String, dynamic>> post(
     String endpoint, [
     Map<String, dynamic> body = const {},
