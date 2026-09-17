@@ -984,6 +984,7 @@ class HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(
         builder: (_) => ConnectionSetupScreen(
           initialConnection: existing,
+          savedConnections: widget.connManager.getConnections(),
           onSaveIcon: existing == null
               ? null
               : (icon) => _saveConnectionIcon(existing, icon),
@@ -1001,6 +1002,9 @@ class HomeScreenState extends State<HomeScreen> {
                 dashboardPort: candidate.dashboardPort,
                 dashboardUsername: candidate.dashboardUsername,
                 dashboardPassword: candidate.dashboardPassword,
+                dashboardOAuth: candidate.dashboardOAuth,
+                cloudInstanceId: candidate.cloudInstanceId,
+                cloudOrganization: candidate.cloudOrganization,
                 gatewayHeaders: candidate.gatewayHeaders,
               );
             }
@@ -1018,6 +1022,9 @@ class HomeScreenState extends State<HomeScreen> {
               dashboardPort: candidate.dashboardPort,
               dashboardUsername: candidate.dashboardUsername ?? '',
               dashboardPassword: candidate.dashboardPassword ?? '',
+              dashboardOAuth: candidate.dashboardOAuth,
+              cloudInstanceId: candidate.cloudInstanceId,
+              cloudOrganization: candidate.cloudOrganization,
               gatewayHeaders: candidate.gatewayHeaders,
             );
             return widget.connManager.getConnections().firstWhere(

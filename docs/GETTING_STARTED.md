@@ -8,6 +8,8 @@ The recorded [live acceptance baseline](TESTING.md#recorded-live-baseline) used 
 
 The setup below follows the [official dashboard guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/web-dashboard), checked on 16 September 2026. A functioning browser dashboard alone does not prove that authenticated chat WebSockets work; the connection checks below verify that access separately.
 
+Using Nous-hosted Hermes? Install Wing, then follow the **Hermes Cloud** route under [Add your connection](#4-add-your-connection). Host preparation below applies to servers you operate.
+
 ## 1. Prepare the Hermes host
 
 Install and configure Hermes using its [official documentation](https://hermes-agent.nousresearch.com/docs/). Confirm that the selected profile can answer a message on the host before connecting Android. Keep model-provider keys on Hermes; the Android connection form needs dashboard credentials.
@@ -50,7 +52,11 @@ For development builds, follow [Contributing](../CONTRIBUTING.md). A Play Store 
 
 ## 4. Add your connection
 
-Tap **Connect your agent** on the welcome screen, or **Add connection** from **Connections**.
+Tap **Connect your agent** on the welcome screen, or **Add connection** from **Connections**. Choose **Hermes Cloud** or **Use an address**.
+
+For **Hermes Cloud**, Continue opens Nous Portal sign-in. Choose an organization if requested, then select an available hosted instance and Continue. Wing runs the same profile, live-chat and history checks before the explicit **Save and open** step. Empty accounts can open Portal to create an instance and refresh afterward; stopped instances must be managed in Portal. Creation, billing and start/stop controls stay there. Login and empty-instance discovery have been confirmed on Android; connection to a running hosted instance still needs live acceptance.
+
+For **Use an address**:
 
 1. **Address:** enter the complete dashboard base address, such as `http://hermes.home:9119`, `https://hermes.example.com`, or `https://hermes.example.com:8443/hermes`. Include the scheme, any custom port and any proxy path in this single field. HTTP and HTTPS use their standard ports (80 and 443) when you omit the port. The normal Hermes dashboard port `9119` must be included explicitly for a direct connection.
 2. **Sign in:** enter your dashboard username and password. These are not your model-provider credentials. Wing normally uses this same dashboard address for profiles, live chat and history.
@@ -63,7 +69,9 @@ Tap **Connect your agent** on the welcome screen, or **Add connection** from **C
 - **Use a separate chat address** accepts a complete HTTP(S) base address when live chat is explicitly served elsewhere. Wing adds `/api/ws`; do not paste that endpoint into the field. Review this destination because it also receives chat authentication and configured access headers.
 - **Access headers** supplies extra proxy credentials when required, including alongside normal dashboard sign-in. Values remain hidden after saving. Most connections do not need headers. See [Access headers](CONNECTION_DIAGNOSTICS_AND_VERSIONS.md#access-headers).
 
-There is no separate API-server address, API key or second port in the normal journey. The standalone OpenAI-compatible API service on port `8642` is not used by this setup. Connection edits use the same address/sign-in/check flow and retain the connection's identity. Failed checks do not replace the saved connection; failed local saves keep your draft for retry.
+There is no separate API-server address, API key or second port in the normal journey. The standalone OpenAI-compatible API service on port `8642` is not used by this setup. Address connection edits use the same address/sign-in/check flow and retain the connection's identity. Failed checks do not replace the saved connection; failed local saves keep your draft for retry.
+
+Cloud sign-ins are stored securely on this device. Configuration backups retain Cloud connection identity but exclude Portal sessions and rotating instance tokens. After restoring a Cloud connection, use **Edit connection** to sign in again.
 
 ## Troubleshooting
 

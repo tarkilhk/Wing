@@ -38,6 +38,8 @@ class HermesVoice implements RemoteVoice {
       proxied: connection.dashboardProxied,
       username: connection.dashboardUsername,
       password: connection.dashboardPassword,
+      dashboardOAuth: connection.dashboardOAuth,
+      requiresOAuth: connection.isCloud,
       gatewayHeaders: connection.gatewayHeaders,
     );
     return HermesVoice(

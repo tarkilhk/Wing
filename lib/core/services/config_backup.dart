@@ -112,6 +112,10 @@ class ConfigBackup {
       'dashboard_username': connection.dashboardUsername,
       'dashboard_password': connection.dashboardPassword,
       'gateway_headers': connection.gatewayHeaders,
+      // Browser identity and rotating grants stay on this device. Restore requires sign-in.
+      if (connection.isCloud) 'cloud_instance_id': connection.cloudInstanceId,
+      if (connection.cloudOrganization != null)
+        'cloud_organization': connection.cloudOrganization,
     };
   }
 
@@ -123,6 +127,8 @@ class ConfigBackup {
 
     return SavedConnection(
       id: map['id'] as String,
+      cloudInstanceId: nonEmpty(map['cloud_instance_id']),
+      cloudOrganization: nonEmpty(map['cloud_organization']),
       label: map['label'] as String,
       icon: ConnectionIcon.fromStored(map['icon']),
       host: map['host'] as String,

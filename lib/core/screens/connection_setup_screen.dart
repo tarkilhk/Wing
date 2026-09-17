@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../services/hermes_cloud.dart';
+import '../widgets/studio_selection_tile.dart';
 
 import '../models/connection_address.dart';
 import '../services/connection_manager.dart';
@@ -19,11 +23,15 @@ class ConnectionSetupScreen extends StatefulWidget {
     required this.onSave,
     required this.onSaveIcon,
     this.initialConnection,
+    this.cloud,
+    this.savedConnections = const [],
     this.createProbe = DashboardConnectionProbe.new,
     super.key,
   }) : assert(initialConnection == null || onSaveIcon != null);
 
   final SavedConnection? initialConnection;
+  final HermesCloud? cloud;
+  final List<SavedConnection> savedConnections;
   final Future<SavedConnection> Function(SavedConnection candidate) onSave;
 
   /// Existing connections save appearance independently of access verification.
@@ -35,7 +43,7 @@ class ConnectionSetupScreen extends StatefulWidget {
   State<ConnectionSetupScreen> createState() => _ConnectionSetupScreenState();
 }
 
-enum _Step { address, signIn, check, review }
+enum _Step { choose, address, cloud, signIn, check, review }
 
 class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
   final _addressForm = GlobalKey<FormState>();
@@ -49,7 +57,29 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
   late final ConnectionSetupProbe _probe;
   late _AccessSettings _access;
   late ConnectionIcon _icon;
-  _Step _step = _Step.address;
+  _Step _step = _Step.choose;
+  late final HermesCloud _cloud;
+  CloudDiscovery? _discovery;
+  List<CloudOrganization> _organizations = const [];
+  CloudInstance? _instance;
+  String? _organization;
+  DashboardOAuthSession? _cloudSession;
+  String? _cloudError;
+  bool _cloudBusy = false;
+  bool _cloudRoute = false;
+  int _cloudGeneration = 0;
+
+  SavedConnection? get _alreadySaved {
+    if (_editing || _instance == null) return null;
+    for (final saved in widget.savedConnections) {
+      if (saved.cloudInstanceId == _instance!.id &&
+          saved.cloudOrganization == _organization) {
+        return saved;
+      }
+    }
+    return null;
+  }
+
   SavedConnection? _checkedConnection;
   bool _revealPassword = false;
   bool _dirty = false;
@@ -64,6 +94,13 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
   void initState() {
     super.initState();
     final initial = widget.initialConnection;
+    _cloud = widget.cloud ?? HermesCloud();
+    _cloudRoute = initial?.isCloud ?? false;
+    _step = _cloudRoute
+        ? _Step.cloud
+        : initial == null
+        ? _Step.choose
+        : _Step.address;
     _icon = initial?.icon ?? ConnectionIcon.server;
     _address = TextEditingController(
       text: initial == null
@@ -73,6 +110,16 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
               initial.dashboardPrefix ?? '',
             ),
     );
+    if (_cloudRoute) {
+      _organization = initial!.cloudOrganization;
+      _instance = CloudInstance(
+        id: initial.cloudInstanceId!,
+        name: initial.label,
+        state: 'unknown',
+        dashboardUrl: _address.text,
+      );
+      _discovery = CloudDiscovery(instances: [_instance!]);
+    }
     _username = TextEditingController(text: initial?.dashboardUsername ?? '');
     _password = TextEditingController(text: initial?.dashboardPassword ?? '');
     _name = TextEditingController(text: initial?.label ?? '');
@@ -134,7 +181,11 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
 
   Future<void> _check() async {
     if (_probe.checking) return;
-    if (_step == _Step.signIn && !_signInForm.currentState!.validate()) return;
+    if (!_cloudRoute &&
+        _step == _Step.signIn &&
+        !_signInForm.currentState!.validate()) {
+      return;
+    }
     final address = ConnectionAddress.parse(_address.text);
     final candidate = SavedConnection(
       id: widget.initialConnection?.id ?? 'new-connection',
@@ -143,11 +194,16 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
       port: address.port,
       useHttps: address.useHttps,
       apiKey: '',
+      cloudInstanceId: _cloudRoute ? _instance!.id : null,
+      cloudOrganization: _cloudRoute ? _organization : null,
+      dashboardOAuth: _cloudRoute ? _cloudSession : null,
       dashboardPortOverride: address.port,
       dashboardPrefix: address.path,
       dashboardProxied: _access.proxied,
-      dashboardUsername: _access.proxied ? null : _username.text.trim(),
-      dashboardPassword: _access.proxied ? null : _password.text,
+      dashboardUsername: _cloudRoute || _access.proxied
+          ? null
+          : _username.text.trim(),
+      dashboardPassword: _cloudRoute || _access.proxied ? null : _password.text,
       desktopGatewayUrl: _access.chatUrl.isEmpty ? null : _access.chatUrl,
       gatewayHeaders: _access.headers,
     );
@@ -192,8 +248,24 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
 
   Future<void> _back() async {
     if (_saving || _leaving || _confirmingExit) return;
-    if (_step != _Step.address) {
-      _go(_step == _Step.signIn ? _Step.address : _Step.signIn);
+    if (_cloudBusy) {
+      _cloudGeneration++;
+      await _cloud.cancel();
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      return;
+    }
+    if (_step == _Step.check || _step == _Step.review) {
+      _go(_cloudRoute ? _Step.cloud : _Step.signIn);
+      return;
+    }
+    if (_step == _Step.signIn) {
+      _go(_Step.address);
+      return;
+    }
+    if (!_editing && (_step == _Step.address || _step == _Step.cloud)) {
+      _cloudGeneration++;
+      _go(_Step.choose);
       return;
     }
     if (!_dirty) {
@@ -224,6 +296,8 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
 
   @override
   void dispose() {
+    _cloudGeneration++;
+    _cloud.close();
     _probe.removeListener(_probeChanged);
     _probe.dispose();
     for (final controller in [_address, _username, _password, _name]) {
@@ -235,7 +309,11 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final step = _step.index.clamp(0, 2) + 1;
+    final step = switch (_step) {
+      _Step.choose || _Step.address || _Step.cloud => 1,
+      _Step.signIn => 2,
+      _Step.check || _Step.review => 3,
+    };
     return PopScope(
       canPop: _leaving,
       onPopInvokedWithResult: (didPop, _) {
@@ -308,6 +386,8 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
                               ),
                               const SizedBox(height: 24),
                               switch (_step) {
+                                _Step.choose => _chooseStep(),
+                                _Step.cloud => _cloudStep(),
                                 _Step.address => _addressStep(),
                                 _Step.signIn => _signInStep(),
                                 _Step.check => _checkStep(),
@@ -369,6 +449,300 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
         ),
       ),
     ),
+  );
+
+  Widget _chooseStep() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _artwork(),
+      _heading('Connect your agent', 'Choose how to find your Hermes.'),
+      for (final cloud in [true, false]) ...[
+        _panel(
+          Material(
+            color: Colors.transparent,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(cloud ? Icons.cloud_outlined : Icons.link),
+              title: Text(cloud ? 'Hermes Cloud' : 'Use an address'),
+              subtitle: Text(
+                cloud
+                    ? 'Find your instances with Nous Portal'
+                    : 'Connect with a dashboard address',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                _cloudRoute = cloud;
+                _go(cloud ? _Step.cloud : _Step.address);
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    ],
+  );
+
+  Future<void> _discoverCloud({bool switchAccount = false}) async {
+    if (_cloudBusy) return;
+    final generation = ++_cloudGeneration;
+    setState(() {
+      _cloudBusy = true;
+      _cloudError = null;
+      if (switchAccount) {
+        _discovery = null;
+        _instance = null;
+        _organization = null;
+        _organizations = const [];
+        _cloudSession = null;
+      }
+    });
+    try {
+      final result = await _cloud.discover(
+        organization: switchAccount ? null : _organization,
+        switchAccount: switchAccount,
+      );
+      if (!mounted || generation != _cloudGeneration) return;
+      setState(() {
+        if (result != null) {
+          _discovery = result;
+          if (result.organizations.isNotEmpty) {
+            _organizations = result.organizations;
+          }
+          _instance = null;
+          _cloudSession = null;
+          _organization = result.organization?.id;
+        }
+      });
+    } catch (error) {
+      if (mounted && generation == _cloudGeneration) {
+        setState(() {
+          _cloudError = error is CloudAccessException
+              ? error.message
+              : 'Couldn’t reach Nous Portal. Try again.';
+        });
+      }
+    } finally {
+      if (mounted && generation == _cloudGeneration) {
+        setState(() => _cloudBusy = false);
+      }
+    }
+  }
+
+  Future<void> _continueCloud() async {
+    if (_cloudBusy) return;
+    if (_discovery == null || _discovery!.organizations.isNotEmpty) {
+      await _discoverCloud();
+      return;
+    }
+    final instance = _instance;
+    if (instance?.canConnect != true) return;
+    if (_alreadySaved case final saved?) {
+      _leave(saved);
+      return;
+    }
+    final generation = ++_cloudGeneration;
+    setState(() {
+      _cloudBusy = true;
+      _cloudError = null;
+    });
+    try {
+      final session = await _cloud.signIn(instance!);
+      if (!mounted || generation != _cloudGeneration || session == null) return;
+      _cloudSession = session;
+      _address.text = instance.dashboardUrl!;
+      if (!_editing) _name.text = instance.name;
+      _access = const _AccessSettings();
+      _username.clear();
+      _password.clear();
+      _dirty = true;
+      setState(() => _cloudBusy = false);
+      await _check();
+    } catch (error) {
+      if (mounted && generation == _cloudGeneration) {
+        setState(() {
+          _cloudError = error is CloudAccessException
+              ? error.message
+              : 'Couldn’t sign in to this Hermes. Try again.';
+        });
+      }
+    } finally {
+      if (mounted && generation == _cloudGeneration) {
+        setState(() => _cloudBusy = false);
+      }
+    }
+  }
+
+  Future<void> _openPortal() async {
+    try {
+      if (await launchUrl(
+        Uri.parse(HermesCloud.portal),
+        mode: LaunchMode.externalApplication,
+      )) {
+        return;
+      }
+    } catch (_) {
+      /* Show an actionable error without platform details. */
+    }
+    if (mounted) {
+      setState(
+        () => _cloudError =
+            'Couldn’t open Nous Portal. Visit portal.nousresearch.com in your browser.',
+      );
+    }
+  }
+
+  Widget _cloudStep() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _artwork(),
+      _heading(
+        'Where’s your Hermes?',
+        _discovery == null
+            ? 'Find your Cloud instances with Nous Portal.'
+            : _discovery!.organizations.isNotEmpty
+            ? 'Choose the organization that owns your Hermes.'
+            : 'Choose the Cloud instance you want to connect.',
+      ),
+      if (_cloudBusy) ...[
+        Semantics(
+          liveRegion: true,
+          child: Text('Connecting with Nous Portal…'),
+        ),
+        const SizedBox(height: 16),
+      ],
+      if (_cloudError case final message?) ...[
+        StudioError(message),
+        const SizedBox(height: 16),
+        TextButton(
+          onPressed: _cloudBusy ? null : () => _discoverCloud(),
+          child: const Text('Refresh instances'),
+        ),
+        TextButton(
+          onPressed: _cloudBusy
+              ? null
+              : () => _discoverCloud(switchAccount: true),
+          child: const Text('Sign in again'),
+        ),
+      ],
+      if (_discovery == null)
+        _panel(
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Sign in with Nous Portal'),
+              SizedBox(height: 12),
+              Text(
+                'Continue to sign in securely, then choose your Hermes instance.',
+              ),
+            ],
+          ),
+        )
+      else if (_discovery!.organizations.isNotEmpty)
+        RadioGroup<String>(
+          groupValue: _organization,
+          onChanged: _cloudBusy
+              ? (_) {}
+              : (value) => setState(() => _organization = value),
+          child: Column(
+            children: [
+              for (final org in _discovery!.organizations)
+                StudioRadioTile(
+                  value: org.id,
+                  title: Text(org.name),
+                  enabled: !_cloudBusy,
+                ),
+            ],
+          ),
+        )
+      else if (_discovery!.instances.isEmpty)
+        _panel(
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('No Cloud instances yet'),
+              SizedBox(height: 12),
+              Text(
+                'Create an instance in Nous Portal, then come back and refresh.',
+              ),
+            ],
+          ),
+        )
+      else
+        RadioGroup<String>(
+          groupValue: _instance?.id,
+          onChanged: (value) {
+            if (_cloudBusy) return;
+            setState(() {
+              _instance = _discovery!.instances.firstWhere(
+                (i) => i.id == value,
+              );
+              _cloudError = null;
+            });
+          },
+          child: Column(
+            children: [
+              for (final instance in _discovery!.instances)
+                StudioRadioTile(
+                  value: instance.id,
+                  title: Text(instance.name),
+                  subtitle: Text(
+                    [
+                      instance.statusLabel,
+                      if (instance.dashboardUrl != null)
+                        Uri.parse(instance.dashboardUrl!).host,
+                    ].join(' · '),
+                  ),
+                  enabled: !_cloudBusy && instance.canConnect,
+                ),
+            ],
+          ),
+        ),
+      if (_alreadySaved != null) ...[
+        const SizedBox(height: 12),
+        Text('Already saved as ${_alreadySaved!.label}.'),
+      ],
+      if (_discovery != null) ...[
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          children: [
+            TextButton(
+              onPressed: _cloudBusy ? null : () => _discoverCloud(),
+              child: const Text('Refresh'),
+            ),
+            if (_organizations.length > 1 && _discovery!.organizations.isEmpty)
+              TextButton(
+                onPressed: _cloudBusy
+                    ? null
+                    : () => setState(() {
+                        _discovery = CloudDiscovery(
+                          organizations: _organizations,
+                        );
+                        _organization = null;
+                        _instance = null;
+                        _cloudError = null;
+                      }),
+                child: const Text('Change organization'),
+              ),
+            TextButton(
+              onPressed: _cloudBusy ? null : _openPortal,
+              child: const Text('Open Nous Portal'),
+            ),
+            TextButton(
+              onPressed: _cloudBusy
+                  ? null
+                  : () => _discoverCloud(switchAccount: true),
+              child: const Text('Switch account'),
+            ),
+          ],
+        ),
+        if (_discovery!.instances.any((instance) => !instance.canConnect))
+          Text(
+            'Start or manage unavailable instances in Nous Portal, then refresh.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+      ],
+    ],
   );
 
   Widget _addressStep() => Form(
@@ -474,9 +848,21 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Text(
-                    _address.text,
-                    style: Theme.of(context).textTheme.bodySmall,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_cloudRoute) ...[
+                        Text(
+                          _instance!.name,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 4),
+                      ],
+                      Text(
+                        _address.text,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -636,8 +1022,12 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           ],
         ),
         TextButton(
-          onPressed: () => _go(_Step.signIn),
-          child: const Text('Edit sign-in or custom setup'),
+          onPressed: () => _go(_cloudRoute ? _Step.cloud : _Step.signIn),
+          child: Text(
+            _cloudRoute
+                ? 'Sign in to Hermes Cloud again'
+                : 'Edit sign-in or custom setup',
+          ),
         ),
       ] else
         Text(
@@ -771,20 +1161,38 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
   );
 
   Widget _footer() {
+    if (_step == _Step.choose) return const SizedBox.shrink();
     final (label, action) = switch (_step) {
+      _Step.choose => ('Continue', _continue),
+      _Step.cloud => (
+        _alreadySaved == null ? 'Continue' : 'Open connection',
+        _continueCloud,
+      ),
       _Step.address => ('Continue', _continue),
       _Step.signIn => ('Check connection', _check),
       _Step.check =>
         _probe.checking
-            ? ('Cancel check', () => _go(_Step.signIn))
+            ? (
+                'Cancel check',
+                () => _go(_cloudRoute ? _Step.cloud : _Step.signIn),
+              )
             : ('Try again', _check),
       _Step.review => (_editing ? 'Save changes' : 'Save and open', _save),
     };
     return FilledButton(
       key: const Key('connection-primary'),
       style: FilledButton.styleFrom(minimumSize: const Size(48, 52)),
-      onPressed: _saving ? null : action,
-      child: StudioActionLabel(label, busy: _saving),
+      onPressed:
+          _saving ||
+              _cloudBusy ||
+              (_step == _Step.cloud &&
+                  _discovery != null &&
+                  (_discovery!.organizations.isNotEmpty
+                      ? _organization == null
+                      : _instance?.canConnect != true))
+          ? null
+          : action,
+      child: StudioActionLabel(label, busy: _saving || _cloudBusy),
     );
   }
 

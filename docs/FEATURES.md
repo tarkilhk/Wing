@@ -4,6 +4,10 @@ Long-press Wing's Android launcher icon for **New Quick Chat**, **Activity** or 
 
 Start with [Getting started](GETTING_STARTED.md) to install and connect. The controls below are reachable in the current profile workspace; individual operations depend on the connected server. Read [Known limitations](KNOWN_LIMITATIONS.md) before relying on recovery or background alerts.
 
+## Connect your Hermes
+
+New connections offer equally weighted **Hermes Cloud** and **Use an address** routes. Cloud signs in through Nous Portal and lists hosted instances, with an organization choice when needed. Address setup retains its complete dashboard form, credentials and Custom setup controls. Both routes share the connection checks and explicit final save. Cloud provisioning and billing stay in Portal. Portal login and empty-instance discovery are device-confirmed; live hosted-instance connection remains an acceptance gap.
+
 ## Find your work
 
 Use the drawer for Chats, Activity, Connections, App settings and Hermes administration. Select a connection and profile without changing another client's selection. Chats includes recent projects, pins, search and paginated history. Filters cover unread and automated chats; Activity can filter Running and Needs input and reports unreachable profiles.
@@ -56,7 +60,7 @@ of automatically submitting duplicate work.
 
 App settings groups device preferences into Appearance, Chat, Notifications, Voice and About. Appearance includes a live chat preview, paired light/dark themes, accent colors and text size. Chat explains the default action during work; Notifications groups alert preferences and delivery recovery. Voice opens independent input/output processing and Android speech choices. About contains the installed version, release links and offline privacy policy. Configuration export/import transfers connections, credentials and allowlisted preferences, including voice choices; it is not a full draft/app backup. Android permission decisions remain on the device. Restored Android voices/languages must be installed on the destination phone; unavailable choices show an error without switching engines.
 
-The Connections toolbar provides Backup configuration and Restore configuration, in that order. Backup offers an optional passphrase before sharing the file. Leave it blank for a plain JSON backup, including readable credentials, or enter and confirm a passphrase to encrypt it. Restore accepts either format and only needs a passphrase for encrypted files. Restore is also available before adding a first connection.
+The Connections toolbar provides Backup configuration and Restore configuration, in that order. Backup offers an optional passphrase before sharing the file. Leave it blank for a plain JSON backup, including readable credentials, or enter and confirm a passphrase to encrypt it. Restore accepts either format and only needs a passphrase for encrypted files. Restore is also available before adding a first connection. Cloud browser sessions and instance access/refresh tokens are excluded from backups; restored Cloud connections require sign-in again through Edit connection.
 
 Each connection has a selectable icon. Tap the icon on Connections or beside the address during setup to choose one, then tap Save icon. Existing connections save the icon immediately without checking the server again; new connections keep the choice until the final setup save. The final setup screen also offers a Connection icon row. Icons are Wing-owned, saved locally with the connection, and included in both plain and encrypted configuration backups. Existing connections and older backups without an icon use the standard server icon. The status light has its own connection-details target, with a 16 dp gap before the connection name.
 

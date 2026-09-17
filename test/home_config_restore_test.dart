@@ -575,6 +575,8 @@ void main() {
       await pumpHome(tester, manager);
       await tester.tap(find.text('Connect your agent'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Use an address'));
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const Key('connection-address')),
         'https://hermes.example.com',
@@ -664,6 +666,8 @@ void main() {
     await pumpHome(tester, manager);
 
     await tester.tap(find.text('Connect your agent'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Use an address'));
     await tester.pumpAndSettle();
 
     await tester.enterText(

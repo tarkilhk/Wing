@@ -66,6 +66,12 @@ class ProfileConnectionIdentity {
       connection.dashboardUsername ?? '',
       connection.dashboardPassword ?? '',
       connection.apiKey,
+      if (connection.isCloud)
+        [
+          connection.cloudInstanceId,
+          connection.cloudOrganization,
+          connection.dashboardOAuth?.id,
+        ],
       if (connection.gatewayHeaders.isNotEmpty)
         canonicalGatewayHeaders(connection.gatewayHeaders),
     ]);

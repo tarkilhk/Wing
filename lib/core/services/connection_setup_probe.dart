@@ -133,6 +133,7 @@ class ConnectionSetupProbe extends ChangeNotifier {
   }
 
   static String _failureMessage(Object error, ConnectionCheck stage) {
+    if (error is CloudAccessException) return error.message;
     if (error is DashboardHttpException) {
       if ([301, 302, 303, 307, 308].contains(error.statusCode)) {
         return 'This address redirects. Enter the final dashboard address.';

@@ -147,6 +147,8 @@ class DesktopGatewayClient {
         pathPrefix: pathPrefix,
         username: connection.dashboardUsername,
         password: connection.dashboardPassword,
+        dashboardOAuth: connection.dashboardOAuth,
+        requiresOAuth: connection.isCloud,
         gatewayHeaders: connection.gatewayHeaders,
       ),
       documentProfile: documentIntakeProfileForConnection(connection),

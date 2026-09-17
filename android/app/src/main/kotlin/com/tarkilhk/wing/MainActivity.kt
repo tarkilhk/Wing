@@ -38,6 +38,7 @@ class MainActivity : FlutterActivity() {
     private val maxPendingBytes = 128L * 1024L * 1024L
     private val maxSharedTextChars = 256 * 1024
     private var networkAvailability: NetworkAvailabilityChannel? = null
+    private var hermesCloud: HermesCloudChannel? = null
     private var shareChannel: MethodChannel? = null
     private var launchChannel: MethodChannel? = null
     private var fileDeliveryChannel: MethodChannel? = null
@@ -69,6 +70,8 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MonitoringRuntime.attach(this, flutterEngine)
+        hermesCloud?.close()
+        hermesCloud = HermesCloudChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         voiceChannel?.close()
         voiceChannel = VoiceChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         networkAvailability?.close()
@@ -248,6 +251,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        hermesCloud?.close()
+        hermesCloud = null
         voiceChannel?.close()
         voiceChannel = null
         networkAvailability?.close()

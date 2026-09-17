@@ -132,6 +132,8 @@ class RemoteFilesClient implements RemoteFilesDataSource {
         proxied: connection.dashboardProxied,
         username: connection.dashboardUsername,
         password: connection.dashboardPassword,
+        dashboardOAuth: connection.dashboardOAuth,
+        requiresOAuth: connection.isCloud,
         gatewayHeaders: connection.gatewayHeaders,
       ),
     );

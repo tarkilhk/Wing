@@ -129,18 +129,24 @@ class _ConnectionCredentials {
   final String apiKey;
   final String? dashboardPassword;
   final Map<String, String> gatewayHeaders;
+  final DashboardOAuthSession? dashboardOAuth;
 
   const _ConnectionCredentials({
     required this.apiKey,
     required this.dashboardPassword,
     this.gatewayHeaders = const <String, String>{},
+    this.dashboardOAuth,
   });
 
   bool get isEmpty =>
-      apiKey.isEmpty && dashboardPassword == null && gatewayHeaders.isEmpty;
+      apiKey.isEmpty &&
+      dashboardPassword == null &&
+      gatewayHeaders.isEmpty &&
+      dashboardOAuth == null;
 
   String encode() => jsonEncode(<String, Object>{
     if (apiKey.isNotEmpty) 'api_key': apiKey,
+    if (dashboardOAuth != null) 'dashboard_oauth': dashboardOAuth!.toMap(),
     'dashboard_password': ?dashboardPassword,
     if (gatewayHeaders.isNotEmpty) 'gateway_headers': gatewayHeaders,
   });
@@ -172,6 +178,11 @@ class _ConnectionCredentials {
             ? null
             : password,
         gatewayHeaders: validateGatewayHeaders(headers),
+        dashboardOAuth: map['dashboard_oauth'] == null
+            ? null
+            : DashboardOAuthSession.fromMap(
+                map['dashboard_oauth'] as Map<String, dynamic>,
+              ),
       );
     } catch (_) {
       throw const CredentialStorageException(
@@ -186,6 +197,7 @@ class _ConnectionCredentials {
       apiKey: connection.apiKey,
       dashboardPassword: password == null || password.isEmpty ? null : password,
       gatewayHeaders: connection.gatewayHeaders,
+      dashboardOAuth: connection.dashboardOAuth,
     );
   }
 }
@@ -201,6 +213,65 @@ class ConnectionManager {
 
   final SharedPreferences prefs;
   final CredentialStore _credentialStore;
+  static final _credentialLocks = Expando<Map<String, Future<void>>>();
+  Future<void> _withCredentialLock(String id, Future<void> Function() action) {
+    final locks = _credentialLocks[_credentialStore] ??=
+        <String, Future<void>>{};
+    final next = (locks[id] ?? Future<void>.value()).then((_) => action());
+    final settled = next.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    locks[id] = settled;
+    return next.whenComplete(() {
+      if (identical(locks[id], settled)) locks.remove(id);
+    });
+  }
+
+  static final _sessionCaches = Expando<Map<String, DashboardOAuthSession>>();
+  Map<String, DashboardOAuthSession> get _sessions =>
+      _sessionCaches[_credentialStore] ??= <String, DashboardOAuthSession>{};
+
+  DashboardOAuthSession? _bindSession(
+    String id,
+    DashboardOAuthSession? stored,
+  ) {
+    if (stored == null) {
+      _sessions.remove(id);
+      return null;
+    }
+    final cached = _sessions[id];
+    final session = cached?.id == stored.id ? cached! : stored;
+    _sessions[id] = session;
+    session.persist = () => _withCredentialLock(id, () async {
+      // A deleted/replaced connection must never be resurrected by an in-flight refresh.
+      final present = _connectionsFromMaps(
+        _readConnectionMaps(),
+      ).any((c) => c.id == id && c.isCloud);
+      final encoded = _credentialStore.readCached(_credentialKey(id));
+      if (!present || encoded == null) {
+        throw const CredentialStorageException(
+          'This connection is no longer saved.',
+        );
+      }
+      final credentials = _ConnectionCredentials.decode(encoded);
+      if (credentials.dashboardOAuth?.id != session.id) {
+        throw const CredentialStorageException(
+          'This sign-in has been replaced.',
+        );
+      }
+      await _writeAndVerifyCredentials(
+        id,
+        _ConnectionCredentials(
+          apiKey: credentials.apiKey,
+          dashboardPassword: credentials.dashboardPassword,
+          gatewayHeaders: credentials.gatewayHeaders,
+          dashboardOAuth: session,
+        ),
+      );
+    });
+    return session;
+  }
 
   ConnectionManager(this.prefs, {CredentialStore? credentialStore})
     : _credentialStore = credentialStore ?? _sharedCredentialStore;
@@ -285,6 +356,10 @@ class ConnectionManager {
           apiKey: credentials.apiKey,
           dashboardPassword: credentials.dashboardPassword,
           gatewayHeaders: credentials.gatewayHeaders,
+          dashboardOAuth: _bindSession(
+            connection.id,
+            credentials.dashboardOAuth,
+          ),
           clearDashboardPassword: credentials.dashboardPassword == null,
         ),
       );
@@ -351,6 +426,9 @@ class ConnectionManager {
     int? dashboardPort,
     String? dashboardUsername,
     String? dashboardPassword,
+    String? cloudInstanceId,
+    String? cloudOrganization,
+    DashboardOAuthSession? dashboardOAuth,
     Map<String, String> gatewayHeaders = const <String, String>{},
   }) async {
     final normalized = SavedConnection.normalizeHostAndPort(host, port);
@@ -369,6 +447,9 @@ class ConnectionManager {
       dashboardPortOverride: dashboardPort,
       dashboardUsername: dashboardUsername,
       dashboardPassword: dashboardPassword,
+      cloudInstanceId: cloudInstanceId,
+      cloudOrganization: cloudOrganization,
+      dashboardOAuth: dashboardOAuth,
       gatewayHeaders: gatewayHeaders,
     );
     final current = getConnections();
@@ -382,6 +463,7 @@ class ConnectionManager {
       nextCredentials: _ConnectionCredentials.fromConnection(conn),
       connections: current,
     );
+    _bindSession(conn.id, conn.dashboardOAuth);
     return conn;
   }
 
@@ -401,6 +483,9 @@ class ConnectionManager {
     int? dashboardPort,
     String? dashboardUsername,
     String? dashboardPassword,
+    String? cloudInstanceId,
+    String? cloudOrganization,
+    DashboardOAuthSession? dashboardOAuth,
     Map<String, String?>? gatewayHeaders,
   }) async {
     final current = getConnections();
@@ -424,6 +509,9 @@ class ConnectionManager {
 
     current[idx] = current[idx].copyWith(
       label: label,
+      cloudInstanceId: cloudInstanceId,
+      cloudOrganization: cloudOrganization,
+      dashboardOAuth: dashboardOAuth,
       icon: icon,
       host: normalized.host,
       port: normalized.port,
@@ -584,6 +672,7 @@ class ConnectionManager {
       apiKey: credentials.apiKey,
       dashboardPassword: credentials.dashboardPassword,
       gatewayHeaders: credentials.gatewayHeaders,
+      dashboardOAuth: _bindSession(connection.id, credentials.dashboardOAuth),
       clearDashboardPassword: credentials.dashboardPassword == null,
     );
   }
@@ -593,7 +682,7 @@ class ConnectionManager {
     required _ConnectionCredentials previousCredentials,
     required _ConnectionCredentials nextCredentials,
     required List<SavedConnection> connections,
-  }) async {
+  }) => _withCredentialLock(connectionId, () async {
     try {
       await _writeAndVerifyCredentials(connectionId, nextCredentials);
       await _saveAll(connections);
@@ -608,7 +697,7 @@ class ConnectionManager {
         'Connection credentials could not be saved safely.',
       );
     }
-  }
+  });
 
   Future<void> _writeAndVerifyCredentials(
     String connectionId,
@@ -1147,8 +1236,10 @@ class GatewayChatClient {
 
 /// Client for the Hermes Dashboard REST API.
 ///
-/// Three auth modes, picked by proxy configuration and supplied credentials:
+/// Explicit auth modes, picked by connection configuration:
 ///
+///  * **Cloud OAuth** — an instance-bound bearer grant, renewed through the
+///    native broker. A missing/rejected grant requires sign-in, never another mode.
 ///  * **Proxied dashboard** — when [proxied] is true, upstream infrastructure
 ///    injects auth and the app sends clean JSON requests with no dashboard
 ///    session token or cookie.
@@ -1184,6 +1275,8 @@ class DashboardClient {
   final String? _username;
   final String? _password;
   final Map<String, String> _gatewayHeaders;
+  final DashboardOAuthSession? _oauth;
+  final bool _requiresOAuth;
   String? _token;
   String? _cookie;
   // In-flight auth requests, shared so concurrent /api calls trigger a single
@@ -1205,9 +1298,13 @@ class DashboardClient {
     bool proxied = false,
     String? username,
     String? password,
+    DashboardOAuthSession? dashboardOAuth,
+    bool requiresOAuth = false,
     Map<String, String> gatewayHeaders = const <String, String>{},
     http.Client? httpClient,
-  }) : _proxied = proxied,
+  }) : _oauth = dashboardOAuth,
+       _requiresOAuth = requiresOAuth || dashboardOAuth != null,
+       _proxied = proxied,
        _username = username,
        _password = password,
        _gatewayHeaders = validateGatewayHeaders(gatewayHeaders),
@@ -1225,7 +1322,11 @@ class DashboardClient {
   };
 
   /// Clears any cached auth state so the next request re-authenticates.
-  void _resetAuth() {
+  void _resetAuth(String? rejectedAuthorization) {
+    if (_oauth != null &&
+        rejectedAuthorization == 'Bearer ${_oauth.accessToken}') {
+      _oauth.invalidate();
+    }
     _token = null;
     _cookie = null;
     _cookieInFlight = null;
@@ -1305,6 +1406,17 @@ class DashboardClient {
   }
 
   Future<Map<String, String>> _authHeaders() async {
+    if (_requiresOAuth) {
+      final session = _oauth;
+      if (session == null) {
+        throw const CloudAccessException(
+          'Sign in to Hermes Cloud again from this connection’s settings.',
+          signInRequired: true,
+        );
+      }
+      final bearer = await session.bearerFor(_baseUrl);
+      return {..._jsonHeaders, 'Authorization': 'Bearer $bearer'};
+    }
     if (_proxied) return _jsonHeaders;
     if (_usesPasswordAuth) {
       return {
@@ -1331,7 +1443,7 @@ class DashboardClient {
   /// Select authentication by configured mode, never by retrying a rejected
   /// ticket as a different auth mechanism. Local Desktop uses its session token.
   Future<({String? token, String? ticket})> gatewayCredentials() async {
-    if (_usesPasswordAuth || _proxied) {
+    if (_requiresOAuth || _usesPasswordAuth || _proxied) {
       return (token: null, ticket: await mintWebSocketTicket());
     }
     return (token: await _getToken(), ticket: null);
@@ -1346,7 +1458,7 @@ class DashboardClient {
       headers: await _authHeaders(),
     );
     if (res.statusCode == 401 && !retried) {
-      _resetAuth();
+      _resetAuth(res.request?.headers['Authorization']);
       return mintWebSocketTicket(retried: true);
     }
     if (res.statusCode != 200) {
@@ -1379,7 +1491,7 @@ class DashboardClient {
     ).replace(queryParameters: queryParameters);
     final res = await _http.get(uri, headers: headers);
     if (res.statusCode == 401 && !retried) {
-      _resetAuth();
+      _resetAuth(res.request?.headers['Authorization']);
       return apiGet(endpoint, queryParameters: queryParameters, retried: true);
     }
     if (res.statusCode != 200) {
@@ -1402,7 +1514,7 @@ class DashboardClient {
     final res = await _http.send(request);
     if (res.statusCode == 401 && !retried) {
       await res.stream.drain<void>();
-      _resetAuth();
+      _resetAuth(res.request?.headers['Authorization']);
       return apiGetBytes(
         endpoint,
         queryParameters: queryParameters,
@@ -1448,7 +1560,7 @@ class DashboardClient {
       headers: headers,
     );
     if (res.statusCode == 401 && !retried) {
-      _resetAuth();
+      _resetAuth(res.request?.headers['Authorization']);
       return apiGetList(endpoint, retried: true);
     }
     if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
@@ -1472,7 +1584,7 @@ class DashboardClient {
       body: body != null ? jsonEncode(body) : null,
     );
     if (res.statusCode == 401 && !retried) {
-      _resetAuth();
+      _resetAuth(res.request?.headers['Authorization']);
       return apiPost(endpoint, body: body, retried: true);
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -1501,7 +1613,7 @@ class DashboardClient {
       body: body == null ? null : jsonEncode(body),
     );
     if (res.statusCode == 401 && !retried) {
-      _resetAuth();
+      _resetAuth(res.request?.headers['Authorization']);
       return apiDeleteResult(endpoint, body: body, retried: true);
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -1522,7 +1634,7 @@ class DashboardClient {
       body: jsonEncode(body),
     );
     if (res.statusCode == 401 && !retried) {
-      _resetAuth();
+      _resetAuth(res.request?.headers['Authorization']);
       return apiPatch(endpoint, body: body, retried: true);
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -1543,7 +1655,7 @@ class DashboardClient {
       body: body != null ? jsonEncode(body) : null,
     );
     if (res.statusCode == 401 && !retried) {
-      _resetAuth();
+      _resetAuth(res.request?.headers['Authorization']);
       return apiPut(endpoint, body: body, retried: true);
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -1595,7 +1707,7 @@ class DashboardClient {
         .then(http.Response.fromStream)
         .timeout(timeout);
     if (response.statusCode == 401 && !retried) {
-      _resetAuth();
+      _resetAuth(request.headers['Authorization']);
       return cronRequest(method, endpoint, query, body, retried: true);
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {

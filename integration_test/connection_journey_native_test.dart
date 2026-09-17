@@ -41,6 +41,8 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        await captureJourney(tester, 'connection-${brightness.name}-choices');
+        await _tap(tester, 'Use an address');
         await captureJourney(tester, 'connection-${brightness.name}-address');
         await tester.enterText(
           find.byKey(const Key('connection-address')),

@@ -81,6 +81,7 @@ Future<void> _pump(
     ),
   );
   await tester.pumpAndSettle();
+  if (initial == null) await _tap(tester, 'Use an address');
 }
 
 Future<void> _signIn(WidgetTester tester) async {

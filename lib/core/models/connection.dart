@@ -1,4 +1,7 @@
+import 'dashboard_oauth_session.dart';
 import 'connection_icon.dart';
+
+export 'dashboard_oauth_session.dart';
 
 export 'connection_icon.dart';
 
@@ -138,6 +141,10 @@ class SavedConnection {
   /// SPA session token, which only works on an insecure (open) dashboard.
   final String? dashboardUsername;
   final String? dashboardPassword;
+  final String? cloudInstanceId;
+  final String? cloudOrganization;
+  final DashboardOAuthSession? dashboardOAuth;
+  bool get isCloud => cloudInstanceId != null;
 
   SavedConnection({
     required this.id,
@@ -155,6 +162,9 @@ class SavedConnection {
     this.dashboardPortOverride,
     this.dashboardUsername,
     this.dashboardPassword,
+    this.cloudInstanceId,
+    this.cloudOrganization,
+    this.dashboardOAuth,
   }) : gatewayHeaders = validateGatewayHeaders(gatewayHeaders);
 
   String get baseUrl {
@@ -236,6 +246,8 @@ class SavedConnection {
   Map<String, dynamic> toMap() {
     final m = <String, dynamic>{
       'id': id,
+      if (cloudInstanceId != null) 'cloud_instance_id': cloudInstanceId,
+      if (cloudOrganization != null) 'cloud_organization': cloudOrganization,
       'label': label,
       'icon': icon.name,
       'host': host,
@@ -269,6 +281,8 @@ class SavedConnection {
 
     return SavedConnection(
       id: map['id'] as String,
+      cloudInstanceId: nonEmpty(map['cloud_instance_id']),
+      cloudOrganization: nonEmpty(map['cloud_organization']),
       label: map['label'] as String,
       icon: ConnectionIcon.fromStored(map['icon']),
       host: map['host'] as String,
@@ -304,6 +318,9 @@ class SavedConnection {
     int? dashboardPortOverride,
     String? dashboardUsername,
     String? dashboardPassword,
+    String? cloudInstanceId,
+    String? cloudOrganization,
+    DashboardOAuthSession? dashboardOAuth,
     Map<String, String>? gatewayHeaders,
     bool clearGatewayPrefix = false,
     bool clearDashboardPrefix = false,
@@ -314,6 +331,9 @@ class SavedConnection {
   }) {
     return SavedConnection(
       id: id,
+      cloudInstanceId: cloudInstanceId ?? this.cloudInstanceId,
+      cloudOrganization: cloudOrganization ?? this.cloudOrganization,
+      dashboardOAuth: dashboardOAuth ?? this.dashboardOAuth,
       label: label ?? this.label,
       icon: icon ?? this.icon,
       host: host ?? this.host,

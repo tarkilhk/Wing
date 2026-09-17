@@ -90,6 +90,13 @@ This supersedes the earlier 48 dp drawer placement. Keep only the app identity
 in this header. The low footer uses icon → connection name → LED on the left and
 version → update indicator on the right. See the [menu specification](design/2026-09-17-menu-versions.md).
 
+The owner approved adding [Hermes Cloud discovery](design/2026-09-17-hermes-cloud-connection.md)
+after the connection design review. Keep the welcome unchanged, then offer equally
+weighted Hermes Cloud and Use an address routes. Both destination screens use the
+same 112 dp portrait, feather cluster, “Where’s your Hermes?” heading and bottom
+Continue action. Preserve the complete address journey. Cloud instance selection
+uses Studio tint and joins the existing checks and explicit final save.
+
 ## Layout and controls
 
 Keep hamburger navigation and projects scoped inside Chats. Use compact connection/profile text below the page title. Search stays below this scope. Projects, pins and recents use full-width rows, grouped where helpful, with thin separators.
