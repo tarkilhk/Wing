@@ -240,13 +240,8 @@ class ProfileDiagnosticsPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Profile checks',
+              'Access checks',
               style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${controller.connectionLabel} · ${controller.workspace.scope.profileName}',
-              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
             Text(
@@ -380,8 +375,12 @@ class _DiagnosticRow extends StatelessWidget {
       minTileHeight: 56,
       minVerticalPadding: 4,
       contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: color),
-      title: Text(label),
+      leading: Icon(
+        icon,
+        color: color,
+        size: result.state == _DiagnosticState.ready ? 12 : 22,
+      ),
+      title: Text(label, style: Theme.of(context).textTheme.titleSmall),
       subtitle: Text(
         result.message,
         style: Theme.of(context).textTheme.bodySmall,

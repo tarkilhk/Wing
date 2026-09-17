@@ -101,7 +101,12 @@ void main() {
       await tester.scrollUntilVisible(
         find.text('example/long-production-model'),
         120,
-        scrollable: find.byType(Scrollable).last,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('example/long-production-model'));
@@ -109,7 +114,12 @@ void main() {
       await tester.scrollUntilVisible(
         find.text('1,234,567,890,123,456,789'),
         120,
-        scrollable: find.byType(Scrollable).last,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       expect(tester.takeException(), isNull);
       await capture(tester, 'usage-${brightness.name}-200-keyboard');
@@ -319,13 +329,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         await capture(tester, 'logs-${brightness.name}-200-keyboard');
-        await tester.scrollUntilVisible(
-          find.text('Refresh'),
-          160,
-          scrollable: find.byType(Scrollable).first,
-        );
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Refresh'));
+        await tester.tap(find.byTooltip('Refresh logs'));
         await tester.pumpAndSettle();
         expect(
           fixture.requests.where((request) => request.$2 == 'logs').length,

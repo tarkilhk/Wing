@@ -1,76 +1,60 @@
-# Administration Health entry
+# Hermes health
 
-The owner approved the tab-free Administration proposal on 17 September 2026.
-The Profile/Health tab strip is removed. A pharmacy cross beside the single
-header Refresh action opens Health as a dedicated screen. Server operations
-remain in their existing owning destinations and the global version menu.
+The owner approved a Server/Profile mock on 18 September 2026, replacing the
+previous combined health verdict. The main task is to see what needs attention
+and open the relevant result or recovery action. Refresh and Check profile are
+explicit controls; connection, runtime identity and observation times are context.
 
-## Implemented composition
+## Composition and alternatives
 
-The root shows connection/profile scope, the shared direct profile selector with
-Manage profiles, search, a compact model/reasoning brief and two settings groups.
-Profile descriptions appear when present. Search preserves its input and the
-previous overview scroll position when returning from an editor or clearing it.
-Health remains reachable without a selected profile.
+A combined status banner with expandable healthy checks obscured the source of
+unknown coverage and occupied the most prominent space. Separate Server/Profile
+tabs reduced the initial list, but hid ownership and added a tap between routine
+checks. The selected arrangement keeps two visible groups, stable observation
+rows and scoped detail pages. It gives the actual issues the visual emphasis.
 
-Health shows actionable selected-profile findings first, then runtime identity
-and explicitly run diagnostics, followed by observed settings, access checks
-and usage. Runtime identity names the actual launch profile and explains when it
-differs from the selected profile. Diagnostic observations survive leaving Health
-and opening settings; navigation never reruns them. Explicit access-check failures also
-contribute to the indicator and remain attached to their canonical profile. An
-ordinary overview refresh cannot erase a retained failure.
+Server contains Doctor, security audit and Logs, followed by quiet runtime-profile
+metadata. Profile contains a dropdown and Check profile, then Provider access,
+Model, Tools, Connectors and Scheduled tasks. Usage follows the profile rows.
+The profile selector stacks above its action at narrow widths or enlarged text.
+Doctor/audit never run automatically and retain their captured server scope.
 
-The cross has a neutral glyph, status-colored border and a 48 dp target. Unknown,
-loading and stale observations do not become green. See [Administration](../ADMINISTRATION.md)
-for the observed-health contract and pinned vanilla Hermes API verification.
+The visual language stays within Studio: navy-charcoal canvas `#101B24`, opaque
+panel `#192934`, primary text `#EBF1F2`, muted context `#ADBDC4`, teal action
+`#65C7BC` and border `#344C58`, with their shared light-theme counterparts.
+Use the existing body/title scale, stronger row titles, 16 dp gutters and 8 dp
+group corners. Monospace is confined to raw diagnostic/log output. Semantic
+warning/error colors identify actual findings; configuration icons remain neutral.
 
-## Visual assessment
+Provider access consolidates configuration and sign-in observations, explicit
+checks and recovery into one submenu. Other observation submenus show the actual
+result and timestamp with a direct link to the owning editor. Doctor uses parsed
+findings and an expandable full-output panel. Other diagnostics display actual
+output without interpreting process completion as success. Run again is separate
+from reading an existing result and requires a known completed operation.
 
-Production Flutter widgets were captured at 412 × 832 dp in both themes with
-healthy, setup-needed, expired-provider and unavailable observations. Enlarged
-captures use 320 × 640 dp at 200% text. The capture harness is in
-`test/administration_health_entry_test.dart`; its sample data is confined to tests.
-These are fixture-backed widget renders, not observations from a live server.
+Logs keeps server-only source/severity/search controls and a bounded, selectable
+output panel with an explicit empty state. Usage retains profile/day scope,
+sorting, per-model drilldown, estimated cost coverage and unavailable values.
+No client or server repair endpoint is invented. See the current
+[API and state contract](../ADMINISTRATION.md#health-observations).
 
-An independent reviewer compared the images against the approved toolbar
-mockups. The review led to placing runtime immediately after profile findings,
-compacting unrun diagnostic actions, and naming affected tools/providers. A
-second review found no visible layout blockers. Final captures also show the
-explicit different-runtime-profile explanation. All enlarged controls grow and
-scroll; at enlarged text the root title moves into the scrolling body so the
-header actions remain reachable.
+## Verification
 
-Recreate captures with the local Roboto/Material font files used by the harness:
+Use `test/administration_health_entry_test.dart` for direct-entry loading, explicit
+checks, canonical profile switching and root/submenu renders. Captures cover
+healthy, setup-needed, expired-sign-in and unavailable states in both themes,
+412 × 832 dp normally and 320 × 640 dp at 200% text.
 
-```sh
-flutter test --dart-define=CAPTURE_ADMIN_HEALTH=true test/administration_health_entry_test.dart
-```
+Use `test/health_details_design_test.dart` for Usage, Logs and audit at 412 dp and
+320 dp/200% in both themes, including expanded/scrolled results. Doctor findings,
+failed refresh and raw output are covered by `test/doctor_diagnostic_page_test.dart`.
+Navigation regressions also cover captured action identity and server-only requests.
 
-Images are generated under `build/administration-health/`. The disposable Android
-journeys reuse the production-widget harness through
-`integration_test/administration_health_entry_test.dart`.
-
-## Verification record
-
-Static analysis passes with no issues. The complete widget/unit suite produced
-2,086 passes and 12 intentional skips; its four remaining failures referenced the
-removed tabs. Those four were updated to exercise Health navigation and passed.
-After the explicit-access-check regression and integration of the latest main,
-all 61 affected health, shell, navigation and menu tests passed. Both new
-access-check regressions verify status and canonical-profile isolation.
-
-On the disposable API 36 Android emulator, all ten root/Health journeys passed in
-both themes, including enlarged text, profile selection, search and Back. The four
-existing native editor/diagnostic journeys also passed, including keyboard,
-conflict/discard, accessibility action and retained operation output. These use
-in-memory observations; they do not establish live-provider behavior. No production
-server was changed or model request sent.
-
-Four additional dark/light native visual journeys passed using Android's real
-viewport and insets at 100% and 200% text. Twelve native-rendered frames were
-exported before the disposable app was removed and visually inspected. Widget
-captures retain the separate 320 dp narrow-screen coverage.
-The independent reviewer inspected all twelve native frames and found no new
-visual blockers or inset collisions; the native renders support the earlier
-widget-render assessment.
+Capture flags are `CAPTURE_ADMIN_HEALTH`, `CAPTURE_HEALTH_DETAILS`, and
+`CAPTURE_DOCTOR`. The first two load `/tmp/wing-header-fonts/roboto-regular.ttf`
+and `materialicons-regular.otf`; details also load `mono.ttf`. Doctor uses
+`CAPTURE_FONT_DIR`. Generated evidence belongs under ignored
+`build/administration-health`, `build/health-details` and `build/doctor-preview`.
+Inspect the actual images: passing assertions alone do not establish design quality.
+These are fixture-backed Flutter renders, not proof of live provider operation.

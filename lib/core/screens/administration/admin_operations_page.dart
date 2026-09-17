@@ -10,6 +10,7 @@ import 'admin_widgets.dart';
 import 'admin_doctor_diagnosis.dart';
 
 class AdminActionPage extends StatefulWidget {
+  final Future<void> Function()? onRunAgain;
   final AdministrationRepository server;
   final AdministrationAction action;
   final String title;
@@ -24,6 +25,7 @@ class AdminActionPage extends StatefulWidget {
     required this.scope,
     this.onObservation,
     this.initialObservation,
+    this.onRunAgain,
   });
   @override
   State<AdminActionPage> createState() => _AdminActionPageState();
@@ -51,6 +53,7 @@ class _AdminActionPageState extends State<AdminActionPage> {
 
   Future<void> _check() async {
     if (_loading) return;
+    _timer?.cancel();
     setState(() {
       _loading = true;
       _error = null;
@@ -94,12 +97,11 @@ class _AdminActionPageState extends State<AdminActionPage> {
       title: widget.title,
       scope: widget.scope,
       actions: [
-        if (diagnosis != null)
-          IconButton(
-            tooltip: 'Refresh result',
-            onPressed: _loading ? null : _check,
-            icon: const Icon(Icons.refresh),
-          ),
+        IconButton(
+          tooltip: 'Refresh result',
+          onPressed: _loading ? null : _check,
+          icon: const Icon(Icons.refresh),
+        ),
       ],
       child: ListView(
         padding: const EdgeInsets.all(16),
@@ -122,14 +124,13 @@ class _AdminActionPageState extends State<AdminActionPage> {
                   ? 'Outcome unavailable'
                   : 'Failed',
             ),
-          if (diagnosis == null) ...[
-            const SizedBox(height: 16),
+          if (diagnosis == null &&
+              _status?['running'] == false &&
+              _status?['exit_code'] == 0) ...[
+            const SizedBox(height: 8),
             Text(
-              AdminDiagnosticObservation(
-                widget.action,
-                _status ?? const {},
-                _checkedAt,
-              ).nextStep,
+              'Review the findings below.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
           if (_checkedAt != null && diagnosis == null) ...[
@@ -143,21 +144,40 @@ class _AdminActionPageState extends State<AdminActionPage> {
             AdminDoctorDiagnosis(diagnosis: diagnosis, checkedAt: _checkedAt),
             const SizedBox(height: WingSpacing.lg),
           ],
-          ExpansionTile(
-            tilePadding: diagnosis == null ? null : EdgeInsets.zero,
-            title: const Text('Diagnostic output'),
+          const SizedBox(height: 12),
+          AdminGroup(
             children: [
-              SelectableText(
-                (_status?['lines'] as List? ?? []).join('\n'),
-                style: WingTokens.of(context).typography.mono,
+              ExpansionTile(
+                key: ValueKey(diagnosis != null),
+                shape: const Border(),
+                collapsedShape: const Border(),
+                initiallyExpanded: diagnosis == null,
+                title: const Text('Diagnostic output'),
+                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: SelectableText(
+                      (_status?['lines'] as List? ?? []).isEmpty
+                          ? 'No output yet.'
+                          : (_status!['lines'] as List).join('\n'),
+                      style: WingTokens.of(context).typography.mono,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          if (diagnosis == null)
-            TextButton(
-              onPressed: _loading ? null : _check,
-              child: const Text('Check progress'),
+          if (widget.onRunAgain != null &&
+              _status?['running'] == false &&
+              _status?['exit_code'] is int) ...[
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: widget.onRunAgain,
+              icon: const Icon(Icons.play_arrow),
+              label: Text('Run ${widget.title} again'),
             ),
+          ],
         ],
       ),
     );
@@ -227,7 +247,14 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
   @override
   Widget build(BuildContext context) => AdminPage(
     title: 'Logs',
-    scope: '${widget.server.connectionLabel} / ${widget.runtimeLabel}',
+    scope: widget.server.connectionLabel,
+    actions: [
+      IconButton(
+        tooltip: 'Refresh logs',
+        onPressed: () => setState(() => _version++),
+        icon: const Icon(Icons.refresh),
+      ),
+    ],
     child: ListView(
       children: [
         Padding(
@@ -239,7 +266,7 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                   final scaledWidth =
                       constraints.maxWidth /
                       (MediaQuery.textScalerOf(context).scale(16) / 16);
-                  final width = scaledWidth < 480
+                  final width = scaledWidth < 340
                       ? constraints.maxWidth
                       : (constraints.maxWidth - 12) / 2;
                   return Wrap(
@@ -289,10 +316,10 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
               const SizedBox(height: 12),
               TextField(
                 decoration: const InputDecoration(
-                  labelText: 'Search logs',
-                  helperMaxLines: 4,
-                  helperText: 'Last 100 matching lines. Submit to search.',
+                  hintText: 'Search logs',
+                  prefixIcon: Icon(Icons.search),
                 ),
+                textInputAction: TextInputAction.search,
                 onSubmitted: (v) => setState(() {
                   _search = v;
                   _version++;
@@ -302,7 +329,7 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
           child: AdminLoad(
             expand: false,
             key: ValueKey(_version),
@@ -315,12 +342,26 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
             builder: (context, data, refresh) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextButton(onPressed: refresh, child: const Text('Refresh')),
-                SelectableText(
-                  (data['lines'] as List? ?? data['logs'] as List? ?? []).join(
-                    '\n',
-                  ),
-                  style: WingTokens.of(context).typography.mono,
+                Text(
+                  'Latest ${(data['lines'] as List? ?? []).length} matching lines · Up to 100',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                AdminGroup(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: SelectableText(
+                          (data['lines'] as List? ?? []).isEmpty
+                              ? 'No matching log entries.'
+                              : (data['lines'] as List).join('\n'),
+                          style: WingTokens.of(context).typography.mono,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

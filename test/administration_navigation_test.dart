@@ -393,7 +393,7 @@ void main() {
         expect(find.text('Selected profile'), findsAtLeastNWidgets(1));
         await screenshot(tester, '${brightness.name}-health-profile');
         await tester.scrollUntilVisible(
-          find.text('Runtime'),
+          find.text('Server'),
           250,
           scrollable: find
               .byWidgetPredicate(
@@ -564,7 +564,7 @@ void main() {
     (tester) async {
       await show(tester, Brightness.dark, healthOnly: true);
       await tester.scrollUntilVisible(
-        find.text('Access checks'),
+        find.text('Provider access'),
         280,
         scrollable: find
             .byWidgetPredicate(
@@ -573,7 +573,7 @@ void main() {
             .first,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Access checks'));
+      await tester.tap(find.text('Provider access'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.byTooltip('More health actions'),
@@ -624,7 +624,7 @@ void main() {
     admin = AdministrationDesignFixture();
     await show(tester, Brightness.dark, healthOnly: true);
     await tester.scrollUntilVisible(
-      find.text('Run Doctor'),
+      find.text('Doctor'),
       100,
       scrollable: find
           .byWidgetPredicate(
@@ -633,15 +633,17 @@ void main() {
           .first,
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Run Doctor'));
+    await tester.tap(find.text('Doctor'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Run'));
+    await tester.tap(
+      find.descendant(of: find.byType(AlertDialog), matching: find.text('Run')),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Failed'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('Review output'),
+      find.text('Doctor'),
       200,
       scrollable: find
           .byWidgetPredicate(
@@ -651,8 +653,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(HermesHealthContent), findsOneWidget);
-    expect(find.text('Failed'), findsOneWidget);
-    expect(find.text('Run Doctor'), findsNothing);
+    expect(find.textContaining('Failed'), findsOneWidget);
+    expect(find.text('Doctor'), findsOneWidget);
     expect(
       admin.requests.where((r) => r.$1 == 'POST' && r.$2 == 'ops/doctor'),
       hasLength(1),

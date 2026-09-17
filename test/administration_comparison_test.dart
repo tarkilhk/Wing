@@ -30,7 +30,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(find.textContaining('1 of 3 models'), findsOneWidget);
-    expect(find.textContaining('Total reported: USD 0.00'), findsOneWidget);
+    expect(find.text('USD 0.00'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

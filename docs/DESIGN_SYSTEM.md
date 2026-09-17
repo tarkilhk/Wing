@@ -229,15 +229,16 @@ diagnostic. Identity is a full-screen editor; settings show dirty counts, sparse
 feedback and deliberate field conflict resolution. Percent diagrams describe
 configuration and usage bars describe reported costs, never inferred activity.
 
-The Health cross uses semantic red for reported failures or expired sign-ins, amber
-for setup or task attention, neutral for incomplete, refreshing or stale coverage,
-and green only when all required observations are current and clear. Retained
-failures and warnings remain visible when refresh is unavailable. Green means no
-issues in the available observations; provider configuration does not establish
-inference or runtime health. Give the cross a Health tooltip with its current
-status and a 48 dp target. Opening Health performs no diagnostics or writes. Keep
-Doctor/audit results and captured scope across close/reopen and profile changes;
-never treat process completion as proof that its output contains no findings.
+The owner-approved 18 September Health revision replaces the combined verdict
+with Server and Profile groups on the standalone Hermes health destination.
+Server rows own Doctor, audit and Logs, with subordinate runtime identity. Profile
+uses a dropdown (an explicit exception to Administration's shared profile chips),
+an explicit Check profile action, five stable observation rows and Usage.
+Only actual issues carry warning/error emphasis; configuration icons stay neutral.
+Unknown checks are local to their row. Do not invalidate configuration after a
+fixed five-minute timer or imply successful inference from configuration.
+Detail pages use the same gutters, grouped rows and quiet timestamps, with
+specific recovery links to the owning editors. Opening Health performs reads only.
 
 Growing select-only values, page titles and large-text field labels must remain
 readable at 320 dp/200%. Keep 48 dp controls and keyboard-safe editor actions.

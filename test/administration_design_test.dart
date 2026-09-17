@@ -169,18 +169,23 @@ void main() {
         expect(tester.takeException(), isNull);
         await snapshot(tester, '$mode-$family');
         if (family == 'runtime-health') {
-          await tester.ensureVisible(find.text('Run Doctor'));
+          await tester.ensureVisible(find.text('Doctor'));
           await tester.pumpAndSettle();
-          await tester.tap(find.text('Run Doctor'));
+          await tester.tap(find.text('Doctor'));
           await tester.pumpAndSettle();
-          await tester.tap(find.text('Run'));
+          await tester.tap(
+            find.descendant(
+              of: find.byType(AlertDialog),
+              matching: find.text('Run'),
+            ),
+          );
           await tester.pumpAndSettle();
           await snapshot(tester, '$mode-runtime-result');
           await tester.pageBack();
           await tester.pumpAndSettle();
           await tester.ensureVisible(find.text('Doctor'));
           await tester.pumpAndSettle();
-          expect(find.text('Failed'), findsOneWidget);
+          expect(find.textContaining('Failed'), findsOneWidget);
           await snapshot(tester, '$mode-runtime-findings');
         }
         if (family == 'identity') {

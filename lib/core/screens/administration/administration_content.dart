@@ -1,4 +1,6 @@
 import 'dart:async';
+import '../../services/scheduled_tasks_controller.dart';
+import '../../widgets/studio_select.dart';
 import '../../services/administration_overview.dart';
 import '../../services/administration_health.dart';
 import '../../widgets/profile_diagnostics_panel.dart';
@@ -61,6 +63,10 @@ class _HermesAdministrationContentState
   Set<String> _overviewKeys = const {};
 
   void _refreshAfter(_Destination destination) {
+    if (widget.healthOnly) {
+      unawaited(_refreshHealthProfile());
+      return;
+    }
     unawaited(_health.refreshReadiness());
     setState(() {
       _overviewKeys = destination.summaryKeys;
@@ -74,6 +80,62 @@ class _HermesAdministrationContentState
   );
   String? _healthProfileName;
   bool _refreshing = false;
+  final _healthOverviews = <String, AdministrationOverview>{};
+  final _healthTasks = <String, ScheduledTasksController>{};
+  final _taskListeners = <String, VoidCallback>{};
+  bool _checkingProfile = false;
+
+  void _selectHealthProfile() {
+    final profile = _profile;
+    if (!widget.healthOnly || profile == null) return;
+    final key = profile.scope.storageNamespace;
+    final overview = _healthOverviews.putIfAbsent(
+      key,
+      () => AdministrationOverview(profile),
+    );
+    final tasks = _healthTasks.putIfAbsent(key, () {
+      final source = ScheduledTasksController.acquire(
+        profile,
+        widget.controller.preferences,
+      );
+      void listener() {
+        if (mounted) _health.updateTasks(source);
+      }
+
+      _taskListeners[key] = listener;
+      source.addListener(listener);
+      return source;
+    });
+    _health.selectProfile(overview);
+    final checks = _checksForCurrentProfile();
+    if (checks != null) _health.updateProfileChecks(checks.healthObservation);
+    _health.updateTasks(tasks);
+    unawaited(_refreshHealthProfile());
+  }
+
+  Future<void> _refreshHealthProfile({bool checkAccess = false}) async {
+    final key = _profile?.scope.storageNamespace;
+    final overview = _healthOverviews[key];
+    if (overview == null) return;
+    final checks = checkAccess ? _checksForCurrentProfile() : null;
+    await Future.wait([
+      overview.refresh(keys: {'model', 'access', 'tools', 'connectors'}),
+      if (_healthTasks[key] case final tasks?) tasks.refresh(),
+      _health.refreshReadiness(),
+      if (checks != null) checks.check(),
+    ]);
+  }
+
+  Future<void> _checkProfile() async {
+    if (_checkingProfile) return;
+    setState(() => _checkingProfile = true);
+    try {
+      await _refreshHealthProfile(checkAccess: true);
+    } finally {
+      if (mounted) setState(() => _checkingProfile = false);
+    }
+  }
+
   final _accessChecks = <String, ProfileDiagnosticsController>{};
 
   @override
@@ -82,6 +144,7 @@ class _HermesAdministrationContentState
     _healthProfileName = _profile?.name;
     widget.controller.addListener(_workspaceChanged);
     unawaited(_health.refreshRuntimeIdentity());
+    _selectHealthProfile();
   }
 
   void _workspaceChanged() {
@@ -90,6 +153,7 @@ class _HermesAdministrationContentState
     if (name != _healthProfileName) {
       _healthProfileName = name;
       _health.selectProfile(null);
+      _selectHealthProfile();
     }
     _checksForCurrentProfile();
     setState(() {});
@@ -140,7 +204,10 @@ class _HermesAdministrationContentState
       await Future.wait([
         widget.controller.refresh(),
         _health.refreshRuntimeIdentity(),
-        _health.refreshReadiness(),
+        if (widget.healthOnly)
+          _refreshHealthProfile()
+        else
+          _health.refreshReadiness(),
       ]);
     } catch (error) {
       if (mounted) {
@@ -158,6 +225,15 @@ class _HermesAdministrationContentState
   void dispose() {
     widget.controller.removeListener(_workspaceChanged);
     _health.dispose();
+    for (final entry in _healthTasks.entries) {
+      entry.value.removeListener(_taskListeners[entry.key]!);
+      // Releasing the last task lease can close a gateway and notify the shell.
+      // Defer that notification until Flutter finishes unmounting this route.
+      scheduleMicrotask(entry.value.release);
+    }
+    for (final overview in _healthOverviews.values) {
+      overview.dispose();
+    }
     for (final checks in _accessChecks.values) {
       checks.dispose();
     }
@@ -564,19 +640,39 @@ class _HermesAdministrationContentState
   @override
   Widget build(BuildContext context) {
     if (widget.healthOnly) {
+      final capturedProfile = _profile;
       return ListenableBuilder(
         listenable: Listenable.merge([widget.controller, _health]),
         builder: (context, _) => AdminHealthContent(
           server: _server,
           health: _health,
           profile: _profile,
-          profileSelector: _selector(),
+          profileSelector: StudioSelect<String>(
+            key: ValueKey(_profile?.name),
+            label: 'Selected profile',
+            value: _profile?.name,
+            options: [
+              for (final p in widget.controller.discovery?.profiles ?? [])
+                (value: p.name, label: p.name),
+            ],
+            onChanged: widget.controller.switching
+                ? null
+                : (name) {
+                    if (name != null) {
+                      unawaited(widget.controller.switchProfile(name));
+                    }
+                  },
+          ),
+          onCheckProfile: _checkingProfile || widget.controller.switching
+              ? null
+              : _checkProfile,
+          checkingProfile: _checkingProfile,
           accessChecks: _checksForCurrentProfile(),
           onConnections: widget.onConnections,
           onRefresh: _refresh,
           onOpenDestination: (title) async {
             final destination = _destinations(
-              _profile,
+              capturedProfile,
             ).where((d) => d.title == title).firstOrNull;
             if (destination?.open != null) {
               await destination!.open!();

@@ -1,0 +1,145 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:wing/core/screens/administration/admin_health_page.dart';
+import 'package:wing/core/screens/administration/admin_operations_page.dart';
+import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'support/administration_design_fixture.dart';
+
+void main() {
+  const capture = bool.fromEnvironment('CAPTURE_HEALTH_DETAILS');
+  setUpAll(() async {
+    if (!capture) return;
+    for (final entry in {
+      'Roboto': 'roboto-regular.ttf',
+      'MaterialIcons': 'materialicons-regular.otf',
+      'monospace': 'mono.ttf',
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            File(
+              '/tmp/wing-header-fonts/${entry.value}',
+            ).readAsBytes().then((b) => b.buffer.asByteData()),
+          ))
+          .load();
+    }
+  });
+  Future<void> snapshot(WidgetTester tester, String name) async {
+    if (!capture) return;
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(const ValueKey('capture')),
+    );
+    await tester.runAsync(() async {
+      final image = await boundary.toImage(pixelRatio: 1.5);
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      final file = File('build/health-details/$name.png');
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(bytes!.buffer.asUint8List());
+      image.dispose();
+    });
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final page in ['usage', 'logs', 'audit']) {
+        testWidgets('$page ${brightness.name} at $scale', (tester) async {
+          final fixture = AdministrationDesignFixture();
+          if (page != 'usage') {
+            fixture.override = (method, path, query, body) async =>
+                switch (path) {
+                  'logs' => {
+                    'lines': [
+                      '2026-09-18 02:15:03 INFO Gateway connected',
+                      '2026-09-18 02:15:05 WARNING Provider connection retry',
+                      '2026-09-18 02:15:06 INFO Provider connection restored',
+                    ],
+                  },
+                  'actions/security-audit/status' => {
+                    'pid': 7,
+                    'running': false,
+                    'exit_code': 0,
+                    'lines': [
+                      'Security audit completed.',
+                      'Review access permissions and local configuration.',
+                    ],
+                  },
+                  _ => throw StateError('Unexpected $path'),
+                };
+          }
+          tester.view.physicalSize = Size(scale == 2 ? 320 : 412, 832);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: RepaintBoundary(
+                  key: const ValueKey('capture'),
+                  child: child!,
+                ),
+              ),
+              home: switch (page) {
+                'usage' => AdminUsagePage(
+                  profile: fixture.server.profile('client-work'),
+                ),
+                'logs' => AdminLogsPage(
+                  server: fixture.server,
+                  runtimeLabel: 'Runtime profile: default',
+                ),
+                _ => AdminActionPage(
+                  server: fixture.server,
+                  action: const AdministrationAction('security-audit', 7),
+                  title: 'Security audit',
+                  scope: 'Runtime profile: default',
+                ),
+              },
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await snapshot(tester, '$page-${brightness.name}-$scale');
+          if (page == 'usage') {
+            expect(
+              fixture.requests
+                  .where((r) => r.$2 == 'analytics/models')
+                  .single
+                  .$3,
+              {'profile': 'client-work', 'days': '7'},
+            );
+            await tester.scrollUntilVisible(
+              find.text('Research model'),
+              200,
+              scrollable: find.byType(Scrollable).last,
+            );
+            await tester.tap(find.text('Research model'));
+            await tester.pumpAndSettle();
+            await snapshot(tester, '$page-${brightness.name}-$scale-expanded');
+          } else {
+            expect(
+              fixture.requests.every(
+                (r) => r.$1 == 'GET' && !r.$3.containsKey('profile'),
+              ),
+              isTrue,
+            );
+            await tester.drag(
+              find.byType(Scrollable).first,
+              const Offset(0, -450),
+            );
+            await tester.pumpAndSettle();
+            await snapshot(tester, '$page-${brightness.name}-$scale-lower');
+          }
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+          fixture.server.close();
+        });
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # Administration ownership and design
 
-This is the ownership contract for Administration, updated on 17 September 2026 to use a tab-free Profile root and a top-bar Health route, with versions in the global menu, and provider ownership corrected to follow the latest-upstream policy in [AGENTS.md](../../AGENTS.md). Use the shared [Studio tokens](../DESIGN_SYSTEM.md). [Administration](../ADMINISTRATION.md) lists implemented controls and backend limitations; the [roadmap](../ADMINISTRATION_ROADMAP.md) owns feature scope. Generated mockups are not evidence of implemented backend operations.
+This is the ownership contract for Administration, updated on 17 September 2026 to use a tab-free Profile root and a standalone Health destination, with versions in the global menu, and provider ownership corrected to follow the latest-upstream policy in [AGENTS.md](../../AGENTS.md). Use the shared [Studio tokens](../DESIGN_SYSTEM.md). [Administration](../ADMINISTRATION.md) lists implemented controls and backend limitations; the [roadmap](../ADMINISTRATION_ROADMAP.md) owns feature scope. Generated mockups are not evidence of implemented backend operations.
 
 ## Navigation
 
@@ -15,12 +15,12 @@ This is the ownership contract for Administration, updated on 17 September 2026 
 | Profile / Behavior | Supported execution limits, approval policy, basic compression, reach/recovery policy and backend voice defaults |
 | Profile / Manage profiles | Collection lifecycle; compact pill after the last profile, scrolling with the profile selector |
 | Global menu / Connection and Server version | Icon, connection name and LED open connection details; server version opens Versions & updates and checks upstream availability. Client version remains in App settings. |
-| Health / Runtime | Runtime/launch-profile observations, bounded logs, Doctor/security audit and action results |
-| Health / Selected profile | Scoped readiness and usage; recovery links to the owning editor |
+| Health / Server | Runtime/launch-profile observations, bounded logs, Doctor/security audit and action results |
+| Health / Profile | Scoped readiness and usage; recovery links to the owning editor |
 
 MCP connectors owns Reload server connectors, with confirmation that it reconnects tools across all server profiles and can invalidate prompt caches. Versions & updates contains server identity and update controls. Only the server has an upstream update check and circular-arrows availability indicator. Check update progress appears after an update request; it reads the running update action, while Check for updates compares installed code with upstream.
 
-Keep the Profile root short. A pharmacy-cross action in the top bar opens the dedicated Health route; there are no ownership tabs. Use categorized rows and drill-downs, sheets for short choices and dedicated screens for inventories and long editors. Search results identify the owner and navigate to the single editor. Health links to settings; it does not duplicate their forms.
+Keep the Profile root short. The global menu opens the dedicated Hermes health destination; there are no ownership tabs. Use categorized rows and drill-downs, sheets for short choices and dedicated screens for inventories and long editors. Search results identify the owner and navigate to the single editor. Health links to settings; it does not duplicate their forms.
 
 The owner approved scheduled-task implementation on 17 September 2026 and asked
 for a polished, focused surface independent of a future administration redesign.
@@ -47,7 +47,14 @@ when the backend establishes it, and do not infer account use from provider name
 
 Runtime health uses `profiles/active.current`, resolved through profile metadata. `active` is the sticky future-launch selection, not the runtime identity. Neither it nor the mobile selection may substitute for `current`. Unknown identity is shown as unavailable while independent server/runtime operations remain reachable.
 
-The Health cross summarizes bounded observations: red for reported failures or expired sign-ins, amber for setup/task attention, neutral for incomplete or stale coverage, and green only for complete, fresh observations without known issues. Retained failures and warnings take precedence over unknown coverage. Provider configuration is not proof of inference or runtime health. Opening Health never runs Doctor, security audit, connector tests or writes. Keep runtime results, observation times and captured action scope across Health visits and profile changes; reading results does not rerun them.
+The owner-approved 18 September Health layout uses Server and Profile groups,
+with no combined health verdict. Doctor, audit and Logs remain server-owned;
+Usage and five observation rows follow the dropdown-selected profile. Unknown
+coverage is local, configuration does not expire after five minutes, and actual
+credential expiration remains visible. Check profile explicitly checks access
+without inference. Details show their captured scope and link to the owning editor.
+See [Health observations](../ADMINISTRATION.md#health-observations) for the current
+stock API verification and rendering contract.
 
 Verified against stock upstream `98f758ae7e8db83c2bb9214c3b35adf41df15f03` on 17 September 2026: explicitly profile-scoped `setup.status` observes provider configuration without creating credentials. See the [implementation and source evidence](../ADMINISTRATION.md#health-observations).
 

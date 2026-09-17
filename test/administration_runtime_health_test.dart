@@ -44,10 +44,15 @@ void main() {
         await render();
         await tester.pumpAndSettle();
         expect(fixture.requests.where((r) => r.$1 == 'POST'), isEmpty);
-        expect(find.text('Not checked'), findsNWidgets(2));
-        await tester.tap(find.text('Run Doctor'));
+        expect(find.text('Not run'), findsNWidgets(2));
+        await tester.tap(find.text('Doctor'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Run'));
+        await tester.tap(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text('Run'),
+          ),
+        );
         await tester.pumpAndSettle();
         final outcome = exitCode == 0
             ? 'Completed'
@@ -55,29 +60,20 @@ void main() {
             ? 'Outcome unavailable'
             : 'Failed';
         expect(find.text(outcome), findsOneWidget);
-        expect(find.text('Fixture diagnostic output'), findsNothing);
-        await tester.tap(find.text('Diagnostic output'));
-        await tester.pumpAndSettle();
         expect(find.text('Fixture diagnostic output'), findsOneWidget);
         await tester.pageBack();
         await tester.pumpAndSettle();
-        expect(find.text(outcome), findsOneWidget);
-        expect(find.textContaining('Checked '), findsOneWidget);
+        expect(find.textContaining(outcome), findsOneWidget);
         await health.refreshRuntimeIdentity();
         await render();
         await tester.pumpAndSettle();
-        expect(find.text(outcome), findsOneWidget);
-        expect(
-          tester
-                  .widget<TextButton>(
-                    find.widgetWithText(TextButton, 'Run Doctor again'),
-                  )
-                  .onPressed ==
-              null,
-          exitCode == null,
-        );
-        await tester.tap(find.text('Review output'));
+        expect(find.textContaining(outcome), findsOneWidget);
+        await tester.tap(find.text('Doctor'));
         await tester.pumpAndSettle();
+        expect(
+          find.text('Run Doctor again'),
+          exitCode == null ? findsNothing : findsOneWidget,
+        );
         expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(1));
         expect(
           fixture.requests.where((r) => r.$2 == 'actions/doctor/status'),
@@ -90,16 +86,16 @@ void main() {
         await tester.pageBack();
         await tester.pumpAndSettle();
         failRead = true;
-        await tester.tap(find.text('Review output'));
+        await tester.tap(find.text('Doctor'));
         await tester.pumpAndSettle();
         expect(find.text(outcome), findsOneWidget);
-        await tester.tap(find.text('Diagnostic output'));
-        await tester.pumpAndSettle();
         expect(find.text('Fixture diagnostic output'), findsOneWidget);
         await tester.pageBack();
         await tester.pumpAndSettle();
-        expect(find.text('Result refresh unavailable'), findsOneWidget);
-        expect(find.textContaining('Checked '), findsOneWidget);
+        expect(
+          find.textContaining('Result refresh unavailable'),
+          findsOneWidget,
+        );
         expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(1));
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());

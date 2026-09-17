@@ -1,4 +1,5 @@
 import '../../widgets/studio_select.dart';
+import '../../widgets/studio_action_label.dart';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 import '../../services/administration_health.dart';
@@ -30,6 +31,8 @@ class AdminHealthContent extends StatelessWidget {
   final ProfileDiagnosticsController? accessChecks;
   final VoidCallback? onConnections;
   final Future<void> Function() onRefresh;
+  final Future<void> Function()? onCheckProfile;
+  final bool checkingProfile;
   final Future<void> Function(String destination) onOpenDestination;
   const AdminHealthContent({
     super.key,
@@ -39,6 +42,8 @@ class AdminHealthContent extends StatelessWidget {
     required this.profileSelector,
     required this.onRefresh,
     required this.onOpenDestination,
+    this.onCheckProfile,
+    this.checkingProfile = false,
     this.accessChecks,
     this.onConnections,
   });
@@ -46,126 +51,139 @@ class AdminHealthContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final findings = health.profileFindings;
-    final problems =
-        findings
-            .where((f) => f.status != AdministrationHealthStatus.healthy)
-            .toList()
-          ..sort((a, b) => _priority(a.status).compareTo(_priority(b.status)));
+    final access = findings
+        .where(
+          (f) => const [
+            'Provider configuration',
+            'Provider access',
+            'Access checks',
+          ].contains(f.title),
+        )
+        .toList();
+    final accessSummary = [...access]
+      ..sort((a, b) {
+        final severity = _priority(a.status).compareTo(_priority(b.status));
+        return severity != 0
+            ? severity
+            : (b.title == 'Access checks' ? 1 : 0) -
+                  (a.title == 'Access checks' ? 1 : 0);
+      });
     final checked =
         findings.map((f) => f.checkedAt).whereType<DateTime>().toList()..sort();
-    return ListView(
-      key: const PageStorageKey('administration-health-findings'),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              health.status == AdministrationHealthStatus.healthy
-                  ? Icons.favorite_border
-                  : health.status == AdministrationHealthStatus.unknown
-                  ? Icons.help_outline
-                  : Icons.error_outline,
-              color: administrationHealthColor(context, health.status),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(switch (health.status) {
-                AdministrationHealthStatus.healthy => 'No issues found',
-                AdministrationHealthStatus.warning => 'Needs attention',
-                AdministrationHealthStatus.failure => 'Action required',
-                AdministrationHealthStatus.unknown => 'Not fully checked',
-              }, style: Theme.of(context).textTheme.headlineSmall),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (health.status == AdministrationHealthStatus.healthy ||
-            health.status == AdministrationHealthStatus.unknown)
-          Text(
-            health.statusLabel,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        if (checked.isNotEmpty)
-          Text(
-            'Profile observations from ${TimeOfDay.fromDateTime(checked.first).format(context)}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        const AdminSectionLabel('Selected profile'),
-        profileSelector,
-        if (profile == null)
-          const AdminNotice('Select an available profile to view its health.')
-        else ...[
-          for (final finding in problems) _finding(context, finding),
-        ],
-        const AdminSectionLabel('Runtime'),
-        AdminRuntimeHealth(health: health),
-        if (profile != null) ...[
-          ExpansionTile(
-            key: PageStorageKey('health-observed-settings:${profile?.name}'),
-            tilePadding: EdgeInsets.zero,
-            title: const Text('Observed settings'),
-            subtitle: Text(
-              'Current profile: ${profile!.name}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView(
+        key: const PageStorageKey('administration-health-findings'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        children: [
+          Row(
             children: [
-              for (final finding in findings.where(
-                (f) => f.status == AdministrationHealthStatus.healthy,
-              ))
-                _finding(context, finding),
-            ],
-          ),
-          AdminGroup(
-            children: [
-              if (accessChecks != null && onConnections != null)
-                AdminRow(
-                  title: 'Access checks',
-                  subtitle: 'Check access and provider credentials',
-                  icon: Icons.key_outlined,
-                  onTap: () => adminPush(
-                    context,
-                    AdminPage(
-                      title: 'Access checks',
-                      scope: profile!.label,
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(16),
-                        child: ProfileDiagnosticsPanel(
-                          controller: accessChecks!,
-                          onManageConnections: onConnections!,
-                          onReviewProviderAccess: () => adminPush(
-                            context,
-                            AdminProvidersPage(
-                              profile: profile!,
-                              shared: false,
-                            ),
-                          ),
-                          onReviewConnectors: () => adminPush(
-                            context,
-                            AdminConnectorsPage(profile: profile!),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+              Expanded(
+                child: Text(
+                  'Server',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-              AdminRow(
-                title: 'Usage',
-                subtitle: 'Time ranges and model detail',
-                icon: Icons.bar_chart,
-                onTap: () =>
-                    adminPush(context, AdminUsagePage(profile: profile!)),
+              ),
+              IconButton(
+                tooltip: 'Refresh health',
+                onPressed: onRefresh,
+                icon: const Icon(Icons.refresh),
               ),
             ],
           ),
+          AdminRuntimeHealth(health: health),
+          const SizedBox(height: 24),
+          Text('Profile', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final button = OutlinedButton(
+                onPressed: onCheckProfile,
+                child: StudioActionLabel(
+                  'Check profile',
+                  busy: checkingProfile,
+                ),
+              );
+              if (constraints.maxWidth < 350 ||
+                  MediaQuery.textScalerOf(context).scale(16) > 20) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    profileSelector,
+                    const SizedBox(height: 8),
+                    button,
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: profileSelector),
+                  const SizedBox(width: 12),
+                  button,
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          if (profile == null)
+            const AdminNotice('Select an available profile to view its health.')
+          else ...[
+            AdminGroup(
+              children: [
+                _row(
+                  context,
+                  'Provider access',
+                  accessSummary.firstOrNull,
+                  Icons.key_outlined,
+                  () => _access(context, access),
+                ),
+                for (final (title, source, icon) in [
+                  ('Model', 'Model selection', Icons.auto_awesome_outlined),
+                  ('Tools', 'Tool setup', Icons.handyman_outlined),
+                  (
+                    'Connectors',
+                    'Connector settings',
+                    Icons.extension_outlined,
+                  ),
+                  ('Scheduled tasks', 'Scheduled tasks', Icons.schedule),
+                ])
+                  _row(
+                    context,
+                    title,
+                    findings.where((f) => f.title == source).firstOrNull,
+                    icon,
+                    () => _detail(
+                      context,
+                      title,
+                      findings.where((f) => f.title == source).firstOrNull,
+                    ),
+                  ),
+              ],
+            ),
+            if (checked.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
+                child: Text(
+                  'Checked ${TimeOfDay.fromDateTime(checked.first).format(context)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            const SizedBox(height: 4),
+            AdminGroup(
+              children: [
+                AdminRow(
+                  title: 'Usage',
+                  subtitle: 'Tokens, requests and cost',
+                  icon: Icons.bar_chart,
+                  onTap: () =>
+                      adminPush(context, AdminUsagePage(profile: profile!)),
+                ),
+              ],
+            ),
+          ],
         ],
-        const SizedBox(height: 16),
-        OutlinedButton.icon(
-          onPressed: onRefresh,
-          icon: const Icon(Icons.refresh),
-          label: const Text('Refresh observations'),
-        ),
-      ],
+      ),
     );
   }
 
@@ -176,33 +194,183 @@ class AdminHealthContent extends StatelessWidget {
     AdministrationHealthStatus.healthy => 3,
   };
 
-  Widget _finding(BuildContext context, AdministrationHealthFinding finding) =>
-      ListTile(
-        contentPadding: EdgeInsets.zero,
-        title: Text(
-          finding.title,
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
-        subtitle: Text(
-          finding.detail,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        leading: finding.status == AdministrationHealthStatus.healthy
-            ? null
-            : Icon(
-                finding.status == AdministrationHealthStatus.unknown
-                    ? Icons.help_outline
-                    : Icons.error_outline,
-                color: administrationHealthColor(context, finding.status),
-                size: 20,
+  String _summary(String title, AdministrationHealthFinding? finding) {
+    if (finding == null) return 'Not checked';
+    if (finding.status != AdministrationHealthStatus.healthy) {
+      return finding.detail;
+    }
+    return switch (title) {
+      'Provider access' =>
+        finding.title == 'Access checks'
+            ? 'Credentials checked'
+            : 'Configuration available',
+      'Tools' => 'Enabled tools configured',
+      'Scheduled tasks' => 'No tasks need attention',
+      _ => finding.detail,
+    };
+  }
+
+  Widget _row(
+    BuildContext context,
+    String title,
+    AdministrationHealthFinding? finding,
+    IconData icon,
+    VoidCallback onTap,
+  ) => ListTile(
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+    minTileHeight: 64,
+    minVerticalPadding: 8,
+    leading: Icon(
+      finding?.status == AdministrationHealthStatus.failure ||
+              finding?.status == AdministrationHealthStatus.warning
+          ? Icons.error_outline
+          : icon,
+      color:
+          finding == null ||
+              finding.status == AdministrationHealthStatus.healthy
+          ? Theme.of(context).colorScheme.onSurfaceVariant
+          : administrationHealthColor(context, finding.status),
+      size: 22,
+    ),
+    title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+    subtitle: Text(
+      _summary(title, finding),
+      style: Theme.of(context).textTheme.bodySmall,
+    ),
+    trailing: const Icon(Icons.chevron_right, size: 20),
+    onTap: onTap,
+  );
+
+  Widget _observation(
+    BuildContext context,
+    AdministrationHealthFinding finding,
+  ) => Padding(
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              switch (finding.status) {
+                AdministrationHealthStatus.healthy =>
+                  Icons.info_outline,
+                AdministrationHealthStatus.unknown => Icons.help_outline,
+                _ => Icons.error_outline,
+              },
+              color: administrationHealthColor(context, finding.status),
+              size: 22,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                finding.detail,
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
-        trailing: finding.destination == null
-            ? null
-            : const Icon(Icons.chevron_right),
-        onTap: finding.destination == null
-            ? null
-            : () => onOpenDestination(finding.destination!),
-      );
+            ),
+          ],
+        ),
+        if (finding.checkedAt case final at?) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Checked ${TimeOfDay.fromDateTime(at).format(context)}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ],
+    ),
+  );
+
+  Future<void> _detail(
+    BuildContext context,
+    String title,
+    AdministrationHealthFinding? finding,
+  ) => adminPush(
+    context,
+    AdminPage(
+      title: title,
+      scope: profile!.label,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (finding != null)
+            AdminGroup(children: [_observation(context, finding)])
+          else
+            const AdminNotice(
+              'Not checked. Return to Health and check this profile.',
+            ),
+          const SizedBox(height: 16),
+          if (finding?.destination case final destination?)
+            AdminGroup(
+              children: [
+                AdminRow(
+                  title: switch (title) {
+                    'Model' => 'Models and reasoning',
+                    'Tools' => 'Skills and tools',
+                    'Connectors' => 'Manage connectors',
+                    _ => 'Manage scheduled tasks',
+                  },
+                  subtitle: 'Review configuration',
+                  icon: Icons.tune,
+                  onTap: () => title == 'Connectors'
+                      ? adminPush(
+                          context,
+                          AdminConnectorsPage(profile: profile!),
+                        )
+                      : onOpenDestination(destination),
+                ),
+              ],
+            ),
+        ],
+      ),
+    ),
+  );
+
+  Future<void> _access(
+    BuildContext context,
+    List<AdministrationHealthFinding> findings,
+  ) => adminPush(
+    context,
+    AdminPage(
+      title: 'Provider access',
+      scope: profile!.label,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          AdminGroup(
+            children: [
+              for (final finding in findings.where(
+                (f) => f.title != 'Access checks',
+              ))
+                _observation(context, finding),
+              AdminRow(
+                title: 'Manage provider access',
+                subtitle: 'Accounts and credentials',
+                icon: Icons.key_outlined,
+                onTap: () => adminPush(
+                  context,
+                  AdminProvidersPage(profile: profile!, shared: false),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (accessChecks != null && onConnections != null)
+            ProfileDiagnosticsPanel(
+              controller: accessChecks!,
+              onManageConnections: onConnections!,
+              onReviewProviderAccess: () => adminPush(
+                context,
+                AdminProvidersPage(profile: profile!, shared: false),
+              ),
+              onReviewConnectors: () =>
+                  adminPush(context, AdminConnectorsPage(profile: profile!)),
+            ),
+        ],
+      ),
+    ),
+  );
 }
 
 class AdminUsagePage extends StatefulWidget {
@@ -271,13 +439,48 @@ class _AdminUsagePageState extends State<AdminUsagePage> {
               return ListView(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 children: [
-                  Text(
-                    'Model usage',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const AdminNotice(
-                    'Hermes usage estimates. These are not provider invoices.',
-                  ),
+                  if (models.isNotEmpty) ...[
+                    AdminGroup(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                known.length == models.length
+                                    ? 'Estimated cost'
+                                    : 'Reported cost',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                number(
+                                  context,
+                                  known.isEmpty ? null : total,
+                                  money: true,
+                                ),
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.headlineSmall,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${models.length} models · Last $_days ${_days == 1 ? 'day' : 'days'}',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Hermes estimates, not provider invoices.${known.length < models.length ? ' Costs available for ${known.length} of ${models.length} models.' : ''}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                   StudioSelect<String>(
                     value: _sort,
                     label: 'Sort models',
@@ -295,12 +498,6 @@ class _AdminUsagePageState extends State<AdminUsagePage> {
                     const AdminNotice(
                       'No recorded model usage in this period.',
                     ),
-                  if (models.isNotEmpty)
-                    Text(
-                      'Cost bars compare ${known.length} of ${models.length} models with reported costs. Total reported: ${number(context, total, money: true)}.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  const SizedBox(height: 12),
                   AdminGroup(
                     children: [
                       for (final model in models)
@@ -325,9 +522,7 @@ class _AdminUsagePageState extends State<AdminUsagePage> {
                                 Text(
                                   '${number(context, model['api_calls'])} calls · ${number(context, model['estimated_cost'], money: true)}',
                                 ),
-                                Text(
-                                  '${number(context, model['input_tokens'])} in · ${number(context, model['output_tokens'])} out tokens',
-                                ),
+
                                 if (valid(model['estimated_cost']) &&
                                     total > 0 &&
                                     total.isFinite) ...[

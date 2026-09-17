@@ -28,6 +28,8 @@ class _Fixture {
   _Fixture(this.status);
   final String status;
   final requests = <String>[];
+  final scopedRequests = <(String, String, Map<String, String>)>[];
+  final explicitCalls = <String>[];
   final base = AdministrationFixture('Claw');
   late ProfileWorkspaceController workspace;
   late AdministrationRepository repository;
@@ -55,7 +57,10 @@ class _Fixture {
         return ProfileGateway(
           scope: scope,
           get: source.read,
-          rpc: source.call,
+          rpc: (method, params) {
+            explicitCalls.add('$method ${scope.profileName}');
+            return source.call(method, params);
+          },
           discover: () async => discovery,
         );
       },
@@ -71,6 +76,7 @@ class _Fixture {
       Map<String, dynamic>? body,
     ) async {
       requests.add('$method $path');
+      scopedRequests.add((method, path, Map.of(query)));
       if (method != 'GET') throw StateError('Unexpected write: $path');
       if (status == 'unknown' && path == 'tools/toolsets') {
         throw StateError('Unavailable');
@@ -198,6 +204,79 @@ void main({
     });
   }
 
+  testWidgets(
+    'Health owns scoped observations; profile check is explicit and read only',
+    (tester) async {
+      final fixture = _Fixture('green');
+      await fixture.initialize();
+      addTearDown(fixture.dispose);
+      fixture.explicitCalls.clear();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: HermesHealthContent(
+              controller: fixture.workspace,
+              repository: fixture.repository,
+              onOpenMenu: () {},
+              onOpenSession: (_) async {},
+              onConnections: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        fixture.requests,
+        containsAll([
+          'GET model/info',
+          'GET providers/oauth',
+          'GET tools/toolsets',
+          'GET mcp/servers',
+          'GET cron/jobs',
+        ]),
+      );
+      expect(
+        fixture.explicitCalls.where((v) => v.startsWith('setup.runtime_check')),
+        isEmpty,
+      );
+      expect(find.text('Not fully checked'), findsNothing);
+      final before = fixture.scopedRequests.length;
+      await fixture.workspace.switchProfile('client-work');
+      await tester.pumpAndSettle();
+      final switched = fixture.scopedRequests
+          .skip(before)
+          .where(
+            (r) => const [
+              'model/info',
+              'providers/oauth',
+              'tools/toolsets',
+              'mcp/servers',
+              'cron/jobs',
+            ].contains(r.$2),
+          );
+      expect(switched, hasLength(5));
+      expect(switched.every((r) => r.$3['profile'] == 'client-work'), isTrue);
+      await tester.ensureVisible(find.text('Check profile'));
+      await tester.tap(find.text('Check profile'));
+      await tester.pumpAndSettle();
+      expect(
+        fixture.explicitCalls.where(
+          (v) => v == 'setup.runtime_check client-work',
+        ),
+        hasLength(1),
+      );
+      expect(
+        fixture.requests.where(
+          (v) => v.startsWith('POST') || v.contains('ops/'),
+        ),
+        isEmpty,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
   for (final brightness in Brightness.values) {
     for (final status in ['green', 'amber', 'red', 'unknown']) {
       for (final large in [false, if (status == 'amber') true]) {
@@ -229,6 +308,7 @@ void main({
                   ),
                   home: Scaffold(
                     key: scaffold,
+                    appBar: AppBar(title: const Text('Hermes health')),
                     drawer: const Drawer(child: Text('Navigation')),
                     body: HermesHealthContent(
                       controller: fixture.workspace,
@@ -243,7 +323,16 @@ void main({
             );
             await tester.pumpAndSettle();
             expect(find.byType(HermesHealthContent), findsOneWidget);
-            expect(find.text('Selected profile'), findsAtLeastNWidgets(1));
+            expect(find.text('Server'), findsOneWidget);
+            expect(
+              fixture.requests,
+              containsAll([
+                'GET model/info',
+                'GET providers/oauth',
+                'GET tools/toolsets',
+                'GET mcp/servers',
+              ]),
+            );
             expect(find.byType(TabBar), findsNothing);
             final name =
                 '$status-${brightness.name}-${large ? 'large' : 'phone'}';
@@ -258,11 +347,36 @@ void main({
             await tester.drag(vertical, const Offset(0, -700));
             await tester.pumpAndSettle();
             await snapshot(tester, '$name-health-lower');
-            if (!large) {
-              expect(
-                find.byKey(const ValueKey('profile-default')),
-                findsOneWidget,
-              );
+            expect(find.text('Not fully checked'), findsNothing);
+            if (status == 'green' || large) {
+              for (final title in [
+                'Provider access',
+                'Model',
+                'Tools',
+                'Connectors',
+                'Scheduled tasks',
+              ]) {
+                await tester.drag(vertical, const Offset(0, 3000));
+                await tester.pumpAndSettle();
+                await tester.scrollUntilVisible(
+                  find.text(title),
+                  200,
+                  scrollable: vertical,
+                );
+                await tester.pumpAndSettle();
+                await tester.tap(find.text(title));
+                await tester.pumpAndSettle();
+                await snapshot(tester, '$name-detail-$title');
+                await tester.drag(
+                  find.byType(Scrollable).first,
+                  const Offset(0, -450),
+                );
+                await tester.pumpAndSettle();
+                await snapshot(tester, '$name-detail-$title-lower');
+                expect(tester.takeException(), isNull);
+                await tester.pageBack();
+                await tester.pumpAndSettle();
+              }
             }
             expect(
               fixture.requests.where(

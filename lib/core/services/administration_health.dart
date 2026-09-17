@@ -176,17 +176,18 @@ class AdministrationHealth extends ChangeNotifier {
     String? destination,
   }) {
     final stale = isStale(at);
-    final unknown = stale || loading || error != null;
+    final unknown = at == null || error != null;
     return AdministrationHealthFinding(
       title: title,
-      detail:
-          '$detail${loading
-              ? ' · Refreshing'
-              : error != null
-              ? ' · Refresh unavailable'
-              : stale && at != null
-              ? ' · Stale observation'
-              : ''}',
+      detail: at == null && loading
+          ? 'Checking…'
+          : at == null && error != null
+          ? 'Couldn’t check ${title.toLowerCase()}'
+          : '$detail${loading
+                ? ' · Refreshing'
+                : error != null
+                ? ' · Refresh unavailable'
+                : ''}',
       status: unknown && status == AdministrationHealthStatus.healthy
           ? AdministrationHealthStatus.unknown
           : status,
@@ -231,7 +232,7 @@ class AdministrationHealth extends ChangeNotifier {
             ? AdministrationHealthStatus.warning
             : AdministrationHealthStatus.unknown,
         configured == true
-            ? 'Provider configuration detected; no model request'
+            ? 'Provider configuration detected'
             : configured == false
             ? 'No provider configuration detected'
             : 'Provider configuration has not been established',
@@ -354,7 +355,7 @@ class AdministrationHealth extends ChangeNotifier {
     }
     return (
       AdministrationHealthStatus.healthy,
-      'Listed provider sign-ins observed; no model request',
+      'No expired sign-ins reported',
     );
   }
 
@@ -408,7 +409,7 @@ class AdministrationHealth extends ChangeNotifier {
     }
     return (
       AdministrationHealthStatus.healthy,
-      '${rows.length} connector settings observed; connections not checked',
+      '${rows.length} configured · Connections not tested',
     );
   }
 
@@ -511,16 +512,6 @@ class AdministrationHealth extends ChangeNotifier {
     if (_disposed) return;
     _expiry?.cancel();
     final futureExpiries = [
-      for (final value
-          in _overview?.observations.values ?? <AdministrationObservation>[])
-        if (value.checkedAt != null) value.checkedAt!.add(maxAge),
-      if (_tasks?.checkedAt != null) _tasks!.checkedAt!.add(maxAge),
-      if (_profileChecks?.checkedAt != null)
-        _profileChecks!.checkedAt!.add(maxAge),
-      if (_readiness.checkedAt != null) _readiness.checkedAt!.add(maxAge),
-      if (runtimeCheckedAt != null) runtimeCheckedAt!.add(maxAge),
-      for (final diagnostic in _diagnostics.values)
-        if (diagnostic.checkedAt != null) diagnostic.checkedAt!.add(maxAge),
       ..._providerExpiries(),
     ].where((time) => time.isAfter(_now())).toList()..sort();
     if (futureExpiries.isNotEmpty) {

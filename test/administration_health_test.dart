@@ -95,32 +95,35 @@ void main() {
     },
   );
 
-  test('missing, malformed and refreshing data never become green', () async {
-    final source = overview('default');
-    health.selectProfile(source);
-    await health.refreshReadiness();
-    final model = source.observations['model']!;
-    model.data = {};
-    expect(health.status, AdministrationHealthStatus.unknown);
-    model.data = {'provider': 'example', 'model': 'research'};
-    model.loading = true;
-    expect(health.status, AdministrationHealthStatus.unknown);
-    model.loading = false;
-    model.error = 'Offline';
-    expect(health.status, AdministrationHealthStatus.unknown);
-    model.error = null;
-    source.observations['tools']!.data = {
-      'data': [<String, dynamic>{}],
-    };
-    expect(health.status, AdministrationHealthStatus.unknown);
-    source.observations['tools']!.data = {'data': []};
-    source.observations['access']!.data = {
-      'providers': [
-        {'status': {}},
-      ],
-    };
-    expect(health.status, AdministrationHealthStatus.unknown);
-  });
+  test(
+    'missing and malformed observations are unknown; refresh retains prior results',
+    () async {
+      final source = overview('default');
+      health.selectProfile(source);
+      await health.refreshReadiness();
+      final model = source.observations['model']!;
+      model.data = {};
+      expect(health.status, AdministrationHealthStatus.unknown);
+      model.data = {'provider': 'example', 'model': 'research'};
+      model.loading = true;
+      expect(health.status, AdministrationHealthStatus.healthy);
+      model.loading = false;
+      model.error = 'Offline';
+      expect(health.status, AdministrationHealthStatus.unknown);
+      model.error = null;
+      source.observations['tools']!.data = {
+        'data': [<String, dynamic>{}],
+      };
+      expect(health.status, AdministrationHealthStatus.unknown);
+      source.observations['tools']!.data = {'data': []};
+      source.observations['access']!.data = {
+        'providers': [
+          {'status': {}},
+        ],
+      };
+      expect(health.status, AdministrationHealthStatus.unknown);
+    },
+  );
 
   test(
     'configuration does not establish runtime health or provider access',
@@ -186,12 +189,12 @@ void main() {
   );
 
   test(
-    'fresh observations expire and failed readiness retains qualified result',
+    'age alone preserves observations; failed refresh qualifies retained results',
     () async {
       health.selectProfile(overview('default'));
       await health.refreshReadiness();
       now = observedAt.add(const Duration(minutes: 5));
-      expect(health.status, AdministrationHealthStatus.unknown);
+      expect(health.status, AdministrationHealthStatus.healthy);
       expect(health.profileFindings.every((f) => f.stale), isTrue);
       now = observedAt;
       readiness = (_) => Future.error(StateError('Offline'));
