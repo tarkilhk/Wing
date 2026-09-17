@@ -28,6 +28,14 @@ custom ID remains visible; **Advanced → Voice ID** accepts another ID. Other
 providers expose a custom ID when their schema supports it, and can test their
 current default. Backend source and installation remain unchanged.
 
+Provider identity is distinct from speech engine identity: Nous Subscription and
+direct OpenAI both report `tts_provider: openai`, but stock Hermes saves their
+selections as `nous` and `openai` respectively. Match and confirm the managed route
+using `requires_nous_auth`, including when account access is still needed. Both
+routes use `tts.openai.voice`; saving a voice must preserve the selected route.
+Regression fixtures include this shared-engine pair so catalogue ordering cannot
+silently choose the wrong account or turn a confirmed Nous save into an error.
+
 Rapid choices are serialized and coalesced to the latest selection. Play waits
 for confirmation. Unconfirmed writes retain the last confirmed value and require
 Refresh. Leaving the page lets queued saves finish against their captured target.

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix speech provider selection confusing Nous Subscription with direct OpenAI. Confirm the saved provider route independently of its speech engine, and keep Nous voice edits in the OpenAI voice settings used by Hermes.
 - Combine Hermes speech provider and voice selection in one compact screen, with adjacent Play/Stop and a direct App settings link. Keep the sample sentence hidden and show setup only for the selected provider.
 
 - Add an autosaving profile voice picker with Play/Stop for the Wing sample sentence, Edge suggestions, ElevenLabs account voices and advanced custom IDs, using vanilla Hermes APIs.

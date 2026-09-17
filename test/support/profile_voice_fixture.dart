@@ -7,11 +7,13 @@ class ProfileVoiceFixture extends AdministrationFixture {
     configs['personal']!['tts'] = {
       'provider': 'edge',
       'edge': {'voice': 'en-US-AriaNeural', 'speed': 1.2},
+      'openai': {'voice': 'alloy'},
       'elevenlabs': {'voice_id': 'custom-a'},
     };
   }
   Completer<void>? putStarted;
   bool elevenLabsReady = true;
+  bool nousReady = false;
   Completer<Map<String, dynamic>>? audioGate;
   Map<String, dynamic> catalogue = {
     'available': true,
@@ -44,14 +46,45 @@ class ProfileVoiceFixture extends AdministrationFixture {
           setSetting(
             configs[query['profile']]!,
             'tts.provider',
-            body!['provider'] == 'Edge' ? 'edge' : 'elevenlabs',
+            switch (body!['provider']) {
+              'Edge' => 'edge',
+              'Nous Subscription' => 'nous',
+              'OpenAI TTS' => 'openai',
+              'ElevenLabs' => 'elevenlabs',
+              _ => throw StateError('Unknown provider'),
+            },
           );
         }
-        return {'ok': true};
+        return {
+          'ok': true,
+          'provider': body!['provider'],
+          if (body['provider'] == 'Nous Subscription' && !nousReady)
+            'needs_nous_auth': true,
+        };
       }
       return {
         'providers': [
           {'name': 'Edge', 'tts_provider': 'edge', 'status': 'ready'},
+          // Stock Hermes exposes two routes for the same OpenAI engine.
+          {
+            'name': 'Nous Subscription',
+            'tts_provider': 'openai',
+            'requires_nous_auth': true,
+            'status': nousReady ? 'ready' : 'needs_auth',
+          },
+          {
+            'name': 'OpenAI TTS',
+            'tts_provider': 'openai',
+            'requires_nous_auth': false,
+            'status': 'ready',
+            'env_vars': [
+              {
+                'key': 'VOICE_TOOLS_OPENAI_KEY',
+                'prompt': 'OpenAI API key',
+                'is_set': true,
+              },
+            ],
+          },
           {
             'name': 'ElevenLabs',
             'tts_provider': 'elevenlabs',
@@ -78,6 +111,7 @@ class ProfileVoiceFixture extends AdministrationFixture {
         'config/schema' => {
           'fields': {
             'tts.edge.voice': {'type': 'string'},
+            'tts.openai.voice': {'type': 'string'},
             'tts.elevenlabs.voice_id': {'type': 'string'},
           },
         },

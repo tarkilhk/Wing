@@ -355,6 +355,80 @@ void main() {
     );
   });
 
+  for (final name in ['Nous Subscription', 'OpenAI TTS']) {
+    testWidgets('$name selection keeps its own provider identity', (
+      tester,
+    ) async {
+      final f = ProfileVoiceFixture();
+      final device = VoiceDeviceFixture();
+      addTearDown(device.stream.close);
+      await show(tester, f, device);
+      await tester.tap(find.text('Edge'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(name).last);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Provider selection could not be confirmed'),
+        findsNothing,
+      );
+      expect(
+        tester
+            .widget<StudioSelect<String>>(find.byType(StudioSelect<String>))
+            .value,
+        name,
+      );
+      if (name == 'Nous Subscription') {
+        expect(
+          find.text('Sign in to this provider on Hermes, then refresh.'),
+          findsOneWidget,
+        );
+      } else {
+        expect(find.text('alloy'), findsOneWidget);
+      }
+      await tester.tap(find.byTooltip('Refresh speech settings'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<StudioSelect<String>>(find.byType(StudioSelect<String>))
+            .value,
+        name,
+      );
+    });
+  }
+
+  testWidgets(
+    'ready Nous keeps its identity and OpenAI voice after reopening',
+    (tester) async {
+      final f = ProfileVoiceFixture()..nousReady = true;
+      setSetting(f.configs['personal']!, 'tts.provider', 'nous');
+      final device = VoiceDeviceFixture();
+      addTearDown(device.stream.close);
+      await show(tester, f, device);
+      expect(
+        tester
+            .widget<StudioSelect<String>>(find.byType(StudioSelect<String>))
+            .value,
+        'Nous Subscription',
+      );
+      expect(find.text('alloy'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Play'))
+            .onPressed,
+        isNotNull,
+      );
+      await tester.pumpWidget(const SizedBox());
+      await show(tester, f, device);
+      expect(
+        tester
+            .widget<StudioSelect<String>>(find.byType(StudioSelect<String>))
+            .value,
+        'Nous Subscription',
+      );
+      expect(find.text('alloy'), findsOneWidget);
+    },
+  );
+
   testWidgets('missing credentials show setup before voice controls', (
     tester,
   ) async {

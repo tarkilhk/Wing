@@ -1,6 +1,11 @@
 import 'administration_repository.dart';
 import 'hermes_voice.dart';
 
+/// Stock Hermes exposes the engine in tts_provider, but persists managed
+/// subscription selections as "nous". Engine identity is not route identity.
+String? speechProviderRoute(Map<String, dynamic> row) =>
+    row['requires_nous_auth'] == true ? 'nous' : row['tts_provider'] as String?;
+
 class ProfileVoiceChoice {
   final String id;
   final String name;
@@ -40,8 +45,10 @@ class ProfileVoiceRepository {
     if (provider is! String || provider.isEmpty || schema is! Map) {
       throw const FormatException('Missing speech settings');
     }
+    // Nous uses OpenAI's voice configuration while retaining its managed route.
+    final voiceProvider = provider == 'nous' ? 'openai' : provider;
     for (final suffix in ['voice', 'voice_id']) {
-      final key = 'tts.$provider.$suffix';
+      final key = 'tts.$voiceProvider.$suffix';
       if (schema.containsKey(key)) {
         final value = setting(config, key);
         if (value != null && value is! String) {

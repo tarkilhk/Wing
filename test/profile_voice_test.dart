@@ -12,6 +12,31 @@ void main() {
         ProfileVoiceRepository(f.server.profile('personal')),
       );
 
+  test(
+    'Nous retains its route while reading and saving OpenAI voice settings',
+    () async {
+      final f = ProfileVoiceFixture();
+      setSetting(f.configs['personal']!, 'tts.provider', 'nous');
+      final c = controller(f);
+      await c.load();
+      expect(c.settings!.provider, 'nous');
+      expect(c.settings!.key, 'tts.openai.voice');
+      expect(c.settings!.voice, 'alloy');
+      await c.select('nova');
+      expect(c.error, isNull);
+      expect(setting(f.configs['personal']!, 'tts.provider'), 'nous');
+      expect(setting(f.configs['personal']!, 'tts.openai.voice'), 'nova');
+      expect(setting(f.configs['personal']!, 'tts.nous'), isNull);
+      // A direct OpenAI selection must invalidate a sample prepared for Nous.
+      setSetting(f.configs['personal']!, 'tts.provider', 'openai');
+      await expectLater(
+        c.repository.verify(c.settings!),
+        throwsA(isA<AdministrationFailure>()),
+      );
+      c.dispose();
+    },
+  );
+
   test('rapid choices serialize writes and newest selection wins', () async {
     final f = ProfileVoiceFixture()
       ..writeGate = Completer()

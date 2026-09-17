@@ -42,7 +42,7 @@ class _AdminSpeechSynthesisPageState extends State<AdminSpeechSynthesisPage>
   String? _error;
   static const _base = 'tools/toolsets/tts';
   Map<String, dynamic>? get _provider => _providers
-      .where((row) => row['tts_provider'] == _voices.settings?.provider)
+      .where((row) => speechProviderRoute(row) == _voices.settings?.provider)
       .firstOrNull;
 
   @override
@@ -154,7 +154,7 @@ class _AdminSpeechSynthesisPageState extends State<AdminSpeechSynthesisPage>
       await _profile.write('PUT', '$_base/provider', {'provider': name});
       await _read();
       if (!_confirmed ||
-          _voices.settings?.provider != provider['tts_provider']) {
+          _voices.settings?.provider != speechProviderRoute(provider)) {
         throw const AdministrationFailure(
           'Provider selection could not be confirmed. Refresh to continue.',
         );
