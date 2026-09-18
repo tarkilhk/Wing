@@ -20,6 +20,9 @@ class _UsageDashboardState extends State<UsageDashboard> {
   final _cache = <int, UsageAnalyticsResult>{};
   final _pending = <int>{};
   final _modelColors = <String, int>{};
+  UsageDaily? _year;
+  String? _yearError;
+  bool _yearLoading = false;
   int _days = 7;
   String? _selected;
   bool _breakdownModels = false;
@@ -32,7 +35,33 @@ class _UsageDashboardState extends State<UsageDashboard> {
   void initState() {
     super.initState();
     _reader = UsageAnalyticsReader(widget.profile);
+    _loadYear();
     _load();
+  }
+
+  Future<void> _loadYear({bool refresh = false}) async {
+    setState(() => _yearLoading = true);
+    try {
+      final year = await _reader.loadYear(refresh: refresh);
+      if (!mounted) return;
+      setState(() {
+        _year = year;
+        _yearError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(
+        () => _yearError = _year == null
+            ? 'Could not load the activity year. Use Refresh to retry.'
+            : 'Could not refresh the activity year. Showing retained activity; use Refresh to retry.',
+      );
+    } finally {
+      if (mounted) setState(() => _yearLoading = false);
+    }
+  }
+
+  Future<void> _refresh() async {
+    await Future.wait([_loadYear(refresh: true), _load()]);
   }
 
   Future<void> _load() async {
@@ -60,6 +89,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
     setState(() {
       _days = days;
       _selected = null;
+      Tooltip.dismissAllToolTips();
     });
     if (!_cache.containsKey(days)) _load();
   }
@@ -78,8 +108,8 @@ class _UsageDashboardState extends State<UsageDashboard> {
     final models = data?.models;
     final daily = data?.daily;
     final summary = models?.costs;
-    final loading = _pending.contains(_days);
-    final selected = daily?.days.where((d) => d.id == _selected).firstOrNull;
+    final loading = _pending.contains(_days) || _yearLoading;
+    final selected = _year?.days.where((d) => d.id == _selected).firstOrNull;
     final costTitle = summary?.isMixed == true
         ? 'Estimated usage value'
         : summary?.hasSubscription == true
@@ -161,21 +191,40 @@ class _UsageDashboardState extends State<UsageDashboard> {
             },
           ),
           const SizedBox(height: 24),
-          Text('Usage by day', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          if (daily != null)
-            UsageCalendar(
-              daily: daily,
-              selected: _selected,
-              onSelected: (day) => setState(
-                () => _selected = _selected == day.id ? null : day.id,
-              ),
-            )
-          else
-            _quiet(
-              'Daily usage unavailable. Period totals may still be available.',
+        ],
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          children: [
+            Text(
+              'Usage by day',
+              style: Theme.of(context).textTheme.titleMedium,
             ),
-          const SizedBox(height: 20),
+            _quiet('${_days}D selected'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_yearError != null) AdminNotice.error(_yearError!),
+        if (_year != null)
+          UsageCalendar(
+            daily: _year!,
+            rangeStart:
+                daily?.days.first.date ??
+                _year!.days.last.date.subtract(Duration(days: _days)),
+            rangeEnd: daily?.days.last.date ?? _year!.days.last.date,
+            selected: _selected,
+            onSelected: (day) =>
+                setState(() => _selected = _selected == day.id ? null : day.id),
+          )
+        else
+          _quiet(
+            _yearLoading
+                ? 'Loading activity year…'
+                : 'Activity year unavailable. Period totals may still be available.',
+          ),
+        const SizedBox(height: 20),
+        if (data != null) ...[
           _ChartHeader(
             section: 'Breakdown',
             models: _breakdownModels,
@@ -198,7 +247,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
               if (selected != null)
                 TextButton(
                   onPressed: () => setState(() => _selected = null),
-                  child: const Text('All days'),
+                  child: const Text('Selected period'),
                 ),
             ],
           ),
@@ -221,7 +270,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
         Align(
           alignment: Alignment.centerRight,
           child: TextButton.icon(
-            onPressed: loading ? null : _load,
+            onPressed: loading ? null : _refresh,
             icon: const Icon(Icons.refresh, size: 18),
             label: Text(loading ? 'Refreshing…' : 'Refresh'),
           ),
@@ -332,18 +381,43 @@ class _UsageDashboardState extends State<UsageDashboard> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        segment.label,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        '${_value(segment.value, _breakdownCost)}${segment.partial ? ' · partial' : ''}',
-                        textAlign: TextAlign.end,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
+                      child: MediaQuery.textScalerOf(context).scale(16) > 24
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  segment.label,
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                                Text(
+                                  '${_value(segment.value, _breakdownCost)}${segment.partial ? ' · partial' : ''}',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ],
+                            )
+                          : Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    segment.label,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    '${_value(segment.value, _breakdownCost)}${segment.partial ? ' · partial' : ''}',
+                                    textAlign: TextAlign.end,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                  ),
+                                ),
+                              ],
+                            ),
                     ),
                     if (segment.onTap != null)
                       const Padding(
@@ -394,6 +468,10 @@ class _UsageDashboardState extends State<UsageDashboard> {
     children: [
       _quiet(
         'Daily charts group accumulated session tokens by UTC session-start date, not the date of each request. The first and last date can be partial days.',
+      ),
+      const SizedBox(height: 8),
+      _quiet(
+        'The grid keeps the past year visible. The outline marks UTC dates touched by the selected rolling period, including its partial first date. Day tooltips and breakdowns use the year-wide daily counts; the trend and period totals use the selected window.',
       ),
       const SizedBox(height: 8),
       _quiet(

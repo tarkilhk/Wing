@@ -197,9 +197,10 @@ void main() {
     expect(find.text('USD 5.44'), findsOneWidget);
     expect(find.text('1.4M'), findsOneWidget);
     expect(find.text('Breakdown per token type'), findsOneWidget);
+    await reveal(tester, find.byType(UsageAreaChart));
     expect(find.text('Trend per token type'), findsOneWidget);
     expect(find.byType(UsageAreaChart), findsOneWidget);
-    expect(fixture.requests.length, 2);
+    expect(fixture.requests.length, 3);
     expect(find.text('Cached input'), findsWidgets);
     final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
     await tap(tester, find.byKey(ValueKey('usage-day-$today')));
@@ -222,9 +223,10 @@ void main() {
     expect(find.text('12.0K'), findsOneWidget);
     await tap(tester, find.byKey(const ValueKey('usage-trend-group')));
     await tap(tester, find.text('Show token trend'));
+    await reveal(tester, find.byType(UsageAreaChart));
     expect(find.byType(UsageAreaChart), findsOneWidget);
-    expect(fixture.requests.length, 2);
-    await tap(tester, find.text('All days'));
+    expect(fixture.requests.length, 3);
+    await tap(tester, find.text('Selected period'));
     expect(find.text('300K'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -243,7 +245,7 @@ void main() {
     await tap(tester, find.text('7D'));
     expect(fixture.requests.length, 4);
     await tap(tester, find.text('365D'));
-    await tap(tester, find.byTooltip('Earlier dates'));
+    expect(find.byTooltip('Earlier dates'), findsNothing);
     expect(fixture.requests.length, 4);
     expect(tester.takeException(), isNull);
   });
@@ -360,7 +362,7 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     pending.completeError(StateError('Offline'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Could not load'), findsOneWidget);
+    expect(find.textContaining('Could not load'), findsWidgets);
     expect(find.text('No recorded model usage in this period.'), findsNothing);
     fixture.override = (_, path, _, _) async =>
         path == 'analytics/models' ? {'models': []} : {'daily': []};
@@ -394,8 +396,43 @@ void main() {
     expect(find.text('USD 30.00'), findsNothing);
     await tap(tester, find.text('30D'));
     expect(find.text('USD 30.00'), findsOneWidget);
-    expect(fixture.requests.length, 4);
+    expect(fixture.requests.length, 5);
   });
+
+  testWidgets(
+    'older day selects year counts without changing period or refetching',
+    (tester) async {
+      final date = DateTime.now().toUtc().subtract(const Duration(days: 100));
+      final id = date.toIso8601String().substring(0, 10);
+      fixture.override = (_, path, query, _) async {
+        if (path == 'analytics/models') {
+          return {
+            'models': [_astra()],
+          };
+        }
+        return {
+          'daily': [
+            if (query['days'] == '365')
+              {
+                'day': id,
+                'input_tokens': 123,
+                'cache_read_tokens': 456,
+                'output_tokens': 789,
+              },
+          ],
+        };
+      };
+      await show(tester);
+      await tap(tester, find.byKey(ValueKey('usage-day-$id')));
+      await reveal(tester, find.text('123'));
+      expect(find.text('456'), findsOneWidget);
+      expect(find.text('789'), findsOneWidget);
+      expect(find.text('Selected period'), findsOneWidget);
+      expect(fixture.requests.length, 3);
+      await tap(tester, find.text('Selected period'));
+      expect(find.text('Last 7 days · all models'), findsOneWidget);
+    },
+  );
 
   testWidgets('failed browser launch leaves a copyable source', (tester) async {
     browser.opens = false;
@@ -428,7 +465,7 @@ void main() {
         final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
         await tap(tester, find.byKey(ValueKey('usage-day-$today')));
         await snapshot(tester, '${brightness.name}-$scale-day-tooltip');
-        await tap(tester, find.text('All days'));
+        await tap(tester, find.text('Selected period'));
         await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
         await tap(tester, find.text('gpt-6-astra'));
         await reveal(tester, find.text('Uncached input').last);

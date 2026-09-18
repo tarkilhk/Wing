@@ -14,7 +14,7 @@ void main() {
             {'day': '2026-09-18', 'input_tokens': 10, 'output_tokens': 20},
           ],
         },
-        period: 1,
+        period: 365,
         loadedAt: DateTime.utc(2026, 9, 18),
       );
       final selected = <String>[];
@@ -24,6 +24,8 @@ void main() {
           home: Scaffold(
             body: UsageCalendar(
               daily: daily,
+              rangeStart: daily.days.first.date,
+              rangeEnd: daily.days.last.date,
               selected: null,
               onSelected: (day) => selected.add(day.id),
             ),
@@ -54,22 +56,23 @@ void main() {
     },
   );
 
-  // Exercise every possible weekday at both ends of the rolling year.
+  // Preserve the partial UTC boundary and every weekday alignment in both bands.
   for (var weekday = 0; weekday < 7; weekday++) {
-    testWidgets(
-      'responsive year paging preserves all dates, weekday $weekday',
-      (tester) async {
-        tester.view.physicalSize = const Size(1000, 844);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.reset);
-        final daily = UsageDaily.fromJson(
-          {'daily': <dynamic>[]},
-          period: 365,
-          loadedAt: DateTime.utc(2026, 9, 13 + weekday),
-        );
-        double width = 358;
-        UsageDay? selected;
-        Future<void> show() => tester.pumpWidget(
+    testWidgets('full year stays fixed across ranges, weekday $weekday', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1000, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final daily = UsageDaily.fromJson(
+        {'daily': <dynamic>[]},
+        period: 365,
+        loadedAt: DateTime.utc(2026, 9, 13 + weekday),
+      );
+      var width = 358.0, period = 7;
+      UsageDay? selected;
+      Future<void> show() async {
+        await tester.pumpWidget(
           MaterialApp(
             theme: wingTheme(Brightness.dark),
             home: Scaffold(
@@ -79,6 +82,10 @@ void main() {
                   width: width,
                   child: UsageCalendar(
                     daily: daily,
+                    rangeStart: daily.days.last.date.subtract(
+                      Duration(days: period),
+                    ),
+                    rangeEnd: daily.days.last.date,
                     selected: selected?.id,
                     onSelected: (day) => selected = day,
                   ),
@@ -87,73 +94,40 @@ void main() {
             ),
           ),
         );
-        List<String> visible() =>
-            tester
-                .widgetList<InkWell>(find.byType(InkWell))
-                .map((w) => w.key)
-                .whereType<ValueKey<String>>()
-                .map((key) => key.value)
-                .where((value) => value.startsWith('usage-day-'))
-                .map((value) => value.substring('usage-day-'.length))
-                .toList()
-              ..sort();
-        bool enabled(String tooltip) =>
-            tester
-                .widget<IconButton>(
-                  find.widgetWithIcon(
-                    IconButton,
-                    tooltip == 'Earlier dates'
-                        ? Icons.chevron_left
-                        : Icons.chevron_right,
-                  ),
-                )
-                .onPressed !=
-            null;
-        Future<void> page(String tooltip) async {
-          await tester.tap(find.byTooltip(tooltip));
-          await tester.pumpAndSettle();
-        }
+        await tester.pumpAndSettle();
+      }
 
+      Finder day(String id) => find.byKey(ValueKey('usage-day-$id'));
+      await show();
+      expect(find.byTooltip('Earlier dates'), findsNothing);
+      expect(find.byTooltip('Later dates'), findsNothing);
+      expect(daily.days.length, 366);
+      final samples = [daily.days.first, daily.days[180], daily.days.last];
+      expect(tester.widgetList<InkWell>(find.byType(InkWell)).length, 366);
+      final bounds = {for (final d in samples) d.id: tester.getRect(day(d.id))};
+      for (final range in usagePeriods) {
+        period = range;
+        await show();
+        for (final d in samples) {
+          expect(tester.getRect(day(d.id)), bounds[d.id]);
+        }
+      }
+      for (final nextWidth in [288.0, 900.0]) {
+        width = nextWidth;
         await show();
         final grid = find.byKey(const ValueKey('usage-activity-grid'));
         expect(tester.getSize(grid).width, closeTo(width, .01));
-        final latest = visible();
-        expect(latest.length, greaterThan(150));
-        expect(latest.last, daily.days.last.id);
-        expect(enabled('Later dates'), isFalse);
-        final visited = <String>{};
-        while (true) {
-          final dates = visible();
-          expect(visited.intersection(dates.toSet()), isEmpty);
-          visited.addAll(dates);
-          if (!enabled('Earlier dates')) break;
-          await page('Earlier dates');
+        for (final d in samples) {
+          final rect = tester.getRect(day(d.id));
+          expect(rect.left, greaterThanOrEqualTo(0));
+          expect(rect.right, lessThanOrEqualTo(width + .01));
         }
-        expect(visited, daily.days.map((day) => day.id).toSet());
-        while (enabled('Later dates')) {
-          await page('Later dates');
-        }
-        expect(visible(), latest);
-
-        await page('Earlier dates');
-        final lastBeforeResize = visible().last;
-        width = 288;
-        await show();
-        expect(visible().last, lastBeforeResize);
-        expect(tester.getSize(grid).width, closeTo(width, .01));
-        final chosen = visible().first;
-        await tester.tap(find.byKey(ValueKey('usage-day-$chosen')));
-        expect(selected?.id, chosen);
-        // Widen enough to fit the year. Navigation back to today must survive.
-        width = 900;
-        await show();
-        expect(visible().last, lastBeforeResize);
-        expect(enabled('Later dates'), isTrue);
-        await page('Later dates');
-        expect(visible(), daily.days.map((day) => day.id).toList());
-        expect(find.byTooltip('Earlier dates'), findsNothing);
-        expect(tester.takeException(), isNull);
-      },
-    );
+        await tester.tap(day(daily.days.first.id));
+        expect(selected?.id, daily.days.first.id);
+        await tester.tap(day(daily.days.last.id));
+        expect(selected?.id, daily.days.last.id);
+      }
+      expect(tester.takeException(), isNull);
+    });
   }
 }

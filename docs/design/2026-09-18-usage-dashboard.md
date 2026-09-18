@@ -8,15 +8,11 @@ inspect a date or a model without leaving its captured profile/connection.
 ## Implemented layout
 
 - Neutral period buttons; token count and estimated value side by side.
-- Token-intensity calendar, one square per UTC session-start date. The year
-  view fits as many week columns as the available width allows, with arrows
-  for earlier/later weeks and no day slider. Cells stay approximately 12dp
-  with 3dp gaps and no date numerals; the small width remainder is shared
-  across squares on full pages. Longer ranges use seven-row Sunday-aligned
-  week columns; 1D and 7D use a compact strip. Short ranges and the oldest
-  partial page stay compact rather than inventing dates outside the period.
-  Resizing preserves the last visible week; changing the period returns to
-  the latest dates. Paging never makes additional API requests.
+- Full-year token-intensity calendar, one square per UTC session-start date,
+  in two compact Sunday-aligned week bands on phones. One band at widths of
+  at least 720dp. No paging or day slider. Dates and intensity colours remain
+  fixed when changing the range; a contrasting perimeter marks its dates.
+  Preserve the possible 366th partial UTC boundary date from Hermes.
 - Breakdown immediately below the grid, one animated composition bar. Its
   clickable title switches model/token-type grouping; Tokens/Cost stays at the
   top right and is independent from the trend controls.
@@ -39,10 +35,12 @@ dismisses it. Unknown totals explicitly say unavailable.
 ## Data and performance
 
 See the [verified stock data contract](../research/2026-09-18-usage-redesign-data-contract.md).
-There are two parallel aggregate reads for each uncached period. Day selection,
-calendar paging, grouping and measure changes are local. Previously loaded
-periods are reused until Refresh or leaving this screen. Scope changes replace
-the cache; late responses cannot replace another selected period.
+First load uses three parallel aggregate reads: year-wide daily activity plus
+selected-period daily and model totals. The year read is cached independently
+and shared with the 365D trend. Day selection, grouping and measure changes are
+local. Previously loaded periods are reused until Refresh or leaving this
+screen. Scope changes replace the cache; late responses cannot replace another
+selected period.
 
 Daily model history and daily API-equivalent pricing are unavailable. A selected
 day never displays period model totals as if they belonged to that date. Token
@@ -58,7 +56,9 @@ races, errors, pricing links and actual Flutter renders in light/dark themes at
 390dp/100% and 320dp/200%. Existing administration and layout checks exercise
 navigation and large numbers in the new detail sheet.
 `test/usage_calendar_test.dart` checks complete date coverage without duplicates
-for every weekday alignment, full-page width, date selection and resize anchoring.
+for every weekday alignment, full width, date selection and stable geometry
+across range changes. `test/usage_selection_color_test.dart` verifies all ten
+approved accent/theme colours and contrast for extreme inputs.
 
 Render with:
 
@@ -72,3 +72,32 @@ Actual renders are written to `build/usage-review/`. The inspected normal,
 enlarged-text, calendar, trend and source views use Flutter widgets and real
 fonts, not generated artwork. Authenticated analytics latency on the phone has
 not been measured.
+
+## Accepted full-year activity refinement
+
+The owner selected the full-colour year grid and accent-derived contrasting
+outline from `prototype/usage-full-year` (`27da0d5`). The preserved prototype
+is `docs/design/prototypes/usage-accent-gallery-prototype.html` on that branch.
+Main contains the native Flutter implementation, not the HTML prototype.
+
+Always show the rolling year in two compact Sunday-aligned week bands on phones
+(one band when at least 720 dp is available). All dates keep the same year-wide
+intensity scale. The 1D/7D/30D/90D/365D chips only move the period outline;
+no calendar paging or slider remains. The outline crossfades with reduced-motion
+support, includes zero-usage dates, and follows the actual date perimeter.
+Tap any date, including outside the outlined period, for its year-query token
+count and day breakdown. “Selected period” restores the period breakdown.
+
+The outline rotates the active accent's OKLCH hue by 180 degrees, caps chroma
+at 0.12, and finds the closest lightness meeting 4.5:1 against the actual canvas.
+Gamut mapping reduces chroma; contrast is checked after sRGB byte rounding.
+Use a 1.75 dp outline over a 3 dp canvas under-stroke. This keeps activity and
+selection visually distinct without a hand-picked colour palette. Source-colour
+contrast is not a claim about antialiased pixels or the entire UI's accessibility.
+
+The scope-local reader shares and caches one 365-day daily request. The selected
+period's model and daily requests stay independent: a year query's first-day
+count cannot substitute for a shorter rolling window's partial first-day count.
+First load uses three concurrent aggregate reads; the 365D view reuses the year
+read. Refresh retries year and period data, retaining successes on independent
+failures. No per-session scraping or backend changes.

@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import '../../theme/usage_selection_color.dart';
 import '../../models/usage_analytics.dart';
 import '../../theme/wing_theme.dart';
 
@@ -101,11 +103,15 @@ class UsageComposition extends StatelessWidget {
 
 class UsageCalendar extends StatefulWidget {
   final UsageDaily daily;
+  final DateTime rangeStart;
+  final DateTime rangeEnd;
   final String? selected;
   final ValueChanged<UsageDay> onSelected;
   const UsageCalendar({
     super.key,
     required this.daily,
+    required this.rangeStart,
+    required this.rangeEnd,
     required this.selected,
     required this.onSelected,
   });
@@ -114,56 +120,52 @@ class UsageCalendar extends StatefulWidget {
 }
 
 class _UsageCalendarState extends State<UsageCalendar> {
-  // Anchor the last visible week so resizing does not jump to another date.
-  int _weeksBack = 0;
+  Color? _accent, _canvas;
+  late Color _outline;
 
   @override
   void didUpdateWidget(UsageCalendar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.daily.days.first.date != widget.daily.days.first.date ||
-        oldWidget.daily.days.length != widget.daily.days.length) {
-      _weeksBack = 0;
+    if (oldWidget.rangeStart != widget.rangeStart ||
+        oldWidget.rangeEnd != widget.rangeEnd) {
+      Tooltip.dismissAllToolTips();
     }
   }
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => _calendar(context, constraints.maxWidth),
-  );
+  Widget build(BuildContext context) {
+    final tokens = WingTokens.of(context);
+    final canvas = Theme.of(context).scaffoldBackgroundColor;
+    if (_accent != tokens.accent || _canvas != canvas) {
+      _accent = tokens.accent;
+      _canvas = canvas;
+      _outline = usageSelectionColor(tokens.accent, canvas);
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) =>
+          _calendar(context, constraints.maxWidth),
+    );
+  }
 
   Widget _calendar(BuildContext context, double width) {
-    final all = widget.daily.days;
-    const gap = 3.0;
-    const minimumSquare = 12.0;
-    final capacity = math.max(
-      1,
-      ((width + gap) / (minimumSquare + gap)).floor(),
-    );
-    final weekly = all.length > 8;
-    final firstOffset = weekly ? all.first.date.weekday % 7 : 0;
-    final totalWeeks = ((all.length + firstOffset) / 7).ceil();
-    final endWeek = totalWeeks - _weeksBack;
-    final startWeek = math.max(0, endWeek - capacity);
-    // Page in complete week columns, clipping only the range's boundary dates.
-    final start = weekly ? math.max(0, startWeek * 7 - firstOffset) : 0;
-    final end = weekly
-        ? math.min(all.length, endWeek * 7 - firstOffset)
-        : all.length;
-    final days = all.sublist(start, end);
-    final maximum = all.fold<int>(
+    final days = widget.daily.days;
+    const gap = 3.0, inset = 3.0;
+    final offset = days.first.date.weekday % 7;
+    final weeks = ((days.length + offset) / 7).ceil();
+    final bands = width >= 720 || weeks <= 27 ? 1 : 2;
+    final columns = (weeks / bands).ceil();
+    final pitch = (width - inset * 2 + gap) / columns;
+    final square = pitch - gap;
+    final maximum = days.fold<int>(
       0,
       (m, d) => math.max(m, d.tokens.total ?? 0),
     );
     final tokens = WingTokens.of(context);
     final locale = MaterialLocalizations.of(context);
-    // Fit more weeks, not oversized squares or gaps. Share the sub-cell
-    // remainder across columns when the range is long enough to fill a page.
-    final square = weekly && totalWeeks >= capacity
-        ? (width + gap) / capacity - gap
-        : minimumSquare;
-    final pitch = square + gap;
-    final offset = weekly ? days.first.date.weekday % 7 : 0;
-    final columns = weekly ? ((days.length + offset) / 7).ceil() : days.length;
+    bool inRange(UsageDay day) =>
+        !day.date.isBefore(widget.rangeStart) &&
+        !day.date.isAfter(widget.rangeEnd);
+
     Widget cell(UsageDay day) {
       final count = day.tokens.total;
       final selected = day.id == widget.selected;
@@ -176,11 +178,10 @@ class _UsageCalendarState extends State<UsageCalendar> {
               tokens.accent,
               .25 + .75 * math.sqrt(count / math.max(maximum, 1)),
             )!;
-      final label =
-          '${locale.formatFullDate(day.date)}: ${count == null ? 'tokens unavailable' : '${locale.formatDecimal(count)} tokens'}';
       return Semantics(
         key: ValueKey(day.id),
-        label: label,
+        label:
+            '${locale.formatFullDate(day.date)}: ${count == null ? 'tokens unavailable' : '${locale.formatDecimal(count)} tokens'}${inRange(day) ? ', in selected period' : ''}',
         button: true,
         selected: selected,
         child: Tooltip(
@@ -196,7 +197,7 @@ class _UsageCalendarState extends State<UsageCalendar> {
               color: Colors.transparent,
               child: InkWell(
                 key: ValueKey('usage-day-${day.id}'),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(2),
                 onTap: () {
                   Tooltip.dismissAllToolTips();
                   tooltipContext
@@ -220,7 +221,7 @@ class _UsageCalendarState extends State<UsageCalendar> {
                     child: count == null
                         ? Icon(
                             Icons.question_mark,
-                            size: 9,
+                            size: math.min(square, 9),
                             color: tokens.muted,
                           )
                         : null,
@@ -233,70 +234,103 @@ class _UsageCalendarState extends State<UsageCalendar> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                '${locale.formatShortDate(days.first.date)} – ${locale.formatShortDate(days.last.date)}',
-                style: Theme.of(context).textTheme.bodySmall,
+    Widget band(int index) {
+      final startWeek = index * columns;
+      final first = math.max(0, startWeek * 7 - offset);
+      final end = math.min(days.length, (startWeek + columns) * 7 - offset);
+      final selectedCells = <int>{};
+      for (var i = first; i < end; i++) {
+        if (inRange(days[i])) selectedCells.add(i + offset - startWeek * 7);
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            spacing: 12,
+            children: [
+              Text(
+                locale.formatMonthYear(days[first].date),
+                style: Theme.of(context).textTheme.labelSmall,
               ),
-            ),
-            if (weekly && (totalWeeks > capacity || _weeksBack > 0)) ...[
-              IconButton(
-                tooltip: 'Earlier dates',
-                onPressed: startWeek > 0
-                    ? () => setState(() => _weeksBack += capacity)
-                    : null,
-                icon: const Icon(Icons.chevron_left),
-              ),
-              IconButton(
-                tooltip: 'Later dates',
-                onPressed: _weeksBack > 0
-                    ? () => setState(
-                        () => _weeksBack = math.max(0, _weeksBack - capacity),
-                      )
-                    : null,
-                icon: const Icon(Icons.chevron_right),
+              Text(
+                locale.formatMonthYear(days[end - 1].date),
+                style: Theme.of(context).textTheme.labelSmall,
               ),
             ],
-          ],
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: SizedBox(
-            key: const ValueKey('usage-activity-grid'),
-            width: columns * pitch - gap,
-            height: (weekly ? 7 : 1) * pitch - gap,
-            child: Column(
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            key: ValueKey('usage-year-band-$index'),
+            height: 7 * pitch - gap + inset * 2,
+            child: Stack(
               children: [
-                for (var row = 0; row < (weekly ? 7 : 1); row++)
-                  SizedBox(
-                    height: row == (weekly ? 6 : 0) ? square : pitch,
-                    child: Row(
-                      children: [
-                        for (var col = 0; col < columns; col++)
-                          SizedBox(
-                            width: col == columns - 1 ? square : pitch,
-                            child:
-                                (weekly ? col * 7 + row - offset : col) >= 0 &&
-                                    (weekly ? col * 7 + row - offset : col) <
-                                        days.length
-                                ? cell(
-                                    days[weekly ? col * 7 + row - offset : col],
-                                  )
-                                : null,
+                Padding(
+                  padding: const EdgeInsets.all(inset),
+                  child: Column(
+                    children: [
+                      for (var row = 0; row < 7; row++)
+                        SizedBox(
+                          height: row == 6 ? square : pitch,
+                          child: Row(
+                            children: [
+                              for (var col = 0; col < columns; col++)
+                                SizedBox(
+                                  width: col == columns - 1 ? square : pitch,
+                                  child:
+                                      (startWeek + col) * 7 + row - offset >=
+                                              0 &&
+                                          (startWeek + col) * 7 + row - offset <
+                                              days.length
+                                      ? cell(
+                                          days[(startWeek + col) * 7 +
+                                              row -
+                                              offset],
+                                        )
+                                      : null,
+                                ),
+                            ],
                           ),
-                      ],
+                        ),
+                    ],
+                  ),
+                ),
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedSwitcher(
+                      duration: _motion(context),
+                      child: CustomPaint(
+                        key: ValueKey(
+                          '${widget.rangeStart}/${widget.rangeEnd}/$index',
+                        ),
+                        size: Size.infinite,
+                        painter: _UsageRangePainter(
+                          selectedCells,
+                          columns,
+                          pitch,
+                          inset,
+                          _outline,
+                          _canvas!,
+                        ),
+                      ),
                     ),
                   ),
+                ),
               ],
             ),
           ),
-        ),
+        ],
+      );
+    }
+
+    return Column(
+      key: const ValueKey('usage-activity-grid'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < bands; i++) ...[
+          if (i > 0) const SizedBox(height: 14),
+          band(i),
+        ],
         const SizedBox(height: 8),
         Wrap(
           alignment: WrapAlignment.spaceBetween,
@@ -304,7 +338,7 @@ class _UsageCalendarState extends State<UsageCalendar> {
           runSpacing: 4,
           children: [
             Text(
-              'Tokens · UTC session-start dates',
+              'Past year · UTC',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             Row(
@@ -335,6 +369,65 @@ class _UsageCalendarState extends State<UsageCalendar> {
       ],
     );
   }
+}
+
+/// Trace only external edges, so adjacent selected dates share one perimeter.
+class _UsageRangePainter extends CustomPainter {
+  final Set<int> cells;
+  final int columns;
+  final double pitch, inset;
+  final Color outline, canvasColor;
+  const _UsageRangePainter(
+    this.cells,
+    this.columns,
+    this.pitch,
+    this.inset,
+    this.outline,
+    this.canvasColor,
+  );
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path();
+    void edge(double x1, double y1, double x2, double y2) {
+      path.moveTo(inset - 1.5 + x1 * pitch, inset - 1.5 + y1 * pitch);
+      path.lineTo(inset - 1.5 + x2 * pitch, inset - 1.5 + y2 * pitch);
+    }
+
+    for (final cell in cells) {
+      final col = cell ~/ 7, row = cell % 7;
+      final x = col.toDouble(), y = row.toDouble();
+      if (col == 0 || !cells.contains(cell - 7)) edge(x, y, x, y + 1);
+      if (col == columns - 1 || !cells.contains(cell + 7)) {
+        edge(x + 1, y, x + 1, y + 1);
+      }
+      if (row == 0 || !cells.contains(cell - 1)) edge(x, y, x + 1, y);
+      if (row == 6 || !cells.contains(cell + 1)) edge(x, y + 1, x + 1, y + 1);
+    }
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawPath(
+      path,
+      paint
+        ..color = canvasColor
+        ..strokeWidth = 3,
+    );
+    canvas.drawPath(
+      path,
+      paint
+        ..color = outline
+        ..strokeWidth = 1.75,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_UsageRangePainter old) =>
+      old.pitch != pitch ||
+      old.outline != outline ||
+      old.canvasColor != canvasColor ||
+      old.columns != columns ||
+      !setEquals(old.cells, cells);
 }
 
 class UsageAreaChart extends StatelessWidget {

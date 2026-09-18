@@ -70,15 +70,15 @@ and API-equivalent cost views explain the missing data and offer the supported
 token-type view. Selecting a day keeps its scope when switching controls; it
 never substitutes period-wide model figures for a day's values.
 
-The calendar shows recorded tokens, with width-adaptive week pages for the year
-view and no day slider. Selecting the same date again, or All days, restores the period
-breakdown. Duplicate auxiliary model rows contribute to one model/provider bar
+The calendar now keeps the year visible in compact week bands, with a contrasting
+outline for the period and no paging or day slider. Selecting the same date
+again, or Selected period, restores the period breakdown. Duplicate auxiliary model rows contribute to one model/provider bar
 segment and remain individually inspectable in its detail sheet. Unknown values
 remain unavailable; partial cost bars explicitly exclude unpriced values.
 
 A rolling N-day query can cover N+1 UTC dates. The partial first date is retained.
-Period cache entries live only for the open profile/connection scope; Refresh
-updates both aggregates. Older data survives individual refresh failures with
+Period and year cache entries live only for the open profile/connection scope;
+Refresh updates the year read and both selected-period aggregates. Older data survives individual refresh failures with
 an explicit retained-data notice. Model palette assignments stay stable while
 switching periods. Counts and pricing sources remain accessible from a model.
 
@@ -92,3 +92,14 @@ Sources at the inspected revision:
 - https://github.com/NousResearch/hermes-agent/blob/c62bd9f2078a946108f1c9d9b24bf118963277ef/hermes_state_sessions.py
 - https://github.com/NousResearch/hermes-agent/blob/c62bd9f2078a946108f1c9d9b24bf118963277ef/tui_gateway/contracts/sessions.py
 - https://github.com/NousResearch/hermes-agent/blob/c62bd9f2078a946108f1c9d9b24bf118963277ef/hermes_cli/console_engine.py
+
+
+## Full-year implementation verification
+
+Reverified latest upstream main `01382698fc32ec7740b6a204d9b7a6abeac74d33`
+on 18 September 2026 for the persistent-year grid. The stock
+[analytics router](https://github.com/NousResearch/hermes-agent/blob/01382698fc32ec7740b6a204d9b7a6abeac74d33/hermes_cli/web_routers/analytics.py)
+still bounds days to 1..365 and groups session counters by UTC start date after
+a rolling seconds cutoff. Retain the possible 366th partial boundary date.
+The grid now uses a separately cached 365D read; period trends retain their own
+query. Daily model and API-equivalent cost limitations remain unchanged.

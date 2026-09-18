@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep a full year of Usage activity visible in two compact week bands. Highlight the selected period with a theme-derived contrasting outline while retaining every day's activity colour. Cache year history separately and allow any date to open its token tooltip and breakdown.
+
 - Summarize Security audit findings in Health and show component totals, expandable severity cards, package/advisory/fix details, and a collapsed raw-output view.
 
 - Keep Doctor and Security audit Run actions on Health, and refresh diagnostic status and Doctor issue counts automatically without opening details. Shorten diagnostic confirmations and emphasize the profile name.

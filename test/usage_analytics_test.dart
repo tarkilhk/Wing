@@ -151,4 +151,57 @@ void main() {
       expect(loaded.modelsError, isNull);
     },
   );
+  test(
+    'year read is shared, period boundary counts stay independent, refresh retries',
+    () async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      var offline = false;
+      fixture.override = (_, path, query, _) async {
+        if (path == 'analytics/models') return {'models': []};
+        if (offline && query['days'] == '365') throw StateError('Offline');
+        return {
+          'daily': [
+            {
+              'day': '2026-09-18',
+              'input_tokens': int.parse(query['days']!),
+              'cache_read_tokens': 0,
+              'output_tokens': 0,
+            },
+          ],
+        };
+      };
+      final reader = UsageAnalyticsReader(
+        fixture.server.profile('client-work'),
+        now: () => now,
+      );
+      final year = reader.loadYear();
+      final week = await reader.load(7);
+      expect((await year).days.last.tokens.total, 365);
+      expect(week.daily!.days.last.tokens.total, 7);
+      expect(fixture.requests.length, 3);
+      final full = await reader.load(365);
+      expect(identical(full.daily, await year), isTrue);
+      expect(fixture.requests.length, 4);
+      await reader.load(30);
+      expect(
+        fixture.requests
+            .where((r) => r.$2 == 'analytics/usage' && r.$3['days'] == '365')
+            .length,
+        1,
+      );
+      offline = true;
+      await expectLater(reader.loadYear(refresh: true), throwsStateError);
+      expect((await reader.load(7)).daily, isNotNull);
+      offline = false;
+      expect(
+        (await reader.loadYear(refresh: true)).days.last.tokens.total,
+        365,
+      );
+      expect(
+        fixture.requests.every((r) => r.$3['profile'] == 'client-work'),
+        isTrue,
+      );
+    },
+  );
 }

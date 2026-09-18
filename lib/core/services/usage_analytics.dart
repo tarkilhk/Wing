@@ -34,6 +34,24 @@ class UsageAnalyticsReader {
            (() => rootBundle.loadString('assets/pricing/openai.json')),
        now = now ?? DateTime.now;
 
+  Future<UsageDaily>? _year;
+
+  /// Shared by the persistent calendar and the 365D trend. Period changes do
+  /// not refetch the year; explicit refresh replaces this scope-local cache.
+  Future<UsageDaily> loadYear({bool refresh = false}) {
+    if (refresh || _year == null) _year = _readDaily(365);
+    return _year!;
+  }
+
+  Future<UsageDaily> _readDaily(int days) async {
+    final loadedAt = now().toUtc();
+    return UsageDaily.fromJson(
+      await profile.read('analytics/usage', {'days': '$days'}),
+      period: days,
+      loadedAt: loadedAt,
+    );
+  }
+
   Future<UsageAnalyticsResult> load(int days) async {
     if (!usagePeriods.contains(days)) throw ArgumentError.value(days, 'days');
     final loadedAt = now().toUtc();
@@ -61,11 +79,7 @@ class UsageAnalyticsReader {
       })(),
       (() async {
         try {
-          daily = UsageDaily.fromJson(
-            await profile.read('analytics/usage', {'days': '$days'}),
-            period: days,
-            loadedAt: loadedAt,
-          );
+          daily = await (days == 365 ? loadYear() : _readDaily(days));
         } catch (_) {
           dailyError = 'Could not load daily usage.';
         }
