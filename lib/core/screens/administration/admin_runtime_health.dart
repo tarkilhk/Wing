@@ -64,7 +64,7 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
         controller.server,
         path,
         title,
-        scope,
+        controller.runtimeIdentity?['name'] as String?,
       );
       if (action != null) {
         controller.trackDiagnostic(path, action, generation: generation);

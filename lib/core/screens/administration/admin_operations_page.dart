@@ -189,16 +189,40 @@ Future<AdministrationAction?> startAdminOperation(
   AdministrationRepository server,
   String path,
   String title,
-  String scope,
+  String? profileName,
 ) async {
-  if (!await adminConfirm(
-    context,
-    title,
-    'Run this diagnostic on $scope? The result may include backend log details.',
-    action: 'Run',
-  )) {
-    return null;
-  }
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      scrollable: true,
+      title: Text(title),
+      content: Text.rich(
+        TextSpan(
+          text: profileName == null
+              ? 'Run this diagnostic'
+              : 'Run this diagnostic on profile ',
+          children: [
+            if (profileName != null)
+              TextSpan(
+                text: profileName,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Run'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) return null;
   try {
     final result = await server.write('POST', path);
     return AdministrationAction.fromJson(result);
