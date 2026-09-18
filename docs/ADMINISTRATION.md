@@ -102,7 +102,7 @@ explicit empty/error states.
 | A18–A19 | Recorded skill usage ordering, provenance, complete instructions, edit/archive agent-owned skills | Bundled instructions are read-only. Existing changed content is detected before saving; this is not a server compare-and-swap guarantee. |
 | A20 | Official Hub/search, provenance preview, install, uninstall and group update | Tracks returned background action identity and actual exit status. Install/update acceptance requires an authorized target and actual action result. |
 | A22 | Scoped toolset providers, effective key readiness, model selection, explicit post-setup action | Setup explains host requirements and tracks the returned action. An effective inherited key is not offered as removable from the profile. |
-| A24–A25 | MCP inventory/enablement, cached status, explicit Test, returned tool details and prompt/resource counts, browser OAuth, remove; Update running chats under MCP connectors (all server profiles) | Per-tool edits remain unavailable because the backend replaces the whole map. Missing cached status is not disconnected. OAuth uses the configured server callback. Runtime reload is process-wide. |
+| A24–A25 | MCP inventory/enablement, cached status, explicit Test, returned tool details and prompt/resource counts, browser OAuth, remove; Reconnect MCP tools under MCP connectors (all server profiles) | Per-tool edits remain unavailable because the backend replaces the whole map. Missing cached status is not disconnected. OAuth uses the configured server callback. Runtime reload is process-wide. |
 | A27 | Agent-plugin inventory/status and individual enablement | Selected P1 portion only. Install/remove/update and Desktop UI extensions are outside this slice. |
 | A28 | Memory enablement and character budgets | Exact retained-file sizes lack an arbitrary-profile contract and are explicitly unavailable. |
 | A31 | Compression percentages, capacity illustration, enablement and protected recent messages | Schema-supported basic controls only; advanced context-engine work remains P2. |
@@ -136,13 +136,14 @@ to a particular deployed connector; that requires its actual server response.
 Reload uses the same upstream revision's strict
 [`ReloadMcpParams` contract](https://github.com/NousResearch/hermes-agent/blob/a566d20d226a8e2ef0747639dc8a3fc1c43f9dba/tui_gateway/contracts/tools_mcp_plugins.py):
 the server-wide `reload.mcp` command accepts `session_id`, `confirm`, `always`
-and `rev`, but no `profile`. Wing sends an empty initial request and only
-`confirm: true` after the server requests further confirmation. The previous
+and `rev`, but no `profile`. Wing asks once in a client dialog and sends
+`confirm: true` in its single request after consent. It does not set `always`
+or change the server's approval policy. The previous
 profile-scoped call added `profile: default`, which stock parameter validation
 rejects before reloading. Reload errors now retain the redacted server reason;
 timeouts and disconnects report an uncertain outcome without automatically
-retrying. The recovery tests enforce the strict parameter contract and both
-confirmation cancellation paths.
+retrying. The recovery tests enforce the single-confirmation contract and
+cancellation before any request is sent.
 
 ## Scheduled tasks
 

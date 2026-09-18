@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replace the confusing MCP action with Reconnect MCP tools below the connector list. Explain its server-wide scope, ask once, and send that confirmation directly to Hermes without a second popup.
+
 - Make the usage activity grid more compact with small, tightly spaced squares and week columns.
 
 - Redesign Usage with 1D/7D/30D/90D/365D controls, a daily token grid, animated model/token composition and stacked token trends. Keep pricing sources and exact counts accessible, cache local interactions and explain unavailable daily model/cost dimensions.

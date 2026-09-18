@@ -64,10 +64,16 @@ connection identity, and first-time registration require live verification.
 Device-code configuration produces same-host/same-profile terminal guidance.
 The other-sign-in disclosure also explains the CLI path for CIMD-only providers.
 Neither is presented as native remote sign-in support. Users return to Test
-connection after external login, and can explicitly update running chats to
-adopt credentials in existing sessions. Wing labels this action **Update running
-chats**: it reconnects MCP tools for every profile on the server, so existing
-chats refresh their tool access.
+connection after external login, then use **Reconnect MCP tools** to apply
+settings and sign-ins to existing chats. This server-wide action sits below
+the connector list with a short explanation. Its single confirmation explains
+that it affects all profiles and may increase token usage on the next message.
+
+Verified against stock Hermes main `045eb44363464072637a4661d02bf1d6ce9b9c38`
+on 18 September 2026: `reload.mcp` accepts `confirm: true` on the first request.
+Wing sends that only after the user confirms; cancel sends no RPC. The former
+two-dialog flow asked locally then sent an unconfirmed request, causing Hermes
+to ask again. No `always` flag or approval-setting change is needed.
 
 ## Connection results
 

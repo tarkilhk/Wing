@@ -274,11 +274,14 @@ void main() {
         'test',
         'signin',
         'reload',
+        'reconnect-page',
+        'reconnect-confirm',
         'tools',
         'tools-open',
       ]) {
         final signIn = operation == 'signin';
         final reload = operation == 'reload';
+        final reconnect = operation.startsWith('reconnect-');
         final success = operation.startsWith('tools');
         final name =
             '$operation-${brightness.name}-${enlarged ? 'large' : 'normal'}';
@@ -331,7 +334,7 @@ void main() {
                   ).copyWith(textScaler: TextScaler.linear(enlarged ? 2 : 1)),
                   child: child!,
                 ),
-                home: reload
+                home: reload || reconnect
                     ? AdminConnectorsPage(
                         profile: fixture.server.profile('personal'),
                       )
@@ -349,15 +352,34 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
-          if (reload) {
+          if (reconnect) {
             await tester.scrollUntilVisible(
-              find.widgetWithText(OutlinedButton, 'Update running chats'),
+              find.text('Reconnect MCP tools'),
+              200,
+            );
+            await tester.ensureVisible(
+              find.widgetWithText(OutlinedButton, 'Reconnect MCP tools'),
+            );
+            await tester.pumpAndSettle();
+            if (operation == 'reconnect-confirm') {
+              await tester.tap(find.text('Reconnect MCP tools'));
+              await tester.pumpAndSettle();
+              expect(find.byType(AlertDialog), findsOneWidget);
+              expect(
+                find.textContaining('all profiles on this server'),
+                findsWidgets,
+              );
+              expect(fixture.rpcRequests, isEmpty);
+            }
+          } else if (reload) {
+            await tester.scrollUntilVisible(
+              find.widgetWithText(OutlinedButton, 'Reconnect MCP tools'),
               200,
             );
             await tester.pumpAndSettle();
-            await tester.tap(find.text('Update running chats'));
+            await tester.tap(find.text('Reconnect MCP tools'));
             await tester.pumpAndSettle();
-            await tester.tap(find.text('Reconnect tools'));
+            await tester.tap(find.text('Reconnect'));
             await tester.pumpAndSettle();
           } else if (signIn) {
             await tester.scrollUntilVisible(find.text('Start sign-in'), 200);
@@ -378,7 +400,7 @@ void main() {
               await tester.pumpAndSettle();
               expect(find.text('get_accounting_settings'), findsOneWidget);
             }
-          } else if (!reload) {
+          } else if (!reload && !reconnect) {
             if (!signIn) {
               await tester.scrollUntilVisible(
                 find.text('Failure details'),
@@ -393,7 +415,7 @@ void main() {
             );
             await tester.pumpAndSettle();
           }
-          if (!success) {
+          if (!success && !reconnect) {
             expect(
               find.textContaining('OAuth discovery failed'),
               findsOneWidget,
@@ -415,11 +437,18 @@ void main() {
               image.dispose();
             });
           }
-          if (!reload) {
+          if (!reload && !reconnect) {
             await tester.scrollUntilVisible(
               find.text(signIn ? 'Close' : 'Remove connector'),
               200,
             );
+          }
+          if (operation == 'reconnect-confirm') {
+            await tester.tap(find.text('Reconnect'));
+            await tester.pumpAndSettle();
+            expect(find.byType(AlertDialog), findsNothing);
+            expect(fixture.rpcRequests, [('default', 'reload.mcp')]);
+            expect(find.text('MCP tools reconnected.'), findsOneWidget);
           }
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);

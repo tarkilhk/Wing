@@ -415,12 +415,9 @@ void main() {
     await back(tester);
     await tap(tester, 'Access and connectors');
     await tap(tester, 'MCP connectors');
-    await tap(tester, 'Update running chats');
-    await tap(tester, 'Reconnect tools');
-    if (find.text('Confirm tool reconnection').evaluate().isNotEmpty) {
-      await tap(tester, 'Reconnect tools');
-    }
-    expect(find.text('MCP tools reconnected in running chats.'), findsOneWidget);
+    await tap(tester, 'Reconnect MCP tools');
+    await tap(tester, 'Reconnect');
+    expect(find.text('MCP tools reconnected.'), findsOneWidget);
   });
 
   testWidgets(
