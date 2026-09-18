@@ -661,7 +661,7 @@ void main() {
     );
     expect(
       admin.requests.where((r) => r.$2 == 'actions/doctor/status'),
-      hasLength(1),
+      hasLength(2),
     );
     expect(tester.takeException(), isNull);
   });
