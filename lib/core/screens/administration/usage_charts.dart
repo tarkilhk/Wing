@@ -114,29 +114,41 @@ class UsageCalendar extends StatefulWidget {
 }
 
 class _UsageCalendarState extends State<UsageCalendar> {
-  late int _page;
-  int get _pages => (widget.daily.days.length / 91).ceil();
-  @override
-  void initState() {
-    super.initState();
-    _page = _pages - 1;
-  }
+  // Anchor the last visible week so resizing does not jump to another date.
+  int _weeksBack = 0;
 
   @override
   void didUpdateWidget(UsageCalendar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.daily.days.first.date != widget.daily.days.first.date ||
         oldWidget.daily.days.length != widget.daily.days.length) {
-      _page = _pages - 1;
+      _weeksBack = 0;
     }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => _calendar(context, constraints.maxWidth),
+  );
+
+  Widget _calendar(BuildContext context, double width) {
     final all = widget.daily.days;
-    // Work backwards so the latest page is full, including for 365D.
-    final end = all.length - (_pages - 1 - _page) * 91;
-    final start = math.max(0, end - 91);
+    const gap = 3.0;
+    const minimumSquare = 12.0;
+    final capacity = math.max(
+      1,
+      ((width + gap) / (minimumSquare + gap)).floor(),
+    );
+    final weekly = all.length > 8;
+    final firstOffset = weekly ? all.first.date.weekday % 7 : 0;
+    final totalWeeks = ((all.length + firstOffset) / 7).ceil();
+    final endWeek = totalWeeks - _weeksBack;
+    final startWeek = math.max(0, endWeek - capacity);
+    // Page in complete week columns, clipping only the range's boundary dates.
+    final start = weekly ? math.max(0, startWeek * 7 - firstOffset) : 0;
+    final end = weekly
+        ? math.min(all.length, endWeek * 7 - firstOffset)
+        : all.length;
     final days = all.sublist(start, end);
     final maximum = all.fold<int>(
       0,
@@ -144,12 +156,12 @@ class _UsageCalendarState extends State<UsageCalendar> {
     );
     final tokens = WingTokens.of(context);
     final locale = MaterialLocalizations.of(context);
-    // Fixed-size cells keep the activity map compact at every phone width.
-    // Longer ranges run top-to-bottom through Sunday-aligned week columns.
-    const square = 12.0;
-    const gap = 3.0;
-    const pitch = square + gap;
-    final weekly = all.length > 8;
+    // Fit more weeks, not oversized squares or gaps. Share the sub-cell
+    // remainder across columns when the range is long enough to fill a page.
+    final square = weekly && totalWeeks >= capacity
+        ? (width + gap) / capacity - gap
+        : minimumSquare;
+    final pitch = square + gap;
     final offset = weekly ? days.first.date.weekday % 7 : 0;
     final columns = weekly ? ((days.length + offset) / 7).ceil() : days.length;
     Widget cell(UsageDay day) {
@@ -214,16 +226,20 @@ class _UsageCalendarState extends State<UsageCalendar> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
-            if (_pages > 1) ...[
+            if (weekly && (totalWeeks > capacity || _weeksBack > 0)) ...[
               IconButton(
                 tooltip: 'Earlier dates',
-                onPressed: _page > 0 ? () => setState(() => _page--) : null,
+                onPressed: startWeek > 0
+                    ? () => setState(() => _weeksBack += capacity)
+                    : null,
                 icon: const Icon(Icons.chevron_left),
               ),
               IconButton(
                 tooltip: 'Later dates',
-                onPressed: _page < _pages - 1
-                    ? () => setState(() => _page++)
+                onPressed: _weeksBack > 0
+                    ? () => setState(
+                        () => _weeksBack = math.max(0, _weeksBack - capacity),
+                      )
                     : null,
                 icon: const Icon(Icons.chevron_right),
               ),

@@ -412,6 +412,9 @@ void main() {
         await snapshot(tester, '${brightness.name}-$scale-trend');
         await tap(tester, find.text('90D'));
         await snapshot(tester, '${brightness.name}-$scale-calendar');
+        await tap(tester, find.text('365D'));
+        await reveal(tester, find.byKey(const ValueKey('usage-activity-grid')));
+        await snapshot(tester, '${brightness.name}-$scale-year');
         await tap(tester, find.text('gpt-6-astra'));
         await reveal(tester, find.text('Uncached input').last);
         await snapshot(tester, '${brightness.name}-$scale-breakdown');

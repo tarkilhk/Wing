@@ -70,8 +70,8 @@ and API-equivalent cost views explain the missing data and offer the supported
 token-type view. Selecting a day keeps its scope when switching controls; it
 never substitutes period-wide model figures for a day's values.
 
-The calendar shows recorded tokens, with 91-day pages for the year view and no
-day slider. Selecting the same date again, or All days, restores the period
+The calendar shows recorded tokens, with width-adaptive week pages for the year
+view and no day slider. Selecting the same date again, or All days, restores the period
 breakdown. Duplicate auxiliary model rows contribute to one model/provider bar
 segment and remain individually inspectable in its detail sheet. Unknown values
 remain unavailable; partial cost bars explicitly exclude unpriced values.

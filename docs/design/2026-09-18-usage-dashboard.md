@@ -9,10 +9,14 @@ inspect a date or a model without leaving its captured profile/connection.
 
 - Neutral period buttons; token count and estimated value side by side.
 - Token-intensity calendar, one square per UTC session-start date. The year
-  view pages through 91 dates with arrows; there is no day slider. Following
-  phone feedback, cells are fixed at 12dp with 3dp gaps and no date numerals.
-  Longer ranges use seven-row Sunday-aligned week columns; 1D and 7D use a
-  compact strip. Cells no longer stretch to fill the available width.
+  view fits as many week columns as the available width allows, with arrows
+  for earlier/later weeks and no day slider. Cells stay approximately 12dp
+  with 3dp gaps and no date numerals; the small width remainder is shared
+  across squares on full pages. Longer ranges use seven-row Sunday-aligned
+  week columns; 1D and 7D use a compact strip. Short ranges and the oldest
+  partial page stay compact rather than inventing dates outside the period.
+  Resizing preserves the last visible week; changing the period returns to
+  the latest dates. Paging never makes additional API requests.
 - Breakdown immediately below the grid, one animated composition bar. Its
   clickable title switches model/token-type grouping; Tokens/Cost stays at the
   top right and is independent from the trend controls.
@@ -51,6 +55,8 @@ auxiliary contributions, mixed providers and independent parallel reads.
 races, errors, pricing links and actual Flutter renders in light/dark themes at
 390dp/100% and 320dp/200%. Existing administration and layout checks exercise
 navigation and large numbers in the new detail sheet.
+`test/usage_calendar_test.dart` checks complete date coverage without duplicates
+for every weekday alignment, full-page width, date selection and resize anchoring.
 
 Render with:
 
