@@ -74,7 +74,6 @@ void main() {
         final fixture = AdministrationDesignFixture();
         final profile = fixture.server.profile('personal');
         final health = AdministrationHealth(fixture.server);
-        if (family == 'runtime-health') await health.refreshRuntimeIdentity();
         final narrow = mode == 'narrow';
         tester.view.physicalSize = Size(
           narrow

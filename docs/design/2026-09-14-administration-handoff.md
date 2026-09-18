@@ -15,7 +15,7 @@ This is the ownership contract for Administration, updated on 17 September 2026 
 | Profile / Behavior | Supported execution limits, approval policy, basic compression, reach/recovery policy and backend voice defaults |
 | Profile / Manage profiles | Collection lifecycle; compact pill after the last profile, scrolling with the profile selector |
 | Global menu / Connection and Server version | Icon, connection name and LED open connection details; server version opens Versions & updates and checks upstream availability. Client version remains in App settings. |
-| Health / Server | Runtime/launch-profile observations, bounded logs, Doctor/security audit and action results |
+| Health / Server | Bounded logs, Doctor/security audit, Run all diagnostics and action results |
 | Health / Profile | Scoped readiness and usage; recovery links to the owning editor |
 
 MCP connectors owns Reconnect MCP tools, with confirmation that it reconnects tools across all server profiles and can invalidate prompt caches. Versions & updates contains server identity and update controls. Only the server has an upstream update check and circular-arrows availability indicator. Check update progress appears after an update request; it reads the running update action, while Check for updates compares installed code with upstream.
@@ -45,7 +45,11 @@ still target `default` and need correction together with its shared-account labe
 access. External CLI ownership remains distinct. Show credential provenance only
 when the backend establishes it, and do not infer account use from provider names.
 
-Runtime health uses `profiles/active.current`, resolved through profile metadata. `active` is the sticky future-launch selection, not the runtime identity. Neither it nor the mobile selection may substitute for `current`. Unknown identity is shown as unavailable while independent server/runtime operations remain reachable.
+The owner-approved 19 September Health update removes runtime-profile metadata
+and replaces Server refresh with Run all diagnostics (play). Doctor and security
+audit use their existing server endpoints, with separate retained progress and
+results. They do not accept the selected mobile profile. Confirmations and result
+headers identify the connection, and Logs no longer requests profile identity.
 
 The owner-approved 18 September Health layout uses Server and Profile groups,
 with no combined health verdict. Doctor, audit and Logs remain server-owned;

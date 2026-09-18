@@ -129,8 +129,6 @@ void main() {
     'configuration does not establish runtime health or provider access',
     () async {
       health.selectProfile(overview('default'));
-      await health.refreshRuntimeIdentity();
-      expect(health.runtimeIdentity?['name'], 'default');
       expect(health.status, AdministrationHealthStatus.unknown);
       readiness = (profile) async => {'profile': profile};
       await health.refreshReadiness();

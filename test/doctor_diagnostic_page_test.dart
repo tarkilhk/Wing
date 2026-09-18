@@ -83,7 +83,7 @@ void main() {
               server: fixture.server,
               action: const AdministrationAction('doctor', 7),
               title: 'Doctor',
-              scope: 'Runtime profile: default',
+              scope: 'Home server',
             ),
           ),
         );
@@ -153,7 +153,7 @@ void main() {
               server: fixture.server,
               action: const AdministrationAction('doctor', 7),
               title: 'Doctor',
-              scope: 'Runtime profile: default',
+              scope: 'Home server',
             ),
           ),
         );
@@ -187,7 +187,7 @@ void main() {
           server: fixture.server,
           action: const AdministrationAction('doctor', 7),
           title: 'Doctor',
-          scope: 'Runtime profile: default',
+          scope: 'Home server',
         ),
       ),
     );

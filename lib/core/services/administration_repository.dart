@@ -141,23 +141,6 @@ class AdministrationRepository {
   Future<ProfileDiscovery> discover() =>
       ProfilesRepository((endpoint) => read(endpoint)).discover();
 
-  Future<Map<String, dynamic>> runtimeIdentity() async {
-    try {
-      final profiles = await discover();
-      final current = profiles.named(profiles.currentName);
-      if (current != null) {
-        return {
-          'name': current.name,
-          'label': 'Runtime profile: ${current.label}',
-          'unavailable': false,
-        };
-      }
-    } catch (_) {
-      // Runtime operations remain reachable when identity metadata is unavailable.
-    }
-    return {'label': 'Profile scope unavailable', 'unavailable': true};
-  }
-
   ProfileAdministration profile(String name) {
     if (!HermesProfile.isCanonicalName(name) || name == 'current') {
       throw ArgumentError('An explicit canonical profile is required');

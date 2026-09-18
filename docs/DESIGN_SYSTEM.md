@@ -241,7 +241,10 @@ configuration and usage bars describe reported costs, never inferred activity.
 
 The owner-approved 18 September Health revision replaces the combined verdict
 with Server and Profile groups on the standalone Hermes health destination.
-Server rows own Doctor, audit and Logs, with subordinate runtime identity. Profile
+Server rows own Doctor, audit and Logs. The owner-approved 19 September update
+removes the runtime-profile label and replaces Server refresh with a play icon
+labelled Run all diagnostics. It starts both diagnostics directly and disables
+repeat starts until both have known completion. Profile
 uses the shared header for profile selection, a refresh icon beside its heading,
 four stable observation rows and Usage. The refresh icon explicitly checks the
 selected profile and shows progress while the check runs.

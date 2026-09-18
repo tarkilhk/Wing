@@ -56,21 +56,6 @@ class AdminHealthContent extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Server',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              IconButton(
-                tooltip: 'Refresh health',
-                onPressed: onRefresh,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
-          ),
           AdminRuntimeHealth(health: health),
           const SizedBox(height: 24),
           Row(

@@ -89,15 +89,12 @@ void main() {
                 'usage' => AdminUsagePage(
                   profile: fixture.server.profile('client-work'),
                 ),
-                'logs' => AdminLogsPage(
-                  server: fixture.server,
-                  runtimeLabel: 'Runtime profile: default',
-                ),
+                'logs' => AdminLogsPage(server: fixture.server),
                 _ => AdminActionPage(
                   server: fixture.server,
                   action: const AdministrationAction('security-audit', 7),
                   title: 'Security audit',
-                  scope: 'Runtime profile: default',
+                  scope: 'Home server',
                 ),
               },
             ),

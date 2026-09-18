@@ -202,51 +202,39 @@ Future<AdministrationAction?> startAdminOperation(
   BuildContext context,
   AdministrationRepository server,
   String path,
-  String title,
-  String? profileName,
-) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      scrollable: true,
-      title: Text(title),
-      content: Text.rich(
-        TextSpan(
-          text: profileName == null
-              ? 'Run this diagnostic'
-              : 'Run this diagnostic on profile ',
-          children: [
-            if (profileName != null)
-              TextSpan(
-                text: profileName,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-          ],
-        ),
+  String title, {
+  bool confirm = true,
+}) async {
+  if (confirm) {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: Text(title),
+        content: Text('Run this diagnostic on ${server.connectionLabel}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Run'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('Run'),
-        ),
-      ],
-    ),
-  );
-  if (confirmed != true) return null;
+    );
+    if (confirmed != true || !context.mounted) return null;
+  }
   try {
     final result = await server.write('POST', path);
     return AdministrationAction.fromJson(result);
   } catch (e) {
     if (context.mounted) {
-      adminMessage(
-        context,
-        administrationError(e, writing: true),
-        isError: true,
-      );
+      final detail = e is AdministrationFailure
+          ? e.message
+          : 'Could not confirm the diagnostic started. Check the connection.';
+      adminMessage(context, '$title: $detail', isError: true);
     }
   }
   return null;
@@ -254,12 +242,7 @@ Future<AdministrationAction?> startAdminOperation(
 
 class AdminLogsPage extends StatefulWidget {
   final AdministrationRepository server;
-  final String runtimeLabel;
-  const AdminLogsPage({
-    super.key,
-    required this.server,
-    required this.runtimeLabel,
-  });
+  const AdminLogsPage({super.key, required this.server});
   @override
   State<AdminLogsPage> createState() => _AdminLogsPageState();
 }

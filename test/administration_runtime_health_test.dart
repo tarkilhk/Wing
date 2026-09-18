@@ -46,7 +46,6 @@ void main() {
           },
           _ => throw StateError('Unexpected $method $path'),
         };
-        await health.refreshRuntimeIdentity();
         await tester.pumpWidget(
           MaterialApp(
             theme: wingTheme(Brightness.dark),
@@ -129,7 +128,6 @@ void main() {
             ),
           ),
         );
-        await health.refreshRuntimeIdentity();
         await render();
         await tester.pumpAndSettle();
         expect(fixture.requests.where((r) => r.$1 == 'POST'), isEmpty);
@@ -153,7 +151,6 @@ void main() {
         await tester.pageBack();
         await tester.pumpAndSettle();
         expect(find.textContaining(outcome), findsOneWidget);
-        await health.refreshRuntimeIdentity();
         await render();
         await tester.pumpAndSettle();
         expect(find.textContaining(outcome), findsOneWidget);

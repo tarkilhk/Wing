@@ -187,10 +187,7 @@ void main() {
       expect(admin.requests.where((r) => r.$1 != 'GET'), isEmpty);
       await show(tester, Brightness.dark, healthOnly: true);
       expect(find.byTooltip('Refresh profile status'), findsOneWidget);
-      expect(
-        admin.requests.where((r) => r.$2 == 'profiles/active'),
-        isNotEmpty,
-      );
+      expect(admin.requests.where((r) => r.$2 == 'profiles/active'), isEmpty);
       expect(admin.requests.where((r) => r.$1 != 'GET'), isEmpty);
       expect(tester.takeException(), isNull);
     },
@@ -402,11 +399,9 @@ void main() {
               .first,
         );
         await tester.pumpAndSettle();
-        expect(find.text('Runtime profile: Shared root'), findsOneWidget);
-        expect(
-          admin.requests.where((r) => r.$2 == 'profiles/active').last.$3,
-          isEmpty,
-        );
+        expect(find.textContaining('Runtime profile:'), findsNothing);
+        expect(find.byTooltip('Run all diagnostics'), findsOneWidget);
+        expect(admin.requests.where((r) => r.$2 == 'profiles/active'), isEmpty);
         await screenshot(tester, '${brightness.name}-health');
         expect(tester.takeException(), isNull);
       },
@@ -450,7 +445,8 @@ void main() {
     controller.current = null;
     await show(tester, Brightness.dark, scale: 1.3, healthOnly: true);
     expect(find.byType(TabBar), findsNothing);
-    expect(find.text('Runtime profile: Shared root'), findsOneWidget);
+    expect(find.textContaining('Runtime profile:'), findsNothing);
+    expect(find.byTooltip('Run all diagnostics'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await screenshot(tester, 'large-text-missing-profile');
   });
@@ -666,10 +662,10 @@ void main() {
             .first,
       );
       await tester.pumpAndSettle();
-      expect(find.text('Profile scope unavailable'), findsOneWidget);
+      expect(find.text('Profile scope unavailable'), findsNothing);
       expect(find.text('Doctor'), findsOneWidget);
       expect(find.text('Logs'), findsOneWidget);
-      expect(find.text('Retry runtime identity'), findsOneWidget);
+      expect(find.byTooltip('Run all diagnostics'), findsOneWidget);
     },
   );
 

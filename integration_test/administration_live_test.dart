@@ -382,9 +382,8 @@ void main() {
     await show(tester);
     await tester.tap(find.byKey(const ValueKey('administration-health')));
     await idle(tester);
-    final runtimeLabel = (await server.runtimeIdentity())['label'] as String;
-    await visible(tester, find.text(runtimeLabel));
-    expect(find.text(runtimeLabel), findsOneWidget);
+    expect(find.textContaining('Runtime profile:'), findsNothing);
+    expect(find.byTooltip('Run all diagnostics'), findsOneWidget);
     await tap(tester, 'Usage');
     for (final label in [
       'Last 24 hours',

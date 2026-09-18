@@ -55,7 +55,6 @@ class AdministrationHealth extends ChangeNotifier {
   AdministrationHealthFinding? _profileChecks;
   Timer? _expiry;
   bool _disposed = false;
-  int _runtimeGeneration = 0;
   int _profileGeneration = 0;
   final _readiness = AdministrationObservation();
   final _diagnosticGenerations = <String, int>{};
@@ -64,9 +63,6 @@ class AdministrationHealth extends ChangeNotifier {
   final _diagnosticScopes = <String, String>{};
   final _pendingScopes = <String, String>{};
   final _starting = <String>{};
-  Map<String, dynamic>? runtimeIdentity;
-  DateTime? runtimeCheckedAt;
-  bool runtimeLoading = false;
 
   AdministrationOverview? get overview => _overview;
   String? get profileName => _overview?.profile.name;
@@ -354,10 +350,7 @@ class AdministrationHealth extends ChangeNotifier {
         'Provider readiness is not fully observed',
       );
     }
-    return (
-      AdministrationHealthStatus.healthy,
-      'No expired sign-ins reported',
-    );
+    return (AdministrationHealthStatus.healthy, 'No expired sign-ins reported');
   }
 
   (AdministrationHealthStatus, String) _tools(Map<String, dynamic> data) {
@@ -454,30 +447,19 @@ class AdministrationHealth extends ChangeNotifier {
     ].join(' · ');
   }
 
-  Future<void> refreshRuntimeIdentity() async {
-    if (_disposed) return;
-    final generation = ++_runtimeGeneration;
-    runtimeLoading = true;
-    _changed();
-    final identity = await server.runtimeIdentity();
-    if (_disposed || generation != _runtimeGeneration) return;
-    runtimeIdentity = identity;
-    runtimeCheckedAt = _now();
-    runtimeLoading = false;
-    _changed();
+  bool canStartDiagnostic(String path) {
+    if (_disposed || _starting.contains(path)) return false;
+    final previous = _diagnostics[path];
+    return previous == null ||
+        (previous.status['running'] == false &&
+            previous.status['exit_code'] is int);
   }
 
   int? beginDiagnostic(String path, {String? scope}) {
-    if (_disposed || _starting.contains(path)) return null;
     if (!{'ops/doctor', 'ops/security-audit'}.contains(path)) {
       throw ArgumentError('Unknown diagnostic');
     }
-    final previous = _diagnostics[path];
-    if (previous != null &&
-        (previous.status['running'] != false ||
-            previous.status['exit_code'] is! int)) {
-      return null;
-    }
+    if (!canStartDiagnostic(path)) return null;
     _starting.add(path);
     if (scope != null) _pendingScopes[path] = scope;
     final generation = _diagnosticGenerations.update(

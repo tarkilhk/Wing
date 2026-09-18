@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -352,12 +353,11 @@ void main({
       // A server-side configuration change clears the retained credential result
       // on the next metadata-only refresh, without rerunning the check.
       fixture.models['client-work'] = 'gpt-6-astra';
-      await tester.scrollUntilVisible(
-        find.byTooltip('Refresh health'),
-        -300,
-        scrollable: find.byType(Scrollable).first,
+      unawaited(
+        tester
+            .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+            .onRefresh(),
       );
-      await tester.tap(find.byTooltip('Refresh health'));
       await tester.pumpAndSettle();
       expect(find.text('Credentials not checked'), findsOneWidget);
       expect(find.text('gpt-6-astra · openai-codex'), findsOneWidget);

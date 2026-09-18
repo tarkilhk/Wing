@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replace Health’s Server refresh with Run all diagnostics for Doctor and Security audit; remove misleading runtime-profile labels.
+
 - Show model access status directly in Health, with recovery actions only when needed. Remove its separate screen, model picker and routine account-management shortcut; keep configuration in Administration.
 
 - Open the Usage breakdown on models by default, keeping the trend on token types.

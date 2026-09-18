@@ -80,7 +80,7 @@ void main() {
               server: fixture.server,
               action: const AdministrationAction('security-audit', 7),
               title: 'Security audit',
-              scope: 'Runtime profile: default',
+              scope: 'Home server',
             ),
           ),
         );
@@ -191,7 +191,7 @@ void main() {
             server: fixture.server,
             action: const AdministrationAction('security-audit', 7),
             title: 'Security audit',
-            scope: 'Runtime profile: default',
+            scope: 'Home server',
           ),
         ),
       );
@@ -232,7 +232,6 @@ void main() {
       },
       _ => throw StateError('Unexpected $method $path'),
     };
-    await health.refreshRuntimeIdentity();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(body: AdminRuntimeHealth(health: health)),

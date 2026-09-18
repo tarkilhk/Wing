@@ -23,11 +23,6 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
   void initState() {
     super.initState();
     health.addListener(_changed);
-    if (health.runtimeCheckedAt == null && !health.runtimeLoading) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) health.refreshRuntimeIdentity();
-      });
-    }
   }
 
   @override
@@ -54,6 +49,7 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
     String title,
     String scope, {
     required bool openResult,
+    bool confirm = true,
   }) async {
     final controller = health;
     final generation = controller.beginDiagnostic(path, scope: scope);
@@ -65,7 +61,7 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
         controller.server,
         path,
         title,
-        controller.runtimeIdentity?['name'] as String?,
+        confirm: confirm,
       );
       if (action != null) {
         controller.trackDiagnostic(path, action, generation: generation);
@@ -115,8 +111,10 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
             observation?.status['lines'] as List? ?? [],
           )
         : null;
-    final label = observation == null
-        ? (health.starting.contains(path) ? 'Starting…' : 'Not run')
+    final label = health.starting.contains(path)
+        ? 'Starting…'
+        : observation == null
+        ? 'Not run'
         : observation.readError != null
         ? 'Result refresh unavailable'
         : audit?.title ??
@@ -169,14 +167,48 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
     );
   }
 
+  Future<void> _runAll() async {
+    if (!health.canStartDiagnostic('ops/doctor') ||
+        !health.canStartDiagnostic('ops/security-audit')) {
+      return;
+    }
+    final scope = health.server.connectionLabel;
+    await Future.wait([
+      _run('ops/doctor', 'Doctor', scope, openResult: false, confirm: false),
+      _run(
+        'ops/security-audit',
+        'Security audit',
+        scope,
+        openResult: false,
+        confirm: false,
+      ),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final identity = health.runtimeIdentity;
-    final scope =
-        identity?['label'] as String? ?? 'Runtime identity not checked';
+    final scope = health.server.connectionLabel;
+    final canRunAll =
+        health.canStartDiagnostic('ops/doctor') &&
+        health.canStartDiagnostic('ops/security-audit');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Server',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Run all diagnostics',
+              onPressed: canRunAll ? _runAll : null,
+              icon: const Icon(Icons.play_arrow),
+            ),
+          ],
+        ),
         AdminGroup(
           children: [
             _check('Doctor', 'ops/doctor', scope),
@@ -187,26 +219,11 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
               icon: Icons.subject,
               onTap: () => adminPush(
                 context,
-                (context) =>
-                    AdminLogsPage(server: health.server, runtimeLabel: scope),
+                (context) => AdminLogsPage(server: health.server),
               ),
             ),
           ],
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
-          child: Text(scope, style: Theme.of(context).textTheme.bodySmall),
-        ),
-        if (identity?['unavailable'] == true)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: health.runtimeLoading
-                  ? null
-                  : health.refreshRuntimeIdentity,
-              child: const Text('Retry runtime identity'),
-            ),
-          ),
       ],
     );
   }

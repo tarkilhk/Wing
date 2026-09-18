@@ -145,7 +145,6 @@ class _HermesAdministrationContentState
     super.initState();
     _healthProfileName = _profile?.name;
     widget.controller.addListener(_workspaceChanged);
-    unawaited(_health.refreshRuntimeIdentity());
     _selectHealthProfile();
   }
 
@@ -210,7 +209,6 @@ class _HermesAdministrationContentState
     try {
       await Future.wait([
         widget.controller.refresh(),
-        _health.refreshRuntimeIdentity(),
         if (widget.healthOnly)
           _refreshHealthProfile()
         else
@@ -643,18 +641,7 @@ class _HermesAdministrationContentState
       'Logs',
       'Errors, severity and search',
       Icons.subject,
-      () async {
-        final identity = await _server.runtimeIdentity();
-        if (mounted) {
-          await adminPush(
-            context,
-            (context) => AdminLogsPage(
-              server: _server,
-              runtimeLabel: identity['label'] as String,
-            ),
-          );
-        }
-      },
+      () => adminPush(context, (context) => AdminLogsPage(server: _server)),
     ),
   ];
 

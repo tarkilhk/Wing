@@ -15,7 +15,7 @@ reflect the older design and need a separate correction.
 
 The header contains the single visible Refresh administration action. It updates
 workspace/profile discovery, overview observations, scoped provider configuration
-and runtime identity. It preserves diagnostic results and does not run operational checks.
+and scoped readiness. It preserves diagnostic results and does not run operational checks.
 Pull-to-refresh remains available on the Profile list.
 
 Overview reads are independent observations for a captured profile. A failed read
@@ -43,8 +43,13 @@ short read-only disclosure; source metadata is shown only when reported.
 
 ## Health observations
 
-Health has two groups. Server owns Doctor, security audit and Logs; the runtime
-profile is quiet metadata below these rows. Profile uses selection from the shared header,
+Health has two groups. Server owns Doctor, security audit and Logs. Its play icon
+starts Doctor and security audit together, without opening their details or a
+confirmation dialog. It is disabled while either diagnostic is starting, running
+or has an uncertain completion. Each operation retains its own result; a failed
+start does not prevent the other operation from running. There is no Server refresh
+button or runtime-profile label. Diagnostic confirmations and results identify
+the server. Profile uses selection from the shared header,
 a refresh icon beside its heading, four stable rows (Model access, Tools, Connectors,
 Scheduled tasks), and Usage. There is no global health verdict. Optional server
 diagnostics say Not run until explicitly started.
@@ -109,6 +114,14 @@ report with exit 0 or 1 supplies structured audit counts; exit 2 is an audit err
 Unrecognized or truncated output never implies no vulnerabilities. See the
 [audit report contract](research/2026-09-18-security-audit-report.md).
 Stock Hermes exposes no remote Doctor repair action, so Wing adds none.
+
+Run-all contract rechecked on 19 September 2026 against upstream
+[`96b6c534c3fc1681ecbf2df0f92d1b3c6cce4f62`](https://github.com/NousResearch/hermes-agent/commit/96b6c534c3fc1681ecbf2df0f92d1b3c6cce4f62):
+`hermes_cli/web_routers/ops.py` still exposes separate POST endpoints for Doctor
+and security audit, with no profile argument. Both use `_spawn_action`, which
+calls `spawn_profile_action(None, ...)` in the dashboard's environment. Wing does
+not select a diagnostic profile or claim that profile discovery establishes one.
+Run all composes these existing endpoints entirely in the client.
 
 Verified on 18 September 2026 against stock upstream
 [`8a492617e1239ab90bd3e3f7794b1e443f37a287`](https://github.com/NousResearch/hermes-agent/commit/8a492617e1239ab90bd3e3f7794b1e443f37a287):
