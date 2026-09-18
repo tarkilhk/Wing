@@ -242,17 +242,22 @@ The owner-approved 18 September Health revision replaces the combined verdict
 with Server and Profile groups on the standalone Hermes health destination.
 Server rows own Doctor, audit and Logs, with subordinate runtime identity. Profile
 uses the shared header for profile selection, a refresh icon beside its heading,
-five stable observation rows and Usage. The refresh icon explicitly checks the
+four stable observation rows and Usage. The refresh icon explicitly checks the
 selected profile and shows progress while the check runs.
 Only actual issues carry warning/error emphasis; configuration icons stay neutral.
 Unknown checks are local to their row. Do not invalidate configuration after a
 fixed five-minute timer or imply successful inference from configuration.
 Detail pages use the same gutters, grouped rows and quiet timestamps, with
-specific recovery links to the owning editors. Provider access uses one result card:
-plain-language outcome, explanation, quiet check time, and one full-width primary
-action. Recovery takes primary emphasis when needed; Check again becomes a secondary
-text action. Keep the scope in the page header. Do not restore the configuration
-summary, diagnostic checklist or overflow navigation menu alongside this component. Opening Health performs reads only.
+specific recovery links to the owning editors. The subsequent owner-approved merge
+uses one Model & provider destination. Its grouped component leads with the default
+model and subordinate provider, then Change model, a compact credential status with
+an explicit refresh control, and one account-management row. Keep model selection
+visually primary; avoid a full-width check button or a separate access-status card.
+Name a different resolved model/provider without presenting it as validation of the
+selection. Keep scope in the header. Connection errors offer Review connection;
+provider errors explain the action available immediately below. Do not restore the
+configuration summary, diagnostic checklist or overflow menu. Opening Health performs
+reads only.
 
 Growing select-only values, page titles and large-text field labels must remain
 readable at 320 dp/200%. Keep 48 dp controls and keyboard-safe editor actions.

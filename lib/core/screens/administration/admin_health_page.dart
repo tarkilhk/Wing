@@ -4,6 +4,7 @@ import '../../services/administration_repository.dart';
 import '../../services/administration_health.dart';
 import '../../theme/wing_theme.dart';
 import '../../widgets/profile_diagnostics_panel.dart';
+import '../../widgets/profile_default_model_sheet.dart';
 import 'admin_widgets.dart';
 import 'admin_runtime_health.dart';
 import 'admin_providers_page.dart';
@@ -106,13 +107,15 @@ class AdminHealthContent extends StatelessWidget {
               children: [
                 _row(
                   context,
-                  'Provider access',
-                  accessChecks()?.healthObservation.finding,
-                  Icons.key_outlined,
+                  'Model & provider',
+                  accessChecks()?.healthObservation.finding ??
+                      findings
+                          .where((f) => f.title == 'Model selection')
+                          .firstOrNull,
+                  Icons.auto_awesome_outlined,
                   () => _access(context),
                 ),
                 for (final (title, source, icon) in [
-                  ('Model', 'Model selection', Icons.auto_awesome_outlined),
                   ('Tools', 'Tool setup', Icons.handyman_outlined),
                   (
                     'Connectors',
@@ -160,10 +163,15 @@ class AdminHealthContent extends StatelessWidget {
   }
 
   String _summary(String title, AdministrationHealthFinding? finding) {
+    if (title == 'Model & provider') {
+      final model = health.overview?.observations['model']?.data?['model'];
+      final access =
+          accessChecks()?.healthObservation.finding?.detail ??
+          'Credentials not checked';
+      return model is String && model.isNotEmpty ? '$model\n$access' : access;
+    }
     if (finding == null) {
-      return title == 'Provider access'
-          ? 'Credentials not checked'
-          : 'Not checked';
+      return 'Not checked';
     }
     if (finding.status != AdministrationHealthStatus.healthy) {
       return finding.detail;
@@ -276,7 +284,6 @@ class AdminHealthContent extends StatelessWidget {
                       children: [
                         AdminRow(
                           title: switch (title) {
-                            'Model' => 'Models and reasoning',
                             'Tools' => 'Skills and tools',
                             'Connectors' => 'Manage connectors',
                             _ => 'Manage scheduled tasks',
@@ -308,7 +315,7 @@ class AdminHealthContent extends StatelessWidget {
       listenable: health,
       builder: (context, _) {
         return AdminPage(
-          title: 'Provider access',
+          title: 'Model & provider',
           scope: profile.label,
           child: ListView(
             padding: const EdgeInsets.all(16),
@@ -316,13 +323,39 @@ class AdminHealthContent extends StatelessWidget {
               if (accessChecks() case final checks?)
                 ProfileDiagnosticsPanel(
                   controller: checks,
+                  modelObservation: health.overview?.observations['model'],
+                  onChangeModel: () async {
+                    final overview = health.overview;
+                    final changed = await showProfileDefaultModelSheet(
+                      context,
+                      gateway: checks.workspace.gateway,
+                      connectionLabel: checks.connectionLabel,
+                    );
+                    if (changed) checks.invalidate();
+                    // A failed save/readback may have changed Hermes even when
+                    // the picker is subsequently cancelled.
+                    await overview?.refresh(keys: {'model'});
+                  },
+                  onCheck: () async {
+                    final overview = health.overview;
+                    final gateway = checks.workspace.gateway;
+                    await overview?.refresh(keys: {'model'});
+                    if (identical(checks.workspace.gateway, gateway)) {
+                      await checks.check();
+                    }
+                  },
                   onManageConnections: onConnections,
-                  onReviewProviderAccess: () => adminPushProfile(
-                    context,
-                    profile,
-                    (context, profile) =>
-                        AdminProvidersPage(profile: profile, shared: false),
-                  ),
+                  onReviewProviderAccess: () async {
+                    final overview = health.overview;
+                    await adminPushProfile(
+                      context,
+                      profile,
+                      (context, profile) =>
+                          AdminProvidersPage(profile: profile, shared: false),
+                    );
+                    checks.invalidate();
+                    await overview?.refresh(keys: {'model'});
+                  },
                 )
               else
                 const AdminNotice(

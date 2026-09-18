@@ -49,21 +49,22 @@ Runtime health uses `profiles/active.current`, resolved through profile metadata
 
 The owner-approved 18 September Health layout uses Server and Profile groups,
 with no combined health verdict. Doctor, audit and Logs remain server-owned;
-Usage and five observation rows follow the header-selected profile. Unknown
+Usage and four observation rows follow the header-selected profile. Unknown
 coverage is local, configuration does not expire after five minutes, and actual
 credential expiration remains visible. The Profile refresh icon explicitly checks access
 without inference. Details show their captured scope and link to the owning editor.
 See [Health observations](../ADMINISTRATION.md#health-observations) for the current
 stock API verification and rendering contract.
 
-The subsequent 18 September provider-access simplification replaces the stacked
-configuration observations and Access checks checklist with one credential-check
-component. Its Health row and detail use the same captured result; unknown catalog
-coverage is left to provider management. A provider failure promotes Manage provider
-access, a connection failure promotes Review connection, and retries remain explicit.
-The overflow menu and MCP shortcut are removed. The current stock runtime check can
-resolve a configured fallback model; it does not test a model reply or quota. See the
-[verified check contract](../ADMINISTRATION.md#health-observations).
+The subsequent provider-access simplification and Model & provider merge replace
+the stacked configuration observations and Access checks checklist with one group.
+Model selection leads, using the existing default-model sheet; credentials are a
+compact supporting observation with an explicit refresh control. Its Health row and
+detail share a captured result. Provider accounts remain in their existing editor,
+linked once from the group. Connection failures expose Review connection. The current
+stock runtime check can resolve a configured fallback model, so the result names any
+different resolved model/provider without validating the selected route. It does not
+test replies or quota. See the [verified check contract](../ADMINISTRATION.md#health-observations).
 
 Verified against stock upstream `98f758ae7e8db83c2bb9214c3b35adf41df15f03` on 17 September 2026: explicitly profile-scoped `setup.status` observes provider configuration without creating credentials. See the [implementation and source evidence](../ADMINISTRATION.md#health-observations).
 

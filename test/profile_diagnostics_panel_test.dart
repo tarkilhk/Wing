@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/administration_overview.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profiles_repository.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
@@ -46,7 +47,12 @@ class _DiagnosticsHost {
               Future.value(
                 method == 'setup.status'
                     ? <String, dynamic>{'provider_configured': true}
-                    : <String, dynamic>{'ok': true, 'profile': profile},
+                    : <String, dynamic>{
+                        'ok': true,
+                        'profile': profile,
+                        'model': 'gpt-5.6-sol',
+                        'provider': 'openai-codex',
+                      },
               );
         },
       ),
@@ -58,6 +64,7 @@ Widget _app(
   ProfileWorkspaceData workspace, {
   VoidCallback? onManage,
   VoidCallback? onProvider,
+  AdministrationObservation? observation,
   Brightness brightness = Brightness.light,
   ProfileDiagnosticsController? controller,
   double textScale = 1,
@@ -79,13 +86,22 @@ Widget _app(
       child: RepaintBoundary(key: const ValueKey('capture'), child: child!),
     ),
     home: AdminPage(
-      title: 'Provider access',
+      title: 'Model & provider',
       scope: 'Claw / work',
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           ProfileDiagnosticsPanel(
             controller: diagnostics,
+            modelObservation:
+                observation ??
+                (AdministrationObservation()
+                  ..data = {
+                    'model': 'gpt-5.6-sol',
+                    'provider': 'openai-codex',
+                  }),
+            onChangeModel: () {},
+            onCheck: diagnostics.check,
             onManageConnections: onManage ?? () {},
             onReviewProviderAccess: onProvider ?? () {},
           ),
@@ -106,7 +122,7 @@ void main() {
     );
     expect(host.reads, isEmpty);
     expect(host.calls, isEmpty);
-    await tester.tap(find.text('Check provider access'));
+    await tester.tap(find.byTooltip('Check access'));
     await tester.pumpAndSettle();
     expect(host.reads, isEmpty);
     expect(host.calls, hasLength(1));
@@ -128,13 +144,13 @@ void main() {
         'error': 'secret backend detail',
       };
     await tester.pumpWidget(_app(host.workspace('work')));
-    await tester.tap(find.text('Check provider access'));
+    await tester.tap(find.byTooltip('Check access'));
     await tester.pumpAndSettle();
     expect(find.text('Provider check failed'), findsOneWidget);
     expect(find.textContaining('secret backend detail'), findsNothing);
     expect(find.text('Provider credentials needed'), findsNothing);
     expect(
-      find.widgetWithText(FilledButton, 'Manage provider access'),
+      find.widgetWithText(ListTile, 'Manage provider access'),
       findsOneWidget,
     );
   });
@@ -151,13 +167,18 @@ void main() {
       await tester.pumpWidget(
         _app(host.workspace('work'), onProvider: () => managed = true),
       );
-      await tester.tap(find.text('Check provider access'));
+      await tester.tap(find.byTooltip('Check access'));
       await tester.pumpAndSettle();
       expect(find.text('Provider credentials needed'), findsOneWidget);
       await tester.tap(find.text('Manage provider access'));
       expect(managed, isTrue);
-      host.onCall = (_, _) async => {'ok': true, 'profile': 'work'};
-      await tester.tap(find.text('Check again'));
+      host.onCall = (_, _) async => {
+        'ok': true,
+        'profile': 'work',
+        'model': 'gpt-5.6-sol',
+        'provider': 'openai-codex',
+      };
+      await tester.tap(find.byTooltip('Check access'));
       await tester.pumpAndSettle();
       expect(find.text('Credentials available'), findsOneWidget);
       expect(find.text('Provider credentials needed'), findsNothing);
@@ -174,13 +195,13 @@ void main() {
       await tester.pumpWidget(
         _app(host.workspace('work'), onManage: () => managed = true),
       );
-      await tester.tap(find.text('Check provider access'));
+      await tester.tap(find.byTooltip('Check access'));
       await tester.pumpAndSettle();
       expect(find.text('Server access denied'), findsOneWidget);
       expect(find.textContaining('sensitive/path'), findsNothing);
       await tester.tap(find.text('Review connection'));
       expect(managed, isTrue);
-      expect(find.text('Manage provider access'), findsNothing);
+      expect(find.text('Manage provider access'), findsOneWidget);
     },
   );
 
@@ -230,7 +251,7 @@ void main() {
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_app(oldWorkspace, controller: controller));
-    await tester.tap(find.text('Check provider access'));
+    await tester.tap(find.byTooltip('Check access'));
     await tester.pump();
 
     final newHost = _DiagnosticsHost();
@@ -260,12 +281,17 @@ void main() {
       connectionLabel: 'Home server',
     );
     await tester.pumpWidget(_app(workspace, controller: controller));
-    await tester.tap(find.text('Check provider access'));
+    await tester.tap(find.byTooltip('Check access'));
     await tester.pump();
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
     controller.dispose();
 
-    pending.complete({'profile': 'work', 'ok': true});
+    pending.complete({
+      'profile': 'work',
+      'ok': true,
+      'model': 'gpt-5.6-sol',
+      'provider': 'openai-codex',
+    });
     await tester.pump();
     expect(tester.takeException(), isNull);
   });
@@ -281,10 +307,10 @@ void main() {
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_app(workspace, controller: controller));
-    await tester.tap(find.text('Check provider access'));
+    await tester.tap(find.byTooltip('Check access'));
     await tester.pumpAndSettle();
     final checkedLabel = tester
-        .widget<Text>(find.textContaining('Checked '))
+        .widget<Text>(find.textContaining(RegExp(r'^Checked [0-9]')))
         .data;
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
@@ -314,15 +340,20 @@ void main() {
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_app(workspace, controller: controller));
-    await tester.tap(find.text('Check provider access'));
+    await tester.tap(find.byTooltip('Check access'));
     await tester.pump();
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
-    pending.complete({'profile': 'work', 'ok': true});
+    pending.complete({
+      'profile': 'work',
+      'ok': true,
+      'model': 'gpt-5.6-sol',
+      'provider': 'openai-codex',
+    });
     await tester.pump();
     await tester.pumpWidget(_app(workspace, controller: controller));
 
     expect(find.text('Credentials available'), findsOneWidget);
-    expect(find.textContaining('Checked '), findsOneWidget);
+    expect(find.textContaining(RegExp(r'^Checked [0-9]')), findsOneWidget);
     expect(host.reads, isEmpty);
     expect(host.calls, hasLength(1));
     expect(tester.takeException(), isNull);
@@ -342,7 +373,7 @@ void main() {
       );
       addTearDown(controller.dispose);
       await tester.pumpWidget(_app(oldWorkspace, controller: controller));
-      await tester.tap(find.text('Check provider access'));
+      await tester.tap(find.byTooltip('Check access'));
       await tester.pump();
       final newHost = _DiagnosticsHost();
       final newWorkspace = newHost.workspace('work');
@@ -351,18 +382,100 @@ void main() {
         connectionLabel: 'Home server',
       );
       await tester.pumpWidget(_app(newWorkspace, controller: controller));
-      pending.complete({'profile': 'work', 'ok': true});
+      pending.complete({
+        'profile': 'work',
+        'ok': true,
+        'model': 'gpt-5.6-sol',
+        'provider': 'openai-codex',
+      });
       await tester.pump();
 
       expect(find.text('Credentials not checked'), findsOneWidget);
-      expect(find.textContaining('Checked '), findsNothing);
+      expect(find.textContaining(RegExp(r'^Checked [0-9]')), findsNothing);
       expect(newHost.reads, isEmpty);
       expect(newHost.calls, isEmpty);
-      await tester.tap(find.text('Check provider access'));
+      await tester.tap(find.byTooltip('Check access'));
       await tester.pumpAndSettle();
       expect(find.text('Credentials available'), findsOneWidget);
     },
   );
+
+  test(
+    'selection changes discard retained and pending credential checks',
+    () async {
+      final host = _DiagnosticsHost();
+      final controller = ProfileDiagnosticsController(
+        workspace: host.workspace('work'),
+        connectionLabel: 'Claw',
+      );
+      addTearDown(controller.dispose);
+      controller.updateModel({
+        'model': 'gpt-5.6-sol',
+        'provider': 'openai-codex',
+      });
+      await controller.check();
+      expect(
+        controller.healthObservation.finding?.detail,
+        'Credentials available',
+      );
+      controller.updateModel({
+        'model': 'gpt-5.6-sol',
+        'provider': 'openai-codex',
+      });
+      expect(
+        controller.healthObservation.finding?.detail,
+        'Credentials available',
+      );
+      controller.updateModel({'model': 'gpt-5.6-sol', 'provider': 'openai'});
+      expect(controller.healthObservation.finding, isNull);
+      final pending = Completer<Map<String, dynamic>>();
+      host.onCall = (_, _) => pending.future;
+      final check = controller.check();
+      controller.updateModel({'model': 'another-model', 'provider': 'openai'});
+      pending.complete({
+        'ok': true,
+        'profile': 'work',
+        'model': 'gpt-5.6-sol',
+        'provider': 'openai',
+      });
+      await check;
+      expect(controller.healthObservation.finding, isNull);
+    },
+  );
+
+  testWidgets('resolved route cannot validate a different selected route', (
+    tester,
+  ) async {
+    final host = _DiagnosticsHost()
+      ..onCall = (_, _) async => {
+        'ok': true,
+        'profile': 'work',
+        'model': 'claude-sonnet-4-6',
+        'provider': 'anthropic',
+      };
+    final workspace = host.workspace('work');
+    final controller = ProfileDiagnosticsController(
+      workspace: workspace,
+      connectionLabel: 'Claw',
+    );
+    addTearDown(controller.dispose);
+    controller.updateModel({
+      'model': 'gpt-5.6-sol',
+      'provider': 'openai-codex',
+    });
+    await controller.check();
+    await tester.pumpWidget(_app(workspace, controller: controller));
+    expect(find.text('Credentials available'), findsNothing);
+    expect(
+      find.textContaining('Checked claude-sonnet-4-6 · anthropic.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('not confirmed'), findsOneWidget);
+    host.onCall = (_, _) async => {'ok': true, 'profile': 'work'};
+    await controller.check();
+    await tester.pump();
+    expect(find.text('Check incomplete'), findsOneWidget);
+  });
 
   const capture = bool.fromEnvironment('CAPTURE_PROVIDER_ACCESS');
   setUpAll(() async {
@@ -398,8 +511,12 @@ void main() {
     for (final scale in [1.0, 2.0]) {
       for (final state in [
         'initial',
+        'model-loading',
+        'model-unavailable',
+        'model-stale',
         'checking',
         'ready',
+        'different',
         'missing',
         'failed',
         'offline',
@@ -413,6 +530,12 @@ void main() {
           final pending = Completer<Map<String, dynamic>>();
           host.onCall = (_, _) async => switch (state) {
             'checking' => pending.future,
+            'different' => {
+              'ok': true,
+              'profile': 'work',
+              'model': 'claude-sonnet-4-6',
+              'provider': 'anthropic',
+            },
             'missing' => {
               'ok': false,
               'error': 'No Hermes provider is configured.',
@@ -420,7 +543,12 @@ void main() {
             'failed' => {'ok': false, 'error': 'other'},
             'offline' => throw TimeoutException('offline'),
             'incomplete' => {},
-            _ => {'ok': true, 'profile': 'work'},
+            _ => {
+              'ok': true,
+              'profile': 'work',
+              'model': 'gpt-5.6-sol',
+              'provider': 'openai-codex',
+            },
           };
           final workspace = host.workspace('work');
           final controller = ProfileDiagnosticsController(
@@ -428,7 +556,11 @@ void main() {
             connectionLabel: 'Claw',
           );
           addTearDown(controller.dispose);
-          if (state != 'initial') {
+          controller.updateModel({
+            'model': 'gpt-5.6-sol',
+            'provider': 'openai-codex',
+          });
+          if (state != 'initial' && !state.startsWith('model-')) {
             final check = controller.check();
             if (state != 'checking') await check;
           }
@@ -438,13 +570,26 @@ void main() {
               controller: controller,
               textScale: scale,
               brightness: brightness,
+              observation: switch (state) {
+                'model-loading' => AdministrationObservation()..loading = true,
+                'model-unavailable' =>
+                  AdministrationObservation()..error = 'Offline',
+                'model-stale' =>
+                  AdministrationObservation()
+                    ..data = {
+                      'model': 'gpt-5.6-sol',
+                      'provider': 'openai-codex',
+                    }
+                    ..error = 'Offline',
+                _ => null,
+              },
             ),
           );
           await tester.pump();
           final name = '$state-${brightness.name}-$scale';
           await snapshot(tester, name);
           expect(tester.takeException(), isNull);
-          await tester.ensureVisible(find.byType(TextButton));
+          await tester.ensureVisible(find.text('Manage provider access'));
           await tester.pump();
           await snapshot(tester, '$name-actions');
           expect(tester.takeException(), isNull);
@@ -454,12 +599,23 @@ void main() {
               isNull,
             );
             expect(
-              tester.widget<TextButton>(find.byType(TextButton)).onPressed,
+              tester
+                  .widget<IconButton>(
+                    find.byWidgetPredicate(
+                      (w) => w is IconButton && w.tooltip == 'Check access',
+                    ),
+                  )
+                  .onPressed,
               isNull,
             );
             await controller.check();
             expect(host.calls, hasLength(1));
-            pending.complete({'ok': true, 'profile': 'work'});
+            pending.complete({
+              'ok': true,
+              'profile': 'work',
+              'model': 'gpt-5.6-sol',
+              'provider': 'openai-codex',
+            });
             await tester.pumpAndSettle();
           }
           await tester.pumpWidget(const SizedBox());

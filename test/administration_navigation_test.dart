@@ -564,7 +564,7 @@ void main() {
     (tester) async {
       await show(tester, Brightness.dark, healthOnly: true);
       await tester.scrollUntilVisible(
-        find.text('Provider access'),
+        find.text('Model & provider'),
         280,
         scrollable: find
             .byWidgetPredicate(
@@ -573,7 +573,7 @@ void main() {
             .first,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Provider access'));
+      await tester.tap(find.text('Model & provider'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.text('Manage provider access'),

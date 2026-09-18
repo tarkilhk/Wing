@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Combine Health’s model and provider access into one screen with direct model selection, compact credential status, and account management. Clear stale checks after model changes and identify different resolved models or providers.
+
 - Show Usage activity in one compact band of week columns with earlier/later navigation, retaining the accent-derived period outline and year-wide activity colours.
 
 - Sort Usage breakdowns from highest to lowest for the selected token or cost measure, keeping unknown amounts last and category colours stable.

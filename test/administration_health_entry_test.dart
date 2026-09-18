@@ -30,6 +30,12 @@ class _Fixture {
   final requests = <String>[];
   final scopedRequests = <(String, String, Map<String, String>)>[];
   final explicitCalls = <String>[];
+  final modelWrites = <(String, Map<String, dynamic>)>[];
+  final models = <String, String>{};
+  Map<String, dynamic> modelInfo(String profile) => {
+    'model': models[profile] ?? 'gpt-5.6-sol',
+    'provider': 'openai-codex',
+  };
   final base = AdministrationFixture('Claw');
   late ProfileWorkspaceController workspace;
   late AdministrationRepository repository;
@@ -56,11 +62,34 @@ class _Fixture {
         final source = browser.gateway(scope);
         return ProfileGateway(
           scope: scope,
-          get: source.read,
+          get: (path, query) async {
+            if (path == 'model/info') return modelInfo(scope.profileName);
+            if (path == 'model/options') {
+              return {
+                'providers': [
+                  {
+                    'slug': 'openai-codex',
+                    'name': 'OpenAI Codex',
+                    'models': ['gpt-5.6-sol', 'gpt-6-astra'],
+                  },
+                ],
+              };
+            }
+            return source.read(path, query);
+          },
+          post: (path, body) async {
+            modelWrites.add((path, Map.of(body)));
+            models[scope.profileName] = body['model'] as String;
+            return {'ok': true};
+          },
           rpc: (method, params) {
             explicitCalls.add('$method ${scope.profileName}');
             if (method == 'setup.runtime_check') {
-              return Future.value({'ok': true, 'profile': scope.profileName});
+              return Future.value({
+                'ok': true,
+                'profile': scope.profileName,
+                ...modelInfo(scope.profileName),
+              });
             }
             return source.call(method, params);
           },
@@ -98,7 +127,7 @@ class _Fixture {
           'approvals': {'mode': 'smart'},
           'compression': {'enabled': true},
         },
-        'model/info' => {'model': 'gpt-5.6-sol', 'provider': 'openai-codex'},
+        'model/info' => modelInfo(query['profile']!),
         'skills' => {
           'data': List.generate(
             126,
@@ -208,6 +237,64 @@ void main({
   }
 
   testWidgets(
+    'model save refreshes selection and clears credentials for the captured profile',
+    (tester) async {
+      final fixture = _Fixture('green');
+      await fixture.initialize();
+      addTearDown(fixture.dispose);
+      await fixture.workspace.switchProfile('client-work');
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: HermesHealthContent(
+              controller: fixture.workspace,
+              repository: fixture.repository,
+              onOpenMenu: () {},
+              onOpenSession: (_) async {},
+              onConnections: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Model & provider'));
+      await tester.tap(find.text('Model & provider'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Check access'));
+      await tester.pumpAndSettle();
+      expect(find.text('Credentials available'), findsOneWidget);
+      await tester.tap(find.text('Change model'));
+      await tester.pumpAndSettle();
+      final option = find.byKey(
+        const Key('profile-model-openai-codex-gpt-6-astra'),
+      );
+      await tester.ensureVisible(option);
+      await tester.tap(option);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('profile-model-save')));
+      await tester.pumpAndSettle();
+      expect(fixture.modelWrites.single.$1, 'model/set?profile=client-work');
+      expect(fixture.modelWrites.single.$2, {
+        'scope': 'main',
+        'provider': 'openai-codex',
+        'model': 'gpt-6-astra',
+      });
+      expect(find.text('gpt-6-astra'), findsOneWidget);
+      expect(find.text('Credentials not checked'), findsOneWidget);
+      expect(
+        fixture.explicitCalls.where((v) => v.startsWith('setup.runtime_check')),
+        hasLength(1),
+      );
+      await tester.tap(find.byTooltip('Check access'));
+      await tester.pumpAndSettle();
+      expect(find.text('Credentials available'), findsOneWidget);
+      expect(fixture.models['default'], isNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'Health owns scoped observations; profile check is explicit and read only',
     (tester) async {
       final fixture = _Fixture('green');
@@ -269,11 +356,11 @@ void main({
         ),
         hasLength(1),
       );
-      expect(find.text('Credentials available'), findsOneWidget);
-      await tester.ensureVisible(find.text('Provider access'));
-      await tester.tap(find.text('Provider access'));
+      expect(find.textContaining('Credentials available'), findsOneWidget);
+      await tester.ensureVisible(find.text('Model & provider'));
+      await tester.tap(find.text('Model & provider'));
       await tester.pumpAndSettle();
-      expect(find.text('Credentials available'), findsOneWidget);
+      expect(find.textContaining('Credentials available'), findsOneWidget);
       expect(find.text('Provider configuration detected'), findsNothing);
       expect(
         find.text('Provider readiness is not fully observed'),
@@ -282,9 +369,17 @@ void main({
       expect(find.text('Access checks'), findsNothing);
       expect(find.byType(PopupMenuButton<String>), findsNothing);
       expect(find.text('Manage provider access'), findsOneWidget);
-      await tester.pageBack();
+      expect(find.text('gpt-5.6-sol'), findsOneWidget);
+      expect(find.text('openai-codex'), findsOneWidget);
+      await tester.tap(find.text('Change model'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cancel'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(find.text('Credentials available'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Credentials available'), findsOneWidget);
       expect(
         fixture.explicitCalls.where((v) => v.startsWith('setup.runtime_check')),
         hasLength(1),
@@ -373,8 +468,7 @@ void main({
             expect(find.text('Not fully checked'), findsNothing);
             if (status == 'green' || large) {
               for (final title in [
-                'Provider access',
-                'Model',
+                'Model & provider',
                 'Tools',
                 'Connectors',
                 'Scheduled tasks',

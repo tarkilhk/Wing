@@ -45,7 +45,7 @@ short read-only disclosure; source metadata is shown only when reported.
 
 Health has two groups. Server owns Doctor, security audit and Logs; the runtime
 profile is quiet metadata below these rows. Profile uses selection from the shared header,
-a refresh icon beside its heading, five stable rows (Provider access, Model, Tools, Connectors,
+a refresh icon beside its heading, four stable rows (Model & provider, Tools, Connectors,
 Scheduled tasks), and Usage. There is no global health verdict. Optional server
 diagnostics say Not run until explicitly started.
 
@@ -53,19 +53,27 @@ Health owns its profile observations, so opening Administration first is unneces
 Opening Health reads model, sign-in, tool, connector, task and provider-configuration
 metadata. The Profile refresh icon refreshes those reads and explicitly checks provider
 credentials. The check sends no model request, connector test or Doctor/audit operation.
-Provider access uses one retained credential result in both its list row and detail
-component. Before an explicit check it says Credentials not checked; configuration
-presence and unknown catalog entries do not substitute for this result. The detail
-has one primary action: check, manage provider access after a provider failure, or
-review the connection after a transport failure. Check again is secondary when a
-recovery action is shown. There is no overflow menu or duplicated setup checklist.
-Account-specific expiry and sign-in details remain in Manage provider access.
-Each detail page retains its captured profile and links to the existing editor.
+Model & provider combines the selected default model with its supporting credential
+status in one group. Change model opens the existing profile-default picker; the
+choice applies to new chats. A small Check access refresh control runs the explicit
+check. Manage provider access links to the existing account editor. Connection
+failures expose Review connection. There is no separate Model/Provider access
+Health destination, overflow menu, or duplicated setup checklist.
 
-The provider component calls only `setup.runtime_check`, scoped to the captured
+The Health row and detail use the same retained credential result. Configuration
+presence and unknown provider catalog entries do not substitute for it. Successful
+checks require the canonical profile and resolved model/provider. A different
+resolved model or provider is named explicitly and does not validate the selected
+route; aliases are not guessed to be fallbacks. Unchanged selections retain results;
+a model/provider change, confirmed picker save, or return from account management
+clears them, including in-flight results. Account-specific expiry and sign-in details
+remain in Manage provider access. Each detail follows explicit header profile
+selection while each editor captures the scope it saves to.
+
+The credential check calls only `setup.runtime_check`, scoped to the captured
 canonical profile. Verified against latest stock upstream
-[`01382698fc32ec7740b6a204d9b7a6abeac74d33`](https://github.com/NousResearch/hermes-agent/blob/01382698fc32ec7740b6a204d9b7a6abeac74d33/tui_gateway/methods_config.py#L296)
-on 18 September 2026: without a provider override it resolves the startup model and
+[`c661785f872b5647fbac7c138d965180783bd9af`](https://github.com/NousResearch/hermes-agent/blob/c661785f872b5647fbac7c138d965180783bd9af/tui_gateway/methods_config.py#L296)
+on 18 September 2026 UTC: without a provider override it resolves the startup model and
 configured fallback chain. This establishes credential resolution, not successful
 inference or available quota. Resolution may use the provider's credential renewal;
 opening the screen never runs it automatically. Only known missing-credential
@@ -73,6 +81,8 @@ messages are described as missing credentials. Other negative results say Provid
 check failed; arbitrary server exception text is not displayed. A missing/mismatched
 success scope or malformed response is incomplete, never success. Transport failures
 are inconclusive, never evidence that credentials are missing.
+The selected model/provider comes from stock [`GET /api/model/info`](https://github.com/NousResearch/hermes-agent/blob/c661785f872b5647fbac7c138d965180783bd9af/hermes_cli/web_routers/models.py#L40),
+refreshed before an explicit check and after editing. No backend changes are needed.
 
 Configuration does not become unknown just because five minutes pass. Failed
 refreshes retain the previous result and timestamp with a local qualification;

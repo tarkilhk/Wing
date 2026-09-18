@@ -799,21 +799,21 @@ void main() {
     await tester.pageBack();
     await _settle(tester);
     await tester.scrollUntilVisible(
-      find.text('Provider access'),
+      find.text('Model & provider'),
       -250,
       scrollable: find.byType(Scrollable).last,
     );
-    await tester.tap(find.text('Provider access'));
+    await tester.tap(find.text('Model & provider'));
     await _settle(tester);
     await tester.scrollUntilVisible(
-      find.text('Check provider access'),
+      find.byTooltip('Check access'),
       260,
       scrollable: find.byType(Scrollable).last,
     );
     await _settle(tester);
-    await tester.ensureVisible(find.text('Check provider access'));
+    await tester.ensureVisible(find.byTooltip('Check access'));
     await _settle(tester);
-    await tester.tap(find.text('Check provider access'));
+    await tester.tap(find.byTooltip('Check access'));
     await _settle(tester);
     expect(find.text('Couldn’t complete the check'), findsOneWidget);
     expect(find.text('Review connection'), findsOneWidget);

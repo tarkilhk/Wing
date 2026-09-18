@@ -88,10 +88,13 @@ class _HermesAdministrationContentState
     final profile = _profile;
     if (!widget.healthOnly || profile == null) return;
     final key = profile.scope.storageNamespace;
-    final overview = _healthOverviews.putIfAbsent(
-      key,
-      () => AdministrationOverview(profile),
-    );
+    final overview = _healthOverviews.putIfAbsent(key, () {
+      final overview = AdministrationOverview(profile);
+      overview.addListener(() {
+        _accessChecks[key]?.updateModel(overview.observations['model']?.data);
+      });
+      return overview;
+    });
     final tasks = _healthTasks.putIfAbsent(key, () {
       final source = ScheduledTasksController.acquire(
         profile,
@@ -121,8 +124,8 @@ class _HermesAdministrationContentState
       overview.refresh(keys: {'model', 'access', 'tools', 'connectors'}),
       if (_healthTasks[key] case final tasks?) tasks.refresh(),
       _health.refreshReadiness(),
-      if (checks != null) checks.check(),
     ]);
+    if (checks != null) await checks.check();
   }
 
   Future<void> _checkProfile() async {
@@ -167,6 +170,11 @@ class _HermesAdministrationContentState
         final checks = ProfileDiagnosticsController(
           workspace: workspace,
           connectionLabel: _server.connectionLabel,
+        );
+        checks.updateModel(
+          _healthOverviews[workspace.scope.storageNamespace]
+              ?.observations['model']
+              ?.data,
         );
         checks.addListener(() {
           if (mounted) _health.updateProfileChecks(checks.healthObservation);
