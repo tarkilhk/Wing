@@ -1,5 +1,6 @@
 import '../../services/administration_health.dart';
 import '../../services/doctor_diagnostic.dart';
+import '../../services/security_audit_report.dart';
 import '../../theme/wing_theme.dart';
 import '../../widgets/studio_select.dart';
 import '../../widgets/studio_error.dart';
@@ -8,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 import 'admin_widgets.dart';
 import 'admin_doctor_diagnosis.dart';
+import 'admin_security_diagnosis.dart';
 
 class AdminActionPage extends StatefulWidget {
   final Future<void> Function()? onRunAgain;
@@ -89,10 +91,15 @@ class _AdminActionPageState extends State<AdminActionPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isAudit = widget.action.name == 'security-audit';
+    final audit = isAudit && _status != null
+        ? SecurityAuditReport.fromStatus(_status!)
+        : null;
     final diagnosis =
         widget.action.name == 'doctor' && _status?['running'] == false
         ? DoctorDiagnostic.fromLines(_status?['lines'] as List? ?? [])
         : null;
+    final hasSummary = diagnosis != null || audit != null;
     return AdminPage(
       title: widget.title,
       scope: widget.scope,
@@ -110,21 +117,24 @@ class _AdminActionPageState extends State<AdminActionPage> {
           if (_error != null) AdminNotice.error(_error!),
           if (_status?['running'] != true &&
               _status?['exit_code'] != null &&
-              _status!['exit_code'] != 0)
+              _status!['exit_code'] != 0 &&
+              !(isAudit && _status!['exit_code'] == 1))
             const StudioError('Failed')
-          else if (diagnosis == null)
+          else if (!hasSummary)
             Text(
               _status == null
                   ? 'Checking operation…'
                   : _status!['running'] == true
                   ? 'Running'
+                  : isAudit
+                  ? 'Audit summary unavailable'
                   : _status!['exit_code'] == 0
                   ? 'Completed'
                   : _status!['exit_code'] == null
                   ? 'Outcome unavailable'
                   : 'Failed',
             ),
-          if (diagnosis == null &&
+          if (!hasSummary &&
               _status?['running'] == false &&
               _status?['exit_code'] == 0) ...[
             const SizedBox(height: 8),
@@ -133,7 +143,7 @@ class _AdminActionPageState extends State<AdminActionPage> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
-          if (_checkedAt != null && diagnosis == null) ...[
+          if (_checkedAt != null && !hasSummary) ...[
             const SizedBox(height: 8),
             Text(
               'Checked ${TimeOfDay.fromDateTime(_checkedAt!).format(context)}',
@@ -144,14 +154,18 @@ class _AdminActionPageState extends State<AdminActionPage> {
             AdminDoctorDiagnosis(diagnosis: diagnosis, checkedAt: _checkedAt),
             const SizedBox(height: WingSpacing.lg),
           ],
+          if (audit != null) ...[
+            AdminSecurityDiagnosis(report: audit, checkedAt: _checkedAt),
+            const SizedBox(height: WingSpacing.lg),
+          ],
           const SizedBox(height: 12),
           AdminGroup(
             children: [
               ExpansionTile(
-                key: ValueKey(diagnosis != null),
+                key: ValueKey(hasSummary),
                 shape: const Border(),
                 collapsedShape: const Border(),
-                initiallyExpanded: diagnosis == null,
+                initiallyExpanded: !hasSummary && !isAudit,
                 title: const Text('Diagnostic output'),
                 childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 children: [

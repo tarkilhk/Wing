@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Summarize Security audit findings in Health and show component totals, expandable severity cards, package/advisory/fix details, and a collapsed raw-output view.
+
 - Keep Doctor and Security audit Run actions on Health, and refresh diagnostic status and Doctor issue counts automatically without opening details. Shorten diagnostic confirmations and emphasize the profile name.
 
 - Remove the duplicate Health profile selector and replace Check profile with a refresh icon beside the Profile heading, using the profile selected in the shared header.

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/doctor_diagnostic.dart';
+import '../../services/security_audit_report.dart';
 import '../../theme/wing_theme.dart';
 import '../../services/administration_health.dart';
 import 'admin_operations_page.dart';
@@ -105,6 +106,9 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
 
   Widget _check(String title, String path, String scope) {
     final observation = _observations[path];
+    final audit = path == 'ops/security-audit' && observation != null
+        ? SecurityAuditReport.fromStatus(observation.status)
+        : null;
     final diagnosis =
         path == 'ops/doctor' && observation?.status['running'] == false
         ? DoctorDiagnostic.fromLines(
@@ -115,12 +119,20 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
         ? (health.starting.contains(path) ? 'Starting…' : 'Not run')
         : observation.readError != null
         ? 'Result refresh unavailable'
-        : diagnosis?.title ??
-              (observation.outcome == 'Completed'
+        : audit?.title ??
+              diagnosis?.title ??
+              (path == 'ops/security-audit' &&
+                      observation.status['running'] == false &&
+                      observation.status['exit_code'] == 1
+                  ? 'Review audit findings'
+                  : observation.outcome == 'Completed'
                   ? 'Completed · Review results'
                   : observation.outcome);
-    final warning = diagnosis?.hasIssues == true;
-    final color = observation?.failed == true
+    final warning =
+        diagnosis?.hasIssues == true || audit?.hasVulnerabilities == true;
+    final color =
+        audit?.hasHighSeverity == true ||
+            (audit == null && observation?.failed == true)
         ? WingTokens.of(context).danger
         : warning
         ? WingTokens.of(context).warning

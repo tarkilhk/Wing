@@ -1,0 +1,70 @@
+=== security-audit started 2026-09-18 18:10:38 ===
+⚠ A previous `hermes update` pulled new code but did not restart running gateways.
+  Gateways may still be serving pre-update modules (mixed sys.modules).
+  Run `hermes update` or `hermes gateway restart`.
+Found 21 known vulnerability finding(s) across 177 component(s):
+
+[venv]
+  HIGH      httpcore2==2.7.0  GHSA-7mj9-2mp8-4m2p
+           HTTPX2: Secure WebSocket traffic sent without TLS through SOCKS proxies
+           fixed in: 2.10.0
+  HIGH      httpx2==2.7.0  GHSA-7mj9-2mp8-4m2p
+           HTTPX2: Secure WebSocket traffic sent without TLS through SOCKS proxies
+           fixed in: 2.10.0
+  HIGH      httpx2==2.7.0  GHSA-8xx6-hgc6-gc2m
+           HTTPX2: Streaming response decompression does not bound peak memory (decompression amplification)
+           fixed in: 2.12.0
+  HIGH      tornado==6.5.7  GHSA-mpf4-983q-p7j4
+           Tornado: Urlencoded body parsing omits max_num_fields, so one request can stall the event loop
+           fixed in: 6.5.8
+  MODERATE  httpx2==2.7.0  GHSA-f2fp-rgf2-35cp
+           HTTPX2: Quadratic SSE line buffering can cause CPU denial of service
+           fixed in: 2.10.0
+  MODERATE  httpx2==2.7.0  GHSA-h4x7-gw46-3wm6
+           HTTPX2: Multipart part header injection via unvalidated file Content-Type and custom headers
+           fixed in: 2.11.0
+  MODERATE  httpx2==2.7.0  GHSA-pf96-p4fj-6566
+           HTTPX2: Conflicting Content-Length and Transfer-Encoding headers can be auto-generated
+           fixed in: 2.11.0
+  MODERATE  pydantic-settings==2.13.1  GHSA-4xgf-cpjx-pc3j
+           pydantic-settings: NestedSecretsSettingsSource follows symlinks outside secrets_dir, enabling loc...
+           fixed in: 2.14.2
+  MODERATE  PyNaCl==1.5.0  GHSA-mrfv-m5wm-5w6w
+           libsodium has Incomplete List of Disallowed Inputs
+           fixed in: 2.5.0, 1.24.0, 1.6.2
+  MODERATE  tornado==6.5.7  GHSA-8423-8fgw-73vq
+           tornado: multipart split() creates huge temp list before max_parts check -> memory amplification ...
+           fixed in: 6.5.8
+  LOW       Pygments==2.19.2  GHSA-5239-wwwm-4pmq
+           Pygments has Regular Expression Denial of Service (ReDoS) due to Inefficient Regex for GUID Matching
+           fixed in: 2.20.0
+  LOW       tornado==6.5.7  GHSA-wwv5-g3v4-889x
+           Tornado: Incomplete fix for CVE-2026-35536: cookie attribute injection re-opened via the legacy c...
+           fixed in: 6.5.8
+  UNKNOWN   httpcore2==2.7.0  PYSEC-2026-3844
+           HTTPX2: Secure WebSocket traffic sent without TLS through SOCKS proxies
+           fixed in: 2.10.0
+  UNKNOWN   httpx2==2.7.0  PYSEC-2026-3845
+           HTTPX2: Secure WebSocket traffic sent without TLS through SOCKS proxies
+           fixed in: 2.10.0
+  UNKNOWN   httpx2==2.7.0  PYSEC-2026-3846
+           HTTPX2: Streaming response decompression does not bound peak memory (decompression amplification)
+           fixed in: 2.12.0
+  UNKNOWN   httpx2==2.7.0  PYSEC-2026-3847
+           HTTPX2: Quadratic SSE line buffering can cause CPU denial of service
+           fixed in: 2.10.0
+  UNKNOWN   httpx2==2.7.0  PYSEC-2026-3848
+           HTTPX2: Multipart part header injection via unvalidated file Content-Type and custom headers
+           fixed in: 2.11.0
+  UNKNOWN   httpx2==2.7.0  PYSEC-2026-3849
+           HTTPX2: Conflicting Content-Length and Transfer-Encoding headers can be auto-generated
+           fixed in: 2.11.0
+  UNKNOWN   Pygments==2.19.2  PYSEC-2026-2987
+           Pygments has Regular Expression Denial of Service (ReDoS) due to Inefficient Regex for GUID Matching
+           fixed in: 2.20.0
+  UNKNOWN   PyNaCl==1.5.0  PYSEC-2026-3002
+           libsodium has Incomplete List of Disallowed Inputs
+           fixed in: 1.6.2
+  UNKNOWN   tornado==6.5.7  PYSEC-2026-3928
+           Tornado: Urlencoded body parsing omits max_num_fields, so one request can stall the event loop
+           fixed in: 6.5.8

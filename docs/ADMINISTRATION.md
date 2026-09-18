@@ -71,7 +71,15 @@ Reviewing output reads
 the same operation. Run again is a separate detail action, offered only for a known
 finished operation. Doctor summaries show parsed findings; full output remains
 available. Other operations show their actual output. Exit zero alone never means
-no issues. Stock Hermes exposes no remote Doctor repair action, so Wing adds none.
+no issues. Security audit shows its vulnerability count in Health, then the full
+finding/component total and expandable severity groups in details. Each finding
+retains its package, source component, advisory, description and reported fixed
+versions. Audit notices remain separate from vulnerability counts. Diagnostic
+output is available in a disclosure, collapsed by default. Only a complete current
+report with exit 0 or 1 supplies structured audit counts; exit 2 is an audit error.
+Unrecognized or truncated output never implies no vulnerabilities. See the
+[audit report contract](research/2026-09-18-security-audit-report.md).
+Stock Hermes exposes no remote Doctor repair action, so Wing adds none.
 
 Verified on 18 September 2026 against stock upstream
 [`8a492617e1239ab90bd3e3f7794b1e443f37a287`](https://github.com/NousResearch/hermes-agent/commit/8a492617e1239ab90bd3e3f7794b1e443f37a287):
