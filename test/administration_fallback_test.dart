@@ -11,11 +11,10 @@ import 'package:wing/core/widgets/chat_intelligence_picker.dart';
 
 import 'support/administration_fixture.dart';
 
-// Stock contract inspected 2026-09-19 at upstream Hermes main
-// 9dd36c56cf66593381c151b787d2b7222ae4b835:
-// hermes_cli/fallback_config.py::_iter_fallback_entries accepts a map or list;
-// it skips non-map entries. Preserve them for explicit removal in this editor.
-// web_routers/config_env.py::get_config returns that value unchanged.
+// Desktop contract inspected 2026-09-19 at upstream Hermes main
+// 21642218445e213b02ea7158f71214022645c9c6:
+// apps/desktop/src/app/settings/fallback-models-field.tsx normalizes strings,
+// retains incomplete local rows, and emits only complete pairs on edits.
 const _entry = {
   'provider': 'example',
   'model': 'backup-model',
@@ -43,68 +42,92 @@ Future<void> _manage(WidgetTester tester, int index, String action) async {
 }
 
 void main() {
-  for (final invalid in <Object?>[
-    'private-value',
-    null,
-    42,
-    false,
-    ['nested'],
-  ]) {
-    testWidgets(
-      'non-object ${invalid.runtimeType} does not block fallback list',
-      (tester) async {
-        final fixture = AdministrationFixture();
-        fixture.configs['default']!['fallback_providers'] = [invalid, _entry];
-        await _open(tester, fixture);
-        expect(find.text('Invalid fallback entry'), findsOneWidget);
-        expect(find.text('backup-model'), findsOneWidget);
-        expect(find.text('Add fallback'), findsOneWidget);
-        expect(find.textContaining('Could not load'), findsNothing);
-        expect(find.textContaining('private-value'), findsNothing);
-        expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
-      },
-    );
+  for (final invalid in <Object?>[null, 42, false, {}]) {
+    testWidgets('incomplete ${invalid.runtimeType} is an editable draft', (
+      tester,
+    ) async {
+      final fixture = AdministrationFixture();
+      fixture.configs['default']!['fallback_providers'] = [invalid, _entry];
+      await _open(tester, fixture);
+      expect(find.text('Choose model'), findsOneWidget);
+      expect(find.text('backup-model'), findsOneWidget);
+      expect(find.textContaining('Could not load'), findsNothing);
+      expect(find.text('Invalid fallback entry'), findsNothing);
+      expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
+      await tester.tap(find.text('Choose model'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('second'));
+      await tester.pumpAndSettle();
+      expect(fixture.configs['default']!['fallback_providers'], [
+        {'provider': 'example', 'model': 'second'},
+        _entry,
+      ]);
+    });
   }
 
-  testWidgets('mixed entries survive edits until explicitly removed', (
-    tester,
-  ) async {
+  testWidgets(
+    'desktop strings normalize and incomplete drafts survive saves locally',
+    (tester) async {
+      final fixture = AdministrationFixture();
+      fixture.configs['default']!['fallback_providers'] = [
+        'example/team/model',
+        'model-only',
+        null,
+        _entry,
+      ];
+      await _open(tester, fixture);
+      expect(find.text('team/model'), findsOneWidget);
+      expect(find.text('model-only'), findsOneWidget);
+      expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
+      await tester.tap(find.text('Add fallback'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('second'));
+      await tester.pumpAndSettle();
+      expect(fixture.configs['default']!['fallback_providers'], [
+        {'provider': 'example', 'model': 'team/model'},
+        _entry,
+        {'provider': 'example', 'model': 'second'},
+      ]);
+      expect(find.text('model-only'), findsOneWidget);
+      expect(find.text('Choose model'), findsOneWidget);
+      await _manage(tester, 4, 'Move up');
+      expect(fixture.configs['default']!['fallback_providers'], [
+        {'provider': 'example', 'model': 'team/model'},
+        _entry,
+        {'provider': 'example', 'model': 'second'},
+      ]);
+      await _manage(tester, 1, 'Remove');
+      expect(fixture.configs['default']!['fallback_providers'], [
+        _entry,
+        {'provider': 'example', 'model': 'second'},
+      ]);
+      expect(find.textContaining('changed elsewhere'), findsNothing);
+    },
+  );
+
+  testWidgets('editing a row preserves its routing fields', (tester) async {
     final fixture = AdministrationFixture();
-    fixture.configs['default']!['fallback_providers'] = [
-      'opaque',
-      _entry,
-      null,
-    ];
+    fixture.configs['default']!['fallback_providers'] = [_entry];
     await _open(tester, fixture);
-    await tester.tap(find.text('Add fallback'));
+    await tester.tap(find.text('backup-model'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('second'));
     await tester.pumpAndSettle();
     expect(fixture.configs['default']!['fallback_providers'], [
-      'opaque',
-      _entry,
-      null,
-      {'provider': 'example', 'model': 'second'},
+      {..._entry, 'model': 'second'},
     ]);
-    await _manage(tester, 2, 'Move up');
-    expect(fixture.configs['default']!['fallback_providers'], [
-      _entry,
-      'opaque',
-      null,
-      {'provider': 'example', 'model': 'second'},
-    ]);
+  });
+
+  testWidgets('changes to incomplete raw data still block saving', (
+    tester,
+  ) async {
+    final fixture = AdministrationFixture();
+    fixture.configs['default']!['fallback_providers'] = [null, _entry];
+    await _open(tester, fixture);
+    fixture.configs['default']!['fallback_providers'] = [false, _entry];
     await _manage(tester, 2, 'Remove');
-    expect(fixture.configs['default']!['fallback_providers'], [
-      _entry,
-      null,
-      {'provider': 'example', 'model': 'second'},
-    ]);
-    await _manage(tester, 2, 'Remove');
-    expect(fixture.configs['default']!['fallback_providers'], [
-      _entry,
-      {'provider': 'example', 'model': 'second'},
-    ]);
-    expect(find.text('Invalid fallback entry'), findsNothing);
+    expect(find.textContaining('changed elsewhere'), findsOneWidget);
+    expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
   });
 
   const capture = bool.fromEnvironment('CAPTURE_FALLBACK');
@@ -153,11 +176,8 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        await tester.scrollUntilVisible(
-          find.text('Invalid fallback entry'),
-          100,
-        );
-        expect(find.text('Invalid fallback entry'), findsOneWidget);
+        await tester.scrollUntilVisible(find.text('Choose model'), 100);
+        expect(find.text('Choose model'), findsOneWidget);
         await tester.scrollUntilVisible(
           find.byTooltip('Manage fallback 1'),
           100,
@@ -194,16 +214,23 @@ void main() {
     }
   }
 
-  testWidgets('fallback screen loads a stock single-entry configuration', (
-    tester,
-  ) async {
-    final fixture = AdministrationFixture();
-    fixture.configs['default']!['fallback_providers'] = {..._entry};
-    await _open(tester, fixture);
-    expect(find.text('backup-model'), findsOneWidget);
-    expect(find.text('Add fallback'), findsOneWidget);
-    expect(find.textContaining('Could not load'), findsNothing);
-  });
+  for (final value in <Object?>[
+    {..._entry},
+    'example/model',
+    42,
+  ]) {
+    testWidgets('non-list ${value.runtimeType} opens empty like desktop', (
+      tester,
+    ) async {
+      final fixture = AdministrationFixture();
+      fixture.configs['default']!['fallback_providers'] = value;
+      await _open(tester, fixture);
+      expect(find.text('No fallback models configured.'), findsOneWidget);
+      expect(find.text('Add fallback'), findsOneWidget);
+      expect(find.textContaining('Could not load'), findsNothing);
+      expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
+    });
+  }
 
   for (final value in [
     null,
@@ -219,11 +246,11 @@ void main() {
     });
   }
 
-  testWidgets('single-entry edits save an ordered list with route metadata', (
+  testWidgets('list edits save an ordered list with route metadata', (
     tester,
   ) async {
     final fixture = AdministrationFixture();
-    fixture.configs['default']!['fallback_providers'] = {..._entry};
+    fixture.configs['default']!['fallback_providers'] = [_entry];
     await _open(tester, fixture);
     await tester.tap(find.text('Add fallback'));
     await tester.pumpAndSettle();
@@ -255,16 +282,15 @@ void main() {
     );
   });
 
-  testWidgets('external map change blocks saving until refreshed', (
+  testWidgets('external list change blocks saving until refreshed', (
     tester,
   ) async {
     final fixture = AdministrationFixture();
-    fixture.configs['default']!['fallback_providers'] = {..._entry};
+    fixture.configs['default']!['fallback_providers'] = [_entry];
     await _open(tester, fixture);
-    fixture.configs['default']!['fallback_providers'] = {
-      ..._entry,
-      'model': 'changed-model',
-    };
+    fixture.configs['default']!['fallback_providers'] = [
+      {..._entry, 'model': 'changed-model'},
+    ];
     await _manage(tester, 1, 'Remove');
     expect(find.textContaining('changed elsewhere'), findsOneWidget);
     expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
@@ -279,7 +305,7 @@ void main() {
     tester,
   ) async {
     final fixture = AdministrationFixture()..ignoreSave = true;
-    fixture.configs['default']!['fallback_providers'] = {..._entry};
+    fixture.configs['default']!['fallback_providers'] = [_entry];
     await _open(tester, fixture);
     await _manage(tester, 1, 'Remove');
     expect(find.text('backup-model'), findsOneWidget);
@@ -294,7 +320,7 @@ void main() {
     tester,
   ) async {
     final fixture = AdministrationFixture()..failReads = true;
-    fixture.configs['default']!['fallback_providers'] = {..._entry};
+    fixture.configs['default']!['fallback_providers'] = [_entry];
     await _open(tester, fixture);
     expect(find.textContaining('Could not load'), findsOneWidget);
     fixture.failReads = false;

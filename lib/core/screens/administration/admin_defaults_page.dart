@@ -381,7 +381,7 @@ class AdminFallbackPage extends StatefulWidget {
 }
 
 class _AdminFallbackPageState extends State<AdminFallbackPage> {
-  List<Object?>? _rows;
+  List<Map<String, dynamic>>? _rows;
   Object? _loadedValue;
   bool _busy = false;
   String? _error;
@@ -395,14 +395,27 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
     try {
       final cfg = await widget.profile.config();
       final value = cfg['fallback_providers'] ?? [];
-      // Stock Hermes accepts one entry as a map as well as an ordered list.
-      // It skips non-map entries. Keep those visible for explicit removal,
-      // preserving them during other edits and in the pre-save conflict check.
-      final rows = switch (value) {
-        final Map entry => <Object?>[entry],
-        final List entries => List<Object?>.of(entries),
-        _ => throw const FormatException('Invalid fallback configuration'),
-      };
+      // Match desktop FallbackModelsField normalization. Keep draft rows local;
+      // only complete provider/model pairs are emitted when the user edits.
+      final rows = value is List
+          ? value.map<Map<String, dynamic>>((item) {
+              if (item is Map) {
+                return {
+                  ...Map<String, dynamic>.from(item),
+                  'provider': '${item['provider'] ?? ''}',
+                  'model': '${item['model'] ?? ''}',
+                };
+              }
+              if (item is String) {
+                final slash = item.indexOf('/');
+                return {
+                  'provider': slash > 0 ? item.substring(0, slash) : '',
+                  'model': slash > 0 ? item.substring(slash + 1) : item,
+                };
+              }
+              return {'provider': '', 'model': ''};
+            }).toList()
+          : <Map<String, dynamic>>[];
       if (mounted) {
         setState(() {
           _rows = rows;
@@ -415,7 +428,14 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
     }
   }
 
-  Future<void> _save(List<Object?> next) async {
+  Future<void> _save(List<Map<String, dynamic>> next) async {
+    final complete = next
+        .where(
+          (row) =>
+              (row['provider'] as String).isNotEmpty &&
+              (row['model'] as String).isNotEmpty,
+        )
+        .toList();
     setState(() {
       _busy = true;
       _error = null;
@@ -427,11 +447,11 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
           'Fallback models changed elsewhere. Refresh before applying this change.',
         );
       }
-      await widget.profile.saveSettings({'fallback_providers': next});
+      await widget.profile.saveSettings({'fallback_providers': complete});
       if (mounted) {
         setState(() {
           _rows = next;
-          _loadedValue = next;
+          _loadedValue = complete;
         });
       }
     } catch (e) {
@@ -455,16 +475,36 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
         if (_error != null) AdminNotice.error(_error!, retry: _load),
         if (_rows == null && _error == null) const LinearProgressIndicator(),
         if (_rows != null) ...[
+          if (_rows!.isEmpty)
+            const AdminNotice('No fallback models configured.'),
           for (final entry in _rows!.indexed)
             ListTile(
-              title: Text(switch (entry.$2) {
-                final Map row => '${row['model'] ?? ''}',
-                _ => 'Invalid fallback entry',
-              }),
-              subtitle: Text(switch (entry.$2) {
-                final Map row => '${row['provider'] ?? ''}',
-                _ => 'Hermes skips this entry. You can remove it.',
-              }),
+              title: Text(
+                entry.$2['model'] == ''
+                    ? 'Choose model'
+                    : entry.$2['model'] as String,
+              ),
+              subtitle: Text(
+                entry.$2['provider'] == ''
+                    ? 'Choose provider'
+                    : entry.$2['provider'] as String,
+              ),
+              onTap: _busy
+                  ? null
+                  : () async {
+                      final choice = await chooseAdminModel(
+                        context,
+                        widget.choices,
+                      );
+                      if (choice == null || !mounted) return;
+                      final next = [..._rows!];
+                      next[entry.$1] = {
+                        ...entry.$2,
+                        'provider': choice.provider,
+                        'model': choice.model,
+                      };
+                      await _save(next);
+                    },
               trailing: PopupMenuButton<String>(
                 tooltip: 'Manage fallback ${entry.$1 + 1}',
                 enabled: !_busy,
