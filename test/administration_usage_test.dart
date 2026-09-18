@@ -196,22 +196,31 @@ void main() {
     expect(find.text('API-equivalent cost'), findsOneWidget);
     expect(find.text('USD 5.44'), findsOneWidget);
     expect(find.text('1.4M'), findsOneWidget);
-    expect(find.text('Breakdown per model'), findsOneWidget);
-    expect(fixture.requests.length, 2);
-    await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
     expect(find.text('Breakdown per token type'), findsOneWidget);
-    expect(find.text('Cached input'), findsOneWidget);
+    expect(find.text('Trend per token type'), findsOneWidget);
+    expect(find.byType(UsageAreaChart), findsOneWidget);
+    expect(fixture.requests.length, 2);
+    expect(find.text('Cached input'), findsWidgets);
     final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
     await tap(tester, find.byKey(ValueKey('usage-day-$today')));
     expect(find.text('12.0K'), findsOneWidget);
     expect(find.text('35.0K'), findsOneWidget);
+    expect(
+      find.textContaining('51,000 tokens', findRichText: true),
+      findsOneWidget,
+    );
     await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
     expect(
       find.text('Hermes does not provide a model breakdown by day.'),
       findsOneWidget,
     );
+    expect(
+      find.textContaining('51,000 tokens', findRichText: true),
+      findsNothing,
+    );
     await tap(tester, find.text('Show daily tokens'));
     expect(find.text('12.0K'), findsOneWidget);
+    await tap(tester, find.byKey(const ValueKey('usage-trend-group')));
     await tap(tester, find.text('Show token trend'));
     expect(find.byType(UsageAreaChart), findsOneWidget);
     expect(fixture.requests.length, 2);
@@ -244,8 +253,7 @@ void main() {
     (tester) async {
       await show(tester);
       await tap(tester, find.text('Cost').first);
-      expect(find.text('USD 5.00'), findsOneWidget);
-      await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
+      expect(find.text('Breakdown per token type'), findsOneWidget);
       expect(find.text('USD 2.70'), findsOneWidget);
       expect(find.text('USD 1.04'), findsOneWidget);
       expect(find.text('USD 1.70'), findsOneWidget);
@@ -271,7 +279,6 @@ void main() {
     await show(tester);
     expect(find.text('Estimated usage value'), findsOneWidget);
     expect(find.text('USD 8.00'), findsOneWidget);
-    await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
     await tap(tester, find.text('Cost').first);
     expect(
       find.textContaining('Cost per token type is available only'),
@@ -291,6 +298,7 @@ void main() {
     await show(tester);
     expect(find.text('USD 5.00'), findsOneWidget);
     expect(find.text('Partial total'), findsOneWidget);
+    await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
     await tap(tester, find.text('Cost').first);
     expect(find.textContaining('Partial breakdown'), findsOneWidget);
     expect(find.textContaining('USD 0.00'), findsNothing);
@@ -303,6 +311,7 @@ void main() {
     rows = [_astra(), _astra()];
     await show(tester);
     expect(find.text('USD 10.00'), findsOneWidget);
+    await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
     expect(find.text('gpt-6-astra'), findsOneWidget);
     await tap(tester, find.text('gpt-6-astra'));
     expect(find.textContaining('2 recorded contributions'), findsOneWidget);
@@ -391,6 +400,7 @@ void main() {
   testWidgets('failed browser launch leaves a copyable source', (tester) async {
     browser.opens = false;
     await show(tester);
+    await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
     await tap(tester, find.text('gpt-6-astra'));
     await tap(tester, find.text('OpenAI pricing source'));
     expect(find.byType(SelectionArea), findsOneWidget);
@@ -408,13 +418,18 @@ void main() {
       ) async {
         await show(tester, brightness: brightness, scale: scale);
         await snapshot(tester, '${brightness.name}-$scale-summary');
-        await tap(tester, find.text('Show token trend'));
+        await reveal(tester, find.byType(UsageAreaChart));
         await snapshot(tester, '${brightness.name}-$scale-trend');
         await tap(tester, find.text('90D'));
         await snapshot(tester, '${brightness.name}-$scale-calendar');
         await tap(tester, find.text('365D'));
         await reveal(tester, find.byKey(const ValueKey('usage-activity-grid')));
         await snapshot(tester, '${brightness.name}-$scale-year');
+        final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+        await tap(tester, find.byKey(ValueKey('usage-day-$today')));
+        await snapshot(tester, '${brightness.name}-$scale-day-tooltip');
+        await tap(tester, find.text('All days'));
+        await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
         await tap(tester, find.text('gpt-6-astra'));
         await reveal(tester, find.text('Uncached input').last);
         await snapshot(tester, '${brightness.name}-$scale-breakdown');

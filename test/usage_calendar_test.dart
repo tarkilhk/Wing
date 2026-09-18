@@ -5,6 +5,55 @@ import 'package:wing/core/screens/administration/usage_charts.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 
 void main() {
+  testWidgets(
+    'day tooltips replace each other and distinguish zero from unknown',
+    (tester) async {
+      final daily = UsageDaily.fromJson(
+        {
+          'daily': [
+            {'day': '2026-09-18', 'input_tokens': 10, 'output_tokens': 20},
+          ],
+        },
+        period: 1,
+        loadedAt: DateTime.utc(2026, 9, 18),
+      );
+      final selected = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: UsageCalendar(
+              daily: daily,
+              selected: null,
+              onSelected: (day) => selected.add(day.id),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('usage-day-2026-09-17')));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('0 tokens', findRichText: true),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('usage-day-2026-09-18')));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Tokens unavailable', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.textContaining('0 tokens', findRichText: true), findsNothing);
+      expect(selected, ['2026-09-17', '2026-09-18']);
+      await tester.tapAt(const Offset(300, 300));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Tokens unavailable', findRichText: true),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   // Exercise every possible weekday at both ends of the rolling year.
   for (var weekday = 0; weekday < 7; weekday++) {
     testWidgets(

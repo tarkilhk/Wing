@@ -22,9 +22,9 @@ class _UsageDashboardState extends State<UsageDashboard> {
   final _modelColors = <String, int>{};
   int _days = 7;
   String? _selected;
-  bool _breakdownModels = true;
+  bool _breakdownModels = false;
   bool _breakdownCost = false;
-  bool _trendModels = true;
+  bool _trendModels = false;
   bool _trendCost = false;
   UsageAnalyticsResult? get _data => _cache[_days];
 

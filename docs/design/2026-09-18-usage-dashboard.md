@@ -21,9 +21,9 @@ inspect a date or a model without leaving its captured profile/connection.
   clickable title switches model/token-type grouping; Tokens/Cost stays at the
   top right and is independent from the trend controls.
 - Trend uses filled, stacked daily token areas with a marker for the selected
-  date. Its title offers the same grouping switch. Models remain the default
-  grouping as requested; unavailable daily dimensions explain the limitation
-  and offer a direct action to show the supported token view.
+  date. Its title offers the same grouping switch. Both sections default to
+  token types following phone feedback; unavailable daily dimensions explain
+  the limitation and offer a direct action to show the supported token view.
 - Tap a model for exact counts, individual background contributions, rates,
   verification date and pricing source. About this usage carries the coverage
   and estimate methodology, keeping ordinary inspection compact.
@@ -32,7 +32,9 @@ The screen follows Studio colors, type, corners and spacing. Period selection
 uses neutral tint as specifically requested. Segment widths animate over 300ms
 with reduced-motion support. Text and controls wrap at enlarged sizes; exact
 counts are also in accessibility labels. Dense calendar cells retain date/token
-labels, tooltips and native keyboard activation.
+labels and native keyboard activation. Tapping a date selects it and shows a
+small anchored tooltip with its UTC date and exact token total; another tap
+dismisses it. Unknown totals explicitly say unavailable.
 
 ## Data and performance
 

@@ -98,6 +98,20 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      final group = find.byKey(const ValueKey('usage-breakdown-group'));
+      await tester.scrollUntilVisible(
+        group,
+        120,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(group);
+      await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.text('example/long-production-model'),
         120,

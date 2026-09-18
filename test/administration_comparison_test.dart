@@ -49,6 +49,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Partial total'), findsOneWidget);
       expect(find.text('USD 12.50'), findsOneWidget);
+      final group = find.byKey(const ValueKey('usage-breakdown-group'));
+      await tester.ensureVisible(group);
+      await tester.pumpAndSettle();
+      await tester.tap(group);
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Research model'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Research model'));

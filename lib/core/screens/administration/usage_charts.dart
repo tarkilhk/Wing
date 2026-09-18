@@ -179,34 +179,52 @@ class _UsageCalendarState extends State<UsageCalendar> {
       final label =
           '${locale.formatFullDate(day.date)}: ${count == null ? 'tokens unavailable' : '${locale.formatDecimal(count)} tokens'}';
       return Semantics(
+        key: ValueKey(day.id),
         label: label,
         button: true,
         selected: selected,
         child: Tooltip(
-          message: label,
+          message:
+              '${locale.formatShortDate(day.date)} · UTC\n${count == null ? 'Tokens unavailable' : '${locale.formatDecimal(count)} tokens'}',
           excludeFromSemantics: true,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              key: ValueKey('usage-day-${day.id}'),
-              borderRadius: BorderRadius.circular(4),
-              onTap: () => widget.onSelected(day),
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: AnimatedContainer(
-                  duration: _motion(context),
-                  width: square,
-                  height: square,
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(2),
-                    border: selected
-                        ? Border.all(color: tokens.onSurface, width: 1.5)
+          triggerMode: TooltipTriggerMode.manual,
+          preferBelow: false,
+          verticalOffset: 10,
+          margin: const EdgeInsets.symmetric(horizontal: 8),
+          child: Builder(
+            builder: (tooltipContext) => Material(
+              color: Colors.transparent,
+              child: InkWell(
+                key: ValueKey('usage-day-${day.id}'),
+                borderRadius: BorderRadius.circular(4),
+                onTap: () {
+                  Tooltip.dismissAllToolTips();
+                  tooltipContext
+                      .findAncestorStateOfType<TooltipState>()!
+                      .ensureTooltipVisible();
+                  widget.onSelected(day);
+                },
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: AnimatedContainer(
+                    duration: _motion(context),
+                    width: square,
+                    height: square,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(2),
+                      border: selected
+                          ? Border.all(color: tokens.onSurface, width: 1.5)
+                          : null,
+                    ),
+                    child: count == null
+                        ? Icon(
+                            Icons.question_mark,
+                            size: 9,
+                            color: tokens.muted,
+                          )
                         : null,
                   ),
-                  child: count == null
-                      ? Icon(Icons.question_mark, size: 9, color: tokens.muted)
-                      : null,
                 ),
               ),
             ),

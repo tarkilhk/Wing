@@ -64,8 +64,8 @@ the mockup appear complete. Actual analytics latency remains unmeasured.
 ## Accepted implementation
 
 The user removed ALL and approved implementation with 1D, 7D, 30D, 90D and
-365D. Both chart titles default to models, as requested. Tapping a title changes
-its grouping; Tokens/Cost controls are independent for each section. Daily model
+365D. Both chart titles default to token types following phone feedback. Tapping
+a title changes its grouping; Tokens/Cost controls are independent for each section. Daily model
 and API-equivalent cost views explain the missing data and offer the supported
 token-type view. Selecting a day keeps its scope when switching controls; it
 never substitutes period-wide model figures for a day's values.
