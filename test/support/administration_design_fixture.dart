@@ -104,6 +104,21 @@ class AdministrationDesignFixture extends AdministrationFixture {
       'model/info' => {'provider': 'research', 'model': 'Research model'},
       'model/options' => {'providers': []},
       'model/auxiliary' => {'tasks': []},
+      'analytics/usage' => {
+        'daily': [
+          for (var i = 0; i < 7; i++)
+            {
+              'day': DateTime.now()
+                  .toUtc()
+                  .subtract(Duration(days: i))
+                  .toIso8601String()
+                  .substring(0, 10),
+              'input_tokens': 10000 + i * 5000,
+              'cache_read_tokens': 20000 + i * 3000,
+              'output_tokens': 4000 + i * 2000,
+            },
+        ],
+      },
       'analytics/models' => {
         'models': [
           {
@@ -112,6 +127,7 @@ class AdministrationDesignFixture extends AdministrationFixture {
             'api_calls': 1234,
             'sessions': 42,
             'input_tokens': 321000,
+            'cache_read_tokens': 100000,
             'output_tokens': 42000,
             'estimated_cost': 12.5,
           },
@@ -121,6 +137,7 @@ class AdministrationDesignFixture extends AdministrationFixture {
             'api_calls': 600,
             'sessions': 12,
             'input_tokens': 98000,
+            'cache_read_tokens': 50000,
             'output_tokens': 18000,
             'estimated_cost': 0,
           },
@@ -130,6 +147,7 @@ class AdministrationDesignFixture extends AdministrationFixture {
             'api_calls': 22,
             'sessions': 2,
             'input_tokens': 9000,
+            'cache_read_tokens': 0,
             'output_tokens': 1000,
           },
         ],

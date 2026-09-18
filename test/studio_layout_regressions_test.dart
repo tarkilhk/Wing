@@ -119,7 +119,7 @@ void main() {
               of: find.byType(ListView),
               matching: find.byType(Scrollable),
             )
-            .first,
+            .last,
       );
       expect(tester.takeException(), isNull);
       await capture(tester, 'usage-${brightness.name}-200-keyboard');

@@ -77,11 +77,14 @@ Verified on 18 September 2026 against stock upstream
 - `hermes_cli/web_routers/analytics.py`: model usage accepts an explicit profile and day range.
 - `tui_gateway/methods_config.py`: `setup.status` observes configuration; `setup.runtime_check` resolves the selected profile's runtime credentials without model inference.
 
-Usage retains time ranges, sorting and expandable calls, sessions and token details.
-The cost summary and bars use only finite, nonnegative reported values. Unreported
-cost stays Unavailable, partial coverage is stated, and estimates are qualified as
-Hermes estimates rather than provider invoices. Logs keeps server source, severity,
-submitted text search, a 100-line limit and explicit empty/error states.
+Usage uses compact period buttons, a daily token grid, animated composition bars
+and a stacked token trend. Tappable chart titles switch model/token grouping;
+Tokens/Cost controls are independent for each chart. Model details retain exact
+calls, sessions, token counts and pricing sources. Unknown costs stay unavailable
+and partial coverage is stated. See the [usage dashboard](design/2026-09-18-usage-dashboard.md)
+and its [stock API boundary](research/2026-09-18-usage-redesign-data-contract.md).
+Logs keeps server source, severity, submitted text search, a 100-line limit and
+explicit empty/error states.
 
 ## Current controls
 
@@ -213,9 +216,11 @@ Refresh failure retains the previous observation with its last-checked time. Mal
 
 Track background actions by returned name and PID. A same-name replacement is not the original action's success. Authenticated DELETE retries must preserve the request body and report the backend's real outcome.
 
-Usage supports 1, 7, 30, 90 and 365-day ranges using Hermes's profile-scoped model analytics. For `openai-codex` only, Wing multiplies the already-uncached input, cached input and output counters by published standard OpenAI API rates. Output includes reasoning; it is not charged again. Other providers, including paid OpenAI API routes, retain Hermes's estimate. This rule uses provider identity, never a zero cost or model-name prefix.
+Usage supports **1D, 7D, 30D, 90D and 365D** using two parallel profile-scoped model and daily analytics reads. Previously loaded periods are cached while the page remains open, and Refresh reloads both. Day/grouping/measure selection makes no network requests. Daily model history and daily API-equivalent costs are explicitly unavailable; the daily token-type chart is supported. Daily records use UTC session-start dates and exclude auxiliary usage included in the model totals. A rolling N-day period can span N+1 UTC dates. The stock API and these limits were checked at `c62bd9f2078a946108f1c9d9b24bf118963277ef` on 18 September 2026.
 
-Subscription-only history shows **API-equivalent cost**. Mixed history shows **Estimated usage value**, with Hermes and subscription subtotals. Sorting and share bars use these same displayed values. Expanded subscription models show the three token/cost components, per-million rates, verification date and an external source link. A positive value below one cent displays **< USD 0.01**. Missing model prices or any of the three required counts stay unavailable; partial totals show their priced-model coverage. Separate rows returned by Hermes (including auxiliary calls) each contribute once; Wing does not add the endpoint's totals again.
+For `openai-codex` only, Wing multiplies the already-uncached input, cached input and output counters by published standard OpenAI API rates. Output includes reasoning; it is not charged again. Other providers, including paid OpenAI API routes, retain Hermes's estimate. This rule uses provider identity, never a zero cost or model-name prefix.
+
+Subscription-only history shows **API-equivalent cost**. Mixed history shows **Estimated usage value**, with Hermes and subscription subtotals. Composition bars use these same displayed values. Expanded subscription models show the three token/cost components, per-million rates, verification date and an external source link. A positive value below one cent displays **< USD 0.01**. Missing model prices or any of the three required counts stay unavailable; partial totals are identified and unpriced models remain visibly unavailable. Separate rows returned by Hermes (including auxiliary calls) each contribute once; Wing does not add the endpoint's totals again.
 
 These are base-rate estimates at the bundled catalogue's current prices, applied to the selected history, not invoices or historical price reconstruction. Cache-write charges, long-context premiums and service-tier adjustments are excluded and disclosed on the screen. Hermes groups primary usage by the session's model/provider and filters sessions by start time, so mixed-model sessions and period boundaries inherit those upstream limitations.
 

@@ -123,8 +123,11 @@ void main() {
                   )
                   .first,
             );
+            await tester.ensureVisible(find.text('Research model'));
+            await tester.pumpAndSettle();
             await tester.tap(find.text('Research model'));
             await tester.pumpAndSettle();
+            expect(find.text('Model details'), findsOneWidget);
             await snapshot(tester, '$page-${brightness.name}-$scale-expanded');
           } else {
             expect(

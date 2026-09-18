@@ -10,17 +10,19 @@ import 'support/administration_fixture.dart';
 import 'support/scheduled_tasks_fixture.dart';
 
 void main() {
-  testWidgets('zero total and invalid costs produce no cost-share bars', (
+  testWidgets('zero and unknown costs stay distinct in usage composition', (
     tester,
   ) async {
     final fixture = AdministrationFixture();
-    fixture.override = (_, _, _, _) async => {
-      'models': [
-        {'model': 'Zero', 'estimated_cost': 0},
-        {'model': 'Missing'},
-        {'model': 'Invalid', 'estimated_cost': -1},
-      ],
-    };
+    fixture.override = (_, path, _, _) async => path == 'analytics/usage'
+        ? {'daily': []}
+        : {
+            'models': [
+              {'model': 'Zero', 'estimated_cost': 0},
+              {'model': 'Missing'},
+              {'model': 'Invalid', 'estimated_cost': -1},
+            ],
+          };
     await tester.pumpWidget(
       MaterialApp(
         theme: wingTheme(Brightness.dark),
@@ -29,13 +31,13 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(LinearProgressIndicator), findsNothing);
-    expect(find.textContaining('1 of 3 models'), findsOneWidget);
+    expect(find.text('Partial total'), findsOneWidget);
     expect(find.text('USD 0.00'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets(
-    'usage compares known costs without counting unknown as zero and changes range',
+    'usage compares known costs, opens exact details and changes range',
     (tester) async {
       final fixture = AdministrationDesignFixture();
       await tester.pumpWidget(
@@ -45,33 +47,42 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.textContaining('2 of 3 models'), findsOneWidget);
-      expect(find.byType(LinearProgressIndicator), findsNWidgets(2));
-      expect(find.text('22 calls · Unavailable'), findsOneWidget);
+      expect(find.text('Partial total'), findsOneWidget);
+      expect(find.text('USD 12.50'), findsOneWidget);
+      await tester.ensureVisible(find.text('Research model'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Research model'));
       await tester.pumpAndSettle();
-      expect(find.text('321,000'), findsOneWidget);
-      await tester.ensureVisible(find.text('Sort models'));
-      await tester.tap(find.text('Estimated cost').first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Model name').last);
-      await tester.pumpAndSettle();
-      expect(
-        tester.getTopLeft(find.text('Local writing model')).dy,
-        lessThan(tester.getTopLeft(find.text('Research model')).dy),
+      await tester.scrollUntilVisible(
+        find.text('321,000'),
+        120,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .last,
       );
-      await tester.ensureVisible(find.text('Last 7 days'));
-      await tester.tap(find.text('Last 7 days'));
+      expect(find.text('321,000'), findsOneWidget);
+      await tester.ensureVisible(find.byTooltip('Close details'));
       await tester.pumpAndSettle();
-      for (final label in [
-        'Last 24 hours',
-        'Last 30 days',
-        'Last 90 days',
-        'Last 365 days',
-      ]) {
-        expect(find.text(label), findsOneWidget);
-      }
-      await tester.tap(find.text('Last 365 days'));
+      await tester.tap(find.byTooltip('Close details'));
+      await tester.pumpAndSettle();
+      tester
+          .state<ScrollableState>(
+            find
+                .descendant(
+                  of: find.byType(ListView),
+                  matching: find.byType(Scrollable),
+                )
+                .last,
+          )
+          .position
+          .jumpTo(0);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('365D'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('365D'));
       await tester.pumpAndSettle();
       expect(
         fixture.requests

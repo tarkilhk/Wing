@@ -10,6 +10,7 @@ import 'package:url_launcher_platform_interface/link.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 import 'package:wing/core/screens/administration/admin_health_page.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/screens/administration/usage_charts.dart';
 import 'support/administration_fixture.dart';
 
 class _Browser extends UrlLauncherPlatform {
@@ -55,6 +56,24 @@ Map<String, dynamic> _paid() => {
   'api_calls': 4,
 };
 
+Map<String, dynamic> dailyData() {
+  final today = DateTime.now().toUtc();
+  return {
+    'daily': [
+      for (var i = 0; i < 6; i++)
+        {
+          'day': today
+              .subtract(Duration(days: i))
+              .toIso8601String()
+              .substring(0, 10),
+          'input_tokens': 12000 + i * 1000,
+          'cache_read_tokens': 35000 + i * i * 4000,
+          'output_tokens': 4000 + i * 2000,
+        },
+    ],
+  };
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const capture = bool.fromEnvironment('CAPTURE_USAGE');
@@ -82,6 +101,7 @@ void main() {
   bool offline = false;
   setUp(() {
     fixture = AdministrationFixture('Claw');
+    addTearDown(fixture.server.close);
     rows = [_sol(), _astra()];
     offline = false;
     browser = _Browser();
@@ -90,6 +110,7 @@ void main() {
     addTearDown(() => UrlLauncherPlatform.instance = previous);
     fixture.override = (method, path, query, body) async {
       if (offline) throw StateError('Offline');
+      if (path == 'analytics/usage') return dailyData();
       return {'models': rows, 'period_days': int.parse(query['days']!)};
     };
   });
@@ -140,134 +161,152 @@ void main() {
   }
 
   Future<void> reveal(WidgetTester tester, Finder target) async {
+    final scrollable = find
+        .descendant(
+          of: find.byType(ListView),
+          matching: find.byType(Scrollable),
+        )
+        .last;
     if (target.evaluate().isEmpty) {
-      await tester.scrollUntilVisible(
-        target,
-        220,
-        scrollable: find
-            .descendant(
-              of: find.byType(ListView),
-              matching: find.byType(Scrollable),
-            )
-            .first,
-      );
+      tester.state<ScrollableState>(scrollable).position.jumpTo(0);
+      await tester.pumpAndSettle();
+      if (target.evaluate().isEmpty) {
+        await tester.scrollUntilVisible(
+          target,
+          180,
+          scrollable: scrollable,
+          maxScrolls: 80,
+        );
+      }
     }
     await tester.ensureVisible(target);
     await tester.pumpAndSettle();
   }
 
-  testWidgets('subscription totals, breakdown and source use bundled rates', (
+  Future<void> tap(WidgetTester tester, Finder target) async {
+    await reveal(tester, target);
+    await tester.tap(target);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('period totals, title switches and day selection stay local', (
     tester,
   ) async {
     await show(tester);
     expect(find.text('API-equivalent cost'), findsOneWidget);
     expect(find.text('USD 5.44'), findsOneWidget);
-    expect(find.text('12 calls · USD 5.00'), findsOneWidget);
-    expect(find.text('3 calls · USD 0.44'), findsOneWidget);
-    await snapshot(tester, 'subscription-summary');
-    expect(
-      tester.getTopLeft(find.text('gpt-6-astra')).dy,
-      lessThan(tester.getTopLeft(find.text('gpt-5.6-sol')).dy),
-    );
-    final bars = tester.widgetList<LinearProgressIndicator>(
-      find.byType(LinearProgressIndicator),
-    );
-    expect(bars.first.value, closeTo(5 / 5.44, 0.000001));
-    await tester.tap(find.text('gpt-6-astra'));
-    await tester.pumpAndSettle();
-    expect(find.text('Uncached input'), findsOneWidget);
+    expect(find.text('1.4M'), findsOneWidget);
+    expect(find.text('Breakdown per model'), findsOneWidget);
+    expect(fixture.requests.length, 2);
+    await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
+    expect(find.text('Breakdown per token type'), findsOneWidget);
     expect(find.text('Cached input'), findsOneWidget);
-    expect(find.text('USD 2.50'), findsOneWidget);
-    expect(find.text('USD 1.00'), findsOneWidget);
-    expect(find.text('USD 1.50'), findsOneWidget);
-    expect(find.textContaining('1,000,000 tokens'), findsOneWidget);
-    await reveal(tester, find.text('OpenAI pricing source'));
-    await tester.tap(find.text('OpenAI pricing source'));
-    await tester.pumpAndSettle();
+    final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+    await tap(tester, find.byKey(ValueKey('usage-day-$today')));
+    expect(find.text('12.0K'), findsOneWidget);
+    expect(find.text('35.0K'), findsOneWidget);
+    await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
     expect(
-      browser.urls.single,
-      'https://developers.openai.com/api/docs/models/gpt-6-astra',
+      find.text('Hermes does not provide a model breakdown by day.'),
+      findsOneWidget,
     );
-    expect(
-      fixture.requests.every(
-        (r) =>
-            r.$1 == 'GET' &&
-            r.$2 == 'analytics/models' &&
-            r.$3['profile'] == 'personal',
-      ),
-      isTrue,
-    );
+    await tap(tester, find.text('Show daily tokens'));
+    expect(find.text('12.0K'), findsOneWidget);
+    await tap(tester, find.text('Show token trend'));
+    expect(find.byType(UsageAreaChart), findsOneWidget);
+    expect(fixture.requests.length, 2);
+    await tap(tester, find.text('All days'));
+    expect(find.text('300K'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('mixed subtotal and sorting use displayed costs', (tester) async {
-    rows = [_sol(), _paid(), _astra()];
+  testWidgets('period chips cap at 365 and cache previously loaded periods', (
+    tester,
+  ) async {
     await show(tester);
-    expect(find.text('Estimated usage value'), findsOneWidget);
-    expect(find.text('USD 8.44'), findsOneWidget);
-    expect(find.text('Hermes estimates'), findsOneWidget);
-    expect(find.text('Subscription API equivalent'), findsOneWidget);
-    expect(find.text('USD 5.44'), findsOneWidget);
-    expect(find.text('USD 3.00'), findsOneWidget);
-    await reveal(tester, find.text('Sort models'));
-    await tester.tap(find.text('Estimated cost').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Model name').last);
-    await tester.pumpAndSettle();
-    expect(
-      tester.getTopLeft(find.text('Paid API model')).dy,
-      lessThan(tester.getTopLeft(find.text('gpt-5.6-sol')).dy),
-    );
-    await reveal(tester, find.text('Last 7 days'));
-    await tester.tap(find.text('Last 7 days'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Last 30 days').last);
-    await tester.pumpAndSettle();
-    expect(fixture.requests.last.$3['days'], '30');
-    expect(find.text('USD 8.44'), findsOneWidget);
+    for (final label in ['1D', '7D', '30D', '90D', '365D']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(find.text('ALL'), findsNothing);
+    await tap(tester, find.text('365D'));
+    expect(fixture.requests.length, 4);
+    expect(fixture.requests.last.$3['days'], '365');
+    await tap(tester, find.text('7D'));
+    expect(fixture.requests.length, 4);
+    await tap(tester, find.text('365D'));
+    await tap(tester, find.byTooltip('Earlier dates'));
+    expect(fixture.requests.length, 4);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('unknown prices and invalid counters are partial, never zero', (
+  testWidgets(
+    'cost and token controls are independent and sources remain accessible',
+    (tester) async {
+      await show(tester);
+      await tap(tester, find.text('Cost').first);
+      expect(find.text('USD 5.00'), findsOneWidget);
+      await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
+      expect(find.text('USD 2.70'), findsOneWidget);
+      expect(find.text('USD 1.04'), findsOneWidget);
+      expect(find.text('USD 1.70'), findsOneWidget);
+      await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
+      await tap(tester, find.text('gpt-6-astra'));
+      await tap(tester, find.text('OpenAI pricing source'));
+      expect(
+        browser.urls.single,
+        'https://developers.openai.com/api/docs/models/gpt-6-astra',
+      );
+      expect(
+        fixture.requests.every(
+          (r) => r.$1 == 'GET' && r.$3['profile'] == 'personal',
+        ),
+        isTrue,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('mixed providers never infer token-type costs', (tester) async {
+    rows = [_astra(), _paid()];
+    await show(tester);
+    expect(find.text('Estimated usage value'), findsOneWidget);
+    expect(find.text('USD 8.00'), findsOneWidget);
+    await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
+    await tap(tester, find.text('Cost').first);
+    expect(
+      find.textContaining('Cost per token type is available only'),
+      findsOneWidget,
+    );
+    expect(find.byType(UsageComposition), findsNothing);
+  });
+
+  testWidgets('unknown prices and counters stay partial, never free', (
     tester,
   ) async {
     rows = [
       _astra(),
-      _sol()..['model'] = 'gpt-5.3-codex-spark',
+      _sol()..['model'] = 'unpriced',
       _sol()..remove('cache_read_tokens'),
     ];
     await show(tester);
     expect(find.text('USD 5.00'), findsOneWidget);
-    expect(find.textContaining('Partial total'), findsOneWidget);
-    expect(find.textContaining('1 of 3 models'), findsOneWidget);
-    expect(find.text('3 calls · Price unavailable'), findsOneWidget);
-    expect(find.text('3 calls · Token counts unavailable'), findsOneWidget);
-    await snapshot(tester, 'partial-summary');
+    expect(find.text('Partial total'), findsOneWidget);
+    await tap(tester, find.text('Cost').first);
+    expect(find.textContaining('Partial breakdown'), findsOneWidget);
     expect(find.textContaining('USD 0.00'), findsNothing);
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(find.textContaining('Unavailable'), findsWidgets);
   });
 
-  testWidgets('all unknown costs and empty history remain distinct', (
+  testWidgets('sub-cent estimates and duplicate contributions are preserved', (
     tester,
   ) async {
-    rows = [_sol()..['model'] = 'unpriced'];
+    rows = [_astra(), _astra()];
     await show(tester);
-    expect(find.text('Unavailable'), findsOneWidget);
-    expect(find.textContaining('0 of 1 models'), findsOneWidget);
-    rows = [];
-    await reveal(tester, find.text('Refresh'));
-    await tester.tap(find.text('Refresh'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('No recorded model usage in this period.'),
-      findsOneWidget,
-    );
-    expect(find.text('API-equivalent cost'), findsNothing);
-    expect(find.textContaining('USD 0.00'), findsNothing);
-  });
-
-  testWidgets('sub-cent subscription value is not displayed as free', (
-    tester,
-  ) async {
+    expect(find.text('USD 10.00'), findsOneWidget);
+    expect(find.text('gpt-6-astra'), findsOneWidget);
+    await tap(tester, find.text('gpt-6-astra'));
+    expect(find.textContaining('2 recorded contributions'), findsOneWidget);
+    await tap(tester, find.byTooltip('Close details'));
     rows = [
       _sol()..addAll({
         'input_tokens': 1,
@@ -275,54 +314,32 @@ void main() {
         'output_tokens': 0,
       }),
     ];
-    await show(tester);
-    expect(find.text('< USD 0.01'), findsOneWidget);
-    expect(find.text('3 calls · < USD 0.01'), findsOneWidget);
+    await tap(tester, find.text('Refresh'));
+    await reveal(tester, find.text('< USD 0.01'));
     expect(find.textContaining('USD 0.00'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'duplicate model rows contribute independently and expand independently',
-    (tester) async {
-      rows = [_astra(), _astra()];
-      await show(tester);
-      expect(find.text('USD 10.00'), findsOneWidget);
-      await tester.tap(find.text('gpt-6-astra').first);
-      await tester.pumpAndSettle();
-      expect(find.text('Uncached input'), findsOneWidget);
-      await reveal(tester, find.text('Sort models'));
-      await tester.tap(find.text('Estimated cost').first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(MenuItemButton, 'Calls'));
-      await tester.pumpAndSettle();
-      expect(find.text('Uncached input'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets('failed refresh retains estimate and retry recovers', (
+  testWidgets('failed refresh retains data and independent retry recovers', (
     tester,
   ) async {
     await show(tester);
     offline = true;
-    await reveal(tester, find.text('Refresh'));
-    await tester.tap(find.text('Refresh'));
-    await tester.pumpAndSettle();
-    expect(find.text('USD 5.44'), findsOneWidget);
-    expect(find.text('Retry'), findsOneWidget);
+    await tap(tester, find.text('Refresh'));
+    await reveal(tester, find.text('USD 5.44'));
+    await reveal(tester, find.textContaining('Showing retained data'));
+    expect(find.textContaining('Showing retained data'), findsOneWidget);
     await snapshot(tester, 'refresh-error');
     offline = false;
     rows = [_astra()];
-    await tester.tap(find.text('Retry'));
-    await tester.runAsync(
-      () => rootBundle.loadString('assets/pricing/openai.json'),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('USD 5.00'), findsOneWidget);
-    expect(find.text('Retry'), findsNothing);
+    await tap(tester, find.text('Refresh'));
+    await reveal(tester, find.text('USD 5.00'));
+    expect(find.textContaining('Could not load'), findsNothing);
   });
 
-  testWidgets('loading and initial error can recover', (tester) async {
+  testWidgets('initial failure is distinct from empty history and retries', (
+    tester,
+  ) async {
     final pending = Completer<Map<String, dynamic>>();
     fixture.override = (_, _, _, _) => pending.future;
     await tester.pumpWidget(
@@ -334,30 +351,48 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     pending.completeError(StateError('Offline'));
     await tester.pumpAndSettle();
-    expect(find.text('Retry'), findsOneWidget);
-    expect(find.text('API-equivalent cost'), findsNothing);
-    fixture.override = (_, _, _, _) async => {
-      'models': [_astra()],
-    };
-    await tester.tap(find.text('Retry'));
-    await tester.runAsync(
-      () => rootBundle.loadString('assets/pricing/openai.json'),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('USD 5.00'), findsOneWidget);
+    expect(find.textContaining('Could not load'), findsOneWidget);
+    expect(find.text('No recorded model usage in this period.'), findsNothing);
+    fixture.override = (_, path, _, _) async =>
+        path == 'analytics/models' ? {'models': []} : {'daily': []};
+    await tap(tester, find.text('Refresh'));
+    await reveal(tester, find.text('No recorded model usage in this period.'));
+    expect(find.textContaining('Could not load'), findsNothing);
   });
 
-  testWidgets('failed browser launch leaves a copyable source link', (
+  testWidgets('late period responses cannot replace the selected range', (
     tester,
   ) async {
-    rows = [_astra()];
+    final pending = Completer<Map<String, dynamic>>();
+    fixture.override = (_, path, query, _) async {
+      if (path == 'analytics/usage') return dailyData();
+      if (query['days'] == '30') return pending.future;
+      return {
+        'models': [_paid()..['estimated_cost'] = 7],
+      };
+    };
+    await show(tester);
+    await tester.tap(find.text('30D'));
+    await tester.pump();
+    expect(find.text('Loading usage…'), findsOneWidget);
+    await tester.tap(find.text('7D'));
+    await tester.pumpAndSettle();
+    pending.complete({
+      'models': [_paid()..['estimated_cost'] = 30],
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('USD 7.00'), findsOneWidget);
+    expect(find.text('USD 30.00'), findsNothing);
+    await tap(tester, find.text('30D'));
+    expect(find.text('USD 30.00'), findsOneWidget);
+    expect(fixture.requests.length, 4);
+  });
+
+  testWidgets('failed browser launch leaves a copyable source', (tester) async {
     browser.opens = false;
     await show(tester);
-    await tester.tap(find.text('gpt-6-astra'));
-    await tester.pumpAndSettle();
-    await reveal(tester, find.text('OpenAI pricing source'));
-    await tester.tap(find.text('OpenAI pricing source'));
-    await tester.pumpAndSettle();
+    await tap(tester, find.text('gpt-6-astra'));
+    await tap(tester, find.text('OpenAI pricing source'));
     expect(find.byType(SelectionArea), findsOneWidget);
     expect(
       find.text('Could not open the browser. Copy this pricing link:'),
@@ -371,16 +406,18 @@ void main() {
       testWidgets('usage renders ${brightness.name} at $scale text', (
         tester,
       ) async {
-        rows = [_astra(), _sol(), _paid()];
         await show(tester, brightness: brightness, scale: scale);
         await snapshot(tester, '${brightness.name}-$scale-summary');
-        await reveal(tester, find.text('gpt-6-astra'));
-        await tester.tap(find.text('gpt-6-astra'));
-        await tester.pumpAndSettle();
-        await reveal(tester, find.text('Uncached input'));
+        await tap(tester, find.text('Show token trend'));
+        await snapshot(tester, '${brightness.name}-$scale-trend');
+        await tap(tester, find.text('90D'));
+        await snapshot(tester, '${brightness.name}-$scale-calendar');
+        await tap(tester, find.text('gpt-6-astra'));
+        await reveal(tester, find.text('Uncached input').last);
         await snapshot(tester, '${brightness.name}-$scale-breakdown');
         await reveal(tester, find.text('OpenAI pricing source'));
         await snapshot(tester, '${brightness.name}-$scale-source');
+        await tap(tester, find.byTooltip('Close details'));
         await reveal(tester, find.text('Refresh'));
         expect(find.text('Refresh').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
