@@ -308,7 +308,15 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   else
-                    Icon(Icons.circle, size: 12, color: color),
+                    Icon(
+                      _testFailure != null
+                          ? Icons.close
+                          : _probe != null
+                          ? Icons.check
+                          : Icons.horizontal_rule,
+                      size: 20,
+                      color: color,
+                    ),
                   const SizedBox(width: 12),
                   Expanded(child: Text(status)),
                 ],

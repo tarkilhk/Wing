@@ -67,7 +67,7 @@ adopt credentials in existing sessions.
 ## Connection results
 
 Connector detail shows a neutral untested state, a spinner while testing, and a
-colored dot with Test passed or Test failed afterward. Available tools (count)
+green tick with Test passed or a red cross with Test failed afterward. Available tools (count)
 expands the returned tool names and descriptions; failure reasons are retained
 under Failure details. Each fresh test clears the previous result and starts
 with disclosures collapsed. These are explicit test observations, not cached

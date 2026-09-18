@@ -16,8 +16,19 @@ void main() {
     ).listSync(recursive: true).whereType<File>()) {
       if (!file.path.endsWith('.dart')) continue;
       final source = file.readAsStringSync();
+      // The owner explicitly chose a tick for a passed MCP connection test.
+      // Exempt only that status branch; selection controls still cannot use ticks.
+      final iconSource =
+          file.path
+              .replaceAll('\\', '/')
+              .endsWith('/admin_connectors_page.dart')
+          ? source.replaceFirst(
+              RegExp(r'\? Icons\.check\s*: Icons\.horizontal_rule'),
+              '? Icons.horizontal_rule : Icons.horizontal_rule',
+            )
+          : source;
       expect(
-        source,
+        iconSource,
         isNot(
           matches(
             RegExp(

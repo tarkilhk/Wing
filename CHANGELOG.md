@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Distinguish MCP test results from the connection LED with a green tick for success and a red cross for failure.
+
 - Simplify MCP connection tests to a compact pass/fail status, with discovered methods under a collapsed Available tools panel and expandable failure details.
 
 - Add profile-scoped MCP setup for browser sign-in, bearer tokens, custom headers and subprocess credentials, with official Aspire settings and optional registered-client/TLS configuration. Complete OAuth through a phone-local callback or pasted browser URL using stock Hermes RPC; keep tokens on Hermes and provide terminal guidance for device-code/CIMD login.
