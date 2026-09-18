@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_connectors_page.dart';
 import 'package:wing/core/screens/administration/admin_mcp_setup_page.dart';
 import 'package:wing/core/services/mcp_oauth.dart';
+import 'package:wing/core/widgets/studio_select.dart';
+import 'package:wing/core/services/mcp_setup.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'support/administration_fixture.dart';
 
@@ -29,7 +31,15 @@ void main() {
   });
   for (final brightness in Brightness.values) {
     for (final enlarged in [false, true]) {
-      for (final page in ['setup', 'callback']) {
+      for (final page in [
+        'setup',
+        'headers',
+        'bearer',
+        'none',
+        'program',
+        'advanced',
+        'callback',
+      ]) {
         final name =
             '$page-${brightness.name}-${enlarged ? 'large' : 'normal'}';
         testWidgets('MCP setup and callback controls remain reachable: $name', (
@@ -68,7 +78,7 @@ void main() {
                   ).copyWith(textScaler: TextScaler.linear(enlarged ? 2 : 1)),
                   child: child!,
                 ),
-                home: page == 'setup'
+                home: page != 'callback'
                     ? AdminMcpSetupPage(
                         profile: fixture.server.profile('personal'),
                       )
@@ -85,24 +95,53 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
-          if (page == 'setup') {
+          Future<void> reveal(Finder target) async {
             await tester.scrollUntilVisible(
-              find.text('Use Aspire settings'),
-              200,
+              target,
+              160,
               scrollable: find.byType(Scrollable).first,
             );
-            await tester.tap(find.text('Use Aspire settings'));
-          } else {
-            await tester.scrollUntilVisible(
-              find.text('Start sign-in'),
-              200,
-              scrollable: find.byType(Scrollable).first,
-            );
+            await tester.pumpAndSettle();
+          }
+
+          Future<void> select(Finder target, String option) async {
+            await reveal(target);
+            await tester.tap(target);
+            await tester.pumpAndSettle();
+            await tester.tap(find.text(option).last);
+            await tester.pumpAndSettle();
+          }
+
+          if (page == 'callback') {
+            await reveal(find.text('Start sign-in'));
             await tester.tap(find.text('Start sign-in'));
+          } else if (page == 'program') {
+            await select(find.byType(StudioSelect<bool>), 'Program on Hermes');
+            await reveal(find.text('Add environment variable'));
+            await tester.tap(find.text('Add environment variable'));
+          } else if (['headers', 'bearer', 'none'].contains(page)) {
+            await select(
+              find.byType(StudioSelect<McpAuthentication>),
+              switch (page) {
+                'headers' => 'Custom headers',
+                'bearer' => 'API key / bearer token',
+                _ => 'No authentication',
+              },
+            );
+            if (page == 'headers') {
+              await reveal(find.text('Add header'));
+              await tester.tap(find.text('Add header'));
+            }
+          } else if (page == 'advanced') {
+            await reveal(find.text('Advanced'));
+            await tester.tap(find.text('Advanced'));
+            await tester.pumpAndSettle();
+            await reveal(find.text('Client ID'));
           }
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
-          if (capture) {
+          Future<void> captureScreen(String suffix) async {
+            if (!capture) return;
             final boundary = tester.renderObject<RenderRepaintBoundary>(
               find.byKey(const ValueKey('capture')),
             );
@@ -111,19 +150,33 @@ void main() {
               final bytes = await image.toByteData(
                 format: ui.ImageByteFormat.png,
               );
-              final file = File('build/mcp-review/$name.png');
+              final file = File('build/mcp-review/$name$suffix.png');
               await file.parent.create(recursive: true);
               await file.writeAsBytes(bytes!.buffer.asUint8List());
               image.dispose();
             });
           }
+
+          await captureScreen('');
+          if (page == 'advanced') {
+            await reveal(find.text('Registered callback address'));
+            await captureScreen('-callback-field');
+          }
+
           await tester.scrollUntilVisible(
-            find.text(page == 'setup' ? 'Add and sign in' : 'Complete sign-in'),
+            find.text(
+              page == 'callback'
+                  ? 'Complete sign-in'
+                  : ['setup', 'advanced'].contains(page)
+                  ? 'Add and sign in'
+                  : 'Add connector',
+            ),
             200,
             scrollable: find.byType(Scrollable).first,
           );
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
+          await captureScreen('-action');
           await tester.pumpWidget(const SizedBox.shrink());
         });
       }

@@ -163,7 +163,7 @@ void main() {
   );
 
   testWidgets(
-    'Aspire shortcut fills an editable official address and browser sign-in',
+    'blank setup saves user-entered service details and browser sign-in',
     (tester) async {
       Map<String, dynamic>? result;
       await tester.pumpWidget(
@@ -189,10 +189,16 @@ void main() {
       );
       await tester.tap(find.text('Open setup'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Use Aspire settings'));
+      expect(find.text('Use Aspire settings'), findsNothing);
+      final name = find.widgetWithText(TextField, 'Connector name');
+      final address = find.widgetWithText(TextField, 'MCP address');
+      expect(tester.widget<TextField>(name).controller!.text, isEmpty);
+      await tester.enterText(name, 'work-docs');
+      await tester.ensureVisible(address);
+      expect(tester.widget<TextField>(address).controller!.text, isEmpty);
+      await tester.enterText(address, 'https://docs.example/mcp');
+      FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();
-      expect(find.text('aspire'), findsOneWidget);
-      expect(find.text('https://aspire-mcp.aspireapp.com/mcp'), findsOneWidget);
       await tester.scrollUntilVisible(
         find.text('Add and sign in'),
         200,
@@ -201,9 +207,13 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Add and sign in'));
       await tester.pumpAndSettle();
-      expect(calls.last.$2['name'], 'aspire');
+      expect(calls.last.$2['name'], 'work-docs');
       expect((calls.last.$2['config'] as Map)['auth'], 'oauth');
-      expect(result?['name'], 'aspire');
+      expect(
+        (calls.last.$2['config'] as Map)['url'],
+        'https://docs.example/mcp',
+      );
+      expect(result?['name'], 'work-docs');
       expect(find.text('Open setup'), findsOneWidget);
     },
   );

@@ -11,9 +11,12 @@ dashboard-callback OAuth description in Administration's MCP failure notes.
 MCP connectors has an Add connector form bound to the selected connection and
 profile. Remote services offer browser sign-in, bearer token, no authentication,
 or custom headers. Programs running on Hermes accept a command, one argument per
-line, and optional environment credentials. Use Aspire settings fills the
-official `https://aspire-mcp.aspireapp.com/mcp` address and browser authentication;
-it is an editable preset, not automatic authentication detection.
+line, and optional environment credentials. The form starts empty and has no
+service-specific presets. Each field includes guidance, and connection and
+authentication selections explain when to use them. Bearer-token help distinguishes
+the automatically added prefix from custom headers, whose values are sent exactly
+as entered. Advanced fields explain OAuth registration, client authentication,
+permissions, callbacks and server-local certificate files.
 
 Advanced fields support pre-registered OAuth clients, token endpoint client
 authentication, scopes, exact registered callbacks, and server-local certificate,
@@ -93,10 +96,32 @@ the actual enlarged-text render.
 repeat login ports, explicit loopback and HTTPS callbacks, wrong overrides,
 device-code handoff, missing RPC, cancellation/disposal races, and a real local
 HTTP callback. `mcp_setup_test.dart` covers profile ownership, separate credential
-storage, duplicate rejection, input validation and the Aspire preset.
+storage, duplicate rejection, input validation and user-entered connector setup.
 `administration_mcp_test.dart` retains probe/error/reload regressions.
 `mcp_setup_layout_test.dart` renders both new screens at 390 dp and at 320 dp with
-200% text in both themes, checking action reachability.
+200% text in both themes, checking action reachability across all authentication
+choices, program setup, populated credential rows and expanded Advanced settings.
+
+The 18 September setup guidance revision compares two arrangements: a separate
+help sheet, and explanations beside the active controls. Inline help keeps advice
+with the field it explains and needs no extra taps; optional technical settings
+remain collapsed under Advanced. Help uses Studio secondary text and grows with
+text scaling without a line limit. The primary action remains Add connector, or
+Add and sign in for browser authentication; profile context stays passive.
+
+Guidance was checked against latest upstream main
+`77ecc72bcdd5da0163cca21c8af0e95b26ba3426` on 18 September 2026, verified with
+`git ls-remote`. Inspected the stock
+[configuration reference](https://github.com/NousResearch/hermes-agent/blob/77ecc72bcdd5da0163cca21c8af0e95b26ba3426/website/docs/reference/mcp-config-reference.md),
+[MCP RPC implementation](https://github.com/NousResearch/hermes-agent/blob/77ecc72bcdd5da0163cca21c8af0e95b26ba3426/tui_gateway/methods_tools.py)
+and [OAuth metadata implementation](https://github.com/NousResearch/hermes-agent/blob/77ecc72bcdd5da0163cca21c8af0e95b26ba3426/tools/mcp_oauth.py).
+This revision changes the client form and guidance, with no backend or wire changes.
+Validation: all 36 setup/viewport tests pass, alongside the 40 OAuth and connector
+regressions; targeted static analysis reports no issues. Actual Flutter renders
+under `build/mcp-review/` were inspected in light/dark at 390 dp and at 320 dp with
+200% text. Long field labels move above the input at enlarged text sizes, and
+help text wraps without truncation. These are widget renders, not a new native
+device or live-service acceptance run.
 
 These tests establish client behavior against the verified wire contract. On
 18 September 2026, the user confirmed successful Aspire sign-in and connection

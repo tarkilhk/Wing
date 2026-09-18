@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove the service-specific MCP setup preset and explain connector fields, sign-in methods, custom headers and advanced settings, with readable labels at enlarged text sizes.
+
 - Show API-equivalent costs for OpenAI Codex subscription usage, with cached/uncached input and output breakdowns, published price sources, mixed-provider subtotals and explicit unavailable estimates.
 
 - Split screen-header taps: the connection icon and status dot open status details, while the name opens a dropdown matching the displayed scope—connections only in Chats and Activity, with profile choices for connection/profile headers. Preserve the current section and retained chat drafts when switching.
@@ -10,7 +12,7 @@
 
 - Simplify MCP connection tests to a compact pass/fail status, with discovered methods under a collapsed Available tools panel and expandable failure details.
 
-- Add profile-scoped MCP setup for browser sign-in, bearer tokens, custom headers and subprocess credentials, with official Aspire settings and optional registered-client/TLS configuration. Complete OAuth through a phone-local callback or pasted browser URL using stock Hermes RPC; keep tokens on Hermes and provide terminal guidance for device-code/CIMD login.
+- Add profile-scoped MCP setup for browser sign-in, bearer tokens, custom headers and subprocess credentials, with optional registered-client/TLS configuration. Complete OAuth through a phone-local callback or pasted browser URL using stock Hermes RPC; keep tokens on Hermes and provide terminal guidance for device-code/CIMD login.
 
 - Fix Live chat staying amber after an administration connection drops while chat remains connected. Keep genuine workspace chat interruptions visible.
 
