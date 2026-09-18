@@ -18,7 +18,7 @@ This is the ownership contract for Administration, updated on 17 September 2026 
 | Health / Server | Runtime/launch-profile observations, bounded logs, Doctor/security audit and action results |
 | Health / Profile | Scoped readiness and usage; recovery links to the owning editor |
 
-MCP connectors owns Reload server connectors, with confirmation that it reconnects tools across all server profiles and can invalidate prompt caches. Versions & updates contains server identity and update controls. Only the server has an upstream update check and circular-arrows availability indicator. Check update progress appears after an update request; it reads the running update action, while Check for updates compares installed code with upstream.
+MCP connectors owns Update running chats, with confirmation that it reconnects tools across all server profiles and can invalidate prompt caches. Versions & updates contains server identity and update controls. Only the server has an upstream update check and circular-arrows availability indicator. Check update progress appears after an update request; it reads the running update action, while Check for updates compares installed code with upstream.
 
 Keep the Profile root short. The global menu opens the dedicated Hermes health destination; there are no ownership tabs. Use categorized rows and drill-downs, sheets for short choices and dedicated screens for inventories and long editors. Search results identify the owner and navigate to the single editor. Health links to settings; it does not duplicate their forms.
 

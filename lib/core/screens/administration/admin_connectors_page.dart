@@ -47,7 +47,7 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
       if (mounted) {
         adminMessage(
           context,
-          'Saved for new sessions. Reload server connectors to apply to existing sessions.',
+          'Saved for new sessions. Update running chats to apply the change now.',
         );
       }
     } catch (e) {
@@ -537,7 +537,7 @@ class _AdminMcpSignInState extends State<AdminMcpSignIn> {
           if (_browserError != null) AdminNotice.error(_browserError!),
           if (_flow.status == 'approved')
             const AdminNotice(
-              'Signed in. Close this page and test the connector. Reload server connectors to update existing sessions.',
+              'Signed in. Close this page and test the connector. Update running chats to use the new credentials.',
             ),
           if (_flow.pending) ...[
             if (_flow.authUrl != null && !_flow.callbackAccepted) ...[
@@ -703,9 +703,9 @@ class _AdminReloadConnectorsButtonState
   Future<void> _reload() async {
     if (!await adminConfirm(
       context,
-      'Reload server connectors?',
-      'Reconnect MCP tools for all profiles on this server. Existing sessions reload their tools; their next message may resend the full conversation to the model.',
-      action: 'Reload',
+      'Update running chats?',
+      'Reconnect MCP tools for every profile on this server. Existing chats refresh their tool access; their next message may resend the full conversation to the model.',
+      action: 'Reconnect tools',
     )) {
       return;
     }
@@ -719,9 +719,9 @@ class _AdminReloadConnectorsButtonState
         if (!mounted ||
             !await adminConfirm(
               context,
-              'Confirm connector reload',
+              'Confirm tool reconnection',
               '${result['message'] ?? 'The next message may resend full input tokens.'}',
-              action: 'Reload',
+              action: 'Reconnect tools',
             )) {
           return;
         }
@@ -729,24 +729,25 @@ class _AdminReloadConnectorsButtonState
       }
       if (result['status'] != 'reloaded') {
         throw const AdministrationFailure(
-          'Connector reload could not be confirmed.',
+          'MCP tool reconnection could not be confirmed.',
         );
       }
-      if (mounted) adminMessage(context, 'Server connectors reloaded.');
+      if (mounted)
+        adminMessage(context, 'MCP tools reconnected in running chats.');
     } catch (e) {
       if (mounted) {
         final message = switch (e) {
           JsonRpcError(reason: 'request_timeout') || TimeoutException() =>
-            'Connector reload timed out. It may still be running on the server. Check connector status before retrying.',
+            'MCP tool reconnection timed out. It may still be running on the server. Check connector status before retrying.',
           JsonRpcError(reason: 'connection_closed') =>
-            'The connection closed before reload could be confirmed. Reconnect and check connector status before retrying.',
+            'The connection closed before MCP tools could be reconnected. Reconnect and check connector status before retrying.',
           JsonRpcError() => mcpErrorMessage(
             e.message,
-            summary: 'Connector reload failed.',
+            summary: 'MCP tool reconnection failed.',
           ),
           AdministrationFailure() => e.message,
           _ =>
-            'Connector reload could not be confirmed. Check the server connection before retrying.',
+            'MCP tool reconnection could not be confirmed. Check the server connection before retrying.',
         };
         adminMessage(context, message, isError: true);
       }
@@ -758,7 +759,7 @@ class _AdminReloadConnectorsButtonState
   @override
   Widget build(BuildContext context) => OutlinedButton(
     onPressed: _busy ? null : _reload,
-    child: StudioActionLabel('Reload server connectors', busy: _busy),
+    child: StudioActionLabel('Update running chats', busy: _busy),
   );
 }
 

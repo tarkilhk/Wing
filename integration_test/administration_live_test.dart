@@ -415,12 +415,12 @@ void main() {
     await back(tester);
     await tap(tester, 'Access and connectors');
     await tap(tester, 'MCP connectors');
-    await tap(tester, 'Reload server connectors');
-    await tap(tester, 'Reload');
-    if (find.text('Confirm runtime reload').evaluate().isNotEmpty) {
-      await tap(tester, 'Reload');
+    await tap(tester, 'Update running chats');
+    await tap(tester, 'Reconnect tools');
+    if (find.text('Confirm tool reconnection').evaluate().isNotEmpty) {
+      await tap(tester, 'Reconnect tools');
     }
-    expect(find.text('Server connectors reloaded.'), findsOneWidget);
+    expect(find.text('MCP tools reconnected in running chats.'), findsOneWidget);
   });
 
   testWidgets(

@@ -64,8 +64,10 @@ connection identity, and first-time registration require live verification.
 Device-code configuration produces same-host/same-profile terminal guidance.
 The other-sign-in disclosure also explains the CLI path for CIMD-only providers.
 Neither is presented as native remote sign-in support. Users return to Test
-connection after external login, and can explicitly reload server connectors to
-adopt credentials in existing sessions.
+connection after external login, and can explicitly update running chats to
+adopt credentials in existing sessions. Wing labels this action **Update running
+chats**: it reconnects MCP tools for every profile on the server, so existing
+chats refresh their tool access.
 
 ## Connection results
 

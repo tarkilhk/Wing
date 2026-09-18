@@ -30,7 +30,7 @@ void main() {
     ),
   ]) {
     testWidgets(
-      'MCP reload reports ${failure.reason ?? 'server error'} without retrying',
+      'MCP reconnection reports ${failure.reason ?? 'server error'} without retrying',
       (tester) async {
         final fixture = AdministrationFixture();
         fixture.rpcOverride = (_, _) async => throw failure;
@@ -42,12 +42,12 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Reload server connectors'));
+        await tester.tap(find.text('Update running chats'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Reload'));
+        await tester.tap(find.text('Reconnect tools'));
         await tester.pumpAndSettle();
         expect(find.textContaining('Your edits are kept'), findsNothing);
-        expect(find.text('Server connectors reloaded.'), findsNothing);
+        expect(find.text('MCP tools reconnected in running chats.'), findsNothing);
         expect(
           find.textContaining(switch (failure.reason) {
             'request_timeout' => 'It may still be running',
@@ -60,7 +60,7 @@ void main() {
         expect(
           tester
               .widget<OutlinedButton>(
-                find.widgetWithText(OutlinedButton, 'Reload server connectors'),
+                find.widgetWithText(OutlinedButton, 'Update running chats'),
               )
               .onPressed,
           isNotNull,
@@ -69,7 +69,7 @@ void main() {
     );
   }
 
-  testWidgets('declining the server confirmation does not reload connectors', (
+  testWidgets('declining the server confirmation does not reconnect MCP tools', (
     tester,
   ) async {
     final fixture = AdministrationFixture();
@@ -87,18 +87,18 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Reload server connectors'));
+    await tester.tap(find.text('Update running chats'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Reload'));
+    await tester.tap(find.text('Reconnect tools'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(requests, [{}]);
-    expect(find.text('Server connectors reloaded.'), findsNothing);
+    expect(find.text('MCP tools reconnected in running chats.'), findsNothing);
   });
 
-  testWidgets('MCP reload obeys the stock server-wide parameter contract', (
+  testWidgets('MCP reconnection obeys the stock server-wide parameter contract', (
     tester,
   ) async {
     final fixture = AdministrationFixture();
@@ -129,24 +129,24 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Reload server connectors'));
+    await tester.tap(find.text('Update running chats'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Reload'));
+    await tester.tap(find.text('Reconnect tools'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.textContaining('Your edits are kept'), findsNothing);
-    expect(find.text('Confirm connector reload'), findsOneWidget);
-    await tester.tap(find.text('Reload'));
+    expect(find.text('Confirm tool reconnection'), findsOneWidget);
+    await tester.tap(find.text('Reconnect tools'));
     await tester.pumpAndSettle();
     expect(requests, [
       {},
       {'confirm': true},
     ]);
-    expect(find.text('Server connectors reloaded.'), findsOneWidget);
+    expect(find.text('MCP tools reconnected in running chats.'), findsOneWidget);
   });
 
   testWidgets(
-    'MCP reload belongs to connectors and confirms server-wide scope',
+    'MCP reconnection belongs to connectors and confirms server-wide scope',
     (tester) async {
       final fixture = AdministrationFixture();
       await tester.pumpWidget(
@@ -158,22 +158,22 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Backend version'), findsNothing);
-      await tester.tap(find.text('Reload server connectors'));
+      await tester.tap(find.text('Update running chats'));
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('all profiles on this server'),
+        find.textContaining('every profile on this server'),
         findsOneWidget,
       );
       expect(fixture.rpcRequests, isEmpty);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(fixture.rpcRequests, isEmpty);
-      await tester.tap(find.text('Reload server connectors'));
+      await tester.tap(find.text('Update running chats'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Reload'));
+      await tester.tap(find.text('Reconnect tools'));
       await tester.pumpAndSettle();
       expect(fixture.rpcRequests, [('default', 'reload.mcp')]);
-      expect(find.text('Server connectors reloaded.'), findsOneWidget);
+      expect(find.text('MCP tools reconnected in running chats.'), findsOneWidget);
       expect(
         fixture.requests.any((request) => request.$2.contains('update')),
         isFalse,

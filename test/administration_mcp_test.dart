@@ -351,13 +351,13 @@ void main() {
           await tester.pumpAndSettle();
           if (reload) {
             await tester.scrollUntilVisible(
-              find.widgetWithText(OutlinedButton, 'Reload server connectors'),
+              find.widgetWithText(OutlinedButton, 'Update running chats'),
               200,
             );
             await tester.pumpAndSettle();
-            await tester.tap(find.text('Reload server connectors'));
+            await tester.tap(find.text('Update running chats'));
             await tester.pumpAndSettle();
-            await tester.tap(find.text('Reload'));
+            await tester.tap(find.text('Reconnect tools'));
             await tester.pumpAndSettle();
           } else if (signIn) {
             await tester.scrollUntilVisible(find.text('Start sign-in'), 200);
