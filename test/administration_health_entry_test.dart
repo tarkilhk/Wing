@@ -437,8 +437,16 @@ void main({
             );
             expect(find.byType(TabBar), findsNothing);
             if (status == 'missing' || status == 'green') {
-              await tester.ensureVisible(
+              await tester.scrollUntilVisible(
                 find.byTooltip('Refresh profile status'),
+                250,
+                scrollable: find
+                    .byWidgetPredicate(
+                      (w) =>
+                          w is Scrollable &&
+                          w.axisDirection == AxisDirection.down,
+                    )
+                    .first,
               );
               await tester.tap(find.byTooltip('Refresh profile status'));
               await tester.pumpAndSettle();
