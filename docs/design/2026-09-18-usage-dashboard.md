@@ -9,7 +9,10 @@ inspect a date or a model without leaving its captured profile/connection.
 
 - Neutral period buttons; token count and estimated value side by side.
 - Token-intensity calendar, one square per UTC session-start date. The year
-  view pages through 91 dates with arrows; there is no day slider.
+  view pages through 91 dates with arrows; there is no day slider. Following
+  phone feedback, cells are fixed at 12dp with 3dp gaps and no date numerals.
+  Longer ranges use seven-row Sunday-aligned week columns; 1D and 7D use a
+  compact strip. Cells no longer stretch to fill the available width.
 - Breakdown immediately below the grid, one animated composition bar. Its
   clickable title switches model/token-type grouping; Tokens/Cost stays at the
   top right and is independent from the trend controls.

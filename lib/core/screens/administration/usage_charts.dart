@@ -144,8 +144,14 @@ class _UsageCalendarState extends State<UsageCalendar> {
     );
     final tokens = WingTokens.of(context);
     final locale = MaterialLocalizations.of(context);
-    final dense = all.length > 32;
-    final columns = dense ? (days.length / 7).ceil() : math.min(7, days.length);
+    // Fixed-size cells keep the activity map compact at every phone width.
+    // Longer ranges run top-to-bottom through Sunday-aligned week columns.
+    const square = 12.0;
+    const gap = 3.0;
+    const pitch = square + gap;
+    final weekly = all.length > 8;
+    final offset = weekly ? days.first.date.weekday % 7 : 0;
+    final columns = weekly ? ((days.length + offset) / 7).ceil() : days.length;
     Widget cell(UsageDay day) {
       final count = day.tokens.total;
       final selected = day.id == widget.selected;
@@ -173,42 +179,21 @@ class _UsageCalendarState extends State<UsageCalendar> {
               key: ValueKey('usage-day-${day.id}'),
               borderRadius: BorderRadius.circular(4),
               onTap: () => widget.onSelected(day),
-              child: Center(
+              child: Align(
+                alignment: Alignment.topLeft,
                 child: AnimatedContainer(
                   duration: _motion(context),
-                  width: dense ? double.infinity : 32,
-                  height: dense ? double.infinity : 32,
-                  margin: const EdgeInsets.all(2),
+                  width: square,
+                  height: square,
                   decoration: BoxDecoration(
                     color: color,
-                    borderRadius: BorderRadius.circular(3),
+                    borderRadius: BorderRadius.circular(2),
                     border: selected
-                        ? Border.all(color: tokens.onSurface, width: 2)
+                        ? Border.all(color: tokens.onSurface, width: 1.5)
                         : null,
                   ),
-                  child:
-                      !dense && MediaQuery.textScalerOf(context).scale(12) <= 18
-                      ? Center(
-                          child: Text(
-                            '${day.date.day}',
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(
-                                  color:
-                                      count != null &&
-                                          count > 0 &&
-                                          count / math.max(maximum, 1) > .7
-                                      ? Theme.of(context).colorScheme.onPrimary
-                                      : tokens.onSurface,
-                                ),
-                          ),
-                        )
-                      : count == null
-                      ? Center(
-                          child: Text(
-                            '?',
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                        )
+                  child: count == null
+                      ? Icon(Icons.question_mark, size: 9, color: tokens.muted)
                       : null,
                 ),
               ),
@@ -246,39 +231,37 @@ class _UsageCalendarState extends State<UsageCalendar> {
           ],
         ),
         const SizedBox(height: 8),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final size = dense
-                ? constraints.maxWidth / 13
-                : constraints.maxWidth / 7;
-            return Column(
+        Align(
+          alignment: Alignment.centerLeft,
+          child: SizedBox(
+            key: const ValueKey('usage-activity-grid'),
+            width: columns * pitch - gap,
+            height: (weekly ? 7 : 1) * pitch - gap,
+            child: Column(
               children: [
-                for (
-                  var row = 0;
-                  row < (dense ? 7 : (days.length / columns).ceil());
-                  row++
-                )
-                  Row(
-                    children: [
-                      for (var col = 0; col < columns; col++)
-                        SizedBox(
-                          width: size,
-                          height: dense ? size : 48,
-                          child:
-                              (dense ? col * 7 + row : row * columns + col) <
-                                  days.length
-                              ? cell(
-                                  days[dense
-                                      ? col * 7 + row
-                                      : row * columns + col],
-                                )
-                              : null,
-                        ),
-                    ],
+                for (var row = 0; row < (weekly ? 7 : 1); row++)
+                  SizedBox(
+                    height: row == (weekly ? 6 : 0) ? square : pitch,
+                    child: Row(
+                      children: [
+                        for (var col = 0; col < columns; col++)
+                          SizedBox(
+                            width: col == columns - 1 ? square : pitch,
+                            child:
+                                (weekly ? col * 7 + row - offset : col) >= 0 &&
+                                    (weekly ? col * 7 + row - offset : col) <
+                                        days.length
+                                ? cell(
+                                    days[weekly ? col * 7 + row - offset : col],
+                                  )
+                                : null,
+                          ),
+                      ],
+                    ),
                   ),
               ],
-            );
-          },
+            ),
+          ),
         ),
         const SizedBox(height: 8),
         Wrap(
