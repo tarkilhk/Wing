@@ -732,8 +732,9 @@ class _AdminReloadConnectorsButtonState
           'MCP tool reconnection could not be confirmed.',
         );
       }
-      if (mounted)
+      if (mounted) {
         adminMessage(context, 'MCP tools reconnected in running chats.');
+      }
     } catch (e) {
       if (mounted) {
         final message = switch (e) {
