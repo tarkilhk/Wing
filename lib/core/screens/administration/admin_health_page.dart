@@ -1,6 +1,9 @@
 import '../../widgets/studio_select.dart';
 import '../../widgets/studio_action_label.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../models/usage_cost.dart';
 import '../../services/administration_repository.dart';
 import '../../services/administration_health.dart';
 import '../../theme/wing_theme.dart';
@@ -383,13 +386,22 @@ class AdminUsagePage extends StatefulWidget {
 class _AdminUsagePageState extends State<AdminUsagePage> {
   int _days = 7;
   String _sort = 'estimated_cost';
-  bool valid(Object? value) => value is num && value.isFinite && value >= 0;
-  String number(BuildContext context, Object? value, {bool money = false}) =>
-      !valid(value)
-      ? 'Unavailable'
-      : money
-      ? 'USD ${(value as num).toStringAsFixed(2)}'
-      : MaterialLocalizations.of(context).formatDecimal((value as num).toInt());
+  OpenAiPricingCatalog? _prices;
+
+  Future<Map<String, dynamic>> _load() async {
+    final data = await widget.profile.read('analytics/models', {
+      'days': '$_days',
+    });
+    if (_prices == null &&
+        administrationRows(
+          data['models'],
+        ).any((model) => model['provider'] == 'openai-codex')) {
+      _prices = OpenAiPricingCatalog.fromJson(
+        await rootBundle.loadString('assets/pricing/openai.json'),
+      );
+    }
+    return data;
+  }
 
   @override
   Widget build(BuildContext context) => AdminPage(
@@ -414,71 +426,48 @@ class _AdminUsagePageState extends State<AdminUsagePage> {
         ),
         Expanded(
           child: AdminLoad(
-            key: ValueKey(_days),
-            load: () =>
-                widget.profile.read('analytics/models', {'days': '$_days'}),
+            key: ValueKey((widget.profile.scope, _days)),
+            load: _load,
             builder: (context, data, refresh) {
-              final models = administrationRows(data['models']);
+              final models = administrationRows(
+                data['models'],
+              ).map((row) => ModelUsageCost.fromUsage(row, _prices)).toList();
+              final rowIds = {
+                for (final (index, model) in models.indexed) model: index,
+              };
               models.sort((a, b) {
-                if (_sort == 'model') {
-                  return '${a['model']}'.compareTo('${b['model']}');
-                }
-                final aValue = a[_sort], bValue = b[_sort];
-                if (!valid(aValue)) return valid(bValue) ? 1 : 0;
-                if (!valid(bValue)) return -1;
-                return (bValue as num).compareTo(aValue as num);
+                if (_sort == 'model') return a.model.compareTo(b.model);
+                final aValue = _sort == 'estimated_cost'
+                    ? a.amount
+                    : usageAmount(a.usage[_sort]);
+                final bValue = _sort == 'estimated_cost'
+                    ? b.amount
+                    : usageAmount(b.usage[_sort]);
+                if (aValue == null) return bValue == null ? 0 : 1;
+                if (bValue == null) return -1;
+                return bValue.compareTo(aValue);
               });
-              final known = models
-                  .where((model) => valid(model['estimated_cost']))
-                  .toList();
-              final total = known.fold<double>(
-                0,
-                (sum, model) =>
-                    sum + (model['estimated_cost'] as num).toDouble(),
-              );
+              final summary = UsageCostSummary(models);
               return ListView(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 children: [
                   if (models.isNotEmpty) ...[
-                    AdminGroup(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                known.length == models.length
-                                    ? 'Estimated cost'
-                                    : 'Reported cost',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                number(
-                                  context,
-                                  known.isEmpty ? null : total,
-                                  money: true,
-                                ),
-                                style: Theme.of(
-                                  context,
-                                ).textTheme.headlineSmall,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${models.length} models · Last $_days ${_days == 1 ? 'day' : 'days'}',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                    _UsageSummary(summary: summary, days: _days),
                     const SizedBox(height: 8),
                     Text(
-                      'Hermes estimates, not provider invoices.${known.length < models.length ? ' Costs available for ${known.length} of ${models.length} models.' : ''}',
+                      summary.hasSubscription
+                          ? 'Subscription usage valued at published API rates. Not a bill.'
+                          : 'Hermes estimates, not provider invoices.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
+                    if (summary.isPartial)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Partial total · Costs available for ${summary.pricedCount} of ${models.length} models.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
                     const SizedBox(height: 20),
                   ],
                   StudioSelect<String>(
@@ -501,70 +490,29 @@ class _AdminUsagePageState extends State<AdminUsagePage> {
                   AdminGroup(
                     children: [
                       for (final model in models)
-                        ExpansionTile(
-                          key: PageStorageKey(
-                            'usage:$_days:${model['provider']}:${model['model']}',
+                        _UsageModelTile(
+                          // Stock analytics may return multiple auxiliary rows
+                          // with the same provider/model; retain each contribution.
+                          key: ValueKey((
+                            widget.profile.scope,
+                            _days,
+                            rowIds[model],
+                          )),
+                          model: model,
+                          total: summary.total,
+                          storageKey: PageStorageKey(
+                            'usage:${widget.profile.scope.storageNamespace}:$_days:${model.usage['provider']}:${model.model}:${rowIds[model]}',
                           ),
-                          title: Text(
-                            '${model['model'] ?? 'Unknown model'}',
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 4, bottom: 8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Text(
-                                  '${model['provider'] ?? 'Provider unavailable'}',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${number(context, model['api_calls'])} calls · ${number(context, model['estimated_cost'], money: true)}',
-                                ),
-
-                                if (valid(model['estimated_cost']) &&
-                                    total > 0 &&
-                                    total.isFinite) ...[
-                                  const SizedBox(height: 8),
-                                  LinearProgressIndicator(
-                                    value:
-                                        ((model['estimated_cost'] as num) /
-                                                total)
-                                            .clamp(0, 1)
-                                            .toDouble(),
-                                    semanticsLabel:
-                                        '${model['model']} share of reported estimated cost',
-                                    semanticsValue:
-                                        '${((model['estimated_cost'] as num) / total * 100).toStringAsFixed(1)}%',
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          children: [
-                            for (final (key, label) in [
-                              ('sessions', 'Sessions'),
-                              ('api_calls', 'Calls'),
-                              ('input_tokens', 'Input tokens'),
-                              ('output_tokens', 'Output tokens'),
-                              ('estimated_cost', 'Estimated cost'),
-                            ])
-                              ListTile(
-                                dense: true,
-                                title: Text(label),
-                                subtitle: Text(
-                                  number(
-                                    context,
-                                    model[key],
-                                    money: key == 'estimated_cost',
-                                  ),
-                                ),
-                              ),
-                          ],
                         ),
                     ],
                   ),
+                  if (summary.hasSubscription) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Base-rate estimate. Excludes cache-write charges and long-context or service-tier adjustments.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
@@ -580,4 +528,252 @@ class _AdminUsagePageState extends State<AdminUsagePage> {
       ],
     ),
   );
+}
+
+String _usageNumber(BuildContext context, Object? value) {
+  final count = usageTokenCount(value);
+  return count == null
+      ? 'Unavailable'
+      : MaterialLocalizations.of(context).formatDecimal(count);
+}
+
+String _usageRate(double rate) =>
+    rate == rate.roundToDouble() ? rate.toStringAsFixed(0) : rate.toString();
+
+class _UsageSummary extends StatelessWidget {
+  final UsageCostSummary summary;
+  final int days;
+  const _UsageSummary({required this.summary, required this.days});
+
+  @override
+  Widget build(BuildContext context) {
+    final title = summary.isMixed
+        ? 'Estimated usage value'
+        : summary.hasSubscription
+        ? 'API-equivalent cost'
+        : summary.isPartial
+        ? 'Reported cost'
+        : 'Estimated cost';
+    return AdminGroup(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 4),
+              Text(
+                formatUsageUsd(summary.total),
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${summary.models.length} models · Last $days ${days == 1 ? 'day' : 'days'}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              if (summary.isMixed) ...[
+                const SizedBox(height: 12),
+                _UsageValue(
+                  label: 'Hermes estimates',
+                  value: formatUsageUsd(summary.reported),
+                ),
+                const SizedBox(height: 4),
+                _UsageValue(
+                  label: 'Subscription API equivalent',
+                  value: formatUsageUsd(summary.apiEquivalent),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _UsageValue extends StatelessWidget {
+  final String label;
+  final String value;
+  const _UsageValue({required this.label, required this.value});
+  @override
+  Widget build(BuildContext context) => Wrap(
+    alignment: WrapAlignment.spaceBetween,
+    spacing: 12,
+    runSpacing: 4,
+    children: [Text(label), Text(value)],
+  );
+}
+
+class _UsageModelTile extends StatelessWidget {
+  final ModelUsageCost model;
+  final double? total;
+  final PageStorageKey<String> storageKey;
+  const _UsageModelTile({
+    super.key,
+    required this.model,
+    required this.total,
+    required this.storageKey,
+  });
+
+  String get _costLabel => switch (model.unavailable) {
+    UsageCostUnavailable.price => 'Price unavailable',
+    UsageCostUnavailable.tokens => 'Token counts unavailable',
+    _ => formatUsageUsd(model.amount),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final usage = model.usage;
+    final amount = model.amount;
+    final totalAmount = total;
+    return ExpansionTile(
+      key: storageKey,
+      title: Text(
+        model.model,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 4, bottom: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '${usage['provider'] ?? 'Provider unavailable'}${model.isApiEquivalent ? ' · API equivalent' : ''}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${_usageNumber(context, usage['api_calls'])} calls · $_costLabel',
+            ),
+            if (amount != null && totalAmount != null && totalAmount > 0) ...[
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: (amount / totalAmount).clamp(0, 1),
+                semanticsLabel: '${model.model} share of displayed estimates',
+                semanticsValue:
+                    '${(amount / totalAmount * 100).toStringAsFixed(1)}%',
+              ),
+            ],
+          ],
+        ),
+      ),
+      children: [
+        for (final (key, label) in [
+          ('sessions', 'Sessions'),
+          ('api_calls', 'Calls'),
+        ])
+          ListTile(
+            dense: true,
+            title: Text(label),
+            subtitle: Text(_usageNumber(context, usage[key])),
+          ),
+        if (model.isApiEquivalent)
+          _SubscriptionCostDetails(model: model)
+        else
+          for (final (key, label) in [
+            ('input_tokens', 'Input tokens'),
+            ('output_tokens', 'Output tokens'),
+            ('estimated_cost', 'Estimated cost'),
+          ])
+            ListTile(
+              dense: true,
+              title: Text(label),
+              subtitle: Text(
+                key == 'estimated_cost'
+                    ? _costLabel
+                    : _usageNumber(context, usage[key]),
+              ),
+            ),
+      ],
+    );
+  }
+}
+
+class _SubscriptionCostDetails extends StatefulWidget {
+  final ModelUsageCost model;
+  const _SubscriptionCostDetails({required this.model});
+  @override
+  State<_SubscriptionCostDetails> createState() =>
+      _SubscriptionCostDetailsState();
+}
+
+class _SubscriptionCostDetailsState extends State<_SubscriptionCostDetails> {
+  bool _sourceFailed = false;
+
+  Future<void> _openSource() async {
+    var opened = false;
+    try {
+      opened = await launchUrl(
+        widget.model.price!.source,
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      // Keep the source visible for copying when no browser can handle it.
+    }
+    if (mounted) setState(() => _sourceFailed = !opened);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final model = widget.model;
+    final price = model.price;
+    final locale = MaterialLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (key, label, rate, cost) in [
+            ('input_tokens', 'Uncached input', price?.input, model.inputCost),
+            (
+              'cache_read_tokens',
+              'Cached input',
+              price?.cachedInput,
+              model.cachedInputCost,
+            ),
+            ('output_tokens', 'Output', price?.output, model.outputCost),
+          ])
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _UsageValue(label: label, value: formatUsageUsd(cost)),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_usageNumber(context, model.usage[key])} tokens${rate == null ? '' : ' · USD ${_usageRate(rate)} / 1M tokens'}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          if (model.unavailable == UsageCostUnavailable.price)
+            const Text('No verified API price for this model.')
+          else if (model.unavailable == UsageCostUnavailable.tokens)
+            const Text(
+              'All three token counts are needed to estimate this model.',
+            ),
+          if (price != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Prices checked ${locale.formatShortDate(price.verifiedOn)}. Applied to the selected history.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: _openSource,
+                child: const Text('OpenAI pricing source'),
+              ),
+            ),
+            if (_sourceFailed) ...[
+              const Text('Could not open the browser. Copy this pricing link:'),
+              SelectionArea(child: Text(price.source.toString())),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
 }
