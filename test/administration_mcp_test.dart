@@ -154,7 +154,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await testConnection(tester);
-      expect(find.text('Test failed'), findsOneWidget);
+      expect(find.text('Connection failed'), findsOneWidget);
       expect(
         find.textContaining('OAuth authentication required'),
         findsNothing,
@@ -166,7 +166,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('The server rejected this change.'), findsNothing);
-      expect(find.textContaining('Test passed'), findsNothing);
+      expect(find.textContaining('Connected'), findsNothing);
       final request = fixture.requests.singleWhere((r) => r.$1 == 'POST');
       expect(request.$2, 'mcp/servers/aspire/test');
       expect(request.$3, {'profile': 'personal'});
@@ -247,7 +247,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await testConnection(tester);
-    expect(find.text('Test passed'), findsOneWidget);
+    expect(find.text('Connected'), findsOneWidget);
     expect(find.text('fixture_tool'), findsNothing);
     await tester.tap(find.text('Available tools (1)'));
     await tester.pumpAndSettle();
@@ -258,13 +258,13 @@ void main() {
       'tools': [],
     });
     await testConnection(tester);
-    expect(find.text('Test failed'), findsOneWidget);
+    expect(find.text('Connection failed'), findsOneWidget);
     expect(find.text('Available tools (1)'), findsNothing);
     expect(find.textContaining('Connection timed out.'), findsNothing);
     await tester.tap(find.text('Failure details'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Connection timed out.'), findsOneWidget);
-    expect(find.textContaining('Test passed'), findsNothing);
+    expect(find.textContaining('Connected'), findsNothing);
     expect(find.text('fixture_tool'), findsNothing);
   });
 
@@ -367,7 +367,7 @@ void main() {
             await testConnection(tester);
           }
           if (success) {
-            expect(find.text('Test passed'), findsOneWidget);
+            expect(find.text('Connected'), findsOneWidget);
             expect(find.text('get_accounting_settings'), findsNothing);
             if (operation == 'tools-open') {
               await tester.scrollUntilVisible(

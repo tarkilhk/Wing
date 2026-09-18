@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Label MCP connection results Connected or Connection failed.
+
 - Remove the service-specific MCP setup preset and explain connector fields, sign-in methods, custom headers and advanced settings, with readable labels at enlarged text sizes.
 
 - Show API-equivalent costs for OpenAI Codex subscription usage, with cached/uncached input and output breakdowns, published price sources, mixed-provider subtotals and explicit unavailable estimates.

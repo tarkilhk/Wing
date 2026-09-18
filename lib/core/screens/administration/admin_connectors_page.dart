@@ -328,9 +328,9 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
     final status = _testing
         ? 'Testing connection…'
         : _testFailure != null
-        ? 'Test failed'
+        ? 'Connection failed'
         : _probe != null
-        ? 'Test passed'
+        ? 'Connected'
         : 'Not tested';
     final color = _testFailure != null
         ? tokens.danger
