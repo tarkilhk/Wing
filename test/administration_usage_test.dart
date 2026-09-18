@@ -177,7 +177,8 @@ void main() {
     expect(find.text('API-equivalent cost'), findsOneWidget);
     expect(find.text('USD 5.44'), findsOneWidget);
     expect(find.text('1.4M'), findsOneWidget);
-    expect(find.text('Breakdown per token type'), findsOneWidget);
+    expect(find.text('Breakdown per model'), findsOneWidget);
+    await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
     await reveal(tester, find.byType(UsageAreaChart));
     expect(find.text('Trend per token type'), findsOneWidget);
     expect(find.byType(UsageAreaChart), findsOneWidget);
@@ -236,6 +237,7 @@ void main() {
     'cost and token controls are independent and model rows are passive',
     (tester) async {
       await show(tester);
+      await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
       await tap(tester, find.text('Cost').first);
       expect(find.text('Breakdown per token type'), findsOneWidget);
       expect(find.text('USD 2.70'), findsOneWidget);
@@ -260,6 +262,7 @@ void main() {
     await show(tester);
     expect(find.text('Estimated usage value'), findsOneWidget);
     expect(find.text('USD 8.00'), findsOneWidget);
+    await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
     await tap(tester, find.text('Cost').first);
     expect(
       find.textContaining('Cost per token type is available only'),
@@ -279,7 +282,6 @@ void main() {
     await show(tester);
     expect(find.text('USD 5.00'), findsOneWidget);
     expect(find.text('Partial total'), findsOneWidget);
-    await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
     await tap(tester, find.text('Cost').first);
     expect(find.textContaining('Partial breakdown'), findsOneWidget);
     expect(find.textContaining('USD 0.00'), findsNothing);
@@ -292,7 +294,6 @@ void main() {
     rows = [_astra(), _astra()];
     await show(tester);
     expect(find.text('USD 10.00'), findsOneWidget);
-    await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
     expect(find.text('gpt-6-astra'), findsOneWidget);
     await tap(tester, find.text('gpt-6-astra'));
     expect(find.text('Model details'), findsNothing);
@@ -403,6 +404,7 @@ void main() {
       };
       await show(tester);
       await tap(tester, find.byKey(ValueKey('usage-day-$id')));
+      await tap(tester, find.text('Show daily tokens'));
       await reveal(tester, find.text('123'));
       expect(find.text('456'), findsOneWidget);
       expect(find.text('789'), findsOneWidget);
@@ -421,7 +423,7 @@ void main() {
       _astra()..addAll({'provider': 'openai', 'estimated_cost': 7}),
     ];
     await show(tester);
-    await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
+    await reveal(tester, find.text('gpt-6-astra'));
     expect(find.text('gpt-6-astra'), findsOneWidget);
     final tokenSegments = tester
         .widget<UsageComposition>(find.byType(UsageComposition))
@@ -457,7 +459,6 @@ void main() {
         await tap(tester, find.byKey(ValueKey('usage-day-$today')));
         await snapshot(tester, '${brightness.name}-$scale-day-tooltip');
         await tap(tester, find.text('Selected period'));
-        await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
         await tap(tester, find.text('gpt-6-astra'));
         await reveal(tester, find.text('gpt-6-astra'));
         await snapshot(tester, '${brightness.name}-$scale-breakdown');

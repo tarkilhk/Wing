@@ -125,8 +125,6 @@ void main() {
                   .first,
             );
             await tester.pumpAndSettle();
-            await tester.tap(group);
-            await tester.pumpAndSettle();
             await tester.scrollUntilVisible(
               find.text('Research model'),
               200,

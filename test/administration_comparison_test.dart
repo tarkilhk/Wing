@@ -52,8 +52,6 @@ void main() {
       final group = find.byKey(const ValueKey('usage-breakdown-group'));
       await tester.ensureVisible(group);
       await tester.pumpAndSettle();
-      await tester.tap(group);
-      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Research model'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Research model'));

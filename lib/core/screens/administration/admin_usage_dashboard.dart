@@ -24,7 +24,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
   bool _yearLoading = false;
   int _days = 7;
   String? _selected;
-  bool _breakdownModels = false;
+  bool _breakdownModels = true;
   bool _breakdownCost = false;
   bool _trendModels = false;
   bool _trendCost = false;

@@ -20,7 +20,7 @@ inspect a date or a model without leaving its captured profile/connection.
   segments rank highest to lowest for the selected measure, with unavailable
   values last, deterministic ties and stable category colours.
 - Trend uses filled, stacked daily token areas with a marker for the selected
-  date. Its title offers the same grouping switch. Both sections default to
+  date. Its title offers the same grouping switch. Breakdown defaults to models and Trend defaults to
   token types following phone feedback; unavailable daily dimensions explain
   the limitation and offer a direct action to show the supported token view.
 - One passive row per exact model ID, combining providers and auxiliary
