@@ -381,7 +381,7 @@ class AdminFallbackPage extends StatefulWidget {
 }
 
 class _AdminFallbackPageState extends State<AdminFallbackPage> {
-  List<Map<String, dynamic>>? _rows;
+  List<Object?>? _rows;
   Object? _loadedValue;
   bool _busy = false;
   String? _error;
@@ -396,8 +396,13 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
       final cfg = await widget.profile.config();
       final value = cfg['fallback_providers'] ?? [];
       // Stock Hermes accepts one entry as a map as well as an ordered list.
-      // Keep the wire value separately for the pre-save conflict check.
-      final rows = administrationRows(value is Map ? [value] : value);
+      // It skips non-map entries. Keep those visible for explicit removal,
+      // preserving them during other edits and in the pre-save conflict check.
+      final rows = switch (value) {
+        final Map entry => <Object?>[entry],
+        final List entries => List<Object?>.of(entries),
+        _ => throw const FormatException('Invalid fallback configuration'),
+      };
       if (mounted) {
         setState(() {
           _rows = rows;
@@ -410,7 +415,7 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
     }
   }
 
-  Future<void> _save(List<Map<String, dynamic>> next) async {
+  Future<void> _save(List<Object?> next) async {
     setState(() {
       _busy = true;
       _error = null;
@@ -452,8 +457,14 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
         if (_rows != null) ...[
           for (final entry in _rows!.indexed)
             ListTile(
-              title: Text('${entry.$2['model'] ?? ''}'),
-              subtitle: Text('${entry.$2['provider'] ?? ''}'),
+              title: Text(switch (entry.$2) {
+                final Map row => '${row['model'] ?? ''}',
+                _ => 'Invalid fallback entry',
+              }),
+              subtitle: Text(switch (entry.$2) {
+                final Map row => '${row['provider'] ?? ''}',
+                _ => 'Hermes skips this entry. You can remove it.',
+              }),
               trailing: PopupMenuButton<String>(
                 tooltip: 'Manage fallback ${entry.$1 + 1}',
                 enabled: !_busy,

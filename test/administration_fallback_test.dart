@@ -11,9 +11,10 @@ import 'package:wing/core/widgets/chat_intelligence_picker.dart';
 
 import 'support/administration_fixture.dart';
 
-// Stock contract inspected 2026-09-18 at upstream Hermes main
-// c661785f872b5647fbac7c138d965180783bd9af:
+// Stock contract inspected 2026-09-19 at upstream Hermes main
+// 9dd36c56cf66593381c151b787d2b7222ae4b835:
 // hermes_cli/fallback_config.py::_iter_fallback_entries accepts a map or list;
+// it skips non-map entries. Preserve them for explicit removal in this editor.
 // web_routers/config_env.py::get_config returns that value unchanged.
 const _entry = {
   'provider': 'example',
@@ -42,6 +43,70 @@ Future<void> _manage(WidgetTester tester, int index, String action) async {
 }
 
 void main() {
+  for (final invalid in <Object?>[
+    'private-value',
+    null,
+    42,
+    false,
+    ['nested'],
+  ]) {
+    testWidgets(
+      'non-object ${invalid.runtimeType} does not block fallback list',
+      (tester) async {
+        final fixture = AdministrationFixture();
+        fixture.configs['default']!['fallback_providers'] = [invalid, _entry];
+        await _open(tester, fixture);
+        expect(find.text('Invalid fallback entry'), findsOneWidget);
+        expect(find.text('backup-model'), findsOneWidget);
+        expect(find.text('Add fallback'), findsOneWidget);
+        expect(find.textContaining('Could not load'), findsNothing);
+        expect(find.textContaining('private-value'), findsNothing);
+        expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
+      },
+    );
+  }
+
+  testWidgets('mixed entries survive edits until explicitly removed', (
+    tester,
+  ) async {
+    final fixture = AdministrationFixture();
+    fixture.configs['default']!['fallback_providers'] = [
+      'opaque',
+      _entry,
+      null,
+    ];
+    await _open(tester, fixture);
+    await tester.tap(find.text('Add fallback'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('second'));
+    await tester.pumpAndSettle();
+    expect(fixture.configs['default']!['fallback_providers'], [
+      'opaque',
+      _entry,
+      null,
+      {'provider': 'example', 'model': 'second'},
+    ]);
+    await _manage(tester, 2, 'Move up');
+    expect(fixture.configs['default']!['fallback_providers'], [
+      _entry,
+      'opaque',
+      null,
+      {'provider': 'example', 'model': 'second'},
+    ]);
+    await _manage(tester, 2, 'Remove');
+    expect(fixture.configs['default']!['fallback_providers'], [
+      _entry,
+      null,
+      {'provider': 'example', 'model': 'second'},
+    ]);
+    await _manage(tester, 2, 'Remove');
+    expect(fixture.configs['default']!['fallback_providers'], [
+      _entry,
+      {'provider': 'example', 'model': 'second'},
+    ]);
+    expect(find.text('Invalid fallback entry'), findsNothing);
+  });
+
   const capture = bool.fromEnvironment('CAPTURE_FALLBACK');
   setUpAll(() async {
     if (!capture) return;
@@ -68,7 +133,7 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         final fixture = AdministrationFixture('Claw');
-        fixture.configs['default']!['fallback_providers'] = {..._entry};
+        fixture.configs['default']!['fallback_providers'] = [null, _entry];
         await tester.pumpWidget(
           MaterialApp(
             theme: wingTheme(brightness),
@@ -88,12 +153,29 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.text('Invalid fallback entry'),
+          100,
+        );
+        expect(find.text('Invalid fallback entry'), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.byTooltip('Manage fallback 1'),
+          100,
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byTooltip('Manage fallback 1').hitTestable(),
+          findsOneWidget,
+        );
         await tester.scrollUntilVisible(find.text('backup-model'), 100);
         expect(find.text('backup-model'), findsOneWidget);
         await tester.scrollUntilVisible(find.text('Add fallback'), 100);
+        await tester.pumpAndSettle();
         expect(find.text('Add fallback').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
         if (capture) {
+          await tester.drag(find.byType(ListView), const Offset(0, 1000));
+          await tester.pumpAndSettle();
           final boundary = tester.renderObject<RenderRepaintBoundary>(
             find.byKey(const ValueKey('capture')),
           );
