@@ -301,7 +301,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
     final colors = usageColors(context);
     final segments = <UsageSegment>[];
     if (_breakdownModels) {
-      // Keep the same segment order across measure changes so widths morph.
+      // Assign colours before sorting so each model keeps its identity.
       for (final group in models!.groups) {
         segments.add(
           UsageSegment(
@@ -341,6 +341,15 @@ class _UsageDashboardState extends State<UsageDashboard> {
         );
       }
     }
+    // Rank by the selected measure; unknown amounts follow all known values.
+    // Stable IDs break ties and keep the animated bar's segment identities.
+    segments.sort((a, b) {
+      if (a.value == null && b.value == null) return a.id.compareTo(b.id);
+      if (a.value == null) return 1;
+      if (b.value == null) return -1;
+      final amount = b.value!.compareTo(a.value!);
+      return amount != 0 ? amount : a.id.compareTo(b.id);
+    });
     final partial = segments.any((s) => s.value == null || s.partial);
     final noValues = segments.every((s) => s.value == null);
     return Column(

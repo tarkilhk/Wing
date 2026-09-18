@@ -15,7 +15,9 @@ inspect a date or a model without leaving its captured profile/connection.
   Preserve the possible 366th partial UTC boundary date from Hermes.
 - Breakdown immediately below the grid, one animated composition bar. Its
   clickable title switches model/token-type grouping; Tokens/Cost stays at the
-  top right and is independent from the trend controls.
+  top right and is independent from the trend controls. Both the rows and bar
+  segments rank highest to lowest for the selected measure, with unavailable
+  values last, deterministic ties and stable category colours.
 - Trend uses filled, stacked daily token areas with a marker for the selected
   date. Its title offers the same grouping switch. Both sections default to
   token types following phone feedback; unavailable daily dimensions explain
