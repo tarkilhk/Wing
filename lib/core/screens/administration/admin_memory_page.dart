@@ -21,10 +21,11 @@ class _AdminMemoryPageState extends State<AdminMemoryPage> {
       IconButton(
         tooltip: 'Memory settings',
         icon: const Icon(Icons.tune),
-        onPressed: () => adminPush(
+        onPressed: () => adminPushProfile(
           context,
-          AdminSettingsPage(
-            profile: _profile,
+          _profile,
+          (context, profile) => AdminSettingsPage(
+            profile: profile,
             title: 'Memory settings',
             fields: memoryFields,
           ),
@@ -63,10 +64,11 @@ class _AdminMemoryPageState extends State<AdminMemoryPage> {
                   ),
                   const AdminNotice('No retained memories in this profile.'),
                   TextButton(
-                    onPressed: () => adminPush(
+                    onPressed: () => adminPushProfile(
                       context,
-                      AdminSettingsPage(
-                        profile: _profile,
+                      _profile,
+                      (context, profile) => AdminSettingsPage(
+                        profile: profile,
                         title: 'Memory settings',
                         fields: memoryFields,
                       ),
@@ -96,10 +98,11 @@ class _AdminMemoryPageState extends State<AdminMemoryPage> {
                   ],
                 ),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => adminPush(
+                onTap: () => adminPushProfile(
                   context,
-                  AdminMemoryDetail(
-                    profile: _profile,
+                  _profile,
+                  (context, profile) => AdminMemoryDetail(
+                    profile: profile,
                     id: 'memory:${entry.$2['source']}:${entry.$1}',
                   ),
                 ),

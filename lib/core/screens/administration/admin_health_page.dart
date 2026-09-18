@@ -31,7 +31,7 @@ class AdminHealthContent extends StatelessWidget {
   final AdministrationHealth health;
   final ProfileAdministration? profile;
   final Widget profileSelector;
-  final ProfileDiagnosticsController? accessChecks;
+  final ProfileDiagnosticsController? Function() accessChecks;
   final VoidCallback? onConnections;
   final Future<void> Function() onRefresh;
   final Future<void> Function()? onCheckProfile;
@@ -47,7 +47,7 @@ class AdminHealthContent extends StatelessWidget {
     required this.onOpenDestination,
     this.onCheckProfile,
     this.checkingProfile = false,
-    this.accessChecks,
+    required this.accessChecks,
     this.onConnections,
   });
 
@@ -139,7 +139,7 @@ class AdminHealthContent extends StatelessWidget {
                   'Provider access',
                   accessSummary.firstOrNull,
                   Icons.key_outlined,
-                  () => _access(context, access),
+                  () => _access(context),
                 ),
                 for (final (title, source, icon) in [
                   ('Model', 'Model selection', Icons.auto_awesome_outlined),
@@ -156,11 +156,7 @@ class AdminHealthContent extends StatelessWidget {
                     title,
                     findings.where((f) => f.title == source).firstOrNull,
                     icon,
-                    () => _detail(
-                      context,
-                      title,
-                      findings.where((f) => f.title == source).firstOrNull,
-                    ),
+                    () => _detail(context, title, source),
                   ),
               ],
             ),
@@ -179,8 +175,11 @@ class AdminHealthContent extends StatelessWidget {
                   title: 'Usage',
                   subtitle: 'Tokens, requests and cost',
                   icon: Icons.bar_chart,
-                  onTap: () =>
-                      adminPush(context, AdminUsagePage(profile: profile!)),
+                  onTap: () => adminPushProfile(
+                    context,
+                    profile!,
+                    (context, profile) => AdminUsagePage(profile: profile),
+                  ),
                 ),
               ],
             ),
@@ -257,8 +256,7 @@ class AdminHealthContent extends StatelessWidget {
           children: [
             Icon(
               switch (finding.status) {
-                AdministrationHealthStatus.healthy =>
-                  Icons.info_outline,
+                AdministrationHealthStatus.healthy => Icons.info_outline,
                 AdministrationHealthStatus.unknown => Icons.help_outline,
                 _ => Icons.error_outline,
               },
@@ -285,93 +283,124 @@ class AdminHealthContent extends StatelessWidget {
     ),
   );
 
-  Future<void> _detail(
-    BuildContext context,
-    String title,
-    AdministrationHealthFinding? finding,
-  ) => adminPush(
-    context,
-    AdminPage(
-      title: title,
-      scope: profile!.label,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (finding != null)
-            AdminGroup(children: [_observation(context, finding)])
-          else
-            const AdminNotice(
-              'Not checked. Return to Health and check this profile.',
-            ),
-          const SizedBox(height: 16),
-          if (finding?.destination case final destination?)
-            AdminGroup(
-              children: [
-                AdminRow(
-                  title: switch (title) {
-                    'Model' => 'Models and reasoning',
-                    'Tools' => 'Skills and tools',
-                    'Connectors' => 'Manage connectors',
-                    _ => 'Manage scheduled tasks',
-                  },
-                  subtitle: 'Review configuration',
-                  icon: Icons.tune,
-                  onTap: () => title == 'Connectors'
-                      ? adminPush(
-                          context,
-                          AdminConnectorsPage(profile: profile!),
-                        )
-                      : onOpenDestination(destination),
-                ),
-              ],
-            ),
-        ],
-      ),
-    ),
-  );
-
-  Future<void> _access(
-    BuildContext context,
-    List<AdministrationHealthFinding> findings,
-  ) => adminPush(
-    context,
-    AdminPage(
-      title: 'Provider access',
-      scope: profile!.label,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          AdminGroup(
-            children: [
-              for (final finding in findings.where(
-                (f) => f.title != 'Access checks',
-              ))
-                _observation(context, finding),
-              AdminRow(
-                title: 'Manage provider access',
-                subtitle: 'Accounts and credentials',
-                icon: Icons.key_outlined,
-                onTap: () => adminPush(
-                  context,
-                  AdminProvidersPage(profile: profile!, shared: false),
-                ),
+  Future<void> _detail(BuildContext context, String title, String source) =>
+      adminPushProfile(
+        context,
+        profile!,
+        (context, profile) => ListenableBuilder(
+          listenable: health,
+          builder: (context, _) {
+            final finding = health.profileName == profile.name
+                ? health.profileFindings
+                      .where((f) => f.title == source)
+                      .firstOrNull
+                : null;
+            return AdminPage(
+              title: title,
+              scope: profile.label,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (finding != null)
+                    AdminGroup(children: [_observation(context, finding)])
+                  else
+                    const AdminNotice(
+                      'Not checked. Return to Health and check this profile.',
+                    ),
+                  const SizedBox(height: 16),
+                  if (finding?.destination case final destination?)
+                    AdminGroup(
+                      children: [
+                        AdminRow(
+                          title: switch (title) {
+                            'Model' => 'Models and reasoning',
+                            'Tools' => 'Skills and tools',
+                            'Connectors' => 'Manage connectors',
+                            _ => 'Manage scheduled tasks',
+                          },
+                          subtitle: 'Review configuration',
+                          icon: Icons.tune,
+                          onTap: () => title == 'Connectors'
+                              ? adminPushProfile(
+                                  context,
+                                  profile,
+                                  (context, profile) =>
+                                      AdminConnectorsPage(profile: profile),
+                                )
+                              : onOpenDestination(destination),
+                        ),
+                      ],
+                    ),
+                ],
               ),
+            );
+          },
+        ),
+      );
+
+  Future<void> _access(BuildContext context) => adminPushProfile(
+    context,
+    profile!,
+    (context, profile) => ListenableBuilder(
+      listenable: health,
+      builder: (context, _) {
+        final findings = health.profileName == profile.name
+            ? health.profileFindings
+                  .where(
+                    (f) => const [
+                      'Provider configuration',
+                      'Provider access',
+                      'Access checks',
+                    ].contains(f.title),
+                  )
+                  .toList()
+            : <AdministrationHealthFinding>[];
+        return AdminPage(
+          title: 'Provider access',
+          scope: profile.label,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              AdminGroup(
+                children: [
+                  for (final finding in findings.where(
+                    (f) => f.title != 'Access checks',
+                  ))
+                    _observation(context, finding),
+                  AdminRow(
+                    title: 'Manage provider access',
+                    subtitle: 'Accounts and credentials',
+                    icon: Icons.key_outlined,
+                    onTap: () => adminPushProfile(
+                      context,
+                      profile,
+                      (context, profile) =>
+                          AdminProvidersPage(profile: profile, shared: false),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (accessChecks() != null && onConnections != null)
+                ProfileDiagnosticsPanel(
+                  controller: accessChecks()!,
+                  onManageConnections: onConnections!,
+                  onReviewProviderAccess: () => adminPushProfile(
+                    context,
+                    profile,
+                    (context, profile) =>
+                        AdminProvidersPage(profile: profile, shared: false),
+                  ),
+                  onReviewConnectors: () => adminPushProfile(
+                    context,
+                    profile,
+                    (context, profile) => AdminConnectorsPage(profile: profile),
+                  ),
+                ),
             ],
           ),
-          const SizedBox(height: 16),
-          if (accessChecks != null && onConnections != null)
-            ProfileDiagnosticsPanel(
-              controller: accessChecks!,
-              onManageConnections: onConnections!,
-              onReviewProviderAccess: () => adminPush(
-                context,
-                AdminProvidersPage(profile: profile!, shared: false),
-              ),
-              onReviewConnectors: () =>
-                  adminPush(context, AdminConnectorsPage(profile: profile!)),
-            ),
-        ],
-      ),
+        );
+      },
     ),
   );
 }

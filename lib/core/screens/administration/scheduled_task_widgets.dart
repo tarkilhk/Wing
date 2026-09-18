@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/administration_repository.dart';
 
 import '../../models/scheduled_task.dart';
 import '../../services/scheduled_tasks_controller.dart';
@@ -340,4 +342,76 @@ class TaskUncertainty extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Lease the selected profile independently of the page beneath this route.
+/// Existing tasks must be resolved in that profile before showing any actions.
+class AdminTaskRoute extends StatefulWidget {
+  const AdminTaskRoute({
+    super.key,
+    required this.profile,
+    required this.preferences,
+    required this.title,
+    required this.builder,
+    this.taskId,
+  });
+  final ProfileAdministration profile;
+  final SharedPreferences preferences;
+  final String title;
+  final String? taskId;
+  final Widget Function(ScheduledTasksController, ScheduledTask?) builder;
+  @override
+  State<AdminTaskRoute> createState() => _AdminTaskRouteState();
+}
+
+class _AdminTaskRouteState extends State<AdminTaskRoute> {
+  late final controller = ScheduledTasksController.acquire(
+    widget.profile,
+    widget.preferences,
+  );
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !controller.loading) controller.refresh();
+    });
+  }
+
+  @override
+  void dispose() {
+    controller.release();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: controller,
+    builder: (context, _) {
+      final task = widget.taskId == null
+          ? null
+          : controller.task(widget.taskId!);
+      if (widget.taskId == null || task != null) {
+        return widget.builder(controller, task);
+      }
+      return TaskPage(
+        title: widget.title,
+        scope: widget.profile.label,
+        child: controller.loading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  AdminNotice(
+                    controller.error ??
+                        'This task is not available in this profile.',
+                  ),
+                  TextButton(
+                    onPressed: controller.refresh,
+                    child: const Text('Refresh'),
+                  ),
+                ],
+              ),
+      );
+    },
+  );
 }

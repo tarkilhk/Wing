@@ -165,14 +165,15 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
                     title: 'Reasoning and speed',
                     subtitle: 'Defaults supported by this model',
                     icon: Icons.speed,
-                    onTap: () => adminPush(
+                    onTap: () => adminPushProfile(
                       context,
-                      AdminSettingsPage(
-                        profile: _profile,
+                      _profile,
+                      (context, profile) => AdminSettingsPage(
+                        profile: profile,
                         title: 'Reasoning and speed',
                         fields: fields,
                         beforeSave: () async {
-                          final latest = await _profile.read('model/info');
+                          final latest = await profile.read('model/info');
                           if (latest['provider'] != info['provider'] ||
                               latest['model'] != info['model']) {
                             throw const AdministrationFailure(
@@ -187,9 +188,11 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
                   title: 'Fallback models',
                   subtitle: 'Ordered alternatives when a model is unavailable',
                   icon: Icons.alt_route,
-                  onTap: () => adminPush(
+                  onTap: () => adminPushProfile(
                     context,
-                    AdminFallbackPage(profile: _profile, choices: choices),
+                    _profile,
+                    (context, profile) =>
+                        AdminFallbackPage(profile: profile, choices: choices),
                   ),
                 ),
               ],
@@ -209,15 +212,18 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
                       : '${providerInventoryStatus(ProviderAccess(providerRow))} · ${(providerRow['status'] as Map?)?['source_label'] ?? 'Source unavailable'}',
                   onTap: () async {
                     if (providerRow == null) {
-                      await adminPush(
+                      await adminPushProfile(
                         context,
-                        AdminProvidersPage(profile: _profile, shared: false),
+                        _profile,
+                        (context, profile) =>
+                            AdminProvidersPage(profile: profile, shared: false),
                       );
                     } else {
-                      await adminPush(
+                      await adminPushProfile(
                         context,
-                        AdminProviderDetail(
-                          profile: _profile,
+                        _profile,
+                        (context, profile) => AdminProviderDetail(
+                          profile: profile,
                           shared: false,
                           providerId: providerRow['id'] as String,
                         ),

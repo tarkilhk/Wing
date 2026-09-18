@@ -106,11 +106,19 @@ class _AdminScheduledTaskDetailPageState
             TaskMenu(
               task: task,
               controller: controller,
-              onEdit: () => adminPush(
+              onEdit: () => adminPushProfile(
                 context,
-                AdminScheduledTaskEditorPage(
-                  controller: controller,
-                  original: task,
+                controller.repository.profile,
+                (context, profile) => AdminTaskRoute(
+                  profile: profile,
+                  preferences: controller.preferences,
+                  title: 'Edit task',
+                  taskId: task.id,
+                  builder: (controller, selectedTask) =>
+                      AdminScheduledTaskEditorPage(
+                        controller: controller,
+                        original: selectedTask,
+                      ),
                 ),
               ),
             ),

@@ -62,9 +62,11 @@ class _AdminSkillLibraryPageState extends State<AdminSkillLibraryPage> {
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () async {
-                  await adminPush(
+                  await adminPushProfile(
                     context,
-                    AdminSkillDetail(profile: widget.profile, row: row),
+                    widget.profile,
+                    (context, profile) =>
+                        AdminSkillDetail(profile: profile, row: row),
                   );
                   refresh();
                 },
@@ -157,7 +159,7 @@ class _AdminSkillDetailState extends State<AdminSkillDetail> {
       if (mounted) {
         await adminPush(
           context,
-          AdminActionPage(
+          (context) => AdminActionPage(
             server: widget.profile.server,
             action: AdministrationAction.fromJson(result),
             title: 'Uninstall skill',
@@ -197,10 +199,11 @@ class _AdminSkillDetailState extends State<AdminSkillDetail> {
                   onPressed: _busy
                       ? null
                       : () async {
-                          await adminPush(
+                          await adminPushProfile(
                             context,
-                            AdminSkillEditor(
-                              profile: widget.profile,
+                            widget.profile,
+                            (context, profile) => AdminSkillEditor(
+                              profile: profile,
                               name: _name,
                               initial: data['content'] as String? ?? '',
                             ),
@@ -404,7 +407,7 @@ class _AdminSkillHubPageState extends State<AdminSkillHubPage> {
       if (mounted) {
         await adminPush(
           context,
-          AdminActionPage(
+          (context) => AdminActionPage(
             server: widget.profile.server,
             action: AdministrationAction.fromJson(result),
             title: 'Update skills',
@@ -475,10 +478,11 @@ class _AdminSkillHubPageState extends State<AdminSkillHubPage> {
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () async {
-                        await adminPush(
+                        await adminPushProfile(
                           context,
-                          AdminSkillPreview(
-                            profile: widget.profile,
+                          widget.profile,
+                          (context, profile) => AdminSkillPreview(
+                            profile: profile,
                             identifier: row['identifier'] as String,
                           ),
                         );
@@ -526,7 +530,7 @@ class _AdminSkillPreviewState extends State<AdminSkillPreview> {
       if (mounted) {
         await adminPush(
           context,
-          AdminActionPage(
+          (context) => AdminActionPage(
             server: widget.profile.server,
             action: AdministrationAction.fromJson(result),
             title: 'Install skill',

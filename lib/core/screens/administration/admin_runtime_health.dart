@@ -72,7 +72,7 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
     final generation = controller.diagnosticGeneration(path);
     return adminPush(
       context,
-      AdminActionPage(
+      (context) => AdminActionPage(
         server: controller.server,
         action: _observations[path]!.action,
         initialObservation: _observations[path],
@@ -164,7 +164,8 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
               icon: Icons.subject,
               onTap: () => adminPush(
                 context,
-                AdminLogsPage(server: health.server, runtimeLabel: scope),
+                (context) =>
+                    AdminLogsPage(server: health.server, runtimeLabel: scope),
               ),
             ),
           ],

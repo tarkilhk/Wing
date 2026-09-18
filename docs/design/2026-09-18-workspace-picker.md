@@ -22,10 +22,24 @@ administration pages use the shared status behavior and scope-specific picker.
 Activity retains its connection-only label. Profile navigation in Chats stays in
 the existing profile chips; conversation headers do not offer profile selection.
 Connection changes use the retained application controller registry and preserve
-the current main destination. Nested editors keep their captured scope: the picker
-unwinds to the workspace section before changing selection, respecting existing
-pop guards. If a guard intercepts navigation, resolve the edit first and select
-again; no delayed selection can unexpectedly retarget a later edit.
+the current main destination. Profile selection now preserves the complete nested page stack. Profile routes
+use `adminPushProfile` to recreate their content with an immutable owner after
+successful selection. The shared navigation coordinator checks existing editor
+pop guards and blocks input while selection is pending. Failure retains the page,
+owner and draft. A dirty editor requires saving or discarding before selection.
+Connection selection still returns to the current workspace section.
+
+Health details subscribe to the selected profile's findings rather than retaining
+a previous observation. Connector and scheduled-task details resolve their item
+identity in the selected profile; missing items show an unavailable state without
+old controls. Connection-owned pages, shared accounts and action receipts keep
+their fixed owner and offer connection selection only.
+
+The original cause was the picker explicitly popping every nested route before
+switching profiles. Removing that loop alone would retain each page's captured
+old owner. The composed route builder addresses both navigation and ownership
+without screen-name routing or mutable profile proxies.
+
 
 ## Stock API verification
 
@@ -42,7 +56,9 @@ selection. Saved connections remain client-owned. No backend change is required.
 
 `test/workspace_picker_test.dart` covers independent targets in the four main
 sections, connection replacement through Home, retained section and controller,
-profile failure, nested editor guards, selected semantics and outside dismissal.
+profile failure, delayed selection, nested editor guards, Health detail selection,
+back-stack preservation, profile-owned writes, missing connector identity,
+selected semantics and outside dismissal.
 Existing status/retry, chat project-target, navigation, restore and notification
 routing suites cover the affected paths.
 

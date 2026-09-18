@@ -89,12 +89,15 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
                           );
                       refresh();
                       if (context.mounted && row != null) {
-                        await adminPush(
+                        await adminPushProfile(
                           context,
-                          AdminConnectorDetail(
-                            profile: _profile,
-                            row: row,
-                            signInOnOpen: row['auth'] == 'oauth',
+                          _profile,
+                          (context, profile) => AdminConnectorDetail(
+                            profile: profile,
+                            name: row['name'] as String,
+                            signInOnOpen:
+                                profile.scope == _profile.scope &&
+                                row['auth'] == 'oauth',
                           ),
                         );
                         refresh();
@@ -129,9 +132,13 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
                       onChanged: _busy ? null : (v) => _toggle(row, v, refresh),
                     ),
                     onTap: () async {
-                      await adminPush(
+                      await adminPushProfile(
                         context,
-                        AdminConnectorDetail(profile: _profile, row: row),
+                        _profile,
+                        (context, profile) => AdminConnectorDetail(
+                          profile: profile,
+                          name: row['name'] as String,
+                        ),
                       );
                       refresh();
                     },
@@ -147,12 +154,12 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
 
 class AdminConnectorDetail extends StatefulWidget {
   final ProfileAdministration profile;
-  final Map<String, dynamic> row;
+  final String name;
   final bool signInOnOpen;
   const AdminConnectorDetail({
     super.key,
     required this.profile,
-    required this.row,
+    required this.name,
     this.signInOnOpen = false,
   });
   @override
@@ -161,7 +168,9 @@ class AdminConnectorDetail extends StatefulWidget {
 
 class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
   late final _profile = widget.profile;
-  late final _name = widget.row['name'] as String;
+  late final _name = widget.name;
+  Map<String, dynamic>? _configuration;
+  bool _loading = true;
   bool _busy = false;
   String? _error;
   Map<String, dynamic>? _probe;
@@ -170,17 +179,37 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
   @override
   void initState() {
     super.initState();
-    if (widget.signInOnOpen) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _signIn(autoStart: true);
-      });
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final data = await _profile.read('mcp/servers');
+      if (!mounted) return;
+      _configuration = administrationRows(
+        data['servers'],
+      ).where((row) => row['name'] == _name).firstOrNull;
+    } catch (error) {
+      if (!mounted) return;
+      _error = administrationError(error);
+    }
+    if (!mounted) return;
+    setState(() => _loading = false);
+    if (widget.signInOnOpen && _configuration?['auth'] == 'oauth') {
+      await _signIn(autoStart: true);
     }
   }
 
   Future<void> _signIn({bool autoStart = false}) async {
-    await adminPush(
+    await adminPushProfile(
       context,
-      AdminMcpSignIn(profile: _profile, name: _name, autoStart: autoStart),
+      _profile,
+      (context, profile) =>
+          AdminMcpSignIn(profile: profile, name: _name, autoStart: autoStart),
     );
     if (mounted) {
       setState(() {
@@ -269,6 +298,25 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading || _configuration == null) {
+      return AdminPage(
+        title: _name,
+        scope: _profile.label,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  AdminNotice(
+                    _error ??
+                        'This connector is not available in this profile.',
+                  ),
+                  TextButton(onPressed: _load, child: const Text('Refresh')),
+                ],
+              ),
+      );
+    }
+
     final tokens =
         Theme.of(context).extension<WingTokens>() ??
         (Theme.of(context).brightness == Brightness.dark
@@ -331,7 +379,7 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
                 onPressed: _busy ? null : _test,
                 child: const Text('Test connection'),
               ),
-              if (widget.row['auth'] == 'oauth')
+              if (_configuration?['auth'] == 'oauth')
                 OutlinedButton(
                   onPressed: _busy ? null : _signIn,
                   child: const Text('Sign in'),

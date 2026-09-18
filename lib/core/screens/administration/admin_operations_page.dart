@@ -207,7 +207,7 @@ Future<void> startAdminOperation(
     if (context.mounted) {
       await adminPush(
         context,
-        AdminActionPage(
+        (context) => AdminActionPage(
           server: server,
           action: action,
           title: title,

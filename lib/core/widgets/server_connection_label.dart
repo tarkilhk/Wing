@@ -4,6 +4,7 @@ import '../services/server_connection_status.dart';
 import '../theme/wing_theme.dart';
 import 'connection_icon_picker.dart';
 import 'studio_error.dart';
+import 'workspace_profile_navigation.dart';
 
 typedef WorkspacePickerCallback =
     void Function(BuildContext context, {required bool includeProfiles});
@@ -11,11 +12,13 @@ typedef WorkspacePickerCallback =
 class ServerConnectionScope extends InheritedWidget {
   final ServerConnectionStatus status;
   final WorkspacePickerCallback? onPickWorkspace;
+  final WorkspaceProfileNavigation? profileNavigation;
   final ConnectionIcon? icon;
   const ServerConnectionScope({
     super.key,
     required this.status,
     this.onPickWorkspace,
+    this.profileNavigation,
     this.icon,
     required super.child,
   });
@@ -27,6 +30,7 @@ class ServerConnectionScope extends InheritedWidget {
   bool updateShouldNotify(ServerConnectionScope oldWidget) =>
       status != oldWidget.status ||
       onPickWorkspace != oldWidget.onPickWorkspace ||
+      profileNavigation != oldWidget.profileNavigation ||
       icon != oldWidget.icon;
 }
 

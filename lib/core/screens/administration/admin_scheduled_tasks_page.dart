@@ -71,9 +71,19 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
     super.dispose();
   }
 
-  void edit([ScheduledTask? task]) => adminPush(
+  void edit([ScheduledTask? task]) => adminPushProfile(
     context,
-    AdminScheduledTaskEditorPage(controller: controller, original: task),
+    widget.profile,
+    (context, profile) => AdminTaskRoute(
+      profile: profile,
+      preferences: widget.preferences,
+      title: task == null ? 'New task' : 'Edit task',
+      taskId: task?.id,
+      builder: (controller, selectedTask) => AdminScheduledTaskEditorPage(
+        controller: controller,
+        original: selectedTask,
+      ),
+    ),
   );
   int rank(ScheduledTask t) => t.running
       ? 0
@@ -269,12 +279,19 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
     },
   );
   Widget _row(BuildContext context, ScheduledTask task) => InkWell(
-    onTap: () => adminPush(
+    onTap: () => adminPushProfile(
       context,
-      AdminScheduledTaskDetailPage(
-        controller: controller,
-        initial: task,
-        onOpenSession: widget.onOpenSession,
+      widget.profile,
+      (context, profile) => AdminTaskRoute(
+        profile: profile,
+        preferences: widget.preferences,
+        title: 'Task details',
+        taskId: task.id,
+        builder: (controller, selectedTask) => AdminScheduledTaskDetailPage(
+          controller: controller,
+          initial: selectedTask!,
+          onOpenSession: widget.onOpenSession,
+        ),
       ),
     ),
     child: Padding(

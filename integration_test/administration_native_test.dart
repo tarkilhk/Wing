@@ -76,7 +76,7 @@ void main() {
                   child: FilledButton(
                     onPressed: () => adminPush(
                       context,
-                      AdminSettingsPage(
+                      (context) => AdminSettingsPage(
                         profile: fixture.server.profile('personal'),
                         title: 'Memory settings',
                         fields: [memoryFields[2]],

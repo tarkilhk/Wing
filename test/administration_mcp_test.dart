@@ -14,6 +14,13 @@ import 'support/administration_fixture.dart';
 AdministrationFixture fixtureWith(Map<String, dynamic> result) {
   final fixture = AdministrationFixture('Claw');
   fixture.override = (method, path, query, body) async {
+    if (path == 'mcp/servers') {
+      return {
+        'servers': [
+          {'name': 'aspire', 'auth': 'oauth'},
+        ],
+      };
+    }
     if (path == 'profiles') {
       return {
         'profiles': [
@@ -141,7 +148,7 @@ void main() {
           theme: wingTheme(Brightness.dark),
           home: AdminConnectorDetail(
             profile: fixture.server.profile('personal'),
-            row: const {'name': 'aspire', 'auth': 'oauth'},
+            name: 'aspire',
           ),
         ),
       );
@@ -234,7 +241,7 @@ void main() {
       MaterialApp(
         home: AdminConnectorDetail(
           profile: fixture.server.profile('personal'),
-          row: const {'name': 'aspire'},
+          name: 'aspire',
         ),
       ),
     );
@@ -336,7 +343,7 @@ void main() {
                       )
                     : AdminConnectorDetail(
                         profile: fixture.server.profile('personal'),
-                        row: const {'name': 'aspire', 'auth': 'oauth'},
+                        name: 'aspire',
                       ),
               ),
             ),

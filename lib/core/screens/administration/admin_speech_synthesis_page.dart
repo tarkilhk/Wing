@@ -179,7 +179,7 @@ class _AdminSpeechSynthesisPageState extends State<AdminSpeechSynthesisPage>
       if (!mounted) return;
       await adminPush(
         context,
-        AdminActionPage(
+        (context) => AdminActionPage(
           server: _profile.server,
           action: AdministrationAction.fromJson(result),
           title: 'Speech setup',
@@ -192,10 +192,11 @@ class _AdminSpeechSynthesisPageState extends State<AdminSpeechSynthesisPage>
 
   Future<void> _secret(Map<String, dynamic> env) => _run(() async {
     if (!mounted) return;
-    await adminPush(
+    await adminPushProfile(
       context,
-      AdminSecretPage(
-        profile: _profile,
+      _profile,
+      (context, profile) => AdminSecretPage(
+        profile: profile,
         name: env['key'] as String,
         shared: false,
         isSet: env['is_set'] == true,

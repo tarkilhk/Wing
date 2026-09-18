@@ -108,7 +108,8 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                     if (context.mounted) {
                       await adminPush(
                         context,
-                        AdminProvidersPage(profile: shared, shared: true),
+                        (context) =>
+                            AdminProvidersPage(profile: shared, shared: true),
                       );
                     }
                   } catch (e) {
@@ -191,10 +192,11 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                             tooltip: 'Renew ${access.name} sign-in',
                             icon: const Icon(Icons.login),
                             onPressed: () async {
-                              await adminPush(
+                              await adminPushProfile(
                                 context,
-                                AdminProviderSignIn(
-                                  profile: _profile,
+                                _profile,
+                                (context, profile) => AdminProviderSignIn(
+                                  profile: profile,
                                   provider: access.row,
                                   shared: widget.shared,
                                 ),
@@ -206,10 +208,11 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                       ],
                     ),
                     onTap: () async {
-                      await adminPush(
+                      await adminPushProfile(
                         context,
-                        AdminProviderDetail(
-                          profile: _profile,
+                        _profile,
+                        (context, profile) => AdminProviderDetail(
+                          profile: profile,
                           shared: widget.shared,
                           providerId: access.id,
                         ),
@@ -228,10 +231,11 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 onPressed: () async {
-                  await adminPush(
+                  await adminPushProfile(
                     context,
-                    AdminServiceKeyCatalog(
-                      profile: _profile,
+                    _profile,
+                    (context, profile) => AdminServiceKeyCatalog(
+                      profile: profile,
                       shared: widget.shared,
                     ),
                   );
@@ -253,10 +257,11 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                 onTap: _busy
                     ? null
                     : () async {
-                        await adminPush(
+                        await adminPushProfile(
                           context,
-                          AdminSecretPage(
-                            profile: _profile,
+                          _profile,
+                          (context, profile) => AdminSecretPage(
+                            profile: profile,
                             name: entry.key.toString(),
                             shared: widget.shared,
                             isSet: (entry.value as Map)['is_set'] == true,
@@ -402,7 +407,7 @@ class _AdminProviderDetailState extends State<AdminProviderDetail> {
                           if (context.mounted) {
                             await adminPush(
                               context,
-                              AdminProviderDetail(
+                              (context) => AdminProviderDetail(
                                 profile: shared,
                                 shared: true,
                                 providerId: widget.providerId,
@@ -439,10 +444,11 @@ class _AdminProviderDetailState extends State<AdminProviderDetail> {
               busy: _busy,
               disconnect: () => _disconnect(row, refresh),
               signIn: () async {
-                await adminPush(
+                await adminPushProfile(
                   context,
-                  AdminProviderSignIn(
-                    profile: _profile,
+                  _profile,
+                  (context, profile) => AdminProviderSignIn(
+                    profile: profile,
                     provider: row,
                     shared: widget.shared,
                   ),
@@ -520,10 +526,11 @@ class _AdminServiceKeyCatalogState extends State<AdminServiceKeyCatalog> {
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () async {
-                      await adminPush(
+                      await adminPushProfile(
                         context,
-                        AdminSecretPage(
-                          profile: widget.profile,
+                        widget.profile,
+                        (context, profile) => AdminSecretPage(
+                          profile: profile,
                           name: entry.key,
                           shared: widget.shared,
                           isSet: (entry.value as Map)['is_set'] == true,

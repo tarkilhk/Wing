@@ -29,9 +29,10 @@ class AdminToolSetupList extends StatelessWidget {
                   subtitle:
                       '${row['platform_label'] ?? row['platform']} · ${row['enabled'] == true ? 'Enabled' : 'Disabled'}',
                   icon: Icons.build_outlined,
-                  onTap: () => adminPush(
+                  onTap: () => adminPushProfile(
                     context,
-                    AdminToolSetupPage(
+                    profile,
+                    (context, profile) => AdminToolSetupPage(
                       profile: profile,
                       name: row['name'] as String,
                     ),
@@ -146,7 +147,7 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
       if (mounted) {
         await adminPush(
           context,
-          AdminActionPage(
+          (context) => AdminActionPage(
             server: _profile.server,
             action: action,
             title: 'Tool setup',
@@ -171,10 +172,11 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
     if (widget.name == 'tts') {
       return AdminSpeechSynthesisPage(
         profile: _profile,
-        openModels: (provider) => adminPush(
+        openModels: (provider) => adminPushProfile(
           context,
-          AdminToolModelsPage(
-            profile: _profile,
+          _profile,
+          (context, profile) => AdminToolModelsPage(
+            profile: profile,
             tool: 'tts',
             provider: provider,
           ),
@@ -241,10 +243,11 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
                           TextButton(
                             onPressed: _busy
                                 ? null
-                                : () => adminPush(
+                                : () => adminPushProfile(
                                     context,
-                                    AdminToolModelsPage(
-                                      profile: _profile,
+                                    _profile,
+                                    (context, profile) => AdminToolModelsPage(
+                                      profile: profile,
                                       tool: widget.name,
                                       provider: row['name'] as String,
                                     ),
@@ -276,10 +279,11 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
                         onTap: _busy
                             ? null
                             : () async {
-                                await adminPush(
+                                await adminPushProfile(
                                   context,
-                                  AdminSecretPage(
-                                    profile: _profile,
+                                  _profile,
+                                  (context, profile) => AdminSecretPage(
+                                    profile: profile,
                                     name: env['key'] as String,
                                     shared: false,
                                     isSet: false,
@@ -414,27 +418,32 @@ class AdminVoicePage extends StatelessWidget {
                   title: 'Speech recognition provider',
                   subtitle: 'Configured backend providers and keys',
                   icon: Icons.mic_none,
-                  onTap: () => adminPush(
+                  onTap: () => adminPushProfile(
                     context,
-                    AdminToolSetupPage(profile: profile, name: 'stt'),
+                    profile,
+                    (context, profile) =>
+                        AdminToolSetupPage(profile: profile, name: 'stt'),
                   ),
                 ),
                 AdminRow(
                   title: 'Speech synthesis provider',
                   subtitle: 'Configured backend providers and keys',
                   icon: Icons.volume_up_outlined,
-                  onTap: () => adminPush(
+                  onTap: () => adminPushProfile(
                     context,
-                    AdminToolSetupPage(profile: profile, name: 'tts'),
+                    profile,
+                    (context, profile) =>
+                        AdminToolSetupPage(profile: profile, name: 'tts'),
                   ),
                 ),
                 AdminRow(
                   title: 'Speech defaults',
                   subtitle: 'Language, model and automatic speech',
                   icon: Icons.tune,
-                  onTap: () => adminPush(
+                  onTap: () => adminPushProfile(
                     context,
-                    AdminSettingsPage(
+                    profile,
+                    (context, profile) => AdminSettingsPage(
                       profile: profile,
                       title: 'Speech defaults',
                       fields: [

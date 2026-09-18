@@ -1,4 +1,5 @@
 import 'dart:async';
+export 'admin_navigation.dart';
 import '../../theme/wing_theme.dart';
 import '../../widgets/server_connection_label.dart';
 import 'package:flutter/material.dart';
@@ -470,22 +471,6 @@ Future<bool> adminConfirm(
       ),
     ) ??
     false;
-
-Future<void> adminPush(BuildContext context, Widget page) {
-  final scope = ServerConnectionScope.scopeOf(context);
-  return Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (_) => scope == null
-          ? page
-          : ServerConnectionScope(
-              status: scope.status,
-              icon: scope.icon,
-              onPickWorkspace: scope.onPickWorkspace,
-              child: page,
-            ),
-    ),
-  );
-}
 
 void adminMessage(
   BuildContext context,

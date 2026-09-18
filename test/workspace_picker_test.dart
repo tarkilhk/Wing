@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/administration/admin_widgets.dart';
+import 'package:wing/core/screens/administration/admin_settings_page.dart';
+import 'package:wing/core/screens/administration/admin_connectors_page.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
@@ -17,6 +20,7 @@ import 'package:wing/main.dart';
 
 import 'home_config_restore_test.dart' show buildManager;
 import 'support/profile_browser_fixture.dart';
+import 'support/administration_fixture.dart';
 
 void main() {
   const capture = bool.fromEnvironment('CAPTURE_WORKSPACE_PICKER');
@@ -272,7 +276,11 @@ void main() {
     await show(tester, destination: AppDestination.administration);
     adminPush(
       tester.element(find.byType(ServerConnectionLabel)),
-      const AdminPage(title: 'Server logs', scope: 'Claw', child: Text('Logs')),
+      (context) => const AdminPage(
+        title: 'Server logs',
+        scope: 'Claw',
+        child: Text('Logs'),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(picker);
@@ -293,26 +301,233 @@ void main() {
     expect(controller.error, isNotNull);
   });
 
-  testWidgets(
-    'nested administration scope returns to section before switching',
-    (tester) async {
-      await show(tester, destination: AppDestination.administration);
-      final context = tester.element(find.byType(ServerConnectionLabel));
-      adminPush(
-        context,
-        const AdminPage(
-          title: 'Details',
-          scope: 'Claw / personal',
-          child: Text('Scoped details'),
+  testWidgets('profile picker keeps Connectors open on the selected profile', (
+    tester,
+  ) async {
+    final administration = AdministrationFixture('Claw');
+    addTearDown(administration.server.close);
+    await show(tester, destination: AppDestination.health);
+    final context = tester.element(find.byType(ServerConnectionLabel));
+    adminPushProfile(
+      context,
+      administration.server.profile('personal'),
+      (context, profile) => AdminConnectorsPage(profile: profile),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('MCP connectors'), findsOneWidget);
+    await tester.tap(picker);
+    await tester.pumpAndSettle();
+    await tester.tap(work);
+    await tester.pumpAndSettle();
+    expect(find.text('MCP connectors'), findsOneWidget);
+    expect(find.text('Claw / work'), findsOneWidget);
+    expect(controller.current!.scope.profileName, 'work');
+    expect(
+      administration.requests.any(
+        (request) =>
+            request.$2 == 'mcp/servers' && request.$3['profile'] == 'work',
+      ),
+      isTrue,
+    );
+  });
+
+  testWidgets('Health Connectors stays open across profile changes and Back', (
+    tester,
+  ) async {
+    await show(tester, destination: AppDestination.health);
+    await tester.ensureVisible(find.text('Connectors'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connectors'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connectors'), findsOneWidget);
+    for (final name in ['work', 'personal', 'work']) {
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('workspace-profile-$name')));
+      await tester.pumpAndSettle();
+      expect(find.text('Connectors'), findsOneWidget);
+      expect(find.text('Claw / $name'), findsOneWidget);
+      expect(find.text(AppDestination.health.label), findsNothing);
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text(AppDestination.health.label), findsOneWidget);
+    expect(controller.current!.scope.profileName, 'work');
+  });
+
+  testWidgets('nested profile routes keep their stack and reload both owners', (
+    tester,
+  ) async {
+    final administration = AdministrationFixture('Claw');
+    addTearDown(administration.server.close);
+    await show(tester, destination: AppDestination.administration);
+    adminPushProfile(
+      tester.element(find.byType(ServerConnectionLabel)),
+      administration.server.profile('personal'),
+      (context, profile) => AdminPage(
+        title: 'Parent',
+        scope: profile.label,
+        child: TextButton(
+          onPressed: () => adminPushProfile(
+            context,
+            profile,
+            (context, profile) => AdminConnectorsPage(profile: profile),
+          ),
+          child: const Text('Open connectors'),
         ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open connectors'));
+    await tester.pumpAndSettle();
+    await tester.tap(picker);
+    await tester.pumpAndSettle();
+    await tester.tap(work);
+    await tester.pumpAndSettle();
+    expect(find.text('MCP connectors'), findsOneWidget);
+    expect(find.text('Claw / work'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Parent'), findsOneWidget);
+    expect(find.text('Claw / work'), findsOneWidget);
+    await tester.tap(find.text('Open connectors'));
+    await tester.pumpAndSettle();
+    expect(find.text('MCP connectors'), findsOneWidget);
+    expect(find.text('Claw / work'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final fails in [false, true]) {
+    testWidgets(
+      'nested selection keeps its page while loading (failure: $fails)',
+      (tester) async {
+        final administration = AdministrationFixture('Claw');
+        addTearDown(administration.server.close);
+        await show(tester, destination: AppDestination.health);
+        adminPushProfile(
+          tester.element(find.byType(ServerConnectionLabel)),
+          administration.server.profile('personal'),
+          (context, profile) => AdminConnectorsPage(profile: profile),
+        );
+        await tester.pumpAndSettle();
+        final gate = Completer<void>();
+        fixture.delays['work'] = gate;
+        fixture.failWork = fails;
+        await tester.tap(picker);
+        await tester.pumpAndSettle();
+        await tester.tap(work);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(find.text('MCP connectors'), findsOneWidget);
+        expect(find.text('Claw / personal'), findsOneWidget);
+        expect(controller.switching, isTrue);
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        expect(find.text('MCP connectors'), findsOneWidget);
+        gate.complete();
+        await tester.pumpAndSettle();
+        expect(find.text('MCP connectors'), findsOneWidget);
+        expect(
+          find.text(fails ? 'Claw / personal' : 'Claw / work'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'connector details resolve identity within the selected profile',
+    (tester) async {
+      final administration = AdministrationFixture('Claw');
+      addTearDown(administration.server.close);
+      administration.override = (method, path, query, body) async => {
+        'servers': query['profile'] == 'personal'
+            ? [
+                {'name': 'example', 'auth': 'oauth'},
+              ]
+            : [],
+      };
+      await show(tester, destination: AppDestination.health);
+      adminPushProfile(
+        tester.element(find.byType(ServerConnectionLabel)),
+        administration.server.profile('personal'),
+        (context, profile) =>
+            AdminConnectorDetail(profile: profile, name: 'example'),
       );
       await tester.pumpAndSettle();
+      expect(find.text('Test connection'), findsOneWidget);
       await tester.tap(picker);
       await tester.pumpAndSettle();
       await tester.tap(work);
       await tester.pumpAndSettle();
-      expect(find.text('Scoped details'), findsNothing);
+      expect(find.text('example'), findsOneWidget);
+      expect(find.text('Claw / work'), findsOneWidget);
+      expect(
+        find.text('This connector is not available in this profile.'),
+        findsOneWidget,
+      );
+      expect(find.text('Test connection'), findsNothing);
+      expect(find.text('Sign in'), findsNothing);
+      expect(
+        administration.requests.every((request) => request.$1 == 'GET'),
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets(
+    'editor reloads and saves only the selected profile, preserving dirty drafts',
+    (tester) async {
+      final administration = AdministrationFixture('Claw');
+      addTearDown(administration.server.close);
+      await show(tester, destination: AppDestination.administration);
+      adminPushProfile(
+        tester.element(find.byType(ServerConnectionLabel)),
+        administration.server.profile('personal'),
+        (context, profile) => AdminSettingsPage(
+          profile: profile,
+          title: 'Memory settings',
+          fields: [memoryFields[2]],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('2000'), findsOneWidget);
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      await tester.tap(work);
+      await tester.pumpAndSettle();
+      expect(find.text('Memory settings'), findsOneWidget);
+      expect(find.text('3000'), findsOneWidget);
+      await tester.enterText(find.byType(TextFormField), '3500');
+      await tester.pump();
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('workspace-profile-personal')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('3500'), findsOneWidget);
       expect(controller.current!.scope.profileName, 'work');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(
+        (administration.configs['work']!['memory'] as Map)['memory_char_limit'],
+        3500,
+      );
+      expect(
+        (administration.configs['personal']!['memory']
+            as Map)['memory_char_limit'],
+        2000,
+      );
+      expect(
+        administration.requests
+            .where((request) => request.$1 == 'PUT')
+            .every((request) => request.$3['profile'] == 'work'),
+        isTrue,
+      );
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -320,9 +535,12 @@ void main() {
     await show(tester, destination: AppDestination.administration);
     final context = tester.element(find.byType(ServerConnectionLabel));
     var guarded = false;
-    adminPush(
+    final administration = AdministrationFixture('Claw');
+    addTearDown(administration.server.close);
+    adminPushProfile(
       context,
-      PopScope(
+      administration.server.profile('personal'),
+      (context, profile) => PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
           guarded = !didPop;
@@ -339,7 +557,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(work);
     await tester.pumpAndSettle();
-    expect(guarded, isTrue);
+    expect(guarded, isFalse);
+    expect(
+      find.text('Finish or discard your edits before switching profiles.'),
+      findsOneWidget,
+    );
     expect(find.text('Unsaved draft'), findsOneWidget);
     expect(controller.current!.scope.profileName, 'personal');
   });

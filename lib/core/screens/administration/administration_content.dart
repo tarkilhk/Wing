@@ -256,7 +256,7 @@ class _HermesAdministrationContentState
   Future<void> _manageProfiles() async {
     await adminPush(
       context,
-      AdminProfilesPage(
+      (context) => AdminProfilesPage(
         server: _server,
         onOpenProfile: (name) async {
           await widget.controller.switchProfile(name);
@@ -335,10 +335,11 @@ class _HermesAdministrationContentState
     String title,
     List<AdminField> fields, {
     String? initialField,
-  }) => adminPush(
+  }) => adminPushProfile(
     context,
-    AdminSettingsPage(
-      profile: p,
+    p,
+    (context, profile) => AdminSettingsPage(
+      profile: profile,
       title: title,
       fields: fields,
       initialField: initialField,
@@ -362,7 +363,11 @@ class _HermesAdministrationContentState
       Icons.tune,
       p == null
           ? null
-          : () => adminPush(context, AdminDefaultsPage(profile: p)),
+          : () => adminPushProfile(
+              context,
+              p,
+              (context, profile) => AdminDefaultsPage(profile: profile),
+            ),
     ),
     _Destination(
       'Profile',
@@ -376,7 +381,13 @@ class _HermesAdministrationContentState
       'Memory',
       'Retained memories and character budgets',
       Icons.bookmark_border,
-      p == null ? null : () => adminPush(context, AdminMemoryPage(profile: p)),
+      p == null
+          ? null
+          : () => adminPushProfile(
+              context,
+              p,
+              (context, profile) => AdminMemoryPage(profile: profile),
+            ),
     ),
     _Destination(
       'Profile',
@@ -385,20 +396,33 @@ class _HermesAdministrationContentState
       Icons.extension_outlined,
       p == null
           ? null
-          : () => adminPush(
+          : () => adminPushProfile(
               context,
-              ProfileCapabilitiesScreen(
-                gateway: p.gateway,
+              p,
+              (context, profile) => ProfileCapabilitiesScreen(
+                gateway: profile.gateway,
                 connectionLabel: _server.connectionLabel,
-                onToolSetup: (name) => adminPush(
+                onToolSetup: (name) => adminPushProfile(
                   context,
-                  AdminToolSetupPage(profile: p, name: name),
+                  profile,
+                  (context, profile) =>
+                      AdminToolSetupPage(profile: profile, name: name),
                 ),
-                onLibrary: () =>
-                    adminPush(context, AdminSkillLibraryPage(profile: p)),
-                onHub: () => adminPush(context, AdminSkillHubPage(profile: p)),
-                onPlugins: () =>
-                    adminPush(context, AdminPluginsPage(profile: p)),
+                onLibrary: () => adminPushProfile(
+                  context,
+                  profile,
+                  (context, profile) => AdminSkillLibraryPage(profile: profile),
+                ),
+                onHub: () => adminPushProfile(
+                  context,
+                  profile,
+                  (context, profile) => AdminSkillHubPage(profile: profile),
+                ),
+                onPlugins: () => adminPushProfile(
+                  context,
+                  profile,
+                  (context, profile) => AdminPluginsPage(profile: profile),
+                ),
               ),
             ),
     ),
@@ -412,10 +436,11 @@ class _HermesAdministrationContentState
           : () {
               final root = ModalRoute.of(context);
               final navigator = Navigator.of(context);
-              return adminPush(
+              return adminPushProfile(
                 context,
-                AdminScheduledTasksPage(
-                  profile: p,
+                p,
+                (context, profile) => AdminScheduledTasksPage(
+                  profile: profile,
                   preferences: widget.controller.preferences,
                   onOpenSession: (key) async {
                     await widget.onOpenSession(key);
@@ -434,26 +459,34 @@ class _HermesAdministrationContentState
       Icons.link,
       p == null
           ? null
-          : () => adminPush(
+          : () => adminPushProfile(
               context,
-              _menu('Access and connectors', p.label, [
-                AdminRow(
-                  title: 'Provider access',
-                  subtitle: 'Accounts and API keys for this profile',
-                  icon: Icons.key_outlined,
-                  onTap: () => adminPush(
-                    context,
-                    AdminProvidersPage(profile: p, shared: false),
-                  ),
-                ),
-                AdminRow(
-                  title: 'MCP connectors',
-                  subtitle: 'Status, tools, authentication and access',
-                  icon: Icons.link,
-                  onTap: () =>
-                      adminPush(context, AdminConnectorsPage(profile: p)),
-                ),
-              ]),
+              p,
+              (context, profile) =>
+                  _menu('Access and connectors', profile.label, [
+                    AdminRow(
+                      title: 'Provider access',
+                      subtitle: 'Accounts and API keys for this profile',
+                      icon: Icons.key_outlined,
+                      onTap: () => adminPushProfile(
+                        context,
+                        profile,
+                        (context, profile) =>
+                            AdminProvidersPage(profile: profile, shared: false),
+                      ),
+                    ),
+                    AdminRow(
+                      title: 'MCP connectors',
+                      subtitle: 'Status, tools, authentication and access',
+                      icon: Icons.link,
+                      onTap: () => adminPushProfile(
+                        context,
+                        profile,
+                        (context, profile) =>
+                            AdminConnectorsPage(profile: profile),
+                      ),
+                    ),
+                  ]),
             ),
     ),
     _Destination(
@@ -463,38 +496,46 @@ class _HermesAdministrationContentState
       Icons.settings_outlined,
       p == null
           ? null
-          : () => adminPush(
+          : () => adminPushProfile(
               context,
-              _menu('Behavior', p.label, [
+              p,
+              (context, profile) => _menu('Behavior', profile.label, [
                 AdminRow(
                   title: 'Execution',
                   subtitle: 'Agent and subagent limits',
                   icon: Icons.rule,
-                  onTap: () => _settings(p, 'Execution', executionFields),
+                  onTap: () => _settings(profile, 'Execution', executionFields),
                 ),
                 AdminRow(
                   title: 'Approval policy',
                   subtitle: 'Approvals and command allowlist',
                   icon: Icons.shield_outlined,
-                  onTap: () => _settings(p, 'Approval policy', approvalFields),
+                  onTap: () =>
+                      _settings(profile, 'Approval policy', approvalFields),
                 ),
                 AdminRow(
                   title: 'Compression',
                   subtitle: 'Context thresholds and protected messages',
                   icon: Icons.compress,
-                  onTap: () => _settings(p, 'Compression', compressionFields),
+                  onTap: () =>
+                      _settings(profile, 'Compression', compressionFields),
                 ),
                 AdminRow(
                   title: 'Reach and recovery',
                   subtitle: 'Private URLs, redaction and checkpoints',
                   icon: Icons.restore,
-                  onTap: () => _settings(p, 'Reach and recovery', reachFields),
+                  onTap: () =>
+                      _settings(profile, 'Reach and recovery', reachFields),
                 ),
                 AdminRow(
                   title: 'Voice',
                   subtitle: 'Backend speech defaults',
                   icon: Icons.mic_none,
-                  onTap: () => adminPush(context, AdminVoicePage(profile: p)),
+                  onTap: () => adminPushProfile(
+                    context,
+                    profile,
+                    (context, profile) => AdminVoicePage(profile: profile),
+                  ),
                 ),
               ]),
             ),
@@ -532,7 +573,11 @@ class _HermesAdministrationContentState
       Icons.auto_awesome_outlined,
       p == null
           ? null
-          : () => adminPush(context, AdminDefaultsPage(profile: p)),
+          : () => adminPushProfile(
+              context,
+              p,
+              (context, profile) => AdminDefaultsPage(profile: profile),
+            ),
     ),
     _Destination(
       'Profile',
@@ -541,7 +586,11 @@ class _HermesAdministrationContentState
       Icons.download_outlined,
       p == null
           ? null
-          : () => adminPush(context, AdminSkillHubPage(profile: p)),
+          : () => adminPushProfile(
+              context,
+              p,
+              (context, profile) => AdminSkillHubPage(profile: profile),
+            ),
     ),
     _Destination(
       'Profile',
@@ -550,21 +599,37 @@ class _HermesAdministrationContentState
       Icons.link,
       p == null
           ? null
-          : () => adminPush(context, AdminConnectorsPage(profile: p)),
+          : () => adminPushProfile(
+              context,
+              p,
+              (context, profile) => AdminConnectorsPage(profile: profile),
+            ),
     ),
     _Destination(
       'Profile',
       'Agent plugins',
       'Plugin inventory and enablement',
       Icons.extension_outlined,
-      p == null ? null : () => adminPush(context, AdminPluginsPage(profile: p)),
+      p == null
+          ? null
+          : () => adminPushProfile(
+              context,
+              p,
+              (context, profile) => AdminPluginsPage(profile: profile),
+            ),
     ),
     _Destination(
       'Profile health',
       'Usage',
       'Rolling ranges and per-model detail',
       Icons.bar_chart,
-      p == null ? null : () => adminPush(context, AdminUsagePage(profile: p)),
+      p == null
+          ? null
+          : () => adminPushProfile(
+              context,
+              p,
+              (context, profile) => AdminUsagePage(profile: profile),
+            ),
     ),
     _Destination(
       'Runtime health',
@@ -576,7 +641,7 @@ class _HermesAdministrationContentState
         if (mounted) {
           await adminPush(
             context,
-            AdminLogsPage(
+            (context) => AdminLogsPage(
               server: _server,
               runtimeLabel: identity['label'] as String,
             ),
@@ -640,7 +705,6 @@ class _HermesAdministrationContentState
   @override
   Widget build(BuildContext context) {
     if (widget.healthOnly) {
-      final capturedProfile = _profile;
       return ListenableBuilder(
         listenable: Listenable.merge([widget.controller, _health]),
         builder: (context, _) => AdminHealthContent(
@@ -667,12 +731,12 @@ class _HermesAdministrationContentState
               ? null
               : _checkProfile,
           checkingProfile: _checkingProfile,
-          accessChecks: _checksForCurrentProfile(),
+          accessChecks: _checksForCurrentProfile,
           onConnections: widget.onConnections,
           onRefresh: _refresh,
           onOpenDestination: (title) async {
             final destination = _destinations(
-              capturedProfile,
+              _profile,
             ).where((d) => d.title == title).firstOrNull;
             if (destination?.open != null) {
               await destination!.open!();

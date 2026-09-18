@@ -1,6 +1,7 @@
 import '../services/workspace_connection_failure.dart';
 import '../widgets/server_connection_label.dart';
 import '../widgets/workspace_picker.dart';
+import '../widgets/workspace_profile_navigation.dart';
 import '../models/connection.dart';
 import '../widgets/studio_action_label.dart';
 import '../widgets/studio_error.dart';
@@ -105,6 +106,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     with WidgetsBindingObserver {
   ProfileWorkspaceController get controller => widget.controller;
   final _composer = TextEditingController();
+  final _profileNavigation = WorkspaceProfileNavigation();
   final _composerFocus = FocusNode();
   final _chatSearchFocus = FocusNode();
   final _queuedEditErrors = <ProfileSessionKey, String>{};
@@ -380,6 +382,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     _voiceOutput.dispose();
     controller.visible = false;
     WidgetsBinding.instance.removeObserver(this);
+    _profileNavigation.dispose();
     _composer.dispose();
     _composerFocus.dispose();
     _chatSearchFocus.dispose();
@@ -397,6 +400,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     child: ServerConnectionScope(
       status: controller.connectionStatus,
       icon: controller.connection.icon,
+      profileNavigation: _profileNavigation,
       onPickWorkspace: (anchor, {required includeProfiles}) =>
           unawaited(_pickWorkspace(anchor, includeProfiles: includeProfiles)),
       child: Builder(builder: (context) => _buildWorkspace(context)),
@@ -417,14 +421,45 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       busy: controller.switching,
       includeProfiles: includeProfiles,
     );
-    if (!mounted || choice == null || controller.switching) return;
+    if (!mounted || !anchor.mounted || choice == null || controller.switching) {
+      return;
+    }
     if (choice.isConnection && choice.id == controller.connection.id) return;
     if (!choice.isConnection &&
         choice.id == controller.current?.scope.profileName) {
       return;
     }
-    // Editors retain their captured owner. Respect their pending-edit guards
-    // before leaving the drill-down and changing workspace at the section root.
+    if (!choice.isConnection) {
+      if (!_profileNavigation.canSwitch) {
+        ScaffoldMessenger.of(anchor).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Finish or discard your edits before switching profiles.',
+            ),
+          ),
+        );
+        return;
+      }
+      _cancelVoice();
+      FocusManager.instance.primaryFocus?.unfocus();
+      controller.cancelNotificationOpen();
+      await _run(() async {
+        final changed = await _profileNavigation.switchTo(
+          choice.id,
+          () => controller.switchProfile(
+            choice.id,
+            resetNavigation: _destination == AppDestination.chats,
+          ),
+        );
+        if (!changed && mounted && anchor.mounted && controller.error != null) {
+          ScaffoldMessenger.of(
+            anchor,
+          ).showSnackBar(SnackBar(content: StudioError(controller.error!)));
+        }
+      });
+      return;
+    }
+    // Connection changes leave this workspace; respect editor guards first.
     final navigator = Navigator.of(context);
     final root = ModalRoute.of(context);
     while (mounted) {
@@ -443,22 +478,12 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     if (!mounted) return;
     _cancelVoice();
     FocusManager.instance.primaryFocus?.unfocus();
-    if (choice.isConnection) {
-      final connection = widget.savedConnections
-          ?.call()
-          .where((connection) => connection.id == choice.id)
-          .firstOrNull;
-      if (connection != null && widget.onSelectConnection != null) {
-        await _run(() => widget.onSelectConnection!(connection, _destination));
-      }
-    } else {
-      controller.cancelNotificationOpen();
-      await _run(() async {
-        await controller.switchProfile(
-          choice.id,
-          resetNavigation: _destination == AppDestination.chats,
-        );
-      });
+    final connection = widget.savedConnections
+        ?.call()
+        .where((connection) => connection.id == choice.id)
+        .firstOrNull;
+    if (connection != null && widget.onSelectConnection != null) {
+      await _run(() => widget.onSelectConnection!(connection, _destination));
     }
   }
 
