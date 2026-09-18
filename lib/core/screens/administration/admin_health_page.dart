@@ -1,4 +1,3 @@
-import '../../widgets/studio_action_label.dart';
 import 'package:flutter/material.dart';
 import 'admin_usage_dashboard.dart';
 import '../../services/administration_repository.dart';
@@ -27,7 +26,6 @@ class AdminHealthContent extends StatelessWidget {
   final AdministrationRepository server;
   final AdministrationHealth health;
   final ProfileAdministration? profile;
-  final Widget profileSelector;
   final ProfileDiagnosticsController? Function() accessChecks;
   final VoidCallback? onConnections;
   final Future<void> Function() onRefresh;
@@ -39,7 +37,6 @@ class AdminHealthContent extends StatelessWidget {
     required this.server,
     required this.health,
     required this.profile,
-    required this.profileSelector,
     required this.onRefresh,
     required this.onOpenDestination,
     this.onCheckProfile,
@@ -94,38 +91,31 @@ class AdminHealthContent extends StatelessWidget {
           ),
           AdminRuntimeHealth(health: health),
           const SizedBox(height: 24),
-          Text('Profile', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final button = OutlinedButton(
-                onPressed: onCheckProfile,
-                child: StudioActionLabel(
-                  'Check profile',
-                  busy: checkingProfile,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Profile',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-              );
-              if (constraints.maxWidth < 350 ||
-                  MediaQuery.textScalerOf(context).scale(16) > 20) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    profileSelector,
-                    const SizedBox(height: 8),
-                    button,
-                  ],
-                );
-              }
-              return Row(
-                children: [
-                  Expanded(child: profileSelector),
-                  const SizedBox(width: 12),
-                  button,
-                ],
-              );
-            },
+              ),
+              IconButton(
+                tooltip: 'Refresh profile status',
+                onPressed: profile == null || checkingProfile
+                    ? null
+                    : onCheckProfile,
+                icon: checkingProfile
+                    ? const SizedBox.square(
+                        dimension: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          semanticsLabel: 'Refreshing profile status',
+                        ),
+                      )
+                    : const Icon(Icons.refresh),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
           if (profile == null)
             const AdminNotice('Select an available profile to view its health.')
           else ...[

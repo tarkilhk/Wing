@@ -1,6 +1,5 @@
 import 'dart:async';
 import '../../services/scheduled_tasks_controller.dart';
-import '../../widgets/studio_select.dart';
 import '../../services/administration_overview.dart';
 import '../../services/administration_health.dart';
 import '../../widgets/profile_diagnostics_panel.dart';
@@ -711,22 +710,6 @@ class _HermesAdministrationContentState
           server: _server,
           health: _health,
           profile: _profile,
-          profileSelector: StudioSelect<String>(
-            key: ValueKey(_profile?.name),
-            label: 'Selected profile',
-            value: _profile?.name,
-            options: [
-              for (final p in widget.controller.discovery?.profiles ?? [])
-                (value: p.name, label: p.name),
-            ],
-            onChanged: widget.controller.switching
-                ? null
-                : (name) {
-                    if (name != null) {
-                      unawaited(widget.controller.switchProfile(name));
-                    }
-                  },
-          ),
           onCheckProfile: _checkingProfile || widget.controller.switching
               ? null
               : _checkProfile,

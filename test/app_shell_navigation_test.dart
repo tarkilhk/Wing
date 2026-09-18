@@ -237,7 +237,7 @@ void main() {
       expect(find.text('Models and reasoning'), findsOneWidget);
       await navigate(tester, AppDestination.health);
       await tester.pumpAndSettle();
-      expect(find.text('Selected profile'), findsAtLeastNWidgets(1));
+      expect(find.byTooltip('Refresh profile status'), findsOneWidget);
       expect(controller.current!.chat, same(chat));
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();

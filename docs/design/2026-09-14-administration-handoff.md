@@ -28,7 +28,7 @@ Its dedicated list/detail/editor uses Studio tokens, a prominent next-run line,
 readable instructions and reachable actions. Do not expand this change into
 restyling the other administration destinations.
 
-Keep the connection visible on Profile and Health. Profile selection belongs in Profile and the selected-profile section of Health. Server writes must not appear profile-scoped. Android appearance, notifications, dictation/playback and composer preferences stay in App settings.
+Keep the connection visible on Profile and Health. Health uses the shared header for profile selection. Server writes must not appear profile-scoped. Android appearance, notifications, dictation/playback and composer preferences stay in App settings.
 
 ## Account and runtime identity
 
@@ -49,9 +49,9 @@ Runtime health uses `profiles/active.current`, resolved through profile metadata
 
 The owner-approved 18 September Health layout uses Server and Profile groups,
 with no combined health verdict. Doctor, audit and Logs remain server-owned;
-Usage and five observation rows follow the dropdown-selected profile. Unknown
+Usage and five observation rows follow the header-selected profile. Unknown
 coverage is local, configuration does not expire after five minutes, and actual
-credential expiration remains visible. Check profile explicitly checks access
+credential expiration remains visible. The Profile refresh icon explicitly checks access
 without inference. Details show their captured scope and link to the owning editor.
 See [Health observations](../ADMINISTRATION.md#health-observations) for the current
 stock API verification and rendering contract.

@@ -186,7 +186,7 @@ void main() {
       expect(find.text('Refresh overview', skipOffstage: false), findsNothing);
       expect(admin.requests.where((r) => r.$1 != 'GET'), isEmpty);
       await show(tester, Brightness.dark, healthOnly: true);
-      expect(find.text('Selected profile'), findsAtLeastNWidgets(1));
+      expect(find.byTooltip('Refresh profile status'), findsOneWidget);
       expect(
         admin.requests.where((r) => r.$2 == 'profiles/active'),
         isNotEmpty,
@@ -390,7 +390,7 @@ void main() {
         expect(tester.takeException(), isNull);
         await screenshot(tester, '${brightness.name}-profile-large-text');
         await show(tester, brightness, healthOnly: true);
-        expect(find.text('Selected profile'), findsAtLeastNWidgets(1));
+        expect(find.byTooltip('Refresh profile status'), findsOneWidget);
         await screenshot(tester, '${brightness.name}-health-profile');
         await tester.scrollUntilVisible(
           find.text('Server'),

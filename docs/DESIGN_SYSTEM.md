@@ -241,8 +241,9 @@ configuration and usage bars describe reported costs, never inferred activity.
 The owner-approved 18 September Health revision replaces the combined verdict
 with Server and Profile groups on the standalone Hermes health destination.
 Server rows own Doctor, audit and Logs, with subordinate runtime identity. Profile
-uses a dropdown (an explicit exception to Administration's shared profile chips),
-an explicit Check profile action, five stable observation rows and Usage.
+uses the shared header for profile selection, a refresh icon beside its heading,
+five stable observation rows and Usage. The refresh icon explicitly checks the
+selected profile and shows progress while the check runs.
 Only actual issues carry warning/error emphasis; configuration icons stay neutral.
 Unknown checks are local to their row. Do not invalidate configuration after a
 fixed five-minute timer or imply successful inference from configuration.

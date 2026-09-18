@@ -44,14 +44,14 @@ short read-only disclosure; source metadata is shown only when reported.
 ## Health observations
 
 Health has two groups. Server owns Doctor, security audit and Logs; the runtime
-profile is quiet metadata below these rows. Profile has a dropdown selector,
-Check profile, five stable rows (Provider access, Model, Tools, Connectors,
+profile is quiet metadata below these rows. Profile uses selection from the shared header,
+a refresh icon beside its heading, five stable rows (Provider access, Model, Tools, Connectors,
 Scheduled tasks), and Usage. There is no global health verdict. Optional server
 diagnostics say Not run until explicitly started.
 
 Health owns its profile observations, so opening Administration first is unnecessary.
 Opening Health reads model, sign-in, tool, connector, task and provider-configuration
-metadata. Check profile refreshes those reads and explicitly checks dashboard
+metadata. The Profile refresh icon refreshes those reads and explicitly checks dashboard
 access and credential availability. It sends no model request, connector test,
 Doctor/audit operation or write. Provider access combines configuration, sign-in
 observations and explicit access checks into one row and a detailed recovery page.

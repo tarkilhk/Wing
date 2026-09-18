@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove the duplicate Health profile selector and replace Check profile with a refresh icon beside the Profile heading, using the profile selected in the shared header.
+
 - Replace the confusing MCP action with Reconnect MCP tools below the connector list. Explain its server-wide scope, ask once, and send that confirmation directly to Hermes without a second popup.
 
 - Make the usage activity grid more compact with small, tightly spaced squares and week columns. Fit year-view pages to the available width instead of capping each page at 91 days.

@@ -257,8 +257,8 @@ void main({
           );
       expect(switched, hasLength(5));
       expect(switched.every((r) => r.$3['profile'] == 'client-work'), isTrue);
-      await tester.ensureVisible(find.text('Check profile'));
-      await tester.tap(find.text('Check profile'));
+      await tester.ensureVisible(find.byTooltip('Refresh profile status'));
+      await tester.tap(find.byTooltip('Refresh profile status'));
       await tester.pumpAndSettle();
       expect(
         fixture.explicitCalls.where(
