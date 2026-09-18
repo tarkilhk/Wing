@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/administration/admin_widgets.dart';
+import 'package:wing/core/screens/administration/admin_health_page.dart';
 import 'package:wing/core/screens/administration/admin_settings_page.dart';
 import 'package:wing/core/screens/administration/admin_connectors_page.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
@@ -299,6 +300,50 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.current!.scope.profileName, 'personal');
     expect(controller.error, isNotNull);
+  });
+
+  testWidgets('Usage offers only profiles and reloads the selected owner', (
+    tester,
+  ) async {
+    final administration = AdministrationFixture('Claw');
+    addTearDown(administration.server.close);
+    administration.override = (_, path, _, _) async =>
+        path == 'analytics/models' ? {'models': []} : {'daily': []};
+    await show(tester, destination: AppDestination.health);
+    adminPushProfile(
+      tester.element(find.byType(ServerConnectionLabel)),
+      administration.server.profile('personal'),
+      (_, profile) => AdminUsagePage(profile: profile),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Choose profile'), findsOneWidget);
+    await tester.tap(picker);
+    await tester.pumpAndSettle();
+    expect(work, findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('workspace-connection-claw')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('workspace-connection-travel')),
+      findsNothing,
+    );
+    expect(find.text('Connection'), findsNothing);
+    await screenshot(tester, 'usage-profile-only');
+    final before = administration.requests.length;
+    await tester.tap(work);
+    await tester.pumpAndSettle();
+    expect(find.text('Usage'), findsOneWidget);
+    expect(find.text('Claw / work'), findsOneWidget);
+    expect(controller.current!.scope.profileName, 'work');
+    expect(administration.requests.skip(before).length, 3);
+    expect(
+      administration.requests
+          .skip(before)
+          .every((r) => r.$3['profile'] == 'work'),
+      isTrue,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('profile picker keeps Connectors open on the selected profile', (

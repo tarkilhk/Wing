@@ -62,7 +62,7 @@ void main() {
     },
   );
   test(
-    'auxiliary duplicates combine, providers remain distinct, reasoning is not added',
+    'model totals combine providers and auxiliary usage without adding reasoning',
     () {
       final data = UsageModels.fromJson({
         'models': [
@@ -71,16 +71,13 @@ void main() {
           {...row, 'provider': 'openai', 'estimated_cost': 7},
         ],
       }, prices);
-      expect(data.groups.length, 2);
+      expect(data.groups.length, 1);
       expect(data.costs.total, 17);
       expect(data.tokens.total, 3840000);
-      expect(
-        data.groups
-            .singleWhere((g) => g.provider == 'openai-codex')
-            .costs
-            .total,
-        10,
-      );
+      expect(data.groups.single.model, 'gpt-6-astra');
+      expect(data.groups.single.costs.total, 17);
+      expect(data.groups.single.tokens.total, 3840000);
+      expect(data.groups.single.rows.length, 3);
       expect(data.tokenCosts, isNull);
       expect(
         UsageModels.fromJson({

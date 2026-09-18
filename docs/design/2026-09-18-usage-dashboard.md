@@ -7,14 +7,15 @@ inspect a date or a model without leaving its captured profile/connection.
 
 ## Implemented layout
 
-- Neutral period buttons; token count and estimated value side by side.
+- Profile-only dropdown in the scope header; neutral period buttons; token
+  count and estimated value side by side. Connection selection stays outside Usage.
 - Full-year token-intensity calendar, one square per UTC session-start date,
   in one compact Sunday-aligned band of week columns. Earlier/later arrows
   browse the cached year; no day slider. The visible weeks and intensity colours
   remain fixed when changing the range; a contrasting perimeter marks its dates.
   Preserve the possible 366th partial UTC boundary date from Hermes.
 - Breakdown immediately below the grid, one animated composition bar. Its
-  clickable title switches model/token-type grouping; Tokens/Cost stays at the
+  clickable title, with its toggle icon on the left, switches model/token-type grouping; Tokens/Cost stays at the
   top right and is independent from the trend controls. Both the rows and bar
   segments rank highest to lowest for the selected measure, with unavailable
   values last, deterministic ties and stable category colours.
@@ -22,9 +23,11 @@ inspect a date or a model without leaving its captured profile/connection.
   date. Its title offers the same grouping switch. Both sections default to
   token types following phone feedback; unavailable daily dimensions explain
   the limitation and offer a direct action to show the supported token view.
-- Tap a model for exact counts, individual background contributions, rates,
-  verification date and pricing source. About this usage carries the coverage
-  and estimate methodology, keeping ordinary inspection compact.
+- One passive row per exact model ID, combining providers and auxiliary
+  contributions. Each raw contribution is valued before aggregation, preserving
+  provider-specific pricing and partial-cost coverage. Rows have no tap action,
+  disclosure arrow or detail sheet. About this usage carries the coverage and
+  estimate methodology.
 
 The screen follows Studio colors, type, corners and spacing. Period selection
 uses neutral tint as specifically requested. Segment widths animate over 300ms
@@ -54,9 +57,10 @@ be split. Unknown estimates are excluded with a partial-coverage explanation.
 `test/usage_analytics_test.dart` covers rolling UTC dates, missing counters,
 auxiliary contributions, mixed providers and independent parallel reads.
 `test/administration_usage_test.dart` covers interactions, caching, stale data,
-races, errors, pricing links and actual Flutter renders in light/dark themes at
+races, errors, passive model rows and actual Flutter renders in light/dark themes at
 390dp/100% and 320dp/200%. Existing administration and layout checks exercise
-navigation and large numbers in the new detail sheet.
+navigation and enlarged text. `test/workspace_picker_test.dart` checks that Usage
+offers profiles only and reloads under the selected immutable owner.
 `test/usage_calendar_test.dart` checks complete date coverage without duplicates
 for every weekday alignment, full width, date selection and stable geometry
 across range changes. `test/usage_selection_color_test.dart` verifies all ten
@@ -71,7 +75,7 @@ flutter test --no-pub test/administration_usage_test.dart \
 ```
 
 Actual renders are written to `build/usage-review/`. The inspected normal,
-enlarged-text, calendar, trend and source views use Flutter widgets and real
+enlarged-text, calendar, trend and breakdown views use Flutter widgets and real
 fonts, not generated artwork. Authenticated analytics latency on the phone has
 not been measured.
 

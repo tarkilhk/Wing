@@ -68,3 +68,11 @@ and dark themes. Reviewed menu anchoring, density, selected surfaces and reachab
 options. These use synthetic profile data and are Flutter widget renders, not a
 new APK installed on a physical phone. Capture with `CAPTURE_WORKSPACE_PICKER=true`
 and `CAPTURE_FONT_DIR=<Flutter SDK>/bin/cache/artifacts/material_fonts`.
+
+
+## Usage profile-only refinement
+
+On 19 September the owner restricted the Usage dropdown to profiles on its
+current connection. It uses the same anchored menu, profile navigation and
+immutable route ownership. The connection context/status remains visible, but
+Usage does not offer connection choices. Other screen picker scopes are unchanged.

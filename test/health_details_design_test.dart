@@ -141,8 +141,9 @@ void main() {
             await tester.pumpAndSettle();
             await tester.tap(find.text('Research model'));
             await tester.pumpAndSettle();
-            expect(find.text('Model details'), findsOneWidget);
-            await snapshot(tester, '$page-${brightness.name}-$scale-expanded');
+            expect(find.byType(BottomSheet), findsNothing);
+            expect(find.text('Research model'), findsOneWidget);
+            await snapshot(tester, '$page-${brightness.name}-$scale-breakdown');
           } else {
             expect(
               fixture.requests.every(

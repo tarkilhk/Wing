@@ -72,15 +72,15 @@ never substitutes period-wide model figures for a day's values.
 
 The calendar browses the cached year in one compact band with earlier/later
 week navigation and a contrasting period outline. Paging makes no API requests. Selecting the same date
-again, or Selected period, restores the period breakdown. Duplicate auxiliary model rows contribute to one model/provider bar
-segment and remain individually inspectable in its detail sheet. Unknown values
+again, or Selected period, restores the period breakdown. Contributions for an exact model ID, including multiple providers and auxiliary
+rows, combine into one passive bar segment after each contribution is valued. Unknown values
 remain unavailable; partial cost bars explicitly exclude unpriced values.
 
 A rolling N-day query can cover N+1 UTC dates. The partial first date is retained.
 Period and year cache entries live only for the open profile/connection scope;
 Refresh updates the year read and both selected-period aggregates. Older data survives individual refresh failures with
 an explicit retained-data notice. Model palette assignments stay stable while
-switching periods. Counts and pricing sources remain accessible from a model.
+switching periods. Model rows have no drill-down action.
 
 Reverified upstream main at the same inspected revision immediately before
 implementation. No server changes or custom endpoints are required.

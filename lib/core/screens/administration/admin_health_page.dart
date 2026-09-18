@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'admin_usage_dashboard.dart';
+import '../../widgets/workspace_picker.dart';
 import '../../services/administration_repository.dart';
 import '../../services/administration_health.dart';
 import '../../theme/wing_theme.dart';
@@ -146,7 +147,7 @@ class AdminHealthContent extends StatelessWidget {
               children: [
                 AdminRow(
                   title: 'Usage',
-                  subtitle: 'Tokens, requests and cost',
+                  subtitle: 'Tokens and cost',
                   icon: Icons.bar_chart,
                   onTap: () => adminPushProfile(
                     context,
@@ -376,6 +377,7 @@ class AdminUsagePage extends StatelessWidget {
   Widget build(BuildContext context) => AdminPage(
     title: 'Usage',
     scope: profile.label,
+    pickerMode: WorkspacePickerMode.profiles,
     child: UsageDashboard(key: ValueKey(profile.scope), profile: profile),
   );
 }

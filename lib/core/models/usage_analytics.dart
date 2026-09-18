@@ -82,10 +82,9 @@ class UsageDaily {
 
 class UsageModelGroup {
   final String model;
-  final String provider;
   final List<ModelUsageCost> rows;
-  UsageModelGroup(this.model, this.provider, this.rows);
-  String get id => '$provider/$model';
+  UsageModelGroup(this.model, this.rows);
+  String get id => model;
   UsageTokens get tokens =>
       UsageTokens.sum(rows.map((r) => UsageTokens.fromJson(r.usage)));
   UsageCostSummary get costs => UsageCostSummary(rows);
@@ -103,19 +102,18 @@ class UsageModels {
       throw const FormatException('Model usage is unavailable.');
     }
     final rows = <ModelUsageCost>[];
-    final grouped = <(String, String), List<ModelUsageCost>>{};
+    final grouped = <String, List<ModelUsageCost>>{};
     for (final raw in data['models'] as List) {
       if (raw is! Map<String, dynamic>) {
         throw const FormatException('Invalid model usage.');
       }
       final row = ModelUsageCost.fromUsage(raw, prices);
       rows.add(row);
-      final key = (row.model, '${raw['provider'] ?? 'Provider unavailable'}');
-      (grouped[key] ??= []).add(row);
+      (grouped[row.model] ??= []).add(row);
     }
     final groups = [
       for (final entry in grouped.entries)
-        UsageModelGroup(entry.key.$1, entry.key.$2, entry.value),
+        UsageModelGroup(entry.key, entry.value),
     ]..sort((a, b) => a.id.compareTo(b.id));
     return UsageModels._(rows, groups);
   }

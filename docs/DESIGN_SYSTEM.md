@@ -125,7 +125,8 @@ On 18 September 2026, the owner split the shared screen header into two targets:
 the connection icon and LED open the existing status/retry sheet, while the name
 opens an anchored dropdown matching its displayed scope: connection-only headers
 (including Chats, conversations and Activity) offer connections only; headers
-showing a profile offer connections and profiles. Each target is at least 48 dp.
+showing a profile offer connections and profiles, except Usage, whose dropdown
+offers only profiles following the owner’s 19 September refinement. Each target is at least 48 dp.
 Use the standard Studio popup surface and selected background tint. This applies
 to Chats, conversations, Activity, Administration, Health and administration
 drill-downs. See [workspace selection](design/2026-09-18-workspace-picker.md).

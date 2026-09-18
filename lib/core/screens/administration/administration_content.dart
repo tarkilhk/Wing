@@ -628,7 +628,7 @@ class _HermesAdministrationContentState
     _Destination(
       'Profile health',
       'Usage',
-      'Rolling ranges and per-model detail',
+      'Daily activity and model breakdowns',
       Icons.bar_chart,
       p == null
           ? null

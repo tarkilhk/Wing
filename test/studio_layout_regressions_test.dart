@@ -87,6 +87,8 @@ void main() {
             'model': 'example/long-production-model',
             'provider': 'Example provider',
             'input_tokens': 9007199254740991,
+            'cache_read_tokens': 0,
+            'output_tokens': 0,
             'estimated_cost': 1234567.12345,
           },
         ],
@@ -125,15 +127,15 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('example/long-production-model'));
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.text('9,007,199,254,740,991'),
-        120,
-        scrollable: find
-            .descendant(
-              of: find.byType(ListView),
-              matching: find.byType(Scrollable),
-            )
-            .last,
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.label ==
+                  'example/long-production-model: 9,007,199,254,740,991 tokens',
+        ),
+        findsOneWidget,
       );
       expect(tester.takeException(), isNull);
       await capture(tester, 'usage-${brightness.name}-200-keyboard');

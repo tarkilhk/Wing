@@ -401,15 +401,15 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       status: controller.connectionStatus,
       icon: controller.connection.icon,
       profileNavigation: _profileNavigation,
-      onPickWorkspace: (anchor, {required includeProfiles}) =>
-          unawaited(_pickWorkspace(anchor, includeProfiles: includeProfiles)),
+      onPickWorkspace: (anchor, {required mode}) =>
+          unawaited(_pickWorkspace(anchor, mode: mode)),
       child: Builder(builder: (context) => _buildWorkspace(context)),
     ),
   );
 
   Future<void> _pickWorkspace(
     BuildContext anchor, {
-    required bool includeProfiles,
+    required WorkspacePickerMode mode,
   }) async {
     if (controller.switching) return;
     final choice = await showWorkspacePicker(
@@ -419,7 +419,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       profiles: controller.discovery?.profiles ?? const [],
       profileName: controller.current?.scope.profileName,
       busy: controller.switching,
-      includeProfiles: includeProfiles,
+      mode: mode,
     );
     if (!mounted || !anchor.mounted || choice == null || controller.switching) {
       return;

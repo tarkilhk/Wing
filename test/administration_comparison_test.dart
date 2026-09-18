@@ -37,7 +37,7 @@ void main() {
   });
 
   testWidgets(
-    'usage compares known costs, opens exact details and changes range',
+    'usage compares known costs, leaves model rows passive and changes range',
     (tester) async {
       final fixture = AdministrationDesignFixture();
       await tester.pumpWidget(
@@ -58,21 +58,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Research model'));
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.text('321,000'),
-        120,
-        scrollable: find
-            .descendant(
-              of: find.byType(ListView),
-              matching: find.byType(Scrollable),
-            )
-            .last,
-      );
-      expect(find.text('321,000'), findsOneWidget);
-      await tester.ensureVisible(find.byTooltip('Close details'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Close details'));
-      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsNothing);
       tester
           .state<ScrollableState>(
             find
@@ -133,9 +119,13 @@ void main() {
       await tester.scrollUntilVisible(
         find.text('Actual next task'),
         160,
-        scrollable: find.byWidgetPredicate(
-          (widget) => widget is Scrollable && widget.axisDirection == AxisDirection.down,
-        ).first,
+        scrollable: find
+            .byWidgetPredicate(
+              (widget) =>
+                  widget is Scrollable &&
+                  widget.axisDirection == AxisDirection.down,
+            )
+            .first,
       );
       expect(find.textContaining('1 running'), findsOneWidget);
       expect(find.textContaining('Last listed run'), findsOneWidget);

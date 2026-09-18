@@ -5,6 +5,20 @@ import '../models/hermes_profile.dart';
 import '../theme/wing_theme.dart';
 import 'connection_icon_picker.dart';
 
+enum WorkspacePickerMode {
+  connections,
+  profiles,
+  connectionAndProfile;
+
+  bool get includesConnections => this != profiles;
+  bool get includesProfiles => this != connections;
+  String get label => switch (this) {
+    connections => 'Choose connection',
+    profiles => 'Choose profile',
+    connectionAndProfile => 'Choose connection and profile',
+  };
+}
+
 typedef WorkspaceChoice = ({String id, bool isConnection});
 
 Future<WorkspaceChoice?> showWorkspacePicker(
@@ -14,7 +28,7 @@ Future<WorkspaceChoice?> showWorkspacePicker(
   required List<HermesProfile> profiles,
   required String? profileName,
   required bool busy,
-  required bool includeProfiles,
+  required WorkspacePickerMode mode,
 }) {
   final tokens = WingTokens.of(context);
   final colors = Theme.of(context).colorScheme;
@@ -67,9 +81,7 @@ Future<WorkspaceChoice?> showWorkspacePicker(
   );
   return showMenu<WorkspaceChoice>(
     context: context,
-    semanticLabel: includeProfiles
-        ? 'Choose connection and profile'
-        : 'Choose connection',
+    semanticLabel: mode.label,
     requestFocus: true,
     positionBuilder: (_, _) {
       if (context.mounted) lastPosition = position();
@@ -84,16 +96,18 @@ Future<WorkspaceChoice?> showWorkspacePicker(
       side: BorderSide(color: tokens.border),
     ),
     items: [
-      heading('Connection'),
-      for (final connection in connections)
-        option(
-          (id: connection.id, isConnection: true),
-          connection.label,
-          connection.id == connectionId,
-          icon: connection.icon.glyph,
-        ),
-      if (includeProfiles) ...[
-        const PopupMenuDivider(),
+      if (mode.includesConnections) ...[
+        heading('Connection'),
+        for (final connection in connections)
+          option(
+            (id: connection.id, isConnection: true),
+            connection.label,
+            connection.id == connectionId,
+            icon: connection.icon.glyph,
+          ),
+      ],
+      if (mode.includesProfiles) ...[
+        if (mode.includesConnections) const PopupMenuDivider(),
         heading('Profile'),
         if (profiles.isEmpty) heading('Profiles unavailable'),
         for (final profile in profiles)

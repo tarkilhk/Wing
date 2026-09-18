@@ -6,24 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:url_launcher_platform_interface/link.dart';
-import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 import 'package:wing/core/screens/administration/admin_health_page.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/screens/administration/usage_charts.dart';
 import 'support/administration_fixture.dart';
-
-class _Browser extends UrlLauncherPlatform {
-  final urls = <String>[];
-  bool opens = true;
-  @override
-  LinkDelegate? get linkDelegate => null;
-  @override
-  Future<bool> launchUrl(String url, LaunchOptions options) async {
-    urls.add(url);
-    return opens;
-  }
-}
 
 Map<String, dynamic> _astra() => {
   'model': 'gpt-6-astra',
@@ -97,17 +83,12 @@ void main() {
 
   late AdministrationFixture fixture;
   late List<Map<String, dynamic>> rows;
-  late _Browser browser;
   bool offline = false;
   setUp(() {
     fixture = AdministrationFixture('Claw');
     addTearDown(fixture.server.close);
     rows = [_sol(), _astra()];
     offline = false;
-    browser = _Browser();
-    final previous = UrlLauncherPlatform.instance;
-    UrlLauncherPlatform.instance = browser;
-    addTearDown(() => UrlLauncherPlatform.instance = previous);
     fixture.override = (method, path, query, body) async {
       if (offline) throw StateError('Offline');
       if (path == 'analytics/usage') return dailyData();
@@ -252,7 +233,7 @@ void main() {
   });
 
   testWidgets(
-    'cost and token controls are independent and sources remain accessible',
+    'cost and token controls are independent and model rows are passive',
     (tester) async {
       await show(tester);
       await tap(tester, find.text('Cost').first);
@@ -262,11 +243,8 @@ void main() {
       expect(find.text('USD 1.70'), findsOneWidget);
       await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
       await tap(tester, find.text('gpt-6-astra'));
-      await tap(tester, find.text('OpenAI pricing source'));
-      expect(
-        browser.urls.single,
-        'https://developers.openai.com/api/docs/models/gpt-6-astra',
-      );
+      expect(find.text('Model details'), findsNothing);
+      expect(find.byType(BottomSheet), findsNothing);
       expect(
         fixture.requests.every(
           (r) => r.$1 == 'GET' && r.$3['profile'] == 'personal',
@@ -317,8 +295,8 @@ void main() {
     await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
     expect(find.text('gpt-6-astra'), findsOneWidget);
     await tap(tester, find.text('gpt-6-astra'));
-    expect(find.textContaining('2 recorded contributions'), findsOneWidget);
-    await tap(tester, find.byTooltip('Close details'));
+    expect(find.text('Model details'), findsNothing);
+    expect(find.byType(BottomSheet), findsNothing);
     rows = [
       _sol()..addAll({
         'input_tokens': 1,
@@ -435,18 +413,30 @@ void main() {
     },
   );
 
-  testWidgets('failed browser launch leaves a copyable source', (tester) async {
-    browser.opens = false;
+  testWidgets('one passive row per model combines provider tokens and costs', (
+    tester,
+  ) async {
+    rows = [
+      _astra(),
+      _astra()..addAll({'provider': 'openai', 'estimated_cost': 7}),
+    ];
     await show(tester);
     await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
+    expect(find.text('gpt-6-astra'), findsOneWidget);
+    final tokenSegments = tester
+        .widget<UsageComposition>(find.byType(UsageComposition))
+        .segments;
+    expect(tokenSegments.single.value, 2560000);
+    final color = tokenSegments.single.color;
+    await tap(tester, find.text('Cost').first);
+    final costSegments = tester
+        .widget<UsageComposition>(find.byType(UsageComposition))
+        .segments;
+    expect(costSegments.single.value, 12);
+    expect(costSegments.single.color, color);
     await tap(tester, find.text('gpt-6-astra'));
-    await tap(tester, find.text('OpenAI pricing source'));
-    expect(find.byType(SelectionArea), findsOneWidget);
-    expect(
-      find.text('Could not open the browser. Copy this pricing link:'),
-      findsOneWidget,
-    );
-    expect(tester.takeException(), isNull);
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.text('Model details'), findsNothing);
   });
 
   for (final brightness in Brightness.values) {
@@ -469,11 +459,8 @@ void main() {
         await tap(tester, find.text('Selected period'));
         await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
         await tap(tester, find.text('gpt-6-astra'));
-        await reveal(tester, find.text('Uncached input').last);
+        await reveal(tester, find.text('gpt-6-astra'));
         await snapshot(tester, '${brightness.name}-$scale-breakdown');
-        await reveal(tester, find.text('OpenAI pricing source'));
-        await snapshot(tester, '${brightness.name}-$scale-source');
-        await tap(tester, find.byTooltip('Close details'));
         await reveal(tester, find.text('Refresh'));
         expect(find.text('Refresh').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);

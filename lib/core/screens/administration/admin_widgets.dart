@@ -2,6 +2,7 @@ import 'dart:async';
 export 'admin_navigation.dart';
 import '../../theme/wing_theme.dart';
 import '../../widgets/server_connection_label.dart';
+import '../../widgets/workspace_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/administration_repository.dart';
@@ -14,6 +15,7 @@ ThemeData administrationTheme(ThemeData base) => base;
 class AdminPage extends StatelessWidget {
   final String title;
   final String scope;
+  final WorkspacePickerMode? pickerMode;
   final Widget child;
   final List<Widget> actions;
   final Widget? bottomNavigationBar;
@@ -21,6 +23,7 @@ class AdminPage extends StatelessWidget {
     super.key,
     required this.title,
     required this.scope,
+    this.pickerMode,
     required this.child,
     this.actions = const [],
     this.bottomNavigationBar,
@@ -56,6 +59,7 @@ class AdminPage extends StatelessWidget {
                   ? Text(scope, style: Theme.of(context).textTheme.bodySmall)
                   : ServerConnectionLabel(
                       label: scope,
+                      pickerMode: pickerMode,
                       includeProfiles:
                           scope != ServerConnectionScope.of(context)?.label,
                       status: ServerConnectionScope.of(context),

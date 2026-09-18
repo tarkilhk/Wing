@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 import '../../widgets/server_connection_label.dart';
+import '../../widgets/workspace_picker.dart';
 
 /// Push connection-owned content without changing its captured owner.
 Future<T?> adminPush<T>(BuildContext context, WidgetBuilder builder) =>
@@ -111,12 +112,12 @@ class _AdminRouteState extends State<_AdminRoute> {
             icon: scope.icon,
             onPickWorkspace: scope.onPickWorkspace == null
                 ? null
-                : (anchor, {required includeProfiles}) =>
-                      scope.onPickWorkspace!(
-                        anchor,
-                        includeProfiles:
-                            includeProfiles && widget.followsProfile,
-                      ),
+                : (anchor, {required mode}) => scope.onPickWorkspace!(
+                    anchor,
+                    mode: widget.followsProfile
+                        ? mode
+                        : WorkspacePickerMode.connections,
+                  ),
             profileNavigation: scope.profileNavigation,
             child: page,
           );

@@ -4,7 +4,6 @@ import '../../models/usage_cost.dart';
 import '../../services/administration_repository.dart';
 import '../../services/usage_analytics.dart';
 import '../../theme/wing_theme.dart';
-import 'admin_usage_details.dart';
 import 'admin_widgets.dart';
 import 'usage_charts.dart';
 
@@ -317,7 +316,6 @@ class _UsageDashboardState extends State<UsageDashboard> {
                     ) %
                     colors.length],
             partial: _breakdownCost && group.costs.isPartial,
-            onTap: () => _modelDetails(group),
           ),
         );
       }
@@ -368,73 +366,60 @@ class _UsageDashboardState extends State<UsageDashboard> {
           Semantics(
             label:
                 '${segment.label}: ${_breakdownCost ? formatUsageUsd(segment.value) : '${_number(segment.value)} tokens'}${segment.partial ? ', partial' : ''}',
-            child: InkWell(
-              onTap: segment.onTap,
-              borderRadius: BorderRadius.circular(6),
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 48),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: segment.color,
-                          shape: BoxShape.circle,
-                        ),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 48),
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: segment.color,
+                        shape: BoxShape.circle,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: MediaQuery.textScalerOf(context).scale(16) > 24
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: MediaQuery.textScalerOf(context).scale(16) > 24
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                segment.label,
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                              Text(
+                                '${_value(segment.value, _breakdownCost)}${segment.partial ? ' · partial' : ''}',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            ],
+                          )
+                        : Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
                                   segment.label,
                                   style: Theme.of(context).textTheme.bodyMedium,
                                 ),
-                                Text(
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
                                   '${_value(segment.value, _breakdownCost)}${segment.partial ? ' · partial' : ''}',
+                                  textAlign: TextAlign.end,
                                   style: Theme.of(context).textTheme.bodyMedium,
                                 ),
-                              ],
-                            )
-                          : Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    segment.label,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyMedium,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    '${_value(segment.value, _breakdownCost)}${segment.partial ? ' · partial' : ''}',
-                                    textAlign: TextAlign.end,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyMedium,
-                                  ),
-                                ),
-                              ],
-                            ),
-                    ),
-                    if (segment.onTap != null)
-                      const Padding(
-                        padding: EdgeInsets.only(left: 4),
-                        child: Icon(Icons.chevron_right, size: 18),
-                      ),
-                  ],
-                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -489,8 +474,8 @@ class _UsageDashboardState extends State<UsageDashboard> {
       const SizedBox(height: 8),
       _quiet(
         models?.costs.hasSubscription == true
-            ? 'Subscription usage is valued at published API rates, not billed spend. Base rates exclude cache-write charges and long-context or service-tier adjustments. Tap a model for counts, rates and pricing sources.'
-            : 'Costs are Hermes estimates, not provider invoices. Tap a model for its recorded counts.',
+            ? 'Subscription usage is valued at published API rates, not billed spend. Base rates exclude cache-write charges and long-context or service-tier adjustments.'
+            : 'Costs are Hermes estimates, not provider invoices.',
       ),
       if (models?.costs.isMixed == true) ...[
         const SizedBox(height: 8),
@@ -500,59 +485,6 @@ class _UsageDashboardState extends State<UsageDashboard> {
       ],
     ],
   );
-
-  void _modelDetails(UsageModelGroup group) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (context) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: .65,
-        maxChildSize: .95,
-        builder: (context, controller) => ListView(
-          controller: controller,
-          padding: const EdgeInsets.all(16),
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Model details',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Close details',
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            Text(
-              widget.profile.label,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            if (group.rows.length > 1)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  '${group.rows.length} recorded contributions, including background usage.',
-                ),
-              ),
-            for (final (i, model) in group.rows.indexed)
-              UsageModelDetails(
-                model: model,
-                total: _data?.models?.costs.total,
-                storageKey: PageStorageKey(
-                  'usage-details:${widget.profile.scope.storageNamespace}:$_days:${group.id}:$i',
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _Choice extends StatelessWidget {
@@ -614,14 +546,14 @@ class _ChartHeader extends StatelessWidget {
       onPressed: onGroup,
       child: Row(
         children: [
+          const Icon(Icons.swap_horiz, size: 18),
+          const SizedBox(width: 6),
           Expanded(
             child: Text(
               '$section per ${models ? 'model' : 'token type'}',
               style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
-          const SizedBox(width: 6),
-          const Icon(Icons.swap_horiz, size: 18),
         ],
       ),
     );

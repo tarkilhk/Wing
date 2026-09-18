@@ -39,14 +39,12 @@ class UsageSegment {
   final double? value;
   final Color color;
   final bool partial;
-  final VoidCallback? onTap;
   const UsageSegment({
     required this.id,
     required this.label,
     required this.value,
     required this.color,
     this.partial = false,
-    this.onTap,
   });
 }
 
