@@ -45,23 +45,27 @@ short read-only disclosure; source metadata is shown only when reported.
 
 Health has two groups. Server owns Doctor, security audit and Logs. Its play icon
 starts Doctor and security audit together, without opening their details or a
-confirmation dialog. It is disabled while either diagnostic is starting, running
+confirmation dialog. Opening Health triggers that same run once per screen visit;
+changing profiles, refreshing profile checks, and returning from a detail do not
+restart server diagnostics. It is disabled while either diagnostic is starting, running
 or has an uncertain completion. Each operation retains its own result; a failed
 start does not prevent the other operation from running. There is no Server refresh
 button or runtime-profile label. Diagnostic confirmations and results identify
 the server. Profile uses selection from the shared header,
 a refresh icon beside its heading, four stable rows (Model access, Tools, Connectors,
-Scheduled tasks), and Usage. There is no global health verdict. Optional server
-diagnostics say Not run until explicitly started.
+Scheduled tasks), and Usage. There is no global health verdict. Server diagnostics retain their separate progress and results.
 
 Health owns its profile observations, so opening Administration first is unnecessary.
-Opening Health reads model, sign-in, tool, connector, task and provider-configuration
-metadata. The Profile refresh icon refreshes those reads and explicitly checks provider
-credentials. The check sends no model request, connector test or Doctor/audit operation.
+Opening Health and selecting a profile automatically refresh all four rows:
+model credential resolution, enabled-tool configuration, enabled connector connection
+probes, and scheduled-task errors or uncertain actions. The Profile refresh icon and
+pull-to-refresh repeat the same checks. Returning from provider recovery also checks
+again. Pending refreshes are shared per profile; another profile can refresh immediately,
+and late results remain attached to their captured scope. No model prompt is sent.
 Model access is a passive row directly in Health. It shows credential status,
 model/provider and the check time. There is no model/provider detail destination,
 Change model control, routine account-management shortcut, or row navigation.
-The Profile refresh icon runs the explicit check. A reported provider failure
+The Profile refresh icon repeats the checks. A reported provider failure
 reveals Fix access, which opens the profile's existing account editor; an
 unconfirmed alternate route offers Review access. An incomplete check offers Retry,
 and server authentication rejection offers Review connection. Healthy and unchecked
@@ -79,17 +83,26 @@ editors capture the profile they save to.
 
 The credential check calls only `setup.runtime_check`, scoped to the captured
 canonical profile. Verified against latest stock upstream
-[`f971bbf51298e846834d3d76e18d763223bd58ec`](https://github.com/NousResearch/hermes-agent/blob/f971bbf51298e846834d3d76e18d763223bd58ec/tui_gateway/methods_config.py#L296)
-on 18 September 2026 UTC: without a provider override it resolves the startup model and
+[`783f854b0fb2bb224cedf972b40adfc77e9c818f`](https://github.com/NousResearch/hermes-agent/blob/783f854b0fb2bb224cedf972b40adfc77e9c818f/tui_gateway/methods_config.py#L296)
+on 19 September 2026: without a provider override it resolves the startup model and
 configured fallback chain. This establishes credential resolution, not successful
 inference or available quota. Resolution may use the provider's credential renewal;
-opening the screen never runs it automatically. Only known missing-credential
+opening Health runs this credential check automatically. Only known missing-credential
 messages are described as missing credentials. Other negative results say Provider
 check failed; arbitrary server exception text is not displayed. A missing/mismatched
 success scope or malformed response is incomplete, never success. Transport failures
 are inconclusive, never evidence that credentials are missing.
 The selected model/provider comes from stock [`GET /api/model/info`](https://github.com/NousResearch/hermes-agent/blob/f971bbf51298e846834d3d76e18d763223bd58ec/hermes_cli/web_routers/models.py#L40),
-refreshed before an explicit check and after editing. No backend changes are needed.
+refreshed before each credential check and after editing. No backend changes are needed.
+
+Connector checks use stock [`POST /api/mcp/servers/{name}/test`](https://github.com/NousResearch/hermes-agent/blob/783f854b0fb2bb224cedf972b40adfc77e9c818f/hermes_cli/web_routers/mcp.py#L166)
+with the captured canonical `profile`, verified at the same upstream commit. Hermes
+connects, lists capabilities, then disconnects; a local connector may start its configured
+process. Disabled connectors are skipped. Empty profiles say No connectors configured.
+Failed probes and unavailable/malformed responses remain distinct from successful checks.
+Checks do not save settings or reload running chats. Tools reports enabled toolsets with
+missing setup; tasks reports recorded errors and uncertain actions, without executing tools
+or scheduled jobs.
 
 Configuration does not become unknown just because five minutes pass. Failed
 refreshes retain the previous result and timestamp with a local qualification;
@@ -121,7 +134,11 @@ Run-all contract rechecked on 19 September 2026 against upstream
 and security audit, with no profile argument. Both use `_spawn_action`, which
 calls `spawn_profile_action(None, ...)` in the dashboard's environment. Wing does
 not select a diagnostic profile or claim that profile discovery establishes one.
-Run all composes these existing endpoints entirely in the client.
+Run all composes these existing endpoints entirely in the client. Automatic Health-entry
+starts were reverified against stock upstream `77da057c5e73867a6e94dbc668e7b85d254a063b`
+(`hermes_cli/web_routers/ops.py:503-513`) on 19 September 2026; neither endpoint takes
+a selected profile. The entry trigger belongs to the screen lifecycle, so list scrolling
+and profile changes cannot restart these operations.
 
 Verified on 18 September 2026 against stock upstream
 [`8a492617e1239ab90bd3e3f7794b1e443f37a287`](https://github.com/NousResearch/hermes-agent/commit/8a492617e1239ab90bd3e3f7794b1e443f37a287):

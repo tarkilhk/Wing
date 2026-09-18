@@ -243,7 +243,10 @@ void main() {
       await tester.pumpAndSettle();
       await navigate(tester, AppDestination.chats);
       expect(find.text('Keep this unsent'), findsOneWidget);
-      expect(fixture.calls.length, callsBefore);
+      expect(
+        fixture.calls.skip(callsBefore).map((call) => (call.$1, call.$2)),
+        [(controller.current!.scope.profileName, 'setup.runtime_check')],
+      );
       expect(tester.takeException(), isNull);
     },
   );

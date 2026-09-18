@@ -48,15 +48,16 @@ when the backend establishes it, and do not infer account use from provider name
 The owner-approved 19 September Health update removes runtime-profile metadata
 and replaces Server refresh with Run all diagnostics (play). Doctor and security
 audit use their existing server endpoints, with separate retained progress and
-results. They do not accept the selected mobile profile. Confirmations and result
+results. Opening Health automatically runs both once; profile changes do not rerun
+them. They do not accept the selected mobile profile. Confirmations and result
 headers identify the connection, and Logs no longer requests profile identity.
 
 The owner-approved 18 September Health layout uses Server and Profile groups,
 with no combined health verdict. Doctor, audit and Logs remain server-owned;
 Usage and four observation rows follow the header-selected profile. Unknown
 coverage is local, configuration does not expire after five minutes, and actual
-credential expiration remains visible. The Profile refresh icon explicitly checks access
-without inference. Details show their captured scope and link to the owning editor.
+credential expiration remains visible. All four Profile rows refresh automatically on entry and profile selection.
+The Profile refresh icon repeats credential, tool setup, connector and task checks. Details show their captured scope and link to the owning editor.
 See [Health observations](../ADMINISTRATION.md#health-observations) for the current
 stock API verification and rendering contract.
 

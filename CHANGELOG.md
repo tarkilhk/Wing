@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refresh all four profile health checks automatically when Health opens or the selected profile changes. Run Doctor and Security audit on opening Health, without rerunning them on profile changes.
+
 - Replace Health’s Server refresh with Run all diagnostics for Doctor and Security audit; remove misleading runtime-profile labels.
 
 - Show model access status directly in Health, with recovery actions only when needed. Remove its separate screen, model picker and routine account-management shortcut; keep configuration in Administration.

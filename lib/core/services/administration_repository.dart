@@ -187,6 +187,16 @@ class ProfileAdministration {
     }
   }
 
+  /// A probe does not edit configuration. Keep `ok: false` as an observation
+  /// instead of treating it as a rejected settings write.
+  Future<Map<String, dynamic>> testConnector(String connector) =>
+      server.request(
+        'POST',
+        'mcp/servers/${Uri.encodeComponent(connector)}/test',
+        {'profile': name},
+        const {},
+      );
+
   Future<Map<String, dynamic>> write(
     String method,
     String endpoint, [

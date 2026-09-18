@@ -401,9 +401,37 @@ class AdministrationHealth extends ChangeNotifier {
         'Connector settings are incomplete',
       );
     }
+    if (rows.isEmpty) {
+      return (AdministrationHealthStatus.healthy, 'No connectors configured');
+    }
+    final enabled = rows.where((r) => r['enabled'] == true).toList();
+    if (enabled.isEmpty) {
+      return (AdministrationHealthStatus.healthy, 'All connectors disabled');
+    }
+    final checks = _overview!.connectorChecks;
+    final failed = enabled.where((r) => checks[r['name']] == false).length;
+    if (failed > 0) {
+      return (
+        AdministrationHealthStatus.warning,
+        failed == 1
+            ? '1 connector failed its check'
+            : '$failed connectors failed their checks',
+      );
+    }
+    final unknown = enabled.where((r) => checks[r['name']] == null).length;
+    if (unknown > 0) {
+      return (
+        AdministrationHealthStatus.unknown,
+        unknown == 1
+            ? '1 connector could not be checked'
+            : '$unknown connectors could not be checked',
+      );
+    }
     return (
       AdministrationHealthStatus.healthy,
-      '${rows.length} configured · Connections not tested',
+      enabled.length == 1
+          ? '1 connector passed its check'
+          : '${enabled.length} connectors passed their checks',
     );
   }
 

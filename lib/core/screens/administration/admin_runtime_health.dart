@@ -6,6 +6,57 @@ import '../../services/administration_health.dart';
 import 'admin_operations_page.dart';
 import 'admin_widgets.dart';
 
+Future<bool> _startDiagnostic(
+  BuildContext context,
+  AdministrationHealth health,
+  String path,
+  String title, {
+  bool confirm = true,
+}) async {
+  final generation = health.beginDiagnostic(
+    path,
+    scope: health.server.connectionLabel,
+  );
+  if (generation == null) return false;
+  try {
+    final action = await startAdminOperation(
+      context,
+      health.server,
+      path,
+      title,
+      confirm: confirm,
+    );
+    if (action == null) return false;
+    health.trackDiagnostic(path, action, generation: generation);
+    return true;
+  } finally {
+    health.finishDiagnostic(path, generation);
+  }
+}
+
+/// Shared by Health entry and its Run all control. Profile selection never
+/// invokes this connection-owned operation.
+Future<void> runAllHealthDiagnostics(
+  BuildContext context,
+  AdministrationHealth health,
+) async {
+  if (!context.mounted ||
+      !health.canStartDiagnostic('ops/doctor') ||
+      !health.canStartDiagnostic('ops/security-audit')) {
+    return;
+  }
+  await Future.wait([
+    _startDiagnostic(context, health, 'ops/doctor', 'Doctor', confirm: false),
+    _startDiagnostic(
+      context,
+      health,
+      'ops/security-audit',
+      'Security audit',
+      confirm: false,
+    ),
+  ]);
+}
+
 /// Presents connection-owned observations retained across Health visits.
 class AdminRuntimeHealth extends StatefulWidget {
   const AdminRuntimeHealth({super.key, required this.health});
@@ -49,27 +100,9 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
     String title,
     String scope, {
     required bool openResult,
-    bool confirm = true,
   }) async {
     final controller = health;
-    final generation = controller.beginDiagnostic(path, scope: scope);
-    if (generation == null) return;
-    var started = false;
-    try {
-      final action = await startAdminOperation(
-        context,
-        controller.server,
-        path,
-        title,
-        confirm: confirm,
-      );
-      if (action != null) {
-        controller.trackDiagnostic(path, action, generation: generation);
-        started = true;
-      }
-    } finally {
-      controller.finishDiagnostic(path, generation);
-    }
+    final started = await _startDiagnostic(context, controller, path, title);
     if (started && mounted && identical(controller, health) && openResult) {
       await _result(path, title, scope);
     }
@@ -167,24 +200,6 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
     );
   }
 
-  Future<void> _runAll() async {
-    if (!health.canStartDiagnostic('ops/doctor') ||
-        !health.canStartDiagnostic('ops/security-audit')) {
-      return;
-    }
-    final scope = health.server.connectionLabel;
-    await Future.wait([
-      _run('ops/doctor', 'Doctor', scope, openResult: false, confirm: false),
-      _run(
-        'ops/security-audit',
-        'Security audit',
-        scope,
-        openResult: false,
-        confirm: false,
-      ),
-    ]);
-  }
-
   @override
   Widget build(BuildContext context) {
     final scope = health.server.connectionLabel;
@@ -204,7 +219,9 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
             ),
             IconButton(
               tooltip: 'Run all diagnostics',
-              onPressed: canRunAll ? _runAll : null,
+              onPressed: canRunAll
+                  ? () => runAllHealthDiagnostics(context, health)
+                  : null,
               icon: const Icon(Icons.play_arrow),
             ),
           ],

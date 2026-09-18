@@ -92,7 +92,8 @@ class AdminHealthContent extends StatelessWidget {
                   ProfileModelAccessRow(
                     controller: checks,
                     modelObservation: health.overview?.observations['model'],
-                    refreshing: checkingProfile,
+                    refreshing:
+                        health.overview?.observations['model']?.loading == true,
                     onRetry: () => onCheckProfile?.call(),
                     onManageConnections: onConnections,
                     onFixAccess: () => _fixAccess(context, checks),
@@ -290,14 +291,13 @@ class AdminHealthContent extends StatelessWidget {
     BuildContext context,
     ProfileDiagnosticsController checks,
   ) async {
-    final overview = health.overview;
     await adminPushProfile(
       context,
       profile!,
       (context, profile) => AdminProvidersPage(profile: profile, shared: false),
     );
     checks.invalidate();
-    await overview?.refresh(keys: {'model'});
+    if (context.mounted) await onCheckProfile?.call();
   }
 }
 

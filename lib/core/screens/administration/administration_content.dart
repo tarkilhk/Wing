@@ -20,6 +20,7 @@ import 'admin_settings_page.dart';
 import 'admin_memory_page.dart';
 import 'admin_providers_page.dart';
 import 'admin_health_page.dart';
+import 'admin_runtime_health.dart';
 import 'admin_defaults_page.dart';
 import 'admin_connectors_page.dart';
 import 'admin_tool_setup_page.dart';
@@ -82,7 +83,9 @@ class _HermesAdministrationContentState
   final _healthOverviews = <String, AdministrationOverview>{};
   final _healthTasks = <String, ScheduledTasksController>{};
   final _taskListeners = <String, VoidCallback>{};
-  bool _checkingProfile = false;
+  final _profileRefreshes = <String, Future<void>>{};
+  bool get _checkingProfile =>
+      _profileRefreshes.containsKey(_profile?.scope.storageNamespace);
 
   void _selectHealthProfile() {
     final profile = _profile;
@@ -115,28 +118,38 @@ class _HermesAdministrationContentState
     unawaited(_refreshHealthProfile());
   }
 
-  Future<void> _refreshHealthProfile({bool checkAccess = false}) async {
+  Future<void> _refreshHealthProfile() {
     final key = _profile?.scope.storageNamespace;
     final overview = _healthOverviews[key];
-    if (overview == null) return;
-    final checks = checkAccess ? _checksForCurrentProfile() : null;
-    await Future.wait([
-      overview.refresh(keys: {'model', 'access', 'tools', 'connectors'}),
-      if (_healthTasks[key] case final tasks?) tasks.refresh(),
-      _health.refreshReadiness(),
-    ]);
-    if (checks != null) await checks.check();
+    if (overview == null) return Future.value();
+    if (_profileRefreshes[key] case final pending?) return pending;
+    final checks = _checksForCurrentProfile();
+    final refresh =
+        Future.wait([
+          // Read the selected model before checking its credentials. Connector
+          // probes run independently so a slow service cannot delay model access.
+          () async {
+            await overview.refresh(keys: {'model'});
+            if (mounted && checks != null) await checks.check();
+          }(),
+          overview.refresh(keys: {'access', 'tools'}),
+          overview.refresh(keys: {'connectors'}, testConnectors: true),
+          if (_healthTasks[key] case final tasks?) tasks.refresh(),
+          _health.refreshReadiness(),
+        ]).then<void>((_) {}).whenComplete(() {
+          if (mounted) {
+            setState(() {
+              _profileRefreshes.remove(key);
+            });
+          }
+        });
+    setState(() {
+      _profileRefreshes[key!] = refresh;
+    });
+    return refresh;
   }
 
-  Future<void> _checkProfile() async {
-    if (_checkingProfile) return;
-    setState(() => _checkingProfile = true);
-    try {
-      await _refreshHealthProfile(checkAccess: true);
-    } finally {
-      if (mounted) setState(() => _checkingProfile = false);
-    }
-  }
+  Future<void> _checkProfile() => _refreshHealthProfile();
 
   final _accessChecks = <String, ProfileDiagnosticsController>{};
 
@@ -146,6 +159,11 @@ class _HermesAdministrationContentState
     _healthProfileName = _profile?.name;
     widget.controller.addListener(_workspaceChanged);
     _selectHealthProfile();
+    if (widget.healthOnly) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(runAllHealthDiagnostics(context, _health));
+      });
+    }
   }
 
   void _workspaceChanged() {
