@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
-import '../theme/wing_theme.dart';
 
-import '../services/connection_manager.dart';
 import '../services/administration_health.dart';
-import '../services/profile_gateway.dart';
+import '../services/connection_manager.dart';
 import '../services/profile_workspace_controller.dart';
+import '../theme/wing_theme.dart';
+import 'studio_action_label.dart';
 
-/// Explicit access-check state owned by Administration, independently of routes.
+/// One explicit credential check, retained independently of the detail route.
 class ProfileDiagnosticsController extends ChangeNotifier {
   ProfileDiagnosticsController({
     required ProfileWorkspaceData workspace,
     required String connectionLabel,
-    // Keep ownership private: callers must use updateWorkspace to invalidate checks.
+    // Callers must use updateWorkspace to invalidate a captured check.
     // ignore: prefer_initializing_formals
   }) : _workspace = workspace,
        // ignore: prefer_initializing_formals
@@ -20,53 +20,31 @@ class ProfileDiagnosticsController extends ChangeNotifier {
   ProfileWorkspaceData _workspace;
   String _connectionLabel;
   bool _disposed = false;
+  int _generation = 0;
+  bool _checking = false;
+  DateTime? _checkedAt;
+  _AccessResult _result = _AccessResult.notChecked;
 
   ProfileWorkspaceData get workspace => _workspace;
   String get connectionLabel => _connectionLabel;
 
-  var _dashboard = _DiagnosticResult.notChecked;
-  var _provider = _DiagnosticResult.notChecked;
-  var _runtime = _DiagnosticResult.notChecked;
-  var _checking = false;
-  DateTime? _checkedAt;
-  var _generation = 0;
-
-  AdministrationProfileHealthObservation get healthObservation {
-    final results = [_dashboard, _provider, _runtime];
-    if (results.every(
-      (result) => result.state == _DiagnosticState.notChecked,
-    )) {
-      return AdministrationProfileHealthObservation(_workspace.scope, null);
-    }
-    final failure = results
-        .where((result) => result.state == _DiagnosticState.failed)
-        .firstOrNull;
-    final unknown = results.any(
-      (result) => result.state != _DiagnosticState.ready,
-    );
-    return AdministrationProfileHealthObservation(
-      _workspace.scope,
-      AdministrationHealthFinding(
-        title: 'Access checks',
-        detail:
-            failure?.message ??
-            (_checking
-                ? 'Checking access and provider credentials'
-                : unknown
-                ? 'Access checks are incomplete'
-                : 'Access and provider credentials checked; no model request'),
-        status: failure != null
-            ? AdministrationHealthStatus.failure
-            : unknown
-            ? AdministrationHealthStatus.unknown
-            : AdministrationHealthStatus.healthy,
-        checkedAt: _checkedAt,
-        destination: failure == _provider || failure == _runtime
-            ? 'Access and connectors'
-            : null,
-      ),
-    );
-  }
+  AdministrationProfileHealthObservation get healthObservation =>
+      AdministrationProfileHealthObservation(
+        _workspace.scope,
+        _result == _AccessResult.notChecked && !_checking
+            ? null
+            : AdministrationHealthFinding(
+                title: 'Provider credential check',
+                detail: _checking ? 'Checking provider access…' : _result.title,
+                status: _checking
+                    ? AdministrationHealthStatus.unknown
+                    : _result.status,
+                checkedAt: _checking ? null : _checkedAt,
+                destination: _result.recovery == _Recovery.provider
+                    ? 'Access and connectors'
+                    : null,
+              ),
+      );
 
   void updateWorkspace({
     required ProfileWorkspaceData workspace,
@@ -83,9 +61,7 @@ class ProfileDiagnosticsController extends ChangeNotifier {
     _generation++;
     _checking = false;
     _checkedAt = null;
-    _dashboard = _DiagnosticResult.notChecked;
-    _provider = _DiagnosticResult.notChecked;
-    _runtime = _DiagnosticResult.notChecked;
+    _result = _AccessResult.notChecked;
     notifyListeners();
   }
 
@@ -102,321 +78,233 @@ class ProfileDiagnosticsController extends ChangeNotifier {
     final scope = _workspace.scope;
     final generation = ++_generation;
     _checking = true;
-    _dashboard = _DiagnosticResult.checking;
-    _provider = _DiagnosticResult.checking;
-    _runtime = _DiagnosticResult.checking;
     notifyListeners();
 
-    bool current() =>
-        !_disposed &&
-        generation == _generation &&
-        identical(_workspace.gateway, gateway) &&
-        _workspace.scope == scope;
-
-    void publish(
-      _DiagnosticResult result,
-      void Function(_DiagnosticResult result) apply,
-    ) {
-      if (!current()) return;
-      apply(result);
-      notifyListeners();
-    }
-
-    await Future.wait([
-      _checkDashboard(
-        gateway,
-      ).then((result) => publish(result, (value) => _dashboard = value)),
-      _checkProvider(
-        gateway,
-      ).then((result) => publish(result, (value) => _provider = value)),
-      _checkRuntime(
-        gateway,
-      ).then((result) => publish(result, (value) => _runtime = value)),
-    ]);
-    if (current()) {
-      _checking = false;
-      _checkedAt = DateTime.now();
-      notifyListeners();
-    }
-  }
-
-  Future<_DiagnosticResult> _checkDashboard(ProfileGateway gateway) async {
+    late final _AccessResult result;
     try {
-      await gateway.read('sessions', const {
-        'limit': '1',
-        'offset': '0',
-        'order': 'recent',
-      });
-      return const _DiagnosticResult.ready(
-        'Authenticated dashboard API responded.',
-      );
+      // Stock Hermes 01382698fc32ec7740b6a204d9b7a6abeac74d33:
+      // resolves this profile's startup model and configured fallback chain.
+      // It does not send a prompt or establish model availability / quota.
+      final response = await gateway.call('setup.runtime_check');
+      result =
+          response.containsKey('profile') &&
+              response['profile'] != scope.profileName
+          ? _AccessResult.incomplete
+          : switch (response['ok']) {
+              true when response['profile'] == scope.profileName =>
+                _AccessResult.ready,
+              false => _AccessResult.failure(response['error']),
+              _ => _AccessResult.incomplete,
+            };
     } on DashboardHttpException catch (error) {
-      if (error.statusCode == 401 || error.statusCode == 403) {
-        return const _DiagnosticResult.failed(
-          'Dashboard authentication was rejected. '
-          'Check the address and password in Manage connections.',
-        );
-      }
-      return const _DiagnosticResult.unknown(
-        'Dashboard check is unavailable. '
-        'Check the address, password, and network in Manage connections.',
-      );
+      result = {401, 403}.contains(error.statusCode)
+          ? _AccessResult.signIn
+          : _AccessResult.unavailable;
     } catch (_) {
-      return const _DiagnosticResult.unknown(
-        'Dashboard check is unavailable. '
-        'Check the address, password, and network in Manage connections.',
-      );
+      result = _AccessResult.unavailable;
     }
-  }
-
-  Future<_DiagnosticResult> _checkProvider(ProfileGateway gateway) async {
-    try {
-      final result = await gateway.call('setup.status');
-      return switch (result['provider_configured']) {
-        true => const _DiagnosticResult.ready('Provider is configured.'),
-        false => const _DiagnosticResult.failed(
-          'No provider credential is configured. '
-          'Open provider access to configure this profile.',
-        ),
-        _ => const _DiagnosticResult.unknown(
-          'Provider status was not returned.',
-        ),
-      };
-    } catch (_) {
-      return const _DiagnosticResult.unknown(
-        'Provider status check is unavailable.',
-      );
+    if (_disposed ||
+        generation != _generation ||
+        !identical(_workspace.gateway, gateway) ||
+        _workspace.scope != scope) {
+      return;
     }
-  }
-
-  Future<_DiagnosticResult> _checkRuntime(ProfileGateway gateway) async {
-    try {
-      final result = await gateway.call('setup.runtime_check');
-      return switch (result['ok']) {
-        true => const _DiagnosticResult.ready(
-          'Provider credentials are available.',
-        ),
-        false => const _DiagnosticResult.failed(
-          'Provider credentials are unavailable. '
-          'Check this profile\'s provider and model credentials on the Hermes server.',
-        ),
-        _ => const _DiagnosticResult.unknown(
-          'Runtime readiness was not returned.',
-        ),
-      };
-    } catch (_) {
-      return const _DiagnosticResult.unknown(
-        'Runtime readiness check is unavailable.',
-      );
-    }
+    _result = result;
+    _checkedAt = DateTime.now();
+    _checking = false;
+    notifyListeners();
   }
 }
 
 class ProfileDiagnosticsPanel extends StatelessWidget {
   final ProfileDiagnosticsController controller;
-  final VoidCallback onManageConnections;
-  final VoidCallback? onReviewProviderAccess;
-  final VoidCallback? onReviewConnectors;
+  final VoidCallback? onManageConnections;
+  final VoidCallback onReviewProviderAccess;
 
   const ProfileDiagnosticsPanel({
     super.key,
     required this.controller,
-    required this.onManageConnections,
-    this.onReviewProviderAccess,
-    this.onReviewConnectors,
+    required this.onReviewProviderAccess,
+    this.onManageConnections,
   });
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: controller,
-    builder: (context, _) => _buildChecks(context),
-  );
-
-  Widget _buildChecks(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Access checks',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              controller._checkedAt == null
-                  ? 'No checks completed yet.'
-                  : 'Checked ${TimeOfDay.fromDateTime(controller._checkedAt!).format(context)}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            Text(
-              'Access and credential checks · No model request',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            for (final finding
-                in [
-                  (
-                    label: 'Server access',
-                    result: controller._dashboard,
-                    action: onManageConnections,
-                    actionLabel: 'Review connection',
-                  ),
-                  (
-                    label: 'Provider setup',
-                    result: controller._provider,
-                    action: onReviewProviderAccess,
-                    actionLabel: 'Resolve provider access',
-                  ),
-                  (
-                    label: 'Credential availability',
-                    result: controller._runtime,
-                    action: onReviewProviderAccess,
-                    actionLabel: 'Review credentials',
-                  ),
-                ]..sort(
-                  (a, b) =>
-                      _findingRank(a.result).compareTo(_findingRank(b.result)),
-                )) ...[
-              _DiagnosticRow(label: finding.label, result: finding.result),
-              if (finding.action != null &&
-                  (finding.result.state == _DiagnosticState.failed ||
-                      finding.result.state == _DiagnosticState.unknown))
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: finding.action,
-                    child: Text(finding.actionLabel),
-                  ),
-                ),
-            ],
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.icon(
-                  onPressed: controller._checking ? null : controller.check,
-                  icon: controller._checking
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.health_and_safety_outlined),
-                  label: Text(
-                    controller._dashboard.state == _DiagnosticState.notChecked
-                        ? 'Run checks'
-                        : 'Check again',
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'More health actions',
-                  icon: const Icon(Icons.more_horiz),
-                  onSelected: (action) {
-                    switch (action) {
-                      case 'connections':
-                        onManageConnections();
-                      case 'providers':
-                        onReviewProviderAccess?.call();
-                      case 'connectors':
-                        onReviewConnectors?.call();
-                    }
-                  },
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(
-                      value: 'connections',
-                      child: Text('Manage connections'),
+    builder: (context, _) {
+      final result = controller._result;
+      final checking = controller._checking;
+      final tokens = WingTokens.of(context);
+      final theme = Theme.of(context);
+      final needsProvider = result.recovery == _Recovery.provider;
+      final needsConnection =
+          result.recovery == _Recovery.connection &&
+          onManageConnections != null;
+      final recover = needsProvider || needsConnection;
+      final recoveryAction = needsProvider
+          ? onReviewProviderAccess
+          : onManageConnections;
+      final recoveryLabel = needsProvider
+          ? 'Manage provider access'
+          : 'Review connection';
+      final checkLabel = controller._checkedAt == null
+          ? 'Check provider access'
+          : 'Check again';
+      final color = checking
+          ? theme.colorScheme.primary
+          : switch (result.status) {
+              AdministrationHealthStatus.failure => tokens.danger,
+              AdministrationHealthStatus.warning => tokens.warning,
+              _ => theme.colorScheme.onSurfaceVariant,
+            };
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Semantics(
+                liveRegion: true,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Icon(
+                        checking
+                            ? Icons.sync
+                            : result.status ==
+                                  AdministrationHealthStatus.failure
+                            ? Icons.error_outline
+                            : Icons.key_outlined,
+                        color: color,
+                        size: 22,
+                      ),
                     ),
-                    if (onReviewProviderAccess != null)
-                      const PopupMenuItem(
-                        value: 'providers',
-                        child: Text('Review provider access'),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        checking ? 'Checking provider access…' : result.title,
+                        style: theme.textTheme.titleMedium,
                       ),
-                    if (onReviewConnectors != null)
-                      const PopupMenuItem(
-                        value: 'connectors',
-                        child: Text('Review MCP connectors'),
-                      ),
+                    ),
                   ],
                 ),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                checking
+                    ? 'Asking Hermes to check this profile’s credentials.'
+                    : result.message,
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'No message is sent to a model. Replies and quota aren’t tested.',
+                style: theme.textTheme.bodySmall,
+              ),
+              if (!checking)
+                if (controller._checkedAt case final at?) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '${result.status == AdministrationHealthStatus.unknown ? 'Last attempt' : 'Checked'} '
+                    '${TimeOfDay.fromDateTime(at).format(context)}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: checking
+                    ? null
+                    : recover
+                    ? recoveryAction
+                    : controller.check,
+                child: StudioActionLabel(
+                  checking
+                      ? 'Checking…'
+                      : recover
+                      ? recoveryLabel
+                      : checkLabel,
+                  busy: checking,
+                ),
+              ),
+              const SizedBox(height: 4),
+              TextButton(
+                onPressed: checking
+                    ? null
+                    : recover
+                    ? controller.check
+                    : onReviewProviderAccess,
+                child: Text(recover ? checkLabel : 'Manage provider access'),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
 }
 
-class _DiagnosticRow extends StatelessWidget {
-  final String label;
-  final _DiagnosticResult result;
+enum _Recovery { none, provider, connection }
 
-  const _DiagnosticRow({required this.label, required this.result});
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = WingTokens.of(context);
-    final (icon, color) = switch (result.state) {
-      _DiagnosticState.ready => (Icons.circle, tokens.success),
-      _DiagnosticState.failed => (Icons.error_outline, tokens.danger),
-      _DiagnosticState.unknown => (Icons.help_outline, tokens.warning),
-      _DiagnosticState.checking => (
-        Icons.sync,
-        Theme.of(context).colorScheme.primary,
-      ),
-      _DiagnosticState.notChecked => (
-        Icons.remove_circle_outline,
-        tokens.muted,
-      ),
-    };
-    return ListTile(
-      minTileHeight: 56,
-      minVerticalPadding: 4,
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(
-        icon,
-        color: color,
-        size: result.state == _DiagnosticState.ready ? 12 : 22,
-      ),
-      title: Text(label, style: Theme.of(context).textTheme.titleSmall),
-      subtitle: Text(
-        result.message,
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
-    );
-  }
-}
-
-enum _DiagnosticState { notChecked, checking, ready, failed, unknown }
-
-class _DiagnosticResult {
-  final _DiagnosticState state;
+class _AccessResult {
+  const _AccessResult(this.title, this.message, this.status, this.recovery);
+  final String title;
   final String message;
+  final AdministrationHealthStatus status;
+  final _Recovery recovery;
 
-  const _DiagnosticResult._(this.state, this.message);
-  const _DiagnosticResult.ready(String message)
-    : this._(_DiagnosticState.ready, message);
-  const _DiagnosticResult.failed(String message)
-    : this._(_DiagnosticState.failed, message);
-  const _DiagnosticResult.unknown(String message)
-    : this._(_DiagnosticState.unknown, message);
+  static const notChecked = _AccessResult(
+    'Credentials not checked',
+    'Check whether Hermes has the provider credentials this profile needs.',
+    AdministrationHealthStatus.unknown,
+    _Recovery.none,
+  );
+  static const ready = _AccessResult(
+    'Credentials available',
+    'Hermes can prepare this profile’s model using its configured provider or a fallback.',
+    AdministrationHealthStatus.healthy,
+    _Recovery.none,
+  );
+  static const incomplete = _AccessResult(
+    'Check incomplete',
+    'Hermes didn’t return a result for this profile. Try checking again.',
+    AdministrationHealthStatus.unknown,
+    _Recovery.none,
+  );
+  static const unavailable = _AccessResult(
+    'Couldn’t complete the check',
+    'Wing couldn’t get a result from Hermes. Check your connection, then try again.',
+    AdministrationHealthStatus.unknown,
+    _Recovery.connection,
+  );
+  static const signIn = _AccessResult(
+    'Server access denied',
+    'Hermes rejected Wing’s access. Review the server address and sign-in details.',
+    AdministrationHealthStatus.failure,
+    _Recovery.connection,
+  );
 
-  static const notChecked = _DiagnosticResult._(
-    _DiagnosticState.notChecked,
-    'Not checked.',
-  );
-  static const checking = _DiagnosticResult._(
-    _DiagnosticState.checking,
-    'Checking…',
-  );
+  static _AccessResult failure(Object? error) {
+    // Recognize stock messages without displaying arbitrary exception text,
+    // which can contain keys, credential-file paths or authenticated URLs.
+    if (error == 'No Hermes provider is configured.' ||
+        error is String &&
+            RegExp(
+              r'^No usable credentials found for [a-zA-Z0-9_.-]+\.$',
+            ).hasMatch(error)) {
+      return const _AccessResult(
+        'Provider credentials needed',
+        'Add an account or API key for this profile’s provider, then check again.',
+        AdministrationHealthStatus.failure,
+        _Recovery.provider,
+      );
+    }
+    return const _AccessResult(
+      'Provider check failed',
+      'Hermes couldn’t prepare this profile’s model. Review provider access, then check again.',
+      AdministrationHealthStatus.failure,
+      _Recovery.provider,
+    );
+  }
 }
-
-int _findingRank(_DiagnosticResult result) => switch (result.state) {
-  _DiagnosticState.failed => 0,
-  _DiagnosticState.unknown => 1,
-  _DiagnosticState.checking => 2,
-  _DiagnosticState.notChecked => 3,
-  _DiagnosticState.ready => 4,
-};

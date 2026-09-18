@@ -48,23 +48,6 @@ class AdminHealthContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final findings = health.profileFindings;
-    final access = findings
-        .where(
-          (f) => const [
-            'Provider configuration',
-            'Provider access',
-            'Access checks',
-          ].contains(f.title),
-        )
-        .toList();
-    final accessSummary = [...access]
-      ..sort((a, b) {
-        final severity = _priority(a.status).compareTo(_priority(b.status));
-        return severity != 0
-            ? severity
-            : (b.title == 'Access checks' ? 1 : 0) -
-                  (a.title == 'Access checks' ? 1 : 0);
-      });
     final checked =
         findings.map((f) => f.checkedAt).whereType<DateTime>().toList()..sort();
     return RefreshIndicator(
@@ -124,7 +107,7 @@ class AdminHealthContent extends StatelessWidget {
                 _row(
                   context,
                   'Provider access',
-                  accessSummary.firstOrNull,
+                  accessChecks()?.healthObservation.finding,
                   Icons.key_outlined,
                   () => _access(context),
                 ),
@@ -176,23 +159,16 @@ class AdminHealthContent extends StatelessWidget {
     );
   }
 
-  int _priority(AdministrationHealthStatus status) => switch (status) {
-    AdministrationHealthStatus.failure => 0,
-    AdministrationHealthStatus.warning => 1,
-    AdministrationHealthStatus.unknown => 2,
-    AdministrationHealthStatus.healthy => 3,
-  };
-
   String _summary(String title, AdministrationHealthFinding? finding) {
-    if (finding == null) return 'Not checked';
+    if (finding == null) {
+      return title == 'Provider access'
+          ? 'Credentials not checked'
+          : 'Not checked';
+    }
     if (finding.status != AdministrationHealthStatus.healthy) {
       return finding.detail;
     }
     return switch (title) {
-      'Provider access' =>
-        finding.title == 'Access checks'
-            ? 'Credentials checked'
-            : 'Configuration available',
       'Tools' => 'Enabled tools configured',
       'Scheduled tasks' => 'No tasks need attention',
       _ => finding.detail,
@@ -331,58 +307,26 @@ class AdminHealthContent extends StatelessWidget {
     (context, profile) => ListenableBuilder(
       listenable: health,
       builder: (context, _) {
-        final findings = health.profileName == profile.name
-            ? health.profileFindings
-                  .where(
-                    (f) => const [
-                      'Provider configuration',
-                      'Provider access',
-                      'Access checks',
-                    ].contains(f.title),
-                  )
-                  .toList()
-            : <AdministrationHealthFinding>[];
         return AdminPage(
           title: 'Provider access',
           scope: profile.label,
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              AdminGroup(
-                children: [
-                  for (final finding in findings.where(
-                    (f) => f.title != 'Access checks',
-                  ))
-                    _observation(context, finding),
-                  AdminRow(
-                    title: 'Manage provider access',
-                    subtitle: 'Accounts and credentials',
-                    icon: Icons.key_outlined,
-                    onTap: () => adminPushProfile(
-                      context,
-                      profile,
-                      (context, profile) =>
-                          AdminProvidersPage(profile: profile, shared: false),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (accessChecks() != null && onConnections != null)
+              if (accessChecks() case final checks?)
                 ProfileDiagnosticsPanel(
-                  controller: accessChecks()!,
-                  onManageConnections: onConnections!,
+                  controller: checks,
+                  onManageConnections: onConnections,
                   onReviewProviderAccess: () => adminPushProfile(
                     context,
                     profile,
                     (context, profile) =>
                         AdminProvidersPage(profile: profile, shared: false),
                   ),
-                  onReviewConnectors: () => adminPushProfile(
-                    context,
-                    profile,
-                    (context, profile) => AdminConnectorsPage(profile: profile),
-                  ),
+                )
+              else
+                const AdminNotice(
+                  'Select an available profile to check provider access.',
                 ),
             ],
           ),

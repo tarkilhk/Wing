@@ -51,11 +51,28 @@ diagnostics say Not run until explicitly started.
 
 Health owns its profile observations, so opening Administration first is unnecessary.
 Opening Health reads model, sign-in, tool, connector, task and provider-configuration
-metadata. The Profile refresh icon refreshes those reads and explicitly checks dashboard
-access and credential availability. It sends no model request, connector test,
-Doctor/audit operation or write. Provider access combines configuration, sign-in
-observations and explicit access checks into one row and a detailed recovery page.
+metadata. The Profile refresh icon refreshes those reads and explicitly checks provider
+credentials. The check sends no model request, connector test or Doctor/audit operation.
+Provider access uses one retained credential result in both its list row and detail
+component. Before an explicit check it says Credentials not checked; configuration
+presence and unknown catalog entries do not substitute for this result. The detail
+has one primary action: check, manage provider access after a provider failure, or
+review the connection after a transport failure. Check again is secondary when a
+recovery action is shown. There is no overflow menu or duplicated setup checklist.
+Account-specific expiry and sign-in details remain in Manage provider access.
 Each detail page retains its captured profile and links to the existing editor.
+
+The provider component calls only `setup.runtime_check`, scoped to the captured
+canonical profile. Verified against latest stock upstream
+[`01382698fc32ec7740b6a204d9b7a6abeac74d33`](https://github.com/NousResearch/hermes-agent/blob/01382698fc32ec7740b6a204d9b7a6abeac74d33/tui_gateway/methods_config.py#L296)
+on 18 September 2026: without a provider override it resolves the startup model and
+configured fallback chain. This establishes credential resolution, not successful
+inference or available quota. Resolution may use the provider's credential renewal;
+opening the screen never runs it automatically. Only known missing-credential
+messages are described as missing credentials. Other negative results say Provider
+check failed; arbitrary server exception text is not displayed. A missing/mismatched
+success scope or malformed response is incomplete, never success. Transport failures
+are inconclusive, never evidence that credentials are missing.
 
 Configuration does not become unknown just because five minutes pass. Failed
 refreshes retain the previous result and timestamp with a local qualification;

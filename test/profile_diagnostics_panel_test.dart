@@ -1,4 +1,9 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +13,8 @@ import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profiles_repository.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/widgets/profile_diagnostics_panel.dart';
+import 'package:wing/core/screens/administration/admin_widgets.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 
 class _DiagnosticsHost {
   final reads = <(String, Map<String, String>)>[];
@@ -39,7 +46,7 @@ class _DiagnosticsHost {
               Future.value(
                 method == 'setup.status'
                     ? <String, dynamic>{'provider_configured': true}
-                    : <String, dynamic>{'ok': true},
+                    : <String, dynamic>{'ok': true, 'profile': profile},
               );
         },
       ),
@@ -50,6 +57,8 @@ class _DiagnosticsHost {
 Widget _app(
   ProfileWorkspaceData workspace, {
   VoidCallback? onManage,
+  VoidCallback? onProvider,
+  Brightness brightness = Brightness.light,
   ProfileDiagnosticsController? controller,
   double textScale = 1,
 }) {
@@ -61,106 +70,148 @@ Widget _app(
       );
   if (controller == null) addTearDown(diagnostics.dispose);
   return MaterialApp(
-    home: MediaQuery(
-      data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
-      child: Scaffold(
-        body: SingleChildScrollView(
-          child: ProfileDiagnosticsPanel(
+    debugShowCheckedModeBanner: false,
+    theme: wingTheme(brightness),
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(
+        context,
+      ).copyWith(textScaler: TextScaler.linear(textScale)),
+      child: RepaintBoundary(key: const ValueKey('capture'), child: child!),
+    ),
+    home: AdminPage(
+      title: 'Provider access',
+      scope: 'Claw / work',
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          ProfileDiagnosticsPanel(
             controller: diagnostics,
             onManageConnections: onManage ?? () {},
+            onReviewProviderAccess: onProvider ?? () {},
           ),
-        ),
+        ],
       ),
     ),
   );
 }
 
 void main() {
-  testWidgets('checks the captured profile through exact modern routes', (
+  testWidgets('one scoped check and one provider management action', (
     tester,
   ) async {
     final host = _DiagnosticsHost();
     var managed = false;
     await tester.pumpWidget(
-      _app(host.workspace('work'), onManage: () => managed = true),
+      _app(host.workspace('work'), onProvider: () => managed = true),
     );
     expect(host.reads, isEmpty);
     expect(host.calls, isEmpty);
-
-    await tester.tap(find.text('Run checks'));
+    await tester.tap(find.text('Check provider access'));
     await tester.pumpAndSettle();
-
-    expect(host.reads, hasLength(1));
-    expect(host.reads.single.$1, 'sessions');
-    expect(host.reads.single.$2, {
-      'limit': '1',
-      'offset': '0',
-      'order': 'recent',
-      'profile': 'work',
-    });
-    expect(host.calls, hasLength(2));
-    expect(host.calls[0].$1, 'setup.status');
-    expect(host.calls[0].$2, {'profile': 'work'});
-    expect(host.calls[1].$1, 'setup.runtime_check');
-    expect(host.calls[1].$2, {'profile': 'work'});
-    expect(find.text('Authenticated dashboard API responded.'), findsOneWidget);
-    expect(find.text('Provider is configured.'), findsOneWidget);
-    expect(find.text('Provider credentials are available.'), findsOneWidget);
-
-    await tester.ensureVisible(find.byTooltip('More health actions'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('More health actions'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Manage connections'));
+    expect(host.reads, isEmpty);
+    expect(host.calls, hasLength(1));
+    expect(host.calls.single.$1, 'setup.runtime_check');
+    expect(host.calls.single.$2, {'profile': 'work'});
+    expect(find.text('Credentials available'), findsOneWidget);
+    expect(find.byType(Card), findsOneWidget);
+    expect(find.byType(PopupMenuButton<String>), findsNothing);
+    await tester.tap(find.text('Manage provider access'));
     expect(managed, isTrue);
   });
 
-  testWidgets('keeps false and unavailable partial results distinct', (
+  testWidgets('does not mistake a failed check for missing credentials', (
     tester,
   ) async {
     final host = _DiagnosticsHost()
-      ..onCall = (method, _) async {
-        if (method == 'setup.status') return {'provider_configured': false};
-        throw TimeoutException('secret backend detail');
+      ..onCall = (_, _) async => {
+        'ok': false,
+        'error': 'secret backend detail',
       };
-    await tester.pumpWidget(_app(host.workspace('personal')));
-
-    await tester.tap(find.text('Run checks'));
+    await tester.pumpWidget(_app(host.workspace('work')));
+    await tester.tap(find.text('Check provider access'));
     await tester.pumpAndSettle();
-
-    expect(
-      find.text(
-        'No provider credential is configured. '
-        'Open provider access to configure this profile.',
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.text('Runtime readiness check is unavailable.'),
-      findsOneWidget,
-    );
+    expect(find.text('Provider check failed'), findsOneWidget);
     expect(find.textContaining('secret backend detail'), findsNothing);
+    expect(find.text('Provider credentials needed'), findsNothing);
+    expect(
+      find.widgetWithText(FilledButton, 'Manage provider access'),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
-    'reports authentication rejection without exposing response text',
+    'missing credentials leads to provider access; retry replaces failure',
     (tester) async {
       final host = _DiagnosticsHost()
-        ..onRead = (_, _) =>
-            Future.error(const DashboardHttpException(401, 'sensitive/path'));
-      await tester.pumpWidget(_app(host.workspace('work')));
-
-      await tester.tap(find.text('Run checks'));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text(
-          'Dashboard authentication was rejected. '
-          'Check the address and password in Manage connections.',
-        ),
-        findsOneWidget,
+        ..onCall = (_, _) async => {
+          'ok': false,
+          'error': 'No usable credentials found for openai-codex.',
+        };
+      var managed = false;
+      await tester.pumpWidget(
+        _app(host.workspace('work'), onProvider: () => managed = true),
       );
+      await tester.tap(find.text('Check provider access'));
+      await tester.pumpAndSettle();
+      expect(find.text('Provider credentials needed'), findsOneWidget);
+      await tester.tap(find.text('Manage provider access'));
+      expect(managed, isTrue);
+      host.onCall = (_, _) async => {'ok': true, 'profile': 'work'};
+      await tester.tap(find.text('Check again'));
+      await tester.pumpAndSettle();
+      expect(find.text('Credentials available'), findsOneWidget);
+      expect(find.text('Provider credentials needed'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'connection rejection has its own recovery without leaking response',
+    (tester) async {
+      final host = _DiagnosticsHost()
+        ..onCall = (_, _) async =>
+            throw const DashboardHttpException(401, 'sensitive/path');
+      var managed = false;
+      await tester.pumpWidget(
+        _app(host.workspace('work'), onManage: () => managed = true),
+      );
+      await tester.tap(find.text('Check provider access'));
+      await tester.pumpAndSettle();
+      expect(find.text('Server access denied'), findsOneWidget);
       expect(find.textContaining('sensitive/path'), findsNothing);
+      await tester.tap(find.text('Review connection'));
+      expect(managed, isTrue);
+      expect(find.text('Manage provider access'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'unavailable, malformed and wrong-profile results cannot turn green',
+    (tester) async {
+      final host = _DiagnosticsHost();
+      final workspace = host.workspace('work');
+      final controller = ProfileDiagnosticsController(
+        workspace: workspace,
+        connectionLabel: 'Claw',
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(_app(workspace, controller: controller));
+      host.onCall = (_, _) async => throw TimeoutException('secret');
+      await controller.check();
+      await tester.pumpAndSettle();
+      expect(find.text('Couldn’t complete the check'), findsOneWidget);
+      expect(find.textContaining('Last attempt'), findsOneWidget);
+      for (final response in [
+        {},
+        {'ok': true},
+        {'ok': true, 'profile': 'another'},
+        {'ok': false, 'profile': 'another'},
+      ]) {
+        host.onCall = (_, _) async => Map<String, dynamic>.from(response);
+        await controller.check();
+        await tester.pumpAndSettle();
+        expect(find.text('Check incomplete'), findsOneWidget);
+        expect(find.text('Credentials available'), findsNothing);
+      }
     },
   );
 
@@ -179,7 +230,7 @@ void main() {
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_app(oldWorkspace, controller: controller));
-    await tester.tap(find.text('Run checks'));
+    await tester.tap(find.text('Check provider access'));
     await tester.pump();
 
     final newHost = _DiagnosticsHost();
@@ -194,7 +245,7 @@ void main() {
     runtime.complete({'ok': true});
     await tester.pump();
 
-    expect(find.text('Not checked.'), findsNWidgets(3));
+    expect(find.text('Credentials not checked'), findsOneWidget);
     expect(find.text('Authenticated dashboard API responded.'), findsNothing);
   });
 
@@ -209,12 +260,12 @@ void main() {
       connectionLabel: 'Home server',
     );
     await tester.pumpWidget(_app(workspace, controller: controller));
-    await tester.tap(find.text('Run checks'));
+    await tester.tap(find.text('Check provider access'));
     await tester.pump();
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
     controller.dispose();
 
-    pending.complete({'provider_configured': true, 'ok': true});
+    pending.complete({'profile': 'work', 'ok': true});
     await tester.pump();
     expect(tester.takeException(), isNull);
   });
@@ -230,7 +281,7 @@ void main() {
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_app(workspace, controller: controller));
-    await tester.tap(find.text('Run checks'));
+    await tester.tap(find.text('Check provider access'));
     await tester.pumpAndSettle();
     final checkedLabel = tester
         .widget<Text>(find.textContaining('Checked '))
@@ -243,12 +294,10 @@ void main() {
     );
     await tester.pumpWidget(_app(workspace, controller: controller));
 
-    expect(find.text('Authenticated dashboard API responded.'), findsOneWidget);
-    expect(find.text('Provider is configured.'), findsOneWidget);
-    expect(find.text('Provider credentials are available.'), findsOneWidget);
+    expect(find.text('Credentials available'), findsOneWidget);
     expect(find.text(checkedLabel!), findsOneWidget);
-    expect(host.reads, hasLength(1));
-    expect(host.calls, hasLength(2));
+    expect(host.reads, isEmpty);
+    expect(host.calls, hasLength(1));
   });
 
   testWidgets('pending checks complete while the panel is closed', (
@@ -265,17 +314,17 @@ void main() {
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_app(workspace, controller: controller));
-    await tester.tap(find.text('Run checks'));
+    await tester.tap(find.text('Check provider access'));
     await tester.pump();
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
-    pending.complete({'provider_configured': true, 'ok': true});
+    pending.complete({'profile': 'work', 'ok': true});
     await tester.pump();
     await tester.pumpWidget(_app(workspace, controller: controller));
 
-    expect(find.text('Provider credentials are available.'), findsOneWidget);
+    expect(find.text('Credentials available'), findsOneWidget);
     expect(find.textContaining('Checked '), findsOneWidget);
-    expect(host.reads, hasLength(1));
-    expect(host.calls, hasLength(2));
+    expect(host.reads, isEmpty);
+    expect(host.calls, hasLength(1));
     expect(tester.takeException(), isNull);
   });
 
@@ -293,7 +342,7 @@ void main() {
       );
       addTearDown(controller.dispose);
       await tester.pumpWidget(_app(oldWorkspace, controller: controller));
-      await tester.tap(find.text('Run checks'));
+      await tester.tap(find.text('Check provider access'));
       await tester.pump();
       final newHost = _DiagnosticsHost();
       final newWorkspace = newHost.workspace('work');
@@ -302,34 +351,120 @@ void main() {
         connectionLabel: 'Home server',
       );
       await tester.pumpWidget(_app(newWorkspace, controller: controller));
-      pending.complete({'provider_configured': true, 'ok': true});
+      pending.complete({'profile': 'work', 'ok': true});
       await tester.pump();
 
-      expect(find.text('Not checked.'), findsNWidgets(3));
-      expect(find.text('No checks completed yet.'), findsOneWidget);
+      expect(find.text('Credentials not checked'), findsOneWidget);
+      expect(find.textContaining('Checked '), findsNothing);
       expect(newHost.reads, isEmpty);
       expect(newHost.calls, isEmpty);
-      await tester.tap(find.text('Run checks'));
+      await tester.tap(find.text('Check provider access'));
       await tester.pumpAndSettle();
-      expect(find.text('Provider is configured.'), findsOneWidget);
+      expect(find.text('Credentials available'), findsOneWidget);
     },
   );
 
-  testWidgets('fits a 320 pixel screen with large text', (tester) async {
-    tester.view.physicalSize = const Size(320, 700);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final host = _DiagnosticsHost();
-
-    await tester.pumpWidget(_app(host.workspace('work'), textScale: 2));
-
-    expect(find.text('Access checks'), findsOneWidget);
-    await tester.ensureVisible(find.byTooltip('More health actions'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('More health actions'));
-    await tester.pumpAndSettle();
-    expect(find.text('Manage connections'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+  const capture = bool.fromEnvironment('CAPTURE_PROVIDER_ACCESS');
+  setUpAll(() async {
+    if (!capture) return;
+    for (final entry in {
+      'Roboto': 'roboto-regular.ttf',
+      'MaterialIcons': 'materialicons-regular.otf',
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            File(
+              '/tmp/wing-header-fonts/${entry.value}',
+            ).readAsBytes().then((b) => b.buffer.asByteData()),
+          ))
+          .load();
+    }
   });
+  Future<void> snapshot(WidgetTester tester, String name) async {
+    if (!capture) return;
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(const ValueKey('capture')),
+    );
+    await tester.runAsync(() async {
+      final image = await boundary.toImage(pixelRatio: 1.5);
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      final file = File('build/provider-access-review/$name.png');
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(bytes!.buffer.asUint8List());
+      image.dispose();
+    });
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final state in [
+        'initial',
+        'checking',
+        'ready',
+        'missing',
+        'failed',
+        'offline',
+        'incomplete',
+      ]) {
+        testWidgets('$state ${brightness.name} at $scale', (tester) async {
+          tester.view.physicalSize = Size(scale == 2 ? 320 : 412, 832);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final host = _DiagnosticsHost();
+          final pending = Completer<Map<String, dynamic>>();
+          host.onCall = (_, _) async => switch (state) {
+            'checking' => pending.future,
+            'missing' => {
+              'ok': false,
+              'error': 'No Hermes provider is configured.',
+            },
+            'failed' => {'ok': false, 'error': 'other'},
+            'offline' => throw TimeoutException('offline'),
+            'incomplete' => {},
+            _ => {'ok': true, 'profile': 'work'},
+          };
+          final workspace = host.workspace('work');
+          final controller = ProfileDiagnosticsController(
+            workspace: workspace,
+            connectionLabel: 'Claw',
+          );
+          addTearDown(controller.dispose);
+          if (state != 'initial') {
+            final check = controller.check();
+            if (state != 'checking') await check;
+          }
+          await tester.pumpWidget(
+            _app(
+              workspace,
+              controller: controller,
+              textScale: scale,
+              brightness: brightness,
+            ),
+          );
+          await tester.pump();
+          final name = '$state-${brightness.name}-$scale';
+          await snapshot(tester, name);
+          expect(tester.takeException(), isNull);
+          await tester.ensureVisible(find.byType(TextButton));
+          await tester.pump();
+          await snapshot(tester, '$name-actions');
+          expect(tester.takeException(), isNull);
+          if (state == 'checking') {
+            expect(
+              tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+              isNull,
+            );
+            expect(
+              tester.widget<TextButton>(find.byType(TextButton)).onPressed,
+              isNull,
+            );
+            await controller.check();
+            expect(host.calls, hasLength(1));
+            pending.complete({'ok': true, 'profile': 'work'});
+            await tester.pumpAndSettle();
+          }
+          await tester.pumpWidget(const SizedBox());
+        });
+      }
+    }
+  }
 }

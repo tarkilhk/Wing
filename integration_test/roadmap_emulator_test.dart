@@ -799,36 +799,26 @@ void main() {
     await tester.pageBack();
     await _settle(tester);
     await tester.scrollUntilVisible(
-      find.text('Access checks'),
+      find.text('Provider access'),
       -250,
       scrollable: find.byType(Scrollable).last,
     );
-    await tester.tap(find.text('Access checks'));
+    await tester.tap(find.text('Provider access'));
     await _settle(tester);
     await tester.scrollUntilVisible(
-      find.text('Run checks'),
+      find.text('Check provider access'),
       260,
       scrollable: find.byType(Scrollable).last,
     );
     await _settle(tester);
-    await tester.ensureVisible(find.text('Run checks'));
+    await tester.ensureVisible(find.text('Check provider access'));
     await _settle(tester);
-    await tester.tap(find.text('Run checks'));
+    await tester.tap(find.text('Check provider access'));
     await _settle(tester);
-    expect(find.text('Authenticated dashboard API responded.'), findsOneWidget);
-    expect(
-      find.text(
-        'No provider credential is configured. '
-        'Open provider access to configure this profile.',
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.text('Runtime readiness check is unavailable.'),
-      findsOneWidget,
-    );
+    expect(find.text('Couldn’t complete the check'), findsOneWidget);
+    expect(find.text('Review connection'), findsOneWidget);
     expect(find.textContaining('private roadmap runtime detail'), findsNothing);
-    await captureJourney(tester, 'access-checks');
+    await captureJourney(tester, 'provider-access');
     expect(
       harness.fixture.reads.any(
         (request) =>
@@ -838,13 +828,7 @@ void main() {
             request.$2['order'] == 'recent' &&
             request.$2['profile'] == 'personal',
       ),
-      isTrue,
-    );
-    expect(
-      harness.fixture.administrationRequests
-          .lastWhere((request) => request.$1 == 'setup.status')
-          .$2,
-      {'profile': 'personal'},
+      isFalse,
     );
     expect(
       harness.fixture.administrationRequests

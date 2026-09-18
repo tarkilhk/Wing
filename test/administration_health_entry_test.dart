@@ -59,6 +59,9 @@ class _Fixture {
           get: source.read,
           rpc: (method, params) {
             explicitCalls.add('$method ${scope.profileName}');
+            if (method == 'setup.runtime_check') {
+              return Future.value({'ok': true, 'profile': scope.profileName});
+            }
             return source.call(method, params);
           },
           discover: () async => discovery,
@@ -264,6 +267,26 @@ void main({
         fixture.explicitCalls.where(
           (v) => v == 'setup.runtime_check client-work',
         ),
+        hasLength(1),
+      );
+      expect(find.text('Credentials available'), findsOneWidget);
+      await tester.ensureVisible(find.text('Provider access'));
+      await tester.tap(find.text('Provider access'));
+      await tester.pumpAndSettle();
+      expect(find.text('Credentials available'), findsOneWidget);
+      expect(find.text('Provider configuration detected'), findsNothing);
+      expect(
+        find.text('Provider readiness is not fully observed'),
+        findsNothing,
+      );
+      expect(find.text('Access checks'), findsNothing);
+      expect(find.byType(PopupMenuButton<String>), findsNothing);
+      expect(find.text('Manage provider access'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Credentials available'), findsOneWidget);
+      expect(
+        fixture.explicitCalls.where((v) => v.startsWith('setup.runtime_check')),
         hasLength(1),
       );
       expect(

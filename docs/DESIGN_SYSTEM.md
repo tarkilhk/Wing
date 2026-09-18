@@ -248,7 +248,11 @@ Only actual issues carry warning/error emphasis; configuration icons stay neutra
 Unknown checks are local to their row. Do not invalidate configuration after a
 fixed five-minute timer or imply successful inference from configuration.
 Detail pages use the same gutters, grouped rows and quiet timestamps, with
-specific recovery links to the owning editors. Opening Health performs reads only.
+specific recovery links to the owning editors. Provider access uses one result card:
+plain-language outcome, explanation, quiet check time, and one full-width primary
+action. Recovery takes primary emphasis when needed; Check again becomes a secondary
+text action. Keep the scope in the page header. Do not restore the configuration
+summary, diagnostic checklist or overflow navigation menu alongside this component. Opening Health performs reads only.
 
 Growing select-only values, page titles and large-text field labels must remain
 readable at 320 dp/200%. Keep 48 dp controls and keyboard-safe editor actions.

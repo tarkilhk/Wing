@@ -328,10 +328,7 @@ void main() {
       runtime.complete({'profile': 'default', 'ok': false});
       await checking;
       expect(health.status, AdministrationHealthStatus.failure);
-      expect(
-        health.profileFindings.last.detail,
-        contains('credentials are unavailable'),
-      );
+      expect(health.profileFindings.last.detail, 'Provider check failed');
       await health.refreshReadiness();
       expect(health.status, AdministrationHealthStatus.failure);
 
@@ -373,7 +370,7 @@ void main() {
     now = DateTime.now();
     expect(health.status, AdministrationHealthStatus.unknown);
     expect(health.profileFindings.last.stale, isFalse);
-    expect(health.profileFindings.last.detail, 'Access checks are incomplete');
+    expect(health.profileFindings.last.detail, 'Check incomplete');
   });
 
   test(

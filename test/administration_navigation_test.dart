@@ -576,7 +576,7 @@ void main() {
       await tester.tap(find.text('Provider access'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.byTooltip('More health actions'),
+        find.text('Manage provider access'),
         280,
         scrollable: find
             .byWidgetPredicate(
@@ -585,9 +585,8 @@ void main() {
             .first,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('More health actions'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Review provider access'));
+      expect(find.byType(PopupMenuButton<String>), findsNothing);
+      await tester.tap(find.text('Manage provider access'));
       await tester.pumpAndSettle();
       expect(find.text('Profile access'), findsOneWidget);
       expect(find.text('Server A / personal'), findsOneWidget);

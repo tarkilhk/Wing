@@ -56,6 +56,15 @@ without inference. Details show their captured scope and link to the owning edit
 See [Health observations](../ADMINISTRATION.md#health-observations) for the current
 stock API verification and rendering contract.
 
+The subsequent 18 September provider-access simplification replaces the stacked
+configuration observations and Access checks checklist with one credential-check
+component. Its Health row and detail use the same captured result; unknown catalog
+coverage is left to provider management. A provider failure promotes Manage provider
+access, a connection failure promotes Review connection, and retries remain explicit.
+The overflow menu and MCP shortcut are removed. The current stock runtime check can
+resolve a configured fallback model; it does not test a model reply or quota. See the
+[verified check contract](../ADMINISTRATION.md#health-observations).
+
 Verified against stock upstream `98f758ae7e8db83c2bb9214c3b35adf41df15f03` on 17 September 2026: explicitly profile-scoped `setup.status` observes provider configuration without creating credentials. See the [implementation and source evidence](../ADMINISTRATION.md#health-observations).
 
 ## Edits and state
