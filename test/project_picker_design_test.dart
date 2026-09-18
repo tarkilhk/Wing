@@ -147,7 +147,9 @@ void main() {
           await screenshot(tester, 'projects-${brightness.name}-$scale');
           await tester.tap(find.text('Cancel'));
           await tester.pumpAndSettle();
-          await tester.tap(find.byType(ServerConnectionLabel));
+          await tester.tap(
+            find.byKey(const ValueKey('connection-status-target')),
+          );
           await tester.pumpAndSettle();
           expect(find.text('Connection details'), findsOneWidget);
           expect(
@@ -233,7 +235,7 @@ void main() {
       await tester.tap(selector);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('chat-project-sheet')), findsNothing);
-      await tester.tap(find.byType(ServerConnectionLabel));
+      await tester.tap(find.byKey(const ValueKey('connection-status-target')));
       await tester.pumpAndSettle();
       expect(find.text('Connection details'), findsOneWidget);
       expect(host.moves, isEmpty);

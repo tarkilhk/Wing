@@ -239,6 +239,13 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
           openMonitoringBatterySettings:
               _backgroundMonitoring.openBatterySettings,
           onConnections: openConnections,
+          savedConnections: widget.connManager.getConnections,
+          onSelectConnection: (connection, destination) async {
+            await _homeKey.currentState?.selectWorkspaceConnection(
+              connection,
+              destination,
+            );
+          },
           onPreferencesChanged: refreshPreferences,
         ),
       );
@@ -543,6 +550,15 @@ class HomeScreenState extends State<HomeScreen> {
   /// restoring connections without restarting the process.
   void refreshConnections() => _refresh();
 
+  Future<void> selectWorkspaceConnection(
+    SavedConnection connection,
+    AppDestination destination,
+  ) => _navigateToWorkspace(
+    connection,
+    destination: destination,
+    replaceWorkspace: true,
+  );
+
   void showConnections() {
     if (mounted) setState(() => _destination = AppDestination.connections);
   }
@@ -823,6 +839,7 @@ class HomeScreenState extends State<HomeScreen> {
     SavedConnection conn, {
     AppDestination destination = AppDestination.chats,
     AndroidSharePayload? sharedPayload,
+    bool replaceWorkspace = false,
   }) async {
     if (_opening || (_reviewingShare && sharedPayload == null)) return;
     setState(() => _opening = true);
@@ -923,7 +940,7 @@ class HomeScreenState extends State<HomeScreen> {
         ? widget.launchIntents?.takePendingAction()
         : null;
     final initialQuickChat = launchAction == AndroidLaunchAction.quickChat;
-    if (launchAction != null) {
+    if (launchAction != null || replaceWorkspace) {
       final departingRoutes = <Future<dynamic>>[];
       setState(() => _opening = true);
       Navigator.of(context).popUntil((route) {
@@ -944,6 +961,8 @@ class HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(
         builder: (_) => ProfileWorkspaceScreen(
           controller: controller,
+          savedConnections: widget.connManager.getConnections,
+          onSelectConnection: selectWorkspaceConnection,
           onCapturePhoto: widget.shareIntents == null
               ? null
               : (key) => widget.shareIntents!.capturePhoto(key.toJson()),

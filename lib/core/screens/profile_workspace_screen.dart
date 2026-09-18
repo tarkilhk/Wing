@@ -1,5 +1,7 @@
 import '../services/workspace_connection_failure.dart';
 import '../widgets/server_connection_label.dart';
+import '../widgets/workspace_picker.dart';
+import '../models/connection.dart';
 import '../widgets/studio_action_label.dart';
 import '../widgets/studio_error.dart';
 import '../widgets/workspace_connection_status.dart';
@@ -72,6 +74,9 @@ class ProfileWorkspaceScreen extends StatefulWidget {
   final ValueListenable<BackgroundMonitoringState>? backgroundMonitoringState;
   final Future<void> Function()? openMonitoringBatterySettings;
   final VoidCallback? onConnections;
+  final List<SavedConnection> Function()? savedConnections;
+  final Future<void> Function(SavedConnection, AppDestination)?
+  onSelectConnection;
   final VoidCallback? onPreferencesChanged;
   final Future<void> Function(ProfileSessionKey)? onCapturePhoto;
   final AppDestination initialDestination;
@@ -85,6 +90,8 @@ class ProfileWorkspaceScreen extends StatefulWidget {
     this.backgroundMonitoringState,
     this.openMonitoringBatterySettings,
     this.onConnections,
+    this.savedConnections,
+    this.onSelectConnection,
     this.onPreferencesChanged,
     this.onCapturePhoto,
     this.initialDestination = AppDestination.chats,
@@ -389,9 +396,66 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     ),
     child: ServerConnectionScope(
       status: controller.connectionStatus,
+      icon: controller.connection.icon,
+      onPickWorkspace: (anchor) => unawaited(_pickWorkspace(anchor)),
       child: Builder(builder: (context) => _buildWorkspace(context)),
     ),
   );
+
+  Future<void> _pickWorkspace(BuildContext anchor) async {
+    if (controller.switching) return;
+    final choice = await showWorkspacePicker(
+      anchor,
+      connections: widget.savedConnections?.call() ?? [controller.connection],
+      connectionId: controller.connection.id,
+      profiles: controller.discovery?.profiles ?? const [],
+      profileName: controller.current?.scope.profileName,
+      busy: controller.switching,
+    );
+    if (!mounted || choice == null || controller.switching) return;
+    if (choice.isConnection && choice.id == controller.connection.id) return;
+    if (!choice.isConnection &&
+        choice.id == controller.current?.scope.profileName) {
+      return;
+    }
+    // Editors retain their captured owner. Respect their pending-edit guards
+    // before leaving the drill-down and changing workspace at the section root.
+    final navigator = Navigator.of(context);
+    final root = ModalRoute.of(context);
+    while (mounted) {
+      Route<dynamic>? top;
+      navigator.popUntil((route) {
+        top = route;
+        return true;
+      });
+      if (top == root) break;
+      if (top == null || top!.popDisposition != RoutePopDisposition.pop) {
+        await navigator.maybePop();
+        return;
+      }
+      navigator.pop();
+    }
+    if (!mounted) return;
+    _cancelVoice();
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (choice.isConnection) {
+      final connection = widget.savedConnections
+          ?.call()
+          .where((connection) => connection.id == choice.id)
+          .firstOrNull;
+      if (connection != null && widget.onSelectConnection != null) {
+        await _run(() => widget.onSelectConnection!(connection, _destination));
+      }
+    } else {
+      controller.cancelNotificationOpen();
+      await _run(() async {
+        await controller.switchProfile(
+          choice.id,
+          resetNavigation: _destination == AppDestination.chats,
+        );
+      });
+    }
+  }
 
   Widget _buildWorkspace(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([controller, _voiceInput, _voiceOutput]),
@@ -2209,6 +2273,8 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 alignment: Alignment.centerLeft,
                 child: ServerConnectionLabel(
                   label: controller.connection.label,
+                  icon: controller.connection.icon,
+                  suffix: controller.current?.scope.profileName,
                   status: controller.connectionStatus,
                 ),
               ),

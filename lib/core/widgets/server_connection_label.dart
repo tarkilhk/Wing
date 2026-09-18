@@ -7,20 +7,27 @@ import 'studio_error.dart';
 
 class ServerConnectionScope extends InheritedWidget {
   final ServerConnectionStatus status;
+  final ValueChanged<BuildContext>? onPickWorkspace;
+  final ConnectionIcon? icon;
   const ServerConnectionScope({
     super.key,
     required this.status,
+    this.onPickWorkspace,
+    this.icon,
     required super.child,
   });
-  static ServerConnectionStatus? of(BuildContext context) => context
-      .dependOnInheritedWidgetOfExactType<ServerConnectionScope>()
-      ?.status;
+  static ServerConnectionScope? scopeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<ServerConnectionScope>();
+  static ServerConnectionStatus? of(BuildContext context) =>
+      scopeOf(context)?.status;
   @override
   bool updateShouldNotify(ServerConnectionScope oldWidget) =>
-      status != oldWidget.status;
+      status != oldWidget.status ||
+      onPickWorkspace != oldWidget.onPickWorkspace ||
+      icon != oldWidget.icon;
 }
 
-/// The server identity and its status form one accessible details target.
+/// Independent status and workspace-selection targets shared by screen headers.
 class ServerConnectionLabel extends StatelessWidget {
   final ServerConnectionStatus? status;
   final String label;
@@ -39,58 +46,100 @@ class ServerConnectionLabel extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
+    final scope = ServerConnectionScope.scopeOf(context);
+    final effectiveIcon = icon ?? scope?.icon ?? ConnectionIcon.server;
+    final identity =
+        '$label${suffix == null || suffix!.isEmpty ? '' : ' · $suffix'}';
     void openDetails() => showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (context) => _ConnectionDetails(label: label, status: status),
     );
-    Widget labelBody() => Semantics(
-      button: true,
-      label:
-          '$label, ${status?.description ?? 'Not checked'}. Connection details',
-      focusable: true,
-      onTap: openDetails,
-      excludeSemantics: true,
-      child: InkWell(
-        borderRadius: WingRadius.control,
-        onTap: openDetails,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
-          child: Align(
-            alignment: alignment,
-            widthFactor: 1,
-            heightFactor: 1,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icon != null) ...[
-                  Icon(
-                    icon!.glyph,
-                    size: 16,
-                    color:
-                        style?.color ??
-                        Theme.of(context).textTheme.bodySmall?.color,
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                _ConnectionLed(
-                  phase: status?.phase ?? ServerConnectionPhase.unchecked,
-                ),
-                const SizedBox(width: 16),
-                Flexible(
-                  child: Text(
-                    '$label${suffix == null || suffix!.isEmpty ? '' : ' · $suffix'}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: style ?? Theme.of(context).textTheme.bodySmall,
+    Widget labelBody() => Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          key: const ValueKey('connection-status-target'),
+          button: true,
+          label:
+              '$label, ${status?.description ?? 'Not checked'}. Connection details',
+          focusable: true,
+          onTap: openDetails,
+          excludeSemantics: true,
+          child: Tooltip(
+            message: 'Connection details',
+            child: InkWell(
+              borderRadius: WingRadius.control,
+              onTap: openDetails,
+              child: SizedBox(
+                width: 48,
+                height: 48,
+                child: Align(
+                  alignment: alignment,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        effectiveIcon.glyph,
+                        size: 16,
+                        color:
+                            style?.color ??
+                            Theme.of(context).textTheme.bodySmall?.color,
+                      ),
+                      const SizedBox(width: 8),
+                      _ConnectionLed(
+                        phase: status?.phase ?? ServerConnectionPhase.unchecked,
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ),
-      ),
+        Flexible(
+          child: Builder(
+            builder: (anchor) => Semantics(
+              label: '$identity. Choose connection and profile',
+              button: true,
+              enabled: scope?.onPickWorkspace != null,
+              excludeSemantics: true,
+              onTap: scope?.onPickWorkspace == null
+                  ? null
+                  : () => scope!.onPickWorkspace!(anchor),
+              child: Tooltip(
+                message: 'Choose connection and profile',
+                child: InkWell(
+                  key: const ValueKey('workspace-picker-target'),
+                  borderRadius: WingRadius.control,
+                  onTap: scope?.onPickWorkspace == null
+                      ? null
+                      : () => scope!.onPickWorkspace!(anchor),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      minHeight: 48,
+                      minWidth: 48,
+                    ),
+                    child: Align(
+                      alignment: alignment,
+                      widthFactor: 1,
+                      heightFactor: 1,
+                      child: Text(
+                        identity,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: style ?? Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
     return status == null
         ? labelBody()

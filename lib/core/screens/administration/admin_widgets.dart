@@ -470,12 +470,17 @@ Future<bool> adminConfirm(
     false;
 
 Future<void> adminPush(BuildContext context, Widget page) {
-  final status = ServerConnectionScope.of(context);
+  final scope = ServerConnectionScope.scopeOf(context);
   return Navigator.of(context).push(
     MaterialPageRoute<void>(
-      builder: (_) => status == null
+      builder: (_) => scope == null
           ? page
-          : ServerConnectionScope(status: status, child: page),
+          : ServerConnectionScope(
+              status: scope.status,
+              icon: scope.icon,
+              onPickWorkspace: scope.onPickWorkspace,
+              child: page,
+            ),
     ),
   );
 }

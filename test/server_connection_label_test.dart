@@ -31,7 +31,9 @@ void main() {
     );
     final semantics = tester.ensureSemantics();
     expect(
-      tester.getSemantics(find.byType(ServerConnectionLabel)),
+      tester.getSemantics(
+        find.byKey(const ValueKey('connection-status-target')),
+      ),
       matchesSemantics(
         label: 'Claw, Disconnected. Connection details',
         isButton: true,
@@ -40,7 +42,7 @@ void main() {
       ),
     );
     semantics.dispose();
-    await tester.tap(find.byType(ServerConnectionLabel));
+    await tester.tap(find.byKey(const ValueKey('connection-status-target')));
     await tester.pumpAndSettle();
     expect(find.text('Disconnected'), findsOneWidget);
     await tester.tap(find.text('Retry connection'));
@@ -107,14 +109,16 @@ void main() {
         expect(led.left - icon.right, 8);
         expect(name.left - led.right, 16);
         expect(
-          tester.getSize(find.byType(InkWell)).height,
+          tester.getSize(find.byType(InkWell).first).height,
           greaterThanOrEqualTo(48),
         );
         final fade = tester.widget<FadeTransition>(
           find.byType(FadeTransition).last,
         );
         expect(fade.opacity.value, 1);
-        await tester.tap(find.byType(ServerConnectionLabel));
+        await tester.tap(
+          find.byKey(const ValueKey('connection-status-target')),
+        );
         await tester.pumpAndSettle();
         expect(find.text('Server access'), findsOneWidget);
         expect(find.text('Live chat'), findsOneWidget);

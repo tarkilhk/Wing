@@ -121,6 +121,13 @@ On 15 September 2026, the owner replaced the full-width New chat shelf with a 56
 
 Use 16 dp page gutters, a 4 dp spacing grid, 6 dp action corners, 8 dp group/composer corners, 24-28 sp page titles, 16 sp body text and 12-13 sp metadata. Primary action paint can be about 40 dp high inside a minimum 48 dp touch area. Text scaling must allow rows and controls to grow. Keep established compact activity density; improve touch areas without adding visible card padding.
 
+On 18 September 2026, the owner split the shared screen header into two targets:
+the connection icon and LED open the existing status/retry sheet, while the name
+opens an anchored connection/profile dropdown. Each target is at least 48 dp.
+Use the standard Studio popup surface and selected background tint. This applies
+to Chats, conversations, Activity, Administration, Health and administration
+drill-downs. See [workspace selection](design/2026-09-18-workspace-picker.md).
+
 Use Android's Roboto sans typography explicitly across component themes and monospace for code. Keep the existing compact Activity geometry. Its tabs, badges and disclosures are deliberate density exceptions to the general control dimensions.
 
 ## Selection controls
