@@ -147,12 +147,19 @@ void main() {
       );
       await tester.pumpAndSettle();
       await testConnection(tester);
+      expect(find.text('Test failed'), findsOneWidget);
+      expect(
+        find.textContaining('OAuth authentication required'),
+        findsNothing,
+      );
+      await tester.tap(find.text('Failure details'));
+      await tester.pumpAndSettle();
       expect(
         find.textContaining('OAuth authentication required'),
         findsOneWidget,
       );
       expect(find.text('The server rejected this change.'), findsNothing);
-      expect(find.textContaining('Test succeeded'), findsNothing);
+      expect(find.textContaining('Test passed'), findsNothing);
       final request = fixture.requests.singleWhere((r) => r.$1 == 'POST');
       expect(request.$2, 'mcp/servers/aspire/test');
       expect(request.$3, {'profile': 'personal'});
@@ -233,36 +240,69 @@ void main() {
     );
     await tester.pumpAndSettle();
     await testConnection(tester);
-    expect(find.textContaining('Test succeeded'), findsOneWidget);
+    expect(find.text('Test passed'), findsOneWidget);
+    expect(find.text('fixture_tool'), findsNothing);
+    await tester.tap(find.text('Available tools (1)'));
+    await tester.pumpAndSettle();
+    expect(find.text('fixture_tool'), findsOneWidget);
     response.addAll({
       'ok': false,
       'error': 'Connection timed out.',
       'tools': [],
     });
     await testConnection(tester);
+    expect(find.text('Test failed'), findsOneWidget);
+    expect(find.text('Available tools (1)'), findsNothing);
+    expect(find.textContaining('Connection timed out.'), findsNothing);
+    await tester.tap(find.text('Failure details'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('Connection timed out.'), findsOneWidget);
-    expect(find.textContaining('Test succeeded'), findsNothing);
+    expect(find.textContaining('Test passed'), findsNothing);
     expect(find.text('fixture_tool'), findsNothing);
   });
 
   for (final brightness in Brightness.values) {
     for (final enlarged in [false, true]) {
-      for (final operation in ['test', 'signin', 'reload']) {
+      for (final operation in [
+        'test',
+        'signin',
+        'reload',
+        'tools',
+        'tools-open',
+      ]) {
         final signIn = operation == 'signin';
         final reload = operation == 'reload';
+        final success = operation.startsWith('tools');
         final name =
             '$operation-${brightness.name}-${enlarged ? 'large' : 'normal'}';
-        testWidgets('MCP failure layout $name', (tester) async {
+        testWidgets('MCP layout $name', (tester) async {
           tester.view.physicalSize = Size(enlarged ? 320 : 390, 844);
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
           final fixture = fixtureWith({
-            if (!signIn) 'ok': false,
+            if (!signIn) 'ok': success,
             'flow_id': 'fixture-flow',
             'status': 'error',
             'error':
                 'OAuth discovery failed: HTTP 404 at https://example.test/mcp.',
-            'tools': [],
+            'tools': success
+                ? [
+                    {
+                      'name': 'get_accounting_settings',
+                      'description':
+                          'Read accounting settings for this business.',
+                    },
+                    {
+                      'name': 'list_chart_of_accounts',
+                      'description':
+                          'List accounts and their codes, names and categories.',
+                    },
+                    {
+                      'name': 'list_journals',
+                      'description': 'List journal entries for this business.',
+                    },
+                  ]
+                : [],
             'servers': [],
           });
           if (reload || signIn) {
@@ -319,14 +359,39 @@ void main() {
           } else {
             await testConnection(tester);
           }
-          if (!reload) {
+          if (success) {
+            expect(find.text('Test passed'), findsOneWidget);
+            expect(find.text('get_accounting_settings'), findsNothing);
+            if (operation == 'tools-open') {
+              await tester.scrollUntilVisible(
+                find.text('Available tools (3)'),
+                100,
+              );
+              await tester.tap(find.text('Available tools (3)'));
+              await tester.pumpAndSettle();
+              expect(find.text('get_accounting_settings'), findsOneWidget);
+            }
+          } else if (!reload) {
+            if (!signIn) {
+              await tester.scrollUntilVisible(
+                find.text('Failure details'),
+                100,
+              );
+              await tester.tap(find.text('Failure details'));
+              await tester.pumpAndSettle();
+            }
             await tester.scrollUntilVisible(
               find.textContaining('OAuth discovery failed'),
               -200,
             );
             await tester.pumpAndSettle();
           }
-          expect(find.textContaining('OAuth discovery failed'), findsOneWidget);
+          if (!success) {
+            expect(
+              find.textContaining('OAuth discovery failed'),
+              findsOneWidget,
+            );
+          }
           expect(tester.takeException(), isNull);
           if (capture) {
             final boundary = tester.renderObject<RenderRepaintBoundary>(

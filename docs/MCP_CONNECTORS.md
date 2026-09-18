@@ -64,6 +64,21 @@ Neither is presented as native remote sign-in support. Users return to Test
 connection after external login, and can explicitly reload server connectors to
 adopt credentials in existing sessions.
 
+## Connection results
+
+Connector detail shows a neutral untested state, a spinner while testing, and a
+colored dot with Test passed or Test failed afterward. Available tools (count)
+expands the returned tool names and descriptions; failure reasons are retained
+under Failure details. Each fresh test clears the previous result and starts
+with disclosures collapsed. These are explicit test observations, not cached
+runtime health. The screen no longer repeats cached configuration status or
+prompt/resource counts beside the test result.
+
+A separate result card was compared with inline status above the actions. Inline
+status keeps Test connection and Sign in close, avoids a second context card,
+and leaves tools one tap away. The tool and failure disclosures are inspected
+in both themes at normal size and at 320 dp with 200% text.
+
 ## Design and validation
 
 The task is to add a connector and authorize access for the selected profile.
@@ -83,7 +98,7 @@ storage, duplicate rejection, input validation and the Aspire preset.
 `mcp_setup_layout_test.dart` renders both new screens at 390 dp and at 320 dp with
 200% text in both themes, checking action reachability.
 
-These tests establish client behavior against the verified wire contract, not
-successful Aspire authorization. Aspire advertises PKCE and dynamic registration;
-its callback allowlist is not public. A user-completed Aspire login on the actual
-deployed Hermes is still needed to verify provider acceptance.
+These tests establish client behavior against the verified wire contract. On
+18 September 2026, the user confirmed successful Aspire sign-in and connection
+testing on their deployed Hermes and phone. Aspire advertises PKCE and dynamic
+registration; its callback allowlist is not public.

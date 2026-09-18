@@ -7,6 +7,7 @@ import '../../services/administration_repository.dart';
 import '../../services/mcp_error.dart';
 import '../../services/mcp_oauth.dart';
 import '../../services/ws_client.dart';
+import '../../theme/wing_theme.dart';
 import 'admin_widgets.dart';
 import 'admin_mcp_setup_page.dart';
 
@@ -164,11 +165,11 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
   bool _busy = false;
   String? _error;
   Map<String, dynamic>? _probe;
-  String _status = 'No runtime status available';
+  String? _testFailure;
+  bool _testing = false;
   @override
   void initState() {
     super.initState();
-    _loadStatus();
     if (widget.signInOnOpen) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _signIn(autoStart: true);
@@ -185,22 +186,8 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
       setState(() {
         _error = null;
         _probe = null;
+        _testFailure = null;
       });
-      _loadStatus();
-    }
-  }
-
-  Future<void> _loadStatus() async {
-    try {
-      final result = await _profile.rpc('mcp.servers.status');
-      final row = administrationRows(
-        result['servers'],
-      ).where((r) => r['name'] == _name).firstOrNull;
-      if (mounted && row?['status'] is String) {
-        setState(() => _status = row!['status'] as String);
-      }
-    } catch (_) {
-      /* Configuration remains readable without the RPC sidecar. */
     }
   }
 
@@ -215,6 +202,8 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
     }
     setState(() {
       _busy = true;
+      _testing = true;
+      _testFailure = null;
       _error = null;
       _probe = null;
     });
@@ -230,14 +219,19 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
     } catch (e) {
       if (mounted) {
         setState(
-          () => _error = mcpErrorMessage(
+          () => _testFailure = mcpErrorMessage(
             e is AdministrationFailure ? e.serverError : null,
             summary: 'Connection test failed.',
           ),
         );
       }
     }
-    if (mounted) setState(() => _busy = false);
+    if (mounted) {
+      setState(() {
+        _busy = false;
+        _testing = false;
+      });
+    }
   }
 
   Future<void> _remove() async {
@@ -274,56 +268,103 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
   }
 
   @override
-  Widget build(BuildContext context) => AdminPage(
-    title: _name,
-    scope: _profile.label,
-    child: ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text(_status),
-        const AdminNotice(
-          'Cached observation. Test performs a new connection.',
-        ),
-        if (_busy) const LinearProgressIndicator(),
-        if (_error != null) AdminNotice.error(_error!),
-        Wrap(
-          spacing: 8,
-          children: [
-            FilledButton(
-              onPressed: _busy ? null : _test,
-              child: const Text('Test connection'),
-            ),
-            if (widget.row['auth'] == 'oauth')
-              OutlinedButton(
-                onPressed: _busy ? null : _signIn,
-                child: const Text('Sign in'),
+  Widget build(BuildContext context) {
+    final tokens =
+        Theme.of(context).extension<WingTokens>() ??
+        (Theme.of(context).brightness == Brightness.dark
+            ? WingTokens.dark()
+            : WingTokens.light());
+    final tools = _probe == null
+        ? <Map<String, dynamic>>[]
+        : administrationRows(_probe!['tools']);
+    final status = _testing
+        ? 'Testing connection…'
+        : _testFailure != null
+        ? 'Test failed'
+        : _probe != null
+        ? 'Test passed'
+        : 'Not tested';
+    final color = _testFailure != null
+        ? tokens.danger
+        : _probe != null
+        ? tokens.success
+        : tokens.muted;
+    return AdminPage(
+      title: _name,
+      scope: _profile.label,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Semantics(
+            liveRegion: true,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Row(
+                children: [
+                  if (_testing)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    Icon(Icons.circle, size: 12, color: color),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(status)),
+                ],
               ),
-          ],
-        ),
-        if (widget.row['auth'] == 'oauth' && _error != null)
-          const AdminNotice(
-            'Complete Sign in, then test this connector again.',
-          ),
-        if (_probe != null) ...[
-          AdminNotice(
-            'Test succeeded · ${_probe!['prompts'] ?? 0} prompts · ${_probe!['resources'] ?? 0} resources',
-          ),
-          for (final tool in administrationRows(_probe!['tools']))
-            ListTile(
-              title: Text('${tool['name']}'),
-              subtitle: Text('${tool['description'] ?? ''}'),
             ),
+          ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton(
+                onPressed: _busy ? null : _test,
+                child: const Text('Test connection'),
+              ),
+              if (widget.row['auth'] == 'oauth')
+                OutlinedButton(
+                  onPressed: _busy ? null : _signIn,
+                  child: const Text('Sign in'),
+                ),
+            ],
+          ),
+          if (_testFailure != null)
+            ExpansionTile(
+              key: ValueKey(_testFailure),
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Failure details'),
+              children: [AdminNotice.error(_testFailure!)],
+            ),
+          if (_probe != null)
+            ExpansionTile(
+              key: ObjectKey(_probe),
+              tilePadding: EdgeInsets.zero,
+              title: Text('Available tools (${tools.length})'),
+              children: [
+                if (tools.isEmpty)
+                  const AdminNotice('This connection returned no tools.'),
+                for (final tool in tools)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('${tool['name']}'),
+                    subtitle: '${tool['description'] ?? ''}'.isEmpty
+                        ? null
+                        : Text('${tool['description']}'),
+                  ),
+              ],
+            ),
+          if (_error != null) AdminNotice.error(_error!),
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: _busy ? null : _remove,
+            child: const Text('Remove connector'),
+          ),
         ],
-        const AdminNotice(
-          'Per-tool access changes are read only until the server supports safe concurrent updates.',
-        ),
-        TextButton(
-          onPressed: _busy ? null : _remove,
-          child: const Text('Remove connector'),
-        ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class AdminMcpSignIn extends StatefulWidget {
