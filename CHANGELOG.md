@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add profile-scoped MCP setup for browser sign-in, bearer tokens, custom headers and subprocess credentials, with official Aspire settings and optional registered-client/TLS configuration. Complete OAuth through a phone-local callback or pasted browser URL using stock Hermes RPC; keep tokens on Hermes and provide terminal guidance for device-code/CIMD login.
+
 - Fix Live chat staying amber after an administration connection drops while chat remains connected. Keep genuine workspace chat interruptions visible.
 
 - Fix MCP connector reload requests rejected by stock Hermes. Show connection-test, sign-in and reload failure reasons with credential redaction, and clear stale successful test results before retesting.

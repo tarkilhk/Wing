@@ -5,8 +5,10 @@ import '../../widgets/compact_switch.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/administration_repository.dart';
 import '../../services/mcp_error.dart';
+import '../../services/mcp_oauth.dart';
 import '../../services/ws_client.dart';
 import 'admin_widgets.dart';
+import 'admin_mcp_setup_page.dart';
 
 class AdminConnectorsPage extends StatefulWidget {
   final ProfileAdministration profile;
@@ -73,6 +75,33 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
             const AdminNotice(
               'Connector settings belong to this profile. Connection status may be unavailable until a session connects.',
             ),
+            FilledButton.icon(
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      final row = await Navigator.of(context)
+                          .push<Map<String, dynamic>>(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  AdminMcpSetupPage(profile: _profile),
+                            ),
+                          );
+                      refresh();
+                      if (context.mounted && row != null) {
+                        await adminPush(
+                          context,
+                          AdminConnectorDetail(
+                            profile: _profile,
+                            row: row,
+                            signInOnOpen: row['auth'] == 'oauth',
+                          ),
+                        );
+                        refresh();
+                      }
+                    },
+              icon: const Icon(Icons.add),
+              label: const Text('Add connector'),
+            ),
             TextButton(
               onPressed: _busy ? null : refresh,
               child: const Text('Refresh'),
@@ -118,10 +147,12 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
 class AdminConnectorDetail extends StatefulWidget {
   final ProfileAdministration profile;
   final Map<String, dynamic> row;
+  final bool signInOnOpen;
   const AdminConnectorDetail({
     super.key,
     required this.profile,
     required this.row,
+    this.signInOnOpen = false,
   });
   @override
   State<AdminConnectorDetail> createState() => _AdminConnectorDetailState();
@@ -138,6 +169,25 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
   void initState() {
     super.initState();
     _loadStatus();
+    if (widget.signInOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _signIn(autoStart: true);
+      });
+    }
+  }
+
+  Future<void> _signIn({bool autoStart = false}) async {
+    await adminPush(
+      context,
+      AdminMcpSignIn(profile: _profile, name: _name, autoStart: autoStart),
+    );
+    if (mounted) {
+      setState(() {
+        _error = null;
+        _probe = null;
+      });
+      _loadStatus();
+    }
   }
 
   Future<void> _loadStatus() async {
@@ -245,16 +295,15 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
             ),
             if (widget.row['auth'] == 'oauth')
               OutlinedButton(
-                onPressed: _busy
-                    ? null
-                    : () => adminPush(
-                        context,
-                        AdminMcpSignIn(profile: _profile, name: _name),
-                      ),
+                onPressed: _busy ? null : _signIn,
                 child: const Text('Sign in'),
               ),
           ],
         ),
+        if (widget.row['auth'] == 'oauth' && _error != null)
+          const AdminNotice(
+            'Complete Sign in, then test this connector again.',
+          ),
         if (_probe != null) ...[
           AdminNotice(
             'Test succeeded · ${_probe!['prompts'] ?? 0} prompts · ${_probe!['resources'] ?? 0} resources',
@@ -280,159 +329,178 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
 class AdminMcpSignIn extends StatefulWidget {
   final ProfileAdministration profile;
   final String name;
-  const AdminMcpSignIn({super.key, required this.profile, required this.name});
+  final McpLoopbackFactory bindLoopback;
+  final bool autoStart;
+  final Future<bool> Function(Uri) openBrowser;
+  const AdminMcpSignIn({
+    super.key,
+    required this.profile,
+    required this.name,
+    this.bindLoopback = McpLoopback.bind,
+    this.autoStart = false,
+    this.openBrowser = _launchMcpBrowser,
+  });
   @override
   State<AdminMcpSignIn> createState() => _AdminMcpSignInState();
 }
 
 class _AdminMcpSignInState extends State<AdminMcpSignIn> {
-  Map<String, dynamic>? _flow;
-  String? _error;
-  bool _busy = false;
+  late final _flow = McpOAuth(
+    profile: widget.profile,
+    name: widget.name,
+    bindLoopback: widget.bindLoopback,
+  );
+  final _callback = TextEditingController();
   bool _leave = false;
-  Timer? _timer;
-  bool get _pending =>
-      _flow != null &&
-      !{'approved', 'error', 'expired'}.contains(_flow!['status']);
+  String? _browserError;
+
   @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _flow.addListener(_changed);
+    if (widget.autoStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _start();
+      });
+    }
   }
 
   Future<void> _start() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final result = await widget.profile.write(
-        'POST',
-        'mcp/servers/${Uri.encodeComponent(widget.name)}/auth',
-      );
-      if (result['flow_id'] is! String) {
-        throw const AdministrationFailure(
-          'Sign-in start could not be confirmed.',
-        );
-      }
-      if (!mounted) return;
-      setState(() => _flow = result);
-      if (_pending) _timer = Timer(const Duration(seconds: 3), _poll);
-    } catch (e) {
-      if (mounted) {
-        setState(() => _error = administrationError(e, writing: true));
-      }
-    }
-    if (mounted) setState(() => _busy = false);
+    setState(() => _browserError = null);
+    await _flow.start();
+    if (mounted && _flow.authUrl != null && _flow.pending) await _openBrowser();
   }
 
-  Future<void> _poll() async {
-    if (!_pending || _busy) return;
-    setState(() => _busy = true);
+  void _changed() {
+    if (!mounted) return;
+    if (_flow.callbackAccepted || !_flow.pending) _callback.clear();
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _flow.removeListener(_changed);
+    _flow.dispose();
+    _callback.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openBrowser() async {
+    final url = _flow.authUrl;
+    if (url == null) return;
+    setState(() => _browserError = null);
     try {
-      final result = await widget.profile.server.read(
-        'mcp/oauth/flows/${Uri.encodeComponent(_flow!['flow_id'] as String)}',
-      );
-      if (!mounted) return;
-      setState(() {
-        _flow = result;
-        _error = null;
-      });
-      if (_pending) _timer = Timer(const Duration(seconds: 3), _poll);
-    } catch (e) {
-      if (mounted) setState(() => _error = administrationError(e));
+      if (await widget.openBrowser(url)) return;
+    } catch (_) {
+      // Never include the authorization URL in diagnostics.
     }
-    if (mounted) setState(() => _busy = false);
+    if (mounted) {
+      setState(
+        () => _browserError = 'Could not open the sign-in page. Try again.',
+      );
+    }
+  }
+
+  Future<void> _submit() async {
+    final callback = _callback.text;
+    _callback.clear();
+    FocusScope.of(context).unfocus();
+    await _flow.submitCallback(callback);
   }
 
   Future<void> _close() async {
-    if (_busy) return;
-    _timer?.cancel();
-    if (_pending) {
-      setState(() => _busy = true);
-      try {
-        await widget.profile.server.write(
-          'DELETE',
-          'mcp/oauth/flows/${Uri.encodeComponent(_flow!['flow_id'] as String)}',
-        );
-      } catch (_) {
-        if (mounted) {
-          setState(() {
-            _busy = false;
-            _error = 'Cancellation was not confirmed. Retry before closing.';
-          });
-        }
-        return;
-      }
-    }
-    if (mounted) {
-      setState(() {
-        _busy = false;
-        _leave = true;
-      });
-      Navigator.pop(context);
-    }
+    if (_flow.busy) return;
+    if (!await _flow.cancel() || !mounted) return;
+    setState(() => _leave = true);
+    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: _leave || (!_pending && !_busy),
+    canPop: _leave || (!_flow.pending && !_flow.busy),
     onPopInvokedWithResult: (didPop, _) {
       if (!didPop) _close();
     },
     child: AdminPage(
-      title: 'Sign in to ${widget.name}',
-      scope: widget.profile.label,
+      title: 'Sign in to ${_flow.name}',
+      scope: _flow.profile.label,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const AdminNotice(
-            'Sign-in opens in your browser and returns to the configured server callback. That address must be reachable from your phone.',
-          ),
-          if (_error != null) AdminNotice.error(_error!),
-          if (_flow == null)
-            FilledButton(
-              onPressed: _busy ? null : _start,
-              child: const Text('Start sign-in'),
+          if (!_flow.pending && _flow.status != 'approved') ...[
+            const AdminNotice(
+              'Sign in through your browser. Your account access is saved on Hermes for this profile.',
             ),
-          if (_flow != null) ...[
-            Text('Status: ${_flow!['status']}'),
-            if (_flow!['status'] == 'error')
-              AdminNotice.error(
-                mcpErrorMessage(
-                  _flow!['error'],
-                  summary: 'Sign-in did not complete.',
-                ),
-              ),
-            if (_pending) ...[
+            FilledButton(
+              onPressed: _flow.busy ? null : _start,
+              child: StudioActionLabel('Start sign-in', busy: _flow.busy),
+            ),
+          ],
+          if (_flow.error != null) AdminNotice.error(_flow.error!),
+          if (_browserError != null) AdminNotice.error(_browserError!),
+          if (_flow.status == 'approved')
+            const AdminNotice(
+              'Signed in. Close this page and test the connector. Reload server connectors to update existing sessions.',
+            ),
+          if (_flow.pending) ...[
+            if (_flow.authUrl != null && !_flow.callbackAccepted) ...[
               FilledButton(
-                onPressed: () async {
-                  final url = Uri.tryParse(
-                    '${_flow!['authorization_url'] ?? ''}',
-                  );
-                  if (url != null && {'http', 'https'}.contains(url.scheme)) {
-                    final opened = await launchUrl(
-                      url,
-                      mode: LaunchMode.externalApplication,
-                    );
-                    if (!opened && mounted) {
-                      setState(
-                        () => _error = 'Could not open the sign-in page.',
-                      );
-                    }
-                  }
-                },
+                onPressed: _flow.busy ? null : _openBrowser,
                 child: const Text('Open sign-in page'),
               ),
-              TextButton(
-                onPressed: _busy ? null : _poll,
-                child: const Text('Check status'),
+              AdminNotice(
+                _flow.manualOnly
+                    ? 'This connector uses its registered callback address. After approving access, copy the full address from your browser and paste it below, even if the page does not load.'
+                    : 'Return to Wing after approval. If your browser stops at a localhost page, paste its full address below.',
+              ),
+              TextField(
+                controller: _callback,
+                enabled: !_flow.busy,
+                obscureText: true,
+                autocorrect: false,
+                enableSuggestions: false,
+                keyboardType: TextInputType.url,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(labelText: 'Callback URL'),
+                onSubmitted: (_) => _submit(),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: _flow.busy ? null : _submit,
+                child: StudioActionLabel('Complete sign-in', busy: _flow.busy),
               ),
             ],
+            if (_flow.callbackAccepted)
+              const AdminNotice(
+                'Authorization received. Waiting for Hermes to finish sign-in.',
+              ),
+            TextButton(
+              onPressed: _flow.busy ? null : _flow.poll,
+              child: const Text('Check status'),
+            ),
           ],
+          if (!_flow.pending && _flow.status != 'approved')
+            ExpansionTile(
+              initiallyExpanded: _flow.terminalRequired,
+              key: ValueKey(_flow.terminalRequired),
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Other sign-in methods'),
+              children: [
+                const AdminNotice(
+                  'Device-code sign-in and providers requiring a client metadata document need a terminal on your Hermes server. Run the command for this profile, then return here to test the connector.',
+                ),
+                SelectableText(
+                  'hermes --profile ${_shellQuote(_flow.profile.name)} mcp login ${_shellQuote(_flow.name)}',
+                ),
+                const SizedBox(height: 12),
+                const AdminNotice(
+                  'For device-code sign-in, add --flow device. The provider must support it.',
+                ),
+              ],
+            ),
           TextButton(
-            onPressed: _busy ? null : _close,
-            child: Text(_pending ? 'Cancel sign-in' : 'Close'),
+            onPressed: _flow.busy ? null : _close,
+            child: Text(_flow.pending ? 'Cancel sign-in' : 'Close'),
           ),
         ],
       ),
@@ -596,3 +664,9 @@ class _AdminReloadConnectorsButtonState
     child: StudioActionLabel('Reload server connectors', busy: _busy),
   );
 }
+
+// Profile and connector names are data even in a copyable terminal command.
+String _shellQuote(String value) => "'${value.replaceAll("'", "'\"'\"'")}'";
+
+Future<bool> _launchMcpBrowser(Uri url) =>
+    launchUrl(url, mode: LaunchMode.externalApplication);

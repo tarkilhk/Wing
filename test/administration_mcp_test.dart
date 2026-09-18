@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_connectors_page.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/services/mcp_error.dart';
+import 'package:wing/core/services/mcp_oauth.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'support/administration_fixture.dart';
 
@@ -21,10 +22,32 @@ AdministrationFixture fixtureWith(Map<String, dynamic> result) {
       };
     }
     if (path == 'profiles/active') return {'current': 'personal'};
+    if (path == 'config') {
+      return {
+        'mcp_servers': {
+          'aspire': {'url': 'https://example.test/mcp', 'auth': 'oauth'},
+        },
+      };
+    }
     return Map<String, dynamic>.from(result);
   };
   return fixture;
 }
+
+Future<McpLoopback> fakeLoopback(
+  Uri target,
+  Future<bool> Function(Uri) receive,
+) async => McpLoopback(redirectUri: target, close: () async {});
+
+Map<String, dynamic> started(Map<String, dynamic> params) => {
+  'ok': true,
+  'session_id': 'oauth-session',
+  'flow': 'pkce',
+  'auth_url': Uri.https('oauth.example.test', '/authorize', {
+    'state': 'fixture-state',
+    'redirect_uri': params['client_redirect_uri'] as String,
+  }).toString(),
+};
 
 Future<void> testConnection(WidgetTester tester) async {
   await tester.scrollUntilVisible(find.text('Test connection'), 200);
@@ -35,6 +58,37 @@ Future<void> testConnection(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'MCP sign-in starts a profile-scoped loopback flow with paste-back',
+    (tester) async {
+      final fixture = fixtureWith({});
+      final calls = <(String, Map<String, dynamic>)>[];
+      fixture.rpcOverride = (method, params) async {
+        calls.add((method, {...params}));
+        return method.endsWith('.start') ? started(params) : {'ok': true};
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AdminMcpSignIn(
+            profile: fixture.server.profile('personal'),
+            name: 'aspire',
+            bindLoopback: fakeLoopback,
+          ),
+        ),
+      );
+      await tester.tap(find.text('Start sign-in'));
+      await tester.pumpAndSettle();
+      expect(calls.single.$1, 'mcp.servers.oauth.start');
+      expect(calls.single.$2['profile'], 'personal');
+      expect(
+        Uri.parse(calls.single.$2['client_redirect_uri'] as String).host,
+        '127.0.0.1',
+      );
+      expect(find.widgetWithText(TextField, 'Callback URL'), findsOneWidget);
+      expect(find.text('Complete sign-in'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
   const capture = bool.fromEnvironment('CAPTURE_MCP');
   setUpAll(() async {
     if (!capture) return;
@@ -115,11 +169,27 @@ void main() {
           'error': polled ? null : 'OAuth discovery failed: HTTP 404.',
         };
         final fixture = fixtureWith(response);
+        fixture.rpcOverride = (method, params) async {
+          if (method.endsWith('.start') && polled) return started(params);
+          if (method.endsWith('.poll')) {
+            return {
+              'ok': true,
+              'status': 'error',
+              'error_message': 'OAuth discovery failed: HTTP 404.',
+            };
+          }
+          throw JsonRpcError(
+            method,
+            'OAuth discovery failed: HTTP 404.',
+            code: 5024,
+          );
+        };
         await tester.pumpWidget(
           MaterialApp(
             home: AdminMcpSignIn(
               profile: fixture.server.profile('personal'),
               name: 'aspire',
+              bindLoopback: fakeLoopback,
             ),
           ),
         );
@@ -195,7 +265,7 @@ void main() {
             'tools': [],
             'servers': [],
           });
-          if (reload) {
+          if (reload || signIn) {
             fixture.rpcOverride = (method, _) async => throw JsonRpcError(
               method,
               'OAuth discovery failed: HTTP 404 at https://example.test/mcp.',
@@ -222,6 +292,7 @@ void main() {
                     ? AdminMcpSignIn(
                         profile: fixture.server.profile('personal'),
                         name: 'aspire',
+                        bindLoopback: fakeLoopback,
                       )
                     : AdminConnectorDetail(
                         profile: fixture.server.profile('personal'),

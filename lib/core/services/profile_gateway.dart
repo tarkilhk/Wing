@@ -248,12 +248,13 @@ class ProfileGateway {
         final envelope = await current.send(
           method,
           params,
-          timeout:
-              const {
-                'command.dispatch',
-                'slash.exec',
-                'session.compress',
-              }.contains(method)
+          timeout: method == 'mcp.servers.oauth.start'
+              ? const Duration(seconds: 45)
+              : const {
+                  'command.dispatch',
+                  'slash.exec',
+                  'session.compress',
+                }.contains(method)
               ? const Duration(minutes: 11)
               : const Duration(seconds: 30),
         );
