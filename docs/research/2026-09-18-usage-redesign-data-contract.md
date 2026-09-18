@@ -70,8 +70,8 @@ and API-equivalent cost views explain the missing data and offer the supported
 token-type view. Selecting a day keeps its scope when switching controls; it
 never substitutes period-wide model figures for a day's values.
 
-The calendar now keeps the year visible in compact week bands, with a contrasting
-outline for the period and no paging or day slider. Selecting the same date
+The calendar browses the cached year in one compact band with earlier/later
+week navigation and a contrasting period outline. Paging makes no API requests. Selecting the same date
 again, or Selected period, restores the period breakdown. Duplicate auxiliary model rows contribute to one model/provider bar
 segment and remain individually inspectable in its detail sheet. Unknown values
 remain unavailable; partial cost bars explicitly exclude unpriced values.

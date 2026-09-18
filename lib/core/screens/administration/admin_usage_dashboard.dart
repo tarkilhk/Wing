@@ -480,7 +480,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
       ),
       const SizedBox(height: 8),
       _quiet(
-        'The grid keeps the past year visible. The outline marks UTC dates touched by the selected rolling period, including its partial first date. Day tooltips and breakdowns use the year-wide daily counts; the trend and period totals use the selected window.',
+        'The arrows browse the past year. The outline marks UTC dates touched by the selected rolling period, including its partial first date. Day tooltips and breakdowns use the year-wide daily counts; the trend and period totals use the selected window.',
       ),
       const SizedBox(height: 8),
       _quiet(

@@ -9,9 +9,9 @@ inspect a date or a model without leaving its captured profile/connection.
 
 - Neutral period buttons; token count and estimated value side by side.
 - Full-year token-intensity calendar, one square per UTC session-start date,
-  in two compact Sunday-aligned week bands on phones. One band at widths of
-  at least 720dp. No paging or day slider. Dates and intensity colours remain
-  fixed when changing the range; a contrasting perimeter marks its dates.
+  in one compact Sunday-aligned band of week columns. Earlier/later arrows
+  browse the cached year; no day slider. The visible weeks and intensity colours
+  remain fixed when changing the range; a contrasting perimeter marks its dates.
   Preserve the possible 366th partial UTC boundary date from Hermes.
 - Breakdown immediately below the grid, one animated composition bar. Its
   clickable title switches model/token-type grouping; Tokens/Cost stays at the
@@ -82,10 +82,11 @@ outline from `prototype/usage-full-year` (`27da0d5`). The preserved prototype
 is `docs/design/prototypes/usage-accent-gallery-prototype.html` on that branch.
 Main contains the native Flutter implementation, not the HTML prototype.
 
-Always show the rolling year in two compact Sunday-aligned week bands on phones
-(one band when at least 720 dp is available). All dates keep the same year-wide
-intensity scale. The 1D/7D/30D/90D/365D chips only move the period outline;
-no calendar paging or slider remains. The outline crossfades with reduced-motion
+The owner subsequently rejected the two-band layout and selected one compact
+band with earlier/later week navigation. The newest weeks open initially;
+controls are disabled at the year boundaries and hidden when all weeks fit.
+All dates keep the same year-wide intensity scale. The 1D/7D/30D/90D/365D chips
+move the period outline while keeping the current calendar page. The outline crossfades with reduced-motion
 support, includes zero-usage dates, and follows the actual date perimeter.
 Tap any date, including outside the outlined period, for its year-query token
 count and day breakdown. “Selected period” restores the period breakdown.

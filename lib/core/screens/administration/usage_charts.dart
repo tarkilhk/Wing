@@ -120,12 +120,18 @@ class UsageCalendar extends StatefulWidget {
 }
 
 class _UsageCalendarState extends State<UsageCalendar> {
+  int _weeksBack = 0;
   Color? _accent, _canvas;
   late Color _outline;
 
   @override
   void didUpdateWidget(UsageCalendar oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.daily.days.first.date != widget.daily.days.first.date ||
+        oldWidget.daily.days.last.date != widget.daily.days.last.date) {
+      _weeksBack = 0;
+      Tooltip.dismissAllToolTips();
+    }
     if (oldWidget.rangeStart != widget.rangeStart ||
         oldWidget.rangeEnd != widget.rangeEnd) {
       Tooltip.dismissAllToolTips();
@@ -152,8 +158,18 @@ class _UsageCalendarState extends State<UsageCalendar> {
     const gap = 3.0, inset = 3.0;
     final offset = days.first.date.weekday % 7;
     final weeks = ((days.length + offset) / 7).ceil();
-    final bands = width >= 720 || weeks <= 27 ? 1 : 2;
-    final columns = (weeks / bands).ceil();
+    // A single band of compact week columns fills the available width.
+    final columns = math.min(
+      weeks,
+      math.max(1, ((width - inset * 2 + gap) / 15).floor()),
+    );
+    final back = math.min(_weeksBack, weeks - columns);
+    final startWeek = weeks - back - columns;
+    void page(int next) {
+      Tooltip.dismissAllToolTips();
+      setState(() => _weeksBack = next);
+    }
+
     final pitch = (width - inset * 2 + gap) / columns;
     final square = pitch - gap;
     final maximum = days.fold<int>(
@@ -234,8 +250,7 @@ class _UsageCalendarState extends State<UsageCalendar> {
       );
     }
 
-    Widget band(int index) {
-      final startWeek = index * columns;
+    Widget band() {
       final first = math.max(0, startWeek * 7 - offset);
       final end = math.min(days.length, (startWeek + columns) * 7 - offset);
       final selectedCells = <int>{};
@@ -245,23 +260,35 @@ class _UsageCalendarState extends State<UsageCalendar> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            spacing: 12,
+          Row(
             children: [
-              Text(
-                locale.formatMonthYear(days[first].date),
-                style: Theme.of(context).textTheme.labelSmall,
+              Expanded(
+                child: Text(
+                  '${locale.formatShortDate(days[first].date)} – ${locale.formatShortDate(days[end - 1].date)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
-              Text(
-                locale.formatMonthYear(days[end - 1].date),
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
+              if (weeks > columns) ...[
+                IconButton(
+                  tooltip: 'Earlier dates',
+                  onPressed: startWeek > 0
+                      ? () => page(math.min(weeks - columns, back + columns))
+                      : null,
+                  icon: const Icon(Icons.chevron_left),
+                ),
+                IconButton(
+                  tooltip: 'Later dates',
+                  onPressed: back > 0
+                      ? () => page(math.max(0, back - columns))
+                      : null,
+                  icon: const Icon(Icons.chevron_right),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 8),
           SizedBox(
-            key: ValueKey('usage-year-band-$index'),
+            key: const ValueKey('usage-year-band'),
             height: 7 * pitch - gap + inset * 2,
             child: Stack(
               children: [
@@ -301,7 +328,7 @@ class _UsageCalendarState extends State<UsageCalendar> {
                       duration: _motion(context),
                       child: CustomPaint(
                         key: ValueKey(
-                          '${widget.rangeStart}/${widget.rangeEnd}/$index',
+                          '${widget.rangeStart}/${widget.rangeEnd}',
                         ),
                         size: Size.infinite,
                         painter: _UsageRangePainter(
@@ -327,10 +354,7 @@ class _UsageCalendarState extends State<UsageCalendar> {
       key: const ValueKey('usage-activity-grid'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (var i = 0; i < bands; i++) ...[
-          if (i > 0) const SizedBox(height: 14),
-          band(i),
-        ],
+        band(),
         const SizedBox(height: 8),
         Wrap(
           alignment: WrapAlignment.spaceBetween,

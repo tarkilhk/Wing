@@ -56,78 +56,119 @@ void main() {
     },
   );
 
-  // Preserve the partial UTC boundary and every weekday alignment in both bands.
+  // Every UTC boundary remains reachable through the single band.
   for (var weekday = 0; weekday < 7; weekday++) {
-    testWidgets('full year stays fixed across ranges, weekday $weekday', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(1000, 844);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final daily = UsageDaily.fromJson(
-        {'daily': <dynamic>[]},
-        period: 365,
-        loadedAt: DateTime.utc(2026, 9, 13 + weekday),
-      );
-      var width = 358.0, period = 7;
-      UsageDay? selected;
-      Future<void> show() async {
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: wingTheme(Brightness.dark),
-            home: Scaffold(
-              body: Align(
-                alignment: Alignment.topLeft,
-                child: SizedBox(
-                  width: width,
-                  child: UsageCalendar(
-                    daily: daily,
-                    rangeStart: daily.days.last.date.subtract(
-                      Duration(days: period),
+    testWidgets(
+      'single band pages through year and keeps range geometry, weekday $weekday',
+      (tester) async {
+        tester.view.physicalSize = const Size(1000, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final daily = UsageDaily.fromJson(
+          {'daily': <dynamic>[]},
+          period: 365,
+          loadedAt: DateTime.utc(2026, 9, 13 + weekday),
+        );
+        var width = 358.0, period = 7;
+        UsageDay? selected;
+        Future<void> show() async {
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(Brightness.dark),
+              home: Scaffold(
+                body: Align(
+                  alignment: Alignment.topLeft,
+                  child: SizedBox(
+                    width: width,
+                    child: UsageCalendar(
+                      daily: daily,
+                      rangeStart: daily.days.last.date.subtract(
+                        Duration(days: period),
+                      ),
+                      rangeEnd: daily.days.last.date,
+                      selected: selected?.id,
+                      onSelected: (day) => selected = day,
                     ),
-                    rangeEnd: daily.days.last.date,
-                    selected: selected?.id,
-                    onSelected: (day) => selected = day,
                   ),
                 ),
               ),
             ),
-          ),
-        );
-        await tester.pumpAndSettle();
-      }
+          );
+          await tester.pumpAndSettle();
+        }
 
-      Finder day(String id) => find.byKey(ValueKey('usage-day-$id'));
-      await show();
-      expect(find.byTooltip('Earlier dates'), findsNothing);
-      expect(find.byTooltip('Later dates'), findsNothing);
-      expect(daily.days.length, 366);
-      final samples = [daily.days.first, daily.days[180], daily.days.last];
-      expect(tester.widgetList<InkWell>(find.byType(InkWell)).length, 366);
-      final bounds = {for (final d in samples) d.id: tester.getRect(day(d.id))};
-      for (final range in usagePeriods) {
-        period = range;
+        Finder day(String id) => find.byKey(ValueKey('usage-day-$id'));
         await show();
-        for (final d in samples) {
-          expect(tester.getRect(day(d.id)), bounds[d.id]);
+        List<String> visible() =>
+            tester
+                .widgetList<InkWell>(find.byType(InkWell))
+                .map((w) => w.key)
+                .whereType<ValueKey<String>>()
+                .map((key) => key.value)
+                .where((key) => key.startsWith('usage-day-'))
+                .map((key) => key.substring('usage-day-'.length))
+                .toList()
+              ..sort();
+        bool enabled(String tooltip) =>
+            tester
+                .widget<IconButton>(
+                  find.byWidgetPredicate(
+                    (w) => w is IconButton && w.tooltip == tooltip,
+                  ),
+                )
+                .onPressed !=
+            null;
+        Future<void> page(String tooltip) async {
+          await tester.tap(find.byTooltip(tooltip));
+          await tester.pumpAndSettle();
         }
-      }
-      for (final nextWidth in [288.0, 900.0]) {
-        width = nextWidth;
+
+        expect(find.byKey(const ValueKey('usage-year-band')), findsOneWidget);
+        expect(enabled('Earlier dates'), isTrue);
+        expect(enabled('Later dates'), isFalse);
+        final latest = visible();
+        expect(latest.length, lessThan(366));
+        expect(latest.last, daily.days.last.id);
+        final samples = [latest.first, latest.last];
+        final bounds = {for (final id in samples) id: tester.getRect(day(id))};
+        for (final range in usagePeriods) {
+          period = range;
+          await show();
+          expect(visible(), latest);
+          for (final id in samples) {
+            expect(tester.getRect(day(id)), bounds[id]);
+          }
+        }
+        final visited = latest.toSet();
+        while (enabled('Earlier dates')) {
+          await page('Earlier dates');
+          visited.addAll(visible());
+        }
+        expect(visited, daily.days.map((d) => d.id).toSet());
+        final oldest = visible().first;
+        final lastBeforeResize = visible().last;
+        await tester.tap(day(oldest));
+        expect(selected?.id, oldest);
+        width = 288;
         await show();
-        final grid = find.byKey(const ValueKey('usage-activity-grid'));
-        expect(tester.getSize(grid).width, closeTo(width, .01));
-        for (final d in samples) {
-          final rect = tester.getRect(day(d.id));
-          expect(rect.left, greaterThanOrEqualTo(0));
-          expect(rect.right, lessThanOrEqualTo(width + .01));
+        expect(visible().last, lastBeforeResize);
+        expect(
+          tester
+              .getSize(find.byKey(const ValueKey('usage-activity-grid')))
+              .width,
+          closeTo(width, .01),
+        );
+        while (enabled('Later dates')) {
+          await page('Later dates');
         }
-        await tester.tap(day(daily.days.first.id));
-        expect(selected?.id, daily.days.first.id);
-        await tester.tap(day(daily.days.last.id));
-        expect(selected?.id, daily.days.last.id);
-      }
-      expect(tester.takeException(), isNull);
-    });
+        expect(visible().last, daily.days.last.id);
+        width = 900;
+        await show();
+        expect(visible(), daily.days.map((d) => d.id).toList());
+        expect(find.byTooltip('Earlier dates'), findsNothing);
+        expect(find.byKey(const ValueKey('usage-year-band')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 }

@@ -245,7 +245,8 @@ void main() {
     await tap(tester, find.text('7D'));
     expect(fixture.requests.length, 4);
     await tap(tester, find.text('365D'));
-    expect(find.byTooltip('Earlier dates'), findsNothing);
+    await tap(tester, find.byTooltip('Earlier dates'));
+    expect(find.byKey(const ValueKey('usage-year-band')), findsOneWidget);
     expect(fixture.requests.length, 4);
     expect(tester.takeException(), isNull);
   });

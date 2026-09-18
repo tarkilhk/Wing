@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Show Usage activity in one compact band of week columns with earlier/later navigation, retaining the accent-derived period outline and year-wide activity colours.
+
 - Sort Usage breakdowns from highest to lowest for the selected token or cost measure, keeping unknown amounts last and category colours stable.
 
 - Keep a full year of Usage activity visible in two compact week bands. Highlight the selected period with a theme-derived contrasting outline while retaining every day's activity colour. Cache year history separately and allow any date to open its token tooltip and breakdown.
