@@ -249,16 +249,16 @@ Only actual issues carry warning/error emphasis; configuration icons stay neutra
 Unknown checks are local to their row. Do not invalidate configuration after a
 fixed five-minute timer or imply successful inference from configuration.
 Detail pages use the same gutters, grouped rows and quiet timestamps, with
-specific recovery links to the owning editors. The subsequent owner-approved merge
-uses one Model & provider destination. Its grouped component leads with the default
-model and subordinate provider, then Change model, a compact credential status with
-an explicit refresh control, and one account-management row. Keep model selection
-visually primary; avoid a full-width check button or a separate access-status card.
-Name a different resolved model/provider without presenting it as validation of the
-selection. Keep scope in the header. Connection errors offer Review connection;
-provider errors explain the action available immediately below. Do not restore the
-configuration summary, diagnostic checklist or overflow menu. Opening Health performs
-reads only.
+specific recovery links to the owning editors. The owner-approved 19 September
+correction removes the Model & provider detail screen and places Model access
+status directly in Health's Profile group. The row is passive: label, credential
+result, subordinate model/provider and its check time. It has no chevron, row tap,
+model picker, or routine management link. Profile refresh owns checking; a problem
+alone reveals Fix access, Review access, Retry or Review connection as appropriate.
+Keep these actions compact and preserve the selected profile when entering its
+existing recovery editor. Use one quiet note below the group for check coverage.
+Name any different resolved model/provider without validating the selected route.
+Opening Health performs reads only. Model selection stays in Administration.
 
 Growing select-only values, page titles and large-text field labels must remain
 readable at 320 dp/200%. Keep 48 dp controls and keyboard-safe editor actions.

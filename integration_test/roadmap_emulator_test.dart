@@ -799,24 +799,16 @@ void main() {
     await tester.pageBack();
     await _settle(tester);
     await tester.scrollUntilVisible(
-      find.text('Model & provider'),
+      find.byTooltip('Refresh profile status'),
       -250,
       scrollable: find.byType(Scrollable).last,
     );
-    await tester.tap(find.text('Model & provider'));
+    await tester.tap(find.byTooltip('Refresh profile status'));
     await _settle(tester);
-    await tester.scrollUntilVisible(
-      find.byTooltip('Check access'),
-      260,
-      scrollable: find.byType(Scrollable).last,
-    );
+    await tester.ensureVisible(find.text('Model access'));
     await _settle(tester);
-    await tester.ensureVisible(find.byTooltip('Check access'));
-    await _settle(tester);
-    await tester.tap(find.byTooltip('Check access'));
-    await _settle(tester);
-    expect(find.text('Couldn’t complete the check'), findsOneWidget);
-    expect(find.text('Review connection'), findsOneWidget);
+    expect(find.text('Check incomplete'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
     expect(find.textContaining('private roadmap runtime detail'), findsNothing);
     await captureJourney(tester, 'provider-access');
     expect(

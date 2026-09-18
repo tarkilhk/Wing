@@ -30,7 +30,6 @@ class _Fixture {
   final requests = <String>[];
   final scopedRequests = <(String, String, Map<String, String>)>[];
   final explicitCalls = <String>[];
-  final modelWrites = <(String, Map<String, dynamic>)>[];
   final models = <String, String>{};
   Map<String, dynamic> modelInfo(String profile) => {
     'model': models[profile] ?? 'gpt-5.6-sol',
@@ -64,27 +63,18 @@ class _Fixture {
           scope: scope,
           get: (path, query) async {
             if (path == 'model/info') return modelInfo(scope.profileName);
-            if (path == 'model/options') {
-              return {
-                'providers': [
-                  {
-                    'slug': 'openai-codex',
-                    'name': 'OpenAI Codex',
-                    'models': ['gpt-5.6-sol', 'gpt-6-astra'],
-                  },
-                ],
-              };
-            }
             return source.read(path, query);
-          },
-          post: (path, body) async {
-            modelWrites.add((path, Map.of(body)));
-            models[scope.profileName] = body['model'] as String;
-            return {'ok': true};
           },
           rpc: (method, params) {
             explicitCalls.add('$method ${scope.profileName}');
             if (method == 'setup.runtime_check') {
+              if (status == 'missing') {
+                return Future.value({
+                  'ok': false,
+                  'profile': scope.profileName,
+                  'error': 'No usable credentials found for openai-codex.',
+                });
+              }
               return Future.value({
                 'ok': true,
                 'profile': scope.profileName,
@@ -237,9 +227,9 @@ void main({
   }
 
   testWidgets(
-    'model save refreshes selection and clears credentials for the captured profile',
+    'Fix access opens the owning editor and clears the old result on return',
     (tester) async {
-      final fixture = _Fixture('green');
+      final fixture = _Fixture('missing');
       await fixture.initialize();
       addTearDown(fixture.dispose);
       await fixture.workspace.switchProfile('client-work');
@@ -258,39 +248,25 @@ void main({
         ),
       );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Model & provider'));
-      await tester.tap(find.text('Model & provider'));
+      expect(find.text('Fix access'), findsNothing);
+      await tester.ensureVisible(find.byTooltip('Refresh profile status'));
+      await tester.tap(find.byTooltip('Refresh profile status'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Check access'));
+      expect(find.text('Credentials missing'), findsOneWidget);
+      await tester.ensureVisible(find.text('Fix access'));
+      await tester.tap(find.text('Fix access'));
       await tester.pumpAndSettle();
-      expect(find.text('Credentials available'), findsOneWidget);
-      await tester.tap(find.text('Change model'));
+      expect(find.text('Profile access'), findsOneWidget);
+      expect(find.text('Claw / client-work'), findsOneWidget);
+      await tester.pageBack();
       await tester.pumpAndSettle();
-      final option = find.byKey(
-        const Key('profile-model-openai-codex-gpt-6-astra'),
-      );
-      await tester.ensureVisible(option);
-      await tester.tap(option);
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('profile-model-save')));
-      await tester.pumpAndSettle();
-      expect(fixture.modelWrites.single.$1, 'model/set?profile=client-work');
-      expect(fixture.modelWrites.single.$2, {
-        'scope': 'main',
-        'provider': 'openai-codex',
-        'model': 'gpt-6-astra',
-      });
-      expect(find.text('gpt-6-astra'), findsOneWidget);
+      expect(find.byType(HermesHealthContent), findsOneWidget);
       expect(find.text('Credentials not checked'), findsOneWidget);
+      expect(find.text('Fix access'), findsNothing);
       expect(
         fixture.explicitCalls.where((v) => v.startsWith('setup.runtime_check')),
         hasLength(1),
       );
-      await tester.tap(find.byTooltip('Check access'));
-      await tester.pumpAndSettle();
-      expect(find.text('Credentials available'), findsOneWidget);
-      expect(fixture.models['default'], isNull);
-      expect(tester.takeException(), isNull);
     },
   );
 
@@ -357,8 +333,8 @@ void main({
         hasLength(1),
       );
       expect(find.textContaining('Credentials available'), findsOneWidget);
-      await tester.ensureVisible(find.text('Model & provider'));
-      await tester.tap(find.text('Model & provider'));
+      await tester.ensureVisible(find.text('Model access'));
+      await tester.tap(find.text('Model access'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Credentials available'), findsOneWidget);
       expect(find.text('Provider configuration detected'), findsNothing);
@@ -368,18 +344,23 @@ void main({
       );
       expect(find.text('Access checks'), findsNothing);
       expect(find.byType(PopupMenuButton<String>), findsNothing);
-      expect(find.text('Manage provider access'), findsOneWidget);
-      expect(find.text('gpt-5.6-sol'), findsOneWidget);
-      expect(find.text('openai-codex'), findsOneWidget);
-      await tester.tap(find.text('Change model'));
+      expect(find.text('Change model'), findsNothing);
+      expect(find.text('Manage provider access'), findsNothing);
+      expect(find.text('Fix access'), findsNothing);
+      expect(find.byType(HermesHealthContent), findsOneWidget);
+      expect(find.text('gpt-5.6-sol · openai-codex'), findsOneWidget);
+      // A server-side configuration change clears the retained credential result
+      // on the next metadata-only refresh, without rerunning the check.
+      fixture.models['client-work'] = 'gpt-6-astra';
+      await tester.scrollUntilVisible(
+        find.byTooltip('Refresh health'),
+        -300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byTooltip('Refresh health'));
       await tester.pumpAndSettle();
-      expect(find.text('Cancel'), findsOneWidget);
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
-      expect(find.text('Credentials available'), findsOneWidget);
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Credentials available'), findsOneWidget);
+      expect(find.text('Credentials not checked'), findsOneWidget);
+      expect(find.text('gpt-6-astra · openai-codex'), findsOneWidget);
       expect(
         fixture.explicitCalls.where((v) => v.startsWith('setup.runtime_check')),
         hasLength(1),
@@ -396,8 +377,11 @@ void main({
   );
 
   for (final brightness in Brightness.values) {
-    for (final status in ['green', 'amber', 'red', 'unknown']) {
-      for (final large in [false, if (status == 'amber') true]) {
+    for (final status in ['green', 'amber', 'red', 'unknown', 'missing']) {
+      for (final large in [
+        false,
+        if (status == 'amber' || status == 'missing') true,
+      ]) {
         testWidgets(
           'health entry $status ${brightness.name} ${large ? 'large' : 'phone'}',
           (tester) async {
@@ -452,6 +436,13 @@ void main({
               ]),
             );
             expect(find.byType(TabBar), findsNothing);
+            if (status == 'missing' || status == 'green') {
+              await tester.ensureVisible(
+                find.byTooltip('Refresh profile status'),
+              );
+              await tester.tap(find.byTooltip('Refresh profile status'));
+              await tester.pumpAndSettle();
+            }
             final name =
                 '$status-${brightness.name}-${large ? 'large' : 'phone'}';
             await snapshot(tester, '$name-overview');
@@ -465,14 +456,21 @@ void main({
             await tester.drag(vertical, const Offset(0, -700));
             await tester.pumpAndSettle();
             await snapshot(tester, '$name-health-lower');
+            await tester.scrollUntilVisible(
+              find.text('Model access'),
+              -250,
+              scrollable: vertical,
+            );
+            await tester.pumpAndSettle();
+            await snapshot(tester, '$name-model-access');
+            if (status == 'missing') {
+              await tester.ensureVisible(find.text('Fix access'));
+              await tester.pumpAndSettle();
+              await snapshot(tester, '$name-model-access-action');
+            }
             expect(find.text('Not fully checked'), findsNothing);
             if (status == 'green' || large) {
-              for (final title in [
-                'Model & provider',
-                'Tools',
-                'Connectors',
-                'Scheduled tasks',
-              ]) {
+              for (final title in ['Tools', 'Connectors', 'Scheduled tasks']) {
                 await tester.drag(vertical, const Offset(0, 3000));
                 await tester.pumpAndSettle();
                 await tester.scrollUntilVisible(

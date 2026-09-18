@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-- Open the Usage breakdown on models by default, keeping the trend on token types.
+- Show model access status directly in Health, with recovery actions only when needed. Remove its separate screen, model picker and routine account-management shortcut; keep configuration in Administration.
 
-- Combine Health’s model and provider access into one screen with direct model selection, compact credential status, and account management. Clear stale checks after model changes and identify different resolved models or providers.
+- Open the Usage breakdown on models by default, keeping the trend on token types.
 
 - Refine Usage with a profile-only dropdown, toggle icons before chart titles, and one combined row per model across providers. Keep highest-first sorting and make model rows passive, removing the extra details sheet.
 

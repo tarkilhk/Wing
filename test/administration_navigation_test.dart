@@ -560,37 +560,22 @@ void main() {
   }
 
   testWidgets(
-    'health recovery opens captured profile access and its shared-provider link',
+    'unknown credential results offer retry without administrative navigation',
     (tester) async {
       await show(tester, Brightness.dark, healthOnly: true);
-      await tester.scrollUntilVisible(
-        find.text('Model & provider'),
-        280,
-        scrollable: find
-            .byWidgetPredicate(
-              (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
-            )
-            .first,
-      );
+      await tester.ensureVisible(find.byTooltip('Refresh profile status'));
+      await tester.tap(find.byTooltip('Refresh profile status'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Model & provider'));
+      expect(find.text('Check incomplete'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text('Fix access'), findsNothing);
+      expect(find.text('Manage provider access'), findsNothing);
+      expect(find.text('Change model'), findsNothing);
+      await tester.ensureVisible(find.text('Retry'));
+      await tester.tap(find.text('Retry'));
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.text('Manage provider access'),
-        280,
-        scrollable: find
-            .byWidgetPredicate(
-              (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
-            )
-            .first,
-      );
-      await tester.pumpAndSettle();
-      expect(find.byType(PopupMenuButton<String>), findsNothing);
-      await tester.tap(find.text('Manage provider access'));
-      await tester.pumpAndSettle();
-      expect(find.text('Profile access'), findsOneWidget);
-      expect(find.text('Server A / personal'), findsOneWidget);
-      expect(find.text('Manage shared providers'), findsOneWidget);
+      expect(find.text('Model access'), findsOneWidget);
+      expect(find.text('Profile access'), findsNothing);
     },
   );
 

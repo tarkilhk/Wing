@@ -86,24 +86,50 @@ Widget _app(
       child: RepaintBoundary(key: const ValueKey('capture'), child: child!),
     ),
     home: AdminPage(
-      title: 'Model & provider',
+      title: 'Hermes health',
       scope: 'Claw / work',
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          ProfileDiagnosticsPanel(
-            controller: diagnostics,
-            modelObservation:
-                observation ??
-                (AdministrationObservation()
-                  ..data = {
-                    'model': 'gpt-5.6-sol',
-                    'provider': 'openai-codex',
-                  }),
-            onChangeModel: () {},
-            onCheck: diagnostics.check,
-            onManageConnections: onManage ?? () {},
-            onReviewProviderAccess: onProvider ?? () {},
+          Row(
+            children: [
+              const Expanded(child: Text('Profile')),
+              ListenableBuilder(
+                listenable: diagnostics,
+                builder: (context, _) => IconButton(
+                  tooltip: 'Refresh profile status',
+                  onPressed: diagnostics.check,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ),
+            ],
+          ),
+          AdminGroup(
+            children: [
+              ProfileModelAccessRow(
+                controller: diagnostics,
+                modelObservation:
+                    observation ??
+                    (AdministrationObservation()
+                      ..data = {
+                        'model': 'gpt-5.6-sol',
+                        'provider': 'openai-codex',
+                      }),
+                refreshing: false,
+                onRetry: diagnostics.check,
+                onManageConnections: onManage ?? () {},
+                onFixAccess: onProvider ?? () {},
+              ),
+            ],
+          ),
+          Builder(
+            builder: (context) => Padding(
+              padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
+              child: Text(
+                'Model access checks credentials. Replies and quota aren’t tested.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
           ),
         ],
       ),
@@ -112,28 +138,32 @@ Widget _app(
 }
 
 void main() {
-  testWidgets('one scoped check and one provider management action', (
-    tester,
-  ) async {
-    final host = _DiagnosticsHost();
-    var managed = false;
-    await tester.pumpWidget(
-      _app(host.workspace('work'), onProvider: () => managed = true),
-    );
-    expect(host.reads, isEmpty);
-    expect(host.calls, isEmpty);
-    await tester.tap(find.byTooltip('Check access'));
-    await tester.pumpAndSettle();
-    expect(host.reads, isEmpty);
-    expect(host.calls, hasLength(1));
-    expect(host.calls.single.$1, 'setup.runtime_check');
-    expect(host.calls.single.$2, {'profile': 'work'});
-    expect(find.text('Credentials available'), findsOneWidget);
-    expect(find.byType(Card), findsOneWidget);
-    expect(find.byType(PopupMenuButton<String>), findsNothing);
-    await tester.tap(find.text('Manage provider access'));
-    expect(managed, isTrue);
-  });
+  testWidgets(
+    'healthy access is a passive row with no settings or recovery action',
+    (tester) async {
+      final host = _DiagnosticsHost();
+      await tester.pumpWidget(_app(host.workspace('work')));
+      expect(host.reads, isEmpty);
+      expect(host.calls, isEmpty);
+      await tester.tap(find.byTooltip('Refresh profile status'));
+      await tester.pumpAndSettle();
+      expect(host.reads, isEmpty);
+      expect(host.calls, hasLength(1));
+      expect(host.calls.single.$1, 'setup.runtime_check');
+      expect(host.calls.single.$2, {'profile': 'work'});
+      expect(find.text('Credentials available'), findsOneWidget);
+      expect(find.byType(Card), findsOneWidget);
+      expect(find.byType(PopupMenuButton<String>), findsNothing);
+      expect(find.text('Fix access'), findsNothing);
+      expect(find.text('Change model'), findsNothing);
+      expect(find.text('Manage provider access'), findsNothing);
+      expect(find.byType(TextButton), findsNothing);
+      await tester.tap(find.text('Model access'));
+      await tester.pumpAndSettle();
+      expect(find.text('Hermes health'), findsOneWidget);
+      expect(host.calls, hasLength(1));
+    },
+  );
 
   testWidgets('does not mistake a failed check for missing credentials', (
     tester,
@@ -144,15 +174,12 @@ void main() {
         'error': 'secret backend detail',
       };
     await tester.pumpWidget(_app(host.workspace('work')));
-    await tester.tap(find.byTooltip('Check access'));
+    await tester.tap(find.byTooltip('Refresh profile status'));
     await tester.pumpAndSettle();
     expect(find.text('Provider check failed'), findsOneWidget);
     expect(find.textContaining('secret backend detail'), findsNothing);
-    expect(find.text('Provider credentials needed'), findsNothing);
-    expect(
-      find.widgetWithText(ListTile, 'Manage provider access'),
-      findsOneWidget,
-    );
+    expect(find.text('Credentials missing'), findsNothing);
+    expect(find.widgetWithText(TextButton, 'Fix access'), findsOneWidget);
   });
 
   testWidgets(
@@ -167,10 +194,10 @@ void main() {
       await tester.pumpWidget(
         _app(host.workspace('work'), onProvider: () => managed = true),
       );
-      await tester.tap(find.byTooltip('Check access'));
+      await tester.tap(find.byTooltip('Refresh profile status'));
       await tester.pumpAndSettle();
-      expect(find.text('Provider credentials needed'), findsOneWidget);
-      await tester.tap(find.text('Manage provider access'));
+      expect(find.text('Credentials missing'), findsOneWidget);
+      await tester.tap(find.text('Fix access'));
       expect(managed, isTrue);
       host.onCall = (_, _) async => {
         'ok': true,
@@ -178,10 +205,10 @@ void main() {
         'model': 'gpt-5.6-sol',
         'provider': 'openai-codex',
       };
-      await tester.tap(find.byTooltip('Check access'));
+      await tester.tap(find.byTooltip('Refresh profile status'));
       await tester.pumpAndSettle();
       expect(find.text('Credentials available'), findsOneWidget);
-      expect(find.text('Provider credentials needed'), findsNothing);
+      expect(find.text('Credentials missing'), findsNothing);
     },
   );
 
@@ -195,13 +222,13 @@ void main() {
       await tester.pumpWidget(
         _app(host.workspace('work'), onManage: () => managed = true),
       );
-      await tester.tap(find.byTooltip('Check access'));
+      await tester.tap(find.byTooltip('Refresh profile status'));
       await tester.pumpAndSettle();
       expect(find.text('Server access denied'), findsOneWidget);
       expect(find.textContaining('sensitive/path'), findsNothing);
       await tester.tap(find.text('Review connection'));
       expect(managed, isTrue);
-      expect(find.text('Manage provider access'), findsOneWidget);
+      expect(find.text('Fix access'), findsNothing);
     },
   );
 
@@ -219,7 +246,7 @@ void main() {
       host.onCall = (_, _) async => throw TimeoutException('secret');
       await controller.check();
       await tester.pumpAndSettle();
-      expect(find.text('Couldn’t complete the check'), findsOneWidget);
+      expect(find.text('Check incomplete'), findsOneWidget);
       expect(find.textContaining('Last attempt'), findsOneWidget);
       for (final response in [
         {},
@@ -233,6 +260,24 @@ void main() {
         expect(find.text('Check incomplete'), findsOneWidget);
         expect(find.text('Credentials available'), findsNothing);
       }
+    },
+  );
+
+  testWidgets(
+    'incomplete check offers Retry and clears the action after success',
+    (tester) async {
+      final host = _DiagnosticsHost()..onCall = (_, _) async => {};
+      await tester.pumpWidget(_app(host.workspace('work')));
+      await tester.tap(find.byTooltip('Refresh profile status'));
+      await tester.pumpAndSettle();
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text('Fix access'), findsNothing);
+      host.onCall = null;
+      await tester.tap(find.text('Retry'));
+      await tester.pumpAndSettle();
+      expect(find.text('Credentials available'), findsOneWidget);
+      expect(find.text('Retry'), findsNothing);
+      expect(host.calls, hasLength(2));
     },
   );
 
@@ -251,7 +296,7 @@ void main() {
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_app(oldWorkspace, controller: controller));
-    await tester.tap(find.byTooltip('Check access'));
+    await tester.tap(find.byTooltip('Refresh profile status'));
     await tester.pump();
 
     final newHost = _DiagnosticsHost();
@@ -281,7 +326,7 @@ void main() {
       connectionLabel: 'Home server',
     );
     await tester.pumpWidget(_app(workspace, controller: controller));
-    await tester.tap(find.byTooltip('Check access'));
+    await tester.tap(find.byTooltip('Refresh profile status'));
     await tester.pump();
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
     controller.dispose();
@@ -307,7 +352,7 @@ void main() {
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_app(workspace, controller: controller));
-    await tester.tap(find.byTooltip('Check access'));
+    await tester.tap(find.byTooltip('Refresh profile status'));
     await tester.pumpAndSettle();
     final checkedLabel = tester
         .widget<Text>(find.textContaining(RegExp(r'^Checked [0-9]')))
@@ -340,7 +385,7 @@ void main() {
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_app(workspace, controller: controller));
-    await tester.tap(find.byTooltip('Check access'));
+    await tester.tap(find.byTooltip('Refresh profile status'));
     await tester.pump();
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
     pending.complete({
@@ -373,7 +418,7 @@ void main() {
       );
       addTearDown(controller.dispose);
       await tester.pumpWidget(_app(oldWorkspace, controller: controller));
-      await tester.tap(find.byTooltip('Check access'));
+      await tester.tap(find.byTooltip('Refresh profile status'));
       await tester.pump();
       final newHost = _DiagnosticsHost();
       final newWorkspace = newHost.workspace('work');
@@ -394,7 +439,7 @@ void main() {
       expect(find.textContaining(RegExp(r'^Checked [0-9]')), findsNothing);
       expect(newHost.reads, isEmpty);
       expect(newHost.calls, isEmpty);
-      await tester.tap(find.byTooltip('Check access'));
+      await tester.tap(find.byTooltip('Refresh profile status'));
       await tester.pumpAndSettle();
       expect(find.text('Credentials available'), findsOneWidget);
     },
@@ -467,10 +512,12 @@ void main() {
     await tester.pumpWidget(_app(workspace, controller: controller));
     expect(find.text('Credentials available'), findsNothing);
     expect(
-      find.textContaining('Checked claude-sonnet-4-6 · anthropic.'),
+      find.textContaining(
+        'Hermes resolved claude-sonnet-4-6 · anthropic instead.',
+      ),
       findsOneWidget,
     );
-    expect(find.textContaining('not confirmed'), findsOneWidget);
+    expect(find.text('Selected model access unconfirmed'), findsOneWidget);
     host.onCall = (_, _) async => {'ok': true, 'profile': 'work'};
     await controller.check();
     await tester.pump();
@@ -500,7 +547,7 @@ void main() {
     await tester.runAsync(() async {
       final image = await boundary.toImage(pixelRatio: 1.5);
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-      final file = File('build/provider-access-review/$name.png');
+      final file = File('build/model-access-row-review/$name.png');
       await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes!.buffer.asUint8List());
       image.dispose();
@@ -589,25 +636,16 @@ void main() {
           final name = '$state-${brightness.name}-$scale';
           await snapshot(tester, name);
           expect(tester.takeException(), isNull);
-          await tester.ensureVisible(find.text('Manage provider access'));
+          await tester.ensureVisible(
+            find.byType(TextButton).evaluate().isNotEmpty
+                ? find.byType(TextButton).first
+                : find.byType(ProfileModelAccessRow),
+          );
           await tester.pump();
           await snapshot(tester, '$name-actions');
           expect(tester.takeException(), isNull);
           if (state == 'checking') {
-            expect(
-              tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-              isNull,
-            );
-            expect(
-              tester
-                  .widget<IconButton>(
-                    find.byWidgetPredicate(
-                      (w) => w is IconButton && w.tooltip == 'Check access',
-                    ),
-                  )
-                  .onPressed,
-              isNull,
-            );
+            expect(find.byType(TextButton), findsNothing);
             await controller.check();
             expect(host.calls, hasLength(1));
             pending.complete({

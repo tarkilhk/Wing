@@ -6,7 +6,7 @@ import '../services/connection_manager.dart';
 import '../services/profile_workspace_controller.dart';
 import '../theme/wing_theme.dart';
 
-/// One explicit credential check, retained independently of the detail route.
+/// One explicit credential check, retained for its profile across navigation.
 class ProfileDiagnosticsController extends ChangeNotifier {
   ProfileDiagnosticsController({
     required ProfileWorkspaceData workspace,
@@ -109,18 +109,16 @@ class ProfileDiagnosticsController extends ChangeNotifier {
                 selectedProvider != 'auto' &&
                 provider != selectedProvider));
     return _AccessResult(
+      differs ? 'Selected model access unconfirmed' : 'Credentials available',
       differs
-          ? 'Access found for a different model or provider'
-          : 'Credentials available',
-      differs
-          ? 'Checked $model · $provider. Access to your selected model and provider is not confirmed.'
+          ? 'Hermes resolved $model · $provider instead.'
           : _selection == (model, provider)
           ? ''
           : 'Checked $model · $provider.',
       differs
           ? AdministrationHealthStatus.warning
           : AdministrationHealthStatus.healthy,
-      _Recovery.none,
+      differs ? _Recovery.provider : _Recovery.none,
     );
   }
 
@@ -134,7 +132,7 @@ class ProfileDiagnosticsController extends ChangeNotifier {
 
     late final _AccessResult result;
     try {
-      // Stock Hermes c661785f872b5647fbac7c138d965180783bd9af:
+      // Stock Hermes f971bbf51298e846834d3d76e18d763223bd58ec:
       // resolves this profile's startup model and configured fallback chain.
       // It does not send a prompt or establish model availability / quota.
       final response = await gateway.call('setup.runtime_check');
@@ -168,22 +166,22 @@ class ProfileDiagnosticsController extends ChangeNotifier {
   }
 }
 
-/// Model selection and its supporting access observation, in one group.
-class ProfileDiagnosticsPanel extends StatelessWidget {
+/// Passive Health observation. Only a reported problem exposes an action.
+class ProfileModelAccessRow extends StatelessWidget {
   final ProfileDiagnosticsController controller;
   final AdministrationObservation? modelObservation;
-  final VoidCallback onChangeModel;
-  final VoidCallback onCheck;
+  final bool refreshing;
+  final VoidCallback onRetry;
   final VoidCallback? onManageConnections;
-  final VoidCallback onReviewProviderAccess;
+  final VoidCallback onFixAccess;
 
-  const ProfileDiagnosticsPanel({
+  const ProfileModelAccessRow({
     super.key,
     required this.controller,
     required this.modelObservation,
-    required this.onChangeModel,
-    required this.onCheck,
-    required this.onReviewProviderAccess,
+    required this.refreshing,
+    required this.onRetry,
+    required this.onFixAccess,
     this.onManageConnections,
   });
 
@@ -192,120 +190,88 @@ class ProfileDiagnosticsPanel extends StatelessWidget {
     listenable: controller,
     builder: (context, _) {
       final result = controller._result;
-      final checking = controller._checking;
+      final checking = controller._checking || refreshing;
       final tokens = WingTokens.of(context);
       final theme = Theme.of(context);
-      final model = modelObservation?.data?['model'] as String?;
-      final provider = modelObservation?.data?['provider'] as String?;
-      final loading = modelObservation?.loading ?? false;
+      final model = modelObservation?.data?['model'];
+      final provider = modelObservation?.data?['provider'];
+      final hasModel = model is String && model.isNotEmpty;
       final unavailable = modelObservation?.error != null;
-      final color = switch (result.status) {
-        AdministrationHealthStatus.failure => tokens.danger,
-        AdministrationHealthStatus.warning => tokens.warning,
-        _ => theme.colorScheme.onSurfaceVariant,
+      final modelLabel = hasModel
+          ? '$model · ${provider is String && provider.isNotEmpty ? provider : 'Automatic provider'}'
+          : modelObservation?.loading == true
+          ? 'Loading model…'
+          : unavailable
+          ? 'Model unavailable'
+          : 'No model selected';
+      final color = checking
+          ? theme.colorScheme.onSurfaceVariant
+          : switch (result.status) {
+              AdministrationHealthStatus.failure => tokens.danger,
+              AdministrationHealthStatus.warning => tokens.warning,
+              _ => theme.colorScheme.onSurfaceVariant,
+            };
+      final (action, label) = switch (result.recovery) {
+        _Recovery.provider => (
+          onFixAccess,
+          result.status == AdministrationHealthStatus.warning
+              ? 'Review access'
+              : 'Fix access',
+        ),
+        _Recovery.connection when onManageConnections != null => (
+          onManageConnections,
+          'Review connection',
+        ),
+        _
+            when result.status == AdministrationHealthStatus.unknown &&
+                controller._checkedAt != null =>
+          (onRetry, 'Retry'),
+        _ => (null, ''),
       };
-      return Card(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Default for new chats',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    model != null && model.isNotEmpty
-                        ? model
-                        : loading
-                        ? 'Loading model…'
-                        : unavailable
-                        ? 'Model unavailable'
-                        : 'No model selected',
-                    style: theme.textTheme.titleLarge,
-                  ),
-                  if (model != null && model.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      provider == null || provider.isEmpty || provider == 'auto'
-                          ? 'Automatic provider'
-                          : provider,
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ],
-                  if (unavailable) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Couldn’t refresh the model. Check your connection and try again.',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  FilledButton.tonal(
-                    onPressed: checking ? null : onChangeModel,
-                    child: const Text('Change model'),
-                  ),
-                ],
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                !checking &&
+                        (result.status == AdministrationHealthStatus.failure ||
+                            result.status == AdministrationHealthStatus.warning)
+                    ? Icons.error_outline
+                    : Icons.key_outlined,
+                color: color,
+                size: 22,
               ),
             ),
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 8, 12),
+            const SizedBox(width: 12),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text('Model access', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 4),
                   Semantics(
                     liveRegion: true,
-                    child: Row(
-                      children: [
-                        Icon(
-                          result.status == AdministrationHealthStatus.failure
-                              ? Icons.error_outline
-                              : Icons.key_outlined,
-                          color: color,
-                          size: 22,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            checking ? 'Checking credentials…' : result.title,
-                            style: theme.textTheme.titleSmall,
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Check access',
-                          onPressed: checking || loading ? null : onCheck,
-                          icon: checking
-                              ? const SizedBox.square(
-                                  dimension: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    semanticsLabel: 'Checking credentials',
-                                  ),
-                                )
-                              : const Icon(Icons.refresh),
-                        ),
-                      ],
+                    child: Text(
+                      checking ? 'Checking credentials…' : result.title,
+                      style: theme.textTheme.bodyMedium,
                     ),
                   ),
+                  const SizedBox(height: 4),
+                  Text(modelLabel, style: theme.textTheme.bodySmall),
+                  if (unavailable && hasModel)
+                    Text(
+                      'Last known model; refresh failed.',
+                      style: theme.textTheme.bodySmall,
+                    ),
                   if (!checking &&
                       result != _AccessResult.notChecked &&
-                      result.message.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8, bottom: 8),
-                      child: Text(
-                        result.message,
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ),
-                  Text(
-                    'Credentials only. Replies and quota aren’t tested.',
-                    style: theme.textTheme.bodySmall,
-                  ),
+                      result.message.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(result.message, style: theme.textTheme.bodySmall),
+                  ],
                   if (!checking && controller._checkedAt != null) ...[
                     const SizedBox(height: 4),
                     Text(
@@ -314,25 +280,10 @@ class ProfileDiagnosticsPanel extends StatelessWidget {
                       style: theme.textTheme.bodySmall,
                     ),
                   ],
-                  if (result.recovery == _Recovery.connection &&
-                      onManageConnections != null)
-                    TextButton(
-                      onPressed: checking ? null : onManageConnections,
-                      child: const Text('Review connection'),
-                    ),
+                  if (!checking && action != null)
+                    TextButton(onPressed: action, child: Text(label)),
                 ],
               ),
-            ),
-            const Divider(height: 1),
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 4,
-              ),
-              title: const Text('Manage provider access'),
-              subtitle: const Text('Accounts and API keys'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: checking ? null : onReviewProviderAccess,
             ),
           ],
         ),
@@ -358,15 +309,15 @@ class _AccessResult {
   );
   static const incomplete = _AccessResult(
     'Check incomplete',
-    'Hermes didn’t return a result for this profile. Try checking again.',
+    'Hermes didn’t return a complete result for this profile.',
     AdministrationHealthStatus.unknown,
     _Recovery.none,
   );
   static const unavailable = _AccessResult(
-    'Couldn’t complete the check',
-    'Wing couldn’t get a result from Hermes. Check your connection, then try again.',
+    'Check incomplete',
+    'Couldn’t get a result from Hermes. Try again.',
     AdministrationHealthStatus.unknown,
-    _Recovery.connection,
+    _Recovery.none,
   );
   static const signIn = _AccessResult(
     'Server access denied',
@@ -384,15 +335,15 @@ class _AccessResult {
               r'^No usable credentials found for [a-zA-Z0-9_.-]+\.$',
             ).hasMatch(error)) {
       return const _AccessResult(
-        'Provider credentials needed',
-        'Add an account or API key for this profile’s provider, then check again.',
+        'Credentials missing',
+        'Add an account or API key for this provider.',
         AdministrationHealthStatus.failure,
         _Recovery.provider,
       );
     }
     return const _AccessResult(
       'Provider check failed',
-      'Hermes couldn’t prepare this profile’s model. Review provider access, then check again.',
+      'Hermes couldn’t prepare this profile’s model.',
       AdministrationHealthStatus.failure,
       _Recovery.provider,
     );
