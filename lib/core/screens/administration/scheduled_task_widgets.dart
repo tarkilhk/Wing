@@ -82,6 +82,8 @@ class TaskPage extends StatelessWidget {
                 ? Text(scope, style: Theme.of(context).textTheme.bodySmall)
                 : ServerConnectionLabel(
                     label: scope,
+                    includeProfiles:
+                        scope != ServerConnectionScope.of(context)?.label,
                     status: ServerConnectionScope.of(context),
                   ),
           ),

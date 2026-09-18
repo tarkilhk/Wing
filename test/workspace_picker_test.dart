@@ -120,7 +120,7 @@ void main() {
     AppDestination.administration,
     AppDestination.health,
   ]) {
-    testWidgets('${destination.name} splits status from profile selection', (
+    testWidgets('${destination.name} picker follows the displayed scope', (
       tester,
     ) async {
       await show(tester, destination: destination);
@@ -136,10 +136,35 @@ void main() {
       await tester.tap(picker);
       await tester.pumpAndSettle();
       expect(find.text('Connection details'), findsNothing);
-      expect(work, findsOneWidget);
-      await tester.tap(work);
+      final includesProfile =
+          destination == AppDestination.administration ||
+          destination == AppDestination.health;
+      expect(work, includesProfile ? findsOneWidget : findsNothing);
+      expect(
+        find.text('Profile'),
+        includesProfile ? findsWidgets : findsNothing,
+      );
+      expect(
+        find.byTooltip(
+          includesProfile
+              ? 'Choose connection and profile'
+              : 'Choose connection',
+        ),
+        findsOneWidget,
+      );
+      if (includesProfile) {
+        await tester.tap(work);
+      } else {
+        expect(find.text('Claw · personal'), findsNothing);
+        await tester.tap(
+          find.byKey(const ValueKey('workspace-connection-claw')),
+        );
+      }
       await tester.pumpAndSettle();
-      expect(controller.current!.scope.profileName, 'work');
+      expect(
+        controller.current!.scope.profileName,
+        includesProfile ? 'work' : 'personal',
+      );
       await tester.tap(find.byTooltip('Open navigation menu'));
       await tester.pumpAndSettle();
       expect(
@@ -180,6 +205,17 @@ void main() {
         await tester.pumpAndSettle();
         expect(work, findsNothing);
         expect(controller.current!.scope.profileName, 'personal');
+        await tester.tap(find.byTooltip('Open navigation menu'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('nav-activity')));
+        await tester.pumpAndSettle();
+        expect(find.text('Claw · personal'), findsNothing);
+        await tester.tap(picker);
+        await tester.pumpAndSettle();
+        expect(work, findsNothing);
+        expect(find.text('Profile'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await screenshot(tester, 'connections-${brightness.name}-$scale');
       });
     }
   }
@@ -201,45 +237,53 @@ void main() {
   });
 
   testWidgets(
-    'chat profile switch preserves its draft and opens the new list',
+    'conversation header offers only connections and retains its draft',
     (tester) async {
       final chat = await controller.openSession(
         ProfileSessionKey(controller.current!.scope, 'newest'),
       );
       await controller.updateDraft(chat!, 'Keep this draft');
-      await show(tester);
+      String? selected;
+      await show(
+        tester,
+        onConnection: (connection, destination) async {
+          selected = connection.id;
+          expect(destination, AppDestination.chats);
+        },
+      );
       await tester.tap(picker);
       await tester.pumpAndSettle();
-      await tester.tap(work);
+      expect(work, findsNothing);
+      expect(find.text('Profile'), findsNothing);
+      expect(find.byTooltip('Choose connection'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('workspace-connection-travel')),
+      );
       await tester.pumpAndSettle();
-      expect(controller.current!.scope.profileName, 'work');
-      expect(controller.current!.chat, isNull);
+      expect(selected, 'travel');
+      expect(controller.current!.scope.profileName, 'personal');
       expect(chat.composerText, 'Keep this draft');
-      expect(tester.takeException(), isNull);
     },
   );
 
-  testWidgets('profile selection leaves a recovering notification chat', (
+  testWidgets('server-owned administration header offers only connections', (
     tester,
   ) async {
-    fixture.failHistory = true;
-    await controller.openNotification(
-      ProfileSessionKey(controller.current!.scope, 'newest'),
+    await show(tester, destination: AppDestination.administration);
+    adminPush(
+      tester.element(find.byType(ServerConnectionLabel)),
+      const AdminPage(title: 'Server logs', scope: 'Claw', child: Text('Logs')),
     );
-    expect(controller.notificationChat, isNotNull);
-    await show(tester);
+    await tester.pumpAndSettle();
     await tester.tap(picker);
     await tester.pumpAndSettle();
-    await tester.tap(work);
-    await tester.pumpAndSettle();
-    expect(controller.current!.scope.profileName, 'work');
-    expect(controller.notificationChat, isNull);
-    expect(controller.current!.chat, isNull);
-    expect(tester.takeException(), isNull);
+    expect(work, findsNothing);
+    expect(find.text('Profile'), findsNothing);
+    expect(find.byTooltip('Choose connection'), findsOneWidget);
   });
 
   testWidgets('failed profile switch retains confirmed scope', (tester) async {
-    await show(tester);
+    await show(tester, destination: AppDestination.administration);
     fixture.failWork = true;
     await tester.tap(picker);
     await tester.pumpAndSettle();

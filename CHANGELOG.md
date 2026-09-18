@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Split screen-header taps: the connection icon and status dot open status details, while the name opens a connection/profile dropdown. Preserve the current section and retained chat drafts when switching.
+- Split screen-header taps: the connection icon and status dot open status details, while the name opens a dropdown matching the displayed scope—connections only in Chats and Activity, with profile choices for connection/profile headers. Preserve the current section and retained chat drafts when switching.
 
 - Distinguish MCP test results from the connection LED with a green tick for success and a red cross for failure.
 

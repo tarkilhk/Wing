@@ -2,8 +2,10 @@
 
 The owner requested separate header interactions on 18 September 2026. The icon
 and status LED open Connection details, including the existing live status and
-retry action. The connection/profile text opens an anchored dropdown with saved
-connections and the current connection's profiles. Selection uses background tint
+retry action. The name opens an anchored dropdown matching its displayed scope.
+Connection-only headers, including Chats, conversations and Activity, offer saved
+connections only. Headers showing a connection and profile also offer the current
+connection's profiles. Selection uses background tint
 and accessible selected state; each header target and menu action is at least
 48 dp. The text target retains the compact header typography.
 
@@ -11,12 +13,14 @@ Two arrangements were considered: a single dropdown with Connection and Profile
 sections, or a connection submenu followed by profile selection. The single panel
 keeps current-server profile changes one tap away and shows both selected values
 without adding another header control. Selecting a different connection enters
-that connection in the current section; reopening the dropdown shows its profiles.
+that connection in the current section; profile-scoped headers also offer its
+profiles when the dropdown is reopened.
 Use the shared Studio surfaces, border, corners and typography in both themes.
 
 Chats, conversation headers, Activity, Administration, Health and nested
-administration pages use the shared behavior. Profile changes from a conversation
-enter the selected profile's list, retaining the original draft and running owner.
+administration pages use the shared status behavior and scope-specific picker.
+Activity retains its connection-only label. Profile navigation in Chats stays in
+the existing profile chips; conversation headers do not offer profile selection.
 Connection changes use the retained application controller registry and preserve
 the current main destination. Nested editors keep their captured scope: the picker
 unwinds to the workspace section before changing selection, respecting existing

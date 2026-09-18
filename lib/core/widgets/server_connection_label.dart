@@ -5,9 +5,12 @@ import '../theme/wing_theme.dart';
 import 'connection_icon_picker.dart';
 import 'studio_error.dart';
 
+typedef WorkspacePickerCallback =
+    void Function(BuildContext context, {required bool includeProfiles});
+
 class ServerConnectionScope extends InheritedWidget {
   final ServerConnectionStatus status;
-  final ValueChanged<BuildContext>? onPickWorkspace;
+  final WorkspacePickerCallback? onPickWorkspace;
   final ConnectionIcon? icon;
   const ServerConnectionScope({
     super.key,
@@ -33,6 +36,7 @@ class ServerConnectionLabel extends StatelessWidget {
   final String label;
   final ConnectionIcon? icon;
   final String? suffix;
+  final bool includeProfiles;
   final TextStyle? style;
   final AlignmentGeometry alignment;
   const ServerConnectionLabel({
@@ -41,12 +45,17 @@ class ServerConnectionLabel extends StatelessWidget {
     this.icon,
     this.status,
     this.suffix,
+    this.includeProfiles = false,
     this.style,
     this.alignment = Alignment.centerLeft,
   });
   @override
   Widget build(BuildContext context) {
     final scope = ServerConnectionScope.scopeOf(context);
+    final pickProfiles = includeProfiles || (suffix?.isNotEmpty ?? false);
+    final pickerLabel = pickProfiles
+        ? 'Choose connection and profile'
+        : 'Choose connection';
     final effectiveIcon = icon ?? scope?.icon ?? ConnectionIcon.server;
     final identity =
         '$label${suffix == null || suffix!.isEmpty ? '' : ' · $suffix'}';
@@ -102,21 +111,27 @@ class ServerConnectionLabel extends StatelessWidget {
         Flexible(
           child: Builder(
             builder: (anchor) => Semantics(
-              label: '$identity. Choose connection and profile',
+              label: '$identity. $pickerLabel',
               button: true,
               enabled: scope?.onPickWorkspace != null,
               excludeSemantics: true,
               onTap: scope?.onPickWorkspace == null
                   ? null
-                  : () => scope!.onPickWorkspace!(anchor),
+                  : () => scope!.onPickWorkspace!(
+                      anchor,
+                      includeProfiles: pickProfiles,
+                    ),
               child: Tooltip(
-                message: 'Choose connection and profile',
+                message: pickerLabel,
                 child: InkWell(
                   key: const ValueKey('workspace-picker-target'),
                   borderRadius: WingRadius.control,
                   onTap: scope?.onPickWorkspace == null
                       ? null
-                      : () => scope!.onPickWorkspace!(anchor),
+                      : () => scope!.onPickWorkspace!(
+                          anchor,
+                          includeProfiles: pickProfiles,
+                        ),
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(
                       minHeight: 48,

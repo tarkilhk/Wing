@@ -397,12 +397,16 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     child: ServerConnectionScope(
       status: controller.connectionStatus,
       icon: controller.connection.icon,
-      onPickWorkspace: (anchor) => unawaited(_pickWorkspace(anchor)),
+      onPickWorkspace: (anchor, {required includeProfiles}) =>
+          unawaited(_pickWorkspace(anchor, includeProfiles: includeProfiles)),
       child: Builder(builder: (context) => _buildWorkspace(context)),
     ),
   );
 
-  Future<void> _pickWorkspace(BuildContext anchor) async {
+  Future<void> _pickWorkspace(
+    BuildContext anchor, {
+    required bool includeProfiles,
+  }) async {
     if (controller.switching) return;
     final choice = await showWorkspacePicker(
       anchor,
@@ -411,6 +415,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       profiles: controller.discovery?.profiles ?? const [],
       profileName: controller.current?.scope.profileName,
       busy: controller.switching,
+      includeProfiles: includeProfiles,
     );
     if (!mounted || choice == null || controller.switching) return;
     if (choice.isConnection && choice.id == controller.connection.id) return;
@@ -2274,7 +2279,9 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 child: ServerConnectionLabel(
                   label: controller.connection.label,
                   icon: controller.connection.icon,
-                  suffix: controller.current?.scope.profileName,
+                  suffix: _destination == AppDestination.health
+                      ? controller.current?.scope.profileName
+                      : null,
                   status: controller.connectionStatus,
                 ),
               ),

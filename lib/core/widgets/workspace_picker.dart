@@ -14,6 +14,7 @@ Future<WorkspaceChoice?> showWorkspacePicker(
   required List<HermesProfile> profiles,
   required String? profileName,
   required bool busy,
+  required bool includeProfiles,
 }) {
   final tokens = WingTokens.of(context);
   final colors = Theme.of(context).colorScheme;
@@ -66,7 +67,9 @@ Future<WorkspaceChoice?> showWorkspacePicker(
   );
   return showMenu<WorkspaceChoice>(
     context: context,
-    semanticLabel: 'Choose connection and profile',
+    semanticLabel: includeProfiles
+        ? 'Choose connection and profile'
+        : 'Choose connection',
     requestFocus: true,
     positionBuilder: (_, _) {
       if (context.mounted) lastPosition = position();
@@ -89,15 +92,17 @@ Future<WorkspaceChoice?> showWorkspacePicker(
           connection.id == connectionId,
           icon: connection.icon.glyph,
         ),
-      const PopupMenuDivider(),
-      heading('Profile'),
-      if (profiles.isEmpty) heading('Profiles unavailable'),
-      for (final profile in profiles)
-        option(
-          (id: profile.name, isConnection: false),
-          profile.label,
-          profile.name == profileName,
-        ),
+      if (includeProfiles) ...[
+        const PopupMenuDivider(),
+        heading('Profile'),
+        if (profiles.isEmpty) heading('Profiles unavailable'),
+        for (final profile in profiles)
+          option(
+            (id: profile.name, isConnection: false),
+            profile.label,
+            profile.name == profileName,
+          ),
+      ],
     ],
   );
 }
