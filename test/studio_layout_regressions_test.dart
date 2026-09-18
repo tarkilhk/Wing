@@ -86,7 +86,7 @@ void main() {
           {
             'model': 'example/long-production-model',
             'provider': 'Example provider',
-            'input_tokens': 1234567890123456789,
+            'input_tokens': 9007199254740991,
             'estimated_cost': 1234567.12345,
           },
         ],
@@ -112,7 +112,7 @@ void main() {
       await tester.tap(find.text('example/long-production-model'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('1,234,567,890,123,456,789'),
+        find.text('9,007,199,254,740,991'),
         120,
         scrollable: find
             .descendant(

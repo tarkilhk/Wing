@@ -116,7 +116,12 @@ void main() {
             await tester.scrollUntilVisible(
               find.text('Research model'),
               200,
-              scrollable: find.byType(Scrollable).last,
+              scrollable: find
+                  .descendant(
+                    of: find.byType(ListView),
+                    matching: find.byType(Scrollable),
+                  )
+                  .first,
             );
             await tester.tap(find.text('Research model'));
             await tester.pumpAndSettle();
