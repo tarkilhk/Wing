@@ -7,6 +7,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/widgets/context_ring.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/wing_icons.dart';
 import 'support/profile_browser_fixture.dart';
 
 void main() {
@@ -137,7 +138,7 @@ void main() {
     'root shows five recent projects, then distinct pinned and recent chats',
     (tester) async {
       await show(tester);
-      expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+      expect(find.byIcon(WingIcons.newChat), findsOneWidget);
       expect(find.byIcon(Icons.add_rounded), findsNothing);
       expect(controller.current!.projects.map((p) => p['name']), [
         'Mobile app',

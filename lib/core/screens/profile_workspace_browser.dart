@@ -12,6 +12,7 @@ import '../services/profile_workspace_controller.dart';
 import '../models/session_visibility.dart';
 import '../services/profile_gateway.dart';
 import '../theme/wing_theme.dart';
+import '../theme/wing_icons.dart';
 import '../widgets/profile_chat_indicator.dart';
 import '../widgets/workspace_options_menu.dart';
 import '../widgets/workspace_connection_status.dart';
@@ -958,7 +959,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                   }
                 }),
           child: Icon(
-            _view == 'projects' ? Icons.add_rounded : Icons.edit_outlined,
+            _view == 'projects' ? Icons.add_rounded : WingIcons.newChat,
           ),
         ),
       ),

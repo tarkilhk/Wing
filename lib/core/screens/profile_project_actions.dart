@@ -2,6 +2,7 @@ import '../widgets/studio_action_label.dart';
 import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
+import '../theme/wing_icons.dart';
 import '../widgets/workspace_action_menu.dart';
 
 import '../services/profile_workspace_controller.dart';
@@ -56,7 +57,7 @@ Future<void> showProjectActions(
 
   final choice =
       await showWorkspaceActionMenu(context, name, owner.profileName, [
-        ('new', 'New chat', Icons.add_rounded, true),
+        ('new', 'New chat', WingIcons.newChat, true),
         ('rename', 'Rename', Icons.edit_outlined, true),
         ('appearance', 'Appearance', Icons.palette_outlined, true),
         ('delete', 'Delete', Icons.delete_outline, true),

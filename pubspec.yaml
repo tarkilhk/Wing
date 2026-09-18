@@ -51,6 +51,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: WingIcons
+      fonts:
+        - asset: assets/fonts/wing-icons.ttf
   assets:
     - PRIVACY.md
     - assets/

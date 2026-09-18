@@ -6,6 +6,7 @@ import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/wing_icons.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'support/profile_actions_fixture.dart';
@@ -106,7 +107,13 @@ void main() {
       find.descendant(of: row, matching: find.byTooltip('Project actions')),
     );
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.edit_square), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('project-action-new')),
+        matching: find.byIcon(WingIcons.newChat),
+      ),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const ValueKey('project-action-new')));
     await tester.pumpAndSettle();
     expect(

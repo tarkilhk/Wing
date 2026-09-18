@@ -9,3 +9,5 @@ Contributors to the original client include CarlosReyesPena, CristianGCiocoi, AI
 Vendored diagram assets retain [Mermaid's license](android/app/src/main/assets/diagrams/MERMAID-LICENSE) and [DOMPurify's license](android/app/src/main/assets/diagrams/DOMPURIFY-LICENSE). These apply to their respective components.
 
 The vendored Flutter setup action retains [its MIT license](.github/actions/setup-flutter/LICENSE) and upstream copyright notice. Its source revision and local changes are recorded in [the action README](.github/actions/setup-flutter/README.md).
+
+The New chat icon uses Lucide's `square-pen` from `lucide-static` 0.468.0, under the [ISC license](assets/fonts/LUCIDE-LICENSE). The app includes a single-glyph font subset and the matching Android shortcut vector; see [icon provenance](assets/fonts/README.md).

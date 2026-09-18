@@ -13,6 +13,7 @@ import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/wing_icons.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/widgets/chat_intelligence_picker.dart';
 import 'package:wing/core/widgets/compact_switch.dart';
@@ -71,6 +72,7 @@ void main() {
         }
         for (final entry in {
           'MaterialIcons': 'build/studio-icons.otf',
+          'WingIcons': 'assets/fonts/wing-icons.ttf',
           'monospace': 'build/studio-mono.ttf',
         }.entries) {
           final loader = FontLoader(entry.key)
@@ -244,7 +246,13 @@ void main() {
             );
             final anchor = tester.getRect(projectActions);
             expect(anchor.size, const Size(48, 48));
-            expect(find.byIcon(Icons.edit_square), findsNothing);
+            expect(
+              find.descendant(
+                of: find.byKey(const ValueKey('project-p2')),
+                matching: find.byIcon(WingIcons.newChat),
+              ),
+              findsNothing,
+            );
             await tester.tap(projectActions);
             await tester.pumpAndSettle();
             final menu = find
