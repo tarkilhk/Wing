@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix Live chat staying amber after an administration connection drops while chat remains connected. Keep genuine workspace chat interruptions visible.
+
 - Fix MCP connector reload requests rejected by stock Hermes. Show connection-test, sign-in and reload failure reasons with credential redaction, and clear stale successful test results before retesting.
 
 - Redesign Hermes health around Server and Profile: remove the global health verdict, load profile observations directly, consolidate provider access, and add an explicit Check profile action. Keep Usage scoped to profiles and Logs scoped to the server. Refine diagnostic, access, usage and log detail screens for both themes and enlarged text.

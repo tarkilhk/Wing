@@ -92,7 +92,7 @@ class AdministrationRepository {
                 ),
               )
               ..connectionStatus = connectionStatus
-              ..statusOwner = 'administration:$name',
+              ..reportsLiveChat = false,
       ),
       close: () {
         for (final gateway in gateways.values) {

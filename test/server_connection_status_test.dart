@@ -43,6 +43,18 @@ void main() {
     expect(status.phase, ServerConnectionPhase.disconnected);
   });
 
+  test('a working profile does not hide interrupted background chat', () {
+    final status = ServerConnectionStatus('Claw');
+    addTearDown(status.dispose);
+    status.accessAvailable();
+    status.liveChanged('work', true);
+    status.liveChanged('travel', false);
+    expect(status.phase, ServerConnectionPhase.limited);
+    expect(status.description, 'Live updates interrupted');
+    status.liveChanged('travel', true);
+    expect(status.phase, ServerConnectionPhase.connected);
+  });
+
   test('rejected operation proves access; sign-in and TLS need action', () {
     final status = ServerConnectionStatus('Claw');
     addTearDown(status.dispose);

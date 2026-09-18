@@ -86,7 +86,7 @@ class ProfileGateway {
     } catch (failure) {
       if (isTemporaryWorkspaceFailure(failure)) {
         disconnect();
-        connectionStatus?.liveChanged(_statusOwner, false);
+        _liveChanged(false);
         onConnectionChanged?.call(false);
       }
       rethrow;
@@ -102,8 +102,15 @@ class ProfileGateway {
   final void Function() disconnect;
   final Future<ProfileDiscovery> Function() _discover;
   ServerConnectionStatus? connectionStatus;
-  String? statusOwner;
-  String get _statusOwner => statusOwner ?? scope.profileName;
+  // Administration RPC sockets do not carry chat updates and are not recovered
+  // by the workspace. Their lifetime must not determine live chat availability.
+  bool reportsLiveChat = true;
+  void _liveChanged(bool connected) {
+    if (reportsLiveChat) {
+      connectionStatus?.liveChanged(scope.profileName, connected);
+    }
+  }
+
   Future<Map<String, dynamic>> _get(
     String endpoint,
     Map<String, String> query,
@@ -193,7 +200,7 @@ class ProfileGateway {
         }
         connected = value;
         if (!value && !closed && identical(socket, candidate)) {
-          gateway.connectionStatus?.liveChanged(gateway._statusOwner, false);
+          gateway._liveChanged(false);
         }
         gateway.onConnectionChanged?.call(value);
       };
@@ -297,16 +304,16 @@ class ProfileGateway {
   Future<void> connect() async {
     try {
       await _connect();
-      connectionStatus?.liveChanged(_statusOwner, true);
+      _liveChanged(true);
     } catch (_) {
-      connectionStatus?.liveChanged(_statusOwner, false);
+      _liveChanged(false);
       rethrow;
     }
   }
 
   void close() {
     _close();
-    if (statusOwner != null) connectionStatus?.forgetLive(_statusOwner);
+    if (reportsLiveChat) connectionStatus?.forgetLive(scope.profileName);
   }
 
   /// Revalidate immediately before writes. Stock servers can still have a
