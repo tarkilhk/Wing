@@ -64,7 +64,10 @@ configuration never establishes connectivity. Switching profiles detaches old
 observations immediately, and late responses cannot replace the current profile.
 
 Server diagnostic results retain their action identity, captured scope, output and
-timestamps through detail navigation and profile switches. Reviewing output reads
+timestamps through detail navigation and profile switches. Run starts the diagnostic
+without opening its result screen; tapping the row opens details. Health polls
+running diagnostics every three seconds and updates Doctor issue counts in place.
+Reviewing output reads
 the same operation. Run again is a separate detail action, offered only for a known
 finished operation. Doctor summaries show parsed findings; full output remains
 available. Other operations show their actual output. Exit zero alone never means

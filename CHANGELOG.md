@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep Doctor and Security audit Run actions on Health, and refresh diagnostic status and Doctor issue counts automatically without opening details.
+
 - Remove the duplicate Health profile selector and replace Check profile with a refresh icon beside the Profile heading, using the profile selected in the shared header.
 
 - Open Usage breakdown and trend on token types, and show the exact daily token total in a tooltip when tapping an activity square.

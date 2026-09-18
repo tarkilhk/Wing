@@ -184,38 +184,24 @@ class _AdminActionPageState extends State<AdminActionPage> {
   }
 }
 
-Future<void> startAdminOperation(
+Future<AdministrationAction?> startAdminOperation(
   BuildContext context,
   AdministrationRepository server,
   String path,
   String title,
-  String scope, {
-  ValueChanged<AdminDiagnosticObservation>? onObservation,
-}) async {
+  String scope,
+) async {
   if (!await adminConfirm(
     context,
     title,
     'Run this diagnostic on $scope? The result may include backend log details.',
     action: 'Run',
   )) {
-    return;
+    return null;
   }
   try {
     final result = await server.write('POST', path);
-    final action = AdministrationAction.fromJson(result);
-    onObservation?.call(AdminDiagnosticObservation(action, const {}, null));
-    if (context.mounted) {
-      await adminPush(
-        context,
-        (context) => AdminActionPage(
-          server: server,
-          action: action,
-          title: title,
-          scope: scope,
-          onObservation: onObservation,
-        ),
-      );
-    }
+    return AdministrationAction.fromJson(result);
   } catch (e) {
     if (context.mounted) {
       adminMessage(
@@ -225,6 +211,7 @@ Future<void> startAdminOperation(
       );
     }
   }
+  return null;
 }
 
 class AdminLogsPage extends StatefulWidget {

@@ -48,22 +48,33 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
     super.dispose();
   }
 
-  Future<void> _run(String path, String title, String scope) async {
+  Future<void> _run(
+    String path,
+    String title,
+    String scope, {
+    required bool openResult,
+  }) async {
     final controller = health;
     final generation = controller.beginDiagnostic(path, scope: scope);
     if (generation == null) return;
+    var started = false;
     try {
-      await startAdminOperation(
+      final action = await startAdminOperation(
         context,
         controller.server,
         path,
         title,
         scope,
-        onObservation: (value) =>
-            controller.observeDiagnostic(path, value, generation: generation),
       );
+      if (action != null) {
+        controller.trackDiagnostic(path, action, generation: generation);
+        started = true;
+      }
     } finally {
       controller.finishDiagnostic(path, generation);
+    }
+    if (started && mounted && identical(controller, health) && openResult) {
+      await _result(path, title, scope);
     }
   }
 
@@ -81,7 +92,7 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
                 _observations[path]?.status['exit_code'] is int
             ? () async {
                 Navigator.of(context).pop();
-                await _run(path, title, scope);
+                await _run(path, title, scope, openResult: true);
               }
             : null,
         title: title,
@@ -134,14 +145,14 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
           ? TextButton(
               onPressed: health.starting.contains(path)
                   ? null
-                  : () => _run(path, title, scope),
+                  : () => _run(path, title, scope, openResult: false),
               child: const Text('Run'),
             )
           : const Icon(Icons.chevron_right, size: 20),
       onTap: health.starting.contains(path)
           ? null
           : () => observation == null
-                ? _run(path, title, scope)
+                ? _run(path, title, scope, openResult: true)
                 : _result(path, title, scope),
     );
   }

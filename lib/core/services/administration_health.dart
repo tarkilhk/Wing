@@ -59,6 +59,7 @@ class AdministrationHealth extends ChangeNotifier {
   int _profileGeneration = 0;
   final _readiness = AdministrationObservation();
   final _diagnosticGenerations = <String, int>{};
+  final _diagnosticTimers = <String, Timer>{};
   final _diagnostics = <String, AdminDiagnosticObservation>{};
   final _diagnosticScopes = <String, String>{};
   final _pendingScopes = <String, String>{};
@@ -488,6 +489,58 @@ class AdministrationHealth extends ChangeNotifier {
     return generation;
   }
 
+  /// Track a started operation independently of its result screen.
+  void trackDiagnostic(
+    String path,
+    AdministrationAction action, {
+    required int generation,
+  }) {
+    if (_disposed || generation != _diagnosticGenerations[path]) return;
+    _diagnosticTimers.remove(path)?.cancel();
+    observeDiagnostic(
+      path,
+      AdminDiagnosticObservation(action, const {'running': true}, null),
+      generation: generation,
+    );
+    unawaited(_refreshDiagnostic(path, action, generation));
+  }
+
+  Future<void> _refreshDiagnostic(
+    String path,
+    AdministrationAction action,
+    int generation,
+  ) async {
+    if (_disposed || generation != _diagnosticGenerations[path]) return;
+    try {
+      final status = await action.status(server);
+      if (_disposed || generation != _diagnosticGenerations[path]) return;
+      observeDiagnostic(
+        path,
+        AdminDiagnosticObservation(action, status, _now()),
+        generation: generation,
+      );
+      if (status['running'] == true) {
+        _diagnosticTimers[path] = Timer(
+          const Duration(seconds: 3),
+          () => _refreshDiagnostic(path, action, generation),
+        );
+      }
+    } catch (error) {
+      if (_disposed || generation != _diagnosticGenerations[path]) return;
+      final previous = _diagnostics[path]!;
+      observeDiagnostic(
+        path,
+        AdminDiagnosticObservation(
+          action,
+          previous.status,
+          previous.checkedAt,
+          readError: administrationError(error),
+        ),
+        generation: generation,
+      );
+    }
+  }
+
   int diagnosticGeneration(String path) => _diagnosticGenerations[path] ?? 0;
 
   void observeDiagnostic(
@@ -534,6 +587,10 @@ class AdministrationHealth extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _expiry?.cancel();
+    for (final timer in _diagnosticTimers.values) {
+      timer.cancel();
+    }
+    _diagnosticTimers.clear();
     _overview?.removeListener(_changed);
     connectionStatus?.removeListener(_changed);
     super.dispose();
