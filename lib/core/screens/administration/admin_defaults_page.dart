@@ -382,6 +382,7 @@ class AdminFallbackPage extends StatefulWidget {
 
 class _AdminFallbackPageState extends State<AdminFallbackPage> {
   List<Map<String, dynamic>>? _rows;
+  Object? _loadedValue;
   bool _busy = false;
   String? _error;
   @override
@@ -393,10 +394,14 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
   Future<void> _load() async {
     try {
       final cfg = await widget.profile.config();
-      final rows = administrationRows(cfg['fallback_providers'] ?? []);
+      final value = cfg['fallback_providers'] ?? [];
+      // Stock Hermes accepts one entry as a map as well as an ordered list.
+      // Keep the wire value separately for the pre-save conflict check.
+      final rows = administrationRows(value is Map ? [value] : value);
       if (mounted) {
         setState(() {
           _rows = rows;
+          _loadedValue = value;
           _error = null;
         });
       }
@@ -412,13 +417,18 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
     });
     try {
       final latest = await widget.profile.config();
-      if (!sameSetting(latest['fallback_providers'] ?? [], _rows)) {
+      if (!sameSetting(latest['fallback_providers'] ?? [], _loadedValue)) {
         throw const AdministrationFailure(
           'Fallback models changed elsewhere. Refresh before applying this change.',
         );
       }
       await widget.profile.saveSettings({'fallback_providers': next});
-      if (mounted) setState(() => _rows = next);
+      if (mounted) {
+        setState(() {
+          _rows = next;
+          _loadedValue = next;
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _error = administrationError(e, writing: true));
