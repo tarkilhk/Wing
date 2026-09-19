@@ -16,6 +16,7 @@ import 'package:wing/core/widgets/chat_profile_bar.dart';
 import 'support/profile_browser_fixture.dart';
 
 class TargetFixture extends ProfileBrowserFixture {
+  final rowUpdates = <String, Map<String, dynamic>>{};
   final tokenInputs = <int, num>{};
 
   @override
@@ -39,6 +40,7 @@ class TargetFixture extends ProfileBrowserFixture {
         'pinned': i == 11,
         'source': i == 8 ? 'cron' : 'cli',
         'archived': false,
+        ...?rowUpdates['$profile/session-$i'],
       },
   ];
   @override
@@ -245,6 +247,61 @@ void main() {
       expect(find.text('Status 2'), findsNothing);
     },
   );
+  for (final boundary in ['refresh', 'return', 'order by']) {
+    testWidgets('live updates keep chat positions until $boundary', (
+      tester,
+    ) async {
+      await show(tester);
+      await select(tester, 'profile', 'personal');
+      final first = find.byKey(const ValueKey('chat-personal-session-0'));
+      final second = find.byKey(const ValueKey('chat-personal-session-1'));
+      expect(
+        tester.getTopLeft(first).dy,
+        lessThan(tester.getTopLeft(second).dy),
+      );
+      final resource = controller.browserResource('personal');
+      fixture.rowUpdates['personal/session-1'] = {
+        'last_active': fixture.now + 100,
+        'title': 'Live title update',
+      };
+      resource.sessions = [
+        for (final row in resource.sessions)
+          if (row['id'] == 'session-1')
+            {
+              ...row,
+              'last_active': fixture.now + 100,
+              'title': 'Live title update',
+            }
+          else
+            row,
+      ];
+      await controller.refreshActivity();
+      await tester.pumpAndSettle();
+      expect(find.text('Live title update'), findsOneWidget);
+      expect(
+        tester.getTopLeft(first).dy,
+        lessThan(tester.getTopLeft(second).dy),
+      );
+      switch (boundary) {
+        case 'refresh':
+          await tester
+              .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+              .onRefresh();
+        case 'return':
+          await tester.pumpWidget(const SizedBox());
+          await show(tester);
+        case 'order by':
+          await tester.tap(find.byKey(const ValueKey('chat-order-by')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('chat-menu-updated')));
+      }
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(second).dy,
+        lessThan(tester.getTopLeft(first).dy),
+      );
+    });
+  }
   testWidgets(
     'project popup has five visible rows and scrolls without closing',
     (tester) async {
@@ -480,6 +537,94 @@ void main() {
     expect(grouped.first.tokens, 3000);
     expect(grouped.where((g) => g.key == 'personal/p0').single.tokens, 9000);
   });
+  for (final ordering in ChatOrdering.values) {
+    test(
+      'stable arrangement keeps $ordering live without moving rows or groups',
+      () {
+        final owner = controller.browserResource('personal');
+        ChatListEntry entry(
+          String id,
+          int value, {
+          String project = 'p0',
+          bool pinned = false,
+        }) => ChatListEntry(
+          owner: owner,
+          row: {
+            'id': id,
+            'last_active': value,
+            'started_at': value,
+            'input_tokens': value,
+            'actual_cost_usd': value,
+            'pinned': pinned,
+          },
+          status: value > 100 ? ChatListStatus.needsInput : ChatListStatus.idle,
+          project: {'id': project, 'name': project},
+        );
+        final arrangement = ChatListArrangement();
+        List<ChatListGroup> arrange(List<ChatListEntry> entries) =>
+            arrangement.apply(
+              groupChats(entries, ChatGrouping.project, ordering),
+              ChatGrouping.project,
+              ordering,
+            );
+        final a = entry('a', 100);
+        arrange([a, entry('b', 90), entry('other', 80, project: 'p1')]);
+        final b = entry('b', 200);
+        final c = entry('new', 300);
+        final result = arrange([a, b, c, entry('other', 400, project: 'p1')]);
+        expect(result.map((g) => g.key), ['personal/p0', 'personal/p1']);
+        expect(result.first.entries.map((e) => e.id), ['a', 'b', 'new']);
+        expect(result.first.entries[1], same(b));
+        expect(result.first.tokens, 600);
+        arrangement.reset();
+        final refreshed = arrange([
+          a,
+          b,
+          c,
+          entry('other', 400, project: 'p1'),
+        ]);
+        expect(refreshed.map((g) => g.key), ['personal/p1', 'personal/p0']);
+        expect(refreshed.last.entries.map((e) => e.id), ['new', 'b', 'a']);
+      },
+    );
+  }
+  for (final grouping in [ChatGrouping.status, ChatGrouping.updated]) {
+    test(
+      '$grouping bucket changes wait for refresh while pinning stays immediate',
+      () {
+        final owner = controller.browserResource('personal');
+        final now = DateTime.now();
+        ChatListEntry entry({required bool active, bool pinned = false}) =>
+            ChatListEntry(
+              owner: owner,
+              row: {
+                'id': 'a',
+                'last_active':
+                    now
+                        .subtract(Duration(days: active ? 0 : 2))
+                        .millisecondsSinceEpoch /
+                    1000,
+                'pinned': pinned,
+              },
+              status: active ? ChatListStatus.working : ChatListStatus.idle,
+            );
+        final arrangement = ChatListArrangement();
+        List<ChatListGroup> arrange(ChatListEntry entry) => arrangement.apply(
+          groupChats([entry], grouping, ChatOrdering.updated, now: now),
+          grouping,
+          ChatOrdering.updated,
+        );
+        final initial = arrange(entry(active: false)).single.key;
+        final live = arrange(entry(active: true)).single;
+        expect(live.key, initial);
+        expect(live.entries.single.status, ChatListStatus.working);
+        expect(arrange(entry(active: true, pinned: true)).single.key, 'pinned');
+        expect(arrange(entry(active: true)).single.key, initial);
+        arrangement.reset();
+        expect(arrange(entry(active: true)).single.key, isNot(initial));
+      },
+    );
+  }
   test('REST active flag cannot invent Working or Draft', () {
     expect(chatListStatus({'is_active': true}), ChatListStatus.idle);
     expect(chatListStatus({'message_count': 0}), ChatListStatus.draft);

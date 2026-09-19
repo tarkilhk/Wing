@@ -116,6 +116,79 @@ class ChatListGroup {
   num get tokens => entries.fold<num>(0, (n, e) => n + chatTokens(e.row));
 }
 
+/// Keeps presentation positions stable while the entries themselves stay live.
+/// Reset only at an explicit ordering boundary, not on controller notifications.
+class ChatListArrangement {
+  final _groupPositions = <String, int>{};
+  final _entryPositions = <String, int>{};
+  final _buckets = <String, String>{};
+  final _headings = <String, ChatListGroup>{};
+  ChatGrouping? _grouping;
+  ChatOrdering? _ordering;
+
+  void reset() {
+    _groupPositions.clear();
+    _entryPositions.clear();
+    _buckets.clear();
+    _headings.clear();
+  }
+
+  List<ChatListGroup> apply(
+    List<ChatListGroup> groups,
+    ChatGrouping grouping,
+    ChatOrdering ordering,
+  ) {
+    if (_grouping != grouping || _ordering != ordering) reset();
+    _grouping = grouping;
+    _ordering = ordering;
+    final result = <String, ChatListGroup>{};
+    ChatListGroup groupFor(String key) => result.putIfAbsent(key, () {
+      final heading = _headings[key]!;
+      return ChatListGroup(
+        key,
+        heading.label,
+        [],
+        project: heading.project,
+        owner: heading.owner,
+      );
+    });
+    for (final group in groups) {
+      _groupPositions.putIfAbsent(group.key, () => _groupPositions.length);
+      _headings[group.key] = ChatListGroup(
+        group.key,
+        group.label,
+        [],
+        project: group.project,
+        owner: group.owner,
+      );
+      if (group.entries.isEmpty) groupFor(group.key);
+      for (final entry in group.entries) {
+        _entryPositions.putIfAbsent(entry.key, () => _entryPositions.length);
+        // Status dots and dates remain live, but their changing buckets must
+        // not move a row to another section while the user is reading it.
+        final key = group.key == 'pinned'
+            ? group.key
+            : grouping == ChatGrouping.status ||
+                  grouping == ChatGrouping.updated
+            ? _buckets.putIfAbsent(entry.key, () => group.key)
+            : group.key;
+        groupFor(key).entries.add(entry);
+      }
+    }
+    for (final group in result.values) {
+      group.entries.sort(
+        (a, b) => _entryPositions[a.key]!.compareTo(_entryPositions[b.key]!),
+      );
+    }
+    return result.values.toList()..sort((a, b) {
+      // Explicit pin/unpin actions retain the dedicated pinned section.
+      if (a.key == 'pinned') return b.key == 'pinned' ? 0 : -1;
+      if (b.key == 'pinned') return 1;
+      return _groupPositions[a.key]!.compareTo(_groupPositions[b.key]!);
+    });
+  }
+}
+
 List<ChatListGroup> groupChats(
   List<ChatListEntry> entries,
   ChatGrouping grouping,

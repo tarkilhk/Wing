@@ -44,6 +44,15 @@ on 19 September 2026. The reference prototype remains in the workspace at
 - Group by and Order by are direct controls beneath the filters, with icons,
   sentence-case menu titles, and no redundant back link or total chat count.
   Project is the initial grouping; Updated is the initial ordering.
+- Apply ordering on entry, after an explicit workspace refresh completes, and
+  immediately when the user chooses Order by or Group by. While the screen stays
+  open, retain chat and group positions across live updates and internal reloads.
+  Titles, dots, metadata and totals remain live. New arrivals append after known
+  rows/groups; status/date bucket changes wait for the next ordering boundary.
+  Filters/search narrow the established arrangement without re-sorting it.
+  Explicit pin/unpin and project changes still move the affected chat to its
+  requested section. Returning from a conversation or another destination starts
+  a fresh arrangement. This state is local to the screen, not persisted.
 - The header menu contains Show, Show automated chats, Collapse/Expand all,
   Mark all as read, Archived/Active chats, and New project. Every item has an
   icon. No duplicate filter, grouping, ordering or global Show all control.

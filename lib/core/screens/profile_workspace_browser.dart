@@ -48,6 +48,8 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   ChatGrouping _grouping = ChatGrouping.project;
   ChatOrdering _ordering = ChatOrdering.updated;
   bool _archived = false, _started = false, _busy = false;
+  int _chatOpenGeneration = 0;
+  String? _openingChat;
   String _query = '';
   List<ChatListEntry> _allEntries = [], _visibleEntries = [];
   List<ChatListGroup> _currentGroups = [];
@@ -56,6 +58,9 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   Timer? _debounce;
   Future<void>? _refreshing;
   bool? _refreshingArchived;
+  bool _reorderAfterRefresh = false;
+  int _refreshGeneration = 0;
+  final _arrangement = ChatListArrangement();
   String get _preferencesKey =>
       'chat_list_target_${controller.connectionIdentity}';
 
@@ -148,7 +153,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     setState(() => _busy = true);
     try {
       await action();
-      if (refresh && mounted) await _refresh();
+      if (refresh && mounted) await _refresh(reorder: false);
     } catch (error) {
       if (mounted) {
         _notice(
@@ -162,23 +167,34 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     }
   }
 
-  Future<void> _refresh() {
+  Future<void> _refresh({bool reorder = true}) {
     final active = _refreshing;
-    if (active != null && _refreshingArchived == _archived) return active;
+    if (active != null && _refreshingArchived == _archived) {
+      _reorderAfterRefresh |= reorder;
+      return active;
+    }
+    _reorderAfterRefresh = reorder;
+    if (_refreshingArchived != _archived) _arrangement.reset();
     _refreshingArchived = _archived;
     late final Future<void> pending;
-    pending = _loadRefresh(_archived).whenComplete(() {
+    pending = _loadRefresh(_archived, ++_refreshGeneration).whenComplete(() {
       if (identical(_refreshing, pending)) _refreshing = null;
     });
     return _refreshing = pending;
   }
 
-  Future<void> _loadRefresh(bool archived) async {
+  Future<void> _loadRefresh(bool archived, int generation) async {
     await _data.refresh(archivedOnly: archived);
     if (!mounted) return;
-    if (_archived != archived) return;
+    if (_archived != archived || generation != _refreshGeneration) return;
     if (_query.isNotEmpty) unawaited(_data.search(_query));
-    unawaited(controller.refreshActivity());
+    await controller.refreshActivity();
+    if (mounted &&
+        _archived == archived &&
+        generation == _refreshGeneration &&
+        _reorderAfterRefresh) {
+      setState(_arrangement.reset);
+    }
   }
 
   void _setQuery(String value) {
@@ -513,8 +529,10 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                       selected: _ordering == value,
                     ),
                 ],
-                onSelected: (id) =>
-                    _change(() => _ordering = ChatOrdering.values.byName(id)),
+                onSelected: (id) => _change(() {
+                  _ordering = ChatOrdering.values.byName(id);
+                  _arrangement.reset();
+                }),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -667,6 +685,33 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     if (anchor.mounted) await showChatActions(anchor, controller, e.row);
   }
 
+  Future<void> _openChat(ChatListEntry entry) async {
+    if (_busy || _openingChat == entry.key) return;
+    final generation = ++_chatOpenGeneration;
+    _openingChat = entry.key;
+    bool isCurrent() => mounted && generation == _chatOpenGeneration;
+    try {
+      if (entry.owner.offlineSnapshot || controller.recovering) {
+        await controller.openNotification(entry.sessionKey);
+      } else {
+        await controller.openSession(
+          entry.sessionKey,
+          isCurrentRequest: isCurrent,
+        );
+      }
+    } catch (error) {
+      if (isCurrent()) {
+        _notice(
+          error is StateError
+              ? error.message.toString()
+              : 'Could not open that chat. Please retry.',
+        );
+      }
+    } finally {
+      if (isCurrent()) _openingChat = null;
+    }
+  }
+
   Widget _session(ChatListEntry e) {
     final local = e.owner.chats[e.id];
     final largeText = MediaQuery.textScalerOf(context).scale(16) > 20;
@@ -771,15 +816,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           onLongPress: _busy || controller.switching
               ? null
               : () => _run(() => _chatActions(anchor, e), refresh: true),
-          onTap: _busy || controller.switching
-              ? null
-              : () => _run(() async {
-                  if (e.owner.offlineSnapshot || controller.recovering) {
-                    await controller.openNotification(e.sessionKey);
-                  } else {
-                    await controller.openSession(e.sessionKey);
-                  }
-                }),
+          onTap: _busy ? null : () => _openChat(e),
         ),
       ),
     );
@@ -1156,7 +1193,32 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   Widget build(BuildContext context) {
     _allEntries = _data.entries;
     _visibleEntries = _filterMatches(_allEntries);
-    _currentGroups = _buildGroups(_visibleEntries);
+    final visibleKeys = _visibleEntries.map((e) => e.key).toSet();
+    final arranged = _arrangement.apply(
+      _buildGroups(
+        _allEntries
+            .where(
+              (e) => controller.sessionVisibility.includes(
+                e.row['source'] as String?,
+              ),
+            )
+            .toList(),
+      ),
+      _grouping,
+      _ordering,
+    );
+    _currentGroups = [
+      for (final group in arranged)
+        if (group.entries.isEmpty ||
+            group.entries.any((e) => visibleKeys.contains(e.key)))
+          ChatListGroup(
+            group.key,
+            group.label,
+            group.entries.where((e) => visibleKeys.contains(e.key)).toList(),
+            project: group.project,
+            owner: group.owner,
+          ),
+    ];
     final tokens = WingTokens.of(context);
     final enabled =
         controller.current != null && !controller.switching && !_busy;
