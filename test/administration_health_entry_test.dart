@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/administration/administration_content.dart';
+import 'package:wing/core/screens/administration/admin_health_section.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
@@ -103,6 +104,18 @@ class _Fixture {
     ) async {
       requests.add('$method $path');
       scopedRequests.add((method, path, Map.of(query)));
+      if (method == 'POST' &&
+          {'ops/doctor', 'ops/security-audit'}.contains(path)) {
+        return {'name': path.substring(4), 'pid': 7};
+      }
+      if (method == 'GET' && path.startsWith('actions/')) {
+        return {
+          'pid': 7,
+          'running': false,
+          'exit_code': 0,
+          'lines': ['All checks passed!'],
+        };
+      }
       if (method == 'POST' && path == 'mcp/servers/example/test') {
         if (checkConnector != null) return checkConnector!(query['profile']!);
         return {'ok': status != 'problems'};
@@ -320,8 +333,15 @@ void main({
         fixture.explicitCalls.where((v) => v.startsWith('setup.runtime_check')),
         ['setup.runtime_check default'],
       );
+      expect(
+        fixture.scopedRequests
+            .where((r) => r.$1 == 'POST' && r.$2.startsWith('ops/'))
+            .map((r) => (r.$2, r.$3.isEmpty)),
+        [('ops/doctor', true), ('ops/security-audit', true)],
+      );
+      expect(find.byType(AlertDialog), findsNothing);
       expect(find.text('Not fully checked'), findsNothing);
-      expect(find.text('Credentials available'), findsOneWidget);
+      expect(find.text('Access is set up'), findsOneWidget);
       expect(
         fixture.scopedRequests
             .where((r) => r.$1 == 'POST' && r.$2 == 'mcp/servers/example/test')
@@ -364,11 +384,11 @@ void main({
         ),
         hasLength(2),
       );
-      expect(find.textContaining('Credentials available'), findsOneWidget);
+      expect(find.textContaining('Access is set up'), findsOneWidget);
       await tester.ensureVisible(find.text('Model access'));
       await tester.tap(find.text('Model access'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Credentials available'), findsOneWidget);
+      expect(find.textContaining('Access is set up'), findsOneWidget);
       expect(find.text('Provider configuration detected'), findsNothing);
       expect(
         find.text('Provider readiness is not fully observed'),
@@ -387,7 +407,7 @@ void main({
           .widget<RefreshIndicator>(find.byType(RefreshIndicator))
           .onRefresh();
       await tester.pumpAndSettle();
-      expect(find.text('Credentials available'), findsOneWidget);
+      expect(find.text('Access is set up'), findsOneWidget);
       expect(find.text('gpt-6-astra · openai-codex'), findsOneWidget);
       expect(
         fixture.explicitCalls.where((v) => v.startsWith('setup.runtime_check')),
@@ -396,10 +416,15 @@ void main({
       expect(
         fixture.requests.where(
           (v) =>
-              (v.startsWith('POST') && !v.endsWith('/test')) ||
-              v.contains('ops/'),
+              v.startsWith('POST') &&
+              !v.endsWith('/test') &&
+              !{'POST ops/doctor', 'POST ops/security-audit'}.contains(v),
         ),
         isEmpty,
+      );
+      expect(
+        fixture.requests.where((r) => r.startsWith('POST ops/')),
+        hasLength(2),
       );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
@@ -427,9 +452,9 @@ void main({
     );
     await tester.pumpAndSettle();
     expect(find.text('Credentials missing'), findsOneWidget);
-    expect(find.text('tool-0 needs setup'), findsOneWidget);
-    expect(find.text('1 connector failed its check'), findsOneWidget);
-    expect(find.text('1 task needs attention'), findsOneWidget);
+    expect(find.text('21 enabled · 1 needs setup'), findsOneWidget);
+    expect(find.text('0 passed · 1 failed'), findsOneWidget);
+    expect(find.text('1 task · 1 has a reported error'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
@@ -460,7 +485,7 @@ void main({
       ),
     );
     await tester.pump();
-    expect(find.text('Checking credentials…'), findsOneWidget);
+    expect(find.text('Checking access…'), findsOneWidget);
     expect(
       tester
           .widget<IconButton>(
@@ -473,7 +498,7 @@ void main({
     );
     await fixture.workspace.switchProfile('client-work');
     await tester.pumpAndSettle();
-    expect(find.text('Credentials available'), findsOneWidget);
+    expect(find.text('Access is set up'), findsOneWidget);
     expect(
       tester
           .widget<IconButton>(
@@ -491,9 +516,9 @@ void main({
     });
     connector.complete({'ok': false});
     await tester.pumpAndSettle();
-    expect(find.text('Credentials available'), findsOneWidget);
+    expect(find.text('Access is set up'), findsOneWidget);
     expect(find.text('Credentials missing'), findsNothing);
-    expect(find.text('1 connector failed its check'), findsNothing);
+    expect(find.text('0 passed · 1 failed'), findsNothing);
     fixture.checkAccess = (profile) async => {
       'ok': true,
       'profile': profile,
@@ -507,8 +532,12 @@ void main({
       hasLength(1),
     );
     expect(find.text('Credentials missing'), findsOneWidget);
-    expect(find.text('1 connector failed its check'), findsOneWidget);
-    // Returning to a profile and reopening Health reuse its completed checks.
+    expect(find.text('0 passed · 1 failed'), findsOneWidget);
+    expect(
+      fixture.requests.where((r) => r.startsWith('POST ops/')),
+      hasLength(2),
+    );
+    // Returning to Health reuses each profile and the server results.
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(
       MaterialApp(
@@ -526,6 +555,10 @@ void main({
     expect(
       fixture.explicitCalls.where((v) => v == 'setup.runtime_check default'),
       hasLength(1),
+    );
+    expect(
+      fixture.requests.where((r) => r.startsWith('POST ops/')),
+      hasLength(2),
     );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
@@ -598,6 +631,36 @@ void main({
               ]),
             );
             expect(find.byType(TabBar), findsNothing);
+            final pageScroll = find
+                .byWidgetPredicate(
+                  (w) =>
+                      w is Scrollable && w.axisDirection == AxisDirection.down,
+                )
+                .first;
+            for (final section in ['Server', 'Profile']) {
+              final heading = find.byWidgetPredicate(
+                (w) => w is AdminHealthSectionHeading && w.title == section,
+              );
+              await tester.scrollUntilVisible(
+                heading,
+                180,
+                scrollable: pageScroll,
+              );
+              await tester.pumpAndSettle();
+              expect(
+                find.descendant(
+                  of: heading,
+                  matching: find.textContaining(
+                    section == 'Profile' && status == 'unknown'
+                        ? 'Check incomplete'
+                        : 'Last checked ',
+                  ),
+                ),
+                findsOneWidget,
+              );
+            }
+            await tester.drag(pageScroll, const Offset(0, 3000));
+            await tester.pumpAndSettle();
             if (status == 'missing' || status == 'green') {
               await tester.scrollUntilVisible(
                 find.byTooltip('Refresh profile status'),
@@ -610,6 +673,10 @@ void main({
                     )
                     .first,
               );
+              await tester.ensureVisible(
+                find.byTooltip('Refresh profile status'),
+              );
+              await tester.pumpAndSettle();
               await tester.tap(find.byTooltip('Refresh profile status'));
               await tester.pumpAndSettle();
             }
@@ -639,7 +706,15 @@ void main({
               await snapshot(tester, '$name-model-access-action');
             }
             expect(find.text('Not fully checked'), findsNothing);
-            for (final title in ['Tools', 'Connectors', 'Scheduled tasks']) {
+            expect(
+              find.textContaining(RegExp(r'^Checked [0-9]')),
+              findsNothing,
+            );
+            for (final title in [
+              'Tool setup',
+              'Connectors',
+              'Scheduled tasks',
+            ]) {
               await tester.drag(vertical, const Offset(0, 3000));
               await tester.pumpAndSettle();
               await tester.scrollUntilVisible(
@@ -654,7 +729,11 @@ void main({
               );
               final tile = tester.widget<ListTile>(row);
               final needsDetails = switch (title) {
-                'Tools' => ['amber', 'problems', 'unknown'].contains(status),
+                'Tool setup' => [
+                  'amber',
+                  'problems',
+                  'unknown',
+                ].contains(status),
                 _ => status == 'problems',
               };
               if (!needsDetails) {
@@ -678,14 +757,14 @@ void main({
               await tester.tap(find.text(title));
               await tester.pumpAndSettle();
               final recovery = find.text(switch (title) {
-                'Tools' => 'Skills and tools',
+                'Tool setup' => 'Skills and tools',
                 'Connectors' => 'Manage connectors',
                 _ => 'Manage scheduled tasks',
               });
               await tester.scrollUntilVisible(
                 recovery,
                 150,
-                scrollable: find.byType(Scrollable).last,
+                scrollable: find.byType(Scrollable).first,
               );
               await tester.pumpAndSettle();
               expect(recovery, findsOneWidget);
@@ -711,11 +790,42 @@ void main({
               await tester.pageBack();
               await tester.pumpAndSettle();
             }
+            if (status == 'green') {
+              await tester.scrollUntilVisible(
+                find.text('What’s checked?'),
+                200,
+                scrollable: vertical,
+              );
+              await tester.ensureVisible(find.text('What’s checked?'));
+              await tester.tap(find.text('What’s checked?'));
+              await tester.pumpAndSettle();
+              expect(find.byType(AlertDialog), findsOneWidget);
+              await snapshot(tester, '$name-explanation');
+              final explanationScroll = find
+                  .descendant(
+                    of: find.byType(AlertDialog),
+                    matching: find.byType(Scrollable),
+                  )
+                  .first;
+              await tester.scrollUntilVisible(
+                find.textContaining('No reported errors doesn’t mean'),
+                180,
+                scrollable: explanationScroll,
+              );
+              await tester.pumpAndSettle();
+              await tester.drag(explanationScroll, const Offset(0, -3000));
+              await tester.pumpAndSettle();
+              await snapshot(tester, '$name-explanation-lower');
+              await tester.tap(find.text('Close'));
+              await tester.pumpAndSettle();
+              expect(find.byType(AlertDialog), findsNothing);
+            }
             expect(
               fixture.requests.where(
                 (r) =>
-                    (r.startsWith('POST') && !r.endsWith('/test')) ||
-                    r.contains('ops/'),
+                    r.startsWith('POST') &&
+                    !r.endsWith('/test') &&
+                    !{'POST ops/doctor', 'POST ops/security-audit'}.contains(r),
               ),
               isEmpty,
             );

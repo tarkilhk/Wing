@@ -20,6 +20,7 @@ import 'admin_settings_page.dart';
 import 'admin_memory_page.dart';
 import 'admin_providers_page.dart';
 import 'admin_health_page.dart';
+import 'admin_runtime_health.dart';
 import 'admin_defaults_page.dart';
 import 'admin_connectors_page.dart';
 import 'admin_tool_setup_page.dart';
@@ -109,6 +110,11 @@ class _HermesAdministrationContentState
     _healthProfileName = _profile?.name;
     widget.controller.addListener(_workspaceChanged);
     _selectHealthProfile();
+    if (widget.healthOnly) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(refreshHealthDiagnostics(context, _health));
+      });
+    }
   }
 
   void _workspaceChanged() {
@@ -673,6 +679,7 @@ class _HermesAdministrationContentState
               ? null
               : _checkProfile,
           checkingProfile: _checkingProfile,
+          profileCheckedAt: _healthSession.checkedAt(_profile?.name),
           accessChecks: _checksForCurrentProfile,
           onConnections: widget.onConnections,
           onRefresh: _refresh,

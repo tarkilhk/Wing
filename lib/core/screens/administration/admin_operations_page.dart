@@ -307,6 +307,7 @@ Future<AdministrationAction?> startAdminOperation(
   String title, {
   bool confirm = true,
   bool Function()? isActive,
+  VoidCallback? onStarting,
 }) async {
   if (confirm) {
     final confirmed = await showDialog<bool>(
@@ -330,6 +331,7 @@ Future<AdministrationAction?> startAdminOperation(
     if (confirmed != true || !context.mounted) return null;
   }
   try {
+    onStarting?.call();
     final result = await server.startDiagnostic(
       path,
       isActive: isActive ?? () => context.mounted,

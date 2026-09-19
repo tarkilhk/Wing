@@ -6,6 +6,84 @@ import '../../theme/wing_theme.dart';
 import '../../services/administration_health.dart';
 import 'admin_operations_page.dart';
 import 'admin_widgets.dart';
+import 'admin_health_section.dart';
+
+Future<bool> _startDiagnostic(
+  BuildContext context,
+  AdministrationHealth health,
+  String path,
+  String title, {
+  bool confirm = true,
+}) async {
+  final generation = health.beginDiagnostic(
+    path,
+    scope: health.server.connectionLabel,
+  );
+  if (generation == null) return false;
+  try {
+    final action = await startAdminOperation(
+      context,
+      health.server,
+      path,
+      title,
+      confirm: confirm,
+      isActive: () => !health.isDisposed,
+      onStarting: () => health.recordDiagnosticAttempt(path),
+    );
+    if (action == null) return false;
+    health.trackDiagnostic(path, action, generation: generation);
+    return true;
+  } finally {
+    health.finishDiagnostic(path, generation);
+  }
+}
+
+/// Shared by Health entry and its Run all control. Profile selection never
+/// invokes this connection-owned operation.
+Future<void> runAllHealthDiagnostics(
+  BuildContext context,
+  AdministrationHealth health,
+) async {
+  if (!context.mounted ||
+      !health.canStartDiagnostic('ops/doctor') ||
+      !health.canStartDiagnostic('ops/security-audit')) {
+    return;
+  }
+  health.beginServerRefresh();
+  await Future.wait([
+    _startDiagnostic(context, health, 'ops/doctor', 'Doctor', confirm: false),
+    _startDiagnostic(
+      context,
+      health,
+      'ops/security-audit',
+      'Security audit',
+      confirm: false,
+    ),
+  ]);
+}
+
+/// Check missing or expired results once on Health entry. Profile changes do
+/// not invoke this connection-owned work.
+Future<void> refreshHealthDiagnostics(
+  BuildContext context,
+  AdministrationHealth health,
+) async {
+  if (!context.mounted) return;
+  if (AdministrationHealth.diagnosticPaths.every(
+    health.diagnosticNeedsRefresh,
+  )) {
+    await runAllHealthDiagnostics(context, health);
+    return;
+  }
+  await Future.wait([
+    for (final (path, title) in [
+      ('ops/doctor', 'Doctor'),
+      ('ops/security-audit', 'Security audit'),
+    ])
+      if (health.diagnosticNeedsRefresh(path))
+        _startDiagnostic(context, health, path, title, confirm: false),
+  ]);
+}
 
 /// Presents connection-owned observations retained across Health visits.
 class AdminRuntimeHealth extends StatefulWidget {
@@ -31,25 +109,6 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
   void initState() {
     super.initState();
     health.addListener(_changed);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshExpired());
-  }
-
-  void _refreshExpired() {
-    if (!mounted) return;
-    for (final (path, title) in [
-      ('ops/doctor', 'Doctor'),
-      ('ops/security-audit', 'Security audit'),
-    ]) {
-      if (health.diagnosticNeedsRefresh(path)) {
-        _run(
-          path,
-          title,
-          health.server.connectionLabel,
-          openResult: false,
-          confirm: false,
-        );
-      }
-    }
   }
 
   @override
@@ -76,28 +135,9 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
     String title,
     String scope, {
     required bool openResult,
-    bool confirm = true,
   }) async {
     final controller = health;
-    final generation = controller.beginDiagnostic(path, scope: scope);
-    if (generation == null) return;
-    var started = false;
-    try {
-      final action = await startAdminOperation(
-        context,
-        controller.server,
-        path,
-        title,
-        confirm: confirm,
-        isActive: () => !controller.isDisposed,
-      );
-      if (action != null) {
-        controller.trackDiagnostic(path, action, generation: generation);
-        started = true;
-      }
-    } finally {
-      controller.finishDiagnostic(path, generation);
-    }
+    final started = await _startDiagnostic(context, controller, path, title);
     if (started && mounted && identical(controller, health) && openResult) {
       await _result(path, title, scope);
     }
@@ -140,7 +180,9 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
     final label = health.starting.contains(path)
         ? 'Starting…'
         : observation == null
-        ? 'Not run'
+        ? health.hasAttemptedDiagnostic(path)
+              ? 'Start not confirmed'
+              : 'Not run'
         : observation.readError != null
         ? 'Result refresh unavailable'
         : audit?.title ??
@@ -174,7 +216,7 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
       ),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text(
-        '$label${observation?.checkedAt != null ? ' · ${TimeOfDay.fromDateTime(observation!.checkedAt!).format(context)}' : ''}',
+        label,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
       ),
       trailing: observation == null
@@ -193,58 +235,39 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
     );
   }
 
-  Future<void> _runAll() async {
-    if (!health.canStartDiagnostic('ops/doctor') ||
-        !health.canStartDiagnostic('ops/security-audit')) {
-      return;
-    }
-    final scope = health.server.connectionLabel;
-    await Future.wait([
-      _run('ops/doctor', 'Doctor', scope, openResult: false, confirm: false),
-      _run(
-        'ops/security-audit',
-        'Security audit',
-        scope,
-        openResult: false,
-        confirm: false,
-      ),
-    ]);
-  }
-
   @override
   Widget build(BuildContext context) {
     final scope = health.server.connectionLabel;
     final canRunAll =
         health.canStartDiagnostic('ops/doctor') &&
         health.canStartDiagnostic('ops/security-audit');
-    final running =
-        health.starting.isNotEmpty ||
-        _observations.values.any((value) => value.status['running'] == true);
+    final running = health.serverChecking;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Server',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-            IconButton(
-              tooltip: 'Run all diagnostics',
-              onPressed: canRunAll ? _runAll : null,
-              icon: running
-                  ? const SizedBox.square(
-                      dimension: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        semanticsLabel: 'Running diagnostics',
-                      ),
-                    )
-                  : const Icon(Icons.refresh),
-            ),
-          ],
+        AdminHealthSectionHeading(
+          title: 'Server',
+          checkedAt: health.serverCheckIncomplete
+              ? health.serverAttemptedAt
+              : health.serverCheckedAt,
+          checking: running,
+          incomplete: health.serverCheckIncomplete,
+          attempted: health.serverAttemptedAt != null,
+          refresh: IconButton(
+            tooltip: 'Run all diagnostics',
+            onPressed: canRunAll
+                ? () => runAllHealthDiagnostics(context, health)
+                : null,
+            icon: running
+                ? const SizedBox.square(
+                    dimension: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      semanticsLabel: 'Running diagnostics',
+                    ),
+                  )
+                : const Icon(Icons.refresh),
+          ),
         ),
         AdminGroup(
           children: [

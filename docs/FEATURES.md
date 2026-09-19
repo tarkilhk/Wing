@@ -18,7 +18,7 @@ See [Navigation and projects](APP_SHELL.md) for search limits and ownership rule
 
 ## Write and control a conversation
 
-Replies stream into a readable transcript with selectable code, copying, tables, expandable tools, reasoning and server todo progress. A context ring beside the model selector shows server-reported or estimated usage. Model selection has search and collapsible technical-provider groups, with supported reasoning choices.
+Replies stream into a readable transcript with selectable code, copying, tables, expandable tools, reasoning and server todo progress. Scrolling up keeps your reading position while new text arrives below; streaming does not interrupt a drag or fling. Use Latest or New activity to return to the bottom. A context ring beside the model selector shows server-reported or estimated usage. Model selection has search and collapsible technical-provider groups, with supported reasoning choices.
 
 Internal task snapshots and compaction continuation reminders are filtered out of chat and Find in chat. Saved history stays intact, and quoted technical messages remain visible.
 

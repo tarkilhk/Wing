@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- Add Ask Hermes to each Doctor finding, opening an editable new-chat draft under the selected profile with the finding and available diagnostic log.
+
+- Move configuration backup and restore to App settings. Include accent colour, notification preferences and the default composer action, and apply restored settings immediately.
+
+- Group the menu into everyday use, instance/app setup, and Hermes tools. Rename Connections to Hermes instances and move Usage out of Health into the standalone Hermes analytics destination.
+
+- Explain Health checks in plain language, show tool/connector/task counts, and display check times once per Server and Profile section with incomplete-check status.
+
+- Retry temporary Health connection failures safely. Keep server and per-profile results across navigation and app restarts, reuse them for 24 hours, and resume tracking unfinished diagnostics without duplicating them.
+
+- Scroll the Usage year grid smoothly in either direction, with the visible date range updating during drags and momentum. Replace the earlier/later arrows.
+
+- Show a refresh icon with progress in Health’s Server section, and move Doctor and Security audit reruns to top-bar play buttons.
+
+- Show green, non-interactive health rows when tools, connectors and scheduled tasks pass their checks; retain details and recovery links for other results.
+
+- Refresh all four profile health checks automatically when Health opens or the selected profile changes. Run Doctor and Security audit on opening Health, without rerunning them on profile changes.
+
+- Replace Health’s Server refresh with Run all diagnostics for Doctor and Security audit; remove misleading runtime-profile labels.
+
 - Show model access status directly in Health, with recovery actions only when needed. Remove its separate screen, model picker and routine account-management shortcut; keep configuration in Administration.
 
 - Open the Usage breakdown on models by default, keeping the trend on token types.

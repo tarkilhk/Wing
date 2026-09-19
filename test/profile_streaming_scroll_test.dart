@@ -14,7 +14,7 @@ import 'package:wing/core/widgets/profile_message.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_history_fixture.dart';
 
-void main() {
+void main({Future<void> Function(WidgetTester, String)? captureFrame}) {
   const capture = bool.fromEnvironment('CAPTURE_STREAMING_SCROLL');
   setUpAll(() async {
     if (!capture) return;
@@ -33,6 +33,7 @@ void main() {
   });
 
   Future<void> snapshot(WidgetTester tester, String name) async {
+    if (captureFrame != null) await captureFrame(tester, name);
     if (!capture) return;
     final boundary = tester.renderObject<RenderRepaintBoundary>(
       find.byKey(const ValueKey('capture')),
@@ -52,9 +53,11 @@ void main() {
       testWidgets('streaming Markdown reading ${brightness.name} $scale', (
         tester,
       ) async {
-        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.reset);
+        if (tester.binding is AutomatedTestWidgetsFlutterBinding) {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+        }
         SharedPreferences.setMockInitialValues({});
         final fixture = ProfileHistoryFixture();
         final controller = ProfileWorkspaceController(
@@ -118,8 +121,23 @@ void main() {
         await tester.pumpAndSettle();
         final list = find.byKey(const ValueKey('profile-transcript'));
         final scroll = tester.widget<ListView>(list).controller!;
-        // Start reading near the beginning of the answer, with no saved row
-        // visible: the streaming message itself must provide the anchor.
+        // With no user scrolling, every update stays at the bottom and its
+        // newest text is visible, including when the answer exceeds the screen.
+        for (var update = 0; update < 5; update++) {
+          chat.streaming += '\n\nLive update $update';
+          controller.clearSearch();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 16));
+          expect(scroll.offset, closeTo(0, 1));
+          expect(
+            find.text('Live update $update', findRichText: true).hitTestable(),
+            findsOneWidget,
+          );
+          expect(find.byKey(const ValueKey('jump-to-latest')), findsNothing);
+        }
+        await snapshot(tester, '${brightness.name}-$scale-following');
+        // Read near the beginning; at enlarged text the saved row is offscreen
+        // and the streaming message itself must provide the anchor.
         final marker = find.textContaining('Paragraph 4:', findRichText: true);
         await Scrollable.ensureVisible(tester.element(marker), alignment: 0.3);
         await tester.pumpAndSettle();
@@ -149,6 +167,15 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('jump-to-latest')));
         await tester.pumpAndSettle();
         expect(scroll.offset, closeTo(0, 1));
+        chat.streaming = 'Following resumes after returning to Latest.';
+        controller.clearSearch();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(scroll.offset, closeTo(0, 1));
+        expect(
+          find.text(chat.streaming, findRichText: true).hitTestable(),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
       });
     }

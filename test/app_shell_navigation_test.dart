@@ -385,9 +385,10 @@ void main() {
       await tester.pumpAndSettle();
       await navigate(tester, AppDestination.chats);
       expect(find.text('Keep this unsent'), findsOneWidget);
-      expect(fixture.calls.skip(callsBefore).map((call) => call.$2), [
-        'setup.runtime_check',
-      ]);
+      expect(
+        fixture.calls.skip(callsBefore).map((call) => (call.$1, call.$2)),
+        [(controller.current!.scope.profileName, 'setup.runtime_check')],
+      );
       final afterHealth = fixture.calls.length;
       await navigate(tester, AppDestination.health);
       await tester.pumpAndSettle();

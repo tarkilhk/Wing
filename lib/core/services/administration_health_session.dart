@@ -61,9 +61,10 @@ class AdministrationHealthSession extends ChangeNotifier {
   String? persistenceError;
 
   String get _key =>
-      'health-results:${server.profile('default').scope.storageNamespace}';
+      'health-results:v2:${server.profile('default').scope.storageNamespace}';
   Future<void> get saved => _saveQueue;
   bool checking(String? name) => _refreshes.containsKey(name);
+  DateTime? checkedAt(String? name) => _refreshedAt[name];
 
   ProfileDiagnosticsController checksFor(ProfileWorkspaceData workspace) {
     final name = workspace.scope.profileName;
@@ -165,8 +166,7 @@ class AdministrationHealthSession extends ChangeNotifier {
             tasks.refresh(),
             health.refreshReadiness(profile: overview.profile),
           ]);
-          if (!_disposed &&
-              checks.healthObservation.finding?.checkedAt != null) {
+          if (!_disposed) {
             _refreshedAt[name] = _now();
           }
         }).whenComplete(() {

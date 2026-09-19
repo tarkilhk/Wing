@@ -89,10 +89,7 @@ void main() {
                 'usage' => AnalyticsPage(
                   profile: fixture.server.profile('client-work'),
                 ),
-                'logs' => AdminLogsPage(
-                  server: fixture.server,
-
-                ),
+                'logs' => AdminLogsPage(server: fixture.server),
                 _ => AdminActionPage(
                   server: fixture.server,
                   action: const AdministrationAction('security-audit', 7),

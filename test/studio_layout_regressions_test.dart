@@ -332,13 +332,7 @@ void main() {
           'lines': ['INFO Hermes is ready', 'WARNING Example diagnostic'],
         };
         await tester.pumpWidget(
-          app(
-            AdminLogsPage(
-              server: fixture.server,
-
-            ),
-            brightness,
-          ),
+          app(AdminLogsPage(server: fixture.server), brightness),
         );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);

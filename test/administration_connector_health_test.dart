@@ -46,7 +46,7 @@ void main() {
       {'name': 'disabled', 'enabled': false},
     ];
     await refresh();
-    expect(finding().detail, 'All connectors disabled');
+    expect(finding().detail, 'No connectors enabled');
     expect(fixture.requests.every((r) => r.$1 == 'GET'), isTrue);
   });
 
@@ -60,7 +60,7 @@ void main() {
       'mcp/servers',
       'mcp/servers/service%20%2F%20one/test',
     ]);
-    expect(finding().detail, '1 connector passed its check');
+    expect(finding().detail, '1 of 1 connection check passed');
     expect(finding().status, AdministrationHealthStatus.healthy);
   });
 
@@ -72,16 +72,16 @@ void main() {
     probe = (path) async =>
         path.contains('/first/') ? {'ok': false} : throw StateError('Offline');
     await refresh();
-    expect(finding().detail, '1 connector failed its check');
+    expect(finding().detail, '0 passed · 1 failed · 1 couldn’t be checked');
     expect(finding().status, AdministrationHealthStatus.warning);
     expect(overview.connectorChecks, {'first': false, 'second': null});
     probe = (_) async => {'ok': 'invalid'};
     await refresh();
     expect(finding().status, AdministrationHealthStatus.unknown);
-    expect(finding().detail, '2 connectors could not be checked');
+    expect(finding().detail, '0 passed · 2 couldn’t be checked');
     probe = (_) async => {'ok': true};
     await refresh();
-    expect(finding().detail, '2 connectors passed their checks');
+    expect(finding().detail, '2 of 2 connection checks passed');
   });
 
   test('late connector checks cannot overwrite a newer refresh', () async {
@@ -100,6 +100,6 @@ void main() {
     await refresh();
     pending.complete({'ok': false});
     await old;
-    expect(finding().detail, '1 connector passed its check');
+    expect(finding().detail, '1 of 1 connection check passed');
   });
 }

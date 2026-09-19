@@ -43,6 +43,27 @@ short read-only disclosure; source metadata is shown only when reported.
 
 ## Health observations
 
+The owner-approved clear-result wording uses `Access is set up`, enabled tool-group
+counts with setup gaps, passed/failed/unavailable connector counts, and scheduled
+task counts with recorded errors. Empty inventories say so explicitly. The
+What’s checked? dialog explains that configuration checks do not execute tools,
+connector checks do not exercise their actions, and task checks do not run jobs.
+Reverified stock Hermes at
+[`1af1db281e7274581cb61fdd03c64f822fbebb83`](https://github.com/NousResearch/hermes-agent/commit/1af1db281e7274581cb61fdd03c64f822fbebb83):
+`tui_gateway/methods_config.py`, `hermes_cli/web_routers/tools.py`,
+`hermes_cli/tools_config.py`, and `hermes_cli/web_routers/mcp.py`. No new API calls.
+
+Server and Profile each display one check time in the heading. The profile time
+is the end of its most recent refresh attempt, qualified as incomplete if any of
+the four visible checks lacks a result; reported problems still count as completed
+checks. The Server completion time advances only when both diagnostics in a
+section refresh finish. Individual reruns retain that shared time. If diagnostics
+were first run separately, their oldest result establishes initial section coverage.
+Diagnostic generation IDs keep retained output from satisfying a newer refresh,
+including after restarting the app. Detailed result pages retain their own times.
+The health-result cache uses the v2 schema for these section records and count-based
+summaries; older cached Health snapshots are not restored. Other app data is unchanged.
+
 Health has two groups. Server owns Doctor, security audit and Logs. Its refresh icon
 starts Doctor and security audit together, without opening their details or a
 confirmation dialog. It is disabled while either diagnostic is starting, running
@@ -53,9 +74,8 @@ Doctor and security audit details rerun from their top-bar play action, with no
 bottom rerun button; result polling remains automatic. There is no runtime-profile
 label. Diagnostic confirmations and results identify the server. Profile uses
 selection from the shared header,
-a refresh icon beside its heading, four stable rows (Model access, Tools, Connectors,
-Scheduled tasks). There is no global health verdict. Optional server
-diagnostics say Not run until explicitly started.
+a refresh icon beside its heading, four stable rows (Model access, Tool setup, Connectors,
+Scheduled tasks). There is no global health verdict. Server diagnostics run on first entry and retain their separate progress and results.
 
 Health owns its profile observations, so opening Administration first is unnecessary.
 Opening Health or selecting a profile reuses that profile’s saved results for 24 hours.
@@ -66,14 +86,14 @@ pull-to-refresh repeat the same checks. Returning from provider recovery also ch
 again. Pending refreshes are shared per profile; another profile can refresh immediately,
 and late results remain attached to their captured scope. No model prompt is sent.
 Model access is a passive row directly in Health. It shows credential status,
-model/provider and the check time. There is no model/provider detail destination,
+and model/provider. There is no model/provider detail destination,
 Change model control, routine account-management shortcut, or row navigation.
 The Profile refresh icon repeats the checks. A reported provider failure
 reveals Fix access, which opens the profile's existing account editor; an
 unconfirmed alternate route offers Review access. An incomplete check offers Retry,
 and server authentication rejection offers Review connection. Healthy and unchecked
-states have no recovery actions. A quiet note distinguishes credentials from replies
-and quota. Observation timestamps belong to their results, not a group-wide verdict.
+states have no recovery actions. What’s checked? explains the checks and their limits.
+The headings own section times; these describe check completion, not a healthy verdict.
 
 The row uses the retained credential result. Configuration presence and unknown
 provider catalog entries do not substitute for it. Successful checks require the
@@ -123,7 +143,9 @@ saved output without issuing another status request. An unfinished restored run
 resumes status reads for its saved action identity without launching a new process.
 
 On Health entry, each completed server diagnostic at least 24 hours old runs
-again automatically; diagnostics never run before their first explicit start.
+again automatically; diagnostics with no prior attempt trigger their initial run.
+An unconfirmed start is saved too: reopening Health never repeats it automatically.
+The row keeps an explicit Run action for the user to retry.
 Profile and server clocks are independent. Manual refresh remains available,
 and an in-flight refresh is shared across repeated visits. Old observations remain
 available while replacement checks are pending. Provider credential expiry is
@@ -207,7 +229,7 @@ explicit empty/error states.
 | A08 | Explicit unavailable state | Edit/delete requires a stable identity and concurrency-safe backend contract. No memory mutation is sent. |
 | A09–A11 | Shared and profile access inventories, source labels, stored-key management, supported device-code sign-in, cancellation, disconnect | External CLI login remains external. Pool-account detail cannot be safely attributed to an arbitrary selected owner; it is explicitly unavailable. No credential values are fetched for display. |
 | A13 | Auxiliary assignments, automatic choice, reset-all, unavailable-model warning, expensive-model confirmation | Reset-all discloses endpoint-credential clearing. Readback must match the affected tasks. |
-| A14 | Ordered fallback list with add/remove/reorder, schema-supported agent/subagent execution controls | Fallback edits check for an already-changed list and verify the saved result. Non-object entries are shown as invalid instead of blocking the list; they remain unchanged until explicitly removed. Custom provider definitions remain P2. |
+| A14 | Ordered fallback list with add/remove/reorder, schema-supported agent/subagent execution controls | Fallback edits check for an already-changed list and verify the saved result. Matches desktop normalization: string entries become provider/model rows, incomplete rows remain editable locally, and only complete pairs are saved after an explicit edit. Opening does not write settings; routing metadata is preserved. Non-list values produce an empty editor. Verified against upstream `21642218445e213b02ea7158f71214022645c9c6` (`apps/desktop/src/app/settings/fallback-models-field.tsx`) on 2026-09-19. Custom provider definitions remain P2. |
 | A16 | Dedicated full-screen description/SOUL editor under Identity | Uses the captured profile gateway; existing readback behavior is retained. |
 | A17 | Create, clone configuration, rename and delete through the trailing Manage profiles pill in the Profile selector | Default profile has presentation-only rename and no delete action. Creation/rename/deletion is followed by discovery. Unconfirmed outcomes remain unconfirmed. Full-data/channel cloning and optional multi-step setup are not offered. |
 | A18–A19 | Recorded skill usage ordering, provenance, complete instructions, edit/archive agent-owned skills | Bundled instructions are read-only. Existing changed content is detected before saving; this is not a server compare-and-swap guarantee. |

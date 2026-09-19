@@ -137,6 +137,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     chat.nextHistoryOffset = null;
     await show(tester);
     tester.view.physicalSize = const Size(320, 140);
+    addTearDown(tester.view.reset);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.byType(PlayfulPortrait), findsOneWidget);

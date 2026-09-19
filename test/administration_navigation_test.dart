@@ -188,7 +188,10 @@ void main() {
       await show(tester, Brightness.dark, healthOnly: true);
       expect(find.byTooltip('Refresh profile status'), findsOneWidget);
       expect(admin.requests.where((r) => r.$2 == 'profiles/active'), isEmpty);
-      expect(admin.requests.where((r) => r.$1 != 'GET'), isEmpty);
+      expect(
+        admin.requests.where((r) => r.$1 != 'GET').map((r) => (r.$1, r.$2)),
+        [('POST', 'ops/doctor'), ('POST', 'ops/security-audit')],
+      );
       expect(tester.takeException(), isNull);
     },
   );
@@ -614,12 +617,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Doctor'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(
-      find.descendant(of: find.byType(AlertDialog), matching: find.text('Run')),
-    );
     await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('Failed'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();

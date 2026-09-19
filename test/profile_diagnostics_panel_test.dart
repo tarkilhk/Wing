@@ -151,7 +151,7 @@ void main() {
       expect(host.calls, hasLength(1));
       expect(host.calls.single.$1, 'setup.runtime_check');
       expect(host.calls.single.$2, {'profile': 'work'});
-      expect(find.text('Credentials available'), findsOneWidget);
+      expect(find.text('Access is set up'), findsOneWidget);
       expect(find.byType(Card), findsOneWidget);
       expect(find.byType(PopupMenuButton<String>), findsNothing);
       expect(find.text('Fix access'), findsNothing);
@@ -207,7 +207,7 @@ void main() {
       };
       await tester.tap(find.byTooltip('Refresh profile status'));
       await tester.pumpAndSettle();
-      expect(find.text('Credentials available'), findsOneWidget);
+      expect(find.text('Access is set up'), findsOneWidget);
       expect(find.text('Credentials missing'), findsNothing);
     },
   );
@@ -251,7 +251,7 @@ void main() {
       await checking;
       await tester.pumpAndSettle();
       expect(find.text('Check incomplete'), findsOneWidget);
-      expect(find.textContaining('Last attempt'), findsOneWidget);
+      expect(find.textContaining('Last attempt'), findsNothing);
       for (final response in [
         {},
         {'ok': true},
@@ -262,7 +262,7 @@ void main() {
         await controller.check();
         await tester.pumpAndSettle();
         expect(find.text('Check incomplete'), findsOneWidget);
-        expect(find.text('Credentials available'), findsNothing);
+        expect(find.text('Access is set up'), findsNothing);
       }
     },
   );
@@ -279,7 +279,7 @@ void main() {
       host.onCall = null;
       await tester.tap(find.text('Retry'));
       await tester.pumpAndSettle();
-      expect(find.text('Credentials available'), findsOneWidget);
+      expect(find.text('Access is set up'), findsOneWidget);
       expect(find.text('Retry'), findsNothing);
       expect(host.calls, hasLength(2));
     },
@@ -358,9 +358,7 @@ void main() {
     await tester.pumpWidget(_app(workspace, controller: controller));
     await tester.tap(find.byTooltip('Refresh profile status'));
     await tester.pumpAndSettle();
-    final checkedLabel = tester
-        .widget<Text>(find.textContaining(RegExp(r'^Checked [0-9]')))
-        .data;
+    final checkedAt = controller.healthObservation.finding!.checkedAt;
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
     controller.updateWorkspace(
@@ -369,8 +367,9 @@ void main() {
     );
     await tester.pumpWidget(_app(workspace, controller: controller));
 
-    expect(find.text('Credentials available'), findsOneWidget);
-    expect(find.text(checkedLabel!), findsOneWidget);
+    expect(find.text('Access is set up'), findsOneWidget);
+    expect(controller.healthObservation.finding!.checkedAt, checkedAt);
+    expect(find.textContaining(RegExp(r'^Checked [0-9]')), findsNothing);
     expect(host.reads, isEmpty);
     expect(host.calls, hasLength(1));
   });
@@ -401,8 +400,9 @@ void main() {
     await tester.pump();
     await tester.pumpWidget(_app(workspace, controller: controller));
 
-    expect(find.text('Credentials available'), findsOneWidget);
-    expect(find.textContaining(RegExp(r'^Checked [0-9]')), findsOneWidget);
+    expect(find.text('Access is set up'), findsOneWidget);
+    expect(find.textContaining(RegExp(r'^Checked [0-9]')), findsNothing);
+    expect(controller.healthObservation.finding!.checkedAt, isNotNull);
     expect(host.reads, isEmpty);
     expect(host.calls, hasLength(1));
     expect(tester.takeException(), isNull);
@@ -445,7 +445,7 @@ void main() {
       expect(newHost.calls, isEmpty);
       await tester.tap(find.byTooltip('Refresh profile status'));
       await tester.pumpAndSettle();
-      expect(find.text('Credentials available'), findsOneWidget);
+      expect(find.text('Access is set up'), findsOneWidget);
     },
   );
 
@@ -463,18 +463,12 @@ void main() {
         'provider': 'openai-codex',
       });
       await controller.check();
-      expect(
-        controller.healthObservation.finding?.detail,
-        'Credentials available',
-      );
+      expect(controller.healthObservation.finding?.detail, 'Access is set up');
       controller.updateModel({
         'model': 'gpt-5.6-sol',
         'provider': 'openai-codex',
       });
-      expect(
-        controller.healthObservation.finding?.detail,
-        'Credentials available',
-      );
+      expect(controller.healthObservation.finding?.detail, 'Access is set up');
       controller.updateModel({'model': 'gpt-5.6-sol', 'provider': 'openai'});
       expect(controller.healthObservation.finding, isNull);
       final pending = Completer<Map<String, dynamic>>();
@@ -514,7 +508,7 @@ void main() {
     });
     await controller.check();
     await tester.pumpWidget(_app(workspace, controller: controller));
-    expect(find.text('Credentials available'), findsNothing);
+    expect(find.text('Access is set up'), findsNothing);
     expect(
       find.textContaining(
         'Hermes resolved claude-sonnet-4-6 · anthropic instead.',
