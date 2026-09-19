@@ -400,7 +400,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
             children: [
               const Padding(
                 padding: EdgeInsets.only(left: 6, right: 2),
-                child: Icon(Icons.filter_list, size: 18),
+                child: Icon(Icons.filter_alt_outlined, size: 19),
               ),
               _filterControl('Status', _statuses),
               _filterControl('Profile', _profiles),

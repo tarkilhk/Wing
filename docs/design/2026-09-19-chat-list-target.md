@@ -12,7 +12,8 @@ on 19 September 2026. The reference prototype remains in the workspace at
   and fixed Clear / Done actions. Profiles sort alphabetically; projects sort
   by most recent visible-source activity, then name. The trailing funnel-with-×
   icon clears these three filters only. It is dimmed and disabled when none are
-  selected, with the tooltip Clear all filters.
+  selected, with the tooltip Clear all filters. The leading icon uses the same
+  outlined funnel at the same size, without the ×.
 - Profile and Project menu headers are compact search fields that filter their
   choices immediately as the user types (case-insensitive). Searching keeps
   selections, ordering and the five-row scroll limit; it does not search chats
