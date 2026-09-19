@@ -2313,7 +2313,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (recovered != null) {
       key = recovered.key;
     }
-    if (current?.scope != key.workspace &&
+    // A newer selection must supersede an unfinished switch even when the
+    // user chooses a chat in the profile that is still on screen.
+    if ((current?.scope != key.workspace || switching) &&
         !await switchProfile(key.workspace.profileName)) {
       return null;
     }

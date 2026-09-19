@@ -48,6 +48,8 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   ChatGrouping _grouping = ChatGrouping.project;
   ChatOrdering _ordering = ChatOrdering.updated;
   bool _archived = false, _started = false, _busy = false;
+  int _chatOpenGeneration = 0;
+  String? _openingChat;
   String _query = '';
   List<ChatListEntry> _allEntries = [], _visibleEntries = [];
   List<ChatListGroup> _currentGroups = [];
@@ -683,6 +685,33 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     if (anchor.mounted) await showChatActions(anchor, controller, e.row);
   }
 
+  Future<void> _openChat(ChatListEntry entry) async {
+    if (_busy || _openingChat == entry.key) return;
+    final generation = ++_chatOpenGeneration;
+    _openingChat = entry.key;
+    bool isCurrent() => mounted && generation == _chatOpenGeneration;
+    try {
+      if (entry.owner.offlineSnapshot || controller.recovering) {
+        await controller.openNotification(entry.sessionKey);
+      } else {
+        await controller.openSession(
+          entry.sessionKey,
+          isCurrentRequest: isCurrent,
+        );
+      }
+    } catch (error) {
+      if (isCurrent()) {
+        _notice(
+          error is StateError
+              ? error.message.toString()
+              : 'Could not open that chat. Please retry.',
+        );
+      }
+    } finally {
+      if (isCurrent()) _openingChat = null;
+    }
+  }
+
   Widget _session(ChatListEntry e) {
     final local = e.owner.chats[e.id];
     final largeText = MediaQuery.textScalerOf(context).scale(16) > 20;
@@ -787,15 +816,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           onLongPress: _busy || controller.switching
               ? null
               : () => _run(() => _chatActions(anchor, e), refresh: true),
-          onTap: _busy || controller.switching
-              ? null
-              : () => _run(() async {
-                  if (e.owner.offlineSnapshot || controller.recovering) {
-                    await controller.openNotification(e.sessionKey);
-                  } else {
-                    await controller.openSession(e.sessionKey);
-                  }
-                }),
+          onTap: _busy ? null : () => _openChat(e),
         ),
       ),
     );
