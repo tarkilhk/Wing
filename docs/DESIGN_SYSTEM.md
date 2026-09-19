@@ -250,7 +250,10 @@ with automatic result polling and no bottom rerun button. Profile
 uses the shared header for profile selection, a refresh icon beside its heading,
 four stable observation rows and Usage. The refresh icon explicitly checks the
 selected profile and shows progress while the check runs.
-Only actual issues carry warning/error emphasis; configuration icons stay neutral.
+Only actual issues carry warning/error emphasis. Healthy Tools, Connectors and
+Scheduled tasks rows use green success icons, with no chevron or tap action.
+Non-healthy rows retain detail navigation and recovery links; unknown checks use
+neutral icons.
 Unknown checks are local to their row. Do not invalidate configuration after a
 fixed five-minute timer or imply successful inference from configuration.
 Detail pages use the same gutters, grouped rows and quiet timestamps, with

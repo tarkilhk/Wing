@@ -59,7 +59,10 @@ with no combined health verdict. Doctor, audit and Logs remain server-owned;
 Usage and four observation rows follow the header-selected profile. Unknown
 coverage is local, configuration does not expire after five minutes, and actual
 credential expiration remains visible. All four Profile rows refresh automatically on entry and profile selection.
-The Profile refresh icon repeats credential, tool setup, connector and task checks. Details show their captured scope and link to the owning editor.
+The Profile refresh icon repeats credential, tool setup, connector and task checks.
+Healthy Tools, Connectors and Scheduled tasks rows are passive, with green icons
+and no disclosure arrow. Other results retain details with their captured scope
+and links to the owning editor.
 See [Health observations](../ADMINISTRATION.md#health-observations) for the current
 stock API verification and rendering contract.
 

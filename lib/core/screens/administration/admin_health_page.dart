@@ -177,9 +177,7 @@ class AdminHealthContent extends StatelessWidget {
               finding?.status == AdministrationHealthStatus.warning
           ? Icons.error_outline
           : icon,
-      color:
-          finding == null ||
-              finding.status == AdministrationHealthStatus.healthy
+      color: finding == null
           ? Theme.of(context).colorScheme.onSurfaceVariant
           : administrationHealthColor(context, finding.status),
       size: 22,
@@ -189,8 +187,10 @@ class AdminHealthContent extends StatelessWidget {
       _summary(title, finding),
       style: Theme.of(context).textTheme.bodySmall,
     ),
-    trailing: const Icon(Icons.chevron_right, size: 20),
-    onTap: onTap,
+    trailing: finding?.status == AdministrationHealthStatus.healthy
+        ? null
+        : const Icon(Icons.chevron_right, size: 20),
+    onTap: finding?.status == AdministrationHealthStatus.healthy ? null : onTap,
   );
 
   Widget _observation(

@@ -563,10 +563,17 @@ void main({
   });
 
   for (final brightness in Brightness.values) {
-    for (final status in ['green', 'amber', 'red', 'unknown', 'missing']) {
+    for (final status in [
+      'green',
+      'amber',
+      'red',
+      'unknown',
+      'missing',
+      'problems',
+    ]) {
       for (final large in [
         false,
-        if (status == 'amber' || status == 'missing') true,
+        if (['green', 'amber', 'missing', 'problems'].contains(status)) true,
       ]) {
         testWidgets(
           'health entry $status ${brightness.name} ${large ? 'large' : 'phone'}',
@@ -634,6 +641,10 @@ void main({
                     )
                     .first,
               );
+              await tester.ensureVisible(
+                find.byTooltip('Refresh profile status'),
+              );
+              await tester.pumpAndSettle();
               await tester.tap(find.byTooltip('Refresh profile status'));
               await tester.pumpAndSettle();
             }
@@ -663,29 +674,77 @@ void main({
               await snapshot(tester, '$name-model-access-action');
             }
             expect(find.text('Not fully checked'), findsNothing);
-            if (status == 'green' || large) {
-              for (final title in ['Tools', 'Connectors', 'Scheduled tasks']) {
-                await tester.drag(vertical, const Offset(0, 3000));
-                await tester.pumpAndSettle();
-                await tester.scrollUntilVisible(
-                  find.text(title),
-                  200,
-                  scrollable: vertical,
+            for (final title in ['Tools', 'Connectors', 'Scheduled tasks']) {
+              await tester.drag(vertical, const Offset(0, 3000));
+              await tester.pumpAndSettle();
+              await tester.scrollUntilVisible(
+                find.text(title),
+                200,
+                scrollable: vertical,
+              );
+              await tester.pumpAndSettle();
+              final row = find.ancestor(
+                of: find.text(title),
+                matching: find.byType(ListTile),
+              );
+              final tile = tester.widget<ListTile>(row);
+              final needsDetails = switch (title) {
+                'Tools' => ['amber', 'problems', 'unknown'].contains(status),
+                _ => status == 'problems',
+              };
+              if (!needsDetails) {
+                expect(tile.onTap, isNull);
+                expect(tile.trailing, isNull);
+                expect(
+                  (tile.leading! as Icon).color,
+                  WingTokens.of(tester.element(row)).success,
                 );
-                await tester.pumpAndSettle();
                 await tester.tap(find.text(title));
                 await tester.pumpAndSettle();
-                await snapshot(tester, '$name-detail-$title');
-                await tester.drag(
-                  find.byType(Scrollable).first,
-                  const Offset(0, -450),
-                );
-                await tester.pumpAndSettle();
-                await snapshot(tester, '$name-detail-$title-lower');
-                expect(tester.takeException(), isNull);
-                await tester.pageBack();
-                await tester.pumpAndSettle();
+                expect(find.byType(HermesHealthContent), findsOneWidget);
+                continue;
               }
+              expect(tile.onTap, isNotNull);
+              expect((tile.trailing! as Icon).icon, Icons.chevron_right);
+              expect(
+                (tile.leading! as Icon).color,
+                isNot(WingTokens.of(tester.element(row)).success),
+              );
+              await tester.tap(find.text(title));
+              await tester.pumpAndSettle();
+              final recovery = find.text(switch (title) {
+                'Tools' => 'Skills and tools',
+                'Connectors' => 'Manage connectors',
+                _ => 'Manage scheduled tasks',
+              });
+              await tester.scrollUntilVisible(
+                recovery,
+                150,
+                scrollable: find.byType(Scrollable).first,
+              );
+              await tester.pumpAndSettle();
+              expect(recovery, findsOneWidget);
+              expect(
+                tester
+                    .widget<ListTile>(
+                      find.ancestor(
+                        of: recovery,
+                        matching: find.byType(ListTile),
+                      ),
+                    )
+                    .onTap,
+                isNotNull,
+              );
+              await snapshot(tester, '$name-detail-$title');
+              await tester.drag(
+                find.byType(Scrollable).first,
+                const Offset(0, -450),
+              );
+              await tester.pumpAndSettle();
+              await snapshot(tester, '$name-detail-$title-lower');
+              expect(tester.takeException(), isNull);
+              await tester.pageBack();
+              await tester.pumpAndSettle();
             }
             expect(
               fixture.requests.where(
