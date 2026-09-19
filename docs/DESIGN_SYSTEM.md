@@ -25,9 +25,9 @@ menus, five colored status dots and a continuous grouped list with three-chat
 previews. Tokens, when shown, include group totals. Preserve the conversation,
 Activity, tool presentation and composer; the list has its own dot component.
 The approved token refinement truncates titles to keep counts and updated ages
-in aligned columns on the same row. Use compact counts at existing precision,
-tabular numerals and one Tokens / Age legend. At enlarged text sizes, let titles
-and metadata wrap; keep full titles and labelled counts accessible.
+in aligned columns on the same row. Use compact counts at existing precision
+and tabular numerals without a Tokens / Age legend. At enlarged text sizes,
+let titles and metadata wrap; keep full titles and labelled counts accessible.
 The owner's subsequent profile-bar refinement places a fixed viewport beside
 the connection label, with horizontally scrolling profile-initial squares.
 Pack short profile lists against the viewport's right edge beside the menu,

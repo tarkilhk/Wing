@@ -63,7 +63,7 @@ on 19 September 2026. The reference prototype remains in the workspace at
 - The owner selected option D from the token mockups: at normal text sizes,
   truncate chat titles with an ellipsis to keep titles, tokens and updated ages
   on one row. Right-align compact counts and ages in fixed columns with tabular
-  numerals and a shared Tokens / Age legend. Preserve count precision and full
+  numerals without a Tokens / Age legend. Preserve count precision and full
   titles for accessibility. At enlarged text sizes, allow two title lines and
   wrap labelled usage below. Cost, profile, search snippets and transient errors
   remain subordinate details when present. Keep the existing row action targets.

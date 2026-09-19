@@ -969,36 +969,6 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           ),
         ),
       ..._draftRows(entries),
-      if (groups.isNotEmpty &&
-          _show.contains(ChatDetail.tokens) &&
-          MediaQuery.textScalerOf(context).scale(16) <= 20)
-        ExcludeSemantics(
-          child: Padding(
-            padding: const EdgeInsets.only(left: 52, right: 62, top: 4),
-            child: DefaultTextStyle(
-              style: Theme.of(context).textTheme.labelSmall!.copyWith(
-                fontSize: 11,
-                color: WingTokens.of(context).muted,
-              ),
-              child: Row(
-                children: [
-                  const Spacer(),
-                  const SizedBox(
-                    width: 56,
-                    child: Text('Tokens', textAlign: TextAlign.right),
-                  ),
-                  if (_show.contains(ChatDetail.updated)) ...[
-                    const SizedBox(width: 8),
-                    const SizedBox(
-                      width: 28,
-                      child: Text('Age', textAlign: TextAlign.right),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
       for (final group in groups) ...[
         _groupHeading(group),
         if (!_collapsed.contains(_groupKey(group))) ...[
