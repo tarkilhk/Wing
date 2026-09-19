@@ -5772,15 +5772,17 @@ class ProfileWorkspaceController extends ChangeNotifier {
       );
 
   void _scheduleReconnect(ProfileWorkspaceData resource) {
-    if (_closed ||
-        resource.retry != null ||
-        resource.reconnecting ||
-        resource.reconnectAttempt >= 5) {
+    if (_closed || resource.retry != null || resource.reconnecting) {
       return;
     }
     resource.recovering = true;
     connectionStatus.beginRecovery(resource.scope.profileName);
-    resource.retry = Timer(_recoveryDelay(resource.reconnectAttempt++), () {
+    final delay = _recoveryDelay(resource.reconnectAttempt);
+    // Keep observing temporary outages after the initial burst. A server can
+    // return without Android reporting a new network or an app-resume event.
+    // Cap the delay and counter, rather than abandoning live updates.
+    if (resource.reconnectAttempt < 5) resource.reconnectAttempt++;
+    resource.retry = Timer(delay, () {
       resource.retry = null;
       unawaited(_reconnect(resource));
     });
@@ -5854,7 +5856,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       resource.recovering = retry;
       resource.reconnectError = retry ? null : workspaceFailureMessage(failure);
-      if (!retry || resource.reconnectAttempt >= 5) {
+      if (!retry) {
         connectionStatus.endRecovery(resource.scope.profileName);
       }
     } finally {

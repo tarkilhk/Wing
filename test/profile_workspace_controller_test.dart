@@ -60,6 +60,7 @@ class Host {
   Completer<void>? promptSubmitStarted;
   Completer<void>? promptSubmitDelay;
   int connectFailures = 0;
+  Object? connectError;
   int connectCalls = 0;
   int disconnectCalls = 0;
   int resumeFailures = 0;
@@ -94,6 +95,7 @@ class Host {
       discover: discover,
       connect: () async {
         connectCalls++;
+        if (connectError != null) throw connectError!;
         if (connectFailures > 0) {
           connectFailures--;
           throw TimeoutException('Network is waking up');
@@ -1558,7 +1560,7 @@ void main() {
   });
 
   testWidgets(
-    'retry exhaustion preserves the draft until a new recovery cycle',
+    'live updates recover after an outage longer than the initial retry burst',
     (tester) async {
       final chat = await controller.createChat();
       await controller.updateDraft(chat, 'Keep this draft');
@@ -1569,17 +1571,18 @@ void main() {
       );
       final before = host.connectCalls;
       host.gateways['a']!.onConnectionChanged!(false);
-      for (final seconds in [1, 2, 4, 8, 16, 30]) {
+      for (final seconds in [1, 2, 4, 8, 16]) {
         await tester.pump(Duration(seconds: seconds));
         expect(controller.error, isNull);
         expect(find.byType(MaterialBanner), findsNothing);
       }
       expect(host.connectCalls - before, 5);
-      expect(find.text('Live updates interrupted'), findsOneWidget);
+      expect(controller.connectionStatus.liveAvailable('a'), isFalse);
       expect(chat.draft, 'Keep this draft');
       await controller.send(chat);
       expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
-      await tester.runAsync(controller.resumeConnection);
+      // The server recovers while the list remains open: no refresh/resume.
+      await tester.pump(const Duration(seconds: 30));
       await tester.runAsync(() => Future<void>.delayed(Duration.zero));
       await tester.pump();
       expect(controller.recovering, isFalse);
@@ -1589,6 +1592,62 @@ void main() {
       expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
     },
   );
+
+  testWidgets(
+    'idle chat list reconnects when the server returns after five failures',
+    (tester) async {
+      host.connectFailures = 5;
+      host.gateways['a']!.onConnectionChanged!(false);
+      for (final seconds in [1, 2, 4, 8, 16]) {
+        await tester.pump(Duration(seconds: seconds));
+      }
+      expect(controller.connectionStatus.liveAvailable('a'), isFalse);
+      await tester.pump(const Duration(seconds: 30));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
+      expect(controller.connectionStatus.description, 'Connected');
+      expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
+    },
+  );
+
+  testWidgets(
+    'continued recovery is capped at one attempt per thirty seconds',
+    (tester) async {
+      host.connectFailures = 8;
+      host.gateways['a']!.onConnectionChanged!(false);
+      for (final seconds in [1, 2, 4, 8, 16]) {
+        await tester.pump(Duration(seconds: seconds));
+      }
+      for (var attempt = 0; attempt < 3; attempt++) {
+        final calls = host.connectCalls;
+        await tester.pump(const Duration(seconds: 29));
+        expect(host.connectCalls, calls);
+        await tester.pump(const Duration(seconds: 1));
+        expect(host.connectCalls, calls + 1);
+        expect(controller.connectionStatus.description, 'Reconnecting');
+        expect(controller.current!.reconnectAttempt, 5);
+      }
+      await tester.pump(const Duration(seconds: 30));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
+      expect(controller.connectionStatus.description, 'Connected');
+      expect(controller.current!.retry, isNull);
+    },
+  );
+
+  testWidgets('sign-in rejection stops automatic live recovery', (
+    tester,
+  ) async {
+    host.connectError = const DashboardHttpException(401, '/api/ws');
+    host.gateways['a']!.onConnectionChanged!(false);
+    await tester.pump(const Duration(seconds: 1));
+    final calls = host.connectCalls;
+    await tester.pump(const Duration(minutes: 2));
+    expect(host.connectCalls, calls);
+    expect(controller.current!.retry, isNull);
+    expect(controller.current!.reconnectError, contains('Sign-in'));
+    expect(controller.recovering, isFalse);
+  });
 
   testWidgets('manual reconnect cancels a pending automatic retry', (
     tester,

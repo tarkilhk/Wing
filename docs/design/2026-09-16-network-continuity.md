@@ -30,7 +30,8 @@ its credentials. Show an 8 dp LED to the left of the server name, separated by
 - Amber, softly pulsing over two seconds: recovery is underway.
 - Amber, steady: server access and live chat differ in availability. Explain the
   affected capability, such as “Live updates interrupted”.
-- Red, steady: unavailable, with the bounded recovery cycle finished.
+- Red, steady: unavailable, with recovery stopped because user action is needed
+  or a bounded initial-opening/notification recovery cycle has finished.
 - Neutral: an inactive saved connection has not been checked.
 
 Reduced motion disables the pulse. Status details expose text for Server access
@@ -50,9 +51,13 @@ messages.
 
 ## Recovery and local reading
 
-Automatic retries are bounded: five retries with delays of 1, 2, 4, 8 and 16
-seconds. An Android network-return event, foreground entry or explicit Retry
-starts a fresh cycle. Android network availability only triggers verification;
+Live-channel recovery retries after 1, 2, 4, 8 and 16 seconds, then continues
+once every 30 seconds while the connection controller is alive. The delay is
+bounded; a temporary outage does not permanently stop observation. Sign-in, TLS
+and other non-transient failures stop automatic retries and require user action.
+Initial workspace opening and notification-target recovery retain their separate
+bounded cycles. An Android network-return event, foreground entry or explicit
+Retry attempts live recovery immediately. Android network availability only triggers verification;
 it does not itself make the server green. A changed network route invalidates a
 stale socket before reconnection. REST and live WebSocket observations remain
 independent; administration success cannot clear a live-chat interruption.
@@ -68,7 +73,7 @@ never restored from disk. Composer drafts retain their existing dedicated store.
 ## Verification
 
 Regression coverage includes notification routing through failure and competing
-taps, bounded retries, uncertain submissions, retained drafts and partial answers,
+taps, bounded retry delays, uncertain submissions, retained drafts and partial answers,
 cold reading snapshots, credential isolation, independent REST/live states, and
 narrow light/dark status layouts at 200% text size with reduced motion.
 
