@@ -2,6 +2,9 @@
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/composer_action.dart';
+import '../theme/profile_workspace_theme.dart';
+import 'turn_notification_service.dart';
 import 'config_backup.dart';
 import 'connection_manager.dart';
 import 'voice_preferences.dart';
@@ -56,6 +59,11 @@ class ConfigBackupService {
     'verbose_mode',
     ...VoicePreferences.keys,
     'app_text_size_preference',
+    WorkspaceAccent.preferenceKey,
+    ComposerAction.preferenceKey,
+    completionNotificationsKey,
+    attentionNotificationsKey,
+    notificationPreviewsKey,
   };
 
   /// Prefixes for per-connection and per-chat preferences, which are keyed by

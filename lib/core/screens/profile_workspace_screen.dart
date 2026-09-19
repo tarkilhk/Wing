@@ -77,6 +77,8 @@ class ProfileWorkspaceScreen extends StatefulWidget {
   final ValueListenable<BackgroundMonitoringState>? backgroundMonitoringState;
   final Future<void> Function()? openMonitoringBatterySettings;
   final VoidCallback? onConnections;
+  final Widget Function(BuildContext, VoidCallback onRestored)?
+  configurationActions;
   final List<SavedConnection> Function()? savedConnections;
   final Future<void> Function(SavedConnection, AppDestination)?
   onSelectConnection;
@@ -93,6 +95,7 @@ class ProfileWorkspaceScreen extends StatefulWidget {
     this.backgroundMonitoringState,
     this.openMonitoringBatterySettings,
     this.onConnections,
+    this.configurationActions,
     this.savedConnections,
     this.onSelectConnection,
     this.onPreferencesChanged,
@@ -113,6 +116,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   final _chatSearchFocus = FocusNode();
   final _queuedEditErrors = <ProfileSessionKey, String>{};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  int _settingsRevision = 0;
   ProfileSessionKey? _composerKey;
   ProfileSessionKey? _loadingIntelligence;
   ChatFindResult? _findResult;
@@ -2272,10 +2276,21 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               toolbarHeight: adminToolbarHeight(
                 context,
                 _destination.label,
-                actions: _destination == AppDestination.activity ? 1 : 0,
+                actions:
+                    _destination == AppDestination.settings &&
+                        widget.configurationActions != null
+                    ? 2
+                    : _destination == AppDestination.activity
+                    ? 1
+                    : 0,
               ),
               title: Text(_destination.label, maxLines: 6, softWrap: true),
               actions: [
+                if (_destination == AppDestination.settings &&
+                    widget.configurationActions != null)
+                  widget.configurationActions!(context, () {
+                    if (mounted) setState(() => _settingsRevision++);
+                  }),
                 if (_destination == AppDestination.activity)
                   IconButton(
                     tooltip: 'Refresh activity',
@@ -2338,6 +2353,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 controller: controller,
               ),
               AppDestination.settings => AppSettingsContent(
+                key: ValueKey(_settingsRevision),
                 preferences: controller.preferences,
                 hermesVoiceProfileLabel: controller.current?.scope.profileName,
                 openHermesVoiceSettings: _hermesSpeechSettingsLink(context),

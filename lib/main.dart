@@ -36,6 +36,7 @@ import 'core/widgets/app_drawer.dart';
 import 'core/widgets/wing_welcome.dart';
 import 'core/screens/app_settings_content.dart';
 import 'core/widgets/config_backup_card.dart';
+import 'core/widgets/config_backup_actions.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -240,6 +241,8 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
           openMonitoringBatterySettings:
               _backgroundMonitoring.openBatterySettings,
           onConnections: openConnections,
+          configurationActions: (context, onRestored) => _homeKey.currentState!
+              .buildConfigurationActions(context, onRestored),
           savedConnections: widget.connManager.getConnections,
           onSelectConnection: (connection, destination) async {
             await _homeKey.currentState?.selectWorkspaceConnection(
@@ -534,6 +537,7 @@ class HomeScreenState extends State<HomeScreen> {
   bool _autoNavigated = false;
   bool _opening = false;
   bool _exportingBackup = false;
+  int _settingsRevision = 0;
   bool _reviewingShare = false;
   bool _discardingShare = false;
   bool _settingUpConnection = false;
@@ -567,7 +571,15 @@ class HomeScreenState extends State<HomeScreen> {
   ConfigBackupIo get _backupIo =>
       ConfigBackupIo(connectionManager: widget.connManager);
 
-  Future<void> _showBackupConfig() async {
+  Widget buildConfigurationActions(
+    BuildContext context, [
+    VoidCallback? onRestored,
+  ]) => ConfigBackupActions(
+    onBackup: () => _showBackupConfig(context),
+    onRestore: () => _showRestoreConfig(context, onRestored: onRestored),
+  );
+
+  Future<void> _showBackupConfig(BuildContext context) async {
     if (_exportingBackup) return;
     setState(() => _exportingBackup = true);
     try {
@@ -576,19 +588,19 @@ class HomeScreenState extends State<HomeScreen> {
         isScrollControlled: true,
         builder: (_) => const ExportPassphraseSheet(),
       );
-      if (choice == null || !mounted) return;
+      if (choice == null || !mounted || !context.mounted) return;
 
       final exporter = widget.exportBackup ?? _backupIo.exportBackup;
       final deliver = widget.deliverBackup ?? _backupIo.deliverExport;
       final contents = await exporter(choice.passphrase);
-      if (!mounted) return;
+      if (!mounted || !context.mounted) return;
       final destination = await deliver(contents);
-      if (!mounted || destination == null) return;
+      if (!mounted || !context.mounted || destination == null) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Backup exported — $destination')));
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || !context.mounted) return;
       final message = error is ConfigBackupException
           ? error.message
           : 'The backup could not be exported.';
@@ -600,40 +612,46 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _showRestoreConfig() async {
+  Future<void> _showRestoreConfig(
+    BuildContext context, {
+    VoidCallback? onRestored,
+  }) async {
     String? contents;
     try {
       contents =
           await (widget.pickBackupFile?.call() ?? _backupIo.pickBackupFile());
     } catch (error) {
-      if (!mounted) return;
-      _showRestoreError(error);
+      if (!mounted || !context.mounted) return;
+      _showRestoreError(context, error);
       return;
     }
-    if (contents == null || !mounted) return;
+    if (contents == null || !mounted || !context.mounted) return;
 
     final choice = await showModalBottomSheet<ImportChoice>(
       context: context,
       isScrollControlled: true,
       builder: (_) => const ImportOptionsSheet(),
     );
-    if (choice == null || !mounted) return;
+    if (choice == null || !mounted || !context.mounted) return;
 
     try {
       final importer = widget.importBackup ?? _backupIo.importBackup;
       final result = await importer(contents, choice.passphrase, choice.mode);
-      if (!mounted) return;
+      if (!mounted || !context.mounted) return;
+      setState(() => _settingsRevision++);
       _refresh();
+      widget.onPreferencesChanged?.call();
+      onRestored?.call();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(result.summary)));
     } catch (error) {
-      if (!mounted) return;
-      _showRestoreError(error);
+      if (!mounted || !context.mounted) return;
+      _showRestoreError(context, error);
     }
   }
 
-  void _showRestoreError(Object error) {
+  void _showRestoreError(BuildContext context, Object error) {
     final message = error is ConfigBackupException
         ? error.message
         : 'The backup could not be restored.';
@@ -964,6 +982,7 @@ class HomeScreenState extends State<HomeScreen> {
           controller: controller,
           savedConnections: widget.connManager.getConnections,
           onSelectConnection: selectWorkspaceConnection,
+          configurationActions: buildConfigurationActions,
           onCapturePhoto: widget.shareIntents == null
               ? null
               : (key) => widget.shareIntents!.capturePhoto(key.toJson()),
@@ -1203,37 +1222,20 @@ class HomeScreenState extends State<HomeScreen> {
             _connections.isEmpty && _destination == AppDestination.connections
                 ? ''
                 : _destination.label,
-            actions:
-                _destination == AppDestination.connections &&
-                    _connections.isNotEmpty
-                ? 2
-                : 0,
+            actions: _destination == AppDestination.settings ? 2 : 0,
           ),
           title:
               _connections.isEmpty && _destination == AppDestination.connections
               ? null
               : Text(_destination.label, maxLines: 6, softWrap: true),
           actions: [
-            if (_destination == AppDestination.connections &&
-                _connections.isNotEmpty)
-              IconButton(
-                key: const Key('home_backup_config_menu'),
-                tooltip: 'Backup configuration',
-                onPressed: _exportingBackup ? null : _showBackupConfig,
-                icon: const Icon(Icons.upload_file),
-              ),
-            if (_destination == AppDestination.connections &&
-                _connections.isNotEmpty)
-              IconButton(
-                key: const Key('home_restore_config_menu'),
-                tooltip: 'Restore configuration',
-                onPressed: _exportingBackup ? null : _showRestoreConfig,
-                icon: const Icon(Icons.settings_backup_restore),
-              ),
+            if (_destination == AppDestination.settings)
+              buildConfigurationActions(context),
           ],
         ),
         body: _destination == AppDestination.settings
             ? AppSettingsContent(
+                key: ValueKey(_settingsRevision),
                 preferences: widget.connManager.prefs,
                 enableNotifications: widget.enableProfileNotifications,
                 backgroundMonitoringState: widget.backgroundMonitoringState,
@@ -1280,7 +1282,7 @@ class HomeScreenState extends State<HomeScreen> {
                     child: _connections.isEmpty
                         ? WingWelcome(
                             onConnect: _addConnection,
-                            onRestore: _showRestoreConfig,
+                            onRestore: () => _showRestoreConfig(context),
                           )
                         : Align(
                             alignment: Alignment.topCenter,

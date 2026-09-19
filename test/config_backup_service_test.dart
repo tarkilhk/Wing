@@ -78,7 +78,12 @@ void main() {
       final (service, _, _) = await buildService(<String, Object>{
         'theme_mode': 'dark',
         'verbose_mode': true,
-        'app_text_size_preference': 1.15,
+        'workspace_accent_v1': 'iris',
+        'composer_running_action': 'queue',
+        'completion_notifications': false,
+        'attention_notifications': true,
+        'notification_message_previews': true,
+        'app_text_size_preference': 'large',
         'voice.android_voice': 'fr-CH-x-fra',
         'session_search.abc.mode': 'ai',
       });
@@ -87,7 +92,12 @@ void main() {
 
       expect(backup.preferences['theme_mode'], 'dark');
       expect(backup.preferences['verbose_mode'], true);
-      expect(backup.preferences['app_text_size_preference'], 1.15);
+      expect(backup.preferences['workspace_accent_v1'], 'iris');
+      expect(backup.preferences['composer_running_action'], 'queue');
+      expect(backup.preferences['completion_notifications'], false);
+      expect(backup.preferences['attention_notifications'], true);
+      expect(backup.preferences['notification_message_previews'], true);
+      expect(backup.preferences['app_text_size_preference'], 'large');
       expect(backup.preferences['voice.android_voice'], 'fr-CH-x-fra');
       expect(backup.preferences['session_search.abc.mode'], 'ai');
     });
@@ -119,6 +129,11 @@ void main() {
       final (source, sourceManager, _) = await buildService(<String, Object>{
         'theme_mode': 'dark',
         'verbose_mode': true,
+        'workspace_accent_v1': 'iris',
+        'composer_running_action': 'queue',
+        'completion_notifications': false,
+        'attention_notifications': true,
+        'notification_message_previews': true,
       });
       await sourceManager.saveConnection(
         'Miniserver',
@@ -139,6 +154,11 @@ void main() {
       expect(result.connectionsUpdated, 0);
       expect(targetPrefs.getString('theme_mode'), 'dark');
       expect(targetPrefs.getBool('verbose_mode'), true);
+      expect(targetPrefs.getString('workspace_accent_v1'), 'iris');
+      expect(targetPrefs.getString('composer_running_action'), 'queue');
+      expect(targetPrefs.getBool('completion_notifications'), false);
+      expect(targetPrefs.getBool('attention_notifications'), true);
+      expect(targetPrefs.getBool('notification_message_previews'), true);
 
       final restored = await targetManager.loadConnectionsWithSecrets();
       expect(restored, hasLength(1));
@@ -271,7 +291,7 @@ void main() {
     test('survives a full export → import → export round trip', () async {
       final (source, sourceManager, _) = await buildService(<String, Object>{
         'theme_mode': 'dark',
-        'app_text_size_preference': 1.15,
+        'app_text_size_preference': 'large',
       });
       await sourceManager.saveConnection(
         'Miniserver',
@@ -290,7 +310,7 @@ void main() {
       expect(reexported.connections.single.dashboardPassword, 'dash');
       expect(reexported.connections.single.id, original.connections.single.id);
       expect(reexported.preferences['theme_mode'], 'dark');
-      expect(reexported.preferences['app_text_size_preference'], 1.15);
+      expect(reexported.preferences['app_text_size_preference'], 'large');
     });
   });
 }

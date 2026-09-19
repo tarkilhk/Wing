@@ -148,7 +148,13 @@ void main() {
         expect(find.text('Hermes instances'), findsOneWidget);
         expect(find.text('Homelab'), findsOneWidget);
         expect(find.text('Add instance'), findsOneWidget);
+        expect(find.byTooltip('Backup configuration'), findsNothing);
+        expect(find.byTooltip('Restore configuration'), findsNothing);
         await snapshot(tester, 'instances-${brightness.name}-$scale');
+        await navigate(tester, AppDestination.settings);
+        expect(find.byTooltip('Backup configuration'), findsOneWidget);
+        expect(find.byTooltip('Restore configuration'), findsOneWidget);
+        await snapshot(tester, 'settings-${brightness.name}-$scale');
         expect(tester.takeException(), isNull);
       });
 

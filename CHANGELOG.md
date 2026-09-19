@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Move configuration backup and restore to App settings. Include accent colour, notification preferences and the default composer action, and apply restored settings immediately.
+
 - Group the menu into everyday use, instance/app setup, and Hermes tools. Rename Connections to Hermes instances and move Usage out of Health into the standalone Hermes analytics destination.
 
 - Explain Health checks in plain language, show tool/connector/task counts, and display check times once per Server and Profile section with incomplete-check status.

@@ -14,8 +14,7 @@ import 'connection_manager.dart';
 /// export, and handing it to the share sheet.
 ///
 /// Kept apart from [ConfigBackupService] so the pure logic stays testable, and
-/// shared by both entry points — the connection list (needed on a fresh
-/// install, where Settings is unreachable) and the Settings screen.
+/// shared by App settings and the first-connection welcome screen.
 class ConfigBackupIo {
   final ConnectionManager connectionManager;
 
