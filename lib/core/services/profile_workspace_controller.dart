@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'administration_health_session.dart';
+import 'administration_repository.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -317,6 +319,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
   final SavedConnection connection;
   final String connectionIdentity;
   final SharedPreferences preferences;
+  AdministrationHealthSession? _healthSession;
+  AdministrationHealthSession healthSession({
+    AdministrationRepository? repository,
+  }) => _healthSession ??= AdministrationHealthSession(
+    repository ??
+        AdministrationRepository.forConnection(
+          connection,
+          connectionIdentity,
+          connectionStatus: connectionStatus,
+        ),
+    preferences,
+    connectionStatus: connectionStatus,
+    ownsServer: repository == null,
+  );
   final ProfileGatewayFactory _factory;
   final AttachmentDraftService attachments;
   late final ComposerDraftStore _drafts;
@@ -6019,6 +6035,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   @override
   void dispose() {
     _closed = true;
+    _healthSession?.dispose();
     _notificationRetry?.cancel();
     unawaited(_saveReadingSnapshot());
     connectionStatus.dispose();

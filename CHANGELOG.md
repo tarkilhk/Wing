@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Retry temporary Health connection failures safely. Keep server and per-profile results across navigation and app restarts, reuse them for 24 hours, and resume tracking unfinished diagnostics without duplicating them.
+
 - Scroll the Usage year grid smoothly in either direction, with the visible date range updating during drags and momentum. Replace the earlier/later arrows.
 
 - Show a refresh icon with progress in Health’s Server section, and move Doctor and Security audit reruns to top-bar play buttons.

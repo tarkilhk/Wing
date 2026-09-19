@@ -198,7 +198,7 @@ void main() {
         expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(1));
         expect(
           fixture.requests.where((r) => r.$2 == 'actions/doctor/status'),
-          hasLength(3),
+          hasLength(exitCode == null ? 3 : 1),
         );
         expect(
           fixture.requests.every((r) => !r.$3.containsKey('profile')),
@@ -215,7 +215,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(
           find.textContaining('Result refresh unavailable'),
-          findsOneWidget,
+          exitCode == null ? findsOneWidget : findsNothing,
         );
         expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(1));
         expect(tester.takeException(), isNull);

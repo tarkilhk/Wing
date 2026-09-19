@@ -247,6 +247,12 @@ void main() {
         fixture.calls.skip(callsBefore).map((call) => (call.$1, call.$2)),
         [(controller.current!.scope.profileName, 'setup.runtime_check')],
       );
+      final afterHealth = fixture.calls.length;
+      await navigate(tester, AppDestination.health);
+      await tester.pumpAndSettle();
+      await navigate(tester, AppDestination.chats);
+      expect(find.text('Keep this unsent'), findsOneWidget);
+      expect(fixture.calls.length, afterHealth);
       expect(tester.takeException(), isNull);
     },
   );

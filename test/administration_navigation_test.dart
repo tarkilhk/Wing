@@ -604,7 +604,7 @@ void main() {
   testWidgets('Health runtime findings survive returning from an action', (
     tester,
   ) async {
-    admin = AdministrationDesignFixture();
+    admin.override = AdministrationDesignFixture().send;
     await show(tester, Brightness.dark, healthOnly: true);
     await tester.scrollUntilVisible(
       find.text('Doctor'),
@@ -641,7 +641,7 @@ void main() {
     );
     expect(
       admin.requests.where((r) => r.$2 == 'actions/doctor/status'),
-      hasLength(2),
+      hasLength(1),
     );
     expect(tester.takeException(), isNull);
   });

@@ -26,6 +26,7 @@ Color administrationHealthColor(
 class AdminHealthContent extends StatelessWidget {
   final AdministrationRepository server;
   final AdministrationHealth health;
+  final String? persistenceError;
   final ProfileAdministration? profile;
   final ProfileDiagnosticsController? Function() accessChecks;
   final VoidCallback? onConnections;
@@ -37,6 +38,7 @@ class AdminHealthContent extends StatelessWidget {
     super.key,
     required this.server,
     required this.health,
+    this.persistenceError,
     required this.profile,
     required this.onRefresh,
     required this.onOpenDestination,
@@ -56,6 +58,7 @@ class AdminHealthContent extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
+          if (persistenceError case final message?) AdminNotice.error(message),
           AdminRuntimeHealth(health: health),
           const SizedBox(height: 24),
           Row(

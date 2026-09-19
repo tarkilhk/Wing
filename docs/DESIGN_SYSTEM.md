@@ -267,7 +267,9 @@ alone reveals Fix access, Review access, Retry or Review connection as appropria
 Keep these actions compact and preserve the selected profile when entering its
 existing recovery editor. Use one quiet note below the group for check coverage.
 Name any different resolved model/provider without validating the selected route.
-Opening Health performs reads only. Model selection stays in Administration.
+Health retains server results and separate profile checks across navigation and app
+restarts. Opening it reuses results for 24 hours; expired completed diagnostics
+and expired profile checks refresh automatically. Missing server results trigger an initial diagnostic run. Model selection stays in Administration.
 
 Growing select-only values, page titles and large-text field labels must remain
 readable at 320 dp/200%. Keep 48 dp controls and keyboard-safe editor actions.

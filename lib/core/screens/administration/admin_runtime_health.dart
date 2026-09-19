@@ -25,6 +25,8 @@ Future<bool> _startDiagnostic(
       path,
       title,
       confirm: confirm,
+      isActive: () => !health.isDisposed,
+      onStarting: () => health.recordDiagnosticAttempt(path),
     );
     if (action == null) return false;
     health.trackDiagnostic(path, action, generation: generation);
@@ -54,6 +56,23 @@ Future<void> runAllHealthDiagnostics(
       'Security audit',
       confirm: false,
     ),
+  ]);
+}
+
+/// Check missing or expired results once on Health entry. Profile changes do
+/// not invoke this connection-owned work.
+Future<void> refreshHealthDiagnostics(
+  BuildContext context,
+  AdministrationHealth health,
+) async {
+  if (!context.mounted) return;
+  await Future.wait([
+    for (final (path, title) in [
+      ('ops/doctor', 'Doctor'),
+      ('ops/security-audit', 'Security audit'),
+    ])
+      if (health.diagnosticNeedsRefresh(path))
+        _startDiagnostic(context, health, path, title, confirm: false),
   ]);
 }
 
@@ -143,7 +162,9 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
     final label = health.starting.contains(path)
         ? 'Starting…'
         : observation == null
-        ? 'Not run'
+        ? health.hasAttemptedDiagnostic(path)
+              ? 'Start not confirmed'
+              : 'Not run'
         : observation.readError != null
         ? 'Result refresh unavailable'
         : audit?.title ??

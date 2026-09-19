@@ -8,6 +8,8 @@ import 'administration_overview.dart';
 import 'administration_repository.dart';
 import 'scheduled_tasks_controller.dart';
 import 'server_connection_status.dart';
+import 'workspace_connection_failure.dart';
+import 'health_snapshot.dart';
 
 enum AdministrationHealthStatus { healthy, warning, failure, unknown }
 
@@ -51,16 +53,19 @@ class AdministrationHealth extends ChangeNotifier {
   final ServerConnectionStatus? connectionStatus;
   final DateTime Function() _now;
   AdministrationOverview? _overview;
-  AdministrationHealthFinding? _tasks;
-  AdministrationHealthFinding? _profileChecks;
+  final _profiles = <String, _ProfileHealthState>{};
+  _ProfileHealthState get _profileState =>
+      _profiles.putIfAbsent(profileName!, _ProfileHealthState.new);
+  AdministrationHealthFinding? get _tasks => _profileState.tasks;
+  AdministrationHealthFinding? get _profileChecks => _profileState.checks;
   Timer? _expiry;
   bool _disposed = false;
-  int _profileGeneration = 0;
-  final _readiness = AdministrationObservation();
+  AdministrationObservation get _readiness => _profileState.readiness;
   final _diagnosticGenerations = <String, int>{};
   final _diagnosticTimers = <String, Timer>{};
   final _diagnostics = <String, AdminDiagnosticObservation>{};
   final _diagnosticScopes = <String, String>{};
+  final _diagnosticAttempts = <String, DateTime>{};
   final _pendingScopes = <String, String>{};
   final _starting = <String>{};
 
@@ -70,6 +75,99 @@ class AdministrationHealth extends ChangeNotifier {
       Map.unmodifiable(_diagnostics);
   Set<String> get starting => Set.unmodifiable(_starting);
   String? diagnosticScope(String path) => _diagnosticScopes[path];
+  bool get isDisposed => _disposed;
+  bool hasAttemptedDiagnostic(String path) =>
+      _diagnosticAttempts.containsKey(path);
+  void recordDiagnosticAttempt(String path) {
+    if (_disposed || !_starting.contains(path)) return;
+    _diagnosticAttempts[path] = _now();
+    _changed();
+  }
+
+  bool diagnosticNeedsRefresh(String path) {
+    final observation = _diagnostics[path];
+    return canStartDiagnostic(path) &&
+        (observation == null
+            ? !hasAttemptedDiagnostic(path)
+            : healthSnapshotExpired(observation.checkedAt, _now()));
+  }
+
+  Map<String, dynamic> snapshot() => {
+    'attempted': {
+      for (final entry in _diagnosticAttempts.entries)
+        entry.key: entry.value.toUtc().toIso8601String(),
+    },
+    'profiles': {
+      for (final entry in _profiles.entries)
+        entry.key: {
+          'readiness': healthObservationSnapshot(entry.value.readiness),
+          'tasks': entry.value.tasks == null
+              ? null
+              : healthFindingSnapshot(entry.value.tasks!),
+          'taskError': entry.value.taskError,
+          'checks': entry.value.checks == null
+              ? null
+              : healthFindingSnapshot(entry.value.checks!),
+        },
+    },
+    'diagnostics': {
+      for (final entry in _diagnostics.entries)
+        entry.key: {
+          'name': entry.value.action.name,
+          'pid': entry.value.action.pid,
+          'status': entry.value.status,
+          'checkedAt': entry.value.checkedAt?.toUtc().toIso8601String(),
+          'readError': entry.value.readError,
+          'scope': _diagnosticScopes[entry.key],
+        },
+    },
+  };
+
+  void restore(Map value) {
+    for (final entry in (value['attempted'] as Map).entries) {
+      final at = healthSnapshotTime(entry.value);
+      if (at != null) _diagnosticAttempts[entry.key as String] = at;
+    }
+    for (final entry in (value['profiles'] as Map).entries) {
+      final state = _ProfileHealthState();
+      restoreHealthObservation(
+        state.readiness,
+        entry.value['readiness'] as Map,
+      );
+      state.tasks = restoreHealthFinding(entry.value['tasks']);
+      state.taskError = entry.value['taskError'] as String?;
+      state.checks = restoreHealthFinding(entry.value['checks']);
+      _profiles[entry.key as String] = state;
+    }
+    for (final entry in (value['diagnostics'] as Map).entries) {
+      final path = entry.key as String;
+      if (!{'ops/doctor', 'ops/security-audit'}.contains(path)) continue;
+      final saved = entry.value as Map;
+      final action = AdministrationAction.fromJson(
+        Map<String, dynamic>.from(saved),
+      );
+      if (path != 'ops/${action.name}') continue;
+      final observation = AdminDiagnosticObservation(
+        action,
+        Map<String, dynamic>.from(saved['status'] as Map),
+        healthSnapshotTime(saved['checkedAt']),
+        readError: saved['readError'] as String?,
+      );
+      _diagnostics[path] = observation;
+      _diagnosticScopes[path] =
+          saved['scope'] as String? ?? server.connectionLabel;
+      _diagnosticGenerations[path] = 1;
+      if (observation.status['running'] != false ||
+          observation.status['exit_code'] is! int) {
+        // Resume observation of this exact run, never POST another start.
+        _diagnosticTimers[path] = Timer(
+          Duration.zero,
+          () => _refreshDiagnostic(path, action, 1),
+        );
+      }
+    }
+  }
+
   bool isStale(DateTime? at) =>
       at == null || _now().isBefore(at) || !_now().isBefore(at.add(maxAge));
 
@@ -85,20 +183,20 @@ class AdministrationHealth extends ChangeNotifier {
     }
     _overview?.removeListener(_changed);
     _overview = overview;
-    _profileGeneration++;
-    _readiness.data = null;
-    _readiness.checkedAt = null;
-    _readiness.error = null;
-    _readiness.loading = false;
-    _tasks = null;
-    _profileChecks = null;
     overview?.addListener(_changed);
     _changed();
   }
 
   void updateProfileChecks(AdministrationProfileHealthObservation observation) {
-    if (_disposed || observation.scope != _overview?.profile.scope) return;
-    _profileChecks = observation.finding;
+    if (_disposed ||
+        observation.scope.connectionId != server.connectionId ||
+        observation.scope.connectionIdentity != server.connectionIdentity) {
+      return;
+    }
+    _profiles
+            .putIfAbsent(observation.scope.profileName, _ProfileHealthState.new)
+            .checks =
+        observation.finding;
     _changed();
   }
 
@@ -106,12 +204,14 @@ class AdministrationHealth extends ChangeNotifier {
   /// secret scope. It neither probes a model nor creates provider credentials.
   /// Inspected upstream 98f758ae7e8db83c2bb9214c3b35adf41df15f03:
   /// tui_gateway/methods_config.py:268; hermes_cli/main.py:1009.
-  Future<void> refreshReadiness() async {
-    final profile = _overview?.profile;
+  Future<void> refreshReadiness({ProfileAdministration? profile}) async {
+    profile ??= _overview?.profile;
     if (_disposed || profile == null) return;
-    final generation = ++_profileGeneration;
-    _readiness.loading = true;
-    _readiness.error = null;
+    final state = _profiles.putIfAbsent(profile.name, _ProfileHealthState.new);
+    final readiness = state.readiness;
+    final generation = ++state.generation;
+    readiness.loading = true;
+    readiness.error = null;
     _changed();
     try {
       final data = await profile.rpc('setup.status');
@@ -119,15 +219,15 @@ class AdministrationHealth extends ChangeNotifier {
           data['provider_configured'] is! bool) {
         throw const FormatException('Incomplete profile readiness');
       }
-      if (_disposed || generation != _profileGeneration) return;
-      _readiness.data = data;
-      _readiness.checkedAt = _now();
+      if (_disposed || generation != state.generation) return;
+      readiness.data = {'provider_configured': data['provider_configured']};
+      readiness.checkedAt = _now();
     } on Object catch (error) {
-      if (_disposed || generation != _profileGeneration) return;
-      _readiness.error = administrationError(error);
+      if (_disposed || generation != state.generation) return;
+      readiness.error = administrationError(error);
     } finally {
-      if (!_disposed && generation == _profileGeneration) {
-        _readiness.loading = false;
+      if (!_disposed && generation == state.generation) {
+        readiness.loading = false;
         _changed();
       }
     }
@@ -135,11 +235,22 @@ class AdministrationHealth extends ChangeNotifier {
 
   void updateTasks(ScheduledTasksController source) {
     if (_disposed ||
-        source.repository.profile.scope != _overview?.profile.scope) {
+        source.repository.profile.server.connectionIdentity !=
+            server.connectionIdentity) {
       return;
     }
+    final state = _profiles.putIfAbsent(
+      source.repository.profile.name,
+      _ProfileHealthState.new,
+    );
     final count = source.tasks?.where((task) => task.needsAttention).length;
-    _tasks = _finding(
+    state.taskLoading = source.loading;
+    state.taskError = source.error;
+    if (count == null && state.tasks?.checkedAt != null) {
+      _changed();
+      return;
+    }
+    state.tasks = _finding(
       'Scheduled tasks',
       count == null
           ? AdministrationHealthStatus.unknown
@@ -156,8 +267,6 @@ class AdministrationHealth extends ChangeNotifier {
           ? 'A task action needs review'
           : 'No attention flags in listed tasks',
       at: source.checkedAt,
-      loading: source.loading,
-      error: source.error,
       destination: 'Scheduled tasks',
     );
     _changed();
@@ -286,6 +395,8 @@ class AdministrationHealth extends ChangeNotifier {
           task.status,
           task.detail,
           at: task.checkedAt,
+          loading: _profileState.taskLoading,
+          error: _profileState.taskError,
           destination: task.destination,
         ),
       );
@@ -548,6 +659,12 @@ class AdministrationHealth extends ChangeNotifier {
         ),
         generation: generation,
       );
+      if (isTemporaryWorkspaceFailure(error)) {
+        _diagnosticTimers[path] = Timer(
+          const Duration(seconds: 15),
+          () => _refreshDiagnostic(path, action, generation),
+        );
+      }
     }
   }
 
@@ -637,4 +754,13 @@ class AdminDiagnosticObservation {
       : status['running'] == false && status['exit_code'] == 0
       ? 'The operation completed. Its output may still contain warnings or findings.'
       : 'A final outcome has not been reported. Check progress to retrieve the result.';
+}
+
+class _ProfileHealthState {
+  final readiness = AdministrationObservation();
+  AdministrationHealthFinding? tasks;
+  bool taskLoading = false;
+  String? taskError;
+  AdministrationHealthFinding? checks;
+  int generation = 0;
 }

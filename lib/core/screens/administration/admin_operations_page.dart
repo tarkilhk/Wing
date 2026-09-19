@@ -7,6 +7,7 @@ import '../../widgets/studio_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
+import '../../services/workspace_connection_failure.dart';
 import 'admin_widgets.dart';
 import 'admin_doctor_diagnosis.dart';
 import 'admin_security_diagnosis.dart';
@@ -44,7 +45,11 @@ class _AdminActionPageState extends State<AdminActionPage> {
     super.initState();
     _status = widget.initialObservation?.status;
     _checkedAt = widget.initialObservation?.checkedAt;
-    _check();
+    if (_status == null ||
+        _status?['running'] != false ||
+        _status?['exit_code'] is! int) {
+      _check();
+    }
   }
 
   @override
@@ -73,6 +78,9 @@ class _AdminActionPageState extends State<AdminActionPage> {
     } catch (e) {
       if (mounted) {
         setState(() => _error = administrationError(e));
+        if (isTemporaryWorkspaceFailure(e)) {
+          _timer = Timer(const Duration(seconds: 15), _check);
+        }
       }
     } finally {
       if (mounted) {
@@ -218,6 +226,8 @@ Future<AdministrationAction?> startAdminOperation(
   String path,
   String title, {
   bool confirm = true,
+  bool Function()? isActive,
+  VoidCallback? onStarting,
 }) async {
   if (confirm) {
     final confirmed = await showDialog<bool>(
@@ -241,7 +251,11 @@ Future<AdministrationAction?> startAdminOperation(
     if (confirmed != true || !context.mounted) return null;
   }
   try {
-    final result = await server.write('POST', path);
+    onStarting?.call();
+    final result = await server.startDiagnostic(
+      path,
+      isActive: isActive ?? () => context.mounted,
+    );
     return AdministrationAction.fromJson(result);
   } catch (e) {
     if (context.mounted) {

@@ -528,14 +528,15 @@ void main({
     await tester.pumpAndSettle();
     expect(
       fixture.explicitCalls.where((v) => v == 'setup.runtime_check default'),
-      hasLength(2),
+      hasLength(1),
     );
-    expect(find.text('Credentials available'), findsOneWidget);
+    expect(find.text('Credentials missing'), findsOneWidget);
+    expect(find.text('1 connector failed its check'), findsOneWidget);
     expect(
       fixture.requests.where((r) => r.startsWith('POST ops/')),
       hasLength(2),
     );
-    // Reopening Health starts a fresh set of checks for the selected profile.
+    // Returning to Health reuses each profile and the server results.
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(
       MaterialApp(
@@ -552,11 +553,11 @@ void main({
     await tester.pumpAndSettle();
     expect(
       fixture.explicitCalls.where((v) => v == 'setup.runtime_check default'),
-      hasLength(3),
+      hasLength(1),
     );
     expect(
       fixture.requests.where((r) => r.startsWith('POST ops/')),
-      hasLength(4),
+      hasLength(2),
     );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());

@@ -45,21 +45,20 @@ short read-only disclosure; source metadata is shown only when reported.
 
 Health has two groups. Server owns Doctor, security audit and Logs. Its refresh icon
 starts Doctor and security audit together, without opening their details or a
-confirmation dialog. Opening Health triggers that same run once per screen visit;
-changing profiles, refreshing profile checks, and returning from a detail do not
-restart server diagnostics. It is disabled while either diagnostic is starting, running
+confirmation dialog. It is disabled while either diagnostic is starting, running
 or has an uncertain completion. Each operation retains its own result; a failed
-start does not prevent the other operation from running. The icon shows the same
-progress spinner as Profile while diagnostics start or run.
-Doctor and Security audit details use a top-bar play action to rerun, with automatic
-result polling and no bottom rerun button. There is no runtime-profile label.
-Diagnostic confirmations and results identify
-the server. Profile uses selection from the shared header,
+start does not prevent the other operation from running. The icon shows a spinner
+while diagnostics start or run, matching Profile refresh.
+Doctor and security audit details rerun from their top-bar play action, with no
+bottom rerun button; result polling remains automatic. There is no runtime-profile
+label. Diagnostic confirmations and results identify the server. Profile uses
+selection from the shared header,
 a refresh icon beside its heading, four stable rows (Model access, Tools, Connectors,
-Scheduled tasks), and Usage. There is no global health verdict. Server diagnostics retain their separate progress and results.
+Scheduled tasks), and Usage. There is no global health verdict. Server diagnostics run on first entry and retain their separate progress and results.
 
 Health owns its profile observations, so opening Administration first is unnecessary.
-Opening Health and selecting a profile automatically refresh all four rows:
+Opening Health or selecting a profile reuses that profile’s saved results for 24 hours.
+A profile with no saved refresh, or one at least 24 hours old, automatically checks all four rows:
 model credential resolution, enabled-tool configuration, enabled connector connection
 probes, and scheduled-task errors or uncertain actions. The Profile refresh icon and
 pull-to-refresh repeat the same checks. Returning from provider recovery also checks
@@ -90,7 +89,7 @@ canonical profile. Verified against latest stock upstream
 on 19 September 2026: without a provider override it resolves the startup model and
 configured fallback chain. This establishes credential resolution, not successful
 inference or available quota. Resolution may use the provider's credential renewal;
-opening Health runs this credential check automatically. Only known missing-credential
+opening Health runs this credential check when the saved profile refresh is absent or expired. Only known missing-credential
 messages are described as missing credentials. Other negative results say Provider
 check failed; arbitrary server exception text is not displayed. A missing/mismatched
 success scope or malformed response is incomplete, never success. Transport failures
@@ -112,6 +111,43 @@ refreshes retain the previous result and timestamp with a local qualification;
 actual provider credential expiration still becomes a reported failure. Connector
 configuration never establishes connectivity. Switching profiles detaches old
 observations immediately, and late responses cannot replace the current profile.
+
+Health state belongs to the connection, not its route. Navigating away keeps
+in-flight checks alive. Server diagnostic results and a separate result/refresh
+time for every canonical profile are saved on the device and restored after app
+restart. Storage is scoped by connection ID and endpoint/authentication identity.
+Profile snapshots contain health metadata rather than connector commands,
+environment values or provider secrets. Completed diagnostic details use their
+saved output without issuing another status request. An unfinished restored run
+resumes status reads for its saved action identity without launching a new process.
+
+On Health entry, each completed server diagnostic at least 24 hours old runs
+again automatically; diagnostics with no prior attempt trigger their initial run.
+An unconfirmed start is saved too: reopening Health never repeats it automatically.
+The row keeps an explicit Run action for the user to retry.
+Profile and server clocks are independent. Manual refresh remains available,
+and an in-flight refresh is shared across repeated visits. Old observations remain
+available while replacement checks are pending. Provider credential expiry is
+still evaluated from the saved expiry timestamp.
+
+Connectivity recovery retries temporary reads up to three attempts with one- and
+two-second delays. Known diagnostic runs keep polling after an extended outage.
+Starts retry only failures known to precede delivery, including transient
+pre-dispatch authentication failures and Android/Linux connect/DNS failures.
+A lost POST response, timeout after dispatch, server error or reset is not replayed:
+stock Hermes cannot associate an idempotency key with a diagnostic start.
+Authentication preparation has its own deadline, so a timed-out preparation
+cannot later dispatch the abandoned diagnostic.
+
+Retry contract verified on 19 September 2026 against upstream main
+[`a11bac476bb2a2129fdffca9511d41260fa5f51f`](https://github.com/NousResearch/hermes-agent/commit/a11bac476bb2a2129fdffca9511d41260fa5f51f):
+[`ops.py`](https://github.com/NousResearch/hermes-agent/blob/a11bac476bb2a2129fdffca9511d41260fa5f51f/hermes_cli/web_routers/ops.py)
+uses separate Doctor and security-audit POST routes;
+[`_common.py`](https://github.com/NousResearch/hermes-agent/blob/a11bac476bb2a2129fdffca9511d41260fa5f51f/hermes_cli/web_routers/_common.py)
+returns the spawned name/PID, and
+[`web_server_gateway.py`](https://github.com/NousResearch/hermes-agent/blob/a11bac476bb2a2129fdffca9511d41260fa5f51f/hermes_cli/web_server_gateway.py)
+launches a new process on every call and overwrites the same-name action handle.
+All recovery and persistence changes are client-only.
 
 Server diagnostic results retain their action identity, captured scope, output and
 timestamps through detail navigation and profile switches. Run starts the diagnostic
@@ -137,12 +173,7 @@ Run-all contract rechecked on 19 September 2026 against upstream
 and security audit, with no profile argument. Both use `_spawn_action`, which
 calls `spawn_profile_action(None, ...)` in the dashboard's environment. Wing does
 not select a diagnostic profile or claim that profile discovery establishes one.
-Run all composes these existing endpoints entirely in the client. Automatic Health-entry
-starts were reverified against stock upstream `77da057c5e73867a6e94dbc668e7b85d254a063b`
-(`hermes_cli/web_routers/ops.py:503-513`) on 19 September 2026; neither endpoint takes
-a selected profile. The entry trigger belongs to the screen lifecycle, so list scrolling
-and profile changes cannot restart these operations.
-
+Run all composes these existing endpoints entirely in the client.
 Verified on 18 September 2026 against stock upstream
 [`8a492617e1239ab90bd3e3f7794b1e443f37a287`](https://github.com/NousResearch/hermes-agent/commit/8a492617e1239ab90bd3e3f7794b1e443f37a287):
 - `hermes_cli/web_routers/ops.py`: Doctor and security audit take no profile or repair flag.

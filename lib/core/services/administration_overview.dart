@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'administration_repository.dart';
+import 'health_snapshot.dart';
 
 /// Independent observations for one captured profile. A failed refresh retains
 /// its previous observation, never an invented empty/default configuration.
@@ -29,6 +30,67 @@ class AdministrationOverview extends ChangeNotifier {
     'access': 'providers/oauth',
     'connectors': 'mcp/servers',
   };
+
+  /// Persist only health metadata, never connector commands, environment
+  /// variables, provider secrets or the full configuration response.
+  Map<String, dynamic> healthSnapshot() => {
+    'observations': {
+      for (final entry in observations.entries)
+        if ({'model', 'access', 'tools', 'connectors'}.contains(entry.key))
+          entry.key: {
+            ...healthObservationSnapshot(entry.value),
+            'data': entry.value.data == null
+                ? null
+                : _healthData(entry.key, entry.value.data!),
+          },
+    },
+    'connectorChecks': connectorChecks,
+  };
+
+  void restoreHealth(Map snapshot) {
+    for (final entry in (snapshot['observations'] as Map).entries) {
+      final observation = AdministrationObservation();
+      restoreHealthObservation(observation, entry.value as Map);
+      observations[entry.key as String] = observation;
+    }
+    connectorChecks = Map<String, bool?>.from(
+      snapshot['connectorChecks'] as Map,
+    );
+  }
+
+  Map<String, dynamic> _healthData(String key, Map<String, dynamic> data) {
+    if (key == 'model') {
+      return {'model': data['model'], 'provider': data['provider']};
+    }
+    final collection = switch (key) {
+      'access' => 'providers',
+      'tools' => 'data',
+      _ => 'servers',
+    };
+    return {
+      collection: [
+        for (final row in administrationRows(data[collection]))
+          {
+            for (final field in [
+              'id',
+              'name',
+              'label',
+              'display_name',
+              'flow',
+              'enabled',
+              'configured',
+            ])
+              if (row.containsKey(field)) field: row[field],
+            if (key == 'access' && row['status'] is Map)
+              'status': {
+                for (final field in ['logged_in', 'expires_at'])
+                  field: row['status'][field],
+                if (row['status']['error'] != null) 'error': true,
+              },
+          },
+      ],
+    };
+  }
 
   Future<void> refresh({Set<String>? keys, bool testConnectors = false}) async {
     await Future.wait([
