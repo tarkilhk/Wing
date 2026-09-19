@@ -271,7 +271,7 @@ void main() {
       expect(checked?.apiKey, isEmpty);
       expect(saved, isNull);
       await tester.enterText(find.byKey(const Key('connection-name')), 'Home');
-      await _tap(tester, 'Connection icon');
+      await _tap(tester, 'Instance icon');
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('connection-icon-home')));
       await _tap(tester, 'Save icon');

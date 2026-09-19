@@ -1,5 +1,5 @@
 import 'dart:async';
-import '../../services/scheduled_tasks_controller.dart';
+import '../analytics_content.dart';
 import '../../services/administration_overview.dart';
 import '../../services/administration_health.dart';
 import '../../widgets/profile_diagnostics_panel.dart';
@@ -50,13 +50,17 @@ class HermesAdministrationContent extends StatefulWidget {
 
 class _HermesAdministrationContentState
     extends State<HermesAdministrationContent> {
-  late final _server =
-      widget.repository ??
-      AdministrationRepository.forConnection(
-        widget.controller.connection,
-        widget.controller.connectionIdentity,
-        connectionStatus: widget.controller.connectionStatus,
-      );
+  late final _healthSession = widget.controller.healthSession(
+    repository: widget.repository,
+  );
+  late final _server = widget.healthOnly
+      ? _healthSession.server
+      : widget.repository ??
+            AdministrationRepository.forConnection(
+              widget.controller.connection,
+              widget.controller.connectionIdentity,
+              connectionStatus: widget.controller.connectionStatus,
+            );
   String _search = '';
   int _overviewRevision = 0;
   Set<String> _overviewKeys = const {};
@@ -73,70 +77,29 @@ class _HermesAdministrationContentState
     });
   }
 
-  late final _health = AdministrationHealth(
-    _server,
-    connectionStatus: widget.controller.connectionStatus,
-  );
+  late final _health = widget.healthOnly
+      ? _healthSession.health
+      : AdministrationHealth(
+          _server,
+          connectionStatus: widget.controller.connectionStatus,
+        );
   String? _healthProfileName;
   bool _refreshing = false;
-  final _healthOverviews = <String, AdministrationOverview>{};
-  final _healthTasks = <String, ScheduledTasksController>{};
-  final _taskListeners = <String, VoidCallback>{};
-  bool _checkingProfile = false;
+  bool get _checkingProfile => _healthSession.checking(_profile?.name);
 
   void _selectHealthProfile() {
-    final profile = _profile;
-    if (!widget.healthOnly || profile == null) return;
-    final key = profile.scope.storageNamespace;
-    final overview = _healthOverviews.putIfAbsent(key, () {
-      final overview = AdministrationOverview(profile);
-      overview.addListener(() {
-        _accessChecks[key]?.updateModel(overview.observations['model']?.data);
-      });
-      return overview;
-    });
-    final tasks = _healthTasks.putIfAbsent(key, () {
-      final source = ScheduledTasksController.acquire(
-        profile,
-        widget.controller.preferences,
-      );
-      void listener() {
-        if (mounted) _health.updateTasks(source);
-      }
-
-      _taskListeners[key] = listener;
-      source.addListener(listener);
-      return source;
-    });
-    _health.selectProfile(overview);
-    final checks = _checksForCurrentProfile();
-    if (checks != null) _health.updateProfileChecks(checks.healthObservation);
-    _health.updateTasks(tasks);
-    unawaited(_refreshHealthProfile());
+    if (!widget.healthOnly) return;
+    _healthSession.select(_profile == null ? null : widget.controller.current);
   }
 
-  Future<void> _refreshHealthProfile({bool checkAccess = false}) async {
-    final key = _profile?.scope.storageNamespace;
-    final overview = _healthOverviews[key];
-    if (overview == null) return;
-    final checks = checkAccess ? _checksForCurrentProfile() : null;
-    await Future.wait([
-      overview.refresh(keys: {'model', 'access', 'tools', 'connectors'}),
-      if (_healthTasks[key] case final tasks?) tasks.refresh(),
-      _health.refreshReadiness(),
-    ]);
-    if (checks != null) await checks.check();
+  Future<void> _refreshHealthProfile() {
+    final workspace = widget.controller.current;
+    return workspace == null
+        ? Future.value()
+        : _healthSession.refresh(workspace);
   }
 
-  Future<void> _checkProfile() async {
-    if (_checkingProfile) return;
-    setState(() => _checkingProfile = true);
-    try {
-      await _refreshHealthProfile(checkAccess: true);
-    } finally {
-      if (mounted) setState(() => _checkingProfile = false);
-    }
-  }
+  Future<void> _checkProfile() => _refreshHealthProfile();
 
   final _accessChecks = <String, ProfileDiagnosticsController>{};
 
@@ -145,7 +108,6 @@ class _HermesAdministrationContentState
     super.initState();
     _healthProfileName = _profile?.name;
     widget.controller.addListener(_workspaceChanged);
-    unawaited(_health.refreshRuntimeIdentity());
     _selectHealthProfile();
   }
 
@@ -164,17 +126,13 @@ class _HermesAdministrationContentState
   ProfileDiagnosticsController? _checksForCurrentProfile() {
     final workspace = widget.controller.current;
     if (workspace == null || workspace.scope != _profile?.scope) return null;
+    if (widget.healthOnly) return _healthSession.checksFor(workspace);
     final checks = _accessChecks.putIfAbsent(
       workspace.scope.storageNamespace,
       () {
         final checks = ProfileDiagnosticsController(
           workspace: workspace,
           connectionLabel: _server.connectionLabel,
-        );
-        checks.updateModel(
-          _healthOverviews[workspace.scope.storageNamespace]
-              ?.observations['model']
-              ?.data,
         );
         checks.addListener(() {
           if (mounted) _health.updateProfileChecks(checks.healthObservation);
@@ -210,7 +168,6 @@ class _HermesAdministrationContentState
     try {
       await Future.wait([
         widget.controller.refresh(),
-        _health.refreshRuntimeIdentity(),
         if (widget.healthOnly)
           _refreshHealthProfile()
         else
@@ -231,21 +188,12 @@ class _HermesAdministrationContentState
   @override
   void dispose() {
     widget.controller.removeListener(_workspaceChanged);
-    _health.dispose();
-    for (final entry in _healthTasks.entries) {
-      entry.value.removeListener(_taskListeners[entry.key]!);
-      // Releasing the last task lease can close a gateway and notify the shell.
-      // Defer that notification until Flutter finishes unmounting this route.
-      scheduleMicrotask(entry.value.release);
-    }
-    for (final overview in _healthOverviews.values) {
-      overview.dispose();
-    }
+    if (!widget.healthOnly) _health.dispose();
     for (final checks in _accessChecks.values) {
       checks.dispose();
     }
     _searchInput.dispose();
-    if (widget.repository == null) {
+    if (!widget.healthOnly && widget.repository == null) {
       final server = _server;
       scheduleMicrotask(server.close);
     }
@@ -626,16 +574,16 @@ class _HermesAdministrationContentState
             ),
     ),
     _Destination(
-      'Profile health',
-      'Usage',
-      'Daily activity and model breakdowns',
+      'Analytics',
+      'Analytics',
+      'Usage, tokens and cost by day and model',
       Icons.bar_chart,
       p == null
           ? null
           : () => adminPushProfile(
               context,
               p,
-              (context, profile) => AdminUsagePage(profile: profile),
+              (context, profile) => AnalyticsPage(profile: profile),
             ),
     ),
     _Destination(
@@ -643,18 +591,7 @@ class _HermesAdministrationContentState
       'Logs',
       'Errors, severity and search',
       Icons.subject,
-      () async {
-        final identity = await _server.runtimeIdentity();
-        if (mounted) {
-          await adminPush(
-            context,
-            (context) => AdminLogsPage(
-              server: _server,
-              runtimeLabel: identity['label'] as String,
-            ),
-          );
-        }
-      },
+      () => adminPush(context, (context) => AdminLogsPage(server: _server)),
     ),
   ];
 
@@ -713,11 +650,25 @@ class _HermesAdministrationContentState
   Widget build(BuildContext context) {
     if (widget.healthOnly) {
       return ListenableBuilder(
-        listenable: Listenable.merge([widget.controller, _health]),
+        listenable: Listenable.merge([
+          widget.controller,
+          _health,
+          _healthSession,
+        ]),
         builder: (context, _) => AdminHealthContent(
           server: _server,
           health: _health,
+          persistenceError: _healthSession.persistenceError,
           profile: _profile,
+          chatController: widget.controller,
+          onOpenSession: (key) async {
+            final root = ModalRoute.of(context);
+            final navigator = Navigator.of(context);
+            await widget.onOpenSession(key);
+            if (navigator.mounted) {
+              navigator.popUntil((route) => route == root);
+            }
+          },
           onCheckProfile: _checkingProfile || widget.controller.switching
               ? null
               : _checkProfile,
@@ -905,7 +856,7 @@ class _Destination {
         _ => 'Profile › $title',
       };
     }
-    if (tab == 'Profile health') return 'Health › Selected profile › $title';
+    if (tab == 'Analytics') return 'Hermes analytics › Selected profile';
     if (tab == 'Runtime health') return 'Health › Runtime › $title';
     return '$tab › $title';
   }

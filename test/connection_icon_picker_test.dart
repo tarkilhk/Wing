@@ -263,6 +263,6 @@ void main() {
     await tester.tap(find.text('Save icon'));
     await tester.pumpAndSettle();
     expect(attempts, 2);
-    expect(find.text('Connection icon'), findsNothing);
+    expect(find.text('Instance icon'), findsNothing);
   });
 }

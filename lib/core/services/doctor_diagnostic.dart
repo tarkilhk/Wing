@@ -62,10 +62,30 @@ class DoctorDiagnostic {
 }
 
 class DoctorFinding {
-  const DoctorFinding(this.title, this.detail);
+  const DoctorFinding(
+    this.title,
+    this.detail, {
+    this.hasRecommendation = false,
+  });
 
   final String title;
   final String? detail;
+  final bool hasRecommendation;
+
+  String chatPrompt(String diagnosticOutput) =>
+      '''Help me investigate this Hermes Doctor finding and propose a solution.
+
+Finding:
+$title
+${detail == null ? '' : '\n${hasRecommendation ? 'Doctor’s recommendation' : 'Doctor details'}:\n$detail\n'}
+Explain what this means, its likely cause, and whether it needs attention. Use the diagnostic output below as context, focusing on this finding.
+
+Propose a fix if possible, including any risk of losing chat history or other data and how to verify the result. If you need more information, ask me rather than guessing.
+
+Do not make changes or run repair commands yet. Explain your proposed solution first.
+
+Diagnostic output:
+$diagnosticOutput''';
 
   factory DoctorFinding.fromText(String text) {
     final separator = text.indexOf(' — ');
@@ -73,6 +93,7 @@ class DoctorFinding {
       return DoctorFinding(
         text.substring(0, separator),
         text.substring(separator + 3),
+        hasRecommendation: true,
       );
     }
     final vulnerabilities = RegExp(

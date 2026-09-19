@@ -13,9 +13,9 @@ enum WorkspacePickerMode {
   bool get includesConnections => this != profiles;
   bool get includesProfiles => this != connections;
   String get label => switch (this) {
-    connections => 'Choose connection',
+    connections => 'Choose instance',
     profiles => 'Choose profile',
-    connectionAndProfile => 'Choose connection and profile',
+    connectionAndProfile => 'Choose instance and profile',
   };
 }
 
@@ -97,7 +97,7 @@ Future<WorkspaceChoice?> showWorkspacePicker(
     ),
     items: [
       if (mode.includesConnections) ...[
-        heading('Connection'),
+        heading('Hermes instance'),
         for (final connection in connections)
           option(
             (id: connection.id, isConnection: true),

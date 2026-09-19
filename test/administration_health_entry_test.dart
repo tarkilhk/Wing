@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -31,6 +32,8 @@ class _Fixture {
   final scopedRequests = <(String, String, Map<String, String>)>[];
   final explicitCalls = <String>[];
   final models = <String, String>{};
+  Future<Map<String, dynamic>> Function(String profile)? checkAccess;
+  Future<Map<String, dynamic>> Function(String profile)? checkConnector;
   Map<String, dynamic> modelInfo(String profile) => {
     'model': models[profile] ?? 'gpt-5.6-sol',
     'provider': 'openai-codex',
@@ -68,7 +71,8 @@ class _Fixture {
           rpc: (method, params) {
             explicitCalls.add('$method ${scope.profileName}');
             if (method == 'setup.runtime_check') {
-              if (status == 'missing') {
+              if (checkAccess != null) return checkAccess!(scope.profileName);
+              if (status == 'missing' || status == 'problems') {
                 return Future.value({
                   'ok': false,
                   'profile': scope.profileName,
@@ -99,6 +103,10 @@ class _Fixture {
     ) async {
       requests.add('$method $path');
       scopedRequests.add((method, path, Map.of(query)));
+      if (method == 'POST' && path == 'mcp/servers/example/test') {
+        if (checkConnector != null) return checkConnector!(query['profile']!);
+        return {'ok': status != 'problems'};
+      }
       if (method != 'GET') throw StateError('Unexpected write: $path');
       if (status == 'unknown' && path == 'tools/toolsets') {
         throw StateError('Unavailable');
@@ -130,7 +138,7 @@ class _Fixture {
             (i) => {
               'name': 'tool-$i',
               'enabled': true,
-              'configured': status != 'amber' || i != 0,
+              'configured': !{'amber', 'problems'}.contains(status) || i != 0,
             },
           ),
         },
@@ -153,7 +161,18 @@ class _Fixture {
             {'name': 'example', 'enabled': true},
           ],
         },
-        'cron/jobs' => {'data': []},
+        'cron/jobs' => {
+          'data': [
+            if (status == 'problems')
+              {
+                'id': 'failed-task',
+                'enabled': true,
+                'schedule': {'kind': 'interval', 'minutes': 60},
+                'state': 'error',
+                'last_error': 'Delivery failed',
+              },
+          ],
+        },
         _ => await base.send(method, path, query, body),
       };
     }
@@ -226,52 +245,47 @@ void main({
     });
   }
 
-  testWidgets(
-    'Fix access opens the owning editor and clears the old result on return',
-    (tester) async {
-      final fixture = _Fixture('missing');
-      await fixture.initialize();
-      addTearDown(fixture.dispose);
-      await fixture.workspace.switchProfile('client-work');
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: wingTheme(Brightness.dark),
-          home: Scaffold(
-            body: HermesHealthContent(
-              controller: fixture.workspace,
-              repository: fixture.repository,
-              onOpenMenu: () {},
-              onOpenSession: (_) async {},
-              onConnections: () {},
-            ),
+  testWidgets('Fix access opens the owning editor and checks again on return', (
+    tester,
+  ) async {
+    final fixture = _Fixture('missing');
+    await fixture.initialize();
+    addTearDown(fixture.dispose);
+    await fixture.workspace.switchProfile('client-work');
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        home: Scaffold(
+          body: HermesHealthContent(
+            controller: fixture.workspace,
+            repository: fixture.repository,
+            onOpenMenu: () {},
+            onOpenSession: (_) async {},
+            onConnections: () {},
           ),
         ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('Fix access'), findsNothing);
-      await tester.ensureVisible(find.byTooltip('Refresh profile status'));
-      await tester.tap(find.byTooltip('Refresh profile status'));
-      await tester.pumpAndSettle();
-      expect(find.text('Credentials missing'), findsOneWidget);
-      await tester.ensureVisible(find.text('Fix access'));
-      await tester.tap(find.text('Fix access'));
-      await tester.pumpAndSettle();
-      expect(find.text('Profile access'), findsOneWidget);
-      expect(find.text('Claw / client-work'), findsOneWidget);
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      expect(find.byType(HermesHealthContent), findsOneWidget);
-      expect(find.text('Credentials not checked'), findsOneWidget);
-      expect(find.text('Fix access'), findsNothing);
-      expect(
-        fixture.explicitCalls.where((v) => v.startsWith('setup.runtime_check')),
-        hasLength(1),
-      );
-    },
-  );
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Credentials missing'), findsOneWidget);
+    await tester.ensureVisible(find.text('Fix access'));
+    await tester.tap(find.text('Fix access'));
+    await tester.pumpAndSettle();
+    expect(find.text('Profile access'), findsOneWidget);
+    expect(find.text('Claw / client-work'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byType(HermesHealthContent), findsOneWidget);
+    expect(find.text('Credentials missing'), findsOneWidget);
+    expect(find.text('Fix access'), findsOneWidget);
+    expect(
+      fixture.explicitCalls.where((v) => v.startsWith('setup.runtime_check')),
+      hasLength(2),
+    );
+  });
 
   testWidgets(
-    'Health owns scoped observations; profile check is explicit and read only',
+    'Health checks access and connectors on entry and profile selection',
     (tester) async {
       final fixture = _Fixture('green');
       await fixture.initialize();
@@ -304,9 +318,17 @@ void main({
       );
       expect(
         fixture.explicitCalls.where((v) => v.startsWith('setup.runtime_check')),
-        isEmpty,
+        ['setup.runtime_check default'],
       );
       expect(find.text('Not fully checked'), findsNothing);
+      expect(find.text('Credentials available'), findsOneWidget);
+      expect(
+        fixture.scopedRequests
+            .where((r) => r.$1 == 'POST' && r.$2 == 'mcp/servers/example/test')
+            .map((r) => r.$3['profile']),
+        ['default'],
+      );
+      expect(find.textContaining('Connections not tested'), findsNothing);
       final before = fixture.scopedRequests.length;
       await fixture.workspace.switchProfile('client-work');
       await tester.pumpAndSettle();
@@ -323,6 +345,16 @@ void main({
           );
       expect(switched, hasLength(5));
       expect(switched.every((r) => r.$3['profile'] == 'client-work'), isTrue);
+      expect(
+        fixture.explicitCalls,
+        contains('setup.runtime_check client-work'),
+      );
+      expect(
+        fixture.scopedRequests
+            .where((r) => r.$1 == 'POST' && r.$2 == 'mcp/servers/example/test')
+            .map((r) => r.$3['profile']),
+        ['default', 'client-work'],
+      );
       await tester.ensureVisible(find.byTooltip('Refresh profile status'));
       await tester.tap(find.byTooltip('Refresh profile status'));
       await tester.pumpAndSettle();
@@ -330,7 +362,7 @@ void main({
         fixture.explicitCalls.where(
           (v) => v == 'setup.runtime_check client-work',
         ),
-        hasLength(1),
+        hasLength(2),
       );
       expect(find.textContaining('Credentials available'), findsOneWidget);
       await tester.ensureVisible(find.text('Model access'));
@@ -349,25 +381,23 @@ void main({
       expect(find.text('Fix access'), findsNothing);
       expect(find.byType(HermesHealthContent), findsOneWidget);
       expect(find.text('gpt-5.6-sol · openai-codex'), findsOneWidget);
-      // A server-side configuration change clears the retained credential result
-      // on the next metadata-only refresh, without rerunning the check.
+      // Refresh checks the newly selected model after reading its configuration.
       fixture.models['client-work'] = 'gpt-6-astra';
-      await tester.scrollUntilVisible(
-        find.byTooltip('Refresh health'),
-        -300,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.tap(find.byTooltip('Refresh health'));
+      await tester
+          .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+          .onRefresh();
       await tester.pumpAndSettle();
-      expect(find.text('Credentials not checked'), findsOneWidget);
+      expect(find.text('Credentials available'), findsOneWidget);
       expect(find.text('gpt-6-astra · openai-codex'), findsOneWidget);
       expect(
         fixture.explicitCalls.where((v) => v.startsWith('setup.runtime_check')),
-        hasLength(1),
+        hasLength(4),
       );
       expect(
         fixture.requests.where(
-          (v) => v.startsWith('POST') || v.contains('ops/'),
+          (v) =>
+              (v.startsWith('POST') && !v.endsWith('/test')) ||
+              v.contains('ops/'),
         ),
         isEmpty,
       );
@@ -376,11 +406,143 @@ void main({
     },
   );
 
+  testWidgets('all four rows surface problems automatically', (tester) async {
+    final fixture = _Fixture('problems');
+    await fixture.initialize();
+    addTearDown(fixture.dispose);
+    tester.view.physicalSize = const Size(412, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HermesHealthContent(
+            controller: fixture.workspace,
+            repository: fixture.repository,
+            onOpenMenu: () {},
+            onOpenSession: (_) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Credentials missing'), findsOneWidget);
+    expect(find.text('tool-0 needs setup'), findsOneWidget);
+    expect(find.text('1 connector failed its check'), findsOneWidget);
+    expect(find.text('1 task needs attention'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('switching profiles during checks keeps results isolated', (
+    tester,
+  ) async {
+    final fixture = _Fixture('green');
+    await fixture.initialize();
+    addTearDown(fixture.dispose);
+    final access = Completer<Map<String, dynamic>>();
+    final connector = Completer<Map<String, dynamic>>();
+    fixture.checkAccess = (profile) async => profile == 'default'
+        ? access.future
+        : {'ok': true, 'profile': profile, ...fixture.modelInfo(profile)};
+    fixture.checkConnector = (profile) async =>
+        profile == 'default' ? connector.future : {'ok': true};
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HermesHealthContent(
+            controller: fixture.workspace,
+            repository: fixture.repository,
+            onOpenMenu: () {},
+            onOpenSession: (_) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Checking credentials…'), findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byWidgetPredicate(
+              (w) => w is IconButton && w.tooltip == 'Refresh profile status',
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
+    await fixture.workspace.switchProfile('client-work');
+    await tester.pumpAndSettle();
+    expect(find.text('Credentials available'), findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byWidgetPredicate(
+              (w) => w is IconButton && w.tooltip == 'Refresh profile status',
+            ),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    access.complete({
+      'ok': false,
+      'profile': 'default',
+      'error': 'No usable credentials found for openai-codex.',
+    });
+    connector.complete({'ok': false});
+    await tester.pumpAndSettle();
+    expect(find.text('Credentials available'), findsOneWidget);
+    expect(find.text('Credentials missing'), findsNothing);
+    expect(find.text('1 connector failed its check'), findsNothing);
+    fixture.checkAccess = (profile) async => {
+      'ok': true,
+      'profile': profile,
+      ...fixture.modelInfo(profile),
+    };
+    fixture.checkConnector = (_) async => {'ok': true};
+    await fixture.workspace.switchProfile('default');
+    await tester.pumpAndSettle();
+    expect(
+      fixture.explicitCalls.where((v) => v == 'setup.runtime_check default'),
+      hasLength(1),
+    );
+    expect(find.text('Credentials missing'), findsOneWidget);
+    expect(find.text('1 connector failed its check'), findsOneWidget);
+    // Returning to a profile and reopening Health reuse its completed checks.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HermesHealthContent(
+            controller: fixture.workspace,
+            repository: fixture.repository,
+            onOpenMenu: () {},
+            onOpenSession: (_) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      fixture.explicitCalls.where((v) => v == 'setup.runtime_check default'),
+      hasLength(1),
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final brightness in Brightness.values) {
-    for (final status in ['green', 'amber', 'red', 'unknown', 'missing']) {
+    for (final status in [
+      'green',
+      'amber',
+      'red',
+      'unknown',
+      'missing',
+      'problems',
+    ]) {
       for (final large in [
         false,
-        if (status == 'amber' || status == 'missing') true,
+        if (['green', 'amber', 'missing', 'problems'].contains(status)) true,
       ]) {
         testWidgets(
           'health entry $status ${brightness.name} ${large ? 'large' : 'phone'}',
@@ -471,39 +633,89 @@ void main({
             );
             await tester.pumpAndSettle();
             await snapshot(tester, '$name-model-access');
-            if (status == 'missing') {
+            if (status == 'missing' || status == 'problems') {
               await tester.ensureVisible(find.text('Fix access'));
               await tester.pumpAndSettle();
               await snapshot(tester, '$name-model-access-action');
             }
             expect(find.text('Not fully checked'), findsNothing);
-            if (status == 'green' || large) {
-              for (final title in ['Tools', 'Connectors', 'Scheduled tasks']) {
-                await tester.drag(vertical, const Offset(0, 3000));
-                await tester.pumpAndSettle();
-                await tester.scrollUntilVisible(
-                  find.text(title),
-                  200,
-                  scrollable: vertical,
+            for (final title in ['Tools', 'Connectors', 'Scheduled tasks']) {
+              await tester.drag(vertical, const Offset(0, 3000));
+              await tester.pumpAndSettle();
+              await tester.scrollUntilVisible(
+                find.text(title),
+                200,
+                scrollable: vertical,
+              );
+              await tester.pumpAndSettle();
+              final row = find.ancestor(
+                of: find.text(title),
+                matching: find.byType(ListTile),
+              );
+              final tile = tester.widget<ListTile>(row);
+              final needsDetails = switch (title) {
+                'Tools' => ['amber', 'problems', 'unknown'].contains(status),
+                _ => status == 'problems',
+              };
+              if (!needsDetails) {
+                expect(tile.onTap, isNull);
+                expect(tile.trailing, isNull);
+                expect(
+                  (tile.leading! as Icon).color,
+                  WingTokens.of(tester.element(row)).success,
                 );
-                await tester.pumpAndSettle();
                 await tester.tap(find.text(title));
                 await tester.pumpAndSettle();
-                await snapshot(tester, '$name-detail-$title');
-                await tester.drag(
-                  find.byType(Scrollable).first,
-                  const Offset(0, -450),
-                );
-                await tester.pumpAndSettle();
-                await snapshot(tester, '$name-detail-$title-lower');
-                expect(tester.takeException(), isNull);
-                await tester.pageBack();
-                await tester.pumpAndSettle();
+                expect(find.byType(HermesHealthContent), findsOneWidget);
+                continue;
               }
+              expect(tile.onTap, isNotNull);
+              expect((tile.trailing! as Icon).icon, Icons.chevron_right);
+              expect(
+                (tile.leading! as Icon).color,
+                isNot(WingTokens.of(tester.element(row)).success),
+              );
+              await tester.tap(find.text(title));
+              await tester.pumpAndSettle();
+              final recovery = find.text(switch (title) {
+                'Tools' => 'Skills and tools',
+                'Connectors' => 'Manage connectors',
+                _ => 'Manage scheduled tasks',
+              });
+              await tester.scrollUntilVisible(
+                recovery,
+                150,
+                scrollable: find.byType(Scrollable).last,
+              );
+              await tester.pumpAndSettle();
+              expect(recovery, findsOneWidget);
+              expect(
+                tester
+                    .widget<ListTile>(
+                      find.ancestor(
+                        of: recovery,
+                        matching: find.byType(ListTile),
+                      ),
+                    )
+                    .onTap,
+                isNotNull,
+              );
+              await snapshot(tester, '$name-detail-$title');
+              await tester.drag(
+                find.byType(Scrollable).first,
+                const Offset(0, -450),
+              );
+              await tester.pumpAndSettle();
+              await snapshot(tester, '$name-detail-$title-lower');
+              expect(tester.takeException(), isNull);
+              await tester.pageBack();
+              await tester.pumpAndSettle();
             }
             expect(
               fixture.requests.where(
-                (r) => r.startsWith('POST') || r.contains('ops/'),
+                (r) =>
+                    (r.startsWith('POST') && !r.endsWith('/test')) ||
+                    r.contains('ops/'),
               ),
               isEmpty,
             );

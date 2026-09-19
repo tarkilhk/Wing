@@ -246,10 +246,14 @@ void main() {
       await tester.enterText(find.byType(TextField), 'needle');
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();
-      expect(host.reads.where((r) => r.$1 == 'sessions/search').length, 1);
+      expect(host.reads.where((r) => r.$1 == 'sessions/search').length, 2);
       expect(find.text('personal archive match'), findsOneWidget);
-      expect(find.textContaining('Archived · needle'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('profile-work')));
+      expect(find.textContaining('Archived · needle'), findsWidgets);
+      await tester.tap(find.byKey(const ValueKey('chat-filter-profile')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('chat-menu-work')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Done'));
       await tester.pumpAndSettle();
       expect(find.text('personal archive match'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());

@@ -174,7 +174,7 @@ void main() {
       await tester.pump();
 
       expect(
-        find.text('Choose a connection for this shared draft'),
+        find.text('Choose a Hermes instance for this shared draft'),
         findsOneWidget,
       );
       expect(shares.pendingShare.value, same(payload));
@@ -341,7 +341,7 @@ void main() {
     shares.pendingShare.value = payload;
     await tester.pumpAndSettle();
     expect(
-      find.text('Choose a connection for this shared draft'),
+      find.text('Choose a Hermes instance for this shared draft'),
       findsNothing,
     );
     expect(find.text('Add shared content'), findsNothing);

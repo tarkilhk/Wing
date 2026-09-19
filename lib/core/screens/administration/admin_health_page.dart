@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'admin_usage_dashboard.dart';
-import '../../widgets/workspace_picker.dart';
 import '../../services/administration_repository.dart';
 import '../../services/administration_health.dart';
+import '../../services/profile_workspace_controller.dart';
 import '../../theme/wing_theme.dart';
 import '../../widgets/profile_diagnostics_panel.dart';
 import 'admin_widgets.dart';
@@ -26,6 +25,7 @@ Color administrationHealthColor(
 class AdminHealthContent extends StatelessWidget {
   final AdministrationRepository server;
   final AdministrationHealth health;
+  final String? persistenceError;
   final ProfileAdministration? profile;
   final ProfileDiagnosticsController? Function() accessChecks;
   final VoidCallback? onConnections;
@@ -33,10 +33,13 @@ class AdminHealthContent extends StatelessWidget {
   final Future<void> Function()? onCheckProfile;
   final bool checkingProfile;
   final Future<void> Function(String destination) onOpenDestination;
+  final ProfileWorkspaceController? chatController;
+  final Future<void> Function(ProfileSessionKey)? onOpenSession;
   const AdminHealthContent({
     super.key,
     required this.server,
     required this.health,
+    this.persistenceError,
     required this.profile,
     required this.onRefresh,
     required this.onOpenDestination,
@@ -44,6 +47,8 @@ class AdminHealthContent extends StatelessWidget {
     this.checkingProfile = false,
     required this.accessChecks,
     this.onConnections,
+    this.chatController,
+    this.onOpenSession,
   });
 
   @override
@@ -56,22 +61,12 @@ class AdminHealthContent extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Server',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              IconButton(
-                tooltip: 'Refresh health',
-                onPressed: onRefresh,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
+          if (persistenceError case final message?) AdminNotice.error(message),
+          AdminRuntimeHealth(
+            health: health,
+            chatController: chatController,
+            onOpenSession: onOpenSession,
           ),
-          AdminRuntimeHealth(health: health),
           const SizedBox(height: 24),
           Row(
             children: [
@@ -107,7 +102,8 @@ class AdminHealthContent extends StatelessWidget {
                   ProfileModelAccessRow(
                     controller: checks,
                     modelObservation: health.overview?.observations['model'],
-                    refreshing: checkingProfile,
+                    refreshing:
+                        health.overview?.observations['model']?.loading == true,
                     onRetry: () => onCheckProfile?.call(),
                     onManageConnections: onConnections,
                     onFixAccess: () => _fixAccess(context, checks),
@@ -140,21 +136,6 @@ class AdminHealthContent extends StatelessWidget {
                 'Model access checks credentials. Replies and quota aren’t tested.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-            ),
-            const SizedBox(height: 4),
-            AdminGroup(
-              children: [
-                AdminRow(
-                  title: 'Usage',
-                  subtitle: 'Tokens and cost',
-                  icon: Icons.bar_chart,
-                  onTap: () => adminPushProfile(
-                    context,
-                    profile!,
-                    (context, profile) => AdminUsagePage(profile: profile),
-                  ),
-                ),
-              ],
             ),
           ],
         ],
@@ -191,9 +172,7 @@ class AdminHealthContent extends StatelessWidget {
               finding?.status == AdministrationHealthStatus.warning
           ? Icons.error_outline
           : icon,
-      color:
-          finding == null ||
-              finding.status == AdministrationHealthStatus.healthy
+      color: finding == null
           ? Theme.of(context).colorScheme.onSurfaceVariant
           : administrationHealthColor(context, finding.status),
       size: 22,
@@ -203,8 +182,10 @@ class AdminHealthContent extends StatelessWidget {
       _summary(title, finding),
       style: Theme.of(context).textTheme.bodySmall,
     ),
-    trailing: const Icon(Icons.chevron_right, size: 20),
-    onTap: onTap,
+    trailing: finding?.status == AdministrationHealthStatus.healthy
+        ? null
+        : const Icon(Icons.chevron_right, size: 20),
+    onTap: finding?.status == AdministrationHealthStatus.healthy ? null : onTap,
   );
 
   Widget _observation(
@@ -305,25 +286,12 @@ class AdminHealthContent extends StatelessWidget {
     BuildContext context,
     ProfileDiagnosticsController checks,
   ) async {
-    final overview = health.overview;
     await adminPushProfile(
       context,
       profile!,
       (context, profile) => AdminProvidersPage(profile: profile, shared: false),
     );
     checks.invalidate();
-    await overview?.refresh(keys: {'model'});
+    if (context.mounted) await onCheckProfile?.call();
   }
-}
-
-class AdminUsagePage extends StatelessWidget {
-  final ProfileAdministration profile;
-  const AdminUsagePage({super.key, required this.profile});
-  @override
-  Widget build(BuildContext context) => AdminPage(
-    title: 'Usage',
-    scope: profile.label,
-    pickerMode: WorkspacePickerMode.profiles,
-    child: UsageDashboard(key: ValueKey(profile.scope), profile: profile),
-  );
 }

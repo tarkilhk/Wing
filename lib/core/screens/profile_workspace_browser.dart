@@ -1,31 +1,24 @@
-import '../services/server_connection_status.dart';
-import '../widgets/server_connection_label.dart';
-import '../widgets/profile_selector.dart';
-import '../widgets/studio_error.dart';
 import 'dart:async';
-
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
+import '../models/chat_list_view.dart';
+import '../models/session_visibility.dart';
+import '../services/chat_browser_data.dart';
 import '../services/composer_draft_store.dart';
 import '../services/profile_workspace_controller.dart';
-import '../models/session_visibility.dart';
-import '../services/profile_gateway.dart';
 import '../theme/wing_theme.dart';
 import '../theme/wing_icons.dart';
-import '../widgets/profile_chat_indicator.dart';
-import '../widgets/workspace_options_menu.dart';
+import '../widgets/chat_list_menu.dart';
+import '../widgets/chat_status_dot.dart';
+import '../widgets/server_connection_label.dart';
+import '../widgets/studio_error.dart';
 import '../widgets/workspace_connection_status.dart';
+import '../widgets/workspace_options_menu.dart';
 import 'profile_row_actions.dart';
 import 'profile_project_actions.dart';
 
-/// The reference-inspired navigation tree. All rows come from its immutable
-/// profile owner; project membership remains the server's decision.
 class ProfileWorkspaceBrowser extends StatefulWidget {
-  final ProfileWorkspaceController controller;
-  final Future<void> Function() newProject;
-  final Widget? drawer;
-  final FocusNode? searchFocusNode;
   const ProfileWorkspaceBrowser({
     super.key,
     required this.controller,
@@ -33,6 +26,10 @@ class ProfileWorkspaceBrowser extends StatefulWidget {
     this.drawer,
     this.searchFocusNode,
   });
+  final ProfileWorkspaceController controller;
+  final Future<void> Function() newProject;
+  final Widget? drawer;
+  final FocusNode? searchFocusNode;
   @override
   State<ProfileWorkspaceBrowser> createState() =>
       _ProfileWorkspaceBrowserState();
@@ -40,296 +37,934 @@ class ProfileWorkspaceBrowser extends StatefulWidget {
 
 class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   ProfileWorkspaceController get controller => widget.controller;
-  String _query = '';
-  String _view = 'home';
-  bool _unreadOnly = false;
+  late final ChatBrowserData _data;
   final _search = TextEditingController();
   final _scaffoldKey = GlobalKey<ScaffoldState>();
-  final _workspaceOptionsKey = GlobalKey();
-  Timer? _searchDebounce;
-  void _setQuery(String value) {
-    _searchDebounce?.cancel();
-    final query = value.trim().toLowerCase();
-    setState(() => _query = query);
-    controller.clearSearch();
-    if (query.isNotEmpty &&
-        !_unreadOnly &&
-        _view == 'home' &&
-        controller.current?.selectedProject == null) {
-      _searchDebounce = Timer(const Duration(milliseconds: 350), () {
-        if (mounted && !controller.switching) {
-          unawaited(controller.searchChats(query));
+  final _optionsKey = GlobalKey();
+  final _statuses = <String>{}, _profiles = <String>{}, _projects = <String>{};
+  final _collapsed = <String>{}, _expanded = <String>{};
+  final _show = <ChatDetail>{ChatDetail.updated};
+  ChatGrouping _grouping = ChatGrouping.project;
+  ChatOrdering _ordering = ChatOrdering.updated;
+  bool _archived = false, _started = false, _busy = false;
+  String _query = '';
+  List<ChatListEntry> _allEntries = [], _visibleEntries = [];
+  List<ChatListGroup> _currentGroups = [];
+  List<ChatListEntry> get _matches => _visibleEntries;
+  List<ChatListGroup> get _groups => _currentGroups;
+  Timer? _debounce;
+  String get _preferencesKey =>
+      'chat_list_target_${controller.connectionIdentity}';
+
+  @override
+  void initState() {
+    super.initState();
+    final raw = controller.preferences.getString(_preferencesKey);
+    if (raw != null) {
+      try {
+        final value = jsonDecode(raw) as Map<String, dynamic>;
+        _grouping = ChatGrouping.values.byName(value['grouping'] as String);
+        _ordering = ChatOrdering.values.byName(value['ordering'] as String);
+        _show
+          ..clear()
+          ..addAll(
+            (value['show'] as List).cast<String>().map(
+              ChatDetail.values.byName,
+            ),
+          );
+        for (final (key, set) in [
+          ('status', _statuses),
+          ('profile', _profiles),
+          ('project', _projects),
+        ]) {
+          set.addAll((value[key] as List).cast<String>());
         }
-      });
-    }
-  }
-
-  String? _enteredProject;
-  int _projectVisibleCount = ProfileGateway.sessionPageSize;
-  bool _projectHasMore = false;
-
-  void _loadMore() {
-    final resource = controller.current;
-    if (controller.switching ||
-        resource == null ||
-        !{'home', 'archived'}.contains(_view)) {
-      return;
-    }
-    if (resource.selectedProject != null) {
-      if (_projectHasMore && !resource.projectSessionsLoading) {
-        setState(() => _projectVisibleCount += ProfileGateway.sessionPageSize);
+      } on Object {
+        /* An invalid device preference does not block chat access. */
       }
-    } else {
-      unawaited(controller.loadMoreSessions());
     }
+    _data = ChatBrowserData(controller)..addListener(_dataChanged);
+    controller.addListener(_controllerChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _controllerChanged());
   }
 
-  bool _onScroll(ScrollNotification event) {
-    if (event.depth == 0 &&
-        event.metrics.axis == Axis.vertical &&
-        event.metrics.extentAfter < 250 &&
-        _query.isEmpty &&
-        controller.current?.sessionsPageError == null &&
-        (event is ScrollUpdateNotification || event is ScrollEndNotification)) {
-      _loadMore();
+  void _controllerChanged() {
+    if (!mounted) return;
+    if (!_started &&
+        controller.discovery != null &&
+        controller.current != null) {
+      _started = true;
+      unawaited(_refresh());
     }
-    return false;
+    setState(() {});
+  }
+
+  void _dataChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
+    _debounce?.cancel();
     _search.dispose();
+    controller.removeListener(_controllerChanged);
+    _data.dispose();
     super.dispose();
   }
 
-  Future<void> _run(Future<void> Function() action) async {
+  void _change(VoidCallback action) {
+    setState(action);
+    unawaited(_savePreferences());
+  }
+
+  Future<void> _savePreferences() async {
+    final saved = await controller.preferences.setString(
+      _preferencesKey,
+      jsonEncode({
+        'grouping': _grouping.name,
+        'ordering': _ordering.name,
+        'show': _show.map((e) => e.name).toList(),
+        'status': _statuses.toList(),
+        'profile': _profiles.toList(),
+        'project': _projects.toList(),
+      }),
+    );
+    if (!saved && mounted) {
+      _notice('The view could not be saved on this device.');
+    }
+  }
+
+  void _notice(String message) => ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(message)));
+  Future<void> _run(
+    Future<void> Function() action, {
+    bool refresh = false,
+  }) async {
+    if (_busy) return;
+    setState(() => _busy = true);
     try {
       await action();
+      if (refresh && mounted) await _refresh();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: StudioError(
-              error is StateError
-                  ? error.message.toString()
-                  : 'Could not complete that action. Please retry.',
+        _notice(
+          error is StateError
+              ? error.message.toString()
+              : 'Could not complete that action. Please retry.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _refresh() async {
+    await _data.refresh(archivedOnly: _archived);
+    if (!mounted) return;
+    if (_query.isNotEmpty) unawaited(_data.search(_query));
+    unawaited(controller.refreshActivity());
+  }
+
+  void _setQuery(String value) {
+    _debounce?.cancel();
+    setState(() => _query = value.trim().toLowerCase());
+    unawaited(_data.search(''));
+    if (_query.isNotEmpty) {
+      _debounce = Timer(
+        const Duration(milliseconds: 350),
+        () => _data.search(_query),
+      );
+    }
+  }
+
+  List<ChatListEntry> _filterMatches(List<ChatListEntry> entries) => entries
+      .where(
+        (e) =>
+            controller.sessionVisibility.includes(e.row['source'] as String?) &&
+            (_statuses.isEmpty || _statuses.contains(e.status.name)) &&
+            (_profiles.isEmpty || _profiles.contains(e.profile)) &&
+            (_projects.isEmpty || _projects.contains(e.projectKey)) &&
+            (_query.isEmpty ||
+                '${e.row['title'] ?? ''} ${e.row['preview'] ?? ''}'
+                    .toLowerCase()
+                    .contains(_query) ||
+                (_data.searchMatches[e.profile]?.contains(e.id) ?? false)),
+      )
+      .toList();
+  List<ChatListGroup> _buildGroups(List<ChatListEntry> matches) {
+    final groups = groupChats(matches, _grouping, _ordering);
+    if (_grouping == ChatGrouping.project &&
+        !_archived &&
+        _query.isEmpty &&
+        _statuses.isEmpty) {
+      for (final profile in controller.discovery?.profiles ?? []) {
+        if (_profiles.isNotEmpty && !_profiles.contains(profile.name)) continue;
+        for (final project in _data.projects[profile.name] ?? []) {
+          final key = '${profile.name}/${project['id']}';
+          if (project['isNoProject'] == true ||
+              groups.any((g) => g.key == key) ||
+              _projects.isNotEmpty && !_projects.contains(key)) {
+            continue;
+          }
+          groups.add(
+            ChatListGroup(
+              key,
+              project['name'].toString(),
+              [],
+              project: project,
+              owner: controller.browserResource(profile.name),
+            ),
+          );
+        }
+      }
+    }
+    return groups;
+  }
+
+  String _groupKey(ChatListGroup group) => '${_grouping.name}/${group.key}';
+  static IconData _groupIcon(ChatGrouping value) => switch (value) {
+    ChatGrouping.project => Icons.folder_outlined,
+    ChatGrouping.updated => Icons.schedule,
+    ChatGrouping.status => Icons.monitor_heart_outlined,
+    ChatGrouping.profile => Icons.person_outline,
+  };
+  static IconData _orderIcon(ChatOrdering value) => switch (value) {
+    ChatOrdering.updated => Icons.schedule,
+    ChatOrdering.created => Icons.calendar_today_outlined,
+    ChatOrdering.status => Icons.monitor_heart_outlined,
+    ChatOrdering.tokens => Icons.tag,
+    ChatOrdering.cost => Icons.attach_money,
+  };
+  static IconData _detailIcon(ChatDetail value) => switch (value) {
+    ChatDetail.updated => Icons.schedule,
+    ChatDetail.tokens => Icons.tag,
+    ChatDetail.cost => Icons.attach_money,
+    ChatDetail.profile => Icons.person_outline,
+  };
+  void _toggle(Set<String> values, String id) => _change(() {
+    if (!values.remove(id)) values.add(id);
+  });
+
+  Future<void> _filter(BuildContext anchor, String kind) {
+    final selected = switch (kind) {
+      'Status' => _statuses,
+      'Profile' => _profiles,
+      _ => _projects,
+    };
+    List<ChatMenuChoice> choices() {
+      if (kind == 'Status') {
+        return [
+          for (final status in ChatListStatus.values)
+            ChatMenuChoice(
+              status.name,
+              status.label,
+              ChatStatusDot(status),
+              selected: selected.contains(status.name),
+            ),
+        ];
+      }
+      if (kind == 'Profile') {
+        final profiles = [...?controller.discovery?.profiles]
+          ..sort(
+            (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
+          );
+        return [
+          for (final profile in profiles)
+            ChatMenuChoice(
+              profile.name,
+              profile.label,
+              const Icon(Icons.person_outline),
+              selected: selected.contains(profile.name),
+            ),
+        ];
+      }
+      final recency = <String, num>{};
+      for (final e in _data.entries.where(
+        (e) =>
+            controller.sessionVisibility.includes(e.row['source'] as String?),
+      )) {
+        final time = chatUpdated(e.row);
+        if (time > (recency[e.projectKey] ?? 0)) recency[e.projectKey] = time;
+      }
+      final projects =
+          <(String, String)>[
+            for (final profile in controller.discovery?.profiles ?? []) ...[
+              ('${profile.name}/home', 'Home · ${profile.label}'),
+              for (final p in _data.projects[profile.name] ?? [])
+                if (p['isNoProject'] != true)
+                  (
+                    '${profile.name}/${p['id']}',
+                    '${p['name']} · ${profile.label}',
+                  ),
+            ],
+          ]..sort((a, b) {
+            final order = (recency[b.$1] ?? 0).compareTo(recency[a.$1] ?? 0);
+            return order != 0
+                ? order
+                : a.$2.toLowerCase().compareTo(b.$2.toLowerCase());
+          });
+      return [
+        for (final p in projects)
+          ChatMenuChoice(
+            p.$1,
+            p.$2,
+            const Icon(Icons.folder_outlined),
+            selected: selected.contains(p.$1),
+          ),
+      ];
+    }
+
+    return showChatListMenu(
+      anchor,
+      title: kind,
+      choices: choices,
+      multiple: true,
+      onSelected: (id) => _toggle(selected, id),
+      onClear: () => _change(selected.clear),
+    );
+  }
+
+  Widget _filterControl(String label, Set<String> selected) => Expanded(
+    child: Builder(
+      builder: (anchor) => Semantics(
+        button: true,
+        label:
+            '$label filter, ${selected.isEmpty ? 'all' : '${selected.length} selected'}',
+        child: InkWell(
+          key: ValueKey('chat-filter-${label.toLowerCase()}'),
+          onTap: () => _filter(anchor, label),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: ColoredBox(
+              color: selected.isEmpty
+                  ? Colors.transparent
+                  : Theme.of(context).colorScheme.primaryContainer,
+              child: Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        selected.isEmpty ? label : '$label ${selected.length}',
+                        style: const TextStyle(fontSize: 11),
+                        maxLines: 2,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    if (MediaQuery.textScalerOf(context).scale(12) < 18)
+                      const Icon(Icons.expand_more, size: 14),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  Widget _filters() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    child: SizedBox(
+      height: MediaQuery.textScalerOf(context).scale(12) > 18 ? 64 : 48,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 5,
+            bottom: 5,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border.all(color: WingTokens.of(context).border),
+                borderRadius: WingRadius.control,
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(left: 6, right: 2),
+                child: Icon(Icons.filter_list, size: 18),
+              ),
+              _filterControl('Status', _statuses),
+              _filterControl('Profile', _profiles),
+              _filterControl('Project', _projects),
+              SizedBox(
+                width: 28,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  tooltip: 'Clear all filters',
+                  color: WingTokens.of(context).onSurface,
+                  icon: const Icon(Icons.close, size: 14),
+                  onPressed: () => _change(() {
+                    _statuses.clear();
+                    _profiles.clear();
+                    _projects.clear();
+                  }),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+  Widget _viewControls() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    child: Row(
+      children: [
+        Expanded(
+          child: Builder(
+            builder: (anchor) => TextButton(
+              key: const ValueKey('chat-group-by'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+              onPressed: () => showChatListMenu(
+                anchor,
+                title: 'Group by',
+                choices: () => [
+                  for (final value in ChatGrouping.values)
+                    ChatMenuChoice(
+                      value.name,
+                      value.label,
+                      Icon(_groupIcon(value)),
+                      selected: _grouping == value,
+                    ),
+                ],
+                onSelected: (id) => _change(() {
+                  _grouping = ChatGrouping.values.byName(id);
+                  _collapsed.clear();
+                  _expanded.clear();
+                }),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.account_tree_outlined, size: 16),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      _grouping.label,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  const Icon(Icons.expand_more, size: 14),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Builder(
+            builder: (anchor) => TextButton(
+              key: const ValueKey('chat-order-by'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+              onPressed: () => showChatListMenu(
+                anchor,
+                title: 'Order by',
+                choices: () => [
+                  for (final value in ChatOrdering.values)
+                    ChatMenuChoice(
+                      value.name,
+                      value.label,
+                      Icon(_orderIcon(value)),
+                      selected: _ordering == value,
+                    ),
+                ],
+                onSelected: (id) =>
+                    _change(() => _ordering = ChatOrdering.values.byName(id)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  const Icon(Icons.sort, size: 16),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      _ordering.label,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  const Icon(Icons.expand_more, size: 14),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+  void _menuAction(String id) {
+    switch (id) {
+      case 'show':
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          unawaited(
+            showChatListMenu(
+              _optionsKey.currentContext!,
+              title: 'Show',
+              multiple: true,
+              choices: () => [
+                for (final value in ChatDetail.values)
+                  ChatMenuChoice(
+                    value.name,
+                    value.label,
+                    Icon(_detailIcon(value)),
+                    selected: _show.contains(value),
+                  ),
+              ],
+              onSelected: (id) => _change(() {
+                final value = ChatDetail.values.byName(id);
+                if (!_show.remove(value)) _show.add(value);
+              }),
+            ),
+          );
+        });
+      case 'include-automated':
+        unawaited(
+          _run(
+            () => controller.setSessionVisibility(
+              controller.sessionVisibility == SessionVisibility.all
+                  ? SessionVisibility.chats
+                  : SessionVisibility.all,
             ),
           ),
         );
-      }
+      case 'collapse':
+        setState(() {
+          final keys = _groups.map(_groupKey).toSet();
+          if (keys.every(_collapsed.contains)) {
+            _collapsed.clear();
+          } else {
+            _collapsed.addAll(keys);
+          }
+        });
+      case 'mark-read':
+        final unread = _matches.where((e) => e.row['unread'] == true).toList();
+        unawaited(
+          _run(() async {
+            for (final e in unread) {
+              if (controller.current?.scope != e.owner.scope &&
+                  !await controller.switchProfile(e.profile)) {
+                throw StateError('Could not open ${e.profile}.');
+              }
+              await controller.mutateSession(
+                e.sessionKey,
+                changes: {'unread': false},
+              );
+              e.row['unread'] = false;
+            }
+          }, refresh: true),
+        );
+      case 'archived':
+        setState(() {
+          _archived = !_archived;
+          _collapsed.clear();
+          _expanded.clear();
+        });
+        unawaited(_refresh());
+      case 'new-project':
+        unawaited(
+          _run(() async {
+            if (await _chooseOwner()) await widget.newProject();
+          }, refresh: true),
+        );
     }
   }
 
-  void _back() {
-    if (controller.switching) return;
-    if (_unreadOnly) {
-      setState(() => _unreadOnly = false);
-    } else if (controller.current?.archivedOnly == true) {
-      unawaited(_run(() => controller.showArchived(false)));
-      setState(() => _view = 'home');
-    } else if (_view != 'home') {
-      setState(() => _view = 'home');
-    } else if (controller.current?.selectedProject != null) {
-      unawaited(controller.selectProject(null));
+  Future<bool> _chooseOwner() async {
+    final profiles = [...?controller.discovery?.profiles]
+      ..sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+    String? name;
+    if (_profiles.length == 1) {
+      name = _profiles.single;
+    } else if (profiles.length == 1) {
+      name = profiles.single.name;
     } else {
-      Navigator.maybePop(context);
+      await showChatListMenu(
+        _optionsKey.currentContext!,
+        title: 'Choose profile',
+        choices: () => [
+          for (final p in profiles)
+            ChatMenuChoice(p.name, p.label, const Icon(Icons.person_outline)),
+        ],
+        onSelected: (id) => name = id,
+      );
     }
-    _search.clear();
-    _searchDebounce?.cancel();
-    controller.clearSearch();
-    setState(() => _query = '');
+    if (name == null || !mounted) return false;
+    if (controller.current?.scope.profileName != name &&
+        !await controller.switchProfile(name!)) {
+      return false;
+    }
+    await controller.selectProject(null);
+    return true;
   }
-
-  static num _activity(Map<String, dynamic> row) =>
-      (row['last_active'] ?? row['started_at']) is num
-      ? (row['last_active'] ?? row['started_at']) as num
-      : 0;
 
   String _age(Map<String, dynamic> row) {
-    final time = _activity(row);
+    final time = chatUpdated(row);
     if (time <= 0) return '';
     final age = DateTime.now().difference(
       DateTime.fromMillisecondsSinceEpoch((time * 1000).round()),
     );
-    if (age.inMinutes < 1) return 'now';
-    if (age.inHours < 1) return '${age.inMinutes}m';
-    if (age.inDays < 1) return '${age.inHours}h';
-    if (age.inDays < 7) return '${age.inDays}d';
-    return '${age.inDays ~/ 7}w';
+    return age.inMinutes < 1
+        ? 'now'
+        : age.inHours < 1
+        ? '${age.inMinutes}m'
+        : age.inDays < 1
+        ? '${age.inHours}h'
+        : age.inDays < 7
+        ? '${age.inDays}d'
+        : '${age.inDays ~/ 7}w';
   }
 
-  Widget _heading(String title, {Widget? action}) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.2,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-        ?action,
-      ],
-    ),
-  );
+  Future<void> _chatActions(BuildContext anchor, ChatListEntry e) async {
+    if (controller.current?.scope != e.owner.scope &&
+        !await controller.switchProfile(e.profile)) {
+      return;
+    }
+    if (anchor.mounted) await showChatActions(anchor, controller, e.row);
+  }
 
-  Widget _project(Map<String, dynamic> project) => Builder(
-    builder: (rowContext) => Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Material(
-        color: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: WingRadius.card),
-        clipBehavior: Clip.antiAlias,
+  Widget _session(ChatListEntry e) {
+    final local = e.owner.chats[e.id];
+    final detail = [
+      if (e.row['archived'] == true) 'Archived',
+      if (e.row['snippet'] != null) e.row['snippet'].toString(),
+      if (_show.contains(ChatDetail.tokens))
+        '${compactTokens(chatTokens(e.row))} tokens',
+      if (_show.contains(ChatDetail.cost))
+        '\$${chatCost(e.row).toStringAsFixed(2)}',
+      if (_show.contains(ChatDetail.profile)) e.profile,
+      if (local?.status == ProfileTurnStatus.failed) 'Failed',
+      if (local?.status == ProfileTurnStatus.reconnecting) 'Reconnecting',
+    ];
+    return Builder(
+      builder: (anchor) => Padding(
+        padding: const EdgeInsets.only(left: 28, right: 8),
         child: ListTile(
-          key: ValueKey('project-${project['id']}'),
-          selected: controller.current?.selectedProject?['id'] == project['id'],
-          selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
-          selectedColor: Theme.of(context).colorScheme.onSurface,
-          contentPadding: const EdgeInsets.only(left: 4),
+          key: ValueKey('chat-${e.profile}-${e.id}'),
+          contentPadding: EdgeInsets.zero,
           minTileHeight: 48,
           minVerticalPadding: 0,
-          horizontalTitleGap: 12,
-          leading: projectAvatar(context, project, size: 22),
-          minLeadingWidth: 22,
+          horizontalTitleGap: 6,
+          minLeadingWidth: 18,
+          leading: ChatStatusDot(e.status),
           title: Text(
-            project['name'] as String,
-            maxLines: 1,
+            e.row['title']?.toString().trim().isNotEmpty == true
+                ? e.row['title'].toString()
+                : 'Untitled chat',
+            maxLines: MediaQuery.textScalerOf(context).scale(16) > 20 ? 2 : 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: e.row['unread'] == true
+                  ? FontWeight.w600
+                  : FontWeight.w400,
+            ),
           ),
-          onTap: controller.switching ? null : () => _toggleProject(project),
-          onLongPress: controller.switching
+          subtitle: detail.isEmpty
               ? null
-              : () => _run(
-                  () => showProjectActions(rowContext, controller, project),
-                ),
-          trailing: Builder(
-            builder: (buttonContext) => IconButton(
-              tooltip: 'Project actions',
-              style: IconButton.styleFrom(
-                minimumSize: const Size(48, 48),
-                visualDensity: VisualDensity.standard,
-              ),
-              icon: const Icon(Icons.more_horiz, size: 20),
-              onPressed: controller.switching
-                  ? null
-                  : () => _run(
-                      () => showProjectActions(
-                        buttonContext,
-                        controller,
-                        project,
-                      ),
-                    ),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-
-  Widget _session(Map<String, dynamic> row) {
-    final resource = controller.current!;
-    final local = resource.chats[row['id']];
-    final title = row['title']?.toString().trim();
-    return Builder(
-      builder: (rowContext) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-        child: Material(
-          color: row['pinned'] == true
-              ? Theme.of(context).colorScheme.surfaceContainerLow
-              : Colors.transparent,
-          borderRadius: WingRadius.card,
-          clipBehavior: Clip.antiAlias,
-          child: ListTile(
-            key: ValueKey('chat-${row['id']}'),
-            contentPadding: const EdgeInsets.only(left: 16, right: 0),
-            minTileHeight: 52,
-            onLongPress:
-                controller.switching ||
-                    resource.mutatingSessions.contains(row['id'])
-                ? null
-                : () =>
-                      _run(() => showChatActions(rowContext, controller, row)),
-            title: Text(
-              title?.isNotEmpty == true ? title! : 'Untitled chat',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: row['unread'] == true
-                    ? FontWeight.w600
-                    : FontWeight.w400,
-              ),
-            ),
-            subtitle: row['snippet'] != null || row['archived'] == true
-                ? Text(
-                    [
-                      if (row['archived'] == true) 'Archived',
-                      if (row['snippet'] != null) row['snippet'].toString(),
-                    ].join(' · '),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  )
-                : null,
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ProfileChatIndicator(chat: local, row: row),
-                const SizedBox(width: 8),
-                Text(
-                  _age(row),
+              : Text(
+                  detail.join(' · '),
                   style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 11,
+                    color: WingTokens.of(context).muted,
                   ),
                 ),
-                Builder(
-                  builder: (buttonContext) => IconButton(
-                    tooltip: 'Chat actions',
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size(48, 48),
-                      visualDensity: VisualDensity.standard,
-                    ),
-                    icon: const Icon(Icons.more_horiz, size: 20),
-                    onPressed:
-                        controller.switching ||
-                            resource.mutatingSessions.contains(row['id'])
-                        ? null
-                        : () => _run(
-                            () =>
-                                showChatActions(buttonContext, controller, row),
-                          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_show.contains(ChatDetail.updated))
+                Text(
+                  _age(e.row),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: WingTokens.of(context).muted,
                   ),
                 ),
-              ],
-            ),
-            onTap: controller.switching
-                ? null
-                : () => _run(() async {
-                    final key = ProfileSessionKey(
-                      resource.scope,
-                      row['id'] as String,
-                    );
-                    if (resource.offlineSnapshot || controller.recovering) {
-                      await controller.openNotification(key);
-                    } else {
-                      await controller.openSession(key);
-                    }
-                  }),
+              Builder(
+                builder: (button) => IconButton(
+                  tooltip: 'Chat actions',
+                  icon: const Icon(Icons.more_horiz, size: 18),
+                  onPressed: _busy || controller.switching
+                      ? null
+                      : () =>
+                            _run(() => _chatActions(button, e), refresh: true),
+                ),
+              ),
+            ],
           ),
+          onLongPress: _busy || controller.switching
+              ? null
+              : () => _run(() => _chatActions(anchor, e), refresh: true),
+          onTap: _busy || controller.switching
+              ? null
+              : () => _run(() async {
+                  if (e.owner.offlineSnapshot || controller.recovering) {
+                    await controller.openNotification(e.sessionKey);
+                  } else {
+                    await controller.openSession(e.sessionKey);
+                  }
+                }),
         ),
       ),
     );
   }
 
-  Widget _savedDraft(ComposerDraftSummary draft) {
-    final resource = controller.current!;
+  Future<void> _projectActions(BuildContext anchor, ChatListGroup group) async {
+    final owner = group.owner!;
+    if (controller.current?.scope != owner.scope &&
+        !await controller.switchProfile(owner.scope.profileName)) {
+      return;
+    }
+    if (anchor.mounted) {
+      await showProjectActions(anchor, controller, group.project!);
+    }
+  }
+
+  Widget _groupHeading(ChatListGroup group) {
+    final key = _groupKey(group);
+    final collapsed = _collapsed.contains(key);
+    final tokensReady =
+        (group.owner == null ||
+            _data.complete.contains(group.owner!.scope.profileName)) &&
+        group.entries.every((e) => _data.complete.contains(e.profile));
+    return Builder(
+      builder: (headingContext) => Padding(
+        key: group.project == null
+            ? null
+            : ValueKey(
+                'project-${group.owner!.scope.profileName}-${group.project!['id']}',
+              ),
+        padding: const EdgeInsets.only(top: 2, left: 12, right: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                key: ValueKey('chat-group-$key'),
+                onLongPress: group.project == null || _busy
+                    ? null
+                    : () => _run(
+                        () => _projectActions(headingContext, group),
+                        refresh: true,
+                      ),
+                onTap: () => setState(() {
+                  if (!_collapsed.remove(key)) _collapsed.add(key);
+                }),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 16, 0, 0),
+                    child: Row(
+                      children: [
+                        if (group.project != null)
+                          projectAvatar(context, group.project!, size: 20)
+                        else
+                          Icon(
+                            group.key == 'pinned'
+                                ? Icons.push_pin_outlined
+                                : _groupIcon(_grouping),
+                            size: 18,
+                            color: WingTokens.of(context).muted,
+                          ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _grouping == ChatGrouping.project &&
+                                    _groups
+                                            .where(
+                                              (g) => g.label == group.label,
+                                            )
+                                            .length >
+                                        1
+                                ? '${group.label} · ${group.owner!.scope.profileName}'
+                                : group.label,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (_show.contains(ChatDetail.tokens))
+                          Tooltip(
+                            message: tokensReady
+                                ? '${group.tokens} tokens across ${group.entries.length} matching chats'
+                                : 'Loading the complete group total',
+                            child: Text(
+                              tokensReady ? compactTokens(group.tokens) : '…',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: WingTokens.of(context).muted,
+                              ),
+                            ),
+                          ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          collapsed ? Icons.chevron_right : Icons.expand_more,
+                          size: 16,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (group.project != null)
+              Builder(
+                builder: (anchor) => IconButton(
+                  padding: const EdgeInsets.only(top: 12),
+                  tooltip: 'Project actions',
+                  icon: const Icon(Icons.more_horiz, size: 18),
+                  onPressed: _busy
+                      ? null
+                      : () => _run(
+                          () => _projectActions(anchor, group),
+                          refresh: true,
+                        ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _tree() {
+    final groups = _groups;
+    final entries = _allEntries;
+    return [
+      if (_data.loading || _data.searching)
+        const LinearProgressIndicator(minHeight: 2),
+      for (final error in _data.errors.values)
+        ListTile(
+          title: StudioError(error),
+          trailing: TextButton(onPressed: _refresh, child: const Text('Retry')),
+        ),
+      if (_data.searchError != null)
+        ListTile(
+          title: StudioError(_data.searchError!),
+          trailing: TextButton(
+            onPressed: () => _data.search(_query),
+            child: const Text('Retry'),
+          ),
+        ),
+      if (_data.searchLimited)
+        const Padding(
+          padding: EdgeInsets.all(16),
+          child: Text(
+            'Message search returns up to 100 matches per profile. Narrow your search for more specific results.',
+          ),
+        ),
+      ..._draftRows(entries),
+      for (final group in groups) ...[
+        _groupHeading(group),
+        if (!_collapsed.contains(_groupKey(group))) ...[
+          for (final entry in group.entries.take(
+            _expanded.contains(_groupKey(group)) || group.key == 'pinned'
+                ? group.entries.length
+                : 3,
+          ))
+            _session(entry),
+          if (group.entries.length > 3 && group.key != 'pinned')
+            Padding(
+              padding: const EdgeInsets.only(left: 46, right: 16),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => setState(() {
+                    final key = _groupKey(group);
+                    if (!_expanded.remove(key)) _expanded.add(key);
+                  }),
+                  child: Text(
+                    _expanded.contains(_groupKey(group))
+                        ? 'Show less'
+                        : 'Show all ${group.entries.length} chats',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ],
+      if (controller.current == null)
+        const Padding(
+          padding: EdgeInsets.all(24),
+          child: Text('Opening your chats'),
+        ),
+      if (controller.current != null && groups.isEmpty && !_data.loading)
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _query.isNotEmpty ||
+                        _statuses.isNotEmpty ||
+                        _profiles.isNotEmpty ||
+                        _projects.isNotEmpty
+                    ? 'No matching chats'
+                    : _archived
+                    ? 'No archived chats'
+                    : 'No chats here yet',
+              ),
+              if (_projects.isNotEmpty ||
+                  _profiles.isNotEmpty ||
+                  _statuses.isNotEmpty)
+                TextButton(
+                  onPressed: () => _change(() {
+                    _projects.clear();
+                    _profiles.clear();
+                    _statuses.clear();
+                  }),
+                  child: const Text('Clear filters'),
+                ),
+            ],
+          ),
+        ),
+    ];
+  }
+
+  List<Widget> _draftRows(List<ChatListEntry> entries) {
+    if (_archived ||
+        _query.isNotEmpty ||
+        _statuses.isNotEmpty && !_statuses.contains('draft') ||
+        _projects.isNotEmpty) {
+      return [];
+    }
+    final rows = <Widget>[];
+    for (final profile in controller.discovery?.profiles ?? []) {
+      if (_profiles.isNotEmpty && !_profiles.contains(profile.name)) continue;
+      final owner = controller.browserResource(profile.name);
+      for (final draft in controller.savedDrafts(owner.scope)) {
+        if (!entries.any(
+          (e) => e.profile == profile.name && e.id == draft.sessionId,
+        )) {
+          rows.add(_savedDraft(draft, owner));
+        }
+      }
+    }
+    return [
+      if (rows.isNotEmpty)
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+          child: Text(
+            'Saved drafts',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ...rows,
+    ];
+  }
+
+  Widget _savedDraft(
+    ComposerDraftSummary draft,
+    ProfileWorkspaceData resource,
+  ) {
     final preview = draft.text.trim().replaceAll(RegExp(r'\s+'), ' ');
     final attachmentLabel =
         '${draft.attachmentCount} staged attachment${draft.attachmentCount == 1 ? '' : 's'}';
@@ -363,7 +998,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
           child: Material(
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            color: Colors.transparent,
             borderRadius: WingRadius.card,
             clipBehavior: Clip.antiAlias,
             child: GestureDetector(
@@ -371,7 +1006,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
               child: ListTile(
                 key: ValueKey('saved-draft-${draft.sessionId}'),
                 contentPadding: const EdgeInsets.only(left: 16, right: 0),
-                leading: const Icon(Icons.edit_note_outlined, size: 22),
+                leading: const ChatStatusDot(ChatListStatus.draft),
                 title: Text(
                   title,
                   maxLines: 2,
@@ -416,551 +1051,146 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     );
   }
 
-  Widget _empty(String text) => Padding(
-    padding: const EdgeInsets.all(24),
-    child: Text(
-      text,
-      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-    ),
-  );
-
-  void _toggleProject(Map<String, dynamic> project) {
-    _searchDebounce?.cancel();
-    final selected =
-        controller.current?.selectedProject?['id'] == project['id'];
-    if (_view == 'projects') _search.clear();
-    setState(() {
-      _view = 'home';
-    });
-    unawaited(_run(() => controller.selectProject(selected ? null : project)));
-    _setQuery(_search.text);
-  }
-
-  Widget _projectOverview(List<Map<String, dynamic>> projects) => Column(
-    key: const ValueKey('project-overview'),
-    children: projects.map(_project).toList(),
-  );
-
-  List<Widget> _tree() {
-    final resource = controller.current!;
-    if (_view == 'projects') {
-      return [
-        if (resource.projectsError != null) _empty(resource.projectsError!),
-        for (final project in resource.projects.where(
-          (p) => p['name'].toString().toLowerCase().contains(_query),
-        ))
-          _project(project),
-        if (resource.projects.isEmpty && resource.projectsError == null)
-          _empty('No projects in this profile'),
-      ];
-    }
-    final project = resource.selectedProject;
-    if (project == null &&
-        !_unreadOnly &&
-        !resource.archivedOnly &&
-        _query.isNotEmpty) {
-      final pending = resource.searchQuery != _query || resource.searchLoading;
-      final results = <String, Map<String, dynamic>>{
-        for (final row in resource.sessions.where(
-          (r) =>
-              controller.sessionVisibility.includes(r['source'] as String?) &&
-              r['title'].toString().toLowerCase().contains(_query),
-        ))
-          row['id'] as String: row,
-        if (!pending && resource.searchQuery == _query)
-          for (final row in resource.searchResults.where(
-            (r) =>
-                controller.sessionVisibility.includes(r['source'] as String?),
-          ))
-            row['id'] as String: row,
-      };
-      return [
-        _heading('Search results'),
-        _empty(
-          "Searches this profile's message content and chat IDs, including archived chats. Loaded titles also match.",
-        ),
-        if (pending) const LinearProgressIndicator(),
-        if (resource.searchError != null)
-          ListTile(
-            title: StudioError(resource.searchError!),
-            trailing: TextButton(
-              onPressed: () => controller.searchChats(_query),
-              child: const Text('Retry search'),
-            ),
-          ),
-        ...results.values.map(_session),
-        if (!pending && resource.searchError == null && results.isEmpty)
-          _empty('No matching chats'),
-        if (!pending && resource.searchResults.length == 100)
-          _empty(
-            'Showing up to 100 server matches. Narrow your search for more specific results.',
-          ),
-      ];
-    }
-    final pinnedIds = resource.sessions
-        .where((row) => row['pinned'] == true)
-        .map((row) => row['id'])
-        .toSet();
-    final rows = <String, Map<String, dynamic>>{
-      for (final row in resource.visibleSessions)
-        row['id'] as String: {
-          ...row,
-          // The project RPC omits pin flags. REST back-fills all profile pins;
-          // only overlay that flag on authoritative project members.
-          if (project != null) 'pinned': pinnedIds.contains(row['id']),
-        },
-    };
-    for (final chat in resource.chats.values) {
-      if (chat.offlineSnapshot && !resource.offlineSnapshot) continue;
-      if (chat.archived == resource.archivedOnly &&
-          controller.sessionVisibility.includes(chat.source) &&
-          (project == null || chat.projectId == project['id']) &&
-          !rows.containsKey(chat.key.sessionId)) {
-        rows[chat.key.sessionId] = {
-          'id': chat.key.sessionId,
-          'title': chat.title,
-          'source': chat.source,
-          'last_active': chat.lastActive,
-        };
-      }
-    }
-    final matches =
-        rows.values
-            .where(
-              (r) =>
-                  controller.sessionVisibility.includes(
-                    r['source'] as String?,
-                  ) &&
-                  (!_unreadOnly || r['unread'] == true) &&
-                  r['title'].toString().toLowerCase().contains(_query),
-            )
-            .toList()
-          ..sort((a, b) => _activity(b).compareTo(_activity(a)));
-    final pinned = matches.where((r) => r['pinned'] == true).toList();
-    final recent = matches.where((r) => r['pinned'] != true).toList();
-    final savedDrafts =
-        project == null &&
-            !_unreadOnly &&
-            !resource.archivedOnly &&
-            _query.isEmpty
-        ? controller
-              .savedDrafts(resource.scope)
-              .where((draft) => !rows.containsKey(draft.sessionId))
-              .toList()
-        : const <ComposerDraftSummary>[];
-    _projectHasMore = project != null && recent.length > _projectVisibleCount;
-    return [
-      if (_unreadOnly)
-        _empty(
-          resource.nextSessionOffset != null
-              ? 'Unread chats in loaded results. Load more chats to check older pages.'
-              : 'Unread chats in this profile.',
-        ),
-      if (!resource.archivedOnly &&
-          (project != null || (!_unreadOnly && _query.isEmpty))) ...[
-        _heading(
-          'Projects',
-          action: resource.projects.length > 5
-              ? TextButton(
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(48, 40),
-                    tapTargetSize: MaterialTapTargetSize.padded,
-                  ),
-                  onPressed: () => setState(() => _view = 'projects'),
-                  child: const Text('See all'),
-                )
-              : null,
-        ),
-        if (resource.projectsError != null)
-          ListTile(
-            title: StudioError(resource.projectsError!),
-            trailing: TextButton(
-              onPressed: () => _run(controller.refresh),
-              child: const Text('Retry'),
-            ),
-          )
-        else if (resource.projects.isEmpty)
-          _empty('No projects in this profile')
-        else
-          _projectOverview([
-            ...resource.projects.take(5),
-            if (project != null &&
-                !resource.projects.take(5).any((p) => p['id'] == project['id']))
-              project,
-          ]),
-      ],
-      if (project != null && resource.projectSessionsLoading)
-        const LinearProgressIndicator(),
-      if (project != null && resource.projectSessionsError != null)
-        ListTile(
-          title: StudioError(resource.projectSessionsError!),
-          trailing: TextButton(
-            onPressed: () => _run(() => controller.selectProject(project)),
-            child: const Text('Retry'),
-          ),
-        ),
-      if (savedDrafts.isNotEmpty) ...[
-        _heading('Saved drafts'),
-        ...savedDrafts.map(_savedDraft),
-      ],
-      if (pinned.isNotEmpty) ...[
-        _heading('Pinned chats'),
-        ...pinned.map(_session),
-      ],
-      _heading(
-        _query.isEmpty
-            ? (_unreadOnly
-                  ? 'Unread chats'
-                  : resource.archivedOnly
-                  ? 'Archived chats'
-                  : 'Recents')
-            : 'Search results',
-      ),
-      ...(project == null ? recent : recent.take(_projectVisibleCount)).map(
-        _session,
-      ),
-      if (matches.isEmpty &&
-          !resource.projectSessionsLoading &&
-          resource.projectSessionsError == null)
-        _empty(
-          _unreadOnly
-              ? 'No unread chats in loaded results'
-              : _query.isEmpty
-              ? (project == null
-                    ? 'No chats here yet'
-                    : 'No chats in this project yet')
-              : 'No matching chats',
-        ),
-      if (project == null && resource.sessionsLoadingMore)
-        const Padding(
-          padding: EdgeInsets.all(16),
-          child: Center(child: CircularProgressIndicator()),
-        )
-      else if (project == null && resource.sessionsPageError != null)
-        ListTile(
-          title: StudioError(resource.sessionsPageError!),
-          trailing: TextButton(
-            onPressed: _loadMore,
-            child: const Text('Retry'),
-          ),
-        )
-      else if ((project == null && resource.nextSessionOffset != null) ||
-          _projectHasMore)
-        Center(
-          child: TextButton(
-            key: const ValueKey('load-more-chats'),
-            onPressed: _loadMore,
-            child: const Text('Load more chats'),
-          ),
-        ),
-      if (project != null &&
-          !resource.projectSessionsLoading &&
-          resource.projectSessionsError == null &&
-          !_projectHasMore)
-        _empty(
-          "Project results come from Hermes's latest 5,000-session profile scan.",
-        ),
-    ];
-  }
-
   @override
   Widget build(BuildContext context) {
-    final resource = controller.current;
-    final project = resource?.selectedProject;
-    final projectId = project?['id'] as String?;
-    if (_enteredProject != projectId) {
-      _enteredProject = projectId;
-      _projectVisibleCount = ProfileGateway.sessionPageSize;
-    }
-    final colors = Theme.of(context).colorScheme;
-    final background = WingTokens.of(context).surface;
-    final isWorkspaceHome =
-        !_unreadOnly && _view == 'home' && resource?.archivedOnly != true;
-    final workspaceOptions = WorkspaceOptionsMenu(
-      key: _workspaceOptionsKey,
-      enabled: resource != null && !controller.switching,
-      projectsOnly: _view == 'projects',
-      inProject: project != null,
-      archived: resource?.archivedOnly == true,
-      unreadOnly: _unreadOnly,
-      includeAutomated: controller.sessionVisibility == SessionVisibility.all,
-      onSelected: (value) {
-        if (value == 'unread') {
-          _searchDebounce?.cancel();
-          _search.clear();
-          controller.clearSearch();
-          setState(() {
-            _unreadOnly = !_unreadOnly;
-            _query = '';
-            _view = 'home';
-          });
-        }
-        if (value == 'include-automated' && resource != null) {
-          _searchDebounce?.cancel();
-          setState(() => _projectVisibleCount = ProfileGateway.sessionPageSize);
-          unawaited(
-            _run(() async {
-              await controller.setSessionVisibility(
-                controller.sessionVisibility == SessionVisibility.all
-                    ? SessionVisibility.chats
-                    : SessionVisibility.all,
-              );
-              if (mounted &&
-                  controller.current == resource &&
-                  _query.isNotEmpty &&
-                  !_unreadOnly &&
-                  resource.selectedProject == null &&
-                  !resource.archivedOnly &&
-                  resource.searchQuery != _query) {
-                await controller.searchChats(_query);
-              }
-            }),
-          );
-        }
-        if (value == 'refresh') unawaited(_run(controller.refresh));
-        if (value == 'project-actions' && project != null) {
-          unawaited(
-            _run(
-              () => showProjectActions(
-                _workspaceOptionsKey.currentContext!,
-                controller,
-                project,
-              ),
-            ),
-          );
-        }
-        if (value == 'new-project') unawaited(_run(widget.newProject));
-        if (value == 'archived') {
-          _search.clear();
-          _searchDebounce?.cancel();
-          setState(() {
-            _query = '';
-            _view = 'archived';
-            _unreadOnly = false;
-          });
-          unawaited(_run(() => controller.showArchived(true)));
-        }
-      },
-    );
+    _allEntries = _data.entries;
+    _visibleEntries = _filterMatches(_allEntries);
+    _currentGroups = _buildGroups(_visibleEntries);
+    final tokens = WingTokens.of(context);
+    final enabled =
+        controller.current != null && !controller.switching && !_busy;
+    final groups = _groups;
     return PopScope(
-      canPop:
-          widget.drawer == null &&
-          project == null &&
-          !_unreadOnly &&
-          _view == 'home' &&
-          resource?.archivedOnly != true,
+      canPop: widget.drawer == null && !_archived,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) {
-          if (_scaffoldKey.currentState?.isDrawerOpen == true) {
-            unawaited(SystemNavigator.pop());
-          } else if (isWorkspaceHome &&
-              project == null &&
-              widget.drawer != null) {
-            _scaffoldKey.currentState?.openDrawer();
-          } else {
-            _back();
-          }
+        if (didPop) return;
+        if (_archived) {
+          setState(() => _archived = false);
+          unawaited(_refresh());
+        } else if (_scaffoldKey.currentState?.isDrawerOpen == true) {
+          unawaited(SystemNavigator.pop());
+        } else {
+          _scaffoldKey.currentState?.openDrawer();
         }
       },
       child: Scaffold(
         key: _scaffoldKey,
-        backgroundColor: background,
         drawer: widget.drawer,
+        backgroundColor: tokens.surface,
         appBar: AppBar(
-          centerTitle: false,
-          toolbarHeight: 88 + (MediaQuery.textScalerOf(context).scale(24) - 24),
-          backgroundColor: background,
+          backgroundColor: tokens.surface,
           surfaceTintColor: Colors.transparent,
-          leading: isWorkspaceHome
-              ? null
-              : IconButton(
-                  tooltip: 'Back',
-                  icon: const Icon(Icons.arrow_back_rounded, size: 22),
-                  onPressed: _back,
-                ),
+          toolbarHeight: 88 + (MediaQuery.textScalerOf(context).scale(24) - 24),
+          centerTitle: false,
+          leading: _archived
+              ? IconButton(
+                  tooltip: 'Back to chats',
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () {
+                    setState(() => _archived = false);
+                    unawaited(_refresh());
+                  },
+                )
+              : null,
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                resource?.archivedOnly == true
-                    ? 'Archived chats'
-                    : _view == 'projects'
-                    ? 'All projects'
-                    : 'Chats',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                _archived ? 'Archived chats' : 'Chats',
                 style: const TextStyle(
-                  fontWeight: FontWeight.w600,
                   fontSize: 24,
-                  letterSpacing: -0.2,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               ServerConnectionLabel(
                 label: controller.connection.label,
                 icon: controller.connection.icon,
                 status: controller.connectionStatus,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                style: TextStyle(fontSize: 12, color: tokens.muted),
+              ),
+            ],
+          ),
+          actions: [
+            WorkspaceOptionsMenu(
+              key: _optionsKey,
+              enabled: enabled,
+              archived: _archived,
+              includeAutomated:
+                  controller.sessionVisibility == SessionVisibility.all,
+              collapsed:
+                  groups.isNotEmpty &&
+                  groups.every((g) => _collapsed.contains(_groupKey(g))),
+              hasUnread: _matches.any((e) => e.row['unread'] == true),
+              onSelected: _menuAction,
+            ),
+          ],
+        ),
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                child: TextField(
+                  key: const ValueKey('workspace-search'),
+                  controller: _search,
+                  focusNode: widget.searchFocusNode,
+                  onChanged: _setQuery,
+                  decoration: const InputDecoration(
+                    hintText: 'Search chats',
+                    prefixIcon: Icon(Icons.search, size: 20),
+                  ),
+                ),
+              ),
+              _filters(),
+              _viewControls(),
+              WorkspaceConnectionStatus(
+                status: controller.connectionStatus,
+                reserveSpace: false,
+              ),
+              if (controller.error != null)
+                ListTile(
+                  title: StudioError(controller.error!),
+                  trailing: TextButton(
+                    onPressed: () => _run(controller.retry),
+                    child: const Text('Retry'),
+                  ),
+                ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _refresh,
+                  child: Builder(
+                    builder: (context) {
+                      final rows = _tree();
+                      return ListView.builder(
+                        key: ValueKey('chat-list-$_archived'),
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: EdgeInsets.only(
+                          bottom: 88 + MediaQuery.paddingOf(context).bottom,
+                        ),
+                        itemCount: rows.length,
+                        itemBuilder: (_, index) => rows[index],
+                      );
+                    },
+                  ),
                 ),
               ),
             ],
           ),
-          actions: [workspaceOptions],
-        ),
-        body: AnnotatedRegion<SystemUiOverlayStyle>(
-          value:
-              Theme.of(context).appBarTheme.systemOverlayStyle ??
-              (Theme.of(context).brightness == Brightness.dark
-                  ? SystemUiOverlayStyle.light
-                  : SystemUiOverlayStyle.dark),
-          child: SafeArea(
-            bottom: false,
-            child: Column(
-              children: [
-                ProfileSelector(
-                  profiles: controller.discovery?.profiles ?? const [],
-                  selectedProfile: resource?.scope.profileName,
-                  onSelected: (name) {
-                    _searchDebounce?.cancel();
-                    _search.clear();
-                    setState(() {
-                      _query = '';
-                      _view = 'home';
-                      _unreadOnly = false;
-                    });
-                    unawaited(_run(() => controller.navigateProfile(name)));
-                  },
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                  child: TextField(
-                    key: const ValueKey('workspace-search'),
-                    controller: _search,
-                    focusNode: widget.searchFocusNode,
-                    onChanged: _setQuery,
-                    decoration: InputDecoration(
-                      hintText: _view == 'projects'
-                          ? 'Search projects'
-                          : _unreadOnly
-                          ? 'Search loaded unread titles'
-                          : 'Search chats',
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                    ),
-                  ),
-                ),
-                if (resource != null)
-                  WorkspaceConnectionStatus(
-                    status: controller.connectionStatus,
-                    reserveSpace: false,
-                  ),
-                if (controller.error != null)
-                  ListTile(
-                    title: StudioError(controller.error!),
-                    trailing: TextButton(
-                      onPressed: () => _run(controller.retry),
-                      child: const Text('Retry'),
-                    ),
-                  ),
-                Expanded(
-                  child: controller.switching || resource == null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (controller.error == null) ...[
-                                  Icon(
-                                    Icons.cloud_sync_outlined,
-                                    color: colors.onSurfaceVariant,
-                                    size: 32,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    controller.connectionStatus.phase ==
-                                            ServerConnectionPhase.disconnected
-                                        ? 'Waiting for connection'
-                                        : controller.recovering
-                                        ? 'Reconnecting to ${controller.connection.label}'
-                                        : 'Opening your chats',
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Your chats will appear automatically when connected.',
-                                    textAlign: TextAlign.center,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodySmall,
-                                  ),
-                                  if (controller.recovering)
-                                    TextButton(
-                                      onPressed: controller.recoveryInProgress
-                                          ? null
-                                          : () => _run(controller.retry),
-                                      child: const Text('Retry now'),
-                                    ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: controller.refresh,
-                          child: NotificationListener<ScrollNotification>(
-                            onNotification: _onScroll,
-                            child: Builder(
-                              builder: (context) {
-                                final rows = _tree();
-                                return ListView.builder(
-                                  key: ValueKey(
-                                    '${resource.scope.storageNamespace}-$_view-$_unreadOnly-${controller.sessionVisibility.name}',
-                                  ),
-                                  physics:
-                                      const AlwaysScrollableScrollPhysics(),
-                                  padding: EdgeInsets.only(
-                                    bottom:
-                                        88 +
-                                        MediaQuery.paddingOf(context).bottom,
-                                  ),
-                                  itemCount: rows.length,
-                                  itemBuilder: (_, index) => rows[index],
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                ),
-              ],
-            ),
-          ),
         ),
         floatingActionButton: FloatingActionButton(
           key: const ValueKey('workspace-new-chat'),
-          tooltip: _view == 'projects' ? 'New project' : 'New chat',
+          tooltip: 'New chat',
           elevation: 2,
-          backgroundColor: controller.switching || resource == null
-              ? colors.surfaceContainerHighest
-              : null,
-          foregroundColor: controller.switching || resource == null
-              ? colors.onSurfaceVariant
-              : null,
           onPressed:
-              controller.switching ||
-                  resource == null ||
-                  resource.offlineSnapshot ||
+              !enabled ||
+                  controller.current?.offlineSnapshot == true ||
                   controller.recovering
               ? null
               : () => _run(() async {
-                  if (_view == 'projects') {
-                    await widget.newProject();
-                  } else {
-                    await controller.createChat();
-                  }
+                  if (await _chooseOwner()) await controller.createChat();
                 }),
-          child: Icon(
-            _view == 'projects' ? Icons.add_rounded : WingIcons.newChat,
-          ),
+          child: const Icon(WingIcons.newChat),
         ),
       ),
     );

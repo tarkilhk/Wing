@@ -159,7 +159,7 @@ Motion: a single 180–240 ms transition carries the destination strip between s
 
 - Minimum 48 dp targets; text scales to 200% at 320 dp without clipping fields, stage labels or the primary action. Keyboard can scroll every focused field into view. URL lines wrap or expose their complete value for review.
 - Screen-reader headings announce the new step; field errors are associated with their inputs; stage updates announce meaningful transitions once. Focus stays predictable after validation and Back. Password reveal announces its state.
-- Selection uses background tint and accessibility semantics, never visual ticks/radio dots. Status includes words and shape so color is not the only cue.
+- Selection uses background tint and accessibility semantics, never visual ticks/radio dots on selected options. Status includes words and shape so color is not the only cue.
 - Test normal HTTPS, local :9119, custom :8443, prefixed paths, bracketed IPv6, malformed URLs, explicit redirects, bad auth, proxy denial, unavailable WebSocket, zero sessions, session failure, cancellation, credential edits during pending work, local persistence failure and stale results after navigation.
 - Check light/dark, keyboard-open short screens, 200% text and TalkBack in native widgets before claiming production accessibility. The design review is not native validation.
 

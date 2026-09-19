@@ -243,7 +243,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Workspace options'));
+    await tester.tap(find.byTooltip('Chat list options'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('New project'));
     await tester.pumpAndSettle();

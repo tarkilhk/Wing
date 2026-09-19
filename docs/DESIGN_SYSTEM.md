@@ -15,6 +15,16 @@ The [product plan](PRODUCT_PLAN.md) owns functionality. This document owns the a
 - Administration opens directly on Profile without tabs. A pharmacy-cross action in the top bar opens the dedicated Health route. Keep the selected connection visible and classify each operation by its actual ownership. See the [administration handoff](design/2026-09-14-administration-handoff.md) for navigation and unsupported memory/MCP writes.
 - Provider accounts and keys belong to the selected profile, including `default`. The global menu has a larger portrait aligned with Wing and a low, borderless split footer: saved connection icon, name and status LED on the left; server version and conditional update icon on the right. Connection identity opens details; server version opens Versions & updates. Client identity stays in App settings; upstream update checks and the circular-arrows indicator apply only to the server. Manage profiles is its own pill after the last profile in the horizontally scrolling selector. Follow the [administration ownership contract](design/2026-09-14-administration-handoff.md) for credential-source distinctions and pending editor corrections.
 
+## Chats Target, 19 September 2026
+
+The owner approved implementing the [Target chat list](design/2026-09-19-chat-list-target.md).
+This supersedes earlier Chats-specific instructions for profile chips, a separate
+Projects section, Recents, separators, and the header's duplicated filters.
+Use the compact Status / Profile / Project row, direct Group by / Order by
+menus, five colored status dots and a continuous grouped list with three-chat
+previews. Tokens, when shown, include group totals. Preserve the conversation,
+Activity, tool presentation and composer; the list has its own dot component.
+
 ## App and notification identity
 
 The official app name and wordmark are **Wing**, with a capital **W** and
@@ -78,7 +88,7 @@ Playful portrait and the wordmark's original pointed feather cluster on the
 address and verified screens; hide the address artwork while the keyboard is
 open. Keep the approved 144 dp welcome screen unchanged. Custom authentication,
 separate chat routing and access headers live under Sign in / Custom setup.
-Use the active Studio accent, tick-free stage statuses, scrollable growing
+Use the active Studio accent, clearly labelled stage statuses, scrollable growing
 forms, specific failures and an explicit final save. No network check sends a
 chat message or establishes model readiness.
 
@@ -98,6 +108,15 @@ Continue action. Preserve the complete address journey. Cloud instance selection
 uses Studio tint and joins the existing checks and explicit final save.
 
 ## Layout and controls
+
+The owner-approved menu groups Chats and Activity, then Hermes instances and
+App settings, then Hermes administration, Hermes health and Hermes analytics.
+Use quiet separators before Hermes instances and Hermes administration, without
+section headings. Hermes instances is the saved-server collection; use Add
+instance, Edit instance and Instance name in its setup flow. Removing an instance
+removes its saved connection, not the deployed server. Hermes analytics opens the
+existing usage dashboard directly, with a profile-only scope picker. Health ends
+with its Server and Profile checks and has no Usage row.
 
 Keep hamburger navigation and projects scoped inside Chats. Use compact connection/profile text below the page title. Search stays below this scope. Projects, pins and recents use full-width rows, grouped where helpful, with thin separators.
 
@@ -125,7 +144,7 @@ On 18 September 2026, the owner split the shared screen header into two targets:
 the connection icon and LED open the existing status/retry sheet, while the name
 opens an anchored dropdown matching its displayed scope: connection-only headers
 (including Chats, conversations and Activity) offer connections only; headers
-showing a profile offer connections and profiles, except Usage, whose dropdown
+showing a profile offer connections and profiles, except Analytics, whose dropdown
 offers only profiles following the owner’s 19 September refinement. Each target is at least 48 dp.
 Use the standard Studio popup surface and selected background tint. This applies
 to Chats, conversations, Activity, Administration, Health and administration
@@ -135,9 +154,9 @@ Use Android's Roboto sans typography explicitly across component themes and mono
 
 ## Selection controls
 
-Selection uses the selected background tint throughout Wing. Chips, segmented buttons, dropdown entries, navigation rows, model/provider pickers, project appearance controls, and single/multiple-choice rows keep their original labels and artwork when selected. Do not draw ticks, checkmarks, radio dots, or selected-only borders over these options. This owner decision of 16 September 2026 supersedes the earlier visual selection markers.
+Selection uses the selected background tint throughout Wing. Chips, segmented buttons, dropdown entries, navigation rows, model/provider pickers, project appearance controls, and single/multiple-choice rows keep their original labels and artwork when selected. Do not add ticks, radio dots or selected-only borders to indicate the selected option; use the background tint. This rule concerns option selection, including dropdown lists. It does not restrict tick icons in other visual components, such as task completion, test results, status indicators, actions or Markdown task content.
 
-Use `StudioRadioTile` inside `RadioGroup` for one choice and `StudioSelectionTile` for multiple choices. Their whole row is the target and selected surface. Preserve checked/selected accessibility semantics, single versus multiple selection behavior, and keyboard navigation. Use `CompactSwitch` for independent on/off settings; its thumb position still expresses on/off. App-authored status and action icons also use tick-free symbols, with status text or accessibility labels retaining their meaning. Authored message and document content remains intact. The owner-approved MCP test-result exception (18 September 2026) uses a green tick for passed tests and a red cross for failed tests, distinguishing the explicit test result from the connection-status LED.
+Use `StudioRadioTile` inside `RadioGroup` for one choice and `StudioSelectionTile` for multiple choices. Their whole row is the target and selected surface. Preserve checked/selected accessibility semantics, single versus multiple selection behavior, and keyboard navigation. Use `CompactSwitch` for independent on/off settings; its thumb position still expresses on/off. Status and action icons should communicate their meaning, supported by status text or accessibility labels. Authored message and document content remains intact. MCP test results use a green tick for passed tests and a red cross for failed tests, distinguishing the explicit test result from the connection-status LED.
 
 Use `CompactSwitch` for standalone switches and `CompactSwitchListTile` for settings where the whole row toggles. The Material switch face draws at 75% size, about 39 × 24 dp, within an unscaled 48 × 48 dp touch and accessibility target. Keep native keyboard, focus and drag behavior. Do not shrink the hit target with the artwork.
 
@@ -149,7 +168,7 @@ A standalone switch needs a label identifying the affected setting. A setting ro
 
 Check light and dark themes, selected and disabled states, long names at 320 dp width and 200% text, touch-target edges, keyboard activation, and screen-reader state before shipping control changes.
 
-The selection audit covers App settings and composer preferences; Activity filters and tabs; drawer and profile navigation; project colors and icons; administration provider filters, tool models and tab navigation; chat intelligence and profile-default models; shared-draft destinations; clarification choices; backup restore mode; backend-update targets; and Markdown task markers. Chips disable `showCheckmark`, segmented buttons disable `showSelectedIcon`, menu entries use selected fills, and row choices use the shared selection tiles. Markdown uses `StudioTaskMarker` for filled/empty task boxes. Status glyphs for completion, readiness and connected providers use flags, dots and links with their existing labels. `test/studio_selection_test.dart` guards app-owned tick icons and automatic control markers and exercises interaction and layout.
+The selection audit covers App settings and composer preferences; Activity filters and tabs; drawer and profile navigation; project colors and icons; administration provider filters, tool models and tab navigation; chat intelligence and profile-default models; shared-draft destinations; clarification choices; backup restore mode; backend-update targets; and Markdown task markers. Chips disable `showCheckmark`, segmented buttons disable `showSelectedIcon`, menu entries use selected fills, and row choices use the shared selection tiles. `test/studio_selection_test.dart` checks these selection controls, selection semantics, keyboard interaction, task state and layout; it must not ban status or action icons across the app.
 
 ## Conversation preservation
 
@@ -241,24 +260,36 @@ configuration and usage bars describe reported costs, never inferred activity.
 
 The owner-approved 18 September Health revision replaces the combined verdict
 with Server and Profile groups on the standalone Hermes health destination.
-Server rows own Doctor, audit and Logs, with subordinate runtime identity. Profile
+Server rows own Doctor, audit and Logs. The owner-approved 19 September update
+removes the runtime-profile label. The Server refresh icon is labelled
+Run all diagnostics and shows the same progress spinner as Profile while running.
+It starts both diagnostics directly and disables repeat starts until both have
+known completion. Doctor and audit details use a top-bar play action to rerun,
+with automatic result polling and no bottom rerun button. Profile
 uses the shared header for profile selection, a refresh icon beside its heading,
-four stable observation rows and Usage. The refresh icon explicitly checks the
+four stable observation rows. Analytics has its own drawer destination. The refresh icon explicitly checks the
 selected profile and shows progress while the check runs.
-Only actual issues carry warning/error emphasis; configuration icons stay neutral.
+Only actual issues carry warning/error emphasis. Healthy Tools, Connectors and
+Scheduled tasks rows use green success icons, with no chevron or tap action.
+Non-healthy rows retain detail navigation and recovery links; unknown checks use
+neutral icons.
 Unknown checks are local to their row. Do not invalidate configuration after a
 fixed five-minute timer or imply successful inference from configuration.
 Detail pages use the same gutters, grouped rows and quiet timestamps, with
 specific recovery links to the owning editors. The owner-approved 19 September
 correction removes the Model & provider detail screen and places Model access
 status directly in Health's Profile group. The row is passive: label, credential
-result, subordinate model/provider and its check time. It has no chevron, row tap,
+result, subordinate model/provider and its check time. Its key icon uses the
+success green only after credentials are confirmed. It has no chevron, row tap,
 model picker, or routine management link. Profile refresh owns checking; a problem
 alone reveals Fix access, Review access, Retry or Review connection as appropriate.
 Keep these actions compact and preserve the selected profile when entering its
 existing recovery editor. Use one quiet note below the group for check coverage.
 Name any different resolved model/provider without validating the selected route.
-Opening Health performs reads only. Model selection stays in Administration.
+Health retains server results and separate profile checks across navigation and app
+restarts. Opening it reuses results for 24 hours; expired completed diagnostics
+and expired profile checks refresh automatically. New server diagnostics still
+require their first explicit start. Model selection stays in Administration.
 
 Growing select-only values, page titles and large-text field labels must remain
 readable at 320 dp/200%. Keep 48 dp controls and keyboard-safe editor actions.

@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import '../models/hermes_profile.dart';
 import 'connection_manager.dart';
 import 'profile_gateway.dart';
 import 'profiles_repository.dart';
 import 'server_connection_status.dart';
+import 'workspace_connection_failure.dart';
 
 typedef AdministrationRequest =
     Future<Map<String, dynamic>> Function(
@@ -124,7 +126,47 @@ class AdministrationRepository {
   Future<Map<String, dynamic>> read(
     String endpoint, [
     Map<String, String> query = const {},
-  ]) => request('GET', endpoint, query, null);
+  ]) => _retry(
+    () => request('GET', endpoint, query, null),
+    isTemporaryWorkspaceFailure,
+  );
+
+  /// Diagnostic starts have no idempotency key in stock Hermes. Only retry
+  /// failures known to precede delivery; a timeout/reset may hide a real run.
+  Future<Map<String, dynamic>> startDiagnostic(
+    String endpoint, {
+    bool Function()? isActive,
+  }) {
+    if (!{'ops/doctor', 'ops/security-audit'}.contains(endpoint)) {
+      throw ArgumentError('Unknown diagnostic');
+    }
+    return _retry(
+      () => write('POST', endpoint),
+      _diagnosticWasNotSent,
+      isActive: isActive,
+    );
+  }
+
+  Future<T> _retry<T>(
+    Future<T> Function() operation,
+    bool Function(Object) retryable, {
+    bool Function()? isActive,
+  }) async {
+    for (var attempt = 0; ; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (attempt == 2 ||
+            !retryable(error) ||
+            _closed ||
+            isActive?.call() == false) {
+          rethrow;
+        }
+        await Future<void>.delayed(Duration(seconds: 1 << attempt));
+        if (_closed || isActive?.call() == false) rethrow;
+      }
+    }
+  }
 
   Future<Map<String, dynamic>> write(
     String method,
@@ -140,23 +182,6 @@ class AdministrationRepository {
 
   Future<ProfileDiscovery> discover() =>
       ProfilesRepository((endpoint) => read(endpoint)).discover();
-
-  Future<Map<String, dynamic>> runtimeIdentity() async {
-    try {
-      final profiles = await discover();
-      final current = profiles.named(profiles.currentName);
-      if (current != null) {
-        return {
-          'name': current.name,
-          'label': 'Runtime profile: ${current.label}',
-          'unavailable': false,
-        };
-      }
-    } catch (_) {
-      // Runtime operations remain reachable when identity metadata is unavailable.
-    }
-    return {'label': 'Profile scope unavailable', 'unavailable': true};
-  }
 
   ProfileAdministration profile(String name) {
     if (!HermesProfile.isCanonicalName(name) || name == 'current') {
@@ -194,7 +219,7 @@ class ProfileAdministration {
   Future<Map<String, dynamic>> read(
     String endpoint, [
     Map<String, String> query = const {},
-  ]) => server.request('GET', endpoint, {...query, 'profile': name}, null);
+  ]) => server.read(endpoint, {...query, 'profile': name});
 
   Future<void> requireProfile() async {
     if ((await server.discover()).named(name) == null) {
@@ -203,6 +228,16 @@ class ProfileAdministration {
       );
     }
   }
+
+  /// A probe does not edit configuration. Keep `ok: false` as an observation
+  /// instead of treating it as a rejected settings write.
+  Future<Map<String, dynamic>> testConnector(String connector) =>
+      server.request(
+        'POST',
+        'mcp/servers/${Uri.encodeComponent(connector)}/test',
+        {'profile': name},
+        const {},
+      );
 
   Future<Map<String, dynamic>> write(
     String method,
@@ -228,8 +263,14 @@ class ProfileAdministration {
     bool mutation = false,
   ]) async {
     if (mutation) await requireProfile();
-    await gateway.connect();
-    final result = await gateway.call(method, params);
+    Future<Map<String, dynamic>> call() async {
+      await gateway.connect();
+      return gateway.call(method, params);
+    }
+
+    final result = method == 'setup.status'
+        ? await server._retry(call, isTemporaryWorkspaceFailure)
+        : await call();
     if (result['ok'] == false) {
       throw AdministrationFailure.rejected(result);
     }
@@ -252,6 +293,18 @@ class ProfileAdministration {
       }
     }
   }
+}
+
+bool _diagnosticWasNotSent(Object error) {
+  if (error is DashboardRequestNotSentException) {
+    return isTemporaryWorkspaceFailure(error.cause);
+  }
+  // Linux/Android connect and name-resolution errors. Deliberately exclude
+  // timeouts, broken pipes and connection resets, which can follow delivery.
+  if ((Platform.isAndroid || Platform.isLinux) && error is SocketException) {
+    return {-2, -3, 7, 101, 111, 113}.contains(error.osError?.errorCode);
+  }
+  return false;
 }
 
 class AdministrationFailure implements Exception {
@@ -338,7 +391,9 @@ class AdministrationAction {
   Future<Map<String, dynamic>> status(AdministrationRepository server) async {
     final result = await server.read(
       'actions/${Uri.encodeComponent(name)}/status',
-      {'lines': name == 'security-audit' ? '2000' : '100'},
+      {
+        'lines': {'doctor', 'security-audit'}.contains(name) ? '2000' : '100',
+      },
     );
     if (result['pid'] != pid) {
       throw const AdministrationFailure(

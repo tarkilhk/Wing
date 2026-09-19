@@ -15,8 +15,9 @@ This is the ownership contract for Administration, updated on 17 September 2026 
 | Profile / Behavior | Supported execution limits, approval policy, basic compression, reach/recovery policy and backend voice defaults |
 | Profile / Manage profiles | Collection lifecycle; compact pill after the last profile, scrolling with the profile selector |
 | Global menu / Connection and Server version | Icon, connection name and LED open connection details; server version opens Versions & updates and checks upstream availability. Client version remains in App settings. |
-| Health / Server | Runtime/launch-profile observations, bounded logs, Doctor/security audit and action results |
-| Health / Profile | Scoped readiness and usage; recovery links to the owning editor |
+| Health / Server | Bounded logs, Doctor/security audit, Run all diagnostics and action results |
+| Health / Profile | Scoped readiness; recovery links to the owning editor |
+| Global menu / Hermes analytics | Profile-scoped usage, tokens, estimated costs and history |
 
 MCP connectors owns Reconnect MCP tools, with confirmation that it reconnects tools across all server profiles and can invalidate prompt caches. Versions & updates contains server identity and update controls. Only the server has an upstream update check and circular-arrows availability indicator. Check update progress appears after an update request; it reads the running update action, while Check for updates compares installed code with upstream.
 
@@ -45,14 +46,27 @@ still target `default` and need correction together with its shared-account labe
 access. External CLI ownership remains distinct. Show credential provenance only
 when the backend establishes it, and do not infer account use from provider names.
 
-Runtime health uses `profiles/active.current`, resolved through profile metadata. `active` is the sticky future-launch selection, not the runtime identity. Neither it nor the mobile selection may substitute for `current`. Unknown identity is shown as unavailable while independent server/runtime operations remain reachable.
+The owner-approved 19 September Health update removes runtime-profile metadata
+and uses a Server refresh icon for Run all diagnostics, with the same progress
+spinner as Profile. Diagnostic detail pages use a top-bar play action to rerun,
+with automatic result polling and no bottom rerun button. Doctor and security
+audit use their existing server endpoints, with separate retained progress and
+results. They do not accept the selected mobile profile. Confirmations and result
+headers identify the connection, and Logs no longer requests profile identity.
 
 The owner-approved 18 September Health layout uses Server and Profile groups,
 with no combined health verdict. Doctor, audit and Logs remain server-owned;
-Usage and four observation rows follow the header-selected profile. Unknown
+Four observation rows follow the header-selected profile. Usage now lives in the
+standalone Hermes analytics drawer destination, below Hermes health. Unknown
 coverage is local, configuration does not expire after five minutes, and actual
-credential expiration remains visible. The Profile refresh icon explicitly checks access
-without inference. Details show their captured scope and link to the owning editor.
+credential expiration remains visible. All four Profile rows reuse saved results on entry and profile selection.
+A missing or 24-hour-old profile refresh triggers fresh checks. Server results
+and per-profile snapshots survive app restart; expired completed server diagnostics
+refresh on Health entry after their first explicit run.
+The Profile refresh icon repeats credential, tool setup, connector and task checks.
+Healthy Tools, Connectors and Scheduled tasks rows are passive, with green icons
+and no disclosure arrow. Other results retain details with their captured scope
+and links to the owning editor.
 See [Health observations](../ADMINISTRATION.md#health-observations) for the current
 stock API verification and rendering contract.
 

@@ -190,6 +190,7 @@ class Host {
               {
                 'id': 'same',
                 'label': '$name project',
+                'sessionIds': <String>[],
                 'path': '/$name',
                 'lastActive': 1,
               },

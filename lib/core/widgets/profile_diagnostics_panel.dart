@@ -4,6 +4,8 @@ import '../services/administration_health.dart';
 import '../services/administration_overview.dart';
 import '../services/connection_manager.dart';
 import '../services/profile_workspace_controller.dart';
+import '../services/health_snapshot.dart';
+import '../services/workspace_connection_failure.dart';
 import '../theme/wing_theme.dart';
 
 /// One explicit credential check, retained for its profile across navigation.
@@ -26,6 +28,29 @@ class ProfileDiagnosticsController extends ChangeNotifier {
   _AccessResult _result = _AccessResult.notChecked;
 
   (String?, String?) _selection = (null, null);
+
+  Map<String, dynamic> snapshot() => {
+    'model': _selection.$1,
+    'provider': _selection.$2,
+    'checkedAt': _checkedAt?.toUtc().toIso8601String(),
+    'title': _result.title,
+    'message': _result.message,
+    'status': _result.status.name,
+    'recovery': _result.recovery.name,
+  };
+
+  void restore(Map value) {
+    _selection = (value['model'] as String?, value['provider'] as String?);
+    _checkedAt = healthSnapshotTime(value['checkedAt']);
+    _result = _checkedAt == null
+        ? _AccessResult.notChecked
+        : _AccessResult(
+            value['title'] as String,
+            value['message'] as String,
+            AdministrationHealthStatus.values.byName(value['status'] as String),
+            _Recovery.values.byName(value['recovery'] as String),
+          );
+  }
 
   /// Configuration changes invalidate both retained and in-flight checks.
   void updateModel(Map<String, dynamic>? data) {
@@ -135,7 +160,13 @@ class ProfileDiagnosticsController extends ChangeNotifier {
       // Stock Hermes f971bbf51298e846834d3d76e18d763223bd58ec:
       // resolves this profile's startup model and configured fallback chain.
       // It does not send a prompt or establish model availability / quota.
-      final response = await gateway.call('setup.runtime_check');
+      final response = await retryTransientRead(
+        () => gateway.call('setup.runtime_check'),
+        isActive: () =>
+            !_disposed &&
+            generation == _generation &&
+            identical(_workspace.gateway, gateway),
+      );
       result =
           response.containsKey('profile') &&
               response['profile'] != scope.profileName
@@ -207,6 +238,7 @@ class ProfileModelAccessRow extends StatelessWidget {
       final color = checking
           ? theme.colorScheme.onSurfaceVariant
           : switch (result.status) {
+              AdministrationHealthStatus.healthy => tokens.success,
               AdministrationHealthStatus.failure => tokens.danger,
               AdministrationHealthStatus.warning => tokens.warning,
               _ => theme.colorScheme.onSurfaceVariant,

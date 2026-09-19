@@ -35,7 +35,7 @@ class ConnectionSetupScreen extends StatefulWidget {
   final Future<SavedConnection> Function(SavedConnection candidate) onSave;
 
   /// Existing connections save appearance independently of access verification.
-  /// New connections keep their icon in the draft until the final save.
+  /// New instances keep their icon in the draft until the final save.
   final Future<void> Function(ConnectionIcon icon)? onSaveIcon;
   final ConnectionProbe Function(SavedConnection) createProbe;
 
@@ -322,7 +322,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
       child: Scaffold(
         appBar: AppBar(
           leading: BackButton(onPressed: _saving ? null : _back),
-          title: Text(_editing ? 'Edit connection' : 'New connection'),
+          title: Text(_editing ? 'Edit instance' : 'Add instance'),
           actions: [
             if (_step != _Step.review)
               Padding(
@@ -1114,7 +1114,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           controller: _name,
           enabled: !_saving,
           decoration: const InputDecoration(
-            labelText: 'Connection name',
+            labelText: 'Instance name',
             hintText: 'Home',
             errorMaxLines: 3,
           ),
@@ -1122,7 +1122,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           onChanged: (_) => _dirty = true,
           onFieldSubmitted: (_) => _save(),
           validator: (value) => value == null || value.trim().isEmpty
-              ? 'Give this connection a name.'
+              ? 'Give this instance a name.'
               : null,
         ),
         const SizedBox(height: 24),
@@ -1130,7 +1130,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           key: const Key('connection-appearance'),
           contentPadding: EdgeInsets.zero,
           leading: ConnectionIconBadge(icon: _icon),
-          title: const Text('Connection icon'),
+          title: const Text('Instance icon'),
           subtitle: Text(_icon.label),
           trailing: const Icon(Icons.chevron_right),
           enabled: !_saving,
@@ -1165,7 +1165,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
     final (label, action) = switch (_step) {
       _Step.choose => ('Continue', _continue),
       _Step.cloud => (
-        _alreadySaved == null ? 'Continue' : 'Open connection',
+        _alreadySaved == null ? 'Continue' : 'Open instance',
         _continueCloud,
       ),
       _Step.address => ('Continue', _continue),

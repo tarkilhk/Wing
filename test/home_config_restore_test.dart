@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/screens/workspace_overview_content.dart';
 import 'package:wing/core/models/hermes_profile.dart';
@@ -12,6 +13,7 @@ import 'package:wing/core/models/attachment_draft.dart';
 import 'package:wing/core/services/android_launch_intent_service.dart';
 import 'package:wing/core/services/android_share_intent_service.dart';
 import 'package:wing/core/services/config_backup_service.dart';
+import 'package:wing/core/services/config_backup.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/main.dart';
 import 'package:wing/core/widgets/connection_icon_picker.dart';
@@ -137,6 +139,15 @@ Future<void> pumpHome(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    PackageInfo.setMockInitialValues(
+      appName: 'Wing',
+      packageName: 'com.tarkilhk.wing',
+      version: '1.0.0',
+      buildNumber: '1',
+      buildSignature: '',
+    );
+  });
 
   testWidgets('connection icon edits appearance while the LED opens status', (
     tester,
@@ -150,7 +161,7 @@ void main() {
     expect(iconRect.size, const Size(48, 48));
     await tester.tap(icon);
     await tester.pumpAndSettle();
-    expect(find.text('Connection icon'), findsOneWidget);
+    expect(find.text('Instance icon'), findsOneWidget);
     expect(find.text('Server access'), findsNothing);
     expect(find.byType(ProfileWorkspaceScreen), findsNothing);
     await tester.tap(find.byKey(const ValueKey('connection-icon-home')));
@@ -160,7 +171,7 @@ void main() {
     await tester.tap(led);
     await tester.pumpAndSettle();
     expect(find.text('Server access'), findsOneWidget);
-    expect(find.text('Connection icon'), findsNothing);
+    expect(find.text('Instance icon'), findsNothing);
     expect(find.byType(ProfileWorkspaceScreen), findsNothing);
   });
 
@@ -178,8 +189,8 @@ void main() {
     await tester.tap(find.byType(PopupMenuButton<String>));
     await tester.pumpAndSettle();
     expect(find.text('Appearance'), findsNothing);
-    expect(find.text('Edit connection'), findsOneWidget);
-    expect(find.text('Delete'), findsOneWidget);
+    expect(find.text('Edit instance'), findsOneWidget);
+    expect(find.text('Remove instance'), findsOneWidget);
     await tester.tapAt(const Offset(10, 300));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Change connection icon'));
@@ -238,9 +249,8 @@ void main() {
           .tooltip,
       'New chat',
     );
-    for (final destination in ['Recents', 'Projects']) {
-      expect(find.text(destination), findsWidgets);
-    }
+    expect(find.byKey(const ValueKey('chat-filter-profile')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-group-by')), findsOneWidget);
   });
 
   testWidgets('a cold-start launcher shortcut opens a Quick Chat directly', (
@@ -492,7 +502,9 @@ void main() {
     expect(find.byKey(const ValueKey('share-add-to-draft')), findsOneWidget);
   });
 
-  testWidgets('restore stays reachable once connections exist', (tester) async {
+  testWidgets('app settings restores configuration once connections exist', (
+    tester,
+  ) async {
     final manager = await buildManager();
     await manager.saveConnection('Miniserver', 'host', 8642, 'key');
     await pumpHome(
@@ -501,9 +513,70 @@ void main() {
       pickBackupFile: () async => 'encrypted-backup',
     );
 
+    expect(find.byTooltip('Restore configuration'), findsNothing);
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('nav-settings')));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byTooltip('Restore configuration'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('import_passphrase_field')), findsOneWidget);
+  });
+
+  testWidgets('connected settings displays restored preferences immediately', (
+    tester,
+  ) async {
+    final manager = await buildManager();
+    await manager.saveConnection('Work', 'localhost', 9119, '');
+    await manager.prefs.setString('workspace_accent_v1', 'coral');
+    await manager.prefs.setString('composer_running_action', 'stop');
+    final backup = ConfigBackup(
+      createdAt: DateTime.utc(2026),
+      appVersion: 'test',
+      connections: manager.getConnections(),
+      preferences: {
+        'workspace_accent_v1': 'iris',
+        'composer_running_action': 'queue',
+      },
+    );
+    await pumpHome(
+      tester,
+      manager,
+      pickBackupFile: () async => 'selected-file',
+      importBackup: (_, _, mode) => ConfigBackupService(
+        connectionManager: manager,
+        preferences: manager.prefs,
+      ).import(backup, mode: mode),
+    );
+    await tester.tap(find.text('Work'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('nav-settings')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Coral'))
+          .selected,
+      isTrue,
+    );
+    await tester.tap(find.byTooltip('Restore configuration'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('import_confirm_button')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Iris'))
+          .selected,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Queue'))
+          .selected,
+      isTrue,
+    );
   });
 
   testWidgets('tapping restore on an empty device opens the import sheet', (
@@ -615,46 +688,61 @@ void main() {
     },
   );
 
-  testWidgets('connections toolbar exports a passphrase-protected backup', (
-    tester,
-  ) async {
-    final manager = await buildManager();
-    await manager.saveConnection('Work', 'localhost', 9119, '');
-    String? exportedPassphrase;
-    String? deliveredContents;
-    await pumpHome(
-      tester,
-      manager,
-      exportBackup: (passphrase) async {
-        exportedPassphrase = passphrase;
-        return 'encrypted-backup';
+  for (final connected in [false, true]) {
+    testWidgets(
+      'app settings exports a protected backup, connected=$connected',
+      (tester) async {
+        final manager = await buildManager();
+        await manager.saveConnection('Work', 'localhost', 9119, '');
+        String? exportedPassphrase;
+        String? deliveredContents;
+        await pumpHome(
+          tester,
+          manager,
+          exportBackup: (passphrase) async {
+            exportedPassphrase = passphrase;
+            return 'encrypted-backup';
+          },
+          deliverBackup: (contents) async {
+            deliveredContents = contents;
+            return 'wing-config.json';
+          },
+        );
+        expect(find.byTooltip('Backup configuration'), findsNothing);
+        expect(find.byTooltip('Restore configuration'), findsNothing);
+        if (connected) {
+          await tester.tap(find.text('Work'));
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(find.byTooltip('Open navigation menu'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('nav-settings')));
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('Backend updates'), findsNothing);
+        expect(
+          tester.getCenter(find.byTooltip('Backup configuration')).dx,
+          lessThan(
+            tester.getCenter(find.byTooltip('Restore configuration')).dx,
+          ),
+        );
+        await tester.tap(find.byTooltip('Backup configuration'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const Key('export_passphrase_field')),
+          'test-passphrase',
+        );
+        await tester.enterText(
+          find.byKey(const Key('export_passphrase_confirm_field')),
+          'test-passphrase',
+        );
+        await tester.tap(find.byKey(const Key('export_confirm_button')));
+        await tester.pumpAndSettle();
+        expect(exportedPassphrase, 'test-passphrase');
+        expect(deliveredContents, 'encrypted-backup');
+        expect(find.text('Backup exported — wing-config.json'), findsOneWidget);
       },
-      deliverBackup: (contents) async {
-        deliveredContents = contents;
-        return 'wing-config.json';
-      },
     );
-    expect(find.byTooltip('Backend updates'), findsNothing);
-    expect(
-      tester.getCenter(find.byTooltip('Backup configuration')).dx,
-      lessThan(tester.getCenter(find.byTooltip('Restore configuration')).dx),
-    );
-    await tester.tap(find.byTooltip('Backup configuration'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('export_passphrase_field')),
-      'test-passphrase',
-    );
-    await tester.enterText(
-      find.byKey(const Key('export_passphrase_confirm_field')),
-      'test-passphrase',
-    );
-    await tester.tap(find.byKey(const Key('export_confirm_button')));
-    await tester.pumpAndSettle();
-    expect(exportedPassphrase, 'test-passphrase');
-    expect(deliveredContents, 'encrypted-backup');
-    expect(find.text('Backup exported — wing-config.json'), findsOneWidget);
-  });
+  }
 
   testWidgets('a new connection never pre-fills a Desktop Gateway URL', (
     tester,

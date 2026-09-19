@@ -4,11 +4,22 @@
 
 The drawer opens Chats, Activity, Connections, App settings and Hermes administration. Projects are a scope within Chats. There is no permanent bottom navigation or intermediate More page.
 
-Chat browsing keeps the connection and selected profile visible, with five recent projects, pinned chats and recents. The header menu opens compact filters. Archived chats do not offer another Archived destination. All projects omits chat filters and the duplicate New project action.
+Chats browses all profiles on the selected connection. Search stays above one
+compact Status / Profile / Project filter row. Each filter opens its own anchored
+multi-select menu, with scrolling after five visible rows. The cross clears only
+these filters. Profiles sort alphabetically; projects sort by recent activity.
 
-Tap a project to filter pinned chats and recents in place. The selected row uses the shared background tint; tap it again to clear the filter or tap another project to switch. Keep the Chats title and Recents heading unchanged, and hide Pinned chats when the filtered set has no pins. All projects returns to Chats with the chosen project visible and selected. Search matches titles within the selected project's results.
+Group by (Project by default) and Order by (Updated by default) sit below the
+filters. Pinned chats appear once, followed by compact groups with three-chat
+previews and per-group Show all. Headings, indentation and proximity establish
+grouping without cards or separators. Show → Tokens adds totals across every
+matching row, including rows outside the preview and in collapsed groups.
 
-The floating plus creates a chat in the selected project, or a project in All projects. With no project filter, it creates an unassigned chat. A project row's menu offers New chat, Rename, Appearance and Delete without changing the filter. Use the shared menu rules in [Design system](DESIGN_SYSTEM.md), including clear labels and 48 dp touch targets.
+The header menu contains Show, Show automated chats, Collapse/Expand all, Mark
+all as read, Archived/Active chats and New project, each with an icon. The floating
+pen creates a chat. Creation asks for an owning profile unless exactly one profile
+is filtered or available. Project row menus retain New chat, Rename, Appearance
+and Delete. Selection uses Studio tint and row actions retain 48 dp targets.
 
 Back unwinds the current preview or editor, then returns from a conversation to Chats. At the workspace root it opens the drawer before exiting. Navigation preserves the open work and draft.
 
@@ -22,9 +33,20 @@ Modern profile-aware dashboard and Desktop Gateway contracts are required. Missi
 
 Unread status comes from the server watermark. Mark a chat read only after an explicit open and successful history load. Reconnect or foreground refresh alone must not mark it read. Retain failure state and allow retry.
 
-Unread filtering applies to loaded results and retains Load more; it is not a complete server-side unread query. Server-backed conversation search is scoped to the selected profile and bounded to 100 results without a cursor. Loaded title matching does not search every saved body.
+The browser reads profile-owned sessions in pages of 100 with four concurrent
+profile readers. Unread filters apply to the resulting index, including older
+pages. Incomplete loads retain readable rows and offer Retry; incomplete token
+totals are not displayed as final. Message search runs across profiles and retains
+archived matches, with the stock limit of 100 results per profile; title matching
+also covers the loaded index. Search, filter and archive scope intersect.
 
-Include automated chats is off by default. It hides exact sources `cron`, `tool`, `subagent` and `kanban` before REST pagination. Unknown/custom sources remain visible; a parent relationship alone does not make a chat automated. The preference belongs to the connection and applies across its profiles. Activity is unaffected. Project RPC membership has its own server exclusions and a 5,000-entry cap; Android reveals those results in batches of 50.
+Show automated chats starts off and hides exactly `cron`, `tool`, `subagent` and
+`kanban` before grouping, counts and project recency. Unknown/custom sources stay
+visible; parentage alone does not imply automation. This connection preference
+does not affect Activity. Project membership comes from stock `projects.tree`
+`sessionIds`; the scan covers the loaded active set. Archived and excluded source
+rows absent from that tree remain under Home. New filters and display choices
+persist per connection on this device.
 
 ## Projects and destructive actions
 

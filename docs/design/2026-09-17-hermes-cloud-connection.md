@@ -86,7 +86,7 @@ For one instance, retain the same picker and Continue interaction. The proposed 
 
 ### Same check and completion experience
 
-Reuse the exact three real stages: **Profiles & access → Live chat → Chat history**. Discovery or a running status is not evidence that these checks passed. No model request is sent. Keep truthful status words and tick-free indicators.
+Reuse the exact three real stages: **Profiles & access → Live chat → Chat history**. Discovery or a running status is not evidence that these checks passed. No model request is sent. Keep truthful status words and clear state indicators.
 
 On success the familiar portrait and feathers return with **Connection verified**. Prefill Connection name from the Cloud instance's name. Keep icon customization, server-preferred profile context, and explicit **Save and open**. Preserve secure-save failures and verified drafts. Select the saved connection only after a successful save.
 

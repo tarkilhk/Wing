@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wing/core/screens/administration/admin_health_page.dart';
+import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/screens/administration/usage_charts.dart';
 import 'support/administration_fixture.dart';
@@ -117,7 +117,7 @@ void main() {
             child: child!,
           ),
         ),
-        home: AdminUsagePage(profile: fixture.server.profile('personal')),
+        home: AnalyticsPage(profile: fixture.server.profile('personal')),
       ),
     );
     await tester.runAsync(
@@ -145,7 +145,11 @@ void main() {
     final scrollable = find
         .descendant(
           of: find.byType(ListView),
-          matching: find.byType(Scrollable),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Scrollable &&
+                axisDirectionToAxis(widget.axisDirection) == Axis.vertical,
+          ),
         )
         .last;
     if (target.evaluate().isEmpty) {
@@ -227,7 +231,11 @@ void main() {
     await tap(tester, find.text('7D'));
     expect(fixture.requests.length, 4);
     await tap(tester, find.text('365D'));
-    await tap(tester, find.byTooltip('Earlier dates'));
+    await tester.drag(
+      find.byKey(const ValueKey('usage-year-band')),
+      const Offset(200, 0),
+    );
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('usage-year-band')), findsOneWidget);
     expect(fixture.requests.length, 4);
     expect(tester.takeException(), isNull);
@@ -335,7 +343,7 @@ void main() {
     fixture.override = (_, _, _, _) => pending.future;
     await tester.pumpWidget(
       MaterialApp(
-        home: AdminUsagePage(profile: fixture.server.profile('personal')),
+        home: AnalyticsPage(profile: fixture.server.profile('personal')),
       ),
     );
     await tester.pump();
@@ -452,6 +460,13 @@ void main() {
         await snapshot(tester, '${brightness.name}-$scale-trend');
         await tap(tester, find.text('90D'));
         await snapshot(tester, '${brightness.name}-$scale-calendar');
+        final band = find.byKey(const ValueKey('usage-year-band'));
+        await reveal(tester, find.byKey(const ValueKey('usage-activity-grid')));
+        await tester.drag(band, const Offset(140, 0));
+        await tester.pumpAndSettle();
+        await snapshot(tester, '${brightness.name}-$scale-scrolled');
+        await tester.drag(band, const Offset(-300, 0));
+        await tester.pumpAndSettle();
         await tap(tester, find.text('365D'));
         await reveal(tester, find.byKey(const ValueKey('usage-activity-grid')));
         await snapshot(tester, '${brightness.name}-$scale-year');

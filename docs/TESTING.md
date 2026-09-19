@@ -21,6 +21,7 @@ Keep logs and generated captures under ignored `build/`. Record source revision,
 | Notifications | `test/chat_notification_test.dart`, `test/plugin_turn_notification_sink_test.dart`, `test/profile_notification_live_test.dart`, `test/profile_notification_coverage_test.dart`, `integration_test/profile_notification_test.dart`, `tools/qa/check_background_monitoring.py` |
 | Launcher shortcuts | `test/android_launcher_shortcut_contract_test.dart`, `test/android_launch_intent_service_test.dart`, `test/home_config_restore_test.dart`, `tools/qa/check_launcher_shortcut.py` |
 | Slash profile scope | `test/slash_profile_live_contract_test.dart`, `integration_test/slash_commands_live_test.dart` |
+| Configuration backup | `test/config_backup_service_test.dart`, `test/config_backup_test.dart`, `test/home_config_restore_test.dart`, `integration_test/config_backup_native_test.dart` |
 | Connection setup | `test/connection_address_test.dart`, `test/connection_setup_probe_test.dart`, `test/connection_setup_transport_test.dart`, `test/connection_setup_screen_test.dart` |
 | Scheduled tasks | `test/scheduled_tasks_*_test.dart`, `integration_test/scheduled_tasks_native_test.dart` |
 | Voice | `test/voice_*_test.dart`, `test/profile_voice*_test.dart`, `test/hermes_voice_test.dart`, `test/microphone_permission_test.dart`, `test/startup_notification_permission_test.dart`, `integration_test/voice_*_test.dart`; [profile voice checks](PROFILE_VOICE.md#verification) |
@@ -29,6 +30,17 @@ Keep logs and generated captures under ignored `build/`. Record source revision,
 Read a driver's environment flags, mutations and cleanup before running it. Use disposable profiles/chats and owned fixtures on an authorized server. Live tests may invoke models, modify profile settings or start host tools. Restore changed values and independently verify cleanup; a green assertion that records `backend_limited` is not successful feature acceptance.
 
 After installing an APK on an emulator, run `python3 tools/qa/check_launcher_shortcut.py --serial <emulator-id> --package com.tarkilhk.wing.dev` (use `com.tarkilhk.wing` for release or signed development builds). This read-only check verifies Android's registered Quick Chat, Activity and Search chats intents and resolves their activity. Gradle generates `xml/shortcuts.xml` from `android/app/src/main/shortcuts.xml.template` using each variant's application ID; intent targets must be literal package names because Android parses them with system resources. Flutter tests cover the subsequent cold/warm launch handoff, destination routing, search focus and draft preservation.
+
+Configuration backup's native test runs with
+`flutter test integration_test/config_backup_native_test.dart -d <emulator-id> --no-uninstall --dart-define=CONFIG_BACKUP_NATIVE=true`.
+Use a disposable emulator with a local file-saving share target. At each share
+sheet, save the file to Downloads; at each document picker, select the file just
+exported. Flutter drives the app's dialogs, including the wrong-passphrase
+attempt. The test's `backup-qa-stage` file in the app's external files directory
+identifies each native step for a host UI driver. It uses isolated real Android
+preferences and Keystore namespaces, synthetic connection credentials and no
+backend. Coverage includes plain Merge, encrypted Replace, restored settings in
+the current screen, and persisted credentials read through a new storage client.
 
 For a compatible local backend/emulator, the basic connection pattern is:
 

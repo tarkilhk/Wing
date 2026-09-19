@@ -1,17 +1,24 @@
-# Usage dashboard
+# Hermes analytics
 
 The owner selected the title-switching design from the LAN prototype and
 approved the stock-Hermes implementation with **1D, 7D, 30D, 90D, 365D**.
 ALL is removed. The page helps compare token usage and estimated value, then
 inspect a date or a model without leaving its captured profile/connection.
 
+The drawer opens this dashboard directly through **Hermes analytics**, below
+Hermes health. The former Health Usage row is removed. Administration search
+also finds Analytics using usage, token and cost terms. The screen retains its
+profile-only picker and existing stock aggregate reads; this navigation change
+adds no backend integration or API requirements.
+
 ## Implemented layout
 
 - Profile-only dropdown in the scope header; neutral period buttons; token
-  count and estimated value side by side. Connection selection stays outside Usage.
+  count and estimated value side by side. Connection selection stays outside Analytics.
 - Full-year token-intensity calendar, one square per UTC session-start date,
-  in one compact Sunday-aligned band of week columns. Earlier/later arrows
-  browse the cached year; no day slider. The visible weeks and intensity colours
+  in one compact Sunday-aligned band of week columns. Smooth horizontal scrolling
+  browses the cached year, with the date label tracking the visible weeks during
+  dragging and momentum; no day slider or arrow controls. The visible weeks and intensity colours
   remain fixed when changing the range; a contrasting perimeter marks its dates.
   Preserve the possible 366th partial UTC boundary date from Hermes.
 - Breakdown immediately below the grid, one animated composition bar. Its
@@ -63,7 +70,10 @@ navigation and enlarged text. `test/workspace_picker_test.dart` checks that Usag
 offers profiles only and reloads under the selected immutable owner.
 `test/usage_calendar_test.dart` checks complete date coverage without duplicates
 for every weekday alignment, full width, date selection and stable geometry
-across range changes. `test/usage_selection_color_test.dart` verifies all ten
+across range changes. It also checks live date-label updates during drags and
+momentum, bounded scrolling in both directions, and tooltip dismissal on scroll.
+The scrolled calendar renders were inspected in both themes at normal and 200%
+text sizes. `test/usage_selection_color_test.dart` verifies all ten
 approved accent/theme colours and contrast for extreme inputs.
 
 Render with:
@@ -87,10 +97,12 @@ is `docs/design/prototypes/usage-accent-gallery-prototype.html` on that branch.
 Main contains the native Flutter implementation, not the HTML prototype.
 
 The owner subsequently rejected the two-band layout and selected one compact
-band with earlier/later week navigation. The newest weeks open initially;
-controls are disabled at the year boundaries and hidden when all weeks fit.
+band. On 19 September, the owner replaced earlier/later arrows with continuous
+horizontal scrolling. The newest weeks open initially; scrolling is bounded by
+the cached year and unnecessary when all weeks fit. The date label tracks the
+visible columns during scrolling, and scrolling dismisses any open day tooltip.
 All dates keep the same year-wide intensity scale. The 1D/7D/30D/90D/365D chips
-move the period outline while keeping the current calendar page. The outline crossfades with reduced-motion
+move the period outline while keeping the current calendar position. The outline crossfades with reduced-motion
 support, includes zero-usage dates, and follows the actual date perimeter.
 Tap any date, including outside the outlined period, for its year-query token
 count and day breakdown. “Selected period” restores the period breakdown.

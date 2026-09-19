@@ -158,7 +158,7 @@ class _ConnectionIconPickerState extends State<_ConnectionIconPicker> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Connection icon',
+              'Instance icon',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 16),

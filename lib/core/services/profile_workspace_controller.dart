@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'administration_health_session.dart';
+import 'administration_repository.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -317,6 +319,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
   final SavedConnection connection;
   final String connectionIdentity;
   final SharedPreferences preferences;
+  AdministrationHealthSession? _healthSession;
+  AdministrationHealthSession healthSession({
+    AdministrationRepository? repository,
+  }) => _healthSession ??= AdministrationHealthSession(
+    repository ??
+        AdministrationRepository.forConnection(
+          connection,
+          connectionIdentity,
+          connectionStatus: connectionStatus,
+        ),
+    preferences,
+    connectionStatus: connectionStatus,
+    ownsServer: repository == null,
+  );
   final ProfileGatewayFactory _factory;
   final AttachmentDraftService attachments;
   late final ComposerDraftStore _drafts;
@@ -849,6 +865,47 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _notificationOpening = null;
     _navigationGeneration++;
     connectionStatus.endRecovery('notification');
+  }
+
+  /// Read access for the connection-wide browser; this never changes navigation.
+  ProfileWorkspaceData browserResource(String name) {
+    if (discovery?.named(name) == null) {
+      throw StateError('Profile is no longer available');
+    }
+    return _resource(name);
+  }
+
+  /// Project browsing uses short-lived readers, never the conversation socket.
+  /// Bound the caller's concurrency instead of retaining a socket per profile.
+  Future<List<Map<String, dynamic>>> browserProjects(
+    String name, {
+    required int sessionLimit,
+  }) async {
+    final reader = _factory(browserResource(name).scope);
+    try {
+      await reader.connect();
+      final result = await reader.call('projects.tree', {
+        'preview_limit': 3,
+        'session_limit': sessionLimit,
+      });
+      if (result['projects'] is! List) {
+        throw const FormatException('Missing project tree');
+      }
+      return ProfileGateway.records(result['projects']).map((project) {
+        if (project['id'] is! String ||
+            project['label'] is! String ||
+            project['sessionIds'] is! List) {
+          throw const FormatException('Invalid project membership');
+        }
+        return {
+          ...project,
+          'name': project['label'],
+          'primary_path': project['path'],
+        };
+      }).toList();
+    } finally {
+      reader.close();
+    }
   }
 
   ProfileWorkspaceData _resource(String name) {
@@ -2109,7 +2166,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
     Map<String, dynamic>? inProject,
     WorkspaceScope? owner,
   }) async {
-    _navigationGeneration++;
     final resource = _writable();
     if (owner != null && owner != resource.scope) {
       throw StateError('Profile changed. Open the menu again.');
@@ -2118,6 +2174,28 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (project != null && !resource.projects.contains(project)) {
       throw ArgumentError('Wrong project owner');
     }
+    return _createChat(resource, project: project);
+  }
+
+  /// Start an independent profile chat with a local, unsent composer draft.
+  /// The captured owner also owns the draft if selection changes in flight.
+  Future<ProfileChat> createDraftChat({
+    required WorkspaceScope owner,
+    required String text,
+  }) async {
+    final resource = _writable();
+    if (owner != resource.scope) {
+      throw StateError('Profile changed. Try again with the selected profile.');
+    }
+    return _createChat(resource, initialDraft: text);
+  }
+
+  Future<ProfileChat> _createChat(
+    ProfileWorkspaceData resource, {
+    Map<String, dynamic>? project,
+    String? initialDraft,
+  }) async {
+    final navigation = ++_navigationGeneration;
     final response = await resource.gateway.createSession(
       cwd: project?['primary_path'] as String?,
     );
@@ -2136,7 +2214,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _hydrateIntelligence(chat, response);
     _applyTodoSnapshot(chat, response['todo_state']);
     await _restoreDraft(chat);
-    if (current == resource && !switching) resource.selectedSession = id;
+    if (initialDraft != null) await updateDraft(chat, initialDraft);
+    if (current == resource &&
+        !switching &&
+        navigation == _navigationGeneration) {
+      resource.selectedSession = id;
+    }
     _changed();
     await refreshHistory(chat);
     return chat;
@@ -6019,6 +6102,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   @override
   void dispose() {
     _closed = true;
+    _healthSession?.dispose();
     _notificationRetry?.cancel();
     unawaited(_saveReadingSnapshot());
     connectionStatus.dispose();

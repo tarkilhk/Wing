@@ -1,4 +1,8 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,11 +13,31 @@ import 'package:wing/core/screens/workspace_overview_content.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
+import 'package:wing/core/screens/analytics_content.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/main.dart';
 
 import 'support/profile_browser_fixture.dart';
+import 'home_config_restore_test.dart' show buildManager;
 
 void main() {
+  const capture = bool.fromEnvironment('CAPTURE_MENU');
+  setUpAll(() async {
+    if (!capture) return;
+    const root = String.fromEnvironment('CAPTURE_FONT_DIR');
+    for (final font in {
+      'Roboto': 'Roboto-Regular.ttf',
+      'MaterialIcons': 'MaterialIcons-Regular.otf',
+    }.entries) {
+      await (FontLoader(font.key)..addFont(
+            File(
+              '$root/${font.value}',
+            ).readAsBytes().then(ByteData.sublistView),
+          ))
+          .load();
+    }
+  });
+
   late ProfileBrowserFixture fixture;
   late ProfileWorkspaceController controller;
 
@@ -43,25 +67,61 @@ void main() {
   });
   tearDown(() => controller.dispose());
 
-  Future<void> show(WidgetTester tester, {double scale = 1}) async {
+  Future<void> show(
+    WidgetTester tester, {
+    double scale = 1,
+    Brightness brightness = Brightness.light,
+    Widget? home,
+  }) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MaterialApp(
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(scale)),
-          child: child!,
+        debugShowCheckedModeBanner: false,
+        theme: wingTheme(brightness),
+        builder: (context, child) => RepaintBoundary(
+          key: const ValueKey('menu-capture'),
+          child: MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
         ),
-        home: ProfileWorkspaceScreen(
-          controller: controller,
-          onConnections: () {},
-        ),
+        home:
+            home ??
+            ProfileWorkspaceScreen(
+              controller: controller,
+              onConnections: () {},
+            ),
       ),
     );
     await tester.pumpAndSettle();
+  }
+
+  Future<void> snapshot(WidgetTester tester, String name) async {
+    if (!capture) return;
+    for (final widget in tester.widgetList<Image>(find.byType(Image))) {
+      await tester.runAsync(
+        () => precacheImage(
+          widget.image,
+          tester.element(find.byType(MaterialApp)),
+        ),
+      );
+    }
+    await tester.pump();
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(const ValueKey('menu-capture')),
+    );
+    await tester.runAsync(() async {
+      final image = await boundary.toImage();
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      final file = File('build/menu-review/$name.png');
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(bytes!.buffer.asUint8List());
+      image.dispose();
+    });
   }
 
   Future<void> navigate(WidgetTester tester, AppDestination destination) async {
@@ -72,6 +132,87 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(item);
     await tester.pumpAndSettle();
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('instances ${brightness.name} at $scale', (tester) async {
+        final manager = await buildManager();
+        await manager.saveConnection('Homelab', 'hermes.local', 8642, '');
+        await show(
+          tester,
+          scale: scale,
+          brightness: brightness,
+          home: HomeScreen(connManager: manager),
+        );
+        expect(find.text('Hermes instances'), findsOneWidget);
+        expect(find.text('Homelab'), findsOneWidget);
+        expect(find.text('Add instance'), findsOneWidget);
+        expect(find.byTooltip('Backup configuration'), findsNothing);
+        expect(find.byTooltip('Restore configuration'), findsNothing);
+        await snapshot(tester, 'instances-${brightness.name}-$scale');
+        await navigate(tester, AppDestination.settings);
+        expect(find.byTooltip('Backup configuration'), findsOneWidget);
+        expect(find.byTooltip('Restore configuration'), findsOneWidget);
+        await snapshot(tester, 'settings-${brightness.name}-$scale');
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('menu and analytics ${brightness.name} at $scale', (
+        tester,
+      ) async {
+        final chat = await controller.createChat();
+        chat.draft = 'Keep my analytics draft';
+        await show(tester, scale: scale, brightness: brightness);
+        final callsBefore = fixture.calls.length;
+        await tester.tap(find.byTooltip('Open navigation menu'));
+        await tester.pumpAndSettle();
+        final menu = find.byType(AppDrawer);
+        final tiles = tester
+            .widgetList<ListTile>(
+              find.descendant(of: menu, matching: find.byType(ListTile)),
+            )
+            .toList();
+        expect(tiles.map((tile) => tile.key), [
+          for (final name in [
+            'chats',
+            'activity',
+            'connections',
+            'settings',
+            'administration',
+            'health',
+            'analytics',
+          ])
+            ValueKey('nav-$name'),
+        ]);
+        expect(find.text('Hermes instances'), findsOneWidget);
+        expect(
+          find.descendant(of: menu, matching: find.byType(Divider)),
+          findsNWidgets(2),
+        );
+        await snapshot(tester, 'drawer-${brightness.name}-$scale');
+        final analytics = find.byKey(const ValueKey('nav-analytics'));
+        await tester.ensureVisible(analytics);
+        await tester.pumpAndSettle();
+        if (scale == 2) {
+          await snapshot(tester, 'drawer-bottom-${brightness.name}');
+        }
+        await tester.tap(analytics);
+        await tester.pumpAndSettle();
+        expect(find.byType(HermesAnalyticsContent), findsOneWidget);
+        expect(find.text('Hermes analytics'), findsOneWidget);
+        expect(find.byTooltip('Choose profile'), findsOneWidget);
+        expect(find.byTooltip('Refresh profile status'), findsNothing);
+        expect(fixture.calls.length, callsBefore);
+        await snapshot(tester, 'analytics-${brightness.name}-$scale');
+        await navigate(tester, AppDestination.health);
+        expect(find.text('Usage'), findsNothing);
+        await navigate(tester, AppDestination.chats);
+        expect(controller.current!.chat, same(chat));
+        expect(chat.draft, 'Keep my analytics draft');
+        expect(tester.takeException(), isNull);
+      });
+    }
   }
 
   testWidgets('administration header refresh reaches its current content', (
@@ -142,6 +283,7 @@ void main() {
     AppDestination.settings,
     AppDestination.administration,
     AppDestination.health,
+    AppDestination.analytics,
   ]) {
     testWidgets('${destination.label} Back opens the menu, then exits', (
       tester,
@@ -243,7 +385,15 @@ void main() {
       await tester.pumpAndSettle();
       await navigate(tester, AppDestination.chats);
       expect(find.text('Keep this unsent'), findsOneWidget);
-      expect(fixture.calls.length, callsBefore);
+      expect(fixture.calls.skip(callsBefore).map((call) => call.$2), [
+        'setup.runtime_check',
+      ]);
+      final afterHealth = fixture.calls.length;
+      await navigate(tester, AppDestination.health);
+      await tester.pumpAndSettle();
+      await navigate(tester, AppDestination.chats);
+      expect(find.text('Keep this unsent'), findsOneWidget);
+      expect(fixture.calls.length, afterHealth);
       expect(tester.takeException(), isNull);
     },
   );
@@ -402,6 +552,7 @@ void main() {
       AppDestination.activity,
       AppDestination.administration,
       AppDestination.health,
+      AppDestination.analytics,
     ]) {
       expect(
         tester

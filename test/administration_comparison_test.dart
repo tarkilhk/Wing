@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wing/core/screens/administration/admin_health_page.dart';
+import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/screens/administration/admin_profile_overview.dart';
 import 'package:wing/core/screens/administration/admin_providers_page.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -26,7 +26,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: wingTheme(Brightness.dark),
-        home: AdminUsagePage(profile: fixture.server.profile('personal')),
+        home: AnalyticsPage(profile: fixture.server.profile('personal')),
       ),
     );
     await tester.pumpAndSettle();
@@ -43,7 +43,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: wingTheme(Brightness.light),
-          home: AdminUsagePage(profile: fixture.server.profile('personal')),
+          home: AnalyticsPage(profile: fixture.server.profile('personal')),
         ),
       );
       await tester.pumpAndSettle();

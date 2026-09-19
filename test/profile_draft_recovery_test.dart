@@ -141,6 +141,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     final row = find.byKey(const ValueKey('saved-draft-orphan-draft'));
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
     await tester.tap(
       row,
       kind: PointerDeviceKind.mouse,
@@ -249,6 +251,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     final row = find.byKey(const ValueKey('saved-draft-orphan-draft'));
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
     await tester.tap(
       find.descendant(of: row, matching: find.byTooltip('Draft actions')),
     );

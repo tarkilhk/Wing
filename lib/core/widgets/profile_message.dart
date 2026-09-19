@@ -192,60 +192,70 @@ class ProfileMessage extends StatelessWidget {
             : CrossAxisAlignment.start,
         children: [
           if (!user)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Row(
-                children: [
-                  if (role == 'assistant')
-                    const PlayfulPortrait(size: 24)
-                  else
-                    Container(
-                      width: 24,
-                      height: 24,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer,
-                        borderRadius: WingRadius.card,
-                      ),
-                      child: Text(
-                        'S',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: theme.colorScheme.onPrimaryContainer,
+            ConstrainedBox(
+              // Reserve the completed message's action height while streaming
+              // so adding Copy/Read aloud does not shift the answer text.
+              constraints: const BoxConstraints(minHeight: 50),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Row(
+                  children: [
+                    if (role == 'assistant')
+                      const PlayfulPortrait(size: 24)
+                    else
+                      Container(
+                        width: 24,
+                        height: 24,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primaryContainer,
+                          borderRadius: WingRadius.card,
+                        ),
+                        child: Text(
+                          'S',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: theme.colorScheme.onPrimaryContainer,
+                          ),
                         ),
                       ),
-                    ),
-                  const SizedBox(width: 8),
-                  Text(
-                    role == 'assistant' ? 'Hermes' : 'System',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      letterSpacing: 0.6,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: timestamp == null
-                          ? null
-                          : FittedBox(fit: BoxFit.scaleDown, child: timestamp),
-                    ),
-                  ),
-                  if (!streaming && role == 'assistant' && onReadAloud != null)
-                    IconButton(
-                      tooltip: readingAloud
-                          ? 'Stop reading aloud'
-                          : 'Read aloud',
-                      onPressed: onReadAloud,
-                      icon: Icon(
-                        readingAloud ? Icons.stop : Icons.volume_up_outlined,
-                        size: 18,
+                    const SizedBox(width: 8),
+                    Text(
+                      role == 'assistant' ? 'Hermes' : 'System',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        letterSpacing: 0.6,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                  if (!streaming) _copy(context, content),
-                ],
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: timestamp == null
+                            ? null
+                            : FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: timestamp,
+                              ),
+                      ),
+                    ),
+                    if (!streaming &&
+                        role == 'assistant' &&
+                        onReadAloud != null)
+                      IconButton(
+                        tooltip: readingAloud
+                            ? 'Stop reading aloud'
+                            : 'Read aloud',
+                        onPressed: onReadAloud,
+                        icon: Icon(
+                          readingAloud ? Icons.stop : Icons.volume_up_outlined,
+                          size: 18,
+                        ),
+                      ),
+                    if (!streaming) _copy(context, content),
+                  ],
+                ),
               ),
             ),
           if (content.isNotEmpty)

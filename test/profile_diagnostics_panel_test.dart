@@ -244,7 +244,11 @@ void main() {
       addTearDown(controller.dispose);
       await tester.pumpWidget(_app(workspace, controller: controller));
       host.onCall = (_, _) async => throw TimeoutException('secret');
-      await controller.check();
+      final checking = controller.check();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 2));
+      await checking;
       await tester.pumpAndSettle();
       expect(find.text('Check incomplete'), findsOneWidget);
       expect(find.textContaining('Last attempt'), findsOneWidget);
@@ -609,6 +613,11 @@ void main() {
           });
           if (state != 'initial' && !state.startsWith('model-')) {
             final check = controller.check();
+            if (state == 'offline') {
+              await tester.pump();
+              await tester.pump(const Duration(seconds: 1));
+              await tester.pump(const Duration(seconds: 2));
+            }
             if (state != 'checking') await check;
           }
           await tester.pumpWidget(
@@ -634,6 +643,17 @@ void main() {
           );
           await tester.pump();
           final name = '$state-${brightness.name}-$scale';
+          final row = find.byType(ProfileModelAccessRow);
+          final icon = tester.widget<Icon>(
+            find.descendant(of: row, matching: find.byType(Icon)).first,
+          );
+          final tokens = WingTokens.of(tester.element(row));
+          expect(icon.color, switch (state) {
+            'ready' => tokens.success,
+            'different' => tokens.warning,
+            'missing' || 'failed' => tokens.danger,
+            _ => Theme.of(tester.element(row)).colorScheme.onSurfaceVariant,
+          });
           await snapshot(tester, name);
           expect(tester.takeException(), isNull);
           await tester.ensureVisible(

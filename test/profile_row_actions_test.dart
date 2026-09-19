@@ -1,3 +1,4 @@
+import 'support/chat_browser_interactions.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,10 +35,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await filterChatsToProfile(tester, 'personal');
   }
 
   Future<void> menu(WidgetTester tester, String id) async {
-    final row = find.byKey(ValueKey('chat-$id'));
+    final row = find.byKey(ValueKey('chat-personal-$id'));
     await tester.scrollUntilVisible(
       row,
       240,
@@ -684,7 +686,7 @@ void main() {
       controller.current!.projects.firstWhere((p) => p['id'] == 'p2'),
     );
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('chat-newest')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-personal-newest')), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -930,16 +932,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(host.closes, hasLength(1));
     expect(host.deletes, hasLength(1));
-    expect(find.byKey(const ValueKey('chat-newest')), findsNothing);
+    expect(find.byKey(const ValueKey('chat-personal-newest')), findsNothing);
     expect(find.textContaining('Close it before deleting'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
   testWidgets('project menu opens a new chat in that project', (tester) async {
     await show(tester);
+    await revealChatProject(tester, 'personal', 'p2');
     await tester.tap(
       find.descendant(
-        of: find.byKey(const ValueKey('project-p2')),
+        of: find.byKey(const ValueKey('project-personal-p2')),
         matching: find.byTooltip('Project actions'),
       ),
     );

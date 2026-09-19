@@ -1,3 +1,4 @@
+import 'support/chat_browser_interactions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -102,7 +103,8 @@ void main() {
     tester,
   ) async {
     await show(tester);
-    final row = find.byKey(const ValueKey('project-p2'));
+    await revealChatProject(tester, 'personal', 'p2');
+    final row = find.byKey(const ValueKey('project-personal-p2'));
     await tester.tap(
       find.descendant(of: row, matching: find.byTooltip('Project actions')),
     );
@@ -152,33 +154,23 @@ void main() {
     },
   );
 
-  testWidgets(
-    'profile chips have a compact face and retain 48 dp tap targets',
-    (tester) async {
-      await show(tester);
-      final chip = find.byKey(const ValueKey('profile-personal'));
-      final face = find.descendant(of: chip, matching: find.byType(Material));
-      expect(tester.getSize(face).height, 36);
-      expect(tester.getSize(chip).height, 48);
-      expect(
-        tester.getSize(find.byKey(const ValueKey('profile-selector'))).height,
-        48,
-      );
-      // The transparent padding remains tappable, outside the compact face.
-      final work = find.byKey(const ValueKey('profile-work'));
-      await tester.tapAt(tester.getTopLeft(work) + const Offset(12, 2));
-      await tester.pumpAndSettle();
-      expect(controller.current!.scope.profileName, 'work');
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('profile filter changes visibility without changing chat owner', (
+    tester,
+  ) async {
+    await show(tester);
+    await filterChatsToProfile(tester, 'work');
+    expect(controller.current!.scope.profileName, 'personal');
+    expect(find.text('Profile 1'), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-selector')), findsNothing);
+  });
 
   testWidgets('large-text workspace and project actions fit a narrow screen', (
     tester,
   ) async {
     await show(tester, scale: 2);
     expect(tester.takeException(), isNull);
-    final row = find.byKey(const ValueKey('project-p2'));
+    await revealChatProject(tester, 'personal', 'p2');
+    final row = find.byKey(const ValueKey('project-personal-p2'));
     final action = find.descendant(
       of: row,
       matching: find.byTooltip('Project actions'),
@@ -196,38 +188,26 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('five projects are compact full-width rows with usable actions', (
+  testWidgets('project group has usable actions and collapses its children', (
     tester,
   ) async {
     await show(tester);
-    final overview = find.byKey(const ValueKey('project-overview'));
-    expect(tester.getSize(overview).height, 240);
-    final ids = controller.current!.projects
-        .take(5)
-        .map((p) => p['id'])
-        .toList();
-    double? previousBottom;
-    for (final id in ids) {
-      final row = find.byKey(ValueKey('project-$id'));
-      final bounds = tester.getRect(row);
-      expect(bounds.height, 48);
-      expect(bounds.width, 328);
-      if (previousBottom != null) expect(bounds.top, previousBottom);
-      previousBottom = bounds.bottom;
-      final action = find.descendant(
-        of: row,
-        matching: find.byTooltip('Project actions'),
-      );
-      expect(tester.getSize(action).height, greaterThanOrEqualTo(48));
-      final material = tester.widget<Material>(
-        find.ancestor(of: row, matching: find.byType(Material)).first,
-      );
-      expect(material.color, Colors.transparent);
-    }
-    await tester.tap(find.byKey(ValueKey('project-${ids.first}')));
+    await revealChatProject(tester, 'personal', 'p2');
+    final row = find.byKey(const ValueKey('project-personal-p2'));
+    final action = find.descendant(
+      of: row,
+      matching: find.byTooltip('Project actions'),
+    );
+    expect(tester.getSize(action).height, greaterThanOrEqualTo(48));
+    await tester.tap(
+      find.byKey(const ValueKey('chat-group-project/personal/p2')),
+    );
     await tester.pumpAndSettle();
-    expect(controller.current!.selectedProject!['id'], ids.first);
-    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(const ValueKey('chat-personal-project-only')),
+      findsNothing,
+    );
+    expect(controller.current!.selectedProject, isNull);
   });
 
   test(

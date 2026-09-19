@@ -219,6 +219,104 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     },
   );
 
+  testWidgets('streaming updates do not cancel an active reader drag', (
+    tester,
+  ) async {
+    tailHeight = 100;
+    chat.streaming = 'Answer';
+    await show(tester);
+    final gesture = await tester.startGesture(tester.getCenter(list));
+    await gesture.moveBy(const Offset(0, 120));
+    await tester.pump();
+    final anchor = tester.widget(visibleRow(tester)).key!;
+    final before = tester.getTopLeft(find.byKey(anchor)).dy;
+    tailHeight += 40;
+    chat.streaming += ' more';
+    controller.clearSearch();
+    await tester.pump();
+    await tester.pump();
+    expect(tester.getTopLeft(find.byKey(anchor)).dy, closeTo(before, 1));
+    await gesture.moveBy(const Offset(0, 80));
+    await tester.pump();
+    expect(tester.getTopLeft(find.byKey(anchor)).dy, closeTo(before + 80, 1));
+    await gesture.up();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('streaming preserves fling momentum', (tester) async {
+    tailHeight = 100;
+    chat.streaming = 'Answer';
+    await show(tester);
+    await tester.fling(list, const Offset(0, 150), 800);
+    await tester.pump(const Duration(milliseconds: 16));
+    final scroll = tester.widget<ListView>(list).controller!;
+    expect(scroll.position.isScrollingNotifier.value, isTrue);
+    tailHeight += 40;
+    chat.streaming += ' more';
+    controller.clearSearch();
+    await tester.pump();
+    expect(scroll.position.isScrollingNotifier.value, isTrue);
+    final before = scroll.offset;
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(scroll.offset, greaterThan(before));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a small scroll away from latest opts out of streaming follow', (
+    tester,
+  ) async {
+    tailHeight = 100;
+    chat.streaming = 'Answer';
+    await show(tester);
+    final scroll = tester.widget<ListView>(list).controller!;
+    scroll.jumpTo(10);
+    await tester.pumpAndSettle();
+    final anchor = tester.widget(visibleRow(tester)).key!;
+    final before = tester.getTopLeft(find.byKey(anchor)).dy;
+    tailHeight += 40;
+    chat.streaming += ' more';
+    controller.clearSearch();
+    await tester.pump();
+    expect(tester.getTopLeft(find.byKey(anchor)).dy, closeTo(before, 1));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+    'reading inside a long streaming answer stays anchored on every frame',
+    (tester) async {
+      chat.messages = [row(1)];
+      chat.nextHistoryOffset = null;
+      chat.streaming = 'Answer';
+      extraTail = [
+        Column(
+          children: List.generate(
+            100,
+            (i) => SizedBox(height: 40, child: Text('Answer line $i')),
+          ),
+        ),
+      ];
+      await show(tester);
+      await tester.drag(list, const Offset(0, 300));
+      await tester.pumpAndSettle();
+      final anchor = find.text('Answer line 80');
+      final before = tester.getTopLeft(anchor).dy;
+      extraTail = [
+        Column(
+          children: List.generate(
+            105,
+            (i) => SizedBox(height: 40, child: Text('Answer line $i')),
+          ),
+        ),
+      ];
+      chat.streaming += ' more';
+      controller.clearSearch();
+      await tester.pump();
+      expect(tester.getTopLeft(anchor).dy, closeTo(before, 1));
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(anchor).dy, closeTo(before, 1));
+    },
+  );
+
   testWidgets(
     'new durable messages keep reading position, and reduced-motion Latest clears the badge',
     (tester) async {

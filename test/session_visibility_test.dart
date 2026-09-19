@@ -256,7 +256,7 @@ void main() {
   );
 
   testWidgets(
-    'opened tool runs stay out of Chats and project rows use the same filter',
+    'automated visibility applies before cross-profile search and grouping',
     (tester) async {
       await controller.setSessionVisibility(SessionVisibility.all);
       while (controller.current!.nextSessionOffset != null) {
@@ -273,41 +273,37 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byType(SegmentedButton<SessionVisibility>), findsNothing);
-      expect(find.text('Include automated chats'), findsNothing);
-      expect(find.byKey(const ValueKey('chat-tool')), findsNothing);
-      expect(find.byKey(const ValueKey('chat-chat')), findsOneWidget);
-      await controller.selectProject(controller.current!.projects.single);
-      controller.current!.projectSessions = [
-        {'id': 'project-tool', 'title': 'Integration run', 'source': 'tool'},
-        {
-          'id': 'project-chat',
-          'title': 'Project conversation',
-          'source': 'desktop',
-        },
-      ];
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('chat-project-tool')), findsNothing);
-      expect(find.byKey(const ValueKey('chat-project-chat')), findsOneWidget);
-      expect(find.byType(SegmentedButton<SessionVisibility>), findsNothing);
-      expect(find.text('Include automated chats'), findsNothing);
-      await tester.tap(find.byTooltip('Workspace options'));
+      await tester.enterText(
+        find.byKey(const ValueKey('workspace-search')),
+        'Integration run',
+      );
+      await tester.pumpAndSettle(const Duration(milliseconds: 400));
+      expect(
+        find.byWidgetPredicate((w) => w is Text && w.data == 'Integration run'),
+        findsNothing,
+      );
+      await tester.tap(find.byTooltip('Chat list options'));
       await tester.pumpAndSettle();
       expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
       await tester.tap(
-        find.byKey(const ValueKey('workspace-option-include-automated')),
+        find.byKey(const ValueKey('chat-menu-include-automated')),
       );
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('chat-project-tool')), findsOneWidget);
-      expect(find.byKey(const ValueKey('chat-project-chat')), findsOneWidget);
-      await tester.tap(find.byTooltip('Workspace options'));
+      expect(
+        find.byWidgetPredicate((w) => w is Text && w.data == 'Integration run'),
+        findsWidgets,
+      );
+      await tester.tap(find.byTooltip('Chat list options'));
       await tester.pumpAndSettle();
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
       await tester.tap(
-        find.byKey(const ValueKey('workspace-option-include-automated')),
+        find.byKey(const ValueKey('chat-menu-include-automated')),
       );
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('chat-project-tool')), findsNothing);
-      expect(find.byKey(const ValueKey('chat-project-chat')), findsOneWidget);
+      expect(
+        find.byWidgetPredicate((w) => w is Text && w.data == 'Integration run'),
+        findsNothing,
+      );
       expect(controller.sessionVisibility, SessionVisibility.chats);
       expect(host.calls.where((c) => c.$2 == 'session.interrupt'), isEmpty);
     },

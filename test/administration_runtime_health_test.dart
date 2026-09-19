@@ -46,31 +46,44 @@ void main() {
           },
           _ => throw StateError('Unexpected $method $path'),
         };
-        await health.refreshRuntimeIdentity();
         await tester.pumpWidget(
           MaterialApp(
             theme: wingTheme(Brightness.dark),
             home: Scaffold(body: AdminRuntimeHealth(health: health)),
           ),
         );
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
         final row = find.widgetWithText(ListTile, title);
         await tester.tap(find.descendant(of: row, matching: find.text('Run')));
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
         await tester.tap(
           find.descendant(
             of: find.byType(AlertDialog),
             matching: find.text('Run'),
           ),
         );
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
         expect(find.byType(AdminActionPage), findsNothing);
         expect(
           find.descendant(of: row, matching: find.textContaining('Running')),
           findsOneWidget,
         );
+        await tester.tap(find.text(title));
+        await tester.pumpAndSettle();
+        final runAgain = find.byWidgetPredicate(
+          (w) => w is IconButton && w.tooltip == 'Run $title again',
+        );
+        expect(tester.widget<IconButton>(runAgain).onPressed, isNull);
         running = false;
         await tester.pump(const Duration(seconds: 3));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pumpAndSettle();
+        expect(tester.widget<IconButton>(runAgain).onPressed, isNotNull);
+        await tester.pageBack();
         await tester.pumpAndSettle();
         expect(find.byType(AdminActionPage), findsNothing);
         expect(
@@ -86,9 +99,23 @@ void main() {
         );
         expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(1));
         await tester.tap(find.text(title));
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
         expect(find.byType(AdminActionPage), findsOneWidget);
         expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(1));
+        await tester.pumpAndSettle();
+        await tester.tap(runAgain);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text('Run'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(2));
+        expect(find.byType(AdminActionPage), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },
@@ -129,13 +156,13 @@ void main() {
             ),
           ),
         );
-        await health.refreshRuntimeIdentity();
         await render();
         await tester.pumpAndSettle();
         expect(fixture.requests.where((r) => r.$1 == 'POST'), isEmpty);
         expect(find.text('Not run'), findsNWidgets(2));
         await tester.tap(find.text('Doctor'));
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
         await tester.tap(
           find.descendant(
             of: find.byType(AlertDialog),
@@ -153,20 +180,25 @@ void main() {
         await tester.pageBack();
         await tester.pumpAndSettle();
         expect(find.textContaining(outcome), findsOneWidget);
-        await health.refreshRuntimeIdentity();
         await render();
         await tester.pumpAndSettle();
         expect(find.textContaining(outcome), findsOneWidget);
         await tester.tap(find.text('Doctor'));
         await tester.pumpAndSettle();
         expect(
-          find.text('Run Doctor again'),
-          exitCode == null ? findsNothing : findsOneWidget,
+          tester
+              .widget<IconButton>(
+                find.byWidgetPredicate(
+                  (w) => w is IconButton && w.tooltip == 'Run Doctor again',
+                ),
+              )
+              .onPressed,
+          exitCode == null ? isNull : isNotNull,
         );
         expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(1));
         expect(
           fixture.requests.where((r) => r.$2 == 'actions/doctor/status'),
-          hasLength(3),
+          hasLength(exitCode == null ? 3 : 1),
         );
         expect(
           fixture.requests.every((r) => !r.$3.containsKey('profile')),
@@ -183,7 +215,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(
           find.textContaining('Result refresh unavailable'),
-          findsOneWidget,
+          exitCode == null ? findsOneWidget : findsNothing,
         );
         expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(1));
         expect(tester.takeException(), isNull);

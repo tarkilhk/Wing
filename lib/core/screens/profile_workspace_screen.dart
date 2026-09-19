@@ -55,6 +55,8 @@ import 'profile_transcript.dart';
 import 'chat_outputs_screen.dart';
 import '../widgets/app_drawer.dart';
 import 'app_settings_content.dart';
+import 'analytics_content.dart';
+import 'administration/admin_widgets.dart' show adminToolbarHeight;
 import 'workspace_overview_content.dart';
 import '../controllers/voice_input_controller.dart';
 import '../controllers/voice_output_controller.dart';
@@ -75,6 +77,8 @@ class ProfileWorkspaceScreen extends StatefulWidget {
   final ValueListenable<BackgroundMonitoringState>? backgroundMonitoringState;
   final Future<void> Function()? openMonitoringBatterySettings;
   final VoidCallback? onConnections;
+  final Widget Function(BuildContext, VoidCallback onRestored)?
+  configurationActions;
   final List<SavedConnection> Function()? savedConnections;
   final Future<void> Function(SavedConnection, AppDestination)?
   onSelectConnection;
@@ -91,6 +95,7 @@ class ProfileWorkspaceScreen extends StatefulWidget {
     this.backgroundMonitoringState,
     this.openMonitoringBatterySettings,
     this.onConnections,
+    this.configurationActions,
     this.savedConnections,
     this.onSelectConnection,
     this.onPreferencesChanged,
@@ -111,6 +116,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   final _chatSearchFocus = FocusNode();
   final _queuedEditErrors = <ProfileSessionKey, String>{};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  int _settingsRevision = 0;
   ProfileSessionKey? _composerKey;
   ProfileSessionKey? _loadingIntelligence;
   ChatFindResult? _findResult;
@@ -2267,25 +2273,32 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       appBar: _destination == AppDestination.administration
           ? null
           : AppBar(
-              title: Text(_destination.label),
+              toolbarHeight: adminToolbarHeight(
+                context,
+                _destination.label,
+                actions:
+                    _destination == AppDestination.settings &&
+                        widget.configurationActions != null
+                    ? 2
+                    : _destination == AppDestination.activity
+                    ? 1
+                    : 0,
+              ),
+              title: Text(_destination.label, maxLines: 6, softWrap: true),
               actions: [
-                if (_destination != AppDestination.settings &&
-                    _destination != AppDestination.health)
+                if (_destination == AppDestination.settings &&
+                    widget.configurationActions != null)
+                  widget.configurationActions!(context, () {
+                    if (mounted) setState(() => _settingsRevision++);
+                  }),
+                if (_destination == AppDestination.activity)
                   IconButton(
-                    tooltip: _destination == AppDestination.activity
-                        ? 'Refresh activity'
-                        : 'Refresh administration',
+                    tooltip: 'Refresh activity',
                     icon: const Icon(Icons.refresh),
                     onPressed:
-                        controller.switching ||
-                            (_destination == AppDestination.activity &&
-                                controller.activityLoading)
+                        controller.switching || controller.activityLoading
                         ? null
-                        : () => _run(
-                            _destination == AppDestination.activity
-                                ? controller.refreshActivity
-                                : controller.refresh,
-                          ),
+                        : () => _run(controller.refreshActivity),
                   ),
               ],
             ),
@@ -2296,7 +2309,8 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               _destination != AppDestination.administration)
             const LinearProgressIndicator(),
           if (_destination == AppDestination.activity ||
-              _destination == AppDestination.health)
+              _destination == AppDestination.health ||
+              _destination == AppDestination.analytics)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Align(
@@ -2304,7 +2318,12 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 child: ServerConnectionLabel(
                   label: controller.connection.label,
                   icon: controller.connection.icon,
-                  suffix: _destination == AppDestination.health
+                  pickerMode: _destination == AppDestination.analytics
+                      ? WorkspacePickerMode.profiles
+                      : null,
+                  suffix:
+                      _destination == AppDestination.health ||
+                          _destination == AppDestination.analytics
                       ? controller.current?.scope.profileName
                       : null,
                   status: controller.connectionStatus,
@@ -2329,7 +2348,12 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             ),
           Expanded(
             child: switch (_destination) {
+              AppDestination.analytics => HermesAnalyticsContent(
+                key: ValueKey(controller.connectionIdentity),
+                controller: controller,
+              ),
               AppDestination.settings => AppSettingsContent(
+                key: ValueKey(_settingsRevision),
                 preferences: controller.preferences,
                 hermesVoiceProfileLabel: controller.current?.scope.profileName,
                 openHermesVoiceSettings: _hermesSpeechSettingsLink(context),

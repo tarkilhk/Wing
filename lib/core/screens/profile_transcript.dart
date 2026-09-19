@@ -55,6 +55,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   );
   final _viewport = GlobalKey();
   final _focusedRow = GlobalKey();
+  final _tail = GlobalKey();
   final _rows = <Object, GlobalKey>{};
   int _layoutGeneration = 0;
   int _gestureGeneration = 0;
@@ -132,7 +133,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     if (widget.nearbyMessages != null) return;
     if (!_scroll.hasClients) return;
     final atBottom =
-        !_scroll.hasExpansionAnchor && (_scroll.offset <= 24 || _jumping);
+        !_scroll.hasExpansionAnchor &&
+        (_jumping ||
+            (_scroll.offset <= 0.5 &&
+                !_scroll.position.isScrollingNotifier.value));
     final newest = widget.chat.messages.lastOrNull?['id'];
     final segmentChanged = _segment != widget.chat.historySessionId;
     if (!atBottom &&
@@ -151,7 +155,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     if (!atBottom && viewport is RenderBox) {
       final start = viewport.localToGlobal(Offset.zero).dy;
       final end = start + viewport.size.height;
-      for (final key in _rows.values) {
+      for (final key in [..._rows.values, _tail]) {
         final box = key.currentContext?.findRenderObject();
         if (box is! RenderBox || !box.hasSize) continue;
         final y = box.localToGlobal(Offset.zero).dy;
@@ -163,6 +167,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         }
       }
     }
+    _scroll.preserveReaderAnchor(
+      anchor?.currentContext?.findRenderObject() as TranscriptAnchorBox?,
+    );
     final generation = ++_layoutGeneration;
     final gesture = _gestureGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -171,22 +178,6 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           generation != _layoutGeneration ||
           gesture != _gestureGeneration) {
         return;
-      }
-      if (atBottom) {
-        _scroll.jumpTo(0);
-      } else {
-        final box = anchor?.currentContext?.findRenderObject();
-        if (box is RenderBox && box.hasSize && top != null) {
-          final delta = box.localToGlobal(Offset.zero).dy - top;
-          if (delta.abs() > 0.5) {
-            _scroll.restoreReaderOffset(
-              (_scroll.offset - delta).clamp(
-                0.0,
-                _scroll.position.maxScrollExtent,
-              ),
-            );
-          }
-        }
       }
       widget.chat.historyScrollOffset = _scroll.offset;
       _updateJump();
@@ -212,7 +203,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     // or hiding the latest review's standalone detail button.
     final joinCurrentActivity =
         widget.beforeActivity.isEmpty && rows.isNotEmpty && rows.first.isTool;
-    final tail = [
+    final tailContent = [
       ...widget.beforeActivity,
       if ((widget.currentActivity.isNotEmpty ||
               widget.activityTabs.isNotEmpty ||
@@ -226,7 +217,17 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           children: widget.currentActivity,
         ),
       ...widget.tail,
-    ].reversed.toList();
+    ];
+    final tail = [
+      if (tailContent.isNotEmpty)
+        TranscriptScrollAnchor(
+          key: _tail,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: tailContent,
+          ),
+        ),
+    ];
     final showOpening =
         chat.opening && chat.messages.isEmpty && chat.streaming.isEmpty;
     final showWelcome =
@@ -261,6 +262,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       usedKeys.add(key);
     }
     final indices = <Key, int>{
+      if (tail.isNotEmpty) _tail: 0,
       for (var i = 0; i < keys.length; i++) keys[i]: tail.length + i,
       const ValueKey('history-edge'): tail.length + rows.length,
     };
@@ -318,7 +320,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                 if (rowIndex < rows.length) {
                   final section = rows[rowIndex];
                   final row = section.messages.last;
-                  return KeyedSubtree(
+                  return TranscriptScrollAnchor(
                     key: keys[rowIndex],
                     child: section.isActivity
                         ? ProfileToolActivitySection(

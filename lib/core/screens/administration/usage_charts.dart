@@ -118,7 +118,7 @@ class UsageCalendar extends StatefulWidget {
 }
 
 class _UsageCalendarState extends State<UsageCalendar> {
-  int _weeksBack = 0;
+  final _scroll = ScrollController();
   Color? _accent, _canvas;
   late Color _outline;
 
@@ -127,13 +127,21 @@ class _UsageCalendarState extends State<UsageCalendar> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.daily.days.first.date != widget.daily.days.first.date ||
         oldWidget.daily.days.last.date != widget.daily.days.last.date) {
-      _weeksBack = 0;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scroll.hasClients) _scroll.jumpTo(0);
+      });
       Tooltip.dismissAllToolTips();
     }
     if (oldWidget.rangeStart != widget.rangeStart ||
         oldWidget.rangeEnd != widget.rangeEnd) {
       Tooltip.dismissAllToolTips();
     }
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
   }
 
   @override
@@ -161,13 +169,6 @@ class _UsageCalendarState extends State<UsageCalendar> {
       weeks,
       math.max(1, ((width - inset * 2 + gap) / 15).floor()),
     );
-    final back = math.min(_weeksBack, weeks - columns);
-    final startWeek = weeks - back - columns;
-    void page(int next) {
-      Tooltip.dismissAllToolTips();
-      setState(() => _weeksBack = next);
-    }
-
     final pitch = (width - inset * 2 + gap) / columns;
     final square = pitch - gap;
     final maximum = days.fold<int>(
@@ -249,99 +250,110 @@ class _UsageCalendarState extends State<UsageCalendar> {
     }
 
     Widget band() {
-      final first = math.max(0, startWeek * 7 - offset);
-      final end = math.min(days.length, (startWeek + columns) * 7 - offset);
+      final contentWidth = weeks * pitch - gap + inset * 2;
       final selectedCells = <int>{};
-      for (var i = first; i < end; i++) {
-        if (inRange(days[i])) selectedCells.add(i + offset - startWeek * 7);
+      for (var i = 0; i < days.length; i++) {
+        if (inRange(days[i])) selectedCells.add(i + offset);
       }
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${locale.formatShortDate(days[first].date)} – ${locale.formatShortDate(days[end - 1].date)}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-              if (weeks > columns) ...[
-                IconButton(
-                  tooltip: 'Earlier dates',
-                  onPressed: startWeek > 0
-                      ? () => page(math.min(weeks - columns, back + columns))
-                      : null,
-                  icon: const Icon(Icons.chevron_left),
-                ),
-                IconButton(
-                  tooltip: 'Later dates',
-                  onPressed: back > 0
-                      ? () => page(math.max(0, back - columns))
-                      : null,
-                  icon: const Icon(Icons.chevron_right),
-                ),
-              ],
-            ],
+          AnimatedBuilder(
+            animation: _scroll,
+            builder: (context, _) {
+              // Reverse scrolling anchors the latest week at offset zero. Only
+              // rebuild this label while dragging; the year and its outline move
+              // together in the scroll view without rebuilding every day.
+              final pixels = _scroll.hasClients ? _scroll.offset : 0.0;
+              final left = (contentWidth - width - pixels).clamp(
+                0.0,
+                math.max(0.0, contentWidth - width),
+              );
+              final firstWeek = ((left - inset + gap) / pitch + 1e-9)
+                  .floor()
+                  .clamp(0, weeks - 1);
+              final endWeek = ((left + width - inset) / pitch - 1e-9)
+                  .ceil()
+                  .clamp(firstWeek + 1, weeks);
+              final first = math.max(0, firstWeek * 7 - offset);
+              final end = math.min(days.length, endWeek * 7 - offset);
+              return Text(
+                '${locale.formatShortDate(days[first].date)} – ${locale.formatShortDate(days[end - 1].date)}',
+                key: const ValueKey('usage-visible-dates'),
+                style: Theme.of(context).textTheme.bodySmall,
+              );
+            },
           ),
           const SizedBox(height: 8),
           SizedBox(
             key: const ValueKey('usage-year-band'),
             height: 7 * pitch - gap + inset * 2,
-            child: Stack(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(inset),
-                  child: Column(
+            child: NotificationListener<ScrollStartNotification>(
+              onNotification: (_) {
+                Tooltip.dismissAllToolTips();
+                return false;
+              },
+              child: SingleChildScrollView(
+                key: const ValueKey('usage-calendar-scroll'),
+                controller: _scroll,
+                scrollDirection: Axis.horizontal,
+                reverse: true,
+                child: SizedBox(
+                  width: contentWidth,
+                  child: Stack(
                     children: [
-                      for (var row = 0; row < 7; row++)
-                        SizedBox(
-                          height: row == 6 ? square : pitch,
-                          child: Row(
-                            children: [
-                              for (var col = 0; col < columns; col++)
-                                SizedBox(
-                                  width: col == columns - 1 ? square : pitch,
-                                  child:
-                                      (startWeek + col) * 7 + row - offset >=
-                                              0 &&
-                                          (startWeek + col) * 7 + row - offset <
-                                              days.length
-                                      ? cell(
-                                          days[(startWeek + col) * 7 +
-                                              row -
-                                              offset],
-                                        )
-                                      : null,
+                      Padding(
+                        padding: const EdgeInsets.all(inset),
+                        child: Column(
+                          children: [
+                            for (var row = 0; row < 7; row++)
+                              SizedBox(
+                                height: row == 6 ? square : pitch,
+                                child: Row(
+                                  children: [
+                                    for (var col = 0; col < weeks; col++)
+                                      SizedBox(
+                                        width: col == weeks - 1
+                                            ? square
+                                            : pitch,
+                                        child:
+                                            col * 7 + row - offset >= 0 &&
+                                                col * 7 + row - offset <
+                                                    days.length
+                                            ? cell(days[col * 7 + row - offset])
+                                            : null,
+                                      ),
+                                  ],
                                 ),
-                            ],
+                              ),
+                          ],
+                        ),
+                      ),
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: AnimatedSwitcher(
+                            duration: _motion(context),
+                            child: CustomPaint(
+                              key: ValueKey(
+                                '${widget.rangeStart}/${widget.rangeEnd}',
+                              ),
+                              size: Size.infinite,
+                              painter: _UsageRangePainter(
+                                selectedCells,
+                                weeks,
+                                pitch,
+                                inset,
+                                _outline,
+                                _canvas!,
+                              ),
+                            ),
                           ),
                         ),
+                      ),
                     ],
                   ),
                 ),
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: AnimatedSwitcher(
-                      duration: _motion(context),
-                      child: CustomPaint(
-                        key: ValueKey(
-                          '${widget.rangeStart}/${widget.rangeEnd}',
-                        ),
-                        size: Size.infinite,
-                        painter: _UsageRangePainter(
-                          selectedCells,
-                          columns,
-                          pitch,
-                          inset,
-                          _outline,
-                          _canvas!,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ],

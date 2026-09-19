@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/administration/admin_defaults_page.dart';
-import 'package:wing/core/screens/administration/admin_health_page.dart';
+import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/screens/administration/admin_runtime_health.dart';
 import 'package:wing/core/screens/administration/admin_identity_page.dart';
 import 'package:wing/core/screens/administration/admin_memory_page.dart';
@@ -74,7 +74,6 @@ void main() {
         final fixture = AdministrationDesignFixture();
         final profile = fixture.server.profile('personal');
         final health = AdministrationHealth(fixture.server);
-        if (family == 'runtime-health') await health.refreshRuntimeIdentity();
         final narrow = mode == 'narrow';
         tester.view.physicalSize = Size(
           narrow
@@ -127,7 +126,7 @@ void main() {
             title: 'Compression',
             fields: compressionFields,
           ),
-          'usage' => AdminUsagePage(profile: profile),
+          'usage' => AnalyticsPage(profile: profile),
           _ => Scaffold(
             appBar: AppBar(title: const Text('Voice')),
             body: SingleChildScrollView(
@@ -172,7 +171,8 @@ void main() {
           await tester.ensureVisible(find.text('Doctor'));
           await tester.pumpAndSettle();
           await tester.tap(find.text('Doctor'));
-          await tester.pumpAndSettle();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
           await tester.tap(
             find.descendant(
               of: find.byType(AlertDialog),

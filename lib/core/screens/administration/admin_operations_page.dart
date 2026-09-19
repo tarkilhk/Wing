@@ -1,5 +1,6 @@
 import '../../services/administration_health.dart';
 import '../../services/doctor_diagnostic.dart';
+import '../../services/profile_workspace_controller.dart';
 import '../../services/security_audit_report.dart';
 import '../../theme/wing_theme.dart';
 import '../../widgets/studio_select.dart';
@@ -7,6 +8,7 @@ import '../../widgets/studio_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
+import '../../services/workspace_connection_failure.dart';
 import 'admin_widgets.dart';
 import 'admin_doctor_diagnosis.dart';
 import 'admin_security_diagnosis.dart';
@@ -19,6 +21,8 @@ class AdminActionPage extends StatefulWidget {
   final String scope;
   final ValueChanged<AdminDiagnosticObservation>? onObservation;
   final AdminDiagnosticObservation? initialObservation;
+  final ProfileWorkspaceController? chatController;
+  final Future<void> Function(ProfileSessionKey)? onOpenSession;
   const AdminActionPage({
     super.key,
     required this.server,
@@ -28,6 +32,8 @@ class AdminActionPage extends StatefulWidget {
     this.onObservation,
     this.initialObservation,
     this.onRunAgain,
+    this.chatController,
+    this.onOpenSession,
   });
   @override
   State<AdminActionPage> createState() => _AdminActionPageState();
@@ -39,12 +45,76 @@ class _AdminActionPageState extends State<AdminActionPage> {
   Timer? _timer;
   bool _loading = false;
   DateTime? _checkedAt;
+  int? _openingFinding;
+  ProfileChat? _preparedChat;
+  String? _preparedPrompt;
+
+  void _chatNotice(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _askHermes(int index, DoctorFinding finding) async {
+    if (_openingFinding != null) return;
+    final controller = widget.chatController;
+    final owner = controller?.current?.scope;
+    if (controller == null || widget.onOpenSession == null || owner == null) {
+      return;
+    }
+    setState(() {
+      _openingFinding = index;
+    });
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    try {
+      if (owner.connectionId != widget.server.connectionId ||
+          owner.connectionIdentity != widget.server.connectionIdentity) {
+        throw const AdministrationFailure(
+          'Connection changed. Open Doctor on the selected connection.',
+        );
+      }
+      final prompt = finding.chatPrompt(
+        (_status?['lines'] as List? ?? []).join('\n'),
+      );
+      // A navigation failure should retry opening the saved draft, not mint
+      // another chat for the same finding.
+      final chat =
+          _preparedChat?.key.workspace == owner && _preparedPrompt == prompt
+          ? _preparedChat!
+          : await controller.createDraftChat(owner: owner, text: prompt);
+      _preparedChat = chat;
+      _preparedPrompt = prompt;
+      if (!mounted || ModalRoute.of(context)?.isCurrent == false) return;
+      if (controller.switching || controller.current?.scope != owner) {
+        _chatNotice('Draft saved in ${owner.profileName}. Open it from Chats.');
+        return;
+      }
+      await widget.onOpenSession!(chat.key);
+      _preparedChat = null;
+      _preparedPrompt = null;
+    } catch (error) {
+      if (mounted) {
+        _chatNotice(
+          error is AdministrationFailure
+              ? error.message
+              : 'Could not open the chat. Check the connection and retry.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _openingFinding = null);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _status = widget.initialObservation?.status;
     _checkedAt = widget.initialObservation?.checkedAt;
-    _check();
+    if (_status == null ||
+        _status?['running'] != false ||
+        _status?['exit_code'] is! int) {
+      _check();
+    }
   }
 
   @override
@@ -73,6 +143,9 @@ class _AdminActionPageState extends State<AdminActionPage> {
     } catch (e) {
       if (mounted) {
         setState(() => _error = administrationError(e));
+        if (isTemporaryWorkspaceFailure(e)) {
+          _timer = Timer(const Duration(seconds: 15), _check);
+        }
       }
     } finally {
       if (mounted) {
@@ -92,6 +165,7 @@ class _AdminActionPageState extends State<AdminActionPage> {
   @override
   Widget build(BuildContext context) {
     final isAudit = widget.action.name == 'security-audit';
+    final isDiagnostic = isAudit || widget.action.name == 'doctor';
     final audit = isAudit && _status != null
         ? SecurityAuditReport.fromStatus(_status!)
         : null;
@@ -104,11 +178,24 @@ class _AdminActionPageState extends State<AdminActionPage> {
       title: widget.title,
       scope: widget.scope,
       actions: [
-        IconButton(
-          tooltip: 'Refresh result',
-          onPressed: _loading ? null : _check,
-          icon: const Icon(Icons.refresh),
-        ),
+        if (isDiagnostic)
+          IconButton(
+            tooltip: 'Run ${widget.title} again',
+            onPressed:
+                !_loading &&
+                    _openingFinding == null &&
+                    _status?['running'] == false &&
+                    _status?['exit_code'] is int
+                ? widget.onRunAgain
+                : null,
+            icon: const Icon(Icons.play_arrow),
+          )
+        else
+          IconButton(
+            tooltip: 'Refresh result',
+            onPressed: _loading ? null : _check,
+            icon: const Icon(Icons.refresh),
+          ),
       ],
       child: ListView(
         padding: const EdgeInsets.all(16),
@@ -151,7 +238,21 @@ class _AdminActionPageState extends State<AdminActionPage> {
             ),
           ],
           if (diagnosis != null) ...[
-            AdminDoctorDiagnosis(diagnosis: diagnosis, checkedAt: _checkedAt),
+            ListenableBuilder(
+              listenable:
+                  widget.chatController ?? const AlwaysStoppedAnimation(false),
+              builder: (context, _) => AdminDoctorDiagnosis(
+                diagnosis: diagnosis,
+                checkedAt: _checkedAt,
+                openingFinding: _openingFinding,
+                onAskHermes:
+                    widget.chatController?.current == null ||
+                        widget.chatController!.switching ||
+                        widget.onOpenSession == null
+                    ? null
+                    : (index) => _askHermes(index, diagnosis.findings[index]),
+              ),
+            ),
             const SizedBox(height: WingSpacing.lg),
           ],
           if (audit != null) ...[
@@ -182,7 +283,8 @@ class _AdminActionPageState extends State<AdminActionPage> {
               ),
             ],
           ),
-          if (widget.onRunAgain != null &&
+          if (!isDiagnostic &&
+              widget.onRunAgain != null &&
               _status?['running'] == false &&
               _status?['exit_code'] is int) ...[
             const SizedBox(height: 16),
@@ -202,51 +304,43 @@ Future<AdministrationAction?> startAdminOperation(
   BuildContext context,
   AdministrationRepository server,
   String path,
-  String title,
-  String? profileName,
-) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      scrollable: true,
-      title: Text(title),
-      content: Text.rich(
-        TextSpan(
-          text: profileName == null
-              ? 'Run this diagnostic'
-              : 'Run this diagnostic on profile ',
-          children: [
-            if (profileName != null)
-              TextSpan(
-                text: profileName,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-          ],
-        ),
+  String title, {
+  bool confirm = true,
+  bool Function()? isActive,
+}) async {
+  if (confirm) {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: Text(title),
+        content: Text('Run this diagnostic on ${server.connectionLabel}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Run'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('Run'),
-        ),
-      ],
-    ),
-  );
-  if (confirmed != true) return null;
+    );
+    if (confirmed != true || !context.mounted) return null;
+  }
   try {
-    final result = await server.write('POST', path);
+    final result = await server.startDiagnostic(
+      path,
+      isActive: isActive ?? () => context.mounted,
+    );
     return AdministrationAction.fromJson(result);
   } catch (e) {
     if (context.mounted) {
-      adminMessage(
-        context,
-        administrationError(e, writing: true),
-        isError: true,
-      );
+      final detail = e is AdministrationFailure
+          ? e.message
+          : 'Could not confirm the diagnostic started. Check the connection.';
+      adminMessage(context, '$title: $detail', isError: true);
     }
   }
   return null;
@@ -254,12 +348,7 @@ Future<AdministrationAction?> startAdminOperation(
 
 class AdminLogsPage extends StatefulWidget {
   final AdministrationRepository server;
-  final String runtimeLabel;
-  const AdminLogsPage({
-    super.key,
-    required this.server,
-    required this.runtimeLabel,
-  });
+  const AdminLogsPage({super.key, required this.server});
   @override
   State<AdminLogsPage> createState() => _AdminLogsPageState();
 }

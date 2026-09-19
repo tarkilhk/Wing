@@ -1,3 +1,4 @@
+import 'support/chat_browser_interactions.dart';
 import 'package:wing/core/widgets/studio_selection_tile.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -240,15 +241,17 @@ void main() {
               await _capture(tester, '${brightness.name}-chats-$scale');
             }
 
+            await filterChatsToProfile(tester, 'personal');
+            await revealChatProject(tester, 'personal', 'p2');
             final projectActions = find.descendant(
-              of: find.byKey(const ValueKey('project-p2')),
+              of: find.byKey(const ValueKey('project-personal-p2')),
               matching: find.byTooltip('Project actions'),
             );
             final anchor = tester.getRect(projectActions);
             expect(anchor.size, const Size(48, 48));
             expect(
               find.descendant(
-                of: find.byKey(const ValueKey('project-p2')),
+                of: find.byKey(const ValueKey('project-personal-p2')),
                 matching: find.byIcon(WingIcons.newChat),
               ),
               findsNothing,
@@ -279,7 +282,9 @@ void main() {
               find.byKey(const ValueKey('project-action-new')),
               findsNothing,
             );
-            await tester.longPress(find.byKey(const ValueKey('project-p2')));
+            await tester.longPress(
+              find.byKey(const ValueKey('project-personal-p2')),
+            );
             await tester.pumpAndSettle();
             expect(
               find.byKey(const ValueKey('project-action-rename')),
@@ -518,7 +523,7 @@ void main() {
                   const SizedBox(height: 16),
                   const TextField(
                     decoration: InputDecoration(
-                      labelText: 'Connection name',
+                      labelText: 'Instance name',
                       hintText: 'Workstation',
                     ),
                   ),

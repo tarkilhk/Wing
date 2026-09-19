@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/doctor_diagnostic.dart';
+import '../../services/profile_workspace_controller.dart';
 import '../../services/security_audit_report.dart';
 import '../../theme/wing_theme.dart';
 import '../../services/administration_health.dart';
@@ -8,8 +9,15 @@ import 'admin_widgets.dart';
 
 /// Presents connection-owned observations retained across Health visits.
 class AdminRuntimeHealth extends StatefulWidget {
-  const AdminRuntimeHealth({super.key, required this.health});
+  const AdminRuntimeHealth({
+    super.key,
+    required this.health,
+    this.chatController,
+    this.onOpenSession,
+  });
   final AdministrationHealth health;
+  final ProfileWorkspaceController? chatController;
+  final Future<void> Function(ProfileSessionKey)? onOpenSession;
   @override
   State<AdminRuntimeHealth> createState() => _AdminRuntimeHealthState();
 }
@@ -23,10 +31,24 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
   void initState() {
     super.initState();
     health.addListener(_changed);
-    if (health.runtimeCheckedAt == null && !health.runtimeLoading) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) health.refreshRuntimeIdentity();
-      });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshExpired());
+  }
+
+  void _refreshExpired() {
+    if (!mounted) return;
+    for (final (path, title) in [
+      ('ops/doctor', 'Doctor'),
+      ('ops/security-audit', 'Security audit'),
+    ]) {
+      if (health.diagnosticNeedsRefresh(path)) {
+        _run(
+          path,
+          title,
+          health.server.connectionLabel,
+          openResult: false,
+          confirm: false,
+        );
+      }
     }
   }
 
@@ -54,6 +76,7 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
     String title,
     String scope, {
     required bool openResult,
+    bool confirm = true,
   }) async {
     final controller = health;
     final generation = controller.beginDiagnostic(path, scope: scope);
@@ -65,7 +88,8 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
         controller.server,
         path,
         title,
-        controller.runtimeIdentity?['name'] as String?,
+        confirm: confirm,
+        isActive: () => !controller.isDisposed,
       );
       if (action != null) {
         controller.trackDiagnostic(path, action, generation: generation);
@@ -88,14 +112,12 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
         server: controller.server,
         action: _observations[path]!.action,
         initialObservation: _observations[path],
-        onRunAgain:
-            _observations[path]?.status['running'] == false &&
-                _observations[path]?.status['exit_code'] is int
-            ? () async {
-                Navigator.of(context).pop();
-                await _run(path, title, scope, openResult: true);
-              }
-            : null,
+        chatController: widget.chatController,
+        onOpenSession: widget.onOpenSession,
+        onRunAgain: () async {
+          Navigator.of(context).pop();
+          await _run(path, title, scope, openResult: true);
+        },
         title: title,
         scope: controller.diagnosticScope(path) ?? scope,
         onObservation: (value) =>
@@ -115,8 +137,10 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
             observation?.status['lines'] as List? ?? [],
           )
         : null;
-    final label = observation == null
-        ? (health.starting.contains(path) ? 'Starting…' : 'Not run')
+    final label = health.starting.contains(path)
+        ? 'Starting…'
+        : observation == null
+        ? 'Not run'
         : observation.readError != null
         ? 'Result refresh unavailable'
         : audit?.title ??
@@ -169,14 +193,59 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
     );
   }
 
+  Future<void> _runAll() async {
+    if (!health.canStartDiagnostic('ops/doctor') ||
+        !health.canStartDiagnostic('ops/security-audit')) {
+      return;
+    }
+    final scope = health.server.connectionLabel;
+    await Future.wait([
+      _run('ops/doctor', 'Doctor', scope, openResult: false, confirm: false),
+      _run(
+        'ops/security-audit',
+        'Security audit',
+        scope,
+        openResult: false,
+        confirm: false,
+      ),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final identity = health.runtimeIdentity;
-    final scope =
-        identity?['label'] as String? ?? 'Runtime identity not checked';
+    final scope = health.server.connectionLabel;
+    final canRunAll =
+        health.canStartDiagnostic('ops/doctor') &&
+        health.canStartDiagnostic('ops/security-audit');
+    final running =
+        health.starting.isNotEmpty ||
+        _observations.values.any((value) => value.status['running'] == true);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Server',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Run all diagnostics',
+              onPressed: canRunAll ? _runAll : null,
+              icon: running
+                  ? const SizedBox.square(
+                      dimension: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        semanticsLabel: 'Running diagnostics',
+                      ),
+                    )
+                  : const Icon(Icons.refresh),
+            ),
+          ],
+        ),
         AdminGroup(
           children: [
             _check('Doctor', 'ops/doctor', scope),
@@ -187,26 +256,11 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
               icon: Icons.subject,
               onTap: () => adminPush(
                 context,
-                (context) =>
-                    AdminLogsPage(server: health.server, runtimeLabel: scope),
+                (context) => AdminLogsPage(server: health.server),
               ),
             ),
           ],
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
-          child: Text(scope, style: Theme.of(context).textTheme.bodySmall),
-        ),
-        if (identity?['unavailable'] == true)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: health.runtimeLoading
-                  ? null
-                  : health.refreshRuntimeIdentity,
-              child: const Text('Retry runtime identity'),
-            ),
-          ),
       ],
     );
   }

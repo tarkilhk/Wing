@@ -38,8 +38,6 @@ void main() {
     WidgetTester tester, {
     Brightness brightness = Brightness.light,
     double scale = 1,
-    bool projectsOnly = false,
-    bool inProject = false,
     bool archived = false,
     bool enabled = true,
     ValueChanged<String>? onSelected,
@@ -65,10 +63,9 @@ void main() {
               actions: [
                 WorkspaceOptionsMenu(
                   enabled: enabled,
-                  projectsOnly: projectsOnly,
-                  inProject: inProject,
+                  collapsed: false,
+                  hasUnread: true,
                   archived: archived,
-                  unreadOnly: false,
                   includeAutomated: true,
                   onSelected: onSelected ?? (_) {},
                 ),
@@ -78,7 +75,7 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.byTooltip('Workspace options'));
+    await tester.tap(find.byTooltip('Chat list options'));
     await tester.pumpAndSettle();
   }
 
@@ -96,21 +93,17 @@ void main() {
           onSelected: (value) => selected = value,
         );
         expect(tester.takeException(), isNull);
-        expect(find.text('Include automated chats'), findsOneWidget);
-        final unread = find.byKey(const ValueKey('workspace-option-unread'));
+        expect(find.text('Show automated chats'), findsOneWidget);
+        final unread = find.byKey(
+          const ValueKey('chat-menu-include-automated'),
+        );
         expect(tester.getSize(unread).height, greaterThanOrEqualTo(48));
         expect(
-          tester.getSemantics(unread),
-          matchesSemantics(
-            label: 'Unread only',
-            hasEnabledState: true,
-            isEnabled: true,
-            hasToggledState: true,
-            isToggled: false,
-            isFocusable: true,
-            hasTapAction: true,
-            hasFocusAction: true,
-          ),
+          tester
+              .getSemantics(unread)
+              .getSemanticsData()
+              .hasAction(ui.SemanticsAction.tap),
+          isTrue,
         );
         if (const bool.fromEnvironment('OPTIONS_REVIEW')) {
           await tester.runAsync(() async {
@@ -130,50 +123,49 @@ void main() {
         // The switch edge activates the same single menu action as the label.
         await tester.tapAt(tester.getTopRight(unread) + const Offset(-20, 24));
         await tester.pumpAndSettle();
-        expect(selected, 'unread');
-        expect(find.text('Unread only'), findsNothing);
+        expect(selected, 'include-automated');
+        expect(find.text('Show automated chats'), findsNothing);
         semantics.dispose();
       });
     }
   }
 
-  testWidgets('all projects leaves creation to its existing floating button', (
+  testWidgets('menu only contains display and workspace actions', (
     tester,
   ) async {
-    await show(tester, projectsOnly: true);
-    expect(find.text('Refresh'), findsOneWidget);
+    await show(tester);
     for (final label in [
-      'Unread only',
-      'Include automated chats',
+      'Show…',
+      'Show automated chats',
+      'Collapse all',
+      'Mark all as read',
       'Archived chats',
       'New project',
+    ]) {
+      expect(find.text(label), findsOneWidget);
+    }
+    for (final label in [
+      'Grouping',
+      'Ordering',
+      'Filters',
+      'Show all chats',
+      'Refresh',
     ]) {
       expect(find.text(label), findsNothing);
     }
   });
-
-  testWidgets('archive does not offer its own destination or unread filter', (
-    tester,
-  ) async {
+  testWidgets('archive offers the active list', (tester) async {
     await show(tester, archived: true);
+    expect(find.text('Active chats'), findsOneWidget);
     expect(find.text('Archived chats'), findsNothing);
-    expect(find.text('Unread only'), findsNothing);
-    expect(find.text('Include automated chats'), findsOneWidget);
   });
-
-  testWidgets('project actions remain accessible by keyboard', (tester) async {
+  testWidgets('Escape dismisses without selecting', (tester) async {
     String? selected;
-    await show(
-      tester,
-      inProject: true,
-      onSelected: (value) => selected = value,
-    );
-    expect(find.text('Unread only'), findsNothing);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await show(tester, onSelected: (value) => selected = value);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(selected, 'project-actions');
+    expect(selected, isNull);
+    expect(find.text('Show automated chats'), findsNothing);
   });
 
   testWidgets('disabled workspace cannot open menu', (tester) async {

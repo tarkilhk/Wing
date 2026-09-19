@@ -26,11 +26,12 @@ class ProfileBrowserFixture {
     ).where((r) => r['title'].toString().toLowerCase().contains(query)))
       {...row, 'session_id': row['id']},
   ];
-  List<Map<String, dynamic>> projectSessions(String profile, String id) => [
-    sessions(profile).firstWhere(
-      (r) => r['id'] == (profile == 'work' ? 'newest' : 'project-only'),
-    ),
-  ];
+  List<Map<String, dynamic>> projectSessions(String profile, String id) =>
+      sessions(profile)
+          .where(
+            (r) => r['id'] == (profile == 'work' ? 'newest' : 'project-only'),
+          )
+          .toList();
   List<Map<String, dynamic>> projects(String profile) => profile == 'work'
       ? [
           {
@@ -200,7 +201,22 @@ class ProfileBrowserFixture {
       }
       if (method == 'projects.tree') {
         if (failProjects) throw StateError('Projects unavailable');
-        return {'projects': projects(scope.profileName)};
+        return {
+          'projects': [
+            for (final project in projects(scope.profileName))
+              {
+                ...project,
+                if (!project.containsKey('sessionIds'))
+                  'sessionIds':
+                      project['id'] == 'p2' || project['id'] == 'work-project'
+                      ? projectSessions(
+                          scope.profileName,
+                          project['id'] as String,
+                        ).map((r) => r['id']).toList()
+                      : <String>[],
+              },
+          ],
+        };
       }
       if (method == 'projects.project_sessions') {
         return {

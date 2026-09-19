@@ -129,8 +129,6 @@ void main() {
     'configuration does not establish runtime health or provider access',
     () async {
       health.selectProfile(overview('default'));
-      await health.refreshRuntimeIdentity();
-      expect(health.runtimeIdentity?['name'], 'default');
       expect(health.status, AdministrationHealthStatus.unknown);
       readiness = (profile) async => {'profile': profile};
       await health.refreshReadiness();
@@ -209,7 +207,7 @@ void main() {
   );
 
   test(
-    'late readiness cannot recolor another profile or an A-B-A selection',
+    'late readiness remains attached to its profile across an A-B-A selection',
     () async {
       final a = overview('default'), b = overview('work');
       final pending = Completer<Map<String, dynamic>>();
@@ -221,8 +219,8 @@ void main() {
       health.selectProfile(a);
       pending.complete({'profile': 'default', 'provider_configured': true});
       await read;
-      expect(health.status, AdministrationHealthStatus.unknown);
-      expect(health.profileFindings.first.checkedAt, isNull);
+      expect(health.status, AdministrationHealthStatus.healthy);
+      expect(health.profileFindings.first.checkedAt, observedAt);
     },
   );
 

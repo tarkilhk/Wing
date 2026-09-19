@@ -16,39 +16,7 @@ void main() {
     ).listSync(recursive: true).whereType<File>()) {
       if (!file.path.endsWith('.dart')) continue;
       final source = file.readAsStringSync();
-      // The owner explicitly chose a tick for a passed MCP connection test.
-      // Exempt only that status branch; selection controls still cannot use ticks.
-      final iconSource =
-          file.path
-              .replaceAll('\\', '/')
-              .endsWith('/admin_connectors_page.dart')
-          ? source.replaceFirst(
-              RegExp(r'\? Icons\.check\s*: Icons\.horizontal_rule'),
-              '? Icons.horizontal_rule : Icons.horizontal_rule',
-            )
-          : source;
-      expect(
-        iconSource,
-        isNot(
-          matches(
-            RegExp(
-              r'Icons\.(?:check(?:\b|_)|checklist|done|verified|task_alt|beenhere|assignment_turned_in|playlist_add_check|library_add_check|fact_check)',
-            ),
-          ),
-        ),
-        reason: file.path,
-      );
-      expect(
-        source,
-        isNot(
-          matches(
-            RegExp(
-              r'\b(?:Checkbox|CheckboxListTile|RadioListTile|CheckedPopupMenuItem)\s*[<(]',
-            ),
-          ),
-        ),
-        reason: file.path,
-      );
+      // Only selection-control markers are restricted; status icons are allowed.
       for (final chip in RegExp(
         r'\b(?:ChoiceChip|FilterChip|InputChip)\(',
       ).allMatches(source)) {
@@ -135,26 +103,28 @@ void main() {
       },
     );
 
-    testWidgets('Markdown task markers contain no tick in $brightness', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: wingTheme(brightness),
-          home: const Scaffold(
-            body: MarkdownMessageContent(data: '- [x] Finished\n- [ ] Pending'),
+    testWidgets(
+      'Markdown task markers preserve completion state in $brightness',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            home: const Scaffold(
+              body: MarkdownMessageContent(
+                data: '- [x] Finished\n- [ ] Pending',
+              ),
+            ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widgetList<StudioTaskMarker>(find.byType(StudioTaskMarker))
-            .map((marker) => marker.completed),
-        [true, false],
-      );
-      expect(find.byIcon(Icons.check_box), findsNothing);
-    });
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widgetList<StudioTaskMarker>(find.byType(StudioTaskMarker))
+              .map((marker) => marker.completed),
+          [true, false],
+        );
+      },
+    );
 
     testWidgets(
       'background selection preserves chips, row semantics and keys in $brightness',

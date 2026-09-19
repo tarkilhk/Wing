@@ -92,6 +92,12 @@ class DashboardHttpException implements Exception {
   String toString() => 'HTTP $statusCode';
 }
 
+/// Authentication failed before the API request could be dispatched.
+class DashboardRequestNotSentException implements Exception {
+  const DashboardRequestNotSentException(this.cause);
+  final Object cause;
+}
+
 class CronHttpException extends DashboardHttpException {
   const CronHttpException(super.statusCode, super.endpoint, this.detail);
   final Object? detail;
@@ -1393,7 +1399,9 @@ class DashboardClient {
         Uri.parse('$_baseUrl/'),
         headers: _gatewayHeaders,
       );
-      if (res.statusCode != 200) throw Exception('Dashboard not reachable');
+      if (res.statusCode != 200) {
+        throw DashboardHttpException(res.statusCode, '/');
+      }
       final match = RegExp(
         r'window\.__HERMES_SESSION_TOKEN__="([^"]+)";',
       ).firstMatch(res.body);
@@ -1577,7 +1585,18 @@ class DashboardClient {
     Map<String, dynamic>? body,
     bool retried = false,
   }) async {
-    final headers = await _authHeaders();
+    final Map<String, String> headers;
+    try {
+      headers = await _authHeaders().timeout(const Duration(seconds: 15));
+    } catch (error) {
+      if (error is SocketException ||
+          error is TimeoutException ||
+          error is http.ClientException ||
+          error is DashboardHttpException && error.statusCode >= 500) {
+        throw DashboardRequestNotSentException(error);
+      }
+      rethrow;
+    }
     final res = await _http.post(
       Uri.parse('$_baseUrl/api/$endpoint'),
       headers: headers,
@@ -1588,7 +1607,7 @@ class DashboardClient {
       return apiPost(endpoint, body: body, retried: true);
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw Exception('HTTP ${res.statusCode}');
+      throw DashboardHttpException(res.statusCode, endpoint);
     }
     return _decodeMapResponse(res);
   }

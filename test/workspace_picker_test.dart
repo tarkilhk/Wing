@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/administration/admin_widgets.dart';
-import 'package:wing/core/screens/administration/admin_health_page.dart';
+import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/screens/administration/admin_settings_page.dart';
 import 'package:wing/core/screens/administration/admin_connectors_page.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
@@ -147,13 +147,13 @@ void main() {
       expect(work, includesProfile ? findsOneWidget : findsNothing);
       expect(
         find.text('Profile'),
-        includesProfile ? findsWidgets : findsNothing,
+        includesProfile || destination == AppDestination.chats
+            ? findsWidgets
+            : findsNothing,
       );
       expect(
         find.byTooltip(
-          includesProfile
-              ? 'Choose connection and profile'
-              : 'Choose connection',
+          includesProfile ? 'Choose instance and profile' : 'Choose instance',
         ),
         findsOneWidget,
       );
@@ -260,7 +260,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(work, findsNothing);
       expect(find.text('Profile'), findsNothing);
-      expect(find.byTooltip('Choose connection'), findsOneWidget);
+      expect(find.byTooltip('Choose instance'), findsOneWidget);
       await tester.tap(
         find.byKey(const ValueKey('workspace-connection-travel')),
       );
@@ -288,7 +288,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(work, findsNothing);
     expect(find.text('Profile'), findsNothing);
-    expect(find.byTooltip('Choose connection'), findsOneWidget);
+    expect(find.byTooltip('Choose instance'), findsOneWidget);
   });
 
   testWidgets('failed profile switch retains confirmed scope', (tester) async {
@@ -302,7 +302,33 @@ void main() {
     expect(controller.error, isNotNull);
   });
 
-  testWidgets('Usage offers only profiles and reloads the selected owner', (
+  testWidgets(
+    'drawer analytics switches profiles without leaving its destination',
+    (tester) async {
+      await show(tester, destination: AppDestination.analytics);
+      expect(find.byTooltip('Choose profile'), findsOneWidget);
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      expect(work, findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('workspace-connection-claw')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('workspace-connection-travel')),
+        findsNothing,
+      );
+      await tester.tap(work);
+      await tester.pumpAndSettle();
+      expect(controller.current!.scope.profileName, 'work');
+      expect(find.text('Hermes analytics'), findsOneWidget);
+      expect(find.byType(HermesAnalyticsContent), findsOneWidget);
+      expect(find.byTooltip('Refresh profile status'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('Analytics offers only profiles and reloads the selected owner', (
     tester,
   ) async {
     final administration = AdministrationFixture('Claw');
@@ -313,7 +339,7 @@ void main() {
     adminPushProfile(
       tester.element(find.byType(ServerConnectionLabel)),
       administration.server.profile('personal'),
-      (_, profile) => AdminUsagePage(profile: profile),
+      (_, profile) => AnalyticsPage(profile: profile),
     );
     await tester.pumpAndSettle();
     expect(find.byTooltip('Choose profile'), findsOneWidget);
@@ -328,12 +354,12 @@ void main() {
       find.byKey(const ValueKey('workspace-connection-travel')),
       findsNothing,
     );
-    expect(find.text('Connection'), findsNothing);
+    expect(find.text('Hermes instance'), findsNothing);
     await screenshot(tester, 'usage-profile-only');
     final before = administration.requests.length;
     await tester.tap(work);
     await tester.pumpAndSettle();
-    expect(find.text('Usage'), findsOneWidget);
+    expect(find.text('Hermes analytics'), findsOneWidget);
     expect(find.text('Claw / work'), findsOneWidget);
     expect(controller.current!.scope.profileName, 'work');
     expect(administration.requests.skip(before).length, 3);

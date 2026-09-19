@@ -23,7 +23,6 @@ void main() {
     final fixture = AdministrationDesignFixture();
     final health = AdministrationHealth(fixture.server);
     addTearDown(health.dispose);
-    await health.refreshRuntimeIdentity();
     await tester.pumpWidget(
       MaterialApp(
         theme: wingTheme(Brightness.dark),

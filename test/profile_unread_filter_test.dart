@@ -21,66 +21,45 @@ class _UnreadFixture extends ProfileBrowserFixture {
 }
 
 void main() {
-  testWidgets('unread view keeps pagination when no loaded rows match', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({});
-    final fixture = _UnreadFixture();
-    final controller = ProfileWorkspaceController(
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Test',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
-      ),
-      connectionIdentity: 'settings',
-      preferences: await SharedPreferences.getInstance(),
-      gatewayFactory: fixture.gateway,
-    );
-    addTearDown(controller.dispose);
-    await controller.initialize();
-    await tester.binding.setSurfaceSize(const Size(400, 1000));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Workspace options'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('workspace-option-unread')));
-    await tester.pumpAndSettle();
-    expect(find.text('No unread chats in loaded results'), findsOneWidget);
-    expect(
-      find.textContaining('Load more chats to check older pages'),
-      findsOneWidget,
-    );
-    expect(find.byKey(const ValueKey('chat-chat-0')), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('load-more-chats')));
-    await tester.pumpAndSettle();
-    expect(find.text('personal chat 50'), findsOneWidget);
-    expect(find.byKey(const ValueKey('load-more-chats')), findsNothing);
-    expect(find.text('Unread chats in this profile.'), findsOneWidget);
-    expect(
-      fixture.reads.any(
-        (read) =>
-            read.$1 == 'sessions' &&
-            read.$2['offset'] == '50' &&
-            read.$2['profile'] == 'personal',
-      ),
-      isTrue,
-    );
-
-    // Filtering titles must not start a separate server search whose rows omit unread state.
-    await tester.enterText(find.byType(TextField), 'personal');
-    await tester.pumpAndSettle(const Duration(milliseconds: 400));
-    expect(fixture.reads.any((read) => read.$1 == 'sessions/search'), isFalse);
-    expect(find.text('personal chat 50'), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('profile-work')));
-    await tester.pumpAndSettle();
-    expect(find.text('Unread chats in this profile.'), findsNothing);
-    expect(find.text('Work project'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+  testWidgets(
+    'unread filter finds older matches across profiles and intersects search',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final fixture = _UnreadFixture();
+      final controller = ProfileWorkspaceController(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Test',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        connectionIdentity: 'settings',
+        preferences: await SharedPreferences.getInstance(),
+        gatewayFactory: fixture.gateway,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      await tester.binding.setSurfaceSize(const Size(400, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('chat-filter-status')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('chat-menu-unread')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(find.text('personal chat 50'), findsOneWidget);
+      expect(find.text('work chat 50'), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-personal-chat-0')), findsNothing);
+      await tester.enterText(find.byType(TextField), 'personal');
+      await tester.pumpAndSettle(const Duration(milliseconds: 400));
+      expect(find.text('personal chat 50'), findsOneWidget);
+      expect(find.text('work chat 50'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 }
