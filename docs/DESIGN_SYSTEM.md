@@ -78,7 +78,7 @@ Playful portrait and the wordmark's original pointed feather cluster on the
 address and verified screens; hide the address artwork while the keyboard is
 open. Keep the approved 144 dp welcome screen unchanged. Custom authentication,
 separate chat routing and access headers live under Sign in / Custom setup.
-Use the active Studio accent, tick-free stage statuses, scrollable growing
+Use the active Studio accent, clearly labelled stage statuses, scrollable growing
 forms, specific failures and an explicit final save. No network check sends a
 chat message or establishes model readiness.
 
@@ -144,9 +144,9 @@ Use Android's Roboto sans typography explicitly across component themes and mono
 
 ## Selection controls
 
-Selection uses the selected background tint throughout Wing. Chips, segmented buttons, dropdown entries, navigation rows, model/provider pickers, project appearance controls, and single/multiple-choice rows keep their original labels and artwork when selected. Do not draw ticks, checkmarks, radio dots, or selected-only borders over these options. This owner decision of 16 September 2026 supersedes the earlier visual selection markers.
+Selection uses the selected background tint throughout Wing. Chips, segmented buttons, dropdown entries, navigation rows, model/provider pickers, project appearance controls, and single/multiple-choice rows keep their original labels and artwork when selected. Do not add ticks, radio dots or selected-only borders to indicate the selected option; use the background tint. This rule concerns option selection, including dropdown lists. It does not restrict tick icons in other visual components, such as task completion, test results, status indicators, actions or Markdown task content.
 
-Use `StudioRadioTile` inside `RadioGroup` for one choice and `StudioSelectionTile` for multiple choices. Their whole row is the target and selected surface. Preserve checked/selected accessibility semantics, single versus multiple selection behavior, and keyboard navigation. Use `CompactSwitch` for independent on/off settings; its thumb position still expresses on/off. App-authored status and action icons also use tick-free symbols, with status text or accessibility labels retaining their meaning. Authored message and document content remains intact. The owner-approved MCP test-result exception (18 September 2026) uses a green tick for passed tests and a red cross for failed tests, distinguishing the explicit test result from the connection-status LED.
+Use `StudioRadioTile` inside `RadioGroup` for one choice and `StudioSelectionTile` for multiple choices. Their whole row is the target and selected surface. Preserve checked/selected accessibility semantics, single versus multiple selection behavior, and keyboard navigation. Use `CompactSwitch` for independent on/off settings; its thumb position still expresses on/off. Status and action icons should communicate their meaning, supported by status text or accessibility labels. Authored message and document content remains intact. MCP test results use a green tick for passed tests and a red cross for failed tests, distinguishing the explicit test result from the connection-status LED.
 
 Use `CompactSwitch` for standalone switches and `CompactSwitchListTile` for settings where the whole row toggles. The Material switch face draws at 75% size, about 39 × 24 dp, within an unscaled 48 × 48 dp touch and accessibility target. Keep native keyboard, focus and drag behavior. Do not shrink the hit target with the artwork.
 
@@ -158,7 +158,7 @@ A standalone switch needs a label identifying the affected setting. A setting ro
 
 Check light and dark themes, selected and disabled states, long names at 320 dp width and 200% text, touch-target edges, keyboard activation, and screen-reader state before shipping control changes.
 
-The selection audit covers App settings and composer preferences; Activity filters and tabs; drawer and profile navigation; project colors and icons; administration provider filters, tool models and tab navigation; chat intelligence and profile-default models; shared-draft destinations; clarification choices; backup restore mode; backend-update targets; and Markdown task markers. Chips disable `showCheckmark`, segmented buttons disable `showSelectedIcon`, menu entries use selected fills, and row choices use the shared selection tiles. Markdown uses `StudioTaskMarker` for filled/empty task boxes. Status glyphs for completion, readiness and connected providers use flags, dots and links with their existing labels. `test/studio_selection_test.dart` guards app-owned tick icons and automatic control markers and exercises interaction and layout.
+The selection audit covers App settings and composer preferences; Activity filters and tabs; drawer and profile navigation; project colors and icons; administration provider filters, tool models and tab navigation; chat intelligence and profile-default models; shared-draft destinations; clarification choices; backup restore mode; backend-update targets; and Markdown task markers. Chips disable `showCheckmark`, segmented buttons disable `showSelectedIcon`, menu entries use selected fills, and row choices use the shared selection tiles. `test/studio_selection_test.dart` checks these selection controls, selection semantics, keyboard interaction, task state and layout; it must not ban status or action icons across the app.
 
 ## Conversation preservation
 
@@ -169,6 +169,16 @@ navigation with cached reading where available. Use that specification for
 connection cues, accessible status targets and the two recovery journeys.
 
 Keep the existing Activity disclosure, tool counts, Tools/Tasks/Agents/Work tabs when available, thinking disclosure, nested tool rows, guide line, selection, expansion state, scroll anchoring and copyable details. Do not add extra outer cards, timeline dots or permanent rows simply because the raster mockup draws them. Use the current component geometry as the baseline and apply color/type/border refinements. Approvals and questions remain outside collapsible tool results.
+
+Task status icons follow upstream desktop: a green filled-circle tick for
+completed, a spinner for in progress, a muted dashed circle for pending and a
+muted slashed circle for cancelled. Keep the existing 16 dp icon slot and use
+Wing's semantic success and muted colors in both themes. The native spinner
+becomes a static arc with reduced motion; each state has an accessibility label.
+This is task status, not option selection. Verified against upstream Hermes
+commit `603007ead347608c81bf95fd7b40c3fff9e4bed5`, desktop
+`apps/desktop/src/app/chat/composer/status-stack/status-row.tsx`, on 19 September
+2026. The change uses the existing client task states and requires no API changes.
 
 Keep activity status and queued-message controls above the composer. Preserve the two-row composer: draft first, then attachment/capture controls, the compact model/reasoning selector and Send/Stop. Preserve existing voice states and attachment options.
 
