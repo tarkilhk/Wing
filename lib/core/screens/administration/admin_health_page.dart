@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 import '../../services/administration_health.dart';
+import '../../services/profile_workspace_controller.dart';
 import '../../theme/wing_theme.dart';
 import '../../widgets/profile_diagnostics_panel.dart';
 import 'admin_widgets.dart';
@@ -34,6 +35,8 @@ class AdminHealthContent extends StatelessWidget {
   final bool checkingProfile;
   final DateTime? profileCheckedAt;
   final Future<void> Function(String destination) onOpenDestination;
+  final ProfileWorkspaceController? chatController;
+  final Future<void> Function(ProfileSessionKey)? onOpenSession;
   const AdminHealthContent({
     super.key,
     required this.server,
@@ -47,6 +50,8 @@ class AdminHealthContent extends StatelessWidget {
     this.profileCheckedAt,
     required this.accessChecks,
     this.onConnections,
+    this.chatController,
+    this.onOpenSession,
   });
 
   @override
@@ -60,7 +65,11 @@ class AdminHealthContent extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
           if (persistenceError case final message?) AdminNotice.error(message),
-          AdminRuntimeHealth(health: health),
+          AdminRuntimeHealth(
+            health: health,
+            chatController: chatController,
+            onOpenSession: onOpenSession,
+          ),
           const SizedBox(height: 24),
           AdminHealthSectionHeading(
             title: 'Profile',

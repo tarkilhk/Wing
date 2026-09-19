@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -5,11 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/administration/admin_operations_page.dart';
 import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 
 import 'support/administration_fixture.dart';
+import 'support/profile_browser_fixture.dart';
 
 void main() {
   const capture = bool.fromEnvironment('CAPTURE_DOCTOR');
@@ -25,8 +30,8 @@ void main() {
     if (!capture) return;
     const root = String.fromEnvironment('CAPTURE_FONT_DIR');
     for (final font in {
-      'Roboto': 'roboto-regular.ttf',
-      'MaterialIcons': 'materialicons-regular.otf',
+      'Roboto': 'Roboto-Regular.ttf',
+      'MaterialIcons': 'MaterialIcons-Regular.otf',
     }.entries) {
       await (FontLoader(font.key)..addFont(
             File(
@@ -35,6 +40,12 @@ void main() {
           ))
           .load();
     }
+    await (FontLoader('WingIcons')..addFont(
+          File(
+            'assets/fonts/wing-icons.ttf',
+          ).readAsBytes().then((bytes) => bytes.buffer.asByteData()),
+        ))
+        .load();
   });
 
   Future<void> snapshot(WidgetTester tester, String name) async {
@@ -61,7 +72,23 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         final fixture = AdministrationFixture();
+        SharedPreferences.setMockInitialValues({});
+        final controller = ProfileWorkspaceController(
+          connection: SavedConnection(
+            id: fixture.id,
+            label: fixture.id,
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          connectionIdentity: fixture.server.connectionIdentity,
+          preferences: await SharedPreferences.getInstance(),
+          gatewayFactory: ProfileBrowserFixture().gateway,
+        );
+        await controller.initialize();
+        addTearDown(controller.dispose);
         var runs = 0;
+        final opening = Completer<void>();
         fixture.override = (method, path, query, body) async {
           return {'pid': 7, 'running': false, 'exit_code': 0, 'lines': lines};
         };
@@ -82,6 +109,8 @@ void main() {
               server: fixture.server,
               action: const AdministrationAction('doctor', 7),
               title: 'Doctor',
+              chatController: controller,
+              onOpenSession: (_) => opening.future,
               onRunAgain: () async {
                 runs++;
               },
@@ -91,6 +120,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.text('3 issues found'), findsOneWidget);
+        expect(find.text('Ask Hermes'), findsNWidgets(3));
         expect(find.text(lines.join('\n')), findsNothing);
         expect(find.text('Completed'), findsNothing);
         expect(find.text('state.db is large'), findsOneWidget);
@@ -99,6 +129,30 @@ void main() {
         expect(find.text(summary), findsNothing);
         expect(tester.takeException(), isNull);
         await snapshot(tester, '${brightness.name}-$scale');
+
+        await tester.ensureVisible(find.text('Ask Hermes').last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Ask Hermes').last);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(
+          tester
+              .widgetList<TextButton>(find.byType(TextButton))
+              .every((button) => button.onPressed == null),
+          isTrue,
+        );
+        await snapshot(tester, '${brightness.name}-$scale-opening');
+        opening.completeError(StateError('Chat connection unavailable'));
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('Could not open the chat.').hitTestable(),
+          findsOneWidget,
+        );
+        await snapshot(tester, '${brightness.name}-$scale-chat-error');
+        expect(tester.takeException(), isNull);
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pumpAndSettle();
 
         await tester.scrollUntilVisible(
           find.text('Diagnostic output'),

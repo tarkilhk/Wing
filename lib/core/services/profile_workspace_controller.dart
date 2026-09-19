@@ -2125,7 +2125,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
     Map<String, dynamic>? inProject,
     WorkspaceScope? owner,
   }) async {
-    _navigationGeneration++;
     final resource = _writable();
     if (owner != null && owner != resource.scope) {
       throw StateError('Profile changed. Open the menu again.');
@@ -2134,6 +2133,28 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (project != null && !resource.projects.contains(project)) {
       throw ArgumentError('Wrong project owner');
     }
+    return _createChat(resource, project: project);
+  }
+
+  /// Start an independent profile chat with a local, unsent composer draft.
+  /// The captured owner also owns the draft if selection changes in flight.
+  Future<ProfileChat> createDraftChat({
+    required WorkspaceScope owner,
+    required String text,
+  }) async {
+    final resource = _writable();
+    if (owner != resource.scope) {
+      throw StateError('Profile changed. Try again with the selected profile.');
+    }
+    return _createChat(resource, initialDraft: text);
+  }
+
+  Future<ProfileChat> _createChat(
+    ProfileWorkspaceData resource, {
+    Map<String, dynamic>? project,
+    String? initialDraft,
+  }) async {
+    final navigation = ++_navigationGeneration;
     final response = await resource.gateway.createSession(
       cwd: project?['primary_path'] as String?,
     );
@@ -2152,7 +2173,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _hydrateIntelligence(chat, response);
     _applyTodoSnapshot(chat, response['todo_state']);
     await _restoreDraft(chat);
-    if (current == resource && !switching) resource.selectedSession = id;
+    if (initialDraft != null) await updateDraft(chat, initialDraft);
+    if (current == resource &&
+        !switching &&
+        navigation == _navigationGeneration) {
+      resource.selectedSession = id;
+    }
     _changed();
     await refreshHistory(chat);
     return chat;

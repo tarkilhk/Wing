@@ -187,6 +187,13 @@ report with exit 0 or 1 supplies structured audit counts; exit 2 is an audit err
 Unrecognized or truncated output never implies no vulnerabilities. See the
 [audit report contract](research/2026-09-18-security-audit-report.md).
 Stock Hermes exposes no remote Doctor repair action, so Wing adds none.
+Each Doctor finding has an **Ask Hermes** action that opens a new chat using the
+selected profile, with that finding and the available diagnostic log in an
+editable, unsent draft. The prompt asks for an explanation and proposed solution,
+including data-loss risks and verification, and says not to make changes or run
+repairs yet. The user reviews and sends it. Doctor output is requested up to the
+stock limit of 2,000 lines / 256 KiB; it is not guaranteed to be complete. See the
+[per-finding design and API verification](design/2026-09-18-doctor-summary.md#ask-hermes-about-a-finding).
 
 Run-all contract rechecked on 19 September 2026 against upstream
 [`96b6c534c3fc1681ecbf2df0f92d1b3c6cce4f62`](https://github.com/NousResearch/hermes-agent/commit/96b6c534c3fc1681ecbf2df0f92d1b3c6cce4f62):

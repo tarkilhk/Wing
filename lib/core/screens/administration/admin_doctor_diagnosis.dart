@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/doctor_diagnostic.dart';
 import '../../theme/wing_theme.dart';
+import '../../theme/wing_icons.dart';
 import 'admin_widgets.dart';
 
 /// Findings are the main content; process completion is secondary metadata.
@@ -10,10 +11,14 @@ class AdminDoctorDiagnosis extends StatelessWidget {
     super.key,
     required this.diagnosis,
     required this.checkedAt,
+    this.onAskHermes,
+    this.openingFinding,
   });
 
   final DoctorDiagnostic diagnosis;
   final DateTime? checkedAt;
+  final ValueChanged<int>? onAskHermes;
+  final int? openingFinding;
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +68,7 @@ class AdminDoctorDiagnosis extends StatelessWidget {
         if (diagnosis.hasIssues)
           AdminGroup(
             children: [
-              for (final finding in diagnosis.findings)
+              for (final (index, finding) in diagnosis.findings.indexed)
                 Padding(
                   padding: const EdgeInsets.all(WingSpacing.lg),
                   child: SizedBox(
@@ -84,6 +89,25 @@ class AdminDoctorDiagnosis extends StatelessWidget {
                             ),
                           ),
                         ],
+                        const SizedBox(height: WingSpacing.xs),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed:
+                                onAskHermes == null || openingFinding != null
+                                ? null
+                                : () => onAskHermes!(index),
+                            icon: openingFinding == index
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(WingIcons.newChat, size: 18),
+                            label: const Text('Ask Hermes'),
+                          ),
+                        ),
                       ],
                     ),
                   ),

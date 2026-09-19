@@ -391,7 +391,9 @@ class AdministrationAction {
   Future<Map<String, dynamic>> status(AdministrationRepository server) async {
     final result = await server.read(
       'actions/${Uri.encodeComponent(name)}/status',
-      {'lines': name == 'security-audit' ? '2000' : '100'},
+      {
+        'lines': {'doctor', 'security-audit'}.contains(name) ? '2000' : '100',
+      },
     );
     if (result['pid'] != pid) {
       throw const AdministrationFailure(

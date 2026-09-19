@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add Ask Hermes to each Doctor finding, opening an editable new-chat draft under the selected profile with the finding and available diagnostic log.
+
 - Move configuration backup and restore to App settings. Include accent colour, notification preferences and the default composer action, and apply restored settings immediately.
 
 - Group the menu into everyday use, instance/app setup, and Hermes tools. Rename Connections to Hermes instances and move Usage out of Health into the standalone Hermes analytics destination.

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/doctor_diagnostic.dart';
+import '../../services/profile_workspace_controller.dart';
 import '../../services/security_audit_report.dart';
 import '../../theme/wing_theme.dart';
 import '../../services/administration_health.dart';
@@ -86,8 +87,15 @@ Future<void> refreshHealthDiagnostics(
 
 /// Presents connection-owned observations retained across Health visits.
 class AdminRuntimeHealth extends StatefulWidget {
-  const AdminRuntimeHealth({super.key, required this.health});
+  const AdminRuntimeHealth({
+    super.key,
+    required this.health,
+    this.chatController,
+    this.onOpenSession,
+  });
   final AdministrationHealth health;
+  final ProfileWorkspaceController? chatController;
+  final Future<void> Function(ProfileSessionKey)? onOpenSession;
   @override
   State<AdminRuntimeHealth> createState() => _AdminRuntimeHealthState();
 }
@@ -144,6 +152,8 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
         server: controller.server,
         action: _observations[path]!.action,
         initialObservation: _observations[path],
+        chatController: widget.chatController,
+        onOpenSession: widget.onOpenSession,
         onRunAgain: () async {
           Navigator.of(context).pop();
           await _run(path, title, scope, openResult: true);

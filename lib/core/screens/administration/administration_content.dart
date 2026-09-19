@@ -666,6 +666,15 @@ class _HermesAdministrationContentState
           health: _health,
           persistenceError: _healthSession.persistenceError,
           profile: _profile,
+          chatController: widget.controller,
+          onOpenSession: (key) async {
+            final root = ModalRoute.of(context);
+            final navigator = Navigator.of(context);
+            await widget.onOpenSession(key);
+            if (navigator.mounted) {
+              navigator.popUntil((route) => route == root);
+            }
+          },
           onCheckProfile: _checkingProfile || widget.controller.switching
               ? null
               : _checkProfile,

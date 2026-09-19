@@ -1,5 +1,6 @@
 import '../../services/administration_health.dart';
 import '../../services/doctor_diagnostic.dart';
+import '../../services/profile_workspace_controller.dart';
 import '../../services/security_audit_report.dart';
 import '../../theme/wing_theme.dart';
 import '../../widgets/studio_select.dart';
@@ -20,6 +21,8 @@ class AdminActionPage extends StatefulWidget {
   final String scope;
   final ValueChanged<AdminDiagnosticObservation>? onObservation;
   final AdminDiagnosticObservation? initialObservation;
+  final ProfileWorkspaceController? chatController;
+  final Future<void> Function(ProfileSessionKey)? onOpenSession;
   const AdminActionPage({
     super.key,
     required this.server,
@@ -29,6 +32,8 @@ class AdminActionPage extends StatefulWidget {
     this.onObservation,
     this.initialObservation,
     this.onRunAgain,
+    this.chatController,
+    this.onOpenSession,
   });
   @override
   State<AdminActionPage> createState() => _AdminActionPageState();
@@ -40,6 +45,66 @@ class _AdminActionPageState extends State<AdminActionPage> {
   Timer? _timer;
   bool _loading = false;
   DateTime? _checkedAt;
+  int? _openingFinding;
+  ProfileChat? _preparedChat;
+  String? _preparedPrompt;
+
+  void _chatNotice(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _askHermes(int index, DoctorFinding finding) async {
+    if (_openingFinding != null) return;
+    final controller = widget.chatController;
+    final owner = controller?.current?.scope;
+    if (controller == null || widget.onOpenSession == null || owner == null) {
+      return;
+    }
+    setState(() {
+      _openingFinding = index;
+    });
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    try {
+      if (owner.connectionId != widget.server.connectionId ||
+          owner.connectionIdentity != widget.server.connectionIdentity) {
+        throw const AdministrationFailure(
+          'Connection changed. Open Doctor on the selected connection.',
+        );
+      }
+      final prompt = finding.chatPrompt(
+        (_status?['lines'] as List? ?? []).join('\n'),
+      );
+      // A navigation failure should retry opening the saved draft, not mint
+      // another chat for the same finding.
+      final chat =
+          _preparedChat?.key.workspace == owner && _preparedPrompt == prompt
+          ? _preparedChat!
+          : await controller.createDraftChat(owner: owner, text: prompt);
+      _preparedChat = chat;
+      _preparedPrompt = prompt;
+      if (!mounted || ModalRoute.of(context)?.isCurrent == false) return;
+      if (controller.switching || controller.current?.scope != owner) {
+        _chatNotice('Draft saved in ${owner.profileName}. Open it from Chats.');
+        return;
+      }
+      await widget.onOpenSession!(chat.key);
+      _preparedChat = null;
+      _preparedPrompt = null;
+    } catch (error) {
+      if (mounted) {
+        _chatNotice(
+          error is AdministrationFailure
+              ? error.message
+              : 'Could not open the chat. Check the connection and retry.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _openingFinding = null);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -118,6 +183,7 @@ class _AdminActionPageState extends State<AdminActionPage> {
             tooltip: 'Run ${widget.title} again',
             onPressed:
                 !_loading &&
+                    _openingFinding == null &&
                     _status?['running'] == false &&
                     _status?['exit_code'] is int
                 ? widget.onRunAgain
@@ -172,7 +238,21 @@ class _AdminActionPageState extends State<AdminActionPage> {
             ),
           ],
           if (diagnosis != null) ...[
-            AdminDoctorDiagnosis(diagnosis: diagnosis, checkedAt: _checkedAt),
+            ListenableBuilder(
+              listenable:
+                  widget.chatController ?? const AlwaysStoppedAnimation(false),
+              builder: (context, _) => AdminDoctorDiagnosis(
+                diagnosis: diagnosis,
+                checkedAt: _checkedAt,
+                openingFinding: _openingFinding,
+                onAskHermes:
+                    widget.chatController?.current == null ||
+                        widget.chatController!.switching ||
+                        widget.onOpenSession == null
+                    ? null
+                    : (index) => _askHermes(index, diagnosis.findings[index]),
+              ),
+            ),
             const SizedBox(height: WingSpacing.lg),
           ],
           if (audit != null) ...[
