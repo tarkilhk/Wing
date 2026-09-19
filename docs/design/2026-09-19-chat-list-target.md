@@ -51,6 +51,9 @@ on 19 September 2026. The reference prototype remains in the workspace at
 - Group by and Order by are direct controls beneath the filters, with icons,
   sentence-case menu titles, and no redundant back link or total chat count.
   Project is the initial grouping; Updated is the initial ordering.
+- Groups of chats without an assigned project use the profile name in italics
+  and an outlined mixed-shapes icon (`category_outlined`) in headings and Project
+  filter choices. Do not prefix these labels with Home.
 - Apply ordering on entry, after an explicit workspace refresh completes, and
   immediately when the user chooses Order by or Group by. While the screen stays
   open, retain chat and group positions across live updates and internal reloads.

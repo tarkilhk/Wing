@@ -13,11 +13,13 @@ class ChatMenuChoice {
     this.enabled = true,
     this.toggle,
     this.dividerBefore = false,
+    this.fontStyle = FontStyle.normal,
   });
   final String id, label;
   final Widget icon;
   final bool selected, enabled, dividerBefore;
   final bool? toggle;
+  final FontStyle fontStyle;
 }
 
 /// An anchored, bounded menu. The choices scroll independently of the heading
@@ -67,7 +69,10 @@ Future<void> showChatListMenu(
           ).textTheme.bodyMedium!.copyWith(fontSize: 14, height: 1.3);
           final heights = options.map((option) {
             final painter = TextPainter(
-              text: TextSpan(text: option.label, style: labelStyle),
+              text: TextSpan(
+                text: option.label,
+                style: labelStyle.copyWith(fontStyle: option.fontStyle),
+              ),
               textDirection: Directionality.of(context),
               textScaler: media.textScaler,
               maxLines: 2,
@@ -298,6 +303,9 @@ Future<void> showChatListMenu(
                                                                       TextOverflow
                                                                           .ellipsis,
                                                                   style: TextStyle(
+                                                                    fontStyle:
+                                                                        option
+                                                                            .fontStyle,
                                                                     fontSize:
                                                                         14,
                                                                     height: 1.3,

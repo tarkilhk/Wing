@@ -318,14 +318,15 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         if (time > (recency[e.projectKey] ?? 0)) recency[e.projectKey] = time;
       }
       final projects =
-          <(String, String)>[
+          <(String, String, bool)>[
             for (final profile in controller.discovery?.profiles ?? []) ...[
-              ('${profile.name}/home', 'Home · ${profile.label}'),
+              ('${profile.name}/home', profile.name, true),
               for (final p in _data.projects[profile.name] ?? [])
                 if (p['isNoProject'] != true)
                   (
                     '${profile.name}/${p['id']}',
                     '${p['name']} · ${profile.label}',
+                    false,
                   ),
             ],
           ]..sort((a, b) {
@@ -339,7 +340,8 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           ChatMenuChoice(
             p.$1,
             p.$2,
-            const Icon(Icons.folder_outlined),
+            Icon(p.$3 ? Icons.category_outlined : Icons.folder_outlined),
+            fontStyle: p.$3 ? FontStyle.italic : FontStyle.normal,
             selected: selected.contains(p.$1),
           ),
       ];
@@ -834,6 +836,10 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
 
   Widget _groupHeading(ChatListGroup group) {
     final key = _groupKey(group);
+    final isUnassigned =
+        _grouping == ChatGrouping.project &&
+        group.project == null &&
+        group.key != 'pinned';
     final collapsed = _collapsed.contains(key);
     final tokensReady =
         (group.owner == null ||
@@ -873,6 +879,8 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                           Icon(
                             group.key == 'pinned'
                                 ? Icons.push_pin_outlined
+                                : _grouping == ChatGrouping.project
+                                ? Icons.category_outlined
                                 : _groupIcon(_grouping),
                             size: 18,
                             color: WingTokens.of(context).muted,
@@ -880,7 +888,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            _grouping == ChatGrouping.project &&
+                            group.project != null &&
                                     _groups
                                             .where(
                                               (g) => g.label == group.label,
@@ -891,9 +899,12 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                                 : group.label,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
+                              fontStyle: isUnassigned
+                                  ? FontStyle.italic
+                                  : FontStyle.normal,
                             ),
                           ),
                         ),

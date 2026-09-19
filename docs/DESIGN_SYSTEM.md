@@ -28,6 +28,9 @@ The approved token refinement truncates titles to keep counts and updated ages
 in aligned columns on the same row. Use compact counts at existing precision
 and tabular numerals without a Tokens / Age legend. At enlarged text sizes,
 let titles and metadata wrap; keep full titles and labelled counts accessible.
+Groups of chats without an assigned project use the profile name in italics
+and an outlined mixed-shapes icon (`category_outlined`) in headings and Project
+filter choices. Do not prefix these labels with Home.
 The owner's subsequent profile-bar refinement places a fixed viewport beside
 the connection label, with horizontally scrolling profile-initial squares.
 Pack short profile lists against the viewport's right edge beside the menu,
