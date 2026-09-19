@@ -66,8 +66,81 @@ class AdministrationHealth extends ChangeNotifier {
   final _diagnostics = <String, AdminDiagnosticObservation>{};
   final _diagnosticScopes = <String, String>{};
   final _diagnosticAttempts = <String, DateTime>{};
+  final _attemptedGenerations = <String, int>{};
   final _pendingScopes = <String, String>{};
   final _starting = <String>{};
+  DateTime? _serverCheckedAt;
+  DateTime? _serverRefreshStartedAt;
+  final _serverRefreshGenerations = <String, int>{};
+  final _observedGenerations = <String, int>{};
+  static const diagnosticPaths = ['ops/doctor', 'ops/security-audit'];
+
+  DateTime? get serverCheckedAt => _serverCheckedAt;
+  DateTime? get serverAttemptedAt {
+    final times = _diagnosticAttempts.values.toList()..sort();
+    return times.lastOrNull;
+  }
+
+  bool get serverChecking =>
+      _starting.isNotEmpty ||
+      _diagnostics.values.any((value) => value.status['running'] == true);
+
+  bool get serverCheckIncomplete =>
+      diagnosticPaths.any((path) {
+        final value = _diagnostics[path];
+        final attempted = _diagnosticAttempts[path];
+        return value == null ||
+            value.readError != null ||
+            value.status['running'] != false ||
+            value.status['exit_code'] is! int ||
+            value.checkedAt == null ||
+            (_attemptedGenerations[path] != null &&
+                _observedGenerations[path] != _attemptedGenerations[path]) ||
+            (attempted != null && value.checkedAt!.isBefore(attempted));
+      }) ||
+      _serverRefreshStartedAt != null;
+
+  /// Only a refresh of both diagnostics advances the shared completion time.
+  void beginServerRefresh() {
+    _serverRefreshStartedAt = _now();
+    _serverRefreshGenerations
+      ..clear()
+      ..addEntries(
+        diagnosticPaths.map(
+          (path) => MapEntry(path, diagnosticGeneration(path) + 1),
+        ),
+      );
+    _changed();
+  }
+
+  bool get profileCheckIncomplete {
+    if (profileName == null) return true;
+    final findings = profileFindings;
+    final tools = _overview?.observations['tools']?.data?['data'];
+    return [
+          'Model selection',
+          'Provider credential check',
+          'Tool setup',
+          'Connector settings',
+          'Scheduled tasks',
+        ].any((title) {
+          final finding = findings.where((f) => f.title == title).firstOrNull;
+          return finding == null ||
+              finding.status == AdministrationHealthStatus.unknown;
+        }) ||
+        _overview?.observations['model']?.error != null ||
+        _overview?.observations['tools']?.error != null ||
+        _overview?.observations['connectors']?.error != null ||
+        _profileState.taskError != null ||
+        (tools is List &&
+            tools.any(
+              (row) =>
+                  row is! Map ||
+                  row['enabled'] is! bool ||
+                  row['enabled'] == true && row['configured'] is! bool,
+            )) ||
+        _overview!.connectorChecks.values.any((value) => value == null);
+  }
 
   AdministrationOverview? get overview => _overview;
   String? get profileName => _overview?.profile.name;
@@ -81,6 +154,7 @@ class AdministrationHealth extends ChangeNotifier {
   void recordDiagnosticAttempt(String path) {
     if (_disposed || !_starting.contains(path)) return;
     _diagnosticAttempts[path] = _now();
+    _attemptedGenerations[path] = diagnosticGeneration(path);
     _changed();
   }
 
@@ -93,9 +167,18 @@ class AdministrationHealth extends ChangeNotifier {
   }
 
   Map<String, dynamic> snapshot() => {
+    'serverCheck': {
+      'checkedAt': _serverCheckedAt?.toUtc().toIso8601String(),
+      'startedAt': _serverRefreshStartedAt?.toUtc().toIso8601String(),
+      'generations': Map.of(_serverRefreshGenerations),
+    },
+    'generations': Map.of(_diagnosticGenerations),
     'attempted': {
       for (final entry in _diagnosticAttempts.entries)
-        entry.key: entry.value.toUtc().toIso8601String(),
+        entry.key: {
+          'at': entry.value.toUtc().toIso8601String(),
+          'generation': _attemptedGenerations[entry.key],
+        },
     },
     'profiles': {
       for (final entry in _profiles.entries)
@@ -119,14 +202,26 @@ class AdministrationHealth extends ChangeNotifier {
           'checkedAt': entry.value.checkedAt?.toUtc().toIso8601String(),
           'readError': entry.value.readError,
           'scope': _diagnosticScopes[entry.key],
+          'generation': _observedGenerations[entry.key],
         },
     },
   };
 
   void restore(Map value) {
+    final serverCheck = value['serverCheck'] as Map;
+    _serverCheckedAt = healthSnapshotTime(serverCheck['checkedAt']);
+    _serverRefreshStartedAt = healthSnapshotTime(serverCheck['startedAt']);
+    _serverRefreshGenerations.addAll(
+      Map<String, int>.from(serverCheck['generations'] as Map),
+    );
+    _diagnosticGenerations.addAll(
+      Map<String, int>.from(value['generations'] as Map),
+    );
     for (final entry in (value['attempted'] as Map).entries) {
-      final at = healthSnapshotTime(entry.value);
+      final at = healthSnapshotTime(entry.value['at']);
       if (at != null) _diagnosticAttempts[entry.key as String] = at;
+      _attemptedGenerations[entry.key as String] =
+          entry.value['generation'] as int;
     }
     for (final entry in (value['profiles'] as Map).entries) {
       final state = _ProfileHealthState();
@@ -156,13 +251,14 @@ class AdministrationHealth extends ChangeNotifier {
       _diagnostics[path] = observation;
       _diagnosticScopes[path] =
           saved['scope'] as String? ?? server.connectionLabel;
-      _diagnosticGenerations[path] = 1;
+      _observedGenerations[path] = saved['generation'] as int;
+      final generation = _diagnosticGenerations[path]!;
       if (observation.status['running'] != false ||
           observation.status['exit_code'] is! int) {
         // Resume observation of this exact run, never POST another start.
         _diagnosticTimers[path] = Timer(
           Duration.zero,
-          () => _refreshDiagnostic(path, action, 1),
+          () => _refreshDiagnostic(path, action, generation),
         );
       }
     }
@@ -258,14 +354,15 @@ class AdministrationHealth extends ChangeNotifier {
           ? AdministrationHealthStatus.warning
           : AdministrationHealthStatus.healthy,
       count == null
-          ? 'Schedules unavailable'
-          : count == 1
-          ? '1 task needs attention'
-          : count > 0
-          ? '$count tasks need attention'
-          : source.uncertain.isNotEmpty
-          ? 'A task action needs review'
-          : 'No attention flags in listed tasks',
+          ? 'Couldn’t check scheduled tasks'
+          : [
+              if (source.tasks!.isEmpty)
+                'No scheduled tasks'
+              else
+                '${source.tasks!.length} ${source.tasks!.length == 1 ? 'task' : 'tasks'} · '
+                    '${count == 0 ? 'No reported errors' : '$count ${count == 1 ? 'has a reported error' : 'have reported errors'}'}',
+              if (source.uncertain.isNotEmpty) 'A task action needs review',
+            ].join(' · '),
       at: source.checkedAt,
       destination: 'Scheduled tasks',
     );
@@ -466,18 +563,14 @@ class AdministrationHealth extends ChangeNotifier {
 
   (AdministrationHealthStatus, String) _tools(Map<String, dynamic> data) {
     final rows = administrationRows(data['data']);
+    final enabled = rows.where((r) => r['enabled'] == true).length;
     final setup = rows
         .where((r) => r['enabled'] == true && r['configured'] == false)
         .toList();
     if (setup.isNotEmpty) {
-      final name = setup.length == 1
-          ? _observedName(setup.single, const ['display_name', 'label', 'name'])
-          : null;
       return (
         AdministrationHealthStatus.warning,
-        setup.length == 1
-            ? '${name ?? '1 enabled tool'} needs setup'
-            : '${setup.length} enabled tools need setup',
+        '$enabled enabled · ${setup.length} ${setup.length == 1 ? 'needs' : 'need'} setup',
       );
     }
     if (rows.any(
@@ -492,7 +585,7 @@ class AdministrationHealth extends ChangeNotifier {
     }
     return (
       AdministrationHealthStatus.healthy,
-      'No setup gaps reported for enabled tools',
+      enabled == 0 ? 'No tools enabled' : '$enabled enabled · All set up',
     );
   }
 
@@ -517,32 +610,27 @@ class AdministrationHealth extends ChangeNotifier {
     }
     final enabled = rows.where((r) => r['enabled'] == true).toList();
     if (enabled.isEmpty) {
-      return (AdministrationHealthStatus.healthy, 'All connectors disabled');
+      return (AdministrationHealthStatus.healthy, 'No connectors enabled');
     }
     final checks = _overview!.connectorChecks;
     final failed = enabled.where((r) => checks[r['name']] == false).length;
-    if (failed > 0) {
-      return (
-        AdministrationHealthStatus.warning,
-        failed == 1
-            ? '1 connector failed its check'
-            : '$failed connectors failed their checks',
-      );
-    }
     final unknown = enabled.where((r) => checks[r['name']] == null).length;
-    if (unknown > 0) {
+    final passed = enabled.length - failed - unknown;
+    if (failed > 0 || unknown > 0) {
       return (
-        AdministrationHealthStatus.unknown,
-        unknown == 1
-            ? '1 connector could not be checked'
-            : '$unknown connectors could not be checked',
+        failed > 0
+            ? AdministrationHealthStatus.warning
+            : AdministrationHealthStatus.unknown,
+        [
+          '$passed passed',
+          if (failed > 0) '$failed failed',
+          if (unknown > 0) '$unknown couldn’t be checked',
+        ].join(' · '),
       );
     }
     return (
       AdministrationHealthStatus.healthy,
-      enabled.length == 1
-          ? '1 connector passed its check'
-          : '${enabled.length} connectors passed their checks',
+      '$passed of ${enabled.length} connection ${enabled.length == 1 ? 'check' : 'checks'} passed',
     );
   }
 
@@ -677,6 +765,7 @@ class AdministrationHealth extends ChangeNotifier {
   }) {
     if (_disposed || generation != _diagnosticGenerations[path]) return;
     _diagnostics[path] = value;
+    _observedGenerations[path] = generation;
     if (_pendingScopes[path] case final scope?) _diagnosticScopes[path] = scope;
     _changed();
   }
@@ -690,6 +779,36 @@ class AdministrationHealth extends ChangeNotifier {
 
   void _changed() {
     if (_disposed) return;
+    final completed = diagnosticPaths
+        .map((path) => _diagnostics[path])
+        .toList();
+    if (completed.every(
+      (value) =>
+          value != null &&
+          value.readError == null &&
+          value.status['running'] == false &&
+          value.status['exit_code'] is int &&
+          value.checkedAt != null,
+    )) {
+      final times = completed.map((value) => value!.checkedAt!).toList()
+        ..sort();
+      if (_serverRefreshStartedAt case final start?) {
+        if (!times.first.isBefore(start) &&
+            diagnosticPaths.every(
+              (path) =>
+                  (_observedGenerations[path] ?? -1) >=
+                  _serverRefreshGenerations[path]!,
+            )) {
+          _serverCheckedAt = times.last;
+          _serverRefreshStartedAt = null;
+          _serverRefreshGenerations.clear();
+        }
+      } else {
+        // Individually run diagnostics establish conservative initial coverage.
+        // Later individual reruns must not make the other result look fresh.
+        _serverCheckedAt ??= times.first;
+      }
+    }
     _expiry?.cancel();
     final futureExpiries = [
       ..._providerExpiries(),

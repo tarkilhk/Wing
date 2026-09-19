@@ -395,4 +395,84 @@ void main() {
       expect(health.status, AdministrationHealthStatus.healthy);
     },
   );
+  test(
+    'tool setup counts enabled groups and distinguishes empty from unknown',
+    () {
+      final source = overview('default');
+      health.selectProfile(source);
+      AdministrationHealthFinding finding() =>
+          health.profileFindings.singleWhere((f) => f.title == 'Tool setup');
+      expect(finding().detail, 'No tools enabled');
+      source.observations['tools']!.data = {
+        'data': [
+          {'name': 'search', 'enabled': true, 'configured': true},
+          {'name': 'images', 'enabled': true, 'configured': false},
+          {'name': 'disabled', 'enabled': false, 'configured': false},
+        ],
+      };
+      expect(finding().detail, '2 enabled · 1 needs setup');
+      expect(finding().status, AdministrationHealthStatus.warning);
+      source.observations['tools']!.data!['data'][1]['configured'] = true;
+      expect(finding().detail, '2 enabled · All set up');
+      expect(finding().status, AdministrationHealthStatus.healthy);
+      source.observations['tools']!.data!['data'][1].remove('configured');
+      expect(finding().status, AdministrationHealthStatus.unknown);
+    },
+  );
+
+  test('server time advances only when both checks in a refresh finish', () {
+    void complete(String path, {int exitCode = 0}) {
+      final generation = health.beginDiagnostic(path)!;
+      health.recordDiagnosticAttempt(path);
+      health.observeDiagnostic(
+        path,
+        AdminDiagnosticObservation(
+          AdministrationAction(path.substring(4), generation),
+          {'running': false, 'exit_code': exitCode, 'lines': <String>[]},
+          now,
+        ),
+        generation: generation,
+      );
+      health.finishDiagnostic(path, generation);
+    }
+
+    health.beginServerRefresh();
+    complete('ops/doctor');
+    expect(health.serverCheckedAt, isNull);
+    expect(health.serverCheckIncomplete, isTrue);
+    now = now.add(const Duration(minutes: 1));
+    complete('ops/security-audit', exitCode: 1);
+    final first = now;
+    expect(health.serverCheckedAt, first);
+    expect(
+      health.serverCheckIncomplete,
+      isFalse,
+    ); // Findings are a completed check.
+    now = now.add(const Duration(hours: 2));
+    complete('ops/doctor');
+    expect(health.serverCheckedAt, first);
+    expect(health.serverCheckIncomplete, isFalse);
+    health.beginServerRefresh();
+    complete('ops/doctor');
+    expect(health.serverCheckedAt, first);
+    final saved = health.snapshot();
+    health.dispose();
+    health = AdministrationHealth(server, now: () => now)..restore(saved);
+    expect(health.serverCheckIncomplete, isTrue);
+    complete('ops/security-audit');
+    expect(health.serverCheckedAt, now);
+    expect(health.serverCheckIncomplete, isFalse);
+    // Even within the same clock tick, old results cannot complete a new refresh.
+    health.beginServerRefresh();
+    expect(health.serverCheckIncomplete, isTrue);
+    complete('ops/doctor');
+    final generation = health.beginDiagnostic('ops/security-audit')!;
+    health.recordDiagnosticAttempt('ops/security-audit');
+    health.finishDiagnostic('ops/security-audit', generation); // Start failed.
+    expect(health.serverCheckIncomplete, isTrue);
+    now = now.add(const Duration(minutes: 1));
+    complete('ops/security-audit'); // An individual retry completes the batch.
+    expect(health.serverCheckIncomplete, isFalse);
+    expect(health.serverCheckedAt, now);
+  });
 }

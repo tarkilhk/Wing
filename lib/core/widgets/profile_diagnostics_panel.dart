@@ -134,7 +134,7 @@ class ProfileDiagnosticsController extends ChangeNotifier {
                 selectedProvider != 'auto' &&
                 provider != selectedProvider));
     return _AccessResult(
-      differs ? 'Selected model access unconfirmed' : 'Credentials available',
+      differs ? 'Selected model access unconfirmed' : 'Access is set up',
       differs
           ? 'Hermes resolved $model · $provider instead.'
           : _selection == (model, provider)
@@ -287,12 +287,23 @@ class ProfileModelAccessRow extends StatelessWidget {
                   Semantics(
                     liveRegion: true,
                     child: Text(
-                      checking ? 'Checking credentials…' : result.title,
+                      checking
+                          ? 'Checking access…'
+                          : result.status ==
+                                    AdministrationHealthStatus.warning ||
+                                result.status ==
+                                    AdministrationHealthStatus.failure
+                          ? 'Access needs attention'
+                          : result.title,
                       style: theme.textTheme.bodyMedium,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(modelLabel, style: theme.textTheme.bodySmall),
+                  if (!checking &&
+                      (result.status == AdministrationHealthStatus.warning ||
+                          result.status == AdministrationHealthStatus.failure))
+                    Text(result.title, style: theme.textTheme.bodySmall),
                   if (unavailable && hasModel)
                     Text(
                       'Last known model; refresh failed.',
@@ -303,14 +314,6 @@ class ProfileModelAccessRow extends StatelessWidget {
                       result.message.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(result.message, style: theme.textTheme.bodySmall),
-                  ],
-                  if (!checking && controller._checkedAt != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      '${result.status == AdministrationHealthStatus.unknown ? 'Last attempt' : 'Checked'} '
-                      '${TimeOfDay.fromDateTime(controller._checkedAt!).format(context)}',
-                      style: theme.textTheme.bodySmall,
-                    ),
                   ],
                   if (!checking && action != null)
                     TextButton(onPressed: action, child: Text(label)),

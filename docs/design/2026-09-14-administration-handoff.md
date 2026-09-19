@@ -62,15 +62,19 @@ A missing or 24-hour-old profile refresh triggers fresh checks. Server results
 and per-profile snapshots survive app restart; expired completed server diagnostics
 refresh on Health entry; missing results trigger the initial run.
 The Profile refresh icon repeats credential, tool setup, connector and task checks.
-Healthy Tools, Connectors and Scheduled tasks rows are passive, with green icons
+Healthy Tool setup, Connectors and Scheduled tasks rows are passive, with green icons
 and no disclosure arrow. Other results retain details with their captured scope
 and links to the owning editor.
 See [Health observations](../ADMINISTRATION.md#health-observations) for the current
 stock API verification and rendering contract.
 
 The 19 September correction removes the Model & provider detail destination.
-Model access is an inline Health observation, with result, model/provider and check
-time. Healthy and unchecked states have no actions or navigation. The Profile
+Model access is an inline Health observation, with result and model/provider.
+The Server and Profile headings own check times; overview rows do not repeat them.
+Counts describe enabled tool groups and setup gaps, connector connection checks,
+and listed tasks with reported errors. What’s checked? explains the four checks
+without promising test messages, successful tool calls or successful job runs.
+Healthy and unchecked states have no actions or navigation. The Profile
 refresh runs the check. Only problems reveal recovery: Fix access/Review access
 opens the captured profile's provider editor, Retry reruns the check, and server
 access rejection offers Review connection. Model choice and routine account

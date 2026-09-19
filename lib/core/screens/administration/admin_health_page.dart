@@ -7,6 +7,7 @@ import '../../theme/wing_theme.dart';
 import '../../widgets/profile_diagnostics_panel.dart';
 import 'admin_widgets.dart';
 import 'admin_runtime_health.dart';
+import 'admin_health_section.dart';
 import 'admin_providers_page.dart';
 import 'admin_connectors_page.dart';
 
@@ -33,6 +34,7 @@ class AdminHealthContent extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final Future<void> Function()? onCheckProfile;
   final bool checkingProfile;
+  final DateTime? profileCheckedAt;
   final Future<void> Function(String destination) onOpenDestination;
   const AdminHealthContent({
     super.key,
@@ -44,6 +46,7 @@ class AdminHealthContent extends StatelessWidget {
     required this.onOpenDestination,
     this.onCheckProfile,
     this.checkingProfile = false,
+    this.profileCheckedAt,
     required this.accessChecks,
     this.onConnections,
   });
@@ -61,30 +64,26 @@ class AdminHealthContent extends StatelessWidget {
           if (persistenceError case final message?) AdminNotice.error(message),
           AdminRuntimeHealth(health: health),
           const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Profile',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              IconButton(
-                tooltip: 'Refresh profile status',
-                onPressed: profile == null || checkingProfile
-                    ? null
-                    : onCheckProfile,
-                icon: checkingProfile
-                    ? const SizedBox.square(
-                        dimension: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          semanticsLabel: 'Refreshing profile status',
-                        ),
-                      )
-                    : const Icon(Icons.refresh),
-              ),
-            ],
+          AdminHealthSectionHeading(
+            title: 'Profile',
+            checkedAt: profileCheckedAt,
+            checking: checkingProfile,
+            incomplete: health.profileCheckIncomplete,
+            refresh: IconButton(
+              tooltip: 'Refresh profile status',
+              onPressed: profile == null || checkingProfile
+                  ? null
+                  : onCheckProfile,
+              icon: checkingProfile
+                  ? const SizedBox.square(
+                      dimension: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        semanticsLabel: 'Refreshing profile status',
+                      ),
+                    )
+                  : const Icon(Icons.refresh),
+            ),
           ),
           if (profile == null)
             const AdminNotice('Select an available profile to view its health.')
@@ -106,7 +105,7 @@ class AdminHealthContent extends StatelessWidget {
                     'Model access is unavailable for this profile.',
                   ),
                 for (final (title, source, icon) in [
-                  ('Tools', 'Tool setup', Icons.handyman_outlined),
+                  ('Tool setup', 'Tool setup', Icons.handyman_outlined),
                   (
                     'Connectors',
                     'Connector settings',
@@ -123,11 +122,12 @@ class AdminHealthContent extends StatelessWidget {
                   ),
               ],
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
-              child: Text(
-                'Model access checks credentials. Replies and quota aren’t tested.',
-                style: Theme.of(context).textTheme.bodySmall,
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => showHealthCheckExplanation(context),
+                icon: const Icon(Icons.info_outline, size: 18),
+                label: const Text('What’s checked?'),
               ),
             ),
             const SizedBox(height: 4),
@@ -149,20 +149,6 @@ class AdminHealthContent extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  String _summary(String title, AdministrationHealthFinding? finding) {
-    if (finding == null) {
-      return 'Not checked';
-    }
-    if (finding.status != AdministrationHealthStatus.healthy) {
-      return finding.detail;
-    }
-    return switch (title) {
-      'Tools' => 'Enabled tools configured',
-      'Scheduled tasks' => 'No tasks need attention',
-      _ => finding.detail,
-    };
   }
 
   Widget _row(
@@ -187,7 +173,7 @@ class AdminHealthContent extends StatelessWidget {
     ),
     title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
     subtitle: Text(
-      _summary(title, finding),
+      finding?.detail ?? 'Not checked',
       style: Theme.of(context).textTheme.bodySmall,
     ),
     trailing: finding?.status == AdministrationHealthStatus.healthy
@@ -266,7 +252,7 @@ class AdminHealthContent extends StatelessWidget {
                       children: [
                         AdminRow(
                           title: switch (title) {
-                            'Tools' => 'Skills and tools',
+                            'Tool setup' => 'Skills and tools',
                             'Connectors' => 'Manage connectors',
                             _ => 'Manage scheduled tasks',
                           },

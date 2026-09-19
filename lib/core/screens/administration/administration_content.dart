@@ -669,6 +669,7 @@ class _HermesAdministrationContentState
               ? null
               : _checkProfile,
           checkingProfile: _checkingProfile,
+          profileCheckedAt: _healthSession.checkedAt(_profile?.name),
           accessChecks: _checksForCurrentProfile,
           onConnections: widget.onConnections,
           onRefresh: _refresh,

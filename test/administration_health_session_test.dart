@@ -21,6 +21,7 @@ void main() {
   Completer<Map<String, dynamic>>? accessGate;
   var diagnosticRunning = false;
   var tasksOffline = false;
+  var taskRows = <Map<String, dynamic>>[];
   var nextPid = 8;
 
   setUp(() async {
@@ -32,6 +33,7 @@ void main() {
     accessGate = null;
     diagnosticRunning = false;
     tasksOffline = false;
+    taskRows = [];
     nextPid = 8;
     ProfileGateway gateway(String name) => ProfileGateway(
       scope: WorkspaceScope(
@@ -90,7 +92,7 @@ void main() {
           },
           'mcp/servers' => {'servers': []},
           'cron/jobs' =>
-            tasksOffline ? throw StateError('offline') : {'data': []},
+            tasksOffline ? throw StateError('offline') : {'data': taskRows},
           'ops/doctor' ||
           'ops/security-audit' => {'name': path.substring(4), 'pid': ++nextPid},
           'actions/doctor/status' || 'actions/security-audit/status' => {
@@ -151,7 +153,7 @@ void main() {
       await select(session, 'work');
       expect(
         session.health.profileFindings.any(
-          (f) => f.detail == 'tool-work needs setup',
+          (f) => f.detail == '1 enabled · 1 needs setup',
         ),
         isTrue,
       );
@@ -174,7 +176,7 @@ void main() {
       expect(requests, isEmpty);
       expect(
         session.health.profileFindings.any(
-          (f) => f.detail == 'No setup gaps reported for enabled tools',
+          (f) => f.detail == '1 enabled · All set up',
         ),
         isTrue,
       );
@@ -184,14 +186,14 @@ void main() {
             .healthObservation
             .finding
             ?.detail,
-        'Credentials available',
+        'Access is set up',
       );
       session.select(workspaces['work']);
       await tester.pump();
       expect(requests, isEmpty);
       expect(
         session.health.profileFindings.any(
-          (f) => f.detail == 'tool-work needs setup',
+          (f) => f.detail == '1 enabled · 1 needs setup',
         ),
         isTrue,
       );
@@ -237,7 +239,7 @@ void main() {
           .healthObservation
           .finding
           ?.detail,
-      'Credentials available',
+      'Access is set up',
     );
     session.dispose();
   });
@@ -404,6 +406,63 @@ void main() {
       json['profiles']['default']['refreshedAt'],
       isNot(json['profiles']['work']['refreshedAt']),
     );
+    session.dispose();
+  });
+  testWidgets('task counts and partial refresh times survive restart', (
+    tester,
+  ) async {
+    taskRows = [
+      for (final (id, enabled, state, error) in [
+        ('new', true, 'scheduled', ''),
+        ('paused', false, 'paused', ''),
+        ('failed', false, 'disabled', 'Delivery failed'),
+      ])
+        {
+          'id': id,
+          'enabled': enabled,
+          'state': state,
+          'last_error': error,
+          'schedule': {'kind': 'interval', 'minutes': 60},
+        },
+    ];
+    var session = create();
+    await select(session, 'default');
+    expect(
+      session.health.profileFindings
+          .singleWhere((f) => f.title == 'Scheduled tasks')
+          .detail,
+      '3 tasks · 1 has a reported error',
+    );
+    expect(session.health.profileCheckIncomplete, isFalse);
+    expect(session.checkedAt('default'), now);
+    now = now.add(const Duration(minutes: 20));
+    tasksOffline = true;
+    await session.refresh(workspaces['default']!);
+    expect(session.health.profileCheckIncomplete, isTrue);
+    expect(session.checkedAt('default'), now);
+    session.dispose();
+    await session.saved;
+    session = create();
+    session.select(workspaces['default']);
+    await tester.pump();
+    expect(session.health.profileCheckIncomplete, isTrue);
+    expect(session.checkedAt('default'), now);
+    expect(
+      session.health.profileFindings
+          .singleWhere((f) => f.title == 'Scheduled tasks')
+          .detail,
+      contains('3 tasks · 1 has a reported error'),
+    );
+    tasksOffline = false;
+    taskRows.removeLast();
+    await session.refresh(workspaces['default']!);
+    expect(
+      session.health.profileFindings
+          .singleWhere((f) => f.title == 'Scheduled tasks')
+          .detail,
+      '2 tasks · No reported errors',
+    );
+    expect(session.health.profileCheckIncomplete, isFalse);
     session.dispose();
   });
 }

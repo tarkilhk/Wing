@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Explain Health checks in plain language, show tool/connector/task counts, and display check times once per Server and Profile section with incomplete-check status.
+
 - Retry temporary Health connection failures safely. Keep server and per-profile results across navigation and app restarts, reuse them for 24 hours, and resume tracking unfinished diagnostics without duplicating them.
 
 - Scroll the Usage year grid smoothly in either direction, with the visible date range updating during drags and momentum. Replace the earlier/later arrows.

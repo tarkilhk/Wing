@@ -5,6 +5,7 @@ import '../../theme/wing_theme.dart';
 import '../../services/administration_health.dart';
 import 'admin_operations_page.dart';
 import 'admin_widgets.dart';
+import 'admin_health_section.dart';
 
 Future<bool> _startDiagnostic(
   BuildContext context,
@@ -47,6 +48,7 @@ Future<void> runAllHealthDiagnostics(
       !health.canStartDiagnostic('ops/security-audit')) {
     return;
   }
+  health.beginServerRefresh();
   await Future.wait([
     _startDiagnostic(context, health, 'ops/doctor', 'Doctor', confirm: false),
     _startDiagnostic(
@@ -66,6 +68,12 @@ Future<void> refreshHealthDiagnostics(
   AdministrationHealth health,
 ) async {
   if (!context.mounted) return;
+  if (AdministrationHealth.diagnosticPaths.every(
+    health.diagnosticNeedsRefresh,
+  )) {
+    await runAllHealthDiagnostics(context, health);
+    return;
+  }
   await Future.wait([
     for (final (path, title) in [
       ('ops/doctor', 'Doctor'),
@@ -198,7 +206,7 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
       ),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text(
-        '$label${observation?.checkedAt != null ? ' · ${TimeOfDay.fromDateTime(observation!.checkedAt!).format(context)}' : ''}',
+        label,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
       ),
       trailing: observation == null
@@ -223,36 +231,33 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
     final canRunAll =
         health.canStartDiagnostic('ops/doctor') &&
         health.canStartDiagnostic('ops/security-audit');
-    final running =
-        health.starting.isNotEmpty ||
-        _observations.values.any((value) => value.status['running'] == true);
+    final running = health.serverChecking;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Server',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-            IconButton(
-              tooltip: 'Run all diagnostics',
-              onPressed: canRunAll
-                  ? () => runAllHealthDiagnostics(context, health)
-                  : null,
-              icon: running
-                  ? const SizedBox.square(
-                      dimension: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        semanticsLabel: 'Running diagnostics',
-                      ),
-                    )
-                  : const Icon(Icons.refresh),
-            ),
-          ],
+        AdminHealthSectionHeading(
+          title: 'Server',
+          checkedAt: health.serverCheckIncomplete
+              ? health.serverAttemptedAt
+              : health.serverCheckedAt,
+          checking: running,
+          incomplete: health.serverCheckIncomplete,
+          attempted: health.serverAttemptedAt != null,
+          refresh: IconButton(
+            tooltip: 'Run all diagnostics',
+            onPressed: canRunAll
+                ? () => runAllHealthDiagnostics(context, health)
+                : null,
+            icon: running
+                ? const SizedBox.square(
+                    dimension: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      semanticsLabel: 'Running diagnostics',
+                    ),
+                  )
+                : const Icon(Icons.refresh),
+          ),
         ),
         AdminGroup(
           children: [

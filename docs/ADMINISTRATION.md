@@ -43,6 +43,27 @@ short read-only disclosure; source metadata is shown only when reported.
 
 ## Health observations
 
+The owner-approved clear-result wording uses `Access is set up`, enabled tool-group
+counts with setup gaps, passed/failed/unavailable connector counts, and scheduled
+task counts with recorded errors. Empty inventories say so explicitly. The
+What’s checked? dialog explains that configuration checks do not execute tools,
+connector checks do not exercise their actions, and task checks do not run jobs.
+Reverified stock Hermes at
+[`1af1db281e7274581cb61fdd03c64f822fbebb83`](https://github.com/NousResearch/hermes-agent/commit/1af1db281e7274581cb61fdd03c64f822fbebb83):
+`tui_gateway/methods_config.py`, `hermes_cli/web_routers/tools.py`,
+`hermes_cli/tools_config.py`, and `hermes_cli/web_routers/mcp.py`. No new API calls.
+
+Server and Profile each display one check time in the heading. The profile time
+is the end of its most recent refresh attempt, qualified as incomplete if any of
+the four visible checks lacks a result; reported problems still count as completed
+checks. The Server completion time advances only when both diagnostics in a
+section refresh finish. Individual reruns retain that shared time. If diagnostics
+were first run separately, their oldest result establishes initial section coverage.
+Diagnostic generation IDs keep retained output from satisfying a newer refresh,
+including after restarting the app. Detailed result pages retain their own times.
+The health-result cache uses the v2 schema for these section records and count-based
+summaries; older cached Health snapshots are not restored. Other app data is unchanged.
+
 Health has two groups. Server owns Doctor, security audit and Logs. Its refresh icon
 starts Doctor and security audit together, without opening their details or a
 confirmation dialog. It is disabled while either diagnostic is starting, running
@@ -53,7 +74,7 @@ Doctor and security audit details rerun from their top-bar play action, with no
 bottom rerun button; result polling remains automatic. There is no runtime-profile
 label. Diagnostic confirmations and results identify the server. Profile uses
 selection from the shared header,
-a refresh icon beside its heading, four stable rows (Model access, Tools, Connectors,
+a refresh icon beside its heading, four stable rows (Model access, Tool setup, Connectors,
 Scheduled tasks), and Usage. There is no global health verdict. Server diagnostics run on first entry and retain their separate progress and results.
 
 Health owns its profile observations, so opening Administration first is unnecessary.
@@ -65,14 +86,14 @@ pull-to-refresh repeat the same checks. Returning from provider recovery also ch
 again. Pending refreshes are shared per profile; another profile can refresh immediately,
 and late results remain attached to their captured scope. No model prompt is sent.
 Model access is a passive row directly in Health. It shows credential status,
-model/provider and the check time. There is no model/provider detail destination,
+and model/provider. There is no model/provider detail destination,
 Change model control, routine account-management shortcut, or row navigation.
 The Profile refresh icon repeats the checks. A reported provider failure
 reveals Fix access, which opens the profile's existing account editor; an
 unconfirmed alternate route offers Review access. An incomplete check offers Retry,
 and server authentication rejection offers Review connection. Healthy and unchecked
-states have no recovery actions. A quiet note distinguishes credentials from replies
-and quota. Observation timestamps belong to their results, not a group-wide verdict.
+states have no recovery actions. What’s checked? explains the checks and their limits.
+The headings own section times; these describe check completion, not a healthy verdict.
 
 The row uses the retained credential result. Configuration presence and unknown
 provider catalog entries do not substitute for it. Successful checks require the

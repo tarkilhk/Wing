@@ -250,7 +250,7 @@ with automatic result polling and no bottom rerun button. Profile
 uses the shared header for profile selection, a refresh icon beside its heading,
 four stable observation rows and Usage. The refresh icon explicitly checks the
 selected profile and shows progress while the check runs.
-Only actual issues carry warning/error emphasis. Healthy Tools, Connectors and
+Only actual issues carry warning/error emphasis. Healthy Tool setup, Connectors and
 Scheduled tasks rows use green success icons, with no chevron or tap action.
 Non-healthy rows retain detail navigation and recovery links; unknown checks use
 neutral icons.
@@ -260,12 +260,21 @@ Detail pages use the same gutters, grouped rows and quiet timestamps, with
 specific recovery links to the owning editors. The owner-approved 19 September
 correction removes the Model & provider detail screen and places Model access
 status directly in Health's Profile group. The row is passive: label, credential
-result, subordinate model/provider and its check time. Its key icon uses the
+result and subordinate model/provider. Its key icon uses the
 success green only after credentials are confirmed. It has no chevron, row tap,
 model picker, or routine management link. Profile refresh owns checking; a problem
 alone reveals Fix access, Review access, Retry or Review connection as appropriate.
 Keep these actions compact and preserve the selected profile when entering its
-existing recovery editor. Use one quiet note below the group for check coverage.
+existing recovery editor. Use the compact What’s checked? information action below
+the group for the four plain-language explanations and their limits.
+Show concrete counts: enabled tool groups and setup gaps, passed/failed/incomplete
+connector checks, and listed tasks with reported errors. Empty inventories are
+explicit. Model access success says Access is set up; it does not imply a test reply.
+Each Server and Profile heading owns one check time. Use Last checked after a
+completed section refresh, Checking… during work, and Check incomplete when a
+result could not be established. Findings are completed checks, not incomplete
+checks. Remove timestamps from overview rows; a single diagnostic rerun must not
+advance the Server section’s shared completion time. Older dates include their date.
 Name any different resolved model/provider without validating the selected route.
 Health retains server results and separate profile checks across navigation and app
 restarts. Opening it reuses results for 24 hours; expired completed diagnostics
