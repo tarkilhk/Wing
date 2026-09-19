@@ -634,6 +634,20 @@ void main() {
           );
           await tester.pump();
           final name = '$state-${brightness.name}-$scale';
+          final row = find.byType(ProfileModelAccessRow);
+          final icon = tester.widget<Icon>(
+            find.descendant(of: row, matching: find.byType(Icon)).first,
+          );
+          final tokens = WingTokens.of(tester.element(row));
+          expect(
+            icon.color,
+            switch (state) {
+              'ready' => tokens.success,
+              'different' => tokens.warning,
+              'missing' || 'failed' => tokens.danger,
+              _ => Theme.of(tester.element(row)).colorScheme.onSurfaceVariant,
+            },
+          );
           await snapshot(tester, name);
           expect(tester.takeException(), isNull);
           await tester.ensureVisible(

@@ -207,6 +207,7 @@ class ProfileModelAccessRow extends StatelessWidget {
       final color = checking
           ? theme.colorScheme.onSurfaceVariant
           : switch (result.status) {
+              AdministrationHealthStatus.healthy => tokens.success,
               AdministrationHealthStatus.failure => tokens.danger,
               AdministrationHealthStatus.warning => tokens.warning,
               _ => theme.colorScheme.onSurfaceVariant,

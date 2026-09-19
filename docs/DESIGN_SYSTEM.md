@@ -260,7 +260,8 @@ Detail pages use the same gutters, grouped rows and quiet timestamps, with
 specific recovery links to the owning editors. The owner-approved 19 September
 correction removes the Model & provider detail screen and places Model access
 status directly in Health's Profile group. The row is passive: label, credential
-result, subordinate model/provider and its check time. It has no chevron, row tap,
+result, subordinate model/provider and its check time. Its key icon uses the
+success green only after credentials are confirmed. It has no chevron, row tap,
 model picker, or routine management link. Profile refresh owns checking; a problem
 alone reveals Fix access, Review access, Retry or Review connection as appropriate.
 Keep these actions compact and preserve the selected profile when entering its
