@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wing/core/screens/administration/admin_health_page.dart';
+import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/screens/administration/usage_charts.dart';
 import 'support/administration_fixture.dart';
@@ -117,7 +117,7 @@ void main() {
             child: child!,
           ),
         ),
-        home: AdminUsagePage(profile: fixture.server.profile('personal')),
+        home: AnalyticsPage(profile: fixture.server.profile('personal')),
       ),
     );
     await tester.runAsync(
@@ -343,7 +343,7 @@ void main() {
     fixture.override = (_, _, _, _) => pending.future;
     await tester.pumpWidget(
       MaterialApp(
-        home: AdminUsagePage(profile: fixture.server.profile('personal')),
+        home: AnalyticsPage(profile: fixture.server.profile('personal')),
       ),
     );
     await tester.pump();

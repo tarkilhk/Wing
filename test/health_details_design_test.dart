@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wing/core/screens/administration/admin_health_page.dart';
+import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/screens/administration/admin_operations_page.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -86,7 +86,7 @@ void main() {
                 ),
               ),
               home: switch (page) {
-                'usage' => AdminUsagePage(
+                'usage' => AnalyticsPage(
                   profile: fixture.server.profile('client-work'),
                 ),
                 'logs' => AdminLogsPage(server: fixture.server),

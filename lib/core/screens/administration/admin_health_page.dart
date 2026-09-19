@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'admin_usage_dashboard.dart';
-import '../../widgets/workspace_picker.dart';
 import '../../services/administration_repository.dart';
 import '../../services/administration_health.dart';
 import '../../theme/wing_theme.dart';
@@ -129,21 +127,6 @@ class AdminHealthContent extends StatelessWidget {
                 icon: const Icon(Icons.info_outline, size: 18),
                 label: const Text('What’s checked?'),
               ),
-            ),
-            const SizedBox(height: 4),
-            AdminGroup(
-              children: [
-                AdminRow(
-                  title: 'Usage',
-                  subtitle: 'Tokens and cost',
-                  icon: Icons.bar_chart,
-                  onTap: () => adminPushProfile(
-                    context,
-                    profile!,
-                    (context, profile) => AdminUsagePage(profile: profile),
-                  ),
-                ),
-              ],
             ),
           ],
         ],
@@ -288,16 +271,4 @@ class AdminHealthContent extends StatelessWidget {
     checks.invalidate();
     if (context.mounted) await onCheckProfile?.call();
   }
-}
-
-class AdminUsagePage extends StatelessWidget {
-  final ProfileAdministration profile;
-  const AdminUsagePage({super.key, required this.profile});
-  @override
-  Widget build(BuildContext context) => AdminPage(
-    title: 'Usage',
-    scope: profile.label,
-    pickerMode: WorkspacePickerMode.profiles,
-    child: UsageDashboard(key: ValueKey(profile.scope), profile: profile),
-  );
 }

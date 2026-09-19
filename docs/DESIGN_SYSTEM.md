@@ -99,6 +99,15 @@ uses Studio tint and joins the existing checks and explicit final save.
 
 ## Layout and controls
 
+The owner-approved menu groups Chats and Activity, then Hermes instances and
+App settings, then Hermes administration, Hermes health and Hermes analytics.
+Use quiet separators before Hermes instances and Hermes administration, without
+section headings. Hermes instances is the saved-server collection; use Add
+instance, Edit instance and Instance name in its setup flow. Removing an instance
+removes its saved connection, not the deployed server. Hermes analytics opens the
+existing usage dashboard directly, with a profile-only scope picker. Health ends
+with its Server and Profile checks and has no Usage row.
+
 Keep hamburger navigation and projects scoped inside Chats. Use compact connection/profile text below the page title. Search stays below this scope. Projects, pins and recents use full-width rows, grouped where helpful, with thin separators.
 
 On 15 September 2026, the owner requested compact row menus attached to their
@@ -125,7 +134,7 @@ On 18 September 2026, the owner split the shared screen header into two targets:
 the connection icon and LED open the existing status/retry sheet, while the name
 opens an anchored dropdown matching its displayed scope: connection-only headers
 (including Chats, conversations and Activity) offer connections only; headers
-showing a profile offer connections and profiles, except Usage, whose dropdown
+showing a profile offer connections and profiles, except Analytics, whose dropdown
 offers only profiles following the owner’s 19 September refinement. Each target is at least 48 dp.
 Use the standard Studio popup surface and selected background tint. This applies
 to Chats, conversations, Activity, Administration, Health and administration
@@ -248,7 +257,7 @@ It starts both diagnostics directly and disables repeat starts until both have
 known completion. Doctor and audit details use a top-bar play action to rerun,
 with automatic result polling and no bottom rerun button. Profile
 uses the shared header for profile selection, a refresh icon beside its heading,
-four stable observation rows and Usage. The refresh icon explicitly checks the
+four stable observation rows. Analytics has its own drawer destination. The refresh icon explicitly checks the
 selected profile and shows progress while the check runs.
 Only actual issues carry warning/error emphasis. Healthy Tool setup, Connectors and
 Scheduled tasks rows use green success icons, with no chevron or tap action.

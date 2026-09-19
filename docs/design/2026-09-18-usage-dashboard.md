@@ -1,14 +1,20 @@
-# Usage dashboard
+# Hermes analytics
 
 The owner selected the title-switching design from the LAN prototype and
 approved the stock-Hermes implementation with **1D, 7D, 30D, 90D, 365D**.
 ALL is removed. The page helps compare token usage and estimated value, then
 inspect a date or a model without leaving its captured profile/connection.
 
+The drawer opens this dashboard directly through **Hermes analytics**, below
+Hermes health. The former Health Usage row is removed. Administration search
+also finds Analytics using usage, token and cost terms. The screen retains its
+profile-only picker and existing stock aggregate reads; this navigation change
+adds no backend integration or API requirements.
+
 ## Implemented layout
 
 - Profile-only dropdown in the scope header; neutral period buttons; token
-  count and estimated value side by side. Connection selection stays outside Usage.
+  count and estimated value side by side. Connection selection stays outside Analytics.
 - Full-year token-intensity calendar, one square per UTC session-start date,
   in one compact Sunday-aligned band of week columns. Smooth horizontal scrolling
   browses the cached year, with the date label tracking the visible weeks during

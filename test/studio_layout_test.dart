@@ -518,7 +518,7 @@ void main() {
                   const SizedBox(height: 16),
                   const TextField(
                     decoration: InputDecoration(
-                      labelText: 'Connection name',
+                      labelText: 'Instance name',
                       hintText: 'Workstation',
                     ),
                   ),

@@ -1,3 +1,4 @@
+import 'core/screens/administration/admin_widgets.dart' show adminToolbarHeight;
 import 'core/widgets/server_connection_label.dart';
 import 'core/widgets/connection_icon_picker.dart';
 import 'core/services/network_availability.dart';
@@ -753,7 +754,7 @@ class HomeScreenState extends State<HomeScreen> {
                       children: [
                         const ListTile(
                           title: Text(
-                            'Choose a connection for this shared draft',
+                            'Choose a Hermes instance for this shared draft',
                           ),
                         ),
                         for (final connection in _connections)
@@ -1126,7 +1127,7 @@ class HomeScreenState extends State<HomeScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: StudioError(
-                      'The connection could not be deleted safely.',
+                      'The saved instance could not be removed safely.',
                     ),
                   ),
                 );
@@ -1136,11 +1137,11 @@ class HomeScreenState extends State<HomeScreen> {
             }
           },
           itemBuilder: (_) => [
-            const PopupMenuItem(value: 'edit', child: Text('Edit connection')),
+            const PopupMenuItem(value: 'edit', child: Text('Edit instance')),
             PopupMenuItem(
               value: 'delete',
               child: Text(
-                'Delete',
+                'Remove instance',
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),
@@ -1197,10 +1198,21 @@ class HomeScreenState extends State<HomeScreen> {
           ),
         ),
         appBar: AppBar(
+          toolbarHeight: adminToolbarHeight(
+            context,
+            _connections.isEmpty && _destination == AppDestination.connections
+                ? ''
+                : _destination.label,
+            actions:
+                _destination == AppDestination.connections &&
+                    _connections.isNotEmpty
+                ? 2
+                : 0,
+          ),
           title:
               _connections.isEmpty && _destination == AppDestination.connections
               ? null
-              : Text(_destination.label),
+              : Text(_destination.label, maxLines: 6, softWrap: true),
           actions: [
             if (_destination == AppDestination.connections &&
                 _connections.isNotEmpty)
@@ -1292,10 +1304,10 @@ class HomeScreenState extends State<HomeScreen> {
             _destination == AppDestination.connections &&
                 _connections.isNotEmpty
             ? FloatingActionButton.extended(
-                tooltip: 'Add Connection',
+                tooltip: 'Add instance',
                 onPressed: _addConnection,
                 icon: const Icon(Icons.add),
-                label: const Text('Add connection'),
+                label: const Text('Add instance'),
               )
             : null,
       ),

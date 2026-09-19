@@ -150,7 +150,7 @@ void main() {
     expect(iconRect.size, const Size(48, 48));
     await tester.tap(icon);
     await tester.pumpAndSettle();
-    expect(find.text('Connection icon'), findsOneWidget);
+    expect(find.text('Instance icon'), findsOneWidget);
     expect(find.text('Server access'), findsNothing);
     expect(find.byType(ProfileWorkspaceScreen), findsNothing);
     await tester.tap(find.byKey(const ValueKey('connection-icon-home')));
@@ -160,7 +160,7 @@ void main() {
     await tester.tap(led);
     await tester.pumpAndSettle();
     expect(find.text('Server access'), findsOneWidget);
-    expect(find.text('Connection icon'), findsNothing);
+    expect(find.text('Instance icon'), findsNothing);
     expect(find.byType(ProfileWorkspaceScreen), findsNothing);
   });
 
@@ -178,8 +178,8 @@ void main() {
     await tester.tap(find.byType(PopupMenuButton<String>));
     await tester.pumpAndSettle();
     expect(find.text('Appearance'), findsNothing);
-    expect(find.text('Edit connection'), findsOneWidget);
-    expect(find.text('Delete'), findsOneWidget);
+    expect(find.text('Edit instance'), findsOneWidget);
+    expect(find.text('Remove instance'), findsOneWidget);
     await tester.tapAt(const Offset(10, 300));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Change connection icon'));

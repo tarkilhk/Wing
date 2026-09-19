@@ -11,7 +11,7 @@ import 'package:wing/core/screens/administration/admin_widgets.dart';
 import 'package:wing/core/screens/profile_capabilities_screen.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/screens/administration/admin_defaults_page.dart';
-import 'package:wing/core/screens/administration/admin_health_page.dart';
+import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/screens/administration/admin_skills_page.dart';
 import 'package:wing/core/screens/administration/admin_providers_page.dart';
 import 'package:wing/core/services/profile_gateway.dart';
@@ -95,7 +95,7 @@ void main() {
       };
       await tester.pumpWidget(
         app(
-          AdminUsagePage(profile: fixture.server.profile('personal')),
+          AnalyticsPage(profile: fixture.server.profile('personal')),
           brightness,
         ),
       );

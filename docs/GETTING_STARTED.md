@@ -52,7 +52,7 @@ For development builds, follow [Contributing](../CONTRIBUTING.md). A Play Store 
 
 ## 4. Add your connection
 
-Tap **Connect your agent** on the welcome screen, or **Add connection** from **Connections**. Choose **Hermes Cloud** or **Use an address**.
+Tap **Connect your agent** on the welcome screen, or **Add instance** from **Hermes instances**. Choose **Hermes Cloud** or **Use an address**.
 
 For **Hermes Cloud**, Continue opens Nous Portal sign-in. Choose an organization if requested, then select an available hosted instance and Continue. Wing runs the same profile, live-chat and history checks before the explicit **Save and open** step. Empty accounts can open Portal to create an instance and refresh afterward; stopped instances must be managed in Portal. Creation, billing and start/stop controls stay there. Login and empty-instance discovery have been confirmed on Android; connection to a running hosted instance still needs live acceptance.
 

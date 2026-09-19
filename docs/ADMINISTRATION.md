@@ -1,6 +1,6 @@
 # Administration
 
-Administration opens directly on the profile overview without tabs. Hermes health is a dedicated destination in the global navigation. The selected server stays visible. Profile opens with a compact profile brief and current-value navigation: Models and reasoning, Identity, Memory and Behavior under Agent setup; Skills and tools, Access and connectors and Scheduled tasks under Capabilities and automation. Manage profiles is its own pill after the last profile in the horizontally scrolling selector. The global menu shows a larger Wing identity above a low server footer. The connection icon, name and LED open connection details; the server version opens Versions & updates. Back restores the open menu. Client version remains in App settings. Provider settings remain under Profile / Access and connectors. Version and upstream update availability load automatically; an update icon marks newer backend code. Health separates runtime observations from selected-profile diagnostics and usage.
+Administration opens directly on the profile overview without tabs. Hermes health is a dedicated destination in the global navigation. The selected server stays visible. Profile opens with a compact profile brief and current-value navigation: Models and reasoning, Identity, Memory and Behavior under Agent setup; Skills and tools, Access and connectors and Scheduled tasks under Capabilities and automation. Manage profiles is its own pill after the last profile in the horizontally scrolling selector. The global menu shows a larger Wing identity above a low server footer. The connection icon, name and LED open connection details; the server version opens Versions & updates. Back restores the open menu. Client version remains in App settings. Provider settings remain under Profile / Access and connectors. Version and upstream update availability load automatically; an update icon marks newer backend code. Health separates server diagnostics from selected-profile readiness. Hermes analytics is a separate drawer destination for usage history, tokens and estimated costs.
 
 Read the [ownership handoff](design/2026-09-14-administration-handoff.md) before changing these flows. The [roadmap](ADMINISTRATION_ROADMAP.md) preserves selected priorities and exclusions.
 
@@ -75,7 +75,7 @@ bottom rerun button; result polling remains automatic. There is no runtime-profi
 label. Diagnostic confirmations and results identify the server. Profile uses
 selection from the shared header,
 a refresh icon beside its heading, four stable rows (Model access, Tool setup, Connectors,
-Scheduled tasks), and Usage. There is no global health verdict. Server diagnostics run on first entry and retain their separate progress and results.
+Scheduled tasks). There is no global health verdict. Server diagnostics run on first entry and retain their separate progress and results.
 
 Health owns its profile observations, so opening Administration first is unnecessary.
 Opening Health or selecting a profile reuses that profile’s saved results for 24 hours.

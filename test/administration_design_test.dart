@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/administration/admin_defaults_page.dart';
-import 'package:wing/core/screens/administration/admin_health_page.dart';
+import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/screens/administration/admin_runtime_health.dart';
 import 'package:wing/core/screens/administration/admin_identity_page.dart';
 import 'package:wing/core/screens/administration/admin_memory_page.dart';
@@ -126,7 +126,7 @@ void main() {
             title: 'Compression',
             fields: compressionFields,
           ),
-          'usage' => AdminUsagePage(profile: profile),
+          'usage' => AnalyticsPage(profile: profile),
           _ => Scaffold(
             appBar: AppBar(title: const Text('Voice')),
             body: SingleChildScrollView(

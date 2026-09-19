@@ -10,10 +10,11 @@ import 'wing_wordmark.dart';
 enum AppDestination {
   chats('Chats', Icons.chat_bubble_outline),
   activity('Activity', Icons.pending_actions_outlined),
-  connections('Connections', Icons.dns_outlined),
+  connections('Hermes instances', Icons.dns_outlined),
   settings('App settings', Icons.tune_outlined),
   administration('Hermes administration', Icons.manage_accounts_outlined),
-  health('Hermes health', Icons.health_and_safety_outlined);
+  health('Hermes health', Icons.health_and_safety_outlined),
+  analytics('Hermes analytics', Icons.bar_chart_outlined);
 
   const AppDestination(this.label, this.icon);
   final String label;
@@ -78,7 +79,8 @@ class AppDrawer extends StatelessWidget {
                         ),
                       ),
                       for (final destination in AppDestination.values) ...[
-                        if (destination == AppDestination.connections)
+                        if (destination == AppDestination.connections ||
+                            destination == AppDestination.administration)
                           const Padding(
                             padding: EdgeInsets.symmetric(vertical: 12),
                             child: Divider(),

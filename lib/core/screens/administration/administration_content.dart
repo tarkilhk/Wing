@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../analytics_content.dart';
 import '../../services/administration_overview.dart';
 import '../../services/administration_health.dart';
 import '../../widgets/profile_diagnostics_panel.dart';
@@ -579,16 +580,16 @@ class _HermesAdministrationContentState
             ),
     ),
     _Destination(
-      'Profile health',
-      'Usage',
-      'Daily activity and model breakdowns',
+      'Analytics',
+      'Analytics',
+      'Usage, tokens and cost by day and model',
       Icons.bar_chart,
       p == null
           ? null
           : () => adminPushProfile(
               context,
               p,
-              (context, profile) => AdminUsagePage(profile: profile),
+              (context, profile) => AnalyticsPage(profile: profile),
             ),
     ),
     _Destination(
@@ -853,7 +854,7 @@ class _Destination {
         _ => 'Profile › $title',
       };
     }
-    if (tab == 'Profile health') return 'Health › Selected profile › $title';
+    if (tab == 'Analytics') return 'Hermes analytics › Selected profile';
     if (tab == 'Runtime health') return 'Health › Runtime › $title';
     return '$tab › $title';
   }

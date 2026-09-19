@@ -16,7 +16,8 @@ This is the ownership contract for Administration, updated on 17 September 2026 
 | Profile / Manage profiles | Collection lifecycle; compact pill after the last profile, scrolling with the profile selector |
 | Global menu / Connection and Server version | Icon, connection name and LED open connection details; server version opens Versions & updates and checks upstream availability. Client version remains in App settings. |
 | Health / Server | Bounded logs, Doctor/security audit, Run all diagnostics and action results |
-| Health / Profile | Scoped readiness and usage; recovery links to the owning editor |
+| Health / Profile | Scoped readiness; recovery links to the owning editor |
+| Global menu / Hermes analytics | Profile-scoped usage, tokens, estimated costs and history |
 
 MCP connectors owns Reconnect MCP tools, with confirmation that it reconnects tools across all server profiles and can invalidate prompt caches. Versions & updates contains server identity and update controls. Only the server has an upstream update check and circular-arrows availability indicator. Check update progress appears after an update request; it reads the running update action, while Check for updates compares installed code with upstream.
 
@@ -55,7 +56,8 @@ headers identify the connection, and Logs no longer requests profile identity.
 
 The owner-approved 18 September Health layout uses Server and Profile groups,
 with no combined health verdict. Doctor, audit and Logs remain server-owned;
-Usage and four observation rows follow the header-selected profile. Unknown
+Four observation rows follow the header-selected profile. Usage now lives in the
+standalone Hermes analytics drawer destination, below Hermes health. Unknown
 coverage is local, configuration does not expire after five minutes, and actual
 credential expiration remains visible. All four Profile rows reuse saved results on entry and profile selection.
 A missing or 24-hour-old profile refresh triggers fresh checks. Server results

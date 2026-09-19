@@ -269,8 +269,8 @@ void main() {
       await _tap(tester, 'Hermes Cloud');
       await _tap(tester, 'Continue');
       await _tap(tester, 'Research assistant');
-      expect(find.text('Open connection'), findsOneWidget);
-      await _tap(tester, 'Open connection');
+      expect(find.text('Open instance'), findsOneWidget);
+      await _tap(tester, 'Open instance');
       expect(cloud.signIns, 0);
       expect(tester.takeException(), isNull);
     },
