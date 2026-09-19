@@ -20,8 +20,10 @@ on 19 September 2026. The reference prototype remains in the workspace at
   Named profiles use desktop's unsigned name hash and HSL(68%, 58%) colors;
   default stays neutral. Initials use the profile color; backgrounds use 22%
   tint when inactive and 30% when selected. Inactive artwork is dimmed to 55%,
-  matching desktop. Studio selection remains expressed through tint, without
-  desktop's selected-only ring.
+  matching desktop. The owner's visibility refinement adds a 1.5 dp outside
+  border in the profile color when selected (neutral for default), alongside
+  the selected tint. The border uses the existing gap without changing square
+  size, letter layout or the bar's width.
   Verified against upstream `7c6f21a5e12ba9b1c674ec9b410fa6b8c45de4f8`,
   `apps/desktop/src/lib/profile-color.ts`, `apps/desktop/src/store/profile.ts`,
   `apps/desktop/src/app/chat/sidebar/profile-switcher.tsx`

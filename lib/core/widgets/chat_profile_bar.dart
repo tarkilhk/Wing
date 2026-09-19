@@ -88,6 +88,17 @@ class ChatProfileBar extends StatelessWidget {
                                   ),
                                   borderRadius: BorderRadius.circular(3),
                                 ),
+                                foregroundDecoration: selected
+                                    ? BoxDecoration(
+                                        border: Border.all(
+                                          color: color,
+                                          width: 1.5,
+                                          strokeAlign:
+                                              BorderSide.strokeAlignOutside,
+                                        ),
+                                        borderRadius: BorderRadius.circular(3),
+                                      )
+                                    : null,
                                 child: Center(
                                   child: Text(
                                     profile.label.characters.first

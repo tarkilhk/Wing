@@ -37,6 +37,9 @@ indicates the shared list filter. Tap to select one profile, tap again to clear.
 The subsequent density refinement matches desktop's 20 dp squares, 4 dp gaps,
 3 dp corners, 9 sp colored initials and soft profile-color fills. The bar's
 24-by-48 dp targets are an owner-requested exception to standard control width.
+The owner also requested a 1.5 dp outside border around selected profile squares
+for visibility, using their profile color (neutral for default). This is an
+explicit exception to the selection-border rule; square size and spacing stay fixed.
 
 ## App and notification identity
 
