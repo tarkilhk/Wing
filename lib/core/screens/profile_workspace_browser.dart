@@ -320,7 +320,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       final projects =
           <(String, String, bool)>[
             for (final profile in controller.discovery?.profiles ?? []) ...[
-              ('${profile.name}/home', profile.name, true),
+              ('${profile.name}/home', '< ${profile.name} >', true),
               for (final p in _data.projects[profile.name] ?? [])
                 if (p['isNoProject'] != true)
                   (

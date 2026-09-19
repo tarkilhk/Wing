@@ -236,7 +236,7 @@ List<ChatListGroup> groupChats(
     final (key, label) = switch (grouping) {
       ChatGrouping.project => (
         e.projectKey,
-        e.project?['name']?.toString() ?? e.profile,
+        e.project?['name']?.toString() ?? '< ${e.profile} >',
       ),
       ChatGrouping.profile => (e.profile, e.profile),
       ChatGrouping.status => (e.status.name, e.status.label),
