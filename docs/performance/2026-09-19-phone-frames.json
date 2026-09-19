@@ -1,0 +1,418 @@
+{
+  "applicationSource": "3cc762808e2ecca39ac5f8c303f1dec03e4d2f2b",
+  "latestRemoteMainAtValidation": "def56b227b4b334d9ec53365204a50c41e1862c2",
+  "renderer": "Impeller Vulkan",
+  "measurements": {
+    "baseline60Hz": {
+      "environment": {
+        "label": "def56b227b4b334d9ec53365204a50c41e1862c2",
+        "package": "com.tarkilhk.wing.dev",
+        "size": [
+          1080,
+          2316
+        ],
+        "density": "Physical density: 450\nOverride density: 420",
+        "version": [
+          "versionCode=22670 minSdk=24 targetSdk=36",
+          "versionName=1.0.1-dev-profile"
+        ],
+        "android": "16",
+        "actualRefreshRateHz": 60
+      },
+      "runs": [
+        {
+          "run": 1,
+          "build": {
+            "frames": 1775,
+            "p50_ms": 1.431,
+            "p95_ms": 3.738,
+            "p99_ms": 14.06,
+            "max_ms": 25.601,
+            "over_16_ms": 12
+          },
+          "raster": {
+            "frames": 1775,
+            "p50_ms": 2.19,
+            "p95_ms": 2.897,
+            "p99_ms": 3.56,
+            "max_ms": 6.983,
+            "over_16_ms": 0
+          }
+        },
+        {
+          "run": 2,
+          "build": {
+            "frames": 1796,
+            "p50_ms": 1.426,
+            "p95_ms": 3.582,
+            "p99_ms": 4.307,
+            "max_ms": 25.804,
+            "over_16_ms": 1
+          },
+          "raster": {
+            "frames": 1796,
+            "p50_ms": 2.193,
+            "p95_ms": 2.967,
+            "p99_ms": 3.451,
+            "max_ms": 6.745,
+            "over_16_ms": 0
+          }
+        },
+        {
+          "run": 3,
+          "build": {
+            "frames": 1769,
+            "p50_ms": 1.428,
+            "p95_ms": 3.645,
+            "p99_ms": 13.574,
+            "max_ms": 30.84,
+            "over_16_ms": 12
+          },
+          "raster": {
+            "frames": 1769,
+            "p50_ms": 2.214,
+            "p95_ms": 3.031,
+            "p99_ms": 3.777,
+            "max_ms": 9.966,
+            "over_16_ms": 0
+          }
+        }
+      ]
+    },
+    "candidate60Hz": {
+      "environment": {
+        "label": "3cc762808e2ecca39ac5f8c303f1dec03e4d2f2b + phone benchmark entry point",
+        "package": "com.tarkilhk.wing.dev",
+        "size": [
+          1080,
+          2316
+        ],
+        "density": "Physical density: 450\nOverride density: 420",
+        "version": [
+          "versionCode=22671 minSdk=24 targetSdk=36",
+          "versionName=1.0.1-dev-profile"
+        ],
+        "android": "16",
+        "actualRefreshRateHz": 60
+      },
+      "runs": [
+        {
+          "run": 1,
+          "build": {
+            "frames": 1794,
+            "p50_ms": 1.46,
+            "p95_ms": 3.667,
+            "p99_ms": 4.654,
+            "max_ms": 28.144,
+            "over_16_ms": 5
+          },
+          "raster": {
+            "frames": 1794,
+            "p50_ms": 2.218,
+            "p95_ms": 3.137,
+            "p99_ms": 3.681,
+            "max_ms": 10.533,
+            "over_16_ms": 0
+          }
+        },
+        {
+          "run": 2,
+          "build": {
+            "frames": 1818,
+            "p50_ms": 1.486,
+            "p95_ms": 3.836,
+            "p99_ms": 4.477,
+            "max_ms": 5.413,
+            "over_16_ms": 0
+          },
+          "raster": {
+            "frames": 1818,
+            "p50_ms": 2.359,
+            "p95_ms": 3.235,
+            "p99_ms": 3.846,
+            "max_ms": 9.153,
+            "over_16_ms": 0
+          }
+        },
+        {
+          "run": 3,
+          "build": {
+            "frames": 1799,
+            "p50_ms": 1.45,
+            "p95_ms": 3.655,
+            "p99_ms": 4.6,
+            "max_ms": 21.835,
+            "over_16_ms": 6
+          },
+          "raster": {
+            "frames": 1799,
+            "p50_ms": 2.207,
+            "p95_ms": 3.107,
+            "p99_ms": 3.774,
+            "max_ms": 9.694,
+            "over_16_ms": 0
+          }
+        }
+      ]
+    },
+    "expanded637Chats60Hz": {
+      "environment": {
+        "label": "candidate-expanded-637-chats",
+        "package": "com.tarkilhk.wing.dev",
+        "size": [
+          1080,
+          2316
+        ],
+        "density": "Physical density: 450\nOverride density: 420",
+        "version": [
+          "versionCode=22671 minSdk=24 targetSdk=36",
+          "versionName=1.0.1-dev-profile"
+        ],
+        "android": "16",
+        "actualRefreshRateHz": 60
+      },
+      "runs": [
+        {
+          "run": 1,
+          "build": {
+            "frames": 1813,
+            "p50_ms": 1.513,
+            "p95_ms": 4.213,
+            "p99_ms": 5.168,
+            "max_ms": 28.103,
+            "over_16_ms": 6
+          },
+          "raster": {
+            "frames": 1813,
+            "p50_ms": 2.231,
+            "p95_ms": 3.036,
+            "p99_ms": 3.495,
+            "max_ms": 8.748,
+            "over_16_ms": 0
+          }
+        }
+      ]
+    },
+    "candidateNative120Hz": {
+      "environment": {
+        "label": "3cc7628-native-120hz",
+        "package": "com.tarkilhk.wing.dev",
+        "size": [
+          1080,
+          2316
+        ],
+        "density": "Physical density: 450\nOverride density: 420",
+        "version": [
+          "versionCode=22673 minSdk=24 targetSdk=36",
+          "versionName=1.0.1-dev-profile"
+        ],
+        "android": "16",
+        "actualRefreshRateHz": 120
+      },
+      "runs": [
+        {
+          "run": 1,
+          "build": {
+            "frames": 3608,
+            "p50_ms": 1.014,
+            "p95_ms": 2.639,
+            "p99_ms": 3.399,
+            "max_ms": 21.972,
+            "over_16_ms": 3
+          },
+          "raster": {
+            "frames": 3608,
+            "p50_ms": 1.712,
+            "p95_ms": 2.352,
+            "p99_ms": 2.819,
+            "max_ms": 8.856,
+            "over_16_ms": 0
+          }
+        },
+        {
+          "run": 2,
+          "build": {
+            "frames": 3573,
+            "p50_ms": 1.047,
+            "p95_ms": 2.676,
+            "p99_ms": 3.363,
+            "max_ms": 12.938,
+            "over_16_ms": 0
+          },
+          "raster": {
+            "frames": 3573,
+            "p50_ms": 1.823,
+            "p95_ms": 2.426,
+            "p99_ms": 2.914,
+            "max_ms": 9.854,
+            "over_16_ms": 0
+          }
+        },
+        {
+          "run": 3,
+          "build": {
+            "frames": 3597,
+            "p50_ms": 1.052,
+            "p95_ms": 2.613,
+            "p99_ms": 3.337,
+            "max_ms": 33.091,
+            "over_16_ms": 5
+          },
+          "raster": {
+            "frames": 3597,
+            "p50_ms": 1.792,
+            "p95_ms": 2.374,
+            "p99_ms": 2.861,
+            "max_ms": 8.311,
+            "over_16_ms": 0
+          }
+        }
+      ]
+    }
+  },
+  "session": {
+    "source": "3cc762808e2ecca39ac5f8c303f1dec03e4d2f2b + phone benchmark entry point",
+    "phases": {
+      "baseline": {
+        "exitCode": 0
+      },
+      "candidate": {
+        "exitCode": 0
+      },
+      "refreshes": {
+        "exitCode": 0
+      }
+    },
+    "device": {
+      "model": "SM-S918B",
+      "android": "16",
+      "resolution": "Physical size: 1080x2316",
+      "density": "Physical density: 450\nOverride density: 420"
+    },
+    "originalDisplaySettings": {
+      "peak_refresh_rate": "null",
+      "min_refresh_rate": "null"
+    },
+    "elapsedSeconds": 376.6,
+    "baselineReady": {
+      "initialized": true,
+      "profiles": 5,
+      "connection": "Connected",
+      "controllerError": false,
+      "loading": false,
+      "visibleErrors": 0,
+      "profileLoadingErrors": 0,
+      "elapsedMs": 5,
+      "confirmedReadyMs": 6138
+    },
+    "candidateReady": {
+      "initialized": true,
+      "profiles": 5,
+      "connection": "Connected",
+      "controllerError": false,
+      "loading": false,
+      "visibleErrors": 0,
+      "profileLoadingErrors": 0,
+      "elapsedMs": 3,
+      "confirmedReadyMs": 4207
+    },
+    "frameBudgetPassed": true,
+    "normalBuildRestored": true
+  },
+  "reliability": {
+    "refreshes": [
+      {
+        "initialized": true,
+        "profiles": 5,
+        "connection": "Connected",
+        "controllerError": false,
+        "loading": false,
+        "visibleErrors": 0,
+        "profileLoadingErrors": 0,
+        "elapsedMs": 1967,
+        "run": 1,
+        "passed": true
+      },
+      {
+        "initialized": true,
+        "profiles": 5,
+        "connection": "Connected",
+        "controllerError": false,
+        "loading": false,
+        "visibleErrors": 0,
+        "profileLoadingErrors": 0,
+        "elapsedMs": 2034,
+        "run": 2,
+        "passed": true
+      },
+      {
+        "initialized": true,
+        "profiles": 5,
+        "connection": "Connected",
+        "controllerError": false,
+        "loading": false,
+        "visibleErrors": 0,
+        "profileLoadingErrors": 0,
+        "elapsedMs": 1912,
+        "run": 3,
+        "passed": true
+      },
+      {
+        "initialized": true,
+        "profiles": 5,
+        "connection": "Connected",
+        "controllerError": false,
+        "loading": false,
+        "visibleErrors": 0,
+        "profileLoadingErrors": 0,
+        "elapsedMs": 1750,
+        "run": 4,
+        "passed": true
+      },
+      {
+        "initialized": true,
+        "profiles": 5,
+        "connection": "Connected",
+        "controllerError": false,
+        "loading": false,
+        "visibleErrors": 0,
+        "profileLoadingErrors": 0,
+        "elapsedMs": 1894,
+        "run": 5,
+        "passed": true
+      }
+    ],
+    "resume": {
+      "initialized": true,
+      "profiles": 5,
+      "connection": "Connected",
+      "controllerError": false,
+      "loading": false,
+      "visibleErrors": 0,
+      "profileLoadingErrors": 0,
+      "elapsedMs": 2,
+      "confirmedReadyMs": 47
+    },
+    "menus": {
+      "Status": "opened and closed without changing selection",
+      "Profile": "opened and closed without changing selection",
+      "Project": "opened and closed without changing selection"
+    },
+    "expandedGroup": {
+      "chats": 637,
+      "exitCode": 0
+    }
+  },
+  "finalRestoration": {
+    "versionCode": 22674,
+    "ordinaryEntryPoint": true,
+    "benchmarkHooksPresent": false,
+    "greenBackendIndicator": true,
+    "visibleLoadingErrors": 0,
+    "displaySettings": {
+      "peak_refresh_rate": "null",
+      "min_refresh_rate": "null"
+    },
+    "apkSha256": "2d09e4c07784b54dfd6fd2931dae526184d18a740c20a751ccdc1abb0ad75f6b"
+  }
+}

@@ -2,7 +2,7 @@
 """Measure an already-open Chats screen in a profile build; no server mutations.
 
 Build with -t tools/performance/chat_frames.dart. Configure the real connection
-on the emulator first. This script only scrolls and pulls to refresh. Keep builds
+on the device first. This script only scrolls and pulls to refresh. Keep builds
 and tests stopped while it runs. Output includes timing metadata, never chat text.
 """
 import argparse
@@ -12,6 +12,7 @@ import re
 import subprocess
 import time
 from pathlib import Path
+from wing_perf_client import WingPerfClient
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--serial", required=True)
@@ -20,6 +21,8 @@ parser.add_argument("--label", required=True)
 parser.add_argument("--runs", type=int, default=3)
 parser.add_argument("--output", type=Path, required=True)
 args = parser.parse_args()
+if args.runs < 1:
+    parser.error("--runs must be positive")
 adb = ["adb", "-s", args.serial]
 
 def call(*words):
@@ -35,8 +38,10 @@ width, height = map(int, size)
 metadata = {
     "label": args.label, "serial": args.serial, "package": args.package,
     "size": [width, height], "density": call("shell", "wm", "density").strip(),
+    "version": [line.strip() for line in call("shell", "dumpsys", "package", args.package).splitlines()
+                if "versionName=" in line or "versionCode=" in line][:2],
     "android": call("shell", "getprop", "ro.build.version.release").strip(),
-    "renderer_note": "Record emulator GPU and build revision alongside this file.",
+    "renderer_note": "Record device GPU, actual refresh rate and build revision alongside this file.",
 }
 marker = "WingScroll" + str(time.time_ns())
 
@@ -56,10 +61,18 @@ def metric(samples):
             "max_ms": max(values) / 1000,
             "over_16_ms": sum(value > 16000 for value in values)}
 
+client = WingPerfClient(args.serial, args.package)
+try:
+    ready = client.action("snapshot")
+    if ready["loading"] or not ready["initialized"]:
+        raise SystemExit("Wait for the initial Chats load to finish before measuring.")
+finally:
+    client.close()
+
 for run in range(1, args.runs + 1):
-    # Restore the beginning of the list; overscroll may start a refresh.
-    for _ in range(8):
-        swipe(False)
+    # Return to the start without causing extra pull-to-refresh requests.
+    with WingPerfClient(args.serial, args.package) as client:
+        client.action("top")
     time.sleep(2)
     call("shell", "log", "-t", "WingPerf", f"{marker} {run} START")
     started = time.monotonic()
