@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../models/gateway_activity.dart';
 import '../models/gateway_todo.dart';
+import '../theme/wing_theme.dart';
 import 'profile_transcript_disclosure.dart';
 import 'profile_activity_tabs.dart';
 
@@ -100,7 +103,7 @@ class ProfileTodoPanel extends StatelessWidget {
                 : (embedded ? 12 : 24),
             right: 0,
           ),
-          leading: Icon(_todoIcon(todo.status), size: 16),
+          leading: _TodoStatusIcon(status: todo.status),
           title: SelectableText(
             todo.content,
             style: TextStyle(
@@ -124,13 +127,77 @@ class ProfileTodoPanel extends StatelessWidget {
       children: children,
     );
   }
+}
 
-  static IconData _todoIcon(GatewayTodoStatus status) => switch (status) {
-    GatewayTodoStatus.pending => Icons.radio_button_unchecked,
-    GatewayTodoStatus.inProgress => Icons.pending_outlined,
-    GatewayTodoStatus.completed => Icons.flag_outlined,
-    GatewayTodoStatus.cancelled => Icons.cancel_outlined,
-  };
+class _TodoStatusIcon extends StatelessWidget {
+  const _TodoStatusIcon({required this.status});
+
+  final GatewayTodoStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = WingTokens.of(context);
+    final label = switch (status) {
+      GatewayTodoStatus.pending => 'Pending task',
+      GatewayTodoStatus.inProgress => 'Task in progress',
+      GatewayTodoStatus.completed => 'Completed task',
+      GatewayTodoStatus.cancelled => 'Cancelled task',
+    };
+    return Semantics(
+      label: label,
+      child: ExcludeSemantics(
+        child: SizedBox.square(
+          dimension: 16,
+          child: switch (status) {
+            GatewayTodoStatus.pending => CustomPaint(
+              painter: _PendingTaskPainter(tokens.muted),
+            ),
+            GatewayTodoStatus.inProgress => Padding(
+              padding: const EdgeInsets.all(1),
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: tokens.muted,
+                value: MediaQuery.disableAnimationsOf(context) ? 0.75 : null,
+              ),
+            ),
+            GatewayTodoStatus.completed => Icon(
+              Icons.check_circle,
+              size: 16,
+              color: tokens.success,
+            ),
+            GatewayTodoStatus.cancelled => Icon(
+              Icons.block,
+              size: 16,
+              color: tokens.muted,
+            ),
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _PendingTaskPainter extends CustomPainter {
+  const _PendingTaskPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = (Offset.zero & size).deflate(2);
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.25;
+    const step = math.pi / 4;
+    for (var i = 0; i < 8; i++) {
+      canvas.drawArc(rect, -math.pi / 2 + i * step, step * 0.6, false, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PendingTaskPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class ProfileReasoningDisclosure extends StatelessWidget {

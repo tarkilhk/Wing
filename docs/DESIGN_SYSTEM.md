@@ -180,6 +180,16 @@ connection cues, accessible status targets and the two recovery journeys.
 
 Keep the existing Activity disclosure, tool counts, Tools/Tasks/Agents/Work tabs when available, thinking disclosure, nested tool rows, guide line, selection, expansion state, scroll anchoring and copyable details. Do not add extra outer cards, timeline dots or permanent rows simply because the raster mockup draws them. Use the current component geometry as the baseline and apply color/type/border refinements. Approvals and questions remain outside collapsible tool results.
 
+Task status icons follow upstream desktop: a green filled-circle tick for
+completed, a spinner for in progress, a muted dashed circle for pending and a
+muted slashed circle for cancelled. Keep the existing 16 dp icon slot and use
+Wing's semantic success and muted colors in both themes. The native spinner
+becomes a static arc with reduced motion; each state has an accessibility label.
+This is task status, not option selection. Verified against upstream Hermes
+commit `603007ead347608c81bf95fd7b40c3fff9e4bed5`, desktop
+`apps/desktop/src/app/chat/composer/status-stack/status-row.tsx`, on 19 September
+2026. The change uses the existing client task states and requires no API changes.
+
 Keep activity status and queued-message controls above the composer. Preserve the two-row composer: draft first, then attachment/capture controls, the compact model/reasoning selector and Send/Stop. Preserve existing voice states and attachment options.
 
 The model/reasoning selector opens Intelligence. Model selection retains search and collapsible groups by actual technical provider route. Selecting a model returns to Intelligence; Apply confirms the selection for this chat. Keep existing busy/loading/disabled rules and full route identifiers in the picker.
