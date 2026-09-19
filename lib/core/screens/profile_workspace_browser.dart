@@ -666,11 +666,50 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
 
   Widget _session(ChatListEntry e) {
     final local = e.owner.chats[e.id];
+    final largeText = MediaQuery.textScalerOf(context).scale(16) > 20;
+    final showTokens = _show.contains(ChatDetail.tokens);
+    final showUpdated = _show.contains(ChatDetail.updated);
+    final age = _age(e.row);
+    final hasMetrics = showTokens || showUpdated;
+    final metricsStyle = TextStyle(
+      fontSize: 12,
+      color: WingTokens.of(context).muted,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    final metrics = [
+      if (showTokens)
+        Text(
+          '${compactTokens(chatTokens(e.row))}${largeText ? ' tokens' : ''}',
+          semanticsLabel: '${chatTokens(e.row)} tokens',
+          style: metricsStyle,
+          textAlign: TextAlign.right,
+        ),
+      if (showUpdated)
+        Text(
+          age,
+          semanticsLabel: age.isEmpty
+              ? 'Updated time unknown'
+              : age == 'now'
+              ? 'Updated now'
+              : 'Updated $age ago',
+          style: metricsStyle,
+          textAlign: TextAlign.right,
+        ),
+    ];
+    final title = Text(
+      e.row['title']?.toString().trim().isNotEmpty == true
+          ? e.row['title'].toString()
+          : 'Untitled chat',
+      maxLines: largeText ? 2 : 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: 15,
+        fontWeight: e.row['unread'] == true ? FontWeight.w600 : FontWeight.w400,
+      ),
+    );
     final detail = [
       if (e.row['archived'] == true) 'Archived',
       if (e.row['snippet'] != null) e.row['snippet'].toString(),
-      if (_show.contains(ChatDetail.tokens))
-        '${compactTokens(chatTokens(e.row))} tokens',
       if (_show.contains(ChatDetail.cost))
         '\$${chatCost(e.row).toStringAsFixed(2)}',
       if (_show.contains(ChatDetail.profile)) e.profile,
@@ -684,54 +723,47 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           key: ValueKey('chat-${e.profile}-${e.id}'),
           contentPadding: EdgeInsets.zero,
           minTileHeight: 48,
-          minVerticalPadding: 0,
+          minVerticalPadding: largeText ? 6 : 0,
           horizontalTitleGap: 6,
           minLeadingWidth: 18,
           leading: ChatStatusDot(e.status),
-          title: Text(
-            e.row['title']?.toString().trim().isNotEmpty == true
-                ? e.row['title'].toString()
-                : 'Untitled chat',
-            maxLines: MediaQuery.textScalerOf(context).scale(16) > 20 ? 2 : 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: e.row['unread'] == true
-                  ? FontWeight.w600
-                  : FontWeight.w400,
-            ),
-          ),
-          subtitle: detail.isEmpty
+          title: largeText || !hasMetrics
+              ? title
+              : Row(
+                  children: [
+                    Expanded(child: title),
+                    const SizedBox(width: 8),
+                    if (showTokens) SizedBox(width: 56, child: metrics.first),
+                    if (showTokens && showUpdated) const SizedBox(width: 8),
+                    if (showUpdated) SizedBox(width: 28, child: metrics.last),
+                  ],
+                ),
+          subtitle: detail.isEmpty && !(largeText && hasMetrics)
               ? null
-              : Text(
-                  detail.join(' · '),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: WingTokens.of(context).muted,
-                  ),
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (largeText && hasMetrics)
+                      Wrap(spacing: 12, children: metrics),
+                    if (detail.isNotEmpty)
+                      Text(
+                        detail.join(' · '),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: WingTokens.of(context).muted,
+                        ),
+                      ),
+                  ],
                 ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_show.contains(ChatDetail.updated))
-                Text(
-                  _age(e.row),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: WingTokens.of(context).muted,
-                  ),
-                ),
-              Builder(
-                builder: (button) => IconButton(
-                  tooltip: 'Chat actions',
-                  icon: const Icon(Icons.more_horiz, size: 18),
-                  onPressed: _busy || controller.switching
-                      ? null
-                      : () =>
-                            _run(() => _chatActions(button, e), refresh: true),
-                ),
-              ),
-            ],
+          trailing: Builder(
+            builder: (button) => IconButton(
+              tooltip: 'Chat actions',
+              icon: const Icon(Icons.more_horiz, size: 18),
+              onPressed: _busy || controller.switching
+                  ? null
+                  : () => _run(() => _chatActions(button, e), refresh: true),
+            ),
           ),
           onLongPress: _busy || controller.switching
               ? null
@@ -897,6 +929,36 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           ),
         ),
       ..._draftRows(entries),
+      if (groups.isNotEmpty &&
+          _show.contains(ChatDetail.tokens) &&
+          MediaQuery.textScalerOf(context).scale(16) <= 20)
+        ExcludeSemantics(
+          child: Padding(
+            padding: const EdgeInsets.only(left: 52, right: 62, top: 4),
+            child: DefaultTextStyle(
+              style: Theme.of(context).textTheme.labelSmall!.copyWith(
+                fontSize: 11,
+                color: WingTokens.of(context).muted,
+              ),
+              child: Row(
+                children: [
+                  const Spacer(),
+                  const SizedBox(
+                    width: 56,
+                    child: Text('Tokens', textAlign: TextAlign.right),
+                  ),
+                  if (_show.contains(ChatDetail.updated)) ...[
+                    const SizedBox(width: 8),
+                    const SizedBox(
+                      width: 28,
+                      child: Text('Age', textAlign: TextAlign.right),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
       for (final group in groups) ...[
         _groupHeading(group),
         if (!_collapsed.contains(_groupKey(group))) ...[

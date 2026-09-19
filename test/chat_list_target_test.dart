@@ -15,6 +15,8 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'support/profile_browser_fixture.dart';
 
 class TargetFixture extends ProfileBrowserFixture {
+  final tokenInputs = <int, num>{};
+
   @override
   List<Map<String, dynamic>> sessions(String profile) => [
     for (var i = 0; i < 12; i++)
@@ -30,7 +32,7 @@ class TargetFixture extends ProfileBrowserFixture {
         'message_count': i == 4 ? 0 : 10,
         'last_active': now - i * 3600,
         'started_at': now - i * 86400,
-        'input_tokens': 1000,
+        'input_tokens': tokenInputs[i] ?? 1000,
         'output_tokens': 500,
         'unread': i == 0,
         'pinned': i == 11,
@@ -264,10 +266,10 @@ void main() {
       expect(fixture.reads.length, reads);
       await tester.enterText(search, '');
       await tester.pumpAndSettle();
-        expect(find.text('No matches'), findsNothing);
-        await tester.enterText(search, firstQuery);
-        await tester.pumpAndSettle();
-        await tester.tap(find.byTooltip('Close $title'));
+      expect(find.text('No matches'), findsNothing);
+      await tester.enterText(search, firstQuery);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Close $title'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(ValueKey('chat-filter-$kind')));
       await tester.pumpAndSettle();
@@ -304,6 +306,15 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('9.0k'), findsOneWidget);
       expect(find.text('Show all 6 chats'), findsOneWidget);
+      final chat = find.byKey(const ValueKey('chat-personal-session-0'));
+      final tokenCount = find.descendant(of: chat, matching: find.text('1.5k'));
+      final title = find.descendant(
+        of: chat,
+        matching: find.text('Check Hindsight Codex token refresh'),
+      );
+      expect(tester.getCenter(tokenCount).dy, tester.getCenter(title).dy);
+      expect(tester.getSize(chat).height, 48);
+      expect(tester.widget<Text>(title).overflow, TextOverflow.ellipsis);
       await tester.tap(
         find.byKey(const ValueKey('chat-group-project/personal/p0')),
       );
@@ -355,8 +366,18 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('render ${brightness.name} $scale', (tester) async {
+        fixture.tokenInputs.addAll({0: 412300, 1: 14500000, 2: 8399});
         await show(tester, brightness: brightness, scale: scale);
         await screenshot(tester, '${brightness.name}-$scale-list');
+        await tester.tap(find.byTooltip('Chat list options'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('chat-menu-show')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('chat-menu-tokens')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Done'));
+        await tester.pumpAndSettle();
+        await screenshot(tester, '${brightness.name}-$scale-tokens');
         await tester.tap(find.byKey(const ValueKey('chat-filter-status')));
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('chat-menu-unread')));

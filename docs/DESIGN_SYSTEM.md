@@ -24,6 +24,10 @@ Use the compact Status / Profile / Project row, direct Group by / Order by
 menus, five colored status dots and a continuous grouped list with three-chat
 previews. Tokens, when shown, include group totals. Preserve the conversation,
 Activity, tool presentation and composer; the list has its own dot component.
+The approved token refinement truncates titles to keep counts and updated ages
+in aligned columns on the same row. Use compact counts at existing precision,
+tabular numerals and one Tokens / Age legend. At enlarged text sizes, let titles
+and metadata wrap; keep full titles and labelled counts accessible.
 
 ## App and notification identity
 

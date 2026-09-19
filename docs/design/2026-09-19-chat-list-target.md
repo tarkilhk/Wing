@@ -29,6 +29,13 @@ on 19 September 2026. The reference prototype remains in the workspace at
   tokens over all matching rows before the three-chat preview cap. Pinned rows
   appear once, in their own group. Incomplete profile loads do not present
   partial token sums as complete totals.
+- The owner selected option D from the token mockups: at normal text sizes,
+  truncate chat titles with an ellipsis to keep titles, tokens and updated ages
+  on one row. Right-align compact counts and ages in fixed columns with tabular
+  numerals and a shared Tokens / Age legend. Preserve count precision and full
+  titles for accessibility. At enlarged text sizes, allow two title lines and
+  wrap labelled usage below. Cost, profile, search snippets and transient errors
+  remain subordinate details when present. Keep the existing row action targets.
 - Continuous Studio background, no cards or separators. Heading weight,
   indentation and a larger gap above each heading establish proximity. Chat
   rows and project actions retain 48 dp targets and grow at enlarged text.
@@ -70,6 +77,11 @@ unless one is selected in the profile filter or only one exists. Chat/project
 mutations continue through the existing owner-checked controller and dialogs.
 
 No backend changes or deployment are part of this work.
+
+The token-layout refinement rechecked upstream main at
+`7c6f21a5e12ba9b1c674ec9b410fa6b8c45de4f8`. Stock
+`hermes_cli/web_routers/sessions.py` supplies `input_tokens`, `output_tokens`
+and `last_active`; the refinement changes only their client presentation.
 
 ## Verification
 
