@@ -332,6 +332,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     return showChatListMenu(
       anchor,
       title: kind,
+      searchHint: kind == 'Status' ? null : 'Search ${kind.toLowerCase()}s',
       choices: choices,
       multiple: true,
       onSelected: (id) => _toggle(selected, id),

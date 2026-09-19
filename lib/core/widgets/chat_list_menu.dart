@@ -30,9 +30,11 @@ Future<void> showChatListMenu(
   bool multiple = false,
   int maxVisible = 5,
   VoidCallback? onClear,
+  String? searchHint,
 }) async {
   final box = anchor.findRenderObject()! as RenderBox;
   final rect = box.localToGlobal(Offset.zero) & box.size;
+  var query = '';
   await showGeneralDialog<void>(
     context: anchor,
     barrierDismissible: true,
@@ -52,8 +54,14 @@ Future<void> showChatListMenu(
             media.textScaler.scale(280).clamp(280.0, 340.0),
           );
           final rowHeight = math.max(48.0, media.textScaler.scale(20) + 24);
-          final options = choices();
-          final headerHeight = math.max(38.0, media.textScaler.scale(18) + 12);
+          final allOptions = choices();
+          final options = allOptions
+              .where((option) => option.label.toLowerCase().contains(query))
+              .toList();
+          final headerHeight = math.max(
+            searchHint == null ? 38.0 : 48.0,
+            media.textScaler.scale(18) + 12,
+          );
           final labelStyle = Theme.of(
             context,
           ).textTheme.bodyMedium!.copyWith(fontSize: 14, height: 1.3);
@@ -75,7 +83,10 @@ Future<void> showChatListMenu(
               heights.fold<double>(0, (a, b) => a + b) +
               options.where((o) => o.dividerBefore).length * 5;
           final desired =
-              math.min(contentHeight, maxVisible * rowHeight) +
+              (searchHint == null
+                  ? math.min(contentHeight, maxVisible * rowHeight)
+                  : math.min(math.max(1, allOptions.length), maxVisible) *
+                        rowHeight) +
               headerHeight +
               (multiple ? 48 : 0) +
               10;
@@ -133,14 +144,47 @@ Future<void> showChatListMenu(
                                   children: [
                                     const SizedBox(width: 8),
                                     Expanded(
-                                      child: Text(
-                                        title,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: tokens.muted,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
+                                      child: searchHint != null
+                                          ? TextField(
+                                              key: const ValueKey(
+                                                'chat-menu-search',
+                                              ),
+                                              style: labelStyle,
+                                              textInputAction:
+                                                  TextInputAction.search,
+                                              autocorrect: false,
+                                              enableSuggestions: false,
+                                              decoration: InputDecoration(
+                                                hintText: searchHint,
+                                                isDense: true,
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 8,
+                                                    ),
+                                                prefixIcon: const Icon(
+                                                  Icons.search,
+                                                  size: 16,
+                                                ),
+                                                prefixIconConstraints:
+                                                    const BoxConstraints(
+                                                      minWidth: 28,
+                                                    ),
+                                              ),
+                                              onChanged: (value) => update(() {
+                                                query = value
+                                                    .trim()
+                                                    .toLowerCase();
+                                              }),
+                                            )
+                                          : Text(
+                                              title,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: tokens.muted,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
                                     ),
                                     IconButton(
                                       tooltip: 'Close $title',
@@ -151,127 +195,150 @@ Future<void> showChatListMenu(
                                 ),
                               ),
                               Expanded(
-                                child: Scrollbar(
-                                  child: ListView.builder(
-                                    padding: EdgeInsets.zero,
-                                    itemCount: options.length,
-                                    itemBuilder: (context, index) {
-                                      final option = options[index];
-                                      return Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          if (option.dividerBefore)
-                                            Divider(
-                                              height: 5,
-                                              color: tokens.border,
-                                            ),
-                                          Semantics(
-                                            selected: option.selected,
-                                            toggled: option.toggle,
-                                            enabled: option.enabled,
-                                            child: Material(
-                                              color: option.selected
-                                                  ? Theme.of(context)
-                                                        .colorScheme
-                                                        .primaryContainer
-                                                  : Colors.transparent,
-                                              borderRadius: WingRadius.control,
-                                              child: InkWell(
-                                                autofocus: index == 0,
-                                                key: ValueKey(
-                                                  'chat-menu-${option.id}',
-                                                ),
-                                                borderRadius:
-                                                    WingRadius.control,
-                                                onTap: !option.enabled
-                                                    ? null
-                                                    : () {
-                                                        if (!multiple) {
-                                                          Navigator.pop(
-                                                            context,
-                                                          );
-                                                        }
-                                                        onSelected(option.id);
-                                                        if (multiple &&
-                                                            context.mounted) {
-                                                          update(() {});
-                                                        }
-                                                      },
-                                                child: ConstrainedBox(
-                                                  constraints: BoxConstraints(
-                                                    minHeight: heights[index],
+                                child: options.isEmpty
+                                    ? Center(
+                                        child: Text(
+                                          'No matches',
+                                          style: labelStyle.copyWith(
+                                            color: tokens.muted,
+                                          ),
+                                        ),
+                                      )
+                                    : Scrollbar(
+                                        child: ListView.builder(
+                                          key: ValueKey(query),
+                                          padding: EdgeInsets.zero,
+                                          itemCount: options.length,
+                                          itemBuilder: (context, index) {
+                                            final option = options[index];
+                                            return Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                if (option.dividerBefore)
+                                                  Divider(
+                                                    height: 5,
+                                                    color: tokens.border,
                                                   ),
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 6,
-                                                        ),
-                                                    child: Row(
-                                                      children: [
-                                                        IconTheme(
-                                                          data: IconThemeData(
-                                                            size: 18,
-                                                            color:
-                                                                option.enabled
-                                                                ? tokens.muted
-                                                                : Theme.of(
-                                                                    context,
-                                                                  ).disabledColor,
-                                                          ),
-                                                          child: SizedBox(
-                                                            width: 22,
-                                                            child: option.icon,
-                                                          ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 8,
-                                                        ),
-                                                        Expanded(
-                                                          child: Text(
-                                                            option.label,
-                                                            maxLines: 2,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                            style: TextStyle(
-                                                              fontSize: 14,
-                                                              height: 1.3,
-                                                              color:
-                                                                  option.enabled
-                                                                  ? tokens
-                                                                        .onSurface
-                                                                  : Theme.of(
-                                                                      context,
-                                                                    ).disabledColor,
+                                                Semantics(
+                                                  selected: option.selected,
+                                                  toggled: option.toggle,
+                                                  enabled: option.enabled,
+                                                  child: Material(
+                                                    color: option.selected
+                                                        ? Theme.of(context)
+                                                              .colorScheme
+                                                              .primaryContainer
+                                                        : Colors.transparent,
+                                                    borderRadius:
+                                                        WingRadius.control,
+                                                    child: InkWell(
+                                                      autofocus: index == 0,
+                                                      key: ValueKey(
+                                                        'chat-menu-${option.id}',
+                                                      ),
+                                                      borderRadius:
+                                                          WingRadius.control,
+                                                      onTap: !option.enabled
+                                                          ? null
+                                                          : () {
+                                                              if (!multiple) {
+                                                                Navigator.pop(
+                                                                  context,
+                                                                );
+                                                              }
+                                                              onSelected(
+                                                                option.id,
+                                                              );
+                                                              if (multiple &&
+                                                                  context
+                                                                      .mounted) {
+                                                                update(() {});
+                                                              }
+                                                            },
+                                                      child: ConstrainedBox(
+                                                        constraints:
+                                                            BoxConstraints(
+                                                              minHeight:
+                                                                  heights[index],
                                                             ),
-                                                          ),
-                                                        ),
-                                                        if (option.toggle !=
-                                                            null)
-                                                          ExcludeSemantics(
-                                                            child: IgnorePointer(
-                                                              child:
-                                                                  CompactSwitch(
-                                                                    value: option
-                                                                        .toggle!,
-                                                                    onChanged:
-                                                                        (_) {},
+                                                        child: Padding(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 6,
+                                                              ),
+                                                          child: Row(
+                                                            children: [
+                                                              IconTheme(
+                                                                data: IconThemeData(
+                                                                  size: 18,
+                                                                  color:
+                                                                      option
+                                                                          .enabled
+                                                                      ? tokens
+                                                                            .muted
+                                                                      : Theme.of(
+                                                                          context,
+                                                                        ).disabledColor,
+                                                                ),
+                                                                child: SizedBox(
+                                                                  width: 22,
+                                                                  child: option
+                                                                      .icon,
+                                                                ),
+                                                              ),
+                                                              const SizedBox(
+                                                                width: 8,
+                                                              ),
+                                                              Expanded(
+                                                                child: Text(
+                                                                  option.label,
+                                                                  maxLines: 2,
+                                                                  overflow:
+                                                                      TextOverflow
+                                                                          .ellipsis,
+                                                                  style: TextStyle(
+                                                                    fontSize:
+                                                                        14,
+                                                                    height: 1.3,
+                                                                    color:
+                                                                        option
+                                                                            .enabled
+                                                                        ? tokens
+                                                                              .onSurface
+                                                                        : Theme.of(
+                                                                            context,
+                                                                          ).disabledColor,
                                                                   ),
-                                                            ),
+                                                                ),
+                                                              ),
+                                                              if (option
+                                                                      .toggle !=
+                                                                  null)
+                                                                ExcludeSemantics(
+                                                                  child: IgnorePointer(
+                                                                    child: CompactSwitch(
+                                                                      value: option
+                                                                          .toggle!,
+                                                                      onChanged:
+                                                                          (
+                                                                            _,
+                                                                          ) {},
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                            ],
                                                           ),
-                                                      ],
+                                                        ),
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  ),
-                                ),
+                                              ],
+                                            );
+                                          },
+                                        ),
+                                      ),
                               ),
                               if (multiple)
                                 SizedBox(

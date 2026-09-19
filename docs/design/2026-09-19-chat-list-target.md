@@ -12,6 +12,11 @@ on 19 September 2026. The reference prototype remains in the workspace at
   and fixed Clear / Done actions. Profiles sort alphabetically; projects sort
   by most recent visible-source activity, then name. The trailing cross clears
   these three filters only.
+- Profile and Project menu headers are compact search fields that filter their
+  choices immediately as the user types (case-insensitive). Searching keeps
+  selections, ordering and the five-row scroll limit; it does not search chats
+  or issue backend requests. The query resets when the menu is reopened. Clear
+  still clears selections, Done and the close cross dismiss the menu.
 - Group by and Order by are direct controls beneath the filters, with icons,
   sentence-case menu titles, and no redundant back link or total chat count.
   Project is the initial grouping; Updated is the initial ordering.

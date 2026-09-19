@@ -230,6 +230,65 @@ void main() {
       );
     },
   );
+  for (final (kind, firstQuery, firstId, secondQuery, secondId) in [
+    ('profile', ' WORK ', 'work', 'personal', 'personal'),
+    ('project', ' SLUICE ', 'personal/p1', 'hermes', 'personal/p2'),
+  ]) {
+    testWidgets('$kind search keeps selections across local queries', (
+      tester,
+    ) async {
+      await show(tester);
+      await tester.tap(find.byKey(ValueKey('chat-filter-$kind')));
+      await tester.pumpAndSettle();
+      final search = find.byKey(const ValueKey('chat-menu-search'));
+      final calls = fixture.calls.length;
+      final reads = fixture.reads.length;
+      await tester.enterText(search, firstQuery);
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('chat-menu-$firstId')), findsOneWidget);
+      expect(find.byKey(ValueKey('chat-menu-$secondId')), findsNothing);
+      await tester.tap(find.byKey(ValueKey('chat-menu-$firstId')));
+      await tester.pumpAndSettle();
+      await tester.enterText(search, secondQuery);
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('chat-menu-$firstId')), findsNothing);
+      await tester.tap(find.byKey(ValueKey('chat-menu-$secondId')));
+      await tester.pumpAndSettle();
+      final title = kind == 'profile' ? 'Profile' : 'Project';
+      expect(find.text('$title 2'), findsOneWidget);
+      await tester.enterText(search, 'no-such-option');
+      await tester.pumpAndSettle();
+      expect(find.text('No matches'), findsOneWidget);
+      expect(find.text('$title 2'), findsOneWidget);
+      expect(fixture.calls.length, calls);
+      expect(fixture.reads.length, reads);
+      await tester.enterText(search, '');
+      await tester.pumpAndSettle();
+        expect(find.text('No matches'), findsNothing);
+        await tester.enterText(search, firstQuery);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Close $title'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('chat-filter-$kind')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(of: search, matching: find.byType(EditableText)),
+            )
+            .controller
+            .text,
+        isEmpty,
+      );
+      expect(find.text('$title 2'), findsOneWidget);
+      await tester.tap(find.text('Clear'));
+      await tester.pumpAndSettle();
+      expect(find.text('$title 2'), findsNothing);
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(search, findsNothing);
+    });
+  }
   testWidgets(
     'tokens include all matching chats, exclude pins and stay collapsed',
     (tester) async {
@@ -308,6 +367,27 @@ void main() {
         await tester.tap(find.byTooltip('Chat list options'));
         await tester.pumpAndSettle();
         await screenshot(tester, '${brightness.name}-$scale-menu');
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        for (final kind in ['project', 'profile']) {
+          await tester.tap(find.byKey(ValueKey('chat-filter-$kind')));
+          await tester.pumpAndSettle();
+          await screenshot(tester, '${brightness.name}-$scale-$kind-search');
+          tester.view.viewInsets = FakeViewPadding(
+            bottom: 300 * tester.view.devicePixelRatio,
+          );
+          addTearDown(tester.view.resetViewInsets);
+          await tester.enterText(
+            find.byKey(const ValueKey('chat-menu-search')),
+            kind == 'project' ? 'sluice' : 'work',
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Done').hitTestable(), findsOneWidget);
+          await screenshot(tester, '${brightness.name}-$scale-$kind-keyboard');
+          await tester.tap(find.text('Done'));
+          tester.view.resetViewInsets();
+          await tester.pumpAndSettle();
+        }
       });
     }
   }
