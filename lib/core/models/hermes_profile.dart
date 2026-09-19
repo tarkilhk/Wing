@@ -29,6 +29,14 @@ class HermesProfile {
 
   String get label => displayName.trim().isEmpty ? name : displayName.trim();
 
+  /// Desktop's initial rail order: default first, then canonical profile names.
+  /// Presentation-only renames must not move the default profile.
+  static int compareForDisplay(HermesProfile a, HermesProfile b) {
+    if (a.name == 'default' && b.name != 'default') return -1;
+    if (b.name == 'default' && a.name != 'default') return 1;
+    return a.name.compareTo(b.name);
+  }
+
   static bool isCanonicalName(String value) => _canonicalName.hasMatch(value);
 
   factory HermesProfile.fromJson(Map<String, dynamic> json) {

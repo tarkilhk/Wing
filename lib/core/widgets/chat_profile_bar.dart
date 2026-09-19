@@ -31,8 +31,7 @@ class ChatProfileBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = WingTokens.of(context);
-    final ordered = [...profiles]
-      ..sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+    final ordered = [...profiles]..sort(HermesProfile.compareForDisplay);
     return SizedBox(
       height: 48,
       child: LayoutBuilder(

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/chat_list_view.dart';
+import '../models/hermes_profile.dart';
 import '../models/session_visibility.dart';
 import '../services/chat_browser_data.dart';
 import '../services/composer_draft_store.dart';
@@ -297,9 +298,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       }
       if (kind == 'Profile') {
         final profiles = [...?controller.discovery?.profiles]
-          ..sort(
-            (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
-          );
+          ..sort(HermesProfile.compareForDisplay);
         return [
           for (final profile in profiles)
             ChatMenuChoice(

@@ -39,6 +39,8 @@ void main() {
                       HermesProfile(
                         name: 'profile-${i.toString().padLeft(2, '0')}',
                       ),
+                    const HermesProfile(name: 'aaa'),
+                    const HermesProfile(name: 'default', displayName: 'Zebra'),
                   ],
                   selectedProfiles: {if (selected != null) selected!},
                   onSelected: (name) => setState(() => selected = name),
@@ -52,6 +54,12 @@ void main() {
     final bar = find.byKey(const ValueKey('chat-profile-scroll'));
     final last = find.byKey(const ValueKey('chat-profile-profile-11'));
     expect(tester.getSize(bar), const Size(144, 48));
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('chat-profile-default'))).dx,
+      lessThan(
+        tester.getTopLeft(find.byKey(const ValueKey('chat-profile-aaa'))).dx,
+      ),
+    );
     expect(last.hitTestable(), findsNothing);
     await tester.drag(bar, const Offset(-600, 0));
     await tester.pumpAndSettle();

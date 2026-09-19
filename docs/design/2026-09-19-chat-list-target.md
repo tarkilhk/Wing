@@ -31,7 +31,12 @@ on 19 September 2026. The reference prototype remains in the workspace at
 - Search above one compact, full-width Status / Profile / Project filter row.
   Filters are independent anchored multi-select menus. No selection means all.
   Choices use selected tint; five visible row heights maximum, with scrolling
-  and fixed Clear / Done actions. Profiles sort alphabetically; projects sort
+  and fixed Clear / Done actions. The profile bar and menu put `default` first,
+  then named profiles alphabetically by canonical name, matching desktop's
+  initial ordering even when display names change. Desktop's manual rail order
+  is local storage and is not exposed by the server. Verified in upstream
+  `4aa1ff6dc6a60aaea05392b57e976950a9580b27`, desktop `profile-switcher.tsx`,
+  `lib/profile-order.ts` and `store/profile.ts`. Projects sort
   by most recent visible-source activity, then name. The trailing funnel-with-×
   icon clears these three filters only. It is dimmed and disabled when none are
   selected, with the tooltip Clear all filters. The leading icon uses the same
