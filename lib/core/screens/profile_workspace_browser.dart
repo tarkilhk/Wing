@@ -411,12 +411,33 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                   padding: EdgeInsets.zero,
                   tooltip: 'Clear all filters',
                   color: WingTokens.of(context).onSurface,
-                  icon: const Icon(Icons.close, size: 14),
-                  onPressed: () => _change(() {
-                    _statuses.clear();
-                    _profiles.clear();
-                    _projects.clear();
-                  }),
+                  icon: const SizedBox.square(
+                    dimension: 22,
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          child: Icon(Icons.filter_alt_outlined, size: 19),
+                        ),
+                        Positioned(
+                          right: 0,
+                          bottom: 1,
+                          child: Icon(Icons.close, size: 9),
+                        ),
+                      ],
+                    ),
+                  ),
+                  onPressed:
+                      _statuses.isEmpty &&
+                          _profiles.isEmpty &&
+                          _projects.isEmpty
+                      ? null
+                      : () => _change(() {
+                          _statuses.clear();
+                          _profiles.clear();
+                          _projects.clear();
+                        }),
                 ),
               ),
             ],
