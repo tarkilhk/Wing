@@ -71,6 +71,44 @@ class ProjectFolderSuggestion {
   const ProjectFolderSuggestion({required this.path, required this.label});
 }
 
+DashboardClient _dashboardFor(SavedConnection connection) => DashboardClient(
+  host: connection.host,
+  port: connection.dashboardPort,
+  useHttps: connection.useHttps,
+  pathPrefix: connection.dashboardPrefix ?? '',
+  proxied: connection.dashboardProxied,
+  username: connection.dashboardUsername,
+  password: connection.dashboardPassword,
+  dashboardOAuth: connection.dashboardOAuth,
+  requiresOAuth: connection.isCloud,
+  gatewayHeaders: connection.gatewayHeaders,
+);
+
+/// Authentication and HTTP pooling belong to one saved connection, not to each
+/// profile or short-lived project reader. Gateways still own separate sockets.
+class ProfileGatewayConnection {
+  ProfileGatewayConnection(this.connection);
+  final SavedConnection connection;
+  late final DashboardClient _dashboard = _dashboardFor(connection);
+  bool _closed = false;
+
+  ProfileGateway create(WorkspaceScope scope) {
+    if (_closed) throw StateError('Connection is closed');
+    return ProfileGateway._forDashboard(
+      connection,
+      scope,
+      _dashboard,
+      ownsDashboard: false,
+    );
+  }
+
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    _dashboard.close();
+  }
+}
+
 /// The stock modern Hermes contract. All profile-owned traffic passes through
 /// this immutable scope. There is no unscoped or experimental-recovery fallback.
 class ProfileGateway {
@@ -156,18 +194,23 @@ class ProfileGateway {
     if (scope.connectionId != connection.id) {
       throw ArgumentError('Connection does not own this workspace');
     }
-    final dashboard = DashboardClient(
-      host: connection.host,
-      port: connection.dashboardPort,
-      useHttps: connection.useHttps,
-      pathPrefix: connection.dashboardPrefix ?? '',
-      proxied: connection.dashboardProxied,
-      username: connection.dashboardUsername,
-      password: connection.dashboardPassword,
-      dashboardOAuth: connection.dashboardOAuth,
-      requiresOAuth: connection.isCloud,
-      gatewayHeaders: connection.gatewayHeaders,
+    return ProfileGateway._forDashboard(
+      connection,
+      scope,
+      _dashboardFor(connection),
+      ownsDashboard: true,
     );
+  }
+
+  factory ProfileGateway._forDashboard(
+    SavedConnection connection,
+    WorkspaceScope scope,
+    DashboardClient dashboard, {
+    required bool ownsDashboard,
+  }) {
+    if (scope.connectionId != connection.id) {
+      throw ArgumentError('Connection does not own this workspace');
+    }
     WsClient? socket;
     WsClient? openingSocket;
     var closed = false;
@@ -296,7 +339,7 @@ class ProfileGateway {
         closed = true;
         openingSocket?.close();
         socket?.close();
-        dashboard.close();
+        if (ownsDashboard) dashboard.close();
       },
     );
     return gateway;

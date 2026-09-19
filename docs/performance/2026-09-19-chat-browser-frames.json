@@ -1,0 +1,73 @@
+{
+  "environment": {
+    "label": "def56b2-fixes-profile-1080-swiftshader",
+    "serial": "emulator-5582",
+    "package": "com.tarkilhk.wing.dev",
+    "size": [
+      1080,
+      2400
+    ],
+    "density": "Physical density: 420",
+    "android": "16",
+    "renderer_note": "Record emulator GPU and build revision alongside this file."
+  },
+  "runs": [
+    {
+      "run": 1,
+      "build": {
+        "frames": 1483,
+        "p50_ms": 1.107,
+        "p95_ms": 4.043,
+        "p99_ms": 7.36,
+        "max_ms": 23.161,
+        "over_16_ms": 2
+      },
+      "raster": {
+        "frames": 1483,
+        "p50_ms": 19.491,
+        "p95_ms": 27.8,
+        "p99_ms": 33.471,
+        "max_ms": 82.214,
+        "over_16_ms": 1153
+      }
+    },
+    {
+      "run": 2,
+      "build": {
+        "frames": 1445,
+        "p50_ms": 1.174,
+        "p95_ms": 5.144,
+        "p99_ms": 8.34,
+        "max_ms": 39.956,
+        "over_16_ms": 5
+      },
+      "raster": {
+        "frames": 1445,
+        "p50_ms": 19.818,
+        "p95_ms": 28.742,
+        "p99_ms": 40.832,
+        "max_ms": 56.414,
+        "over_16_ms": 1169
+      }
+    },
+    {
+      "run": 3,
+      "build": {
+        "frames": 1470,
+        "p50_ms": 1.189,
+        "p95_ms": 4.83,
+        "p99_ms": 8.296,
+        "max_ms": 29.086,
+        "over_16_ms": 6
+      },
+      "raster": {
+        "frames": 1470,
+        "p50_ms": 19.723,
+        "p95_ms": 27.501,
+        "p99_ms": 33.671,
+        "max_ms": 42.666,
+        "over_16_ms": 1193
+      }
+    }
+  ]
+}

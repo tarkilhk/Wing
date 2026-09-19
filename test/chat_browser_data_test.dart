@@ -11,6 +11,8 @@ import 'support/profile_paging_fixture.dart';
 class ReaderFixture extends ProfilePagingFixture {
   final opened = <int>{}, closed = <int>{};
   final owners = <int, String>{};
+  bool failNextPage = false;
+  bool failNextTree = false;
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
     final id = owners.length;
@@ -27,8 +29,20 @@ class ReaderFixture extends ProfilePagingFixture {
         closed.add(id);
         base.close();
       },
-      get: base.read,
-      rpc: base.call,
+      get: (path, query) async {
+        if (failNextPage && path == 'sessions' && query['offset'] == '100') {
+          failNextPage = false;
+          throw TimeoutException('Temporary page timeout');
+        }
+        return base.read(path, query);
+      },
+      rpc: (method, params) async {
+        if (failNextTree && method == 'projects.tree') {
+          failNextTree = false;
+          throw TimeoutException('Temporary tree timeout');
+        }
+        return base.call(method, params);
+      },
     );
   }
 }
@@ -79,6 +93,73 @@ void main() {
       );
     },
   );
+  test('overlapping refreshes share the same profile reads', () async {
+    final gate = Completer<void>();
+    fixture.pageDelays[('personal', 0)] = gate;
+    fixture.pageDelays[('work', 0)] = gate;
+    final first = data.refresh(archivedOnly: false);
+    final second = data.refresh(archivedOnly: false);
+    await Future<void>.delayed(Duration.zero);
+    final initialReads = fixture.reads
+        .where(
+          (r) =>
+              r.$1 == 'sessions' &&
+              r.$2['limit'] == '100' &&
+              r.$2['offset'] == '0',
+        )
+        .length;
+    gate.complete();
+    await Future.wait([first, second]);
+    expect(initialReads, 2, reason: 'one request per profile while refreshing');
+    expect(data.complete, {'personal', 'work'});
+  });
+
+  test(
+    'refresh retains the complete list until replacement pages are ready',
+    () async {
+      await data.refresh(archivedOnly: false);
+      final previous = data.rows['personal'];
+      final gate = Completer<void>();
+      fixture.pageDelays[('personal', 100)] = gate;
+      fixture.prepend = true;
+      final refreshing = data.refresh(archivedOnly: false);
+      await Future<void>.delayed(Duration.zero);
+      final during = data.rows['personal'];
+      gate.complete();
+      await refreshing;
+      expect(
+        during,
+        same(previous),
+        reason: 'do not collapse and regrow the list during refresh',
+      );
+      expect(data.rows['personal']!.length, 126);
+    },
+  );
+
+  test('refresh publication does not grow with the number of pages', () async {
+    fixture.count = 1000;
+    await data.refresh(archivedOnly: false);
+    var publications = 0;
+    data.addListener(() => publications++);
+    await data.refresh(archivedOnly: false);
+    expect(data.entries.length, 2000);
+    expect(publications, 4, reason: 'start, one snapshot per profile, finish');
+  });
+
+  test(
+    'temporary page and project failures recover without manual refresh',
+    () async {
+      fixture.failNextPage = true;
+      fixture.failNextTree = true;
+      await data.refresh(archivedOnly: false);
+      expect(fixture.failNextPage, isFalse);
+      expect(fixture.failNextTree, isFalse);
+      expect(data.errors, isEmpty);
+      expect(data.complete, {'personal', 'work'});
+      expect(data.entries.length, 250);
+    },
+  );
+
   test(
     'failed later page leaves readable data but never a complete total',
     () async {

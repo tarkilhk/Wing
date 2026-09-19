@@ -333,7 +333,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
     connectionStatus: connectionStatus,
     ownsServer: repository == null,
   );
-  final ProfileGatewayFactory _factory;
+  late final ProfileGatewayFactory _factory;
+  final ProfileGatewayConnection? _gatewayConnection;
   final AttachmentDraftService attachments;
   late final ComposerDraftStore _drafts;
   final ProfileAttention? onAttention;
@@ -423,10 +424,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
     AttachmentDraftService? attachmentService,
     ComposerDraftStore? draftStore,
     this.onAttention,
-  }) : _factory =
-           gatewayFactory ??
-           ((scope) => ProfileGateway.forConnection(connection, scope)),
+  }) : _gatewayConnection = gatewayFactory == null
+           ? ProfileGatewayConnection(connection)
+           : null,
        attachments = attachmentService ?? AttachmentDraftService() {
+    _factory = gatewayFactory ?? _gatewayConnection!.create;
     if (connectionIdentity.isEmpty) {
       throw ArgumentError('A verified connection identity is required');
     }
@@ -6113,6 +6115,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       resource.retry?.cancel();
       resource.gateway.close();
     }
+    _gatewayConnection?.close();
     super.dispose();
   }
 }

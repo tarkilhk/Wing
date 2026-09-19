@@ -53,6 +53,8 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   List<ChatListEntry> get _matches => _visibleEntries;
   List<ChatListGroup> get _groups => _currentGroups;
   Timer? _debounce;
+  Future<void>? _refreshing;
+  bool? _refreshingArchived;
   String get _preferencesKey =>
       'chat_list_target_${controller.connectionIdentity}';
 
@@ -159,9 +161,21 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     }
   }
 
-  Future<void> _refresh() async {
-    await _data.refresh(archivedOnly: _archived);
+  Future<void> _refresh() {
+    final active = _refreshing;
+    if (active != null && _refreshingArchived == _archived) return active;
+    _refreshingArchived = _archived;
+    late final Future<void> pending;
+    pending = _loadRefresh(_archived).whenComplete(() {
+      if (identical(_refreshing, pending)) _refreshing = null;
+    });
+    return _refreshing = pending;
+  }
+
+  Future<void> _loadRefresh(bool archived) async {
+    await _data.refresh(archivedOnly: archived);
     if (!mounted) return;
+    if (_archived != archived) return;
     if (_query.isNotEmpty) unawaited(_data.search(_query));
     unawaited(controller.refreshActivity());
   }

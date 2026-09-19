@@ -890,6 +890,52 @@ void main() {
       client.close();
     });
 
+    test('late stale-cookie failures reuse the refreshed sign-in', () async {
+      var logins = 0;
+      final staleRequests = Completer<void>();
+      final releaseLateFailure = Completer<void>();
+      var requests = 0;
+      final client = DashboardClient(
+        host: 'hermes.local',
+        port: 30433,
+        username: 'fixture',
+        password: 'fixture',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/auth/password-login') {
+            logins++;
+            return http.Response(
+              '{}',
+              200,
+              headers: {
+                'set-cookie': 'hermes_session_at=session$logins; Path=/',
+              },
+            );
+          }
+          if (_header(request, 'cookie') == 'hermes_session_at=session1') {
+            requests++;
+            if (requests == 2) staleRequests.complete();
+            await staleRequests.future;
+            if (request.url.path.endsWith('/late')) {
+              await releaseLateFailure.future;
+            }
+            return http.Response('', 401);
+          }
+          return http.Response('{}', 200);
+        }),
+      );
+      addTearDown(client.close);
+      final first = client.apiGet('first');
+      final late = client.apiGet('late');
+      await first;
+      releaseLateFailure.complete();
+      await late;
+      expect(
+        logins,
+        2,
+        reason: 'a delayed 401 must not discard fresh authentication',
+      );
+    });
+
     test('surfaces invalid dashboard credentials', () async {
       final client = DashboardClient(
         host: 'hermes.local',

@@ -1,8 +1,10 @@
 import 'dart:math' as math;
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/chat_list_view.dart';
 import '../models/session_visibility.dart';
 import 'profile_workspace_controller.dart';
+import 'workspace_connection_failure.dart';
 
 /// A read-only connection-wide index. Four profiles at a time, 100 rows per
 /// request. Publication is generation guarded and never changes chat ownership.
@@ -23,12 +25,25 @@ class ChatBrowserData extends ChangeNotifier {
   int _generation = 0, _searchGeneration = 0;
   bool _disposed = false;
   bool archived = false;
+  Future<void>? _refreshing;
+  bool? _refreshingArchived;
 
   void _changed() {
     if (!_disposed) notifyListeners();
   }
 
-  Future<void> refresh({required bool archivedOnly}) async {
+  Future<void> refresh({required bool archivedOnly}) {
+    final active = _refreshing;
+    if (active != null && _refreshingArchived == archivedOnly) return active;
+    _refreshingArchived = archivedOnly;
+    late final Future<void> pending;
+    pending = _refresh(archivedOnly: archivedOnly).whenComplete(() {
+      if (identical(_refreshing, pending)) _refreshing = null;
+    });
+    return _refreshing = pending;
+  }
+
+  Future<void> _refresh({required bool archivedOnly}) async {
     final generation = ++_generation;
     _searchGeneration++;
     searching = false;
@@ -50,38 +65,56 @@ class ChatBrowserData extends ChangeNotifier {
       while (valid() && cursor < profiles.length) {
         final profile = profiles[cursor++].name;
         final resource = controller.browserResource(profile);
+        final hadRows = rows.containsKey(profile);
+        final fetched = <String, Map<String, dynamic>>{};
         _baselineRows[profile] = {
           for (final row in resource.sessions) row['id'] as String: row,
         };
         try {
-          final fetched = <String, Map<String, dynamic>>{};
           int? offset = 0;
           do {
-            final page = await resource.gateway.sessions(
-              visibility: SessionVisibility.all,
-              archivedOnly: archivedOnly,
-              offset: offset!,
-              limit: 100,
+            final page = await retryTransientRead(
+              () => resource.gateway.sessions(
+                visibility: SessionVisibility.all,
+                archivedOnly: archivedOnly,
+                offset: offset!,
+                limit: 100,
+              ),
+              isActive: valid,
             );
             if (!valid()) return;
             for (final row in page.rows) {
               fetched[row['id'] as String] = row;
             }
+            // Show a first page promptly on entry. A refresh keeps the last
+            // complete snapshot until its replacement is ready, rather than
+            // shrinking and regrowing every group for each background page.
+            if (!hadRows && offset == 0) {
+              rows[profile] = fetched.values.toList();
+              _changed();
+            }
             offset = page.nextOffset;
-            rows[profile] = fetched.values.toList();
-            _changed();
           } while (offset != null);
           // Ask for enough membership rows for the entire active list, not
           // just the desktop's preview. Archived chats are outside this tree.
-          final tree = await controller.browserProjects(
-            profile,
-            sessionLimit: math.max(2000, fetched.length),
+          final tree = await retryTransientRead(
+            () => controller.browserProjects(
+              profile,
+              sessionLimit: math.max(2000, fetched.length),
+            ),
+            isActive: valid,
           );
           if (!valid()) return;
+          rows[profile] = fetched.values.toList();
           projects[profile] = tree;
           complete.add(profile);
         } catch (_) {
-          if (valid()) errors[profile] = 'Could not finish loading $profile.';
+          if (valid()) {
+            if (!hadRows && fetched.isNotEmpty) {
+              rows[profile] = fetched.values.toList();
+            }
+            errors[profile] = 'Could not finish loading $profile.';
+          }
         }
         if (valid()) _changed();
       }

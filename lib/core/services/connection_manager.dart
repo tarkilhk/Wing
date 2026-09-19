@@ -1327,16 +1327,24 @@ class DashboardClient {
     'Content-Type': 'application/json',
   };
 
-  /// Clears any cached auth state so the next request re-authenticates.
-  void _resetAuth(String? rejectedAuthorization) {
+  /// Invalidates only the credentials rejected by this particular request.
+  void _resetAuth(Map<String, String> rejectedHeaders) {
+    String? header(String name) {
+      for (final entry in rejectedHeaders.entries) {
+        if (entry.key.toLowerCase() == name) return entry.value;
+      }
+      return null;
+    }
+
+    // Parallel profile requests may finish after another request has already
+    // renewed the session. Only invalidate the credentials actually rejected;
+    // retain any newer credentials and the shared in-flight renewal.
     if (_oauth != null &&
-        rejectedAuthorization == 'Bearer ${_oauth.accessToken}') {
+        header('authorization') == 'Bearer ${_oauth.accessToken}') {
       _oauth.invalidate();
     }
-    _token = null;
-    _cookie = null;
-    _cookieInFlight = null;
-    _tokenInFlight = null;
+    if (header('cookie') == _cookie) _cookie = null;
+    if (header('x-hermes-session-token') == _token) _token = null;
   }
 
   /// Returns the session cookie, reusing a cached value or an in-flight login.
@@ -1461,12 +1469,13 @@ class DashboardClient {
   /// Hermes Desktop gateway. The HTTP API cookie stays in this client; only the
   /// ticket is passed to the WebSocket URL.
   Future<String> mintWebSocketTicket({bool retried = false}) async {
+    final headers = await _authHeaders();
     final res = await _http.post(
       Uri.parse('$_baseUrl/api/auth/ws-ticket'),
-      headers: await _authHeaders(),
+      headers: headers,
     );
     if (res.statusCode == 401 && !retried) {
-      _resetAuth(res.request?.headers['Authorization']);
+      _resetAuth(headers);
       return mintWebSocketTicket(retried: true);
     }
     if (res.statusCode != 200) {
@@ -1499,7 +1508,7 @@ class DashboardClient {
     ).replace(queryParameters: queryParameters);
     final res = await _http.get(uri, headers: headers);
     if (res.statusCode == 401 && !retried) {
-      _resetAuth(res.request?.headers['Authorization']);
+      _resetAuth(headers);
       return apiGet(endpoint, queryParameters: queryParameters, retried: true);
     }
     if (res.statusCode != 200) {
@@ -1522,7 +1531,7 @@ class DashboardClient {
     final res = await _http.send(request);
     if (res.statusCode == 401 && !retried) {
       await res.stream.drain<void>();
-      _resetAuth(res.request?.headers['Authorization']);
+      _resetAuth(headers);
       return apiGetBytes(
         endpoint,
         queryParameters: queryParameters,
@@ -1568,7 +1577,7 @@ class DashboardClient {
       headers: headers,
     );
     if (res.statusCode == 401 && !retried) {
-      _resetAuth(res.request?.headers['Authorization']);
+      _resetAuth(headers);
       return apiGetList(endpoint, retried: true);
     }
     if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
@@ -1603,7 +1612,7 @@ class DashboardClient {
       body: body != null ? jsonEncode(body) : null,
     );
     if (res.statusCode == 401 && !retried) {
-      _resetAuth(res.request?.headers['Authorization']);
+      _resetAuth(headers);
       return apiPost(endpoint, body: body, retried: true);
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -1632,7 +1641,7 @@ class DashboardClient {
       body: body == null ? null : jsonEncode(body),
     );
     if (res.statusCode == 401 && !retried) {
-      _resetAuth(res.request?.headers['Authorization']);
+      _resetAuth(headers);
       return apiDeleteResult(endpoint, body: body, retried: true);
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -1653,7 +1662,7 @@ class DashboardClient {
       body: jsonEncode(body),
     );
     if (res.statusCode == 401 && !retried) {
-      _resetAuth(res.request?.headers['Authorization']);
+      _resetAuth(headers);
       return apiPatch(endpoint, body: body, retried: true);
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -1674,7 +1683,7 @@ class DashboardClient {
       body: body != null ? jsonEncode(body) : null,
     );
     if (res.statusCode == 401 && !retried) {
-      _resetAuth(res.request?.headers['Authorization']);
+      _resetAuth(headers);
       return apiPut(endpoint, body: body, retried: true);
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -1726,7 +1735,7 @@ class DashboardClient {
         .then(http.Response.fromStream)
         .timeout(timeout);
     if (response.statusCode == 401 && !retried) {
-      _resetAuth(request.headers['Authorization']);
+      _resetAuth(request.headers);
       return cronRequest(method, endpoint, query, body, retried: true);
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {

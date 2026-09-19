@@ -32,6 +32,22 @@ The default is a signed, non-debuggable ARM64 release. It skips Android code/res
 
 See [Release guide](ANDROID_RELEASE_PLAN.md) for signing setup and artifact verification. Do not replace a signing key or uninstall an existing app to bypass an update failure.
 
+## Performance builds
+
+Use an AOT profile build when judging scrolling or loading performance:
+
+```sh
+flutter build apk --profile --build-number=<next-version-code>
+```
+
+This builds the separate `com.tarkilhk.wing.dev` package, labelled Wing Dev and
+signed with the ordinary debug key. It can update an ordinary debug installation
+in place with `adb install -r`, preserving that app's saved connections. It does
+not update the signed `-Development` installation that uses the release package.
+Profile mode supports performance inspection but not hot reload. Keep debug and
+profile timing results separate. For repeatable Chats measurements use
+`tools/performance/chat_frames.dart`; ordinary builds omit its frame observer.
+
 ## Hot reload
 
 After installing and opening Wing Dev, attach from its source checkout:

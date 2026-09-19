@@ -104,6 +104,14 @@ android {
                signingConfig = signingConfigs.getByName("release")
            }
        }
+       getByName("profile") {
+           // AOT performance builds must upgrade the separate Dev app, never
+           // replace the user's installed release or its saved connections.
+           applicationIdSuffix = ".dev"
+           versionNameSuffix = "-dev-profile"
+           manifestPlaceholders["appLabel"] = "Wing Dev"
+           signingConfig = signingConfigs.getByName("debug")
+       }
        release {
            // CI/local analysis may build a release artifact without access to
            // the private distribution keystore. Never fall back to the debug
