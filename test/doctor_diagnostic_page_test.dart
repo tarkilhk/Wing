@@ -61,9 +61,8 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         final fixture = AdministrationFixture();
-        var failRead = false;
+        var runs = 0;
         fixture.override = (method, path, query, body) async {
-          if (failRead) throw Exception('Offline');
           return {'pid': 7, 'running': false, 'exit_code': 0, 'lines': lines};
         };
         await tester.pumpWidget(
@@ -83,6 +82,9 @@ void main() {
               server: fixture.server,
               action: const AdministrationAction('doctor', 7),
               title: 'Doctor',
+              onRunAgain: () async {
+                runs++;
+              },
               scope: 'Home server',
             ),
           ),
@@ -113,15 +115,17 @@ void main() {
 
         await tester.pumpAndSettle();
         await snapshot(tester, '${brightness.name}-$scale-bottom');
-        failRead = true;
-        await tester.tap(find.byTooltip('Refresh result'));
+        expect(find.byTooltip('Refresh result'), findsNothing);
+        expect(find.text('Run Doctor again'), findsNothing);
+        await tester.tap(find.byTooltip('Run Doctor again'));
         await tester.pumpAndSettle();
         expect(find.text('3 issues found'), findsOneWidget);
+        expect(runs, 1);
         expect(fixture.requests.where((r) => r.$1 != 'GET'), isEmpty);
         expect(tester.takeException(), isNull);
         await tester.drag(find.byType(Scrollable).first, const Offset(0, 2000));
         await tester.pumpAndSettle();
-        await snapshot(tester, '${brightness.name}-$scale-read-error');
+        await snapshot(tester, '${brightness.name}-$scale-run-action');
       });
     }
   }

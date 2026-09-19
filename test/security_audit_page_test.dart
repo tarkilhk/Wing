@@ -58,9 +58,8 @@ void main() {
         addTearDown(tester.view.reset);
         final fixture = AdministrationFixture();
         addTearDown(fixture.server.close);
-        var failRead = false;
+        var runs = 0;
         fixture.override = (method, path, query, body) async {
-          if (failRead) throw Exception('Offline');
           return {'pid': 7, 'running': false, 'exit_code': 1, 'lines': lines};
         };
         await tester.pumpWidget(
@@ -80,6 +79,9 @@ void main() {
               server: fixture.server,
               action: const AdministrationAction('security-audit', 7),
               title: 'Security audit',
+              onRunAgain: () async {
+                runs++;
+              },
               scope: 'Home server',
             ),
           ),
@@ -138,10 +140,12 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Diagnostic output'));
         await tester.pumpAndSettle();
-        failRead = true;
-        await tester.tap(find.byTooltip('Refresh result'));
+        expect(find.byTooltip('Refresh result'), findsNothing);
+        expect(find.text('Run Security audit again'), findsNothing);
+        await tester.tap(find.byTooltip('Run Security audit again'));
         await tester.pumpAndSettle();
         expect(find.text(summary), findsOneWidget);
+        expect(runs, 1);
         expect(fixture.requests.every((r) => r.$1 == 'GET'), isTrue);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -244,11 +248,13 @@ void main() {
         matching: find.text('Run'),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(
       find.descendant(of: find.byType(AlertDialog), matching: find.text('Run')),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(AdminActionPage), findsNothing);
     expect(find.textContaining('21 vulnerabilities found'), findsNothing);
     running = false;

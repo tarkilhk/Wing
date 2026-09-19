@@ -92,6 +92,7 @@ class _AdminActionPageState extends State<AdminActionPage> {
   @override
   Widget build(BuildContext context) {
     final isAudit = widget.action.name == 'security-audit';
+    final isDiagnostic = isAudit || widget.action.name == 'doctor';
     final audit = isAudit && _status != null
         ? SecurityAuditReport.fromStatus(_status!)
         : null;
@@ -104,11 +105,23 @@ class _AdminActionPageState extends State<AdminActionPage> {
       title: widget.title,
       scope: widget.scope,
       actions: [
-        IconButton(
-          tooltip: 'Refresh result',
-          onPressed: _loading ? null : _check,
-          icon: const Icon(Icons.refresh),
-        ),
+        if (isDiagnostic)
+          IconButton(
+            tooltip: 'Run ${widget.title} again',
+            onPressed:
+                !_loading &&
+                    _status?['running'] == false &&
+                    _status?['exit_code'] is int
+                ? widget.onRunAgain
+                : null,
+            icon: const Icon(Icons.play_arrow),
+          )
+        else
+          IconButton(
+            tooltip: 'Refresh result',
+            onPressed: _loading ? null : _check,
+            icon: const Icon(Icons.refresh),
+          ),
       ],
       child: ListView(
         padding: const EdgeInsets.all(16),
@@ -182,7 +195,8 @@ class _AdminActionPageState extends State<AdminActionPage> {
               ),
             ],
           ),
-          if (widget.onRunAgain != null &&
+          if (!isDiagnostic &&
+              widget.onRunAgain != null &&
               _status?['running'] == false &&
               _status?['exit_code'] is int) ...[
             const SizedBox(height: 16),

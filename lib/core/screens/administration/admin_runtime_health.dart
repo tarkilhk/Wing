@@ -117,14 +117,10 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
         server: controller.server,
         action: _observations[path]!.action,
         initialObservation: _observations[path],
-        onRunAgain:
-            _observations[path]?.status['running'] == false &&
-                _observations[path]?.status['exit_code'] is int
-            ? () async {
-                Navigator.of(context).pop();
-                await _run(path, title, scope, openResult: true);
-              }
-            : null,
+        onRunAgain: () async {
+          Navigator.of(context).pop();
+          await _run(path, title, scope, openResult: true);
+        },
         title: title,
         scope: controller.diagnosticScope(path) ?? scope,
         onObservation: (value) =>
@@ -206,6 +202,9 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
     final canRunAll =
         health.canStartDiagnostic('ops/doctor') &&
         health.canStartDiagnostic('ops/security-audit');
+    final running =
+        health.starting.isNotEmpty ||
+        _observations.values.any((value) => value.status['running'] == true);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -222,7 +221,15 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
               onPressed: canRunAll
                   ? () => runAllHealthDiagnostics(context, health)
                   : null,
-              icon: const Icon(Icons.play_arrow),
+              icon: running
+                  ? const SizedBox.square(
+                      dimension: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        semanticsLabel: 'Running diagnostics',
+                      ),
+                    )
+                  : const Icon(Icons.refresh),
             ),
           ],
         ),

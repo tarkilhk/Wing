@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Show a refresh icon with progress in Health’s Server section, and move Doctor and Security audit reruns to top-bar play buttons.
+
 - Refresh all four profile health checks automatically when Health opens or the selected profile changes. Run Doctor and Security audit on opening Health, without rerunning them on profile changes.
 
 - Replace Health’s Server refresh with Run all diagnostics for Doctor and Security audit; remove misleading runtime-profile labels.

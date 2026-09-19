@@ -102,20 +102,33 @@ void main() {
             ),
           ),
         );
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
         final runAll = find.byWidgetPredicate(
           (w) => w is IconButton && w.tooltip == 'Run all diagnostics',
         );
         bool enabled() => tester.widget<IconButton>(runAll).onPressed != null;
         expect(enabled(), isTrue);
+        expect(
+          find.descendant(of: runAll, matching: find.byIcon(Icons.refresh)),
+          findsOneWidget,
+        );
         expect(find.byTooltip('Refresh health'), findsNothing);
         expect(find.textContaining('Runtime profile'), findsNothing);
         expect(fixture.requests, isEmpty);
         await snapshot(tester, '${brightness.name}-$scale-idle');
         await tester.tap(runAll);
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
         expect(find.byType(AlertDialog), findsNothing);
         expect(enabled(), isFalse);
+        expect(
+          find.descendant(
+            of: runAll,
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          findsOneWidget,
+        );
         expect(find.text('Starting…'), findsNWidgets(2));
         expect(
           fixture.requests.map((r) => r.$2),
@@ -126,20 +139,41 @@ void main() {
         expect(fixture.requests, hasLength(2));
         await snapshot(tester, '${brightness.name}-$scale-starting');
         starts.complete();
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
         expect(find.byType(AdminActionPage), findsNothing);
         expect(find.textContaining('Running'), findsNWidgets(2));
         expect(enabled(), isFalse);
+        expect(
+          find.descendant(
+            of: runAll,
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          findsOneWidget,
+        );
         await snapshot(tester, '${brightness.name}-$scale-running');
         doctorRunning = false;
         await tester.pump(const Duration(seconds: 3));
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
         expect(enabled(), isFalse);
+        expect(
+          find.descendant(
+            of: runAll,
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          findsOneWidget,
+        );
         expect(find.textContaining('No issues found'), findsOneWidget);
         auditRunning = false;
         await tester.pump(const Duration(seconds: 3));
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
         expect(enabled(), isTrue);
+        expect(
+          find.descendant(of: runAll, matching: find.byIcon(Icons.refresh)),
+          findsOneWidget,
+        );
         expect(find.textContaining('Completed'), findsOneWidget);
         await snapshot(tester, '${brightness.name}-$scale-completed');
         expect(
@@ -148,7 +182,8 @@ void main() {
         );
         expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(2));
         await tester.tap(runAll);
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
         expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(4));
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -196,7 +231,8 @@ void main() {
         (w) => w is IconButton && w.tooltip == 'Run all diagnostics',
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(2));
     expect(
       find.descendant(

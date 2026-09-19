@@ -43,14 +43,17 @@ short read-only disclosure; source metadata is shown only when reported.
 
 ## Health observations
 
-Health has two groups. Server owns Doctor, security audit and Logs. Its play icon
+Health has two groups. Server owns Doctor, security audit and Logs. Its refresh icon
 starts Doctor and security audit together, without opening their details or a
 confirmation dialog. Opening Health triggers that same run once per screen visit;
 changing profiles, refreshing profile checks, and returning from a detail do not
 restart server diagnostics. It is disabled while either diagnostic is starting, running
 or has an uncertain completion. Each operation retains its own result; a failed
-start does not prevent the other operation from running. There is no Server refresh
-button or runtime-profile label. Diagnostic confirmations and results identify
+start does not prevent the other operation from running. The icon shows the same
+progress spinner as Profile while diagnostics start or run.
+Doctor and Security audit details use a top-bar play action to rerun, with automatic
+result polling and no bottom rerun button. There is no runtime-profile label.
+Diagnostic confirmations and results identify
 the server. Profile uses selection from the shared header,
 a refresh icon beside its heading, four stable rows (Model access, Tools, Connectors,
 Scheduled tasks), and Usage. There is no global health verdict. Server diagnostics retain their separate progress and results.

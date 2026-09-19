@@ -46,7 +46,9 @@ access. External CLI ownership remains distinct. Show credential provenance only
 when the backend establishes it, and do not infer account use from provider names.
 
 The owner-approved 19 September Health update removes runtime-profile metadata
-and replaces Server refresh with Run all diagnostics (play). Doctor and security
+and uses a Server refresh icon for Run all diagnostics, with the same progress
+spinner as Profile. Diagnostic details use a top-bar play action to rerun, with
+automatic result polling and no bottom rerun button. Doctor and security
 audit use their existing server endpoints, with separate retained progress and
 results. Opening Health automatically runs both once; profile changes do not rerun
 them. They do not accept the selected mobile profile. Confirmations and result

@@ -171,7 +171,8 @@ void main() {
           await tester.ensureVisible(find.text('Doctor'));
           await tester.pumpAndSettle();
           await tester.tap(find.text('Doctor'));
-          await tester.pumpAndSettle();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
           await tester.tap(
             find.descendant(
               of: find.byType(AlertDialog),
