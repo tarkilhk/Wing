@@ -12,6 +12,7 @@ import 'package:wing/core/services/chat_browser_data.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/chat_profile_bar.dart';
 import 'support/profile_browser_fixture.dart';
 
 class TargetFixture extends ProfileBrowserFixture {
@@ -127,6 +128,7 @@ void main() {
           ),
           home: ProfileWorkspaceBrowser(
             controller: controller,
+            drawer: const Drawer(),
             newProject: () async {},
           ),
         ),
@@ -163,6 +165,46 @@ void main() {
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
   }
+
+  testWidgets('profile bar toggles the shared filter without changing owner', (
+    tester,
+  ) async {
+    await show(tester);
+    ChatProfileBar bar() =>
+        tester.widget<ChatProfileBar>(find.byType(ChatProfileBar));
+    expect(bar().selectedProfiles, isEmpty);
+    final owner = controller.current!.scope;
+    final personal = find.byKey(const ValueKey('chat-profile-personal'));
+    final work = find.byKey(const ValueKey('chat-profile-work'));
+    await tester.tap(work);
+    await tester.pumpAndSettle();
+    expect(bar().selectedProfiles, {'work'});
+    expect(find.text('Profile 1'), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-work-session-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-personal-session-0')), findsNothing);
+    await tester.tap(personal);
+    await tester.pumpAndSettle();
+    expect(bar().selectedProfiles, {'personal'});
+    expect(
+      find.byKey(const ValueKey('chat-personal-session-0')),
+      findsOneWidget,
+    );
+    await tester.tap(personal);
+    await tester.pumpAndSettle();
+    expect(bar().selectedProfiles, isEmpty);
+    expect(find.text('Profile 1'), findsNothing);
+    expect(controller.current!.scope, owner);
+    await select(tester, 'profile', 'work');
+    expect(bar().selectedProfiles, {'work'});
+    await tester.tap(work);
+    await tester.pumpAndSettle();
+    expect(bar().selectedProfiles, isEmpty);
+    await tester.tap(personal);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Clear all filters'));
+    await tester.pumpAndSettle();
+    expect(bar().selectedProfiles, isEmpty);
+  });
 
   testWidgets(
     'filters are independent, multi-select and clear leaves search intact',
@@ -369,6 +411,16 @@ void main() {
         fixture.tokenInputs.addAll({0: 412300, 1: 14500000, 2: 8399});
         await show(tester, brightness: brightness, scale: scale);
         await screenshot(tester, '${brightness.name}-$scale-list');
+        final bar = find.byKey(const ValueKey('chat-profile-scroll'));
+        final width = tester.getSize(bar).width;
+        await tester.drag(bar, const Offset(-200, 0));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('chat-profile-work')));
+        await tester.pumpAndSettle();
+        expect(tester.getSize(bar).width, width);
+        await screenshot(tester, '${brightness.name}-$scale-profile-selected');
+        await tester.tap(find.byKey(const ValueKey('chat-profile-work')));
+        await tester.pumpAndSettle();
         await tester.tap(find.byTooltip('Chat list options'));
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('chat-menu-show')));

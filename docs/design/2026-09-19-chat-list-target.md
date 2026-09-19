@@ -6,6 +6,28 @@ on 19 September 2026. The reference prototype remains in the workspace at
 
 ## Selected interface
 
+- A fixed-width viewport beside the connection label contains profile-initial
+  squares, packed against its right edge beside the header menu. The empty space
+  separates connection context from profile actions; short lists stay right-aligned.
+  Overflow scrolls horizontally inside the bar without moving the
+  surrounding header or search. Following the owner's desktop-density refinement,
+  squares are 20 dp with 4 dp gaps, 3 dp corners and 9 sp initials. Targets are
+  24 dp wide and 48 dp tall, an intentional compact-rail exception. Each has a
+  full-name tooltip/accessibility label. No profile is selected initially. Tapping a square
+  selects only that profile; tapping a selected square clears the profile filter.
+  The bar and Profile menu share the same filter state, including Clear all.
+  This changes list filtering, never the current chat's owning profile.
+  Named profiles use desktop's unsigned name hash and HSL(68%, 58%) colors;
+  default stays neutral. Initials use the profile color; backgrounds use 22%
+  tint when inactive and 30% when selected. Inactive artwork is dimmed to 55%,
+  matching desktop. Studio selection remains expressed through tint, without
+  desktop's selected-only ring.
+  Verified against upstream `7c6f21a5e12ba9b1c674ec9b410fa6b8c45de4f8`,
+  `apps/desktop/src/lib/profile-color.ts`, `apps/desktop/src/store/profile.ts`,
+  `apps/desktop/src/app/chat/sidebar/profile-switcher.tsx`
+  and `hermes_cli/web_routers/profiles.py`. Desktop custom color overrides are
+  local storage, absent from the stock profile API; they cannot sync to Android.
+  The bar uses existing discovery and client filtering, with no new API calls.
 - Search above one compact, full-width Status / Profile / Project filter row.
   Filters are independent anchored multi-select menus. No selection means all.
   Choices use selected tint; five visible row heights maximum, with scrolling
@@ -92,6 +114,14 @@ draft-recovery and Studio layout tests are updated for the selected interaction.
 Actual Flutter renders use Roboto at 390 dp / 100% and 320 dp / 200% in light
 and dark themes, including menus. Export with `CHAT_LIST_REVIEW=true`;
 artifacts are in `build/chat-list-review/`.
+
+Profile-bar verification: the 14 chat-list tests and 2 profile-bar tests pass,
+covering toggle/clear, shared dropdown state, unchanged chat ownership, desktop
+color parity, both scroll directions, fixed viewport size and named selection
+semantics. Analysis passes. Actual light/dark renders at both sizes were inspected,
+including selected, loading and error states; the enlarged filter row now grows
+enough to show its selection count. These are fixture-based Flutter renders,
+not an installed-device or live-server acceptance run.
 
 Validation on the implementation: `flutter analyze --no-pub --fatal-infos`
 passed; the complete local suite passed 2,455 tests with 12 opt-in skips.

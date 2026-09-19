@@ -10,6 +10,7 @@ import '../services/profile_workspace_controller.dart';
 import '../theme/wing_theme.dart';
 import '../theme/wing_icons.dart';
 import '../widgets/chat_list_menu.dart';
+import '../widgets/chat_profile_bar.dart';
 import '../widgets/chat_status_dot.dart';
 import '../widgets/server_connection_label.dart';
 import '../widgets/studio_error.dart';
@@ -381,7 +382,9 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   Widget _filters() => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 16),
     child: SizedBox(
-      height: MediaQuery.textScalerOf(context).scale(12) > 18 ? 64 : 48,
+      height: MediaQuery.textScalerOf(context).scale(12) > 18
+          ? 32 + MediaQuery.textScalerOf(context).scale(24)
+          : 48,
       child: Stack(
         children: [
           Positioned(
@@ -1200,11 +1203,30 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              ServerConnectionLabel(
-                label: controller.connection.label,
-                icon: controller.connection.icon,
-                status: controller.connectionStatus,
-                style: TextStyle(fontSize: 12, color: tokens.muted),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 104,
+                    child: ServerConnectionLabel(
+                      label: controller.connection.label,
+                      icon: controller.connection.icon,
+                      status: controller.connectionStatus,
+                      style: TextStyle(fontSize: 12, color: tokens.muted),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ChatProfileBar(
+                      profiles: controller.discovery?.profiles ?? const [],
+                      selectedProfiles: _profiles,
+                      onSelected: (name) => _change(() {
+                        final selected = _profiles.contains(name);
+                        _profiles.clear();
+                        if (!selected) _profiles.add(name);
+                      }),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
