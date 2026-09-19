@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Scroll the Usage year grid smoothly in either direction, with the visible date range updating during drags and momentum. Replace the earlier/later arrows.
+
 - Show a refresh icon with progress in Health’s Server section, and move Doctor and Security audit reruns to top-bar play buttons.
 
 - Show green, non-interactive health rows when tools, connectors and scheduled tasks pass their checks; retain details and recovery links for other results.
