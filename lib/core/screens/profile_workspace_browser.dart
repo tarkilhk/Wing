@@ -46,7 +46,8 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _optionsKey = GlobalKey();
   final _statuses = <String>{}, _profiles = <String>{}, _projects = <String>{};
-  final _collapsed = <String>{}, _expanded = <String>{};
+  final _collapsed = <String>{};
+  final _visibleCounts = <String, int>{};
   final _show = <ChatDetail>{ChatDetail.updated};
   ChatGrouping _grouping = ChatGrouping.project;
   ChatOrdering _ordering = ChatOrdering.updated;
@@ -257,6 +258,10 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   }
 
   String _groupKey(ChatListGroup group) => '${_grouping.name}/${group.key}';
+
+  int _visibleCount(ChatListGroup group) => group.key == 'pinned'
+      ? group.entries.length
+      : _visibleCounts[_groupKey(group)] ?? 3;
   static IconData _groupIcon(ChatGrouping value) => switch (value) {
     ChatGrouping.project => Icons.folder_outlined,
     ChatGrouping.updated => Icons.schedule,
@@ -518,7 +523,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                   case 'group-by':
                     _grouping = ChatGrouping.values.byName(choice);
                     _collapsed.clear();
-                    _expanded.clear();
+                    _visibleCounts.clear();
                   case 'sort-by':
                     _ordering = ChatOrdering.values.byName(choice);
                     _arrangement.reset();
@@ -570,7 +575,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         setState(() {
           _archived = !_archived;
           _collapsed.clear();
-          _expanded.clear();
+          _visibleCounts.clear();
         });
         unawaited(_refresh());
       case 'new-project':
@@ -934,27 +939,22 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       for (final group in groups) ...[
         _groupHeading(group),
         if (!_collapsed.contains(_groupKey(group))) ...[
-          for (final entry in group.entries.take(
-            _expanded.contains(_groupKey(group)) || group.key == 'pinned'
-                ? group.entries.length
-                : 3,
-          ))
+          for (final entry in group.entries.take(_visibleCount(group)))
             _session(entry),
-          if (group.entries.length > 3 && group.key != 'pinned')
+          if (group.entries.length > _visibleCount(group))
             Padding(
               padding: const EdgeInsets.only(left: 46, right: 16),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton(
+                  key: ValueKey('chat-show-more-${_groupKey(group)}'),
                   onPressed: () => setState(() {
-                    final key = _groupKey(group);
-                    if (!_expanded.remove(key)) _expanded.add(key);
+                    _visibleCounts[_groupKey(group)] =
+                        _visibleCount(group) + 10;
                   }),
-                  child: Text(
-                    _expanded.contains(_groupKey(group))
-                        ? 'Show less'
-                        : 'Show all ${group.entries.length} chats',
-                    style: const TextStyle(fontSize: 12),
+                  child: const Text(
+                    'Show more',
+                    style: TextStyle(fontSize: 12),
                   ),
                 ),
               ),

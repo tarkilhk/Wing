@@ -22,6 +22,9 @@ This supersedes earlier Chats-specific instructions for profile chips, a separat
 Projects section, Recents, separators, and the header's duplicated filters.
 Use the compact Status / Profile / Project row, five colored status dots and
 a continuous grouped list with three-chat previews. The owner’s 20 September
+update uses “Show more” to reveal ten additional chats in that group per tap;
+the action disappears when every matching chat in the group is visible.
+The owner’s 20 September
 refinement places Group by, Sort by and Show details directly in the header
 overflow menu, each opening an anchored menu at the ellipsis. There is no
 permanent grouping/sorting row or bottom sheet. Choices apply immediately and

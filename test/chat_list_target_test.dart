@@ -428,7 +428,7 @@ void main() {
       await tester.tap(find.text('Done'));
       await tester.pumpAndSettle();
       expect(find.text('9.0k'), findsOneWidget);
-      expect(find.text('Show all 6 chats'), findsOneWidget);
+      expect(find.text('Show more'), findsWidgets);
       final chat = find.byKey(const ValueKey('chat-personal-session-0'));
       final tokenCount = find.descendant(of: chat, matching: find.text('1.5k'));
       final title = find.descendant(
@@ -557,6 +557,20 @@ void main() {
         fixture.tokenInputs.addAll({0: 412300, 1: 14500000, 2: 8399});
         await show(tester, brightness: brightness, scale: scale);
         await screenshot(tester, '${brightness.name}-$scale-list');
+        final more = find.byKey(
+          const ValueKey('chat-show-more-project/personal/p0'),
+        );
+        final chatScroll = find.descendant(
+          of: find.byKey(const ValueKey('chat-list-false')),
+          matching: find.byType(Scrollable),
+        );
+        await tester.scrollUntilVisible(more, 200, scrollable: chatScroll);
+        await Scrollable.ensureVisible(tester.element(more), alignment: 1);
+        await tester.pumpAndSettle();
+        expect(more.hitTestable(), findsOneWidget);
+        await screenshot(tester, '${brightness.name}-$scale-show-more');
+        tester.state<ScrollableState>(chatScroll).position.jumpTo(0);
+        await tester.pumpAndSettle();
         final bar = find.byKey(const ValueKey('chat-profile-scroll'));
         final width = tester.getSize(bar).width;
         await tester.drag(bar, const Offset(-200, 0));

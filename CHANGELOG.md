@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reveal ten additional chats per tap with Show more, keeping the action until the group is fully shown.
+
 - Align the notice arrow, fork and retry icons at their centers and reduce the shared row height. Expanded background-agent results use the full message width.
 
 - Bring fork and retry closer to each answer and share the following background-agent notice row when available.

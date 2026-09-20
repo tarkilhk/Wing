@@ -49,7 +49,7 @@ void main() {
     );
     await tester.drag(find.byType(ListView).last, const Offset(0, -350));
     await tester.pumpAndSettle();
-    expect(find.text('Show all 123 chats'), findsWidgets);
+    expect(find.text('Show more'), findsWidgets);
   });
   testWidgets('page failure preserves rows and has an explicit retry', (
     tester,
@@ -66,6 +66,56 @@ void main() {
     await tester.tap(find.text('Retry').first);
     await tester.pumpAndSettle();
     expect(find.text('Could not finish loading personal.'), findsNothing);
+  });
+  testWidgets('Show more adds ten per tap until the group is exhausted', (
+    tester,
+  ) async {
+    fixture.count = 28;
+    await show(tester);
+    await tester.pumpAndSettle();
+    final list = find.byKey(const ValueKey('chat-list-false'));
+    final more = find.byKey(
+      const ValueKey('chat-show-more-project/personal/home'),
+    );
+    Future<void> reachMore() async {
+      await tester.scrollUntilVisible(
+        more,
+        300,
+        scrollable: find.descendant(
+          of: list,
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await Scrollable.ensureVisible(tester.element(more), alignment: 1);
+      await tester.pumpAndSettle();
+    }
+
+    final reads = fixture.reads.length;
+    await reachMore();
+    expect(find.text('personal chat 2'), findsOneWidget);
+    expect(find.text('personal chat 4'), findsNothing);
+    await tester.tap(more);
+    await tester.pumpAndSettle();
+    await reachMore();
+    expect(find.text('personal chat 13'), findsOneWidget);
+    expect(find.text('personal chat 14'), findsNothing);
+    await tester.tap(more);
+    await tester.pumpAndSettle();
+    await reachMore();
+    expect(find.text('personal chat 23'), findsOneWidget);
+    expect(find.text('personal chat 24'), findsNothing);
+    await tester.tap(more);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('personal chat 27'),
+      200,
+      scrollable: find.descendant(of: list, matching: find.byType(Scrollable)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('personal chat 27'), findsOneWidget);
+    expect(more, findsNothing);
+    expect(fixture.reads.length, reads);
   });
   testWidgets(
     'search finds older chats across profiles without an archive scan',
