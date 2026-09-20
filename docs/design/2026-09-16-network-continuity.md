@@ -31,7 +31,7 @@ its credentials. Show an 8 dp LED to the left of the server name, separated by
 - Amber, steady: server access and live chat differ in availability. Explain the
   affected capability, such as “Live updates interrupted”.
 - Red, steady: unavailable, with recovery stopped because user action is needed
-  or a bounded initial-opening/notification recovery cycle has finished.
+  or a non-transient conversation-opening failure needs an explicit retry.
 - Neutral: an inactive saved connection has not been checked.
 
 Reduced motion disables the pulse. Status details expose text for Server access
@@ -55,8 +55,11 @@ Live-channel recovery retries after 1, 2, 4, 8 and 16 seconds, then continues
 once every 30 seconds while the connection controller is alive. The delay is
 bounded; a temporary outage does not permanently stop observation. Sign-in, TLS
 and other non-transient failures stop automatic retries and require user action.
-Initial workspace opening and notification-target recovery retain their separate
-bounded cycles. An Android network-return event, foreground entry or explicit
+Initial workspace opening retains its bounded cycle. Notification-target recovery
+keeps observing temporary failures every 30 seconds after the initial retry burst,
+until the destination opens or the user leaves it. Successful opening publishes
+the ready conversation state immediately so the composer can enable Send.
+An Android network-return event, foreground entry or explicit
 Retry attempts live recovery immediately. Android network availability only triggers verification;
 it does not itself make the server green. A changed network route invalidates a
 stale socket before reconnection. REST and live WebSocket observations remain
@@ -69,6 +72,20 @@ runtime state, approvals, credentials or pending writes. Limits are 12 profiles,
 older reading content is pruned to keep each connection snapshot under 2 MiB.
 This is a recent reading cache, not a complete offline archive. Live status is
 never restored from disk. Composer drafts retain their existing dedicated store.
+
+Stock resume responses were inspected at upstream Hermes
+`bce20d0b1f08518b499d06109f2b027519ddeca5` on 20 September 2026
+(`tui_gateway/methods_session.py` and `tui_gateway/session_lifecycle.py`).
+Runtime restoration failure (5000), disconnect cleanup still settling (4009), and
+an explicitly retryable stale runtime (4007) can recover through another
+`session.resume`. A confirmed missing session remains terminal. This classification
+is scoped to resume; it never retries `prompt.submit` or replays the draft.
+Permanent notification-opening failures stay visible independently of healthy
+transport observations, with Retry available beside cached history as well as
+in an empty destination.
+
+Integration rechecked those resume codes and messages against latest stock
+Hermes `76fe8f7f5f68a8c4ff3477b0e3904c3e26245df2` on 20 September 2026.
 
 ## Verification
 

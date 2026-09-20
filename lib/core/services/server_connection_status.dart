@@ -20,7 +20,10 @@ class ServerConnectionStatus extends ChangeNotifier {
   ConnectionAvailability access = ConnectionAvailability.unchecked;
   final Map<String, ConnectionAvailability> _live = {};
   final Set<String> _recoveries = {};
-  String? problem;
+  final Map<String, String> _failedRecoveries = {};
+  String? _accessProblem;
+  String? get recoveryProblem => _failedRecoveries.values.lastOrNull;
+  String? get problem => recoveryProblem ?? _accessProblem;
   DateTime? lastConnected;
   Future<void> Function()? retry;
   VoidCallback? onInterruption;
@@ -38,6 +41,7 @@ class ServerConnectionStatus extends ChangeNotifier {
       _live[owner] == ConnectionAvailability.available;
   ServerConnectionPhase get phase {
     if (_recoveries.isNotEmpty) return ServerConnectionPhase.reconnecting;
+    if (_failedRecoveries.isNotEmpty) return ServerConnectionPhase.disconnected;
     if (access == ConnectionAvailability.available &&
         live == ConnectionAvailability.available) {
       return ServerConnectionPhase.connected;
@@ -63,7 +67,8 @@ class ServerConnectionStatus extends ChangeNotifier {
           : live == ConnectionAvailability.unchecked
           ? 'Live chat not checked'
           : 'Server access interrupted',
-    ServerConnectionPhase.disconnected => 'Disconnected',
+    ServerConnectionPhase.disconnected =>
+      recoveryProblem == null ? 'Disconnected' : 'Conversation unavailable',
   };
   void _changed() {
     if (!_closed) notifyListeners();
@@ -71,6 +76,7 @@ class ServerConnectionStatus extends ChangeNotifier {
 
   void beginRecovery(String owner) {
     if (_closed) return;
+    _failedRecoveries.remove(owner);
     _recoveries.add(owner);
     _changed();
   }
@@ -78,13 +84,23 @@ class ServerConnectionStatus extends ChangeNotifier {
   void endRecovery(String owner) {
     if (_closed) return;
     _recoveries.remove(owner);
+    _failedRecoveries.remove(owner);
+    _changed();
+  }
+
+  /// A healthy transport does not establish that its destination was restored.
+  /// Keep stopped recovery visible until that owner retries or is dismissed.
+  void failRecovery(String owner, String message) {
+    if (_closed) return;
+    _recoveries.remove(owner);
+    _failedRecoveries[owner] = message;
     _changed();
   }
 
   void accessAvailable() {
     if (_closed) return;
     access = ConnectionAvailability.available;
-    problem = null;
+    _accessProblem = null;
     lastConnected = DateTime.now();
     _changed();
   }
@@ -111,7 +127,7 @@ class ServerConnectionStatus extends ChangeNotifier {
         failure is DashboardHttpException &&
             {401, 403}.contains(failure.statusCode)) {
       access = ConnectionAvailability.unavailable;
-      problem = isTemporaryWorkspaceFailure(failure)
+      _accessProblem = isTemporaryWorkspaceFailure(failure)
           ? null
           : workspaceFailureMessage(failure);
       _changed();

@@ -21,7 +21,18 @@ bool isTemporaryWorkspaceFailure(Object error) {
       error is http.ClientException ||
       error is WebSocketException ||
       error is JsonRpcError &&
-          {'connection_closed', 'request_timeout'}.contains(error.reason) ||
+          ({'connection_closed', 'request_timeout'}.contains(error.reason) ||
+              // Stock session.resume can race disconnect cleanup or fail while
+              // rebuilding its runtime. These observations may be retried;
+              // identical codes on prompt.submit must not replay a message.
+              error.method == 'session.resume' &&
+                  (error.code == 5000 ||
+                      error.code == 4009 &&
+                          error.message ==
+                              'session disconnect interrupt settling' ||
+                      error.code == 4007 &&
+                          error.message ==
+                              'session no longer live; retry resume')) ||
       error is DashboardHttpException &&
           (error.statusCode == 408 ||
               error.statusCode == 429 ||
@@ -59,4 +70,13 @@ String workspaceFailureMessage(Object error) {
     return 'The server’s certificate could not be verified.';
   }
   return 'Couldn’t open this workspace. Check the connection settings and try again.';
+}
+
+String conversationOpeningFailureMessage(Object error) {
+  if (error is TlsException ||
+      error is DashboardHttpException &&
+          {401, 403}.contains(error.statusCode)) {
+    return workspaceFailureMessage(error);
+  }
+  return 'Couldn’t reopen this chat. Retry to continue.';
 }

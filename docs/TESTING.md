@@ -13,6 +13,8 @@ Keep logs and generated captures under ignored `build/`. Record source revision,
 | Boundary | Entry points |
 | --- | --- |
 | Ownership and administration | `test/administration_*_test.dart`, `test/profile_live_contract_test.dart`, `integration_test/administration_existing_server_live_test.dart` |
+| Provider recovery | `test/provider_console_test.dart`, `test/provider_recovery_test.dart`, `test/provider_recovery_screen_test.dart`, `test/workspace_picker_test.dart` |
+| Notification destination recovery | `test/profile_notification_recovery_test.dart`, `test/workspace_connection_failure_test.dart`, `test/server_connection_status_test.dart`, `test/workspace_reading_snapshot_test.dart` |
 | Draft/queue acknowledgements | `test/profile_composer_queue_test.dart`, `test/profile_queue_submission_ownership_test.dart`, `integration_test/profile_lost_ack_live_test.dart` |
 | Native queue editing | `integration_test/queued_message_edit_test.dart`, `integration_test/queued_message_native_preview.dart` |
 | Saved history and branches | `test/answer_sync_acceptance_live_test.dart`, `test/profile_live_history_test.dart`, `integration_test/answer_branch_live_test.dart` |

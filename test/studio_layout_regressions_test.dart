@@ -188,7 +188,6 @@ void main() {
             AdminProviderSignIn(
               profile: fixture.server.profile('personal'),
               provider: const {'id': 'example', 'name': 'Example provider'},
-              shared: false,
             ),
             brightness,
           ),

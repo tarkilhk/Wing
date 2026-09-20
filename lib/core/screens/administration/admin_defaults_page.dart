@@ -216,7 +216,7 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
                         context,
                         _profile,
                         (context, profile) =>
-                            AdminProvidersPage(profile: profile, shared: false),
+                            AdminProvidersPage(profile: profile),
                       );
                     } else {
                       await adminPushProfile(
@@ -224,7 +224,6 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
                         _profile,
                         (context, profile) => AdminProviderDetail(
                           profile: profile,
-                          shared: false,
                           providerId: providerRow['id'] as String,
                         ),
                       );

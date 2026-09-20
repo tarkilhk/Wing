@@ -557,120 +557,118 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           drawer: _drawer(),
           appBar: AppBar(
             toolbarHeight:
-                96 +
-                (MediaQuery.textScalerOf(context).scale(20) - 20) +
+                72 +
+                (MediaQuery.textScalerOf(context).scale(24) - 24) +
                 (stackChatScope ? 48 : 0),
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
               tooltip: 'Back to sessions',
               onPressed: controller.showList,
             ),
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Tooltip(
-                  message: 'Move to project',
-                  child: InkWell(
-                    borderRadius: WingRadius.card,
-                    onTap: canMoveProject ? openProjectPicker : null,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        minHeight: 48,
-                        minWidth: 48,
-                      ),
-                      child: Align(
-                        alignment: Alignment.bottomLeft,
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Text(
-                            chat.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ),
-                      ),
+            // Share the project action across title and scope so the title
+            // doesn't need another empty 48 dp row above the scope controls.
+            title: Tooltip(
+              message: 'Move to project',
+              child: InkWell(
+                borderRadius: WingRadius.card,
+                onTap: canMoveProject ? openProjectPicker : null,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      chat.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
-                  ),
-                ),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final scopeStyle = Theme.of(context).textTheme.labelMedium
-                        ?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w400,
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final scopeStyle = Theme.of(context)
+                            .textTheme
+                            .labelMedium
+                            ?.copyWith(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w400,
+                            );
+                        final projectLabel =
+                            chat.opening || chat.offlineSnapshot
+                            ? chat.key.workspace.profileName
+                            : controller.chatProjectLabel(chat);
+                        final server = ServerConnectionLabel(
+                          alignment: Alignment.centerLeft,
+                          label: controller.connection.label,
+                          icon: controller.connection.icon,
+                          status: controller.connectionStatus,
+                          style: scopeStyle,
                         );
-                    final projectLabel = chat.opening || chat.offlineSnapshot
-                        ? chat.key.workspace.profileName
-                        : controller.chatProjectLabel(chat);
-                    final server = ServerConnectionLabel(
-                      alignment: Alignment.topLeft,
-                      label: controller.connection.label,
-                      icon: controller.connection.icon,
-                      status: controller.connectionStatus,
-                      style: scopeStyle,
-                    );
-                    final project = Tooltip(
-                      message: 'Move to project: $projectLabel',
-                      child: Semantics(
-                        button: true,
-                        enabled: canMoveProject,
-                        focusable: canMoveProject,
-                        onTap: canMoveProject ? openProjectPicker : null,
-                        label: '$projectLabel. Move to project',
-                        excludeSemantics: true,
-                        child: InkWell(
-                          key: const ValueKey('chat-project-picker'),
-                          borderRadius: WingRadius.control,
-                          onTap: canMoveProject ? openProjectPicker : null,
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              minHeight: 48,
-                              minWidth: 48,
-                            ),
-                            child: Align(
-                              alignment: Alignment.topLeft,
-                              widthFactor: 1,
-                              heightFactor: 1,
-                              child: Text(
-                                projectLabel,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: scopeStyle,
+                        final project = Tooltip(
+                          message: 'Move to project: $projectLabel',
+                          child: Semantics(
+                            button: true,
+                            enabled: canMoveProject,
+                            focusable: canMoveProject,
+                            onTap: canMoveProject ? openProjectPicker : null,
+                            label: '$projectLabel. Move to project',
+                            excludeSemantics: true,
+                            child: InkWell(
+                              key: const ValueKey('chat-project-picker'),
+                              borderRadius: WingRadius.control,
+                              onTap: canMoveProject ? openProjectPicker : null,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minHeight: 48,
+                                  minWidth: 48,
+                                ),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  widthFactor: 1,
+                                  heightFactor: 1,
+                                  child: Text(
+                                    projectLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: scopeStyle,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                    );
-                    if (stackChatScope) {
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [server, project],
-                      );
-                    }
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: constraints.maxWidth * .5,
-                          ),
-                          child: server,
-                        ),
-                        ExcludeSemantics(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            child: Text('·', style: scopeStyle),
-                          ),
-                        ),
-                        Expanded(child: project),
-                      ],
-                    );
-                  },
+                        );
+                        if (stackChatScope) {
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [server, project],
+                          );
+                        }
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: constraints.maxWidth * .5,
+                              ),
+                              child: server,
+                            ),
+                            ExcludeSemantics(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                                child: Text('·', style: scopeStyle),
+                              ),
+                            ),
+                            Expanded(child: project),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
             actions: [
               Builder(
@@ -757,8 +755,10 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               if (controller.switching) const LinearProgressIndicator(),
               WorkspaceConnectionStatus(
                 status: controller.connectionStatus,
-                reserveSpace: true,
-                showHint: !chat.opening || chat.messages.isNotEmpty,
+                reserveSpace: false,
+                showHint:
+                    chat.openingError == null &&
+                    (!chat.opening || chat.messages.isNotEmpty),
               ),
               if (controller.error != null)
                 MaterialBanner(
@@ -771,9 +771,15 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   ],
                 ),
               if (chat.openingError != null && chat.messages.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(chat.openingError!),
+                MaterialBanner(
+                  forceActionsBelow: true,
+                  content: StudioError(chat.openingError!),
+                  actions: [
+                    TextButton(
+                      onPressed: () => _run(controller.resumeConnection),
+                      child: const Text('Retry connection'),
+                    ),
+                  ],
                 ),
               Expanded(child: _chat(chat, context)),
             ],

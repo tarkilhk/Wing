@@ -67,7 +67,7 @@ void main() {
       }
       expect(
         controller.connectionStatus.phase,
-        ServerConnectionPhase.disconnected,
+        ServerConnectionPhase.reconnecting,
       );
       expect(controller.notificationChat!.key, key);
       final changedCredentials = owner('other-credentials');

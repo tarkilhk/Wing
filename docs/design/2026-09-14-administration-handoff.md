@@ -41,9 +41,9 @@ which is separate from inheritance. See the [verified ownership research](../res
 for source evidence and provider-specific external/shared credential mechanisms.
 
 The Server / Providers entry has been removed; provider searches route to
-Profile / Access and connectors. Shared-account links within the provider editor
-still target `default` and need correction together with its shared-account labels. Removing profile credentials must not promise restored root
-access. External CLI ownership remains distinct. Show credential provenance only
+Profile / Access and connectors. Provider recovery now removes the obsolete shared-account links and labels;
+its actions retain the selected canonical profile. Removing profile credentials
+does not promise restored root access. External CLI ownership remains distinct. Show credential provenance only
 when the backend establishes it, and do not infer account use from provider names.
 
 The owner-approved 19 September Health update removes runtime-profile metadata

@@ -210,11 +210,7 @@ void main() {
             ),
             child: child!,
           ),
-          home: AdminProviderDetail(
-            profile: profile,
-            shared: false,
-            providerId: 'research',
-          ),
+          home: AdminProviderDetail(profile: profile, providerId: 'research'),
         ),
       );
       await tester.pumpAndSettle();
@@ -222,7 +218,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Manage shared account'));
       await tester.pumpAndSettle();
-      expect(find.text('Home server / Shared accounts'), findsOneWidget);
+      expect(find.text('Home server / default'), findsOneWidget);
       expect(
         fixture.requests
             .where((r) => r.$2 == 'providers/oauth')

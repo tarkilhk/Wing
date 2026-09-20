@@ -79,7 +79,9 @@ class _WorkspaceConnectionStatusState extends State<WorkspaceConnectionStatus> {
                   ServerConnectionPhase.reconnecting =>
                     'Reconnecting… Your draft stays here.',
                   ServerConnectionPhase.disconnected =>
-                    'Offline · Tap the status icon to retry.',
+                    widget.status.recoveryProblem == null
+                        ? 'Offline · Tap the status icon to retry.'
+                        : 'Chat unavailable · Your draft stays here.',
                   _ => widget.status.description,
                 },
                 maxLines: 1,

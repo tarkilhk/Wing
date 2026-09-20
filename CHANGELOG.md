@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add profile-scoped provider credential renewal, sign-in recovery and reviewed credential removal, and remove obsolete shared-account redirects.
+- Clarify connection deadlines, notification recovery, local reading snapshots and configuration-backup limits.
+
+- Restore Send immediately after a chat reopens, automatically retry recoverable session-resume failures and longer notification outages, and preserve drafts with a visible retry action when recovery needs attention.
+
 - Add Ask Hermes to each Doctor finding, opening an editable new-chat draft under the selected profile with the finding and available diagnostic log.
 
 - Move configuration backup and restore to App settings. Include accent colour, notification preferences and the default composer action, and apply restored settings immediately.

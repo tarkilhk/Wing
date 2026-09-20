@@ -198,7 +198,7 @@ class _AdminSpeechSynthesisPageState extends State<AdminSpeechSynthesisPage>
       (context, profile) => AdminSecretPage(
         profile: profile,
         name: env['key'] as String,
-        shared: false,
+
         isSet: env['is_set'] == true,
       ),
     );

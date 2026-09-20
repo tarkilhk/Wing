@@ -55,10 +55,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: wingTheme(Brightness.dark),
-          home: AdminProvidersPage(
-            profile: fixture.server.profile('default'),
-            shared: true,
-          ),
+          home: AdminProvidersPage(profile: fixture.server.profile('default')),
         ),
       );
       await tester.pumpAndSettle();
@@ -70,18 +67,19 @@ void main() {
           tester.getTopLeft(find.byKey(const ValueKey('provider-alpha'))).dy,
         ),
       );
-      expect(find.byTooltip('Renew expired sign-in'), findsOneWidget);
+      expect(find.byTooltip('Sign in to expired again'), findsOneWidget);
       await tester.tap(find.text('Stored (2)'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Sign-in expired'), findsNothing);
+      expect(find.textContaining('Access token expired'), findsNothing);
       await tester.tap(find.text('alpha'));
       await tester.pumpAndSettle();
-      expect(find.text('Default provider for: personal'), findsOneWidget);
+      expect(find.text('Server A / default'), findsOneWidget);
+      expect(find.text('Manage shared account'), findsNothing);
       await tester.pageBack();
       await tester.pumpAndSettle();
       await tester.tap(find.text('beta'));
       await tester.pumpAndSettle();
-      expect(find.text('Default provider for: work'), findsOneWidget);
+      expect(find.text('Server A / default'), findsOneWidget);
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(
@@ -92,11 +90,11 @@ void main() {
       );
       fail = true;
       await tester.scrollUntilVisible(
-        find.text('Refresh access'),
+        find.text('Check status'),
         -250,
         scrollable: pageScroll,
       );
-      await tester.tap(find.text('Refresh access'));
+      await tester.tap(find.text('Check status'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Last checked'), findsOneWidget);
       await tester.scrollUntilVisible(
@@ -137,10 +135,7 @@ void main() {
             ).copyWith(textScaler: const TextScaler.linear(1.5)),
             child: child!,
           ),
-          home: AdminProvidersPage(
-            profile: fixture.server.profile('personal'),
-            shared: false,
-          ),
+          home: AdminProvidersPage(profile: fixture.server.profile('personal')),
         ),
       );
       await tester.pumpAndSettle();
@@ -161,14 +156,19 @@ void main() {
       await tester.tap(find.text('External provider with a long display name'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('Source and sign-in help'),
+        find.text('Credential details'),
         200,
         scrollable: pageScroll,
       );
-      await tester.ensureVisible(find.text('Source and sign-in help'));
+      await tester.ensureVisible(find.text('Credential details'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Source and sign-in help'));
+      await tester.tap(find.text('Credential details'));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Check external sign-in'),
+        -200,
+        scrollable: pageScroll,
+      );
       expect(find.text('Check external sign-in'), findsOneWidget);
       expect(find.text('Disconnect'), findsNothing);
       expect(find.text('Remove profile account'), findsNothing);

@@ -4,6 +4,7 @@ import 'dart:io';
 import '../models/hermes_profile.dart';
 import 'connection_manager.dart';
 import 'profile_gateway.dart';
+import 'provider_console.dart';
 import 'profiles_repository.dart';
 import 'server_connection_status.dart';
 import 'workspace_connection_failure.dart';
@@ -17,13 +18,14 @@ typedef AdministrationRequest =
     );
 
 /// One connection, independent of the currently selected workspace.
-/// Profile views capture an explicit scope, including shared-root account views.
+/// Profile views capture an explicit canonical scope.
 class AdministrationRepository {
   final String connectionId;
   final String connectionIdentity;
   final String connectionLabel;
   final AdministrationRequest request;
   final ProfileGateway Function(String name) gateway;
+  final ProviderConsoleCommand? providerCommand;
   final void Function() _close;
   int _leases = 0;
   bool _closing = false;
@@ -35,6 +37,7 @@ class AdministrationRepository {
     required this.connectionLabel,
     required this.request,
     required this.gateway,
+    this.providerCommand,
     void Function()? close,
   }) : _close = close ?? _noop;
   static void _noop() {}
@@ -57,10 +60,15 @@ class AdministrationRepository {
       gatewayHeaders: connection.gatewayHeaders,
     );
     final gateways = <String, ProfileGateway>{};
+    final console = ProviderConsole.dashboard(
+      dashboard,
+      connection.gatewayHeaders,
+    );
     return AdministrationRepository(
       connectionId: connection.id,
       connectionIdentity: identity,
       connectionLabel: connection.label,
+      providerCommand: console.run,
       request: (method, endpoint, query, body) async {
         if (endpoint.startsWith('cron/')) {
           return connectionStatus.observeAccess(
@@ -101,6 +109,7 @@ class AdministrationRepository {
           gateway.close();
         }
         dashboard.close();
+        console.close();
       },
     );
   }
@@ -188,19 +197,6 @@ class AdministrationRepository {
       throw ArgumentError('An explicit canonical profile is required');
     }
     return ProfileAdministration._(this, name);
-  }
-
-  /// The stock profile resolver maps canonical default to the shared root.
-  /// Verify this identity through discovery before offering shared writes.
-  Future<ProfileAdministration> sharedProviders() async {
-    final profiles = await discover();
-    final root = profiles.named('default');
-    if (root == null || !root.isDefault) {
-      throw const AdministrationFailure(
-        'The shared account owner is unavailable.',
-      );
-    }
-    return profile(root.name);
   }
 }
 

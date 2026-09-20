@@ -433,7 +433,7 @@ class _HermesAdministrationContentState
                         context,
                         profile,
                         (context, profile) =>
-                            AdminProvidersPage(profile: profile, shared: false),
+                            AdminProvidersPage(profile: profile),
                       ),
                     ),
                     AdminRow(

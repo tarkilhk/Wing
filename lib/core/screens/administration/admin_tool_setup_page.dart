@@ -285,7 +285,7 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
                                   (context, profile) => AdminSecretPage(
                                     profile: profile,
                                     name: env['key'] as String,
-                                    shared: false,
+
                                     isSet: false,
                                   ),
                                 );

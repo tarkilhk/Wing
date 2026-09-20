@@ -5,6 +5,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/services/server_connection_status.dart';
 
 void main() {
+  test('a failed recovery stays visible until its owner retries or leaves', () {
+    final status = ServerConnectionStatus('Claw');
+    addTearDown(status.dispose);
+    status.accessAvailable();
+    status.liveChanged('default', true);
+    status.failRecovery('notification', 'Chat could not be reopened');
+    status.accessAvailable();
+    status.endRecovery('another-profile');
+    expect(status.phase, ServerConnectionPhase.disconnected);
+    expect(status.problem, 'Chat could not be reopened');
+    status.beginRecovery('notification');
+    expect(status.phase, ServerConnectionPhase.reconnecting);
+    expect(status.problem, isNull);
+    status.endRecovery('notification');
+    expect(status.phase, ServerConnectionPhase.connected);
+  });
+
   test('server access and live chat are independent observations', () async {
     final status = ServerConnectionStatus('Claw');
     addTearDown(status.dispose);

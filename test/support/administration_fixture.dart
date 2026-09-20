@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/provider_console.dart';
 
 class AdministrationFixture {
   final String id;
@@ -51,11 +52,20 @@ class AdministrationFixture {
   Completer<void>? writeGate;
   AdministrationRequest? override;
   ScopedRpc? rpcOverride;
+  ProviderConsoleCommand? consoleOverride;
+  final consoleRequests = <(String, String, bool)>[];
   late final AdministrationRepository server = AdministrationRepository(
     connectionId: id,
     connectionIdentity: '$id-endpoint',
     connectionLabel: id,
     request: send,
+    providerCommand: (profile, command, {confirm = false}) async {
+      consoleRequests.add((profile, command, confirm));
+      if (consoleOverride == null) {
+        throw StateError('Unexpected console command');
+      }
+      return consoleOverride!(profile, command, confirm: confirm);
+    },
     gateway: (name) => ProfileGateway(
       scope: WorkspaceScope(connectionId: id, profileName: name),
       get: (path, query) => send('GET', path, query, null),

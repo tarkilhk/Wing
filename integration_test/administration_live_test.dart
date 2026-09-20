@@ -1036,11 +1036,8 @@ void main() {
       final context = tester.element(find.byType(HermesAdministrationContent));
       Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => AdminProviderSignIn(
-            profile: profile,
-            provider: candidate,
-            shared: false,
-          ),
+          builder: (_) =>
+              AdminProviderSignIn(profile: profile, provider: candidate),
         ),
       );
       await idle(tester);

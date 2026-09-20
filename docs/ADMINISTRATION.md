@@ -8,8 +8,8 @@ Target correction, 17 September 2026: Wing follows the latest upstream Hermes as
 specified in [AGENTS.md](../AGENTS.md). Provider credentials belong to profiles;
 upstream removed automatic root `auth.json` inheritance. The Providers entry has
 been removed from the Server tab and administration search routes provider queries
-to Profile. Shared-account links and wording inside the provider editor still
-reflect the older design and need a separate correction.
+to Profile. Provider recovery now keeps this scope and removes the obsolete
+shared-account links and root-inheritance wording.
 
 ## Overview and navigation
 
@@ -36,9 +36,9 @@ stacks at narrow widths or enlarged text. Tool details combine
 separate enablement/setup/platform facts with the owning setup route. Skill library,
 Discover skills and Agent plugins remain distinct secondary destinations in the
 Browse and manage skills menu.
-Provider inventories use compact status/source/expiry rows, direct expired-sign-in renewal
-and an explicit Add service key catalog. Account details explain the observed source
-and link to the canonical shared account. Memory leads with retained entries and a
+Provider inventories use compact status/source/expiry rows and an explicit Add
+service key catalog. Account details offer renewal, sign-in, status checks and
+removal according to the observed credential source. Memory leads with retained entries and a
 short read-only disclosure; source metadata is shown only when reported.
 
 ## Health observations
@@ -315,17 +315,33 @@ Recent runs starts with 20 conversations and can expand to the latest 100.
 Failures remain distinct from an empty history. No task-specific Stop command,
 script upload, workflow builder or unlimited history is provided.
 
+## Provider recovery
+
+Provider details now offer **Renew access**, **Sign in again / Sign-in options**,
+**Check status**, and a source-specific removal action. Implemented entirely in
+Wing against stock Hermes `9dda4332f80c66994fe0e21197a8065a73a88991` (18 September
+2026); see the [implementation contract](design/2026-09-18-provider-recovery.md).
+Renewal supports identified Anthropic/Claude, Nous device-code, Codex and xAI OAuth
+credentials through the scoped stock console. Multiple identifiable matches need
+an explicit choice. Other providers retain their supported sign-in/key workflow.
+
+Hermes-managed OAuth removal uses the profile-scoped API and discloses that it
+clears the provider's saved sign-ins. Claude Code file removal requires a reviewed
+server path, explicit shared-file confirmation and permission from Hermes' file
+API. It does not revoke the provider account, remove keychain credentials or clear
+copies already in use. Unknown sources never receive an inferred deletion action.
+No real provider credentials were changed during automated verification.
+
 ## Ownership and credentials
 
 Profile / Provider access targets the selected profile, including `default`.
-The Server tab has been removed. The provider editor still exposes
-shared-account links targeting `default`; those links need correction alongside
-its inheritance wording. An omitted or `current` profile can mean the dashboard's
+The Server tab and shared-account redirects have been removed.
+An omitted or `current` profile can mean the dashboard's
 launch home; use explicit canonical profile identity for credential operations.
 
 The target ownership contract places accounts, keys and model defaults under
 Profile. Current upstream no longer falls back to root `auth.json` when a named
-profile lacks credentials. The UI's existing inheritance claims need correction.
+profile lacks credentials.
 Credential sources still differ by provider: external CLI accounts and explicit
 shared-store mechanisms must be described according to verified backend behavior.
 See the [ownership research](research/2026-09-17-hermes-provider-ownership.md) for

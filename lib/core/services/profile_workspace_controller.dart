@@ -829,26 +829,27 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat.openingError = null;
       _notificationTarget = null;
       connectionStatus.endRecovery('notification');
+      // Clearing the target makes valid() false, so the finally block cannot
+      // publish this transition. Notify now to release the composer immediately.
+      _changed();
     } catch (failure) {
       if (!valid()) return;
       if (isTemporaryWorkspaceFailure(failure)) {
         error = null;
-        if (_notificationAttempts < 5) {
-          _notificationRetry = Timer(
-            _recoveryDelay(_notificationAttempts++),
-            () {
-              if (valid()) unawaited(_retryNotification());
-            },
-          );
-        } else {
-          connectionStatus.endRecovery('notification');
-        }
+        // A notification remains the selected destination through an outage.
+        // Cap the delay, not recovery: the server can return without another
+        // Android network or foreground event. Never replay a submitted prompt.
+        final delay = _recoveryDelay(_notificationAttempts);
+        if (_notificationAttempts < 5) _notificationAttempts++;
+        _notificationRetry = Timer(delay, () {
+          if (valid()) unawaited(_retryNotification());
+        });
       } else {
         error = null;
         chat.openingError = _isMissingSessionFailure(failure)
             ? 'This conversation is no longer available.'
-            : workspaceFailureMessage(failure);
-        connectionStatus.endRecovery('notification');
+            : conversationOpeningFailureMessage(failure);
+        connectionStatus.failRecovery('notification', chat.openingError!);
       }
     } finally {
       if (valid()) _changed();

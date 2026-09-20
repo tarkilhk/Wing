@@ -143,10 +143,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: wingTheme(Brightness.light),
-          home: AdminProvidersPage(
-            profile: fixture.server.profile('personal'),
-            shared: false,
-          ),
+          home: AdminProvidersPage(profile: fixture.server.profile('personal')),
         ),
       );
       await tester.pumpAndSettle();

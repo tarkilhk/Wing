@@ -275,7 +275,7 @@ class AdminHealthContent extends StatelessWidget {
     await adminPushProfile(
       context,
       profile!,
-      (context, profile) => AdminProvidersPage(profile: profile, shared: false),
+      (context, profile) => AdminProvidersPage(profile: profile),
     );
     checks.invalidate();
     if (context.mounted) await onCheckProfile?.call();

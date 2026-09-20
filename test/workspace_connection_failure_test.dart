@@ -4,6 +4,39 @@ import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/services/workspace_connection_failure.dart';
 
 void main() {
+  test(
+    'resume retries distinguish server recovery from missing chats and writes',
+    () {
+      for (final method in ['session.resume', 'prompt.submit']) {
+        for (final entry in [
+          (5000, 'Failed to resume session'),
+          (4009, 'session disconnect interrupt settling'),
+          (4007, 'session no longer live; retry resume'),
+        ]) {
+          expect(
+            isTemporaryWorkspaceFailure(
+              JsonRpcError(method, entry.$2, code: entry.$1),
+            ),
+            method == 'session.resume',
+          );
+        }
+      }
+      for (final entry in [
+        (4007, 'session not found'),
+        (4009, 'session busy'),
+        (4000, 'invalid params'),
+        (4130, 'session too large'),
+      ]) {
+        expect(
+          isTemporaryWorkspaceFailure(
+            JsonRpcError('session.resume', entry.$2, code: entry.$1),
+          ),
+          isFalse,
+        );
+      }
+    },
+  );
+
   test('a real unanswered RPC is classified for connection recovery', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final sockets = <WebSocket>[];

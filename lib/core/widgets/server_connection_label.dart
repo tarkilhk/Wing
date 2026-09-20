@@ -464,7 +464,8 @@ class _ConnectionDetails extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 16),
                   child: StudioError(status!.problem!),
                 ),
-              if (status?.phase == ServerConnectionPhase.disconnected)
+              if (status?.phase == ServerConnectionPhase.disconnected &&
+                  status?.recoveryProblem == null)
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
                   child: Text(

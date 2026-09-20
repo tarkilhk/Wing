@@ -13,6 +13,9 @@ class ProfileActivityStatus extends StatelessWidget {
   const ProfileActivityStatus({super.key, required this.chat});
 
   String get label {
+    if (chat.openingError != null) {
+      return 'Chat unavailable · Your draft is kept';
+    }
     if (chat.opening || chat.offlineSnapshot) return 'You can keep writing';
     switch (chat.status) {
       case ProfileTurnStatus.reconnecting:

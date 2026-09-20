@@ -321,7 +321,7 @@ void main() {
         home: AdminSecretPage(
           profile: f.server.profile('personal'),
           name: 'EXAMPLE_API_KEY',
-          shared: false,
+
           isSet: false,
         ),
       ),

@@ -202,7 +202,6 @@ void main() {
           home: AdminProviderSignIn(
             profile: f.server.profile(name),
             provider: const {'id': 'provider-a', 'name': 'Provider A'},
-            shared: false,
           ),
         ),
       );
@@ -247,7 +246,6 @@ void main() {
         home: AdminProviderSignIn(
           profile: f.server.profile('default'),
           provider: const {'id': 'provider-a', 'name': 'Provider A'},
-          shared: true,
         ),
       ),
     );
@@ -260,7 +258,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Cancel sign-in'), findsOneWidget);
-    expect(find.text('Server A / Shared accounts'), findsOneWidget);
+    expect(find.text('Server A / default'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 

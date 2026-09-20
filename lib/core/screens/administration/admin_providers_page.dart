@@ -1,21 +1,18 @@
-import '../../theme/wing_theme.dart';
 import '../../widgets/studio_action_label.dart';
 import '../../widgets/studio_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/provider_access.dart';
 import '../../services/administration_repository.dart';
 import 'admin_widgets.dart';
+import 'admin_provider_detail.dart';
+export 'admin_provider_detail.dart' show AdminProviderDetail;
 
 class AdminProvidersPage extends StatefulWidget {
   final ProfileAdministration profile;
-  final bool shared;
-  const AdminProvidersPage({
-    super.key,
-    required this.profile,
-    required this.shared,
-  });
+  const AdminProvidersPage({super.key, required this.profile});
   @override
   State<AdminProvidersPage> createState() => _AdminProvidersPageState();
 }
@@ -36,10 +33,8 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
 
   @override
   Widget build(BuildContext context) => AdminPage(
-    title: widget.shared ? 'Shared providers' : 'Profile access',
-    scope: widget.shared
-        ? '${_profile.server.connectionLabel} / Shared accounts'
-        : _profile.label,
+    title: 'Profile access',
+    scope: _profile.label,
     child: AdminLoad(
       load: () async {
         final results = await Future.wait([
@@ -95,35 +90,9 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
           padding: const EdgeInsets.all(16),
           children: [
             Text(
-              widget.shared
-                  ? 'Shared sign-ins for profiles on this server.'
-                  : 'Shared or profile credentials · Availability is not a model test.',
+              'Credentials for this profile · Availability is not a model test.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            if (!widget.shared)
-              TextButton(
-                onPressed: () async {
-                  try {
-                    final shared = await _profile.server.sharedProviders();
-                    if (context.mounted) {
-                      await adminPush(
-                        context,
-                        (context) =>
-                            AdminProvidersPage(profile: shared, shared: true),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      adminMessage(
-                        context,
-                        administrationError(e),
-                        isError: true,
-                      );
-                    }
-                  }
-                },
-                child: const Text('Manage shared providers'),
-              ),
             TextField(
               decoration: const InputDecoration(
                 labelText: 'Search providers and keys',
@@ -156,7 +125,7 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                 TextButton.icon(
                   onPressed: _busy ? null : refresh,
                   icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('Refresh access'),
+                  label: const Text('Check status'),
                 ),
                 Text(
                   'Checked ${TimeOfDay.fromDateTime(data['checkedAt'] as DateTime).format(context)}',
@@ -189,7 +158,7 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                         if (access.state == ProviderAccessState.expired &&
                             access.row['flow'] == 'device_code')
                           IconButton(
-                            tooltip: 'Renew ${access.name} sign-in',
+                            tooltip: 'Sign in to ${access.name} again',
                             icon: const Icon(Icons.login),
                             onPressed: () async {
                               await adminPushProfile(
@@ -198,7 +167,6 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                                 (context, profile) => AdminProviderSignIn(
                                   profile: profile,
                                   provider: access.row,
-                                  shared: widget.shared,
                                 ),
                               );
                               refresh();
@@ -213,7 +181,6 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                         _profile,
                         (context, profile) => AdminProviderDetail(
                           profile: profile,
-                          shared: widget.shared,
                           providerId: access.id,
                         ),
                       );
@@ -234,10 +201,8 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                   await adminPushProfile(
                     context,
                     _profile,
-                    (context, profile) => AdminServiceKeyCatalog(
-                      profile: profile,
-                      shared: widget.shared,
-                    ),
+                    (context, profile) =>
+                        AdminServiceKeyCatalog(profile: profile),
                   );
                   refresh();
                 },
@@ -263,7 +228,7 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                           (context, profile) => AdminSecretPage(
                             profile: profile,
                             name: entry.key.toString(),
-                            shared: widget.shared,
+
                             isSet: (entry.value as Map)['is_set'] == true,
                           ),
                         );
@@ -286,195 +251,16 @@ String providerExpiryLabel(BuildContext context, ProviderAccess access) {
 }
 
 String providerInventoryStatus(ProviderAccess access) => switch (access.state) {
-  ProviderAccessState.connected => 'Sign-in stored',
-  ProviderAccessState.expired => 'Sign-in expired',
+  ProviderAccessState.connected => 'Credentials detected',
+  ProviderAccessState.expired => 'Access token expired',
   ProviderAccessState.signedOut => 'No sign-in stored',
   ProviderAccessState.external => 'Check external sign-in',
   ProviderAccessState.unknown => 'Status unavailable',
 };
 
-class AdminProviderDetail extends StatefulWidget {
-  const AdminProviderDetail({
-    super.key,
-    required this.profile,
-    required this.shared,
-    required this.providerId,
-  });
-  final ProfileAdministration profile;
-  final bool shared;
-  final String providerId;
-  @override
-  State<AdminProviderDetail> createState() => _AdminProviderDetailState();
-}
-
-class _AdminProviderDetailState extends State<AdminProviderDetail> {
-  late final _profile = widget.profile;
-  bool _busy = false;
-  Future<void> _disconnect(
-    Map<String, dynamic> row,
-    VoidCallback refresh,
-  ) async {
-    if (!await adminConfirm(
-      context,
-      widget.shared ? 'Disconnect shared account?' : 'Remove profile account?',
-      widget.shared
-          ? 'Profiles using this shared account may lose access. Other credential sources may still be available.'
-          : 'This removes the profile account. Shared access may become available again.',
-      action: 'Disconnect',
-    )) {
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      final result = await _profile.write(
-        'DELETE',
-        'providers/oauth/${Uri.encodeComponent(row['id'] as String)}',
-      );
-      if (result['ok'] != true) {
-        throw const AdministrationFailure(
-          'No account removal was confirmed. Refresh effective access.',
-        );
-      }
-      await _profile.read('providers/oauth');
-      refresh();
-      if (mounted) {
-        adminMessage(
-          context,
-          'Removal requested. Check the refreshed access status for remaining sources.',
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        adminMessage(
-          context,
-          administrationError(e, writing: true),
-          isError: true,
-        );
-      }
-    }
-    if (mounted) setState(() => _busy = false);
-  }
-
-  @override
-  Widget build(BuildContext context) => AdminPage(
-    title: 'Provider account',
-    scope: widget.shared
-        ? '${_profile.server.connectionLabel} / Shared accounts'
-        : _profile.label,
-    child: AdminLoad(
-      load: () async {
-        final providers = await _profile.read('providers/oauth');
-        Map<String, dynamic> profiles;
-        try {
-          profiles = await _profile.server.read('profiles');
-        } catch (_) {
-          profiles = {};
-        }
-        return {...providers, 'profiles': profiles['profiles']};
-      },
-      builder: (context, data, refresh) {
-        final row = administrationRows(
-          data['providers'],
-        ).where((row) => row['id'] == widget.providerId).firstOrNull;
-        if (row == null) {
-          return AdminNotice(
-            'This provider is no longer available.',
-            retry: refresh,
-          );
-        }
-        final access = ProviderAccess(row);
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text(
-              widget.shared ? 'Shared account' : 'Profile access',
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              widget.shared
-                  ? 'Managed on ${_profile.server.connectionLabel}. Profiles may use these credentials unless they have their own access.'
-                  : 'Access observed for ${_profile.name}. Credential source: ${access.status['source_label'] ?? 'unavailable'}. Individual account ownership is not reported.',
-            ),
-            if (!widget.shared)
-              TextButton(
-                onPressed: _busy
-                    ? null
-                    : () async {
-                        try {
-                          final shared = await _profile.server
-                              .sharedProviders();
-                          if (context.mounted) {
-                            await adminPush(
-                              context,
-                              (context) => AdminProviderDetail(
-                                profile: shared,
-                                shared: true,
-                                providerId: widget.providerId,
-                              ),
-                            );
-                          }
-                          refresh();
-                        } catch (error) {
-                          if (context.mounted) {
-                            adminMessage(
-                              context,
-                              administrationError(error),
-                              isError: true,
-                            );
-                          }
-                        }
-                      },
-                child: const Text('Manage shared account'),
-              ),
-            _ProviderCard(
-              access: access,
-              selectedBy: data['profiles'] is List
-                  ? [
-                      for (final selected in administrationRows(
-                        data['profiles'],
-                      ))
-                        if (selected['provider'] == widget.providerId &&
-                            (widget.shared ||
-                                selected['name'] == _profile.name))
-                          '${selected['display_name'] is String && (selected['display_name'] as String).isNotEmpty ? selected['display_name'] : selected['name']}',
-                    ]
-                  : const [],
-              shared: widget.shared,
-              busy: _busy,
-              disconnect: () => _disconnect(row, refresh),
-              signIn: () async {
-                await adminPushProfile(
-                  context,
-                  _profile,
-                  (context, profile) => AdminProviderSignIn(
-                    profile: profile,
-                    provider: row,
-                    shared: widget.shared,
-                  ),
-                );
-                refresh();
-              },
-            ),
-            TextButton(
-              onPressed: _busy ? null : refresh,
-              child: const Text('Refresh access'),
-            ),
-          ],
-        );
-      },
-    ),
-  );
-}
-
 class AdminServiceKeyCatalog extends StatefulWidget {
-  const AdminServiceKeyCatalog({
-    super.key,
-    required this.profile,
-    required this.shared,
-  });
+  const AdminServiceKeyCatalog({super.key, required this.profile});
   final ProfileAdministration profile;
-  final bool shared;
   @override
   State<AdminServiceKeyCatalog> createState() => _AdminServiceKeyCatalogState();
 }
@@ -484,9 +270,7 @@ class _AdminServiceKeyCatalogState extends State<AdminServiceKeyCatalog> {
   @override
   Widget build(BuildContext context) => AdminPage(
     title: 'Add service key',
-    scope: widget.shared
-        ? '${widget.profile.server.connectionLabel} / Shared accounts'
-        : widget.profile.label,
+    scope: widget.profile.label,
     child: AdminLoad(
       load: () => widget.profile.read('env'),
       builder: (context, data, refresh) {
@@ -532,7 +316,7 @@ class _AdminServiceKeyCatalogState extends State<AdminServiceKeyCatalog> {
                         (context, profile) => AdminSecretPage(
                           profile: profile,
                           name: entry.key,
-                          shared: widget.shared,
+
                           isSet: (entry.value as Map)['is_set'] == true,
                         ),
                       );
@@ -548,179 +332,14 @@ class _AdminServiceKeyCatalogState extends State<AdminServiceKeyCatalog> {
   );
 }
 
-class _ProviderCard extends StatelessWidget {
-  final ProviderAccess access;
-  final List<String> selectedBy;
-  final bool shared;
-  final bool busy;
-  final VoidCallback signIn;
-  final VoidCallback disconnect;
-  const _ProviderCard({
-    required this.access,
-    required this.selectedBy,
-    required this.shared,
-    required this.busy,
-    required this.signIn,
-    required this.disconnect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final color = access.needsAttention
-        ? colors.error
-        : access.state == ProviderAccessState.connected
-        ? colors.primary
-        : colors.onSurfaceVariant;
-    final icon = switch (access.state) {
-      ProviderAccessState.connected => Icons.link,
-      ProviderAccessState.expired => Icons.schedule,
-      ProviderAccessState.signedOut => Icons.link_off,
-      ProviderAccessState.external => Icons.open_in_new,
-      ProviderAccessState.unknown => Icons.help_outline,
-    };
-    String date(DateTime value) {
-      final local = value.toLocal();
-      return '${MaterialLocalizations.of(context).formatMediumDate(local)}, ${TimeOfDay.fromDateTime(local).format(context)}';
-    }
-
-    return Card(
-      key: ValueKey('provider-${access.id}'),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(access.name, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: .12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, color: color, size: 18),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      providerInventoryStatus(access),
-                      style: TextStyle(
-                        color: color,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(access.detail),
-            if (selectedBy.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Default provider for: ${selectedBy.join(', ')}',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              if (shared)
-                const Text('These profiles may have their own credentials.'),
-            ],
-            if (access.hasCredential)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  access.expiresAt == null
-                      ? 'Token expiry not reported'
-                      : '${access.state == ProviderAccessState.expired ? 'Expired' : 'Expires'} ${date(access.expiresAt!)}',
-                ),
-              ),
-            if (access.row['flow'] == 'device_code' ||
-                (access.row['disconnectable'] == true && access.hasCredential))
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    if (access.row['flow'] == 'device_code')
-                      TextButton.icon(
-                        onPressed: busy ? null : signIn,
-                        icon: Icon(
-                          access.hasCredential ? Icons.refresh : Icons.login,
-                          size: 18,
-                        ),
-                        label: Text(
-                          shared ? access.signInLabel : 'Add profile sign-in',
-                        ),
-                      ),
-                    if (access.row['disconnectable'] == true &&
-                        access.hasCredential)
-                      TextButton(
-                        onPressed: busy ? null : disconnect,
-                        child: Text(
-                          shared ? 'Disconnect' : 'Remove profile account',
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: const EdgeInsets.only(bottom: 8),
-              expandedCrossAxisAlignment: CrossAxisAlignment.start,
-              title: Text(
-                access.external
-                    ? 'Source and sign-in help'
-                    : 'Connection details',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              children: [
-                if (access.status['source_label'] is String)
-                  Text('Source: ${access.status['source_label']}'),
-                if (access.lastRefresh != null)
-                  Text('Last token refresh: ${date(access.lastRefresh!)}'),
-                if (access.canRefresh && access.hasCredential)
-                  const Text(
-                    'Refresh token stored. Renewal has not been verified.',
-                  ),
-                if (access.external) ...[
-                  const Text(
-                    'Manage sign-in with the provider\'s tool on the server.',
-                  ),
-                  if (access.row['cli_command'] is String)
-                    SelectableText(
-                      access.row['cli_command'] as String,
-                      style: WingTokens.of(context).typography.mono,
-                    ),
-                ],
-                if (access.row['disconnect_hint'] is String)
-                  Text(access.row['disconnect_hint'] as String),
-                const Text(
-                  'Individual accounts and live usage are unavailable from this server view.',
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class AdminSecretPage extends StatefulWidget {
   final ProfileAdministration profile;
   final String name;
-  final bool shared;
   final bool isSet;
   const AdminSecretPage({
     super.key,
     required this.profile,
     required this.name,
-    required this.shared,
     required this.isSet,
   });
   @override
@@ -757,13 +376,11 @@ class _AdminSecretPageState extends State<AdminSecretPage> {
 
   Future<void> _save({bool remove = false}) async {
     if (_busy || (!remove && _input.text.trim().isEmpty)) return;
-    if ((remove || widget.shared) &&
+    if (remove &&
         !await adminConfirm(
           context,
-          remove ? 'Remove credential?' : 'Update shared credential?',
-          widget.shared
-              ? 'This changes shared access for profiles using this credential.'
-              : 'Removing this override may reveal shared access again.',
+          'Remove saved key?',
+          'This removes the saved key from ${widget.profile.name}. Other credential sources may still be available. The key is not revoked at its provider.',
           action: remove ? 'Remove' : 'Save',
         )) {
       return;
@@ -816,9 +433,7 @@ class _AdminSecretPageState extends State<AdminSecretPage> {
     },
     child: AdminPage(
       title: widget.name,
-      scope: widget.shared
-          ? '${widget.profile.server.connectionLabel} / Shared accounts'
-          : widget.profile.label,
+      scope: widget.profile.label,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -856,12 +471,10 @@ class _AdminSecretPageState extends State<AdminSecretPage> {
 class AdminProviderSignIn extends StatefulWidget {
   final ProfileAdministration profile;
   final Map<String, dynamic> provider;
-  final bool shared;
   const AdminProviderSignIn({
     super.key,
     required this.profile,
     required this.provider,
-    required this.shared,
   });
   @override
   State<AdminProviderSignIn> createState() => _AdminProviderSignInState();
@@ -975,10 +588,19 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
 
   Future<void> _openBrowser() async {
     final url = Uri.tryParse('${_session?['verification_url'] ?? ''}');
-    if (url == null || !{'https', 'http'}.contains(url.scheme)) return;
-    if (!await launchUrl(url, mode: LaunchMode.externalApplication) &&
-        mounted) {
-      setState(() => _error = 'Could not open the browser.');
+    try {
+      if (url == null ||
+          !{'https', 'http'}.contains(url.scheme) ||
+          !await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        throw StateError('Browser unavailable');
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Could not open the browser. Try opening the sign-in address below.',
+        );
+      }
     }
   }
 
@@ -990,22 +612,22 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
     },
     child: AdminPage(
       title: 'Sign in to ${widget.provider['name']}',
-      scope: widget.shared
-          ? '${_profile.server.connectionLabel} / Shared accounts'
-          : _profile.label,
+      scope: _profile.label,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           AdminNotice(
-            widget.shared
-                ? 'This sign-in supplies shared access to inheriting profiles.'
-                : 'This creates a sign-in override for this profile.',
+            'Save this sign-in for ${_profile.name} on ${_profile.server.connectionLabel}.',
           ),
           if (_error != null) AdminNotice.error(_error!),
-          if (_session == null)
+          if (_session == null ||
+              (!_pending && _status != 'approved' && _status != 'unknown'))
             FilledButton(
               onPressed: _busy ? null : _start,
-              child: StudioActionLabel('Start sign-in', busy: _busy),
+              child: StudioActionLabel(
+                _session == null ? 'Start sign-in' : 'Start again',
+                busy: _busy,
+              ),
             ),
           if (_session != null) ...[
             if (const {
@@ -1018,7 +640,7 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
             else
               Text(
                 _status == 'approved'
-                    ? 'Sign-in approved. Refresh access to confirm readiness.'
+                    ? 'Sign-in saved. Return to check credential status.'
                     : 'Status: $_status',
               ),
             if (_pending) ...[
@@ -1027,6 +649,18 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
                 '${_session!['user_code'] ?? ''}',
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
+              TextButton.icon(
+                onPressed: () async {
+                  await Clipboard.setData(
+                    ClipboardData(text: '${_session!['user_code'] ?? ''}'),
+                  );
+                  if (context.mounted) adminMessage(context, 'Code copied.');
+                },
+                icon: const Icon(Icons.copy, size: 18),
+                label: const Text('Copy code'),
+              ),
+              if (_error != null)
+                SelectableText('${_session!['verification_url'] ?? ''}'),
               FilledButton(
                 onPressed: _openBrowser,
                 child: const Text('Open sign-in page'),

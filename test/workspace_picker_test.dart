@@ -11,6 +11,7 @@ import 'package:wing/core/screens/administration/admin_widgets.dart';
 import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/screens/administration/admin_settings_page.dart';
 import 'package:wing/core/screens/administration/admin_connectors_page.dart';
+import 'package:wing/core/screens/administration/admin_providers_page.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
@@ -425,6 +426,52 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(AppDestination.health.label), findsOneWidget);
     expect(controller.current!.scope.profileName, 'work');
+  });
+
+  testWidgets('provider recovery reloads the selected profile before actions', (
+    tester,
+  ) async {
+    final administration = AdministrationFixture('Claw');
+    addTearDown(administration.server.close);
+    administration.override = (method, path, query, body) async => {
+      'providers': query['profile'] == 'personal'
+          ? [
+              {
+                'id': 'claude-code',
+                'flow': 'external',
+                'status': {
+                  'logged_in': true,
+                  'source': 'claude_code_cli',
+                  'has_refresh_token': true,
+                  'expires_at': '2020-01-01T00:00:00Z',
+                },
+              },
+            ]
+          : [],
+    };
+    await show(tester, destination: AppDestination.administration);
+    adminPushProfile(
+      tester.element(find.byType(ServerConnectionLabel)),
+      administration.server.profile('personal'),
+      (context, profile) =>
+          AdminProviderDetail(profile: profile, providerId: 'claude-code'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Renew access'), findsOneWidget);
+    await tester.tap(picker);
+    await tester.pumpAndSettle();
+    await tester.tap(work);
+    await tester.pumpAndSettle();
+    expect(find.text('Claw / work'), findsOneWidget);
+    expect(find.text('Renew access'), findsNothing);
+    expect(find.text('Delete saved credentials'), findsNothing);
+    expect(administration.requests.last.$3['profile'], 'work');
+    expect(
+      administration.requests.every((request) => request.$1 == 'GET'),
+      isTrue,
+    );
+    expect(administration.consoleRequests, isEmpty);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('nested profile routes keep their stack and reload both owners', (

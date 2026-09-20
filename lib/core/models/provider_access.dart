@@ -8,7 +8,12 @@ class ProviderAccess {
 
   Map get status => row['status'] is Map ? row['status'] as Map : const {};
   String get id => row['id'] as String? ?? '';
-  String get name => row['name'] as String? ?? id;
+  String get name => switch (id) {
+    'claude-code' => 'Claude Code',
+    'openai-codex' => 'ChatGPT / Codex',
+    'anthropic' => 'Anthropic',
+    _ => row['name'] as String? ?? id,
+  };
   bool get external => row['flow'] == 'external';
   DateTime? get expiresAt => providerStatusDate(status['expires_at']);
   DateTime? get lastRefresh => providerStatusDate(status['last_refresh']);
@@ -41,16 +46,16 @@ class ProviderAccess {
   String get detail => switch (state) {
     ProviderAccessState.connected => 'Credentials detected by the server.',
     ProviderAccessState.expired when canRefresh =>
-      'A refresh token is stored. Hermes may renew access on the next request.',
+      'A refresh token is stored. Automatic renewal has not been checked.',
     ProviderAccessState.expired when external =>
       'Renew the token in the provider\'s tool on the server.',
     ProviderAccessState.expired => 'Sign in again to renew access.',
     ProviderAccessState.signedOut => 'No sign-in detected for this provider.',
     ProviderAccessState.external =>
       'Check the provider\'s tool on the server. Its sign-in could not be verified.',
-    ProviderAccessState.unknown => 'Refresh to check this provider again.',
+    ProviderAccessState.unknown => 'Check status to read this provider again.',
   };
-  String get signInLabel => hasCredential ? 'Reconnect' : 'Sign in';
+  String get signInLabel => hasCredential ? 'Sign in again' : 'Sign in';
   int get sortOrder => needsAttention
       ? 0
       : state == ProviderAccessState.connected

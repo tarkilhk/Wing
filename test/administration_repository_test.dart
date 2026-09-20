@@ -62,22 +62,6 @@ void main() {
   );
 
   test(
-    'shared provider owner is verified default, never active/current selection',
-    () async {
-      final f = AdministrationFixture();
-      final shared = await f.server.sharedProviders();
-      expect(shared.name, 'default');
-      await shared.read('env');
-      expect(f.requests.last.$3, {'profile': 'default'});
-      f.rootIsDefault = false;
-      await expectLater(
-        f.server.sharedProviders(),
-        throwsA(isA<AdministrationFailure>()),
-      );
-    },
-  );
-
-  test(
     'a vanished profile prevents the mutation without changing another profile',
     () async {
       final f = AdministrationFixture();

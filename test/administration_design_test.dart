@@ -103,16 +103,13 @@ void main() {
             profile: profile,
             id: 'memory:MEMORY.md:0',
           ),
-          'providers' => AdminProvidersPage(profile: profile, shared: false),
+          'providers' => AdminProvidersPage(profile: profile),
           'provider-detail' => AdminProviderDetail(
             profile: profile,
-            shared: false,
+
             providerId: 'research',
           ),
-          'service-keys' => AdminServiceKeyCatalog(
-            profile: profile,
-            shared: false,
-          ),
+          'service-keys' => AdminServiceKeyCatalog(profile: profile),
           'capabilities' => ProfileCapabilitiesScreen(
             gateway: profile.gateway,
             connectionLabel: 'Home server',

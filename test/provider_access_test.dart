@@ -18,8 +18,8 @@ void main() {
         'has_refresh_token': true,
       });
       expect(value.state, ProviderAccessState.expired);
-      expect(value.detail, contains('may renew'));
-      expect(value.signInLabel, 'Reconnect');
+      expect(value.detail, contains('has not been checked'));
+      expect(value.signInLabel, 'Sign in again');
       expect(value.needsAttention, isTrue);
     },
   );
