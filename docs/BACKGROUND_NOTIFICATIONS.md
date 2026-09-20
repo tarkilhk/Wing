@@ -1,9 +1,9 @@
 # Background notifications
 
-Wing keeps its authenticated Hermes event connections running in an Android foreground service while at least one chat is working. The ongoing **Monitoring Hermes** notification identifies this automatic monitoring. Firebase and server push registration are not required.
+Wing keeps its authenticated Hermes event connections running in an Android foreground service while at least one chat is working. The ongoing notification shows a live summary such as **Watching 3 chats · 2 working · 1 needs approval**. Firebase and server push registration are not required.
 
-The permanent connection indicator uses **Hermes' caduceus**; chat completion and
-attention alerts use the **wing** icon. Monitoring has its own notification
+The monitoring indicator uses the **wing with circular arrows**; replies use
+the plain wing, and input/stopped alerts add small type cues. Monitoring has its own notification
 group, with a summary and the foreground-service notification, so Android does
 not combine it with chat alerts. Both monitoring entries reopen Wing without
 selecting a chat. Expand a chat notification group and tap the individual alert
@@ -32,9 +32,13 @@ Temporary network loss while the process survives uses [network continuity](desi
 
 On first launch, after the first screen appears, Wing requests Android notification permission through the native dialog if notifications are not already enabled. Acceptance or denial is remembered on this device, so subsequent launches do not ask again. A failed platform request can be retried on the next launch. No test alert is posted during startup.
 
-App settings has independent completion/attention switches, **Show message previews** (on by default), and a permission/test action. Each alert shows the chat name and connection/profile. One expandable text layout covers updates (Reply ready), input requests (Input needed), and stopped work (Failed or Stopped). Side and background answers use their own reply text. Status-only transitions say Chat updated without claiming a successful result. Turning previews off leaves the chat name and short status. Tapping opens the owning chat. The built-in test proves OS posting, not coverage of actual server work.
+App settings has independent completion/attention switches, **Show message previews** (on by default), and a permission/test action. Each alert shows the chat name and connection/profile. Replies and stopped work use expandable text. Approvals use a decorated native layout with every backend-supported choice: Once, Session, Always…, and Deny. At large text sizes the choices use two rows. Side and background answers use their own reply text. Status-only transitions say Chat updated without claiming a successful result. Turning previews off leaves the chat name and short status. Tapping opens the owning chat. The built-in test proves OS posting, not coverage of actual server work.
 
-Previews omit reasoning, code blocks, tool output and URLs. Secure-input requests and failures use fixed text. Alerts use private lock-screen visibility; Android settings control exposure or generic system text. See [Privacy](../PRIVACY.md). Pending-input alerts and result alerts use separate notification identities so a result cannot replace input needed for the same chat.
+Reply previews omit reasoning, code blocks, tool output and URLs. Approval previews show the command being authorized. Secure-input requests and failures use fixed text. Alerts use private lock-screen visibility; Android settings control exposure or generic system text. See [Privacy](../PRIVACY.md). Each scoped chat has one notification slot. Unresolved input takes priority over the latest unread result. Mixed input requests preserve first-seen FIFO order and show counts; accepted or remotely resolved requests advance to the next request. The same dismissed state stays dismissed across refreshes and restarts.
+
+All approval actions require unlocking. Sending keeps the alert visible with disabled choices until Hermes confirms acceptance; failure retains the request. Permanent approval always opens a matching-pattern confirmation in the chat. A command too long to review in the notification also opens the chat before confirmation. Hidden previews provide Review only.
+
+While the existing watcher runs, a single 30-second timer reconciles pending notices against corroborated runtime/open-request snapshots and the approval queue. Resume also reconciles once. Pending requests never extend the watcher's lifetime. Stock desktop read watermarks do not prove the latest answer was visible, so desktop opening does not clear result notifications; completed desktop decisions can clear pending-input notices.
 
 ## Event coverage
 
@@ -46,11 +50,13 @@ Unopened child-only work also depends on the global backend contract described i
 
 ## Tap routing
 
-Each notification retains connection/profile/durable-chat identity. Stable IDs avoid unrelated replacement, startup navigation retries when initialization is incomplete, and stale connection credentials invalidate obsolete targets. A tap for the same open chat reuses its view; when several requests race, the newest tap wins.
+Each notification retains connection/profile/durable-chat identity and request/task or result revision. Stable IDs avoid unrelated replacement, startup navigation retries when initialization is incomplete, and stale connection credentials invalidate obsolete targets. A tap for the same open chat reuses its view; when several requests race, the newest tap wins.
 
 Routing checks include two different chats in the same profile and tapping an
 older alert after a newer alert has been posted. A system-generated group header
 is not an individual chat target.
+
+Reading the latest answer in Wing clears that result's notification. Opening older history or reaching only newer tool activity does not. For main answers without a stable Hermes message ID, tapping deliberately opens the latest available assistant reply (the user-approved option 2); history may have advanced since posting. No copied answer or prose matching is used.
 
 Refresh server state when opening the chat. Notifications supplement that state and are not the durable record of a result or pending request. The unsent queue still needs a running, connected client to drain.
 
@@ -69,3 +75,16 @@ python3 tools/qa/check_background_monitoring.py --serial emulator-5554
 ```
 
 The driver rejects physical devices and restores its power-test settings. It uses production controllers and Android posting with deterministic gateway fixtures, without model calls. Host tests cover registration-free startup, permission/category changes, battery status, start/stop races and event deduplication.
+
+### Revamp verification
+
+`integration_test/notification_revamp_device.dart` exercises production WingApp,
+controllers, native rendering, approval routing, and visibility handling against
+a fake Hermes transport. Build with `ORG_GRADLE_PROJECT_notificationQa=true`
+and `-t integration_test/notification_revamp_device.dart`; this uses the isolated
+`com.tarkilhk.wing.notificationqa` package. Its loopback control endpoint is port
+18766. Never use this test entry point for a distributed build.
+
+The coordinator, answer-visibility, approval-queue, startup-permission and
+monitoring tests cover replacement, FIFO, restart/dismissal, accepted responses,
+stale targets, preview privacy, and failure retention.

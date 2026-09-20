@@ -1,4 +1,6 @@
 import '../services/server_connection_status.dart';
+import '../models/notification_focus.dart';
+import '../models/answer_versions.dart';
 import '../widgets/studio_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -25,6 +27,7 @@ class ProfileTranscript extends StatefulWidget {
   final List<Map<String, dynamic>>? nearbyMessages;
   final int? focusedMessageId;
   final VoidCallback? onBackToLatest;
+  final Map<String, GlobalKey> notificationAnchors;
   const ProfileTranscript({
     super.key,
     required this.chat,
@@ -39,6 +42,7 @@ class ProfileTranscript extends StatefulWidget {
     this.nearbyMessages,
     this.focusedMessageId,
     this.onBackToLatest,
+    this.notificationAnchors = const {},
   }) : assert(
          nearbyMessages == null ||
              (focusedMessageId != null && onBackToLatest != null),
@@ -59,6 +63,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   final _rows = <Object, GlobalKey>{};
   int _layoutGeneration = 0;
   int _gestureGeneration = 0;
+  int _revealedNotificationGeneration = -1;
+  int _noticeRevealAttempts = 0;
+  int _noticeRevealGeneration = -1;
+  bool _noticeFrameScheduled = false;
   bool _jumping = false;
   bool _hasNewContent = false;
   Object? _newestId;
@@ -93,8 +101,102 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     }
   }
 
+  GlobalKey? _notificationAnchor(NotificationFocus target) {
+    if (target.kind == 'status' &&
+        widget.notificationAnchors.containsKey(target.identity)) {
+      return widget.notificationAnchors[target.identity];
+    }
+    if (target.kind == 'answer' || target.kind == 'status') {
+      final answer = widget.chat.messages.reversed
+          .where(
+            (row) =>
+                row['role'] == 'assistant' &&
+                !isHiddenAnswerMessage(row) &&
+                row['content'] is String &&
+                (row['content'] as String).trim().isNotEmpty &&
+                (target.messageId == null || row['id'] == target.messageId),
+          )
+          .firstOrNull;
+      return answer == null ? null : _rows[answer['id']];
+    }
+    return widget.notificationAnchors[target.identity];
+  }
+
+  void _scheduleNoticeVisibility() {
+    if (_noticeFrameScheduled) return;
+    _noticeFrameScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _noticeFrameScheduled = false;
+      if (!mounted ||
+          !_scroll.hasClients ||
+          widget.nearbyMessages != null ||
+          widget.chat.opening ||
+          widget.chat.historyLoading) {
+        return;
+      }
+      final chat = widget.chat;
+      final focus = chat.notificationFocus;
+      if (focus != null &&
+          _revealedNotificationGeneration != chat.notificationFocusGeneration) {
+        if (_noticeRevealGeneration != chat.notificationFocusGeneration) {
+          _noticeRevealGeneration = chat.notificationFocusGeneration;
+          _noticeRevealAttempts = 0;
+          _scroll.jumpTo(0);
+          _scheduleNoticeVisibility();
+          WidgetsBinding.instance.scheduleFrame();
+          return;
+        }
+        final anchor = _notificationAnchor(focus)?.currentContext;
+        if (anchor != null) {
+          _revealedNotificationGeneration = chat.notificationFocusGeneration;
+          _noticeRevealAttempts = 0;
+          chat.notificationFocus = null;
+          unawaited(
+            Scrollable.ensureVisible(
+              anchor,
+              alignment: .2,
+            ).then((_) => _scheduleNoticeVisibility()),
+          );
+        } else if (_noticeRevealAttempts++ < 24) {
+          // Lazy rows are materialized a viewport at a time, without estimating
+          // message heights or changing normal reader anchoring.
+          final next =
+              (_scroll.offset + _scroll.position.viewportDimension * .8).clamp(
+                0.0,
+                _scroll.position.maxScrollExtent,
+              );
+          if (next != _scroll.offset) {
+            _scroll.jumpTo(next);
+            _scheduleNoticeVisibility();
+          } else {
+            _revealedNotificationGeneration = chat.notificationFocusGeneration;
+          }
+        }
+      }
+      final target = chat.notificationReadTarget;
+      if (target == null) return;
+      final viewport = _viewport.currentContext?.findRenderObject();
+      final answer = _notificationAnchor(
+        target,
+      )?.currentContext?.findRenderObject();
+      if (viewport is! RenderBox ||
+          answer is! RenderBox ||
+          !answer.hasSize ||
+          !viewport.hasSize) {
+        return;
+      }
+      final bounds = viewport.localToGlobal(Offset.zero) & viewport.size;
+      final answerBounds = answer.localToGlobal(Offset.zero) & answer.size;
+      if (bounds.intersect(answerBounds).height >= 16 &&
+          bounds.overlaps(answerBounds)) {
+        widget.controller.notificationAnswerVisible(chat, target);
+      }
+    });
+  }
+
   void _updateJump() {
     if (!mounted || !_scroll.hasClients) return;
+    _scheduleNoticeVisibility();
     final distance = _scroll.offset;
     if (distance <= 24) _hasNewContent = false;
     final attention =
@@ -198,6 +300,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   Widget build(BuildContext context) {
     if (widget.nearbyMessages != null) return _nearbyMessages(context);
     final chat = widget.chat;
+    _scheduleNoticeVisibility();
     final rows = groupTranscriptSections(chat.messages).reversed.toList();
     // Join adjacent saved calls and live work without crossing visible prose
     // or hiding the latest review's standalone detail button.
@@ -288,6 +391,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                 event is ScrollUpdateNotification &&
                     event.dragDetails != null) {
               _gestureGeneration++;
+              _revealedNotificationGeneration =
+                  widget.chat.notificationFocusGeneration;
               _jumping = false;
               _scroll.releaseExpansionAnchor();
             }

@@ -27,7 +27,7 @@ void main() {
     test('removes permanent approval when Hermes disallows it', () {
       final request = GatewayApprovalRequest.fromEventData({
         'allow_permanent': false,
-        'choices': ['once', 'session', 'always'],
+        'choices': ['once', 'session', 'always', 'deny'],
       });
 
       expect(request.allowPermanent, isFalse);
@@ -60,17 +60,13 @@ void main() {
       ]);
     });
 
-    test('falls back to the official non-permanent choices', () {
+    test('does not invent choices for an explicit unrecognized list', () {
       final request = GatewayApprovalRequest.fromEventData({
         'allow_permanent': false,
         'choices': ['unknown'],
       });
 
-      expect(request.choices, [
-        GatewayApprovalChoice.once,
-        GatewayApprovalChoice.session,
-        GatewayApprovalChoice.deny,
-      ]);
+      expect(request.choices, isEmpty);
     });
   });
 }

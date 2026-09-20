@@ -15,6 +15,15 @@ import androidx.core.app.NotificationManagerCompat
 /** Raises the priority of the process that owns the real Dart event clients. */
 class BackgroundMonitoringService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
+    private var builder: NotificationCompat.Builder? = null
+    fun updateSummary() {
+        val notification = builder ?: return
+        notification.setContentTitle(MonitoringRuntime.summary["title"])
+            .setContentText(MonitoringRuntime.summary["text"])
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(notificationId, notification.setGroupSummary(false).build())
+        manager.notify(summaryId, notification.setGroupSummary(true).build())
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -48,9 +57,9 @@ class BackgroundMonitoringService : Service() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             val builder = NotificationCompat.Builder(this, channelId)
-                .setSmallIcon(R.drawable.ic_stat_connection)
-                .setContentTitle("Monitoring Hermes")
-                .setContentText("Keeping connected chats active for completion and attention alerts.")
+                .setSmallIcon(R.drawable.ic_stat_monitoring)
+                .setContentTitle(MonitoringRuntime.summary["title"])
+                .setContentText(MonitoringRuntime.summary["text"])
                 .setContentIntent(open)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
@@ -59,6 +68,8 @@ class BackgroundMonitoringService : Service() {
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setGroup(groupKey)
                 .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
+            this.builder = builder
+            instance = this
             val notification = builder.build()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startForeground(notificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
@@ -83,6 +94,8 @@ class BackgroundMonitoringService : Service() {
     }
 
     override fun onDestroy() {
+        instance = null
+        builder = null
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -92,6 +105,8 @@ class BackgroundMonitoringService : Service() {
     }
 
     companion object {
+        var instance: BackgroundMonitoringService? = null
+            private set
         private const val channelId = "hermes_monitoring"
         private const val notificationId = 214601
         private const val summaryId = 214602

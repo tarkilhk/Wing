@@ -27,6 +27,7 @@ class BackgroundMonitoringService {
   final bool Function() hasActiveChats;
   final Future<bool?> Function() notificationsEnabled;
   final bool supported;
+  final Map<String, String> Function()? summary;
   final state = ValueNotifier(BackgroundMonitoringState.idle);
   Future<void> _tail = Future.value();
   bool _disposed = false;
@@ -36,6 +37,7 @@ class BackgroundMonitoringService {
     required this.hasActiveChats,
     required this.notificationsEnabled,
     bool? supported,
+    this.summary,
   }) : supported =
            supported ??
            (!kIsWeb && defaultTargetPlatform == TargetPlatform.android);
@@ -68,7 +70,10 @@ class BackgroundMonitoringService {
             : BackgroundMonitoringState.idle;
         return;
       }
-      final result = await channel.invokeMapMethod<String, dynamic>('start');
+      final result = await channel.invokeMapMethod<String, dynamic>(
+        'start',
+        summary?.call(),
+      );
       if (_disposed) return;
       state.value = result?['running'] != true
           ? BackgroundMonitoringState.waitingForApp

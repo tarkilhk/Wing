@@ -88,15 +88,13 @@ The owner selected the Playful portrait: a winking woman with a simple dark bob,
 mint headphones and a messenger wing on the earcup. Keep the navy, cream and
 mint identity colors. The white messenger wing is the notification/status-bar
 mark for chat alerts and the optional Android themed launcher mark. The permanent
-connection notification uses Hermes' caduceus in white, in its own notification
-group. The owner's 16 September 2026 direction is to base this mark on Hermes'
-recognizable winged staff and two intertwined snakes. The normal launcher uses
-the portrait. These brand colors do not replace Studio's screen tokens or the
-user's selected accent family.
-
-The owner approved the final caduceus and wing pairing on 16 September 2026.
-The [notification identity board](design/2026-09-15-wing-identity.md#notification-identity-board)
-records both exact app vectors and their permanent-connection/chat roles.
+monitoring notification uses the same full-size wing with a softer circular-arrow
+ring behind it, centered on the wing's visual center. This 20 September decision
+supersedes the earlier caduceus. Replies use the plain wing; input and stopped-work
+variants add small type cues. The normal launcher keeps the portrait. See the
+[notification specification](design/2026-09-20-notification-improvements.md) for
+approved monitoring artwork and notification behavior. Brand colors do not replace
+Studio's screen tokens or the user's selected accent family.
 
 See the [icon assets and production record](design/2026-09-14-app-icon.md) for
 source assets, approved placements and the export command.

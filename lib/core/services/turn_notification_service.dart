@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../models/chat_notification_content.dart';
+import '../models/notification_focus.dart';
 
 const completionNotificationsKey = 'completion_notifications';
 const attentionNotificationsKey = 'attention_notifications';
@@ -33,6 +34,16 @@ class TurnNotification {
   final String? expandedBody;
   final String? scopeLabel;
   final TurnNotificationChannel channel;
+  final NotificationFocus? focus;
+  final String? chatIdentity;
+  final String? revision;
+  final String icon;
+  final List<String> choices;
+  final String pending;
+  final bool submitting;
+  final String? actionError;
+  final bool alert;
+  final bool showPreview;
 
   const TurnNotification({
     required this.id,
@@ -42,7 +53,37 @@ class TurnNotification {
     required this.channel,
     this.expandedBody,
     this.scopeLabel,
+    this.focus,
+    this.chatIdentity,
+    this.revision,
+    this.icon = 'ic_stat_wing',
+    this.choices = const [],
+    this.pending = '',
+    this.submitting = false,
+    this.actionError,
+    this.alert = true,
+    this.showPreview = true,
   });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'body': body,
+    'expanded': expandedBody ?? body,
+    'payload': payload,
+    'scope': scopeLabel,
+    'channel': channel.id,
+    'chat': chatIdentity,
+    'revision': revision,
+    'kind': focus?.kind,
+    'icon': icon,
+    'choices': choices,
+    'pending': pending,
+    'submitting': submitting,
+    'error': actionError,
+    'alert': alert,
+    'preview': showPreview,
+  };
 
   factory TurnNotification.chat({
     required String payload,
@@ -51,12 +92,18 @@ class TurnNotification {
     required ChatNotificationContent content,
     required bool showPreview,
     String? eventId,
+    String? chatIdentity,
+    NotificationFocus? focus,
+    String? revision,
+    List<String> choices = const [],
+    String pending = '',
+    bool submitting = false,
+    String? actionError,
+    bool alert = true,
   }) {
     final cleanTitle = notificationPlainText(title);
     return TurnNotification(
-      id: TurnNotificationService.notificationIdFor(
-        jsonEncode([payload, content.category.name, eventId]),
-      ),
+      id: TurnNotificationService.notificationIdFor(chatIdentity ?? payload),
       title: cleanTitle.isEmpty
           ? 'Untitled chat'
           : notificationTextLimit(cleanTitle, 120),
@@ -64,6 +111,20 @@ class TurnNotification {
       expandedBody: content.body(showPreview: showPreview, limit: 800),
       scopeLabel: notificationTextLimit(notificationPlainText(scopeLabel), 120),
       payload: payload,
+      focus: focus,
+      chatIdentity: chatIdentity,
+      revision: revision,
+      choices: choices,
+      pending: pending,
+      submitting: submitting,
+      actionError: actionError,
+      alert: alert,
+      showPreview: showPreview,
+      icon: switch (content.category) {
+        ChatNotificationCategory.update => 'ic_stat_wing',
+        ChatNotificationCategory.inputNeeded => 'ic_stat_wing_input',
+        ChatNotificationCategory.stopped => 'ic_stat_wing_stopped',
+      },
       channel: content.needsAttention
           ? TurnNotificationService.attentionChannel
           : TurnNotificationService.turnChannel,
@@ -217,12 +278,13 @@ class PluginTurnNotificationSink implements TurnNotificationSink {
       notification.channel.id,
       notification.channel.name,
       channelDescription: notification.channel.description,
-      icon: 'ic_stat_wing',
+      icon: notification.icon,
       importance: needsAttention
           ? Importance.high
           : Importance.defaultImportance,
       priority: needsAttention ? Priority.high : Priority.defaultPriority,
-      autoCancel: true,
+      autoCancel: false,
+      onlyAlertOnce: !notification.alert,
       visibility: NotificationVisibility.private,
       subText: notification.scopeLabel,
       styleInformation: BigTextStyleInformation(

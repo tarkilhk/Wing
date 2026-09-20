@@ -39,6 +39,10 @@ import '../widgets/chat_intelligence_picker.dart';
 import '../models/gateway_approval.dart';
 import '../models/gateway_sensitive_prompt.dart';
 import 'android_share_intent_service.dart';
+import '../models/notification_focus.dart';
+import 'chat_notification_coordinator.dart';
+
+part 'profile_workspace_notifications.dart';
 
 class ProfileSessionKey {
   final WorkspaceScope workspace;
@@ -156,6 +160,14 @@ class ProfileChat {
   Map<String, dynamic>? get approval => approvals.first;
   int _approvalReadGeneration = 0;
   bool approvalResponding = false;
+  String? _notificationInputFingerprint;
+  bool _notificationInputsQuiet = false;
+  String? notificationActionError;
+  String? notificationActionErrorRequestId;
+  NotificationFocus? notificationFocus;
+  NotificationFocus? notificationReadTarget;
+  bool _notificationTargetRestored = false;
+  int notificationFocusGeneration = 0;
   Map<String, dynamic>? clarification;
   GatewaySensitivePromptRequest? sensitivePrompt;
   bool sensitivePromptResponding = false;
@@ -295,6 +307,8 @@ class ProfileNotification {
   final String connectionLabel;
   final ChatNotificationContent content;
   final String? eventId;
+  final NotificationFocus? focus;
+  final bool alert;
 
   const ProfileNotification({
     required this.key,
@@ -302,6 +316,8 @@ class ProfileNotification {
     required this.connectionLabel,
     required this.content,
     this.eventId,
+    this.focus,
+    this.alert = true,
   });
 }
 
@@ -340,6 +356,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
   final AttachmentDraftService attachments;
   late final ComposerDraftStore _drafts;
   final ProfileAttention? onAttention;
+  final Future<void> Function(ProfileInputNotification)? onNotificationInputs;
+  final Future<void> Function(ProfileSessionKey, String)? onNotificationRead;
+  final NotificationFocus? Function(ProfileSessionKey)? notificationResultFor;
+  final _notificationReplayCursors = <String, int>{};
   final Map<WorkspaceScope, ProfileWorkspaceData> _resources = {};
   final Map<ProfileSessionKey, ProfileChat> _recoveredDraftTargets = {};
   final Set<ProfileSessionKey> _unrestoredPending = {};
@@ -426,6 +446,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     AttachmentDraftService? attachmentService,
     ComposerDraftStore? draftStore,
     this.onAttention,
+    this.onNotificationInputs,
+    this.onNotificationRead,
+    this.notificationResultFor,
   }) : _gatewayConnection = gatewayFactory == null
            ? ProfileGatewayConnection(connection)
            : null,
@@ -650,6 +673,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (_lastSnapshot == null ||
         DateTime.now().difference(_lastSnapshot!).inSeconds >= 1) {
       unawaited(_saveReadingSnapshot());
+    }
+    for (final chat in notificationChats) {
+      if (!chat._notificationTargetRestored) {
+        chat._notificationTargetRestored = true;
+        chat.notificationReadTarget ??= notificationResultFor?.call(chat.key);
+      }
+      _publishNotificationInputs(chat);
     }
     notifyListeners();
   }
@@ -4349,6 +4379,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _notify(
       chat,
       ChatNotificationContent.reply(response),
+      focus: taskId == null
+          ? null
+          : NotificationFocus(
+              kind == SideQuestionDeliveryKind.backgroundTask
+                  ? 'background'
+                  : 'side',
+              taskId,
+            ),
       eventId: _notificationEventId(data),
     );
   }
@@ -4945,10 +4983,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
-  void _receiveApproval(ProfileChat chat, Map<String, dynamic> request) {
+  void _receiveApproval(
+    ProfileChat chat,
+    Map<String, dynamic> request, {
+    bool notify = true,
+  }) {
     final added = chat.approvals.add(request);
     if (chat.approval != null) chat.status = ProfileTurnStatus.attention;
-    if (!added) return;
+    if (!added || !notify) return;
     _notifyApproval(chat, request);
   }
 
@@ -4974,7 +5016,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
-  Future<void> _refreshApprovals(ProfileChat chat) async {
+  Future<void> _refreshApprovals(
+    ProfileChat chat, {
+    bool notifyNew = true,
+  }) async {
     final runtime = chat.runtimeId;
     final revision = chat.approvals.revision;
     final generation = ++chat._approvalReadGeneration;
@@ -4998,7 +5043,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat.approvals.reconcile(pending);
       _updateApprovalStatus(chat);
       for (final request in chat.approvals.requests) {
-        if (!previousIds.contains(request['request_id'])) {
+        if (notifyNew && !previousIds.contains(request['request_id'])) {
           _notifyApproval(chat, request);
         }
       }
@@ -5041,6 +5086,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (!supported) throw ArgumentError('Approval choice is unavailable');
     final runtime = chat.runtimeId;
     chat.approvalResponding = true;
+    chat.notificationActionError = null;
     _changed();
     try {
       final gateway = _owned(chat).gateway;
@@ -5050,21 +5096,31 @@ class ProfileWorkspaceController extends ChangeNotifier {
           'id': serverRequestId,
           'result': {'choice': choice},
         });
-        if (response['status'] == 'expired' && chat.runtimeId == runtime) {
-          chat.error =
-              'This approval expired before your response was received.';
+        if (response['status'] != 'ok' && chat.runtimeId == runtime) {
+          await _refreshApprovals(chat);
+          throw StateError('This approval is no longer pending.');
         }
       } else {
-        await gateway.call('approval.respond', {
+        final response = await gateway.call('approval.respond', {
           'session_id': runtime,
           'choice': choice,
           'request_id': request['request_id'],
         });
+        if (response['resolved'] is! num ||
+            (response['resolved'] as num) <= 0) {
+          await _refreshApprovals(chat);
+          throw StateError('This approval is no longer pending.');
+        }
       }
       if (chat.runtimeId != runtime) return;
       chat.approvals.remove(request['request_id'] as String);
       _updateApprovalStatus(chat);
       await _refreshApprovals(chat);
+    } catch (_) {
+      chat.notificationActionError = 'Decision not confirmed · review or retry';
+      chat.notificationActionErrorRequestId = requestId;
+      unawaited(_refreshApprovals(chat));
+      rethrow;
     } finally {
       chat.approvalResponding = false;
       _changed();
@@ -5618,9 +5674,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
               .toString()
         : null;
     chat.tool = null;
-    chat.approvals.clear();
-    chat.clarification = null;
-    chat.sensitivePrompt = null;
+    // A turn completion is not proof every independent input request resolved.
+    // Current server snapshots/cancellations reconcile those requests.
     chat.sensitivePromptResponding = false;
     chat._commandPreflightSensitivePrompt = null;
     chat._commandPreflightReturnStatus = null;
@@ -5633,6 +5688,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
           ? ChatNotificationContent.stopped
           : ChatNotificationContent.reply(finalText),
       eventId: _notificationEventId(completion),
+      focus: NotificationFocus(
+        failed || cancelled ? 'status' : 'answer',
+        _notificationEventId(completion) ??
+            '${chat.runtimeId}:${DateTime.now().microsecondsSinceEpoch}',
+      ),
     );
     if (finalText.isNotEmpty) {
       chat.messages.add({
@@ -5707,30 +5767,60 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileChat chat,
     ChatNotificationContent content, {
     String? eventId,
+    NotificationFocus? focus,
   }) => ProfileNotification(
     key: chat.key,
     title: chat.title,
     connectionLabel: connection.label,
     content: content,
     eventId: eventId,
+    focus: focus,
   );
 
   void _notify(
     ProfileChat chat,
     ChatNotificationContent content, {
     String? eventId,
+    NotificationFocus? focus,
   }) {
-    _deliverNotification(chat, _notification(chat, content, eventId: eventId));
+    if (content.category == ChatNotificationCategory.inputNeeded) {
+      _publishNotificationInputs(chat, alert: true);
+    }
+    final target =
+        focus ??
+        NotificationFocus(
+          'status',
+          eventId ??
+              '${chat.runtimeId}:${DateTime.now().microsecondsSinceEpoch}',
+        );
+    _deliverNotification(
+      chat,
+      _notification(chat, content, eventId: eventId, focus: target),
+    );
   }
 
   void _deliverNotification(
     ProfileChat chat,
     ProfileNotification notification,
   ) {
+    if (notification.focus != null &&
+        notification.content.category != ChatNotificationCategory.inputNeeded) {
+      chat.notificationReadTarget = notification.focus;
+    }
     if (visible &&
         current?.chat == chat &&
         !notification.content.needsAttention) {
-      return;
+      // Suppress the new alert, but keep an already-visible notice current.
+      if (onNotificationInputs == null) return;
+      notification = ProfileNotification(
+        key: notification.key,
+        title: notification.title,
+        connectionLabel: notification.connectionLabel,
+        content: notification.content,
+        eventId: notification.eventId,
+        focus: notification.focus,
+        alert: false,
+      );
     }
     final callback = onAttention;
     if (callback != null) {
@@ -6074,6 +6164,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat.sideQuestionDeliveries.clear();
     }
     chat.runtimeId = runtime;
+    chat._notificationInputsQuiet = true;
     // Resume snapshots contain accumulated text, not the current execution
     // phase. Wait for a fresh event before claiming it is writing or using a tool.
     chat.mainActivity = ProfileMainActivity.working;
@@ -6087,6 +6178,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _receiveApproval(
         chat,
         Map<String, dynamic>.from(result['pending_approval']),
+        notify: false,
       );
     }
     for (final request in ProfileGateway.records(
@@ -6100,10 +6192,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
         _receiveApproval(chat, {
           ...Map<String, dynamic>.from(params),
           'server_request_id': request['id'],
-        });
+        }, notify: false);
       }
     }
-    unawaited(_refreshApprovals(chat));
+    unawaited(_refreshApprovals(chat, notifyNew: false));
     chat.clarification = null;
     for (final request in ProfileGateway.records(
       result['open_requests'] ?? const [],

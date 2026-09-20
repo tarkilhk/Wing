@@ -21,13 +21,44 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
   final _controllers = <String, ProfileWorkspaceController>{};
   bool _closed = false;
   bool _hasActiveChats = false;
+  String _monitoringFingerprint = '';
+
+  Map<String, String> get monitoringSummary {
+    final counts = <String, int>{};
+    for (final owner in _controllers.values) {
+      for (final entry in owner.notificationMonitoringCounts.entries) {
+        counts.update(
+          entry.key,
+          (v) => v + entry.value,
+          ifAbsent: () => entry.value,
+        );
+      }
+    }
+    final watched = counts.values.fold<int>(0, (a, b) => a + b);
+    final detail = counts.entries
+        .where((e) => e.value > 0)
+        .map((e) {
+          final label = e.value == 1
+              ? e.key.replaceFirst('need ', 'needs ')
+              : e.key;
+          return '${e.value} $label';
+        })
+        .join(' · ');
+    return {
+      'title': 'Watching $watched chat${watched == 1 ? '' : 's'}',
+      'text': detail,
+    };
+  }
 
   bool get hasActiveChats => _hasActiveChats;
+  Iterable<ProfileWorkspaceController> get controllers => _controllers.values;
 
   void _activityChanged() {
     if (_closed) return;
     final active = _controllers.values.any((owner) => owner.hasActiveChats);
-    if (active == _hasActiveChats) return;
+    final fingerprint = '$active:$monitoringSummary';
+    if (_monitoringFingerprint == fingerprint) return;
+    _monitoringFingerprint = fingerprint;
     _hasActiveChats = active;
     notifyListeners();
   }

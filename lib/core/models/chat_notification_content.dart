@@ -58,8 +58,39 @@ class ChatNotificationContent {
     false,
   );
 
+  factory ChatNotificationContent.approval(
+    String command,
+    String description,
+  ) => ChatNotificationContent._(
+    ChatNotificationCategory.inputNeeded,
+    'Approval needed',
+    command.trim().isNotEmpty ? command.trim() : description.trim(),
+    true,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'category': category.name,
+    'status': status,
+    'preview': preview,
+    'attention': needsAttention,
+  };
+  factory ChatNotificationContent.fromJson(Map<String, dynamic> value) =>
+      ChatNotificationContent._(
+        ChatNotificationCategory.values.byName(value['category'] as String),
+        value['status'] as String,
+        value['preview'] as String,
+        value['attention'] as bool,
+      );
+
   String body({required bool showPreview, int limit = 180}) =>
-      notificationTextLimit(showPreview ? '$status · $preview' : status, limit);
+      notificationTextLimit(
+        !showPreview
+            ? status
+            : category == ChatNotificationCategory.stopped
+            ? '$status · $preview'
+            : preview,
+        limit,
+      );
 
   static String _excerpt(String text, String empty) {
     final clean = notificationPlainText(text);

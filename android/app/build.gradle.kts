@@ -51,7 +51,9 @@ if (signingEnvironment.values.any { !System.getenv(it).isNullOrBlank() }) {
 val hasReleaseSigning = keystoreProperties.containsKey("storeFile")
 // Opt in only for Wing development APKs. Ordinary debug builds retain
 // their separate Dev identity and debug signing key.
+val notificationQa = providers.gradleProperty("notificationQa").orNull == "true"
 val wingDevelopment = providers.gradleProperty("wingDevelopment").orNull == "true"
+check(!(notificationQa && wingDevelopment)) { "Notification QA must use its isolated package" }
 check(!wingDevelopment || signingEnvironment.keys.all {
     !keystoreProperties.getProperty(it).isNullOrBlank()
 }) {
@@ -97,7 +99,7 @@ android {
            // The guarded Flutter versionCode is the base. The F-Droid ABI-split
            // block below derives per-ABI codes as base * 10 + ABI code; CI
            // verifies the packaged arm64 code against that scheme.
-           applicationIdSuffix = ".dev"
+           applicationIdSuffix = if (notificationQa) ".notificationqa" else ".dev"
            versionNameSuffix = "-dev"
            manifestPlaceholders["appLabel"] = "Wing Dev"
            if (wingDevelopment) {

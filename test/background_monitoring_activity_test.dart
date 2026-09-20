@@ -52,7 +52,12 @@ void main() {
         },
       ),
     );
-    registry.addListener(() => transitions.add(registry.hasActiveChats));
+    registry.addListener(() {
+      if (transitions.lastOrNull != registry.hasActiveChats &&
+          (transitions.isNotEmpty || registry.hasActiveChats)) {
+        transitions.add(registry.hasActiveChats);
+      }
+    });
   });
 
   tearDown(() => registry.dispose());

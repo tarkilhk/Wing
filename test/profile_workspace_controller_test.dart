@@ -56,6 +56,9 @@ class Host {
     'path': '/profile/images/upload.png',
   };
   bool approvalFails = false;
+  int approvalResolved = 1;
+  List<Map<String, dynamic>> notificationActiveSessions = [];
+  Map<String, dynamic>? notificationReplay;
   List<Map<String, dynamic>>? pendingApprovals;
   List<Map<String, dynamic>> approvalOpenRequests = [];
   Completer<void>? pendingApprovalDelay;
@@ -140,7 +143,10 @@ class Host {
       },
       rpc: (method, params) async {
         calls.add((name, method, params));
-        if (method == 'session.active_list') return {'sessions': []};
+        if (method == 'session.active_list') {
+          return {'sessions': notificationActiveSessions};
+        }
+        if (method == 'session.events.since') return notificationReplay ?? {};
         if (method == 'file.attach') {
           if (fileAttachFails) throw StateError('Synthetic upload failure');
           return {'attached': true, 'ref_text': 'attached:${params['name']}'};
@@ -166,6 +172,7 @@ class Host {
           pendingApprovals?.removeWhere(
             (r) => r['request_id'] == params['request_id'],
           );
+          return {'resolved': approvalResolved};
         }
         if (method == 'session.steer') return steerResult;
         if (method == 'session.resume' && resumeFailures > 0) {

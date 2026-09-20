@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/main.dart';
+import 'package:wing/core/services/native_notification_sink.dart';
 import 'package:wing/core/services/android_voice.dart';
 import 'package:wing/core/services/microphone_permission.dart';
 
@@ -34,6 +35,12 @@ void main() {
     enabled = false;
     granted = true;
     failRequest = false;
+    messenger.setMockMethodCallHandler(NativeNotificationSink.channel, (
+      call,
+    ) async {
+      if (call.method == 'show') calls.add('show');
+      return call.method == 'initialize' ? [] : null;
+    });
     messenger.setMockMethodCallHandler(AndroidVoice.channel, (call) async {
       if (call.method == 'requestPermission') {
         calls.add('microphone');
@@ -60,6 +67,7 @@ void main() {
   });
 
   tearDown(() {
+    messenger.setMockMethodCallHandler(NativeNotificationSink.channel, null);
     messenger.setMockMethodCallHandler(AndroidVoice.channel, null);
     messenger.setMockMethodCallHandler(channel, null);
   });

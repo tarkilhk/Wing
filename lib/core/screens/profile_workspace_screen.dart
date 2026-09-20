@@ -1,3 +1,4 @@
+import '../models/side_question_delivery.dart';
 import '../services/workspace_connection_failure.dart';
 import '../widgets/server_connection_label.dart';
 import '../widgets/workspace_picker.dart';
@@ -122,6 +123,39 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   int _settingsRevision = 0;
   ProfileSessionKey? _composerKey;
   ProfileSessionKey? _loadingIntelligence;
+  final _notificationAnchors = <(ProfileSessionKey, String), GlobalKey>{};
+  Widget _notificationAnchor(
+    ProfileChat chat,
+    String kind,
+    String id,
+    Widget child,
+  ) {
+    final key = (chat.key, '$kind:$id');
+    return KeyedSubtree(
+      key: _notificationAnchors.putIfAbsent(key, GlobalKey.new),
+      child: child,
+    );
+  }
+
+  Map<String, GlobalKey> _chatNotificationAnchors(ProfileChat chat) {
+    final ids = <String>[
+      if (chat.error != null && chat.notificationReadTarget?.kind == 'status')
+        chat.notificationReadTarget!.identity,
+      for (final request in chat.approvals.requests)
+        "approval:${request['request_id']}",
+      if (chat.pendingQuestion != null)
+        "question:${chat.pendingQuestion!['request_id']}",
+      if (chat.sensitivePrompt != null)
+        'secure:${chat.sensitivePrompt!.requestId}',
+      for (final delivery in chat.sideQuestionDeliveries)
+        '${delivery.kind == SideQuestionDeliveryKind.backgroundTask ? 'background' : 'side'}:${delivery.taskId ?? ''}',
+    ];
+    return {
+      for (final id in ids)
+        id: _notificationAnchors.putIfAbsent((chat.key, id), GlobalKey.new),
+    };
+  }
+
   ChatFindResult? _findResult;
   ProfileSessionKey? _findOwner;
   int? _findHistoryGeneration;
@@ -1276,6 +1310,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             ),
             nearbyMessages: _activeFindResult(chat)?.page.rows,
             focusedMessageId: _activeFindResult(chat)?.rowId,
+            notificationAnchors: _chatNotificationAnchors(chat),
             onBackToLatest: _activeFindResult(chat) == null
                 ? null
                 : _backToLatest,
@@ -1357,24 +1392,37 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     running: chat.busy,
                   ),
             tail: [
-              if (chat.error != null) StudioError(chat.error!),
+              if (chat.error != null)
+                chat.notificationReadTarget?.kind == 'status'
+                    ? _notificationAnchor(
+                        chat,
+                        'status',
+                        chat.notificationReadTarget!.id,
+                        StudioError(chat.error!),
+                      )
+                    : StudioError(chat.error!),
               if (chat.approval != null)
                 Builder(
                   builder: (context) {
                     final request = chat.approval!;
-                    return GatewayApprovalPanel(
-                      key: ValueKey((chat.key, request['request_id'])),
-                      request: GatewayApprovalRequest.fromEventData(request),
-                      position: chat.approvals.position,
-                      total: chat.approvals.total,
-                      enabled:
-                          !chat.approvalResponding &&
-                          chat.status != ProfileTurnStatus.reconnecting,
-                      onRespond: (choice) => _run(
-                        () => controller.approve(
-                          chat,
-                          choice.wireValue,
-                          requestId: request['request_id'] as String,
+                    return _notificationAnchor(
+                      chat,
+                      'approval',
+                      request['request_id'] as String,
+                      GatewayApprovalPanel(
+                        key: ValueKey((chat.key, request['request_id'])),
+                        request: GatewayApprovalRequest.fromEventData(request),
+                        position: chat.approvals.position,
+                        total: chat.approvals.total,
+                        enabled:
+                            !chat.approvalResponding &&
+                            chat.status != ProfileTurnStatus.reconnecting,
+                        onRespond: (choice) => _run(
+                          () => controller.approve(
+                            chat,
+                            choice.wireValue,
+                            requestId: request['request_id'] as String,
+                          ),
                         ),
                       ),
                     );
@@ -1384,20 +1432,25 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 Builder(
                   builder: (context) {
                     final request = chat.sensitivePrompt!;
-                    return GatewaySensitivePromptPanel(
-                      key: ValueKey((
-                        chat.key,
-                        request.kind,
-                        request.requestId,
-                      )),
-                      request: request,
-                      enabled:
-                          !chat.sensitivePromptResponding &&
-                          chat.status != ProfileTurnStatus.reconnecting,
-                      onRespond: (value) => controller.respondSensitivePrompt(
-                        chat,
-                        value,
-                        expectedRequest: request,
+                    return _notificationAnchor(
+                      chat,
+                      'secure',
+                      request.requestId,
+                      GatewaySensitivePromptPanel(
+                        key: ValueKey((
+                          chat.key,
+                          request.kind,
+                          request.requestId,
+                        )),
+                        request: request,
+                        enabled:
+                            !chat.sensitivePromptResponding &&
+                            chat.status != ProfileTurnStatus.reconnecting,
+                        onRespond: (value) => controller.respondSensitivePrompt(
+                          chat,
+                          value,
+                          expectedRequest: request,
+                        ),
                       ),
                     );
                   },
@@ -1413,16 +1466,29 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                       : SelectableText(output),
                 ),
               for (final delivery in chat.sideQuestionDeliveries)
-                SideQuestionDeliveryCard(
-                  key: ValueKey((
-                    chat.key,
-                    delivery.kind,
-                    delivery.taskId,
-                    delivery.state,
-                  )),
-                  delivery: delivery,
+                _notificationAnchor(
+                  chat,
+                  delivery.kind == SideQuestionDeliveryKind.backgroundTask
+                      ? 'background'
+                      : 'side',
+                  delivery.taskId ?? '',
+                  SideQuestionDeliveryCard(
+                    key: ValueKey((
+                      chat.key,
+                      delivery.kind,
+                      delivery.taskId,
+                      delivery.state,
+                    )),
+                    delivery: delivery,
+                  ),
                 ),
-              if (chat.pendingQuestion != null) _questionPanel(chat),
+              if (chat.pendingQuestion != null)
+                _notificationAnchor(
+                  chat,
+                  'question',
+                  chat.pendingQuestion!['request_id'] as String,
+                  _questionPanel(chat),
+                ),
             ],
           ),
         ),

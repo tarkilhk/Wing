@@ -103,7 +103,7 @@ class GatewayApprovalRequest {
       }
     }
 
-    final choices = parsedChoices.isEmpty
+    final choices = rawChoices is! List
         ? !allowSession
               ? <GatewayApprovalChoice>[
                   GatewayApprovalChoice.once,
@@ -132,7 +132,7 @@ class GatewayApprovalRequest {
             return true;
           }).toList();
 
-    if (!choices.contains(GatewayApprovalChoice.deny)) {
+    if (rawChoices is! List && !choices.contains(GatewayApprovalChoice.deny)) {
       choices.add(GatewayApprovalChoice.deny);
     }
 

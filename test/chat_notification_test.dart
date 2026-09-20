@@ -56,7 +56,7 @@ token=not-for-alerts
     );
   });
 
-  test('chat title and ownership survive preview hiding and ID separation', () {
+  test('chat title and ownership survive preview hiding and per-chat ID stability', () {
     TurnNotification alert(
       String profile,
       ChatNotificationContent content, {
@@ -79,7 +79,7 @@ token=not-for-alerts
       ChatNotificationContent.reply('Actual result'),
       preview: false,
     );
-    expect(reply.id, isNot(input.id));
+    expect(reply.id, input.id);
     expect(
       reply.id,
       isNot(alert('b', ChatNotificationContent.reply('Other')).id),

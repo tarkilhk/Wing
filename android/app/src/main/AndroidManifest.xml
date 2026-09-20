@@ -15,6 +15,9 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:usesCleartextTraffic="true">
+        <receiver android:name=".NotificationDismissReceiver" android:exported="false" />
+        <activity android:name=".NotificationActionActivity" android:exported="false"
+            android:excludeFromRecents="true" android:theme="@style/NotificationActionTheme" />
         <service
             android:name=".BackgroundMonitoringService"
             android:exported="false"

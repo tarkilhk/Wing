@@ -1,3 +1,4 @@
+import '../widgets/notification_channel_diagnostics.dart';
 import 'package:flutter/material.dart';
 import '../widgets/compact_switch.dart';
 import 'package:flutter/foundation.dart';
@@ -358,6 +359,7 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                                 : const Icon(Icons.chevron_right),
                             onTap: _requesting ? null : _notifications,
                           ),
+                          const NotificationChannelDiagnostics(),
                         ],
                       ),
                     ),

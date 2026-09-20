@@ -196,3 +196,24 @@ retained failed observation, and reviews the same operation without another POST
 capture point after the capability checks for external `adb` screenshot/tree
 collection. This is fixture-based Android interaction evidence, not certification
 of a live backend, every installed screen reader or production account access.
+
+## Notification revamp
+
+The production notification path has an isolated emulator fixture:
+
+```sh
+ORG_GRADLE_PROJECT_notificationQa=true flutter build apk --debug --target-platform android-x64 -t integration_test/notification_revamp_device.dart
+adb -s emulator-5556 install --no-incremental -r -g build/app/outputs/flutter-apk/app-debug.apk
+python3 tools/qa/check_notification_revamp.py --serial emulator-5556
+```
+
+The driver resets only `com.tarkilhk.wing.notificationqa`, rejects non-emulators,
+uses fake Hermes transport data, and restores normal font size/light theme. It
+checks FIFO approval identity, failed submission retention, Always confirmation,
+privacy Review, watcher-only remote resolution, latest-reply reading, and native
+100%/200% layouts in both themes. Screenshots are in `build/notification-review/`.
+
+For manual checks against stock Hermes, use the
+[one-chat notification test prompt](design/2026-09-20-notification-live-test-prompt.md).
+It generates supported events one scenario at a time and keeps backend outcomes
+separate from observations on the phone.

@@ -17,6 +17,7 @@ object MonitoringRuntime {
         private set
     var activityVisible = false
     private var activityAttached = false
+    var summary = mapOf("title" to "Watching chats", "text" to "Connecting to Hermes")
     var running = false
     private var channel: MethodChannel? = null
     private val starting = mutableListOf<MethodChannel.Result>()
@@ -26,6 +27,7 @@ object MonitoringRuntime {
         activityAttached = true
         if (engine === flutterEngine) return
         engine = flutterEngine
+        ChatNotifications.attach(context, flutterEngine)
         val app = context.applicationContext
         channel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -34,6 +36,13 @@ object MonitoringRuntime {
             setMethodCallHandler { call, result ->
                 when (call.method) {
                     "start" -> {
+                        val values = call.arguments as? Map<*, *>
+                        val next = mapOf("title" to (values?.get("title") as? String ?: "Watching chats"),
+                            "text" to (values?.get("text") as? String ?: "Connecting to Hermes"))
+                        if (next != summary) {
+                            summary = next
+                            BackgroundMonitoringService.instance?.updateSummary()
+                        }
                         if (running || !activityVisible) {
                             result.success(status(app))
                         } else {
@@ -115,6 +124,7 @@ object MonitoringRuntime {
             if (!activityAttached && !running && starting.isEmpty()) {
                 channel?.setMethodCallHandler(null)
                 channel = null
+                ChatNotifications.detach()
                 engine?.destroy()
                 engine = null
             }

@@ -288,6 +288,9 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
+        if (!getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked) {
+            ChatNotifications.handleMainIntent(this, intent)
+        }
         MonitoringRuntime.activityVisible = true
         intakeExecutor.execute {
             try {
@@ -313,6 +316,9 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (activityResumed && !getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked) {
+            ChatNotifications.handleMainIntent(this, intent)
+        }
         launchActionFor(intent)?.let { action ->
             launchChannel?.invokeMethod("launchAction", action)
             return

@@ -26,10 +26,17 @@ import 'core/screens/shared_draft_review.dart';
 import 'core/services/profile_workspace_controller.dart';
 import 'core/services/profile_connection_identity.dart';
 import 'core/services/profile_workspace_registry.dart';
+import 'core/services/profile_gateway.dart';
+import 'core/models/hermes_profile.dart';
 import 'core/services/turn_notification_service.dart';
 import 'core/services/microphone_permission.dart';
 import 'core/services/background_monitoring_service.dart';
 import 'core/services/notification_delivery_ledger.dart';
+import 'core/services/native_notification_sink.dart';
+import 'core/services/chat_notification_coordinator.dart';
+import 'core/models/chat_notification_content.dart';
+import 'core/models/notification_focus.dart';
+import 'core/models/gateway_approval.dart';
 import 'core/theme/wing_theme.dart';
 import 'core/theme/profile_workspace_theme.dart';
 import 'core/widgets/app_drawer.dart';
@@ -62,12 +69,15 @@ class WingApp extends StatefulWidget {
 
   /// When supplied, this app owns and disposes the registry.
   final ProfileWorkspaceRegistry? profileControllers;
+  final ProfileGateway Function(SavedConnection, WorkspaceScope)?
+  gatewayFactory;
   const WingApp({
     required this.connManager,
     this.shareIntents,
     this.launchIntents,
     this.startupExternalNavigationReady,
     this.profileControllers,
+    this.gatewayFactory,
     super.key,
   });
 
@@ -110,11 +120,15 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   final _homeKey = GlobalKey<HomeScreenState>();
   final _notificationRoutes = <ProfileWorkspaceController, Route<void>>{};
   late final ProfileWorkspaceRegistry _profileControllers;
-  late final PluginTurnNotificationSink _profileNotifications;
+  late final NativeNotificationSink _profileNotifications;
+  late final ChatNotificationCoordinator _chatNotices;
+  Timer? _notificationPoll;
+  bool _pollingNotifications = false;
   late final NotificationDeliveryLedger _notificationDeliveries;
   late final Future<void> _notificationsReady;
   late final BackgroundMonitoringService _backgroundMonitoring;
   ProfileSessionKey? _pendingNotificationKey;
+  NotificationFocus? _pendingNotificationFocus;
   Future<void>? _pendingNotificationOpen;
   int _notificationOpenGeneration = 0;
   String? _deferredShareId;
@@ -155,10 +169,15 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   Future<void> openProfileNotification(String payload) async {
     if (payload.isEmpty) return; // Test alerts have no conversation target.
     final ProfileSessionKey key;
+    NotificationFocus? focus;
     try {
-      key = ProfileSessionKey.fromJson(
-        jsonDecode(payload) as Map<String, dynamic>,
-      );
+      final data = jsonDecode(payload) as Map<String, dynamic>;
+      key = ProfileSessionKey.fromJson(data);
+      if (data['focus'] is Map) {
+        focus = NotificationFocus.fromJson(
+          Map<String, dynamic>.from(data['focus']),
+        );
+      }
     } catch (_) {
       _notificationOpenGeneration++;
       _openingNotificationController?.cancelNotificationOpen();
@@ -170,11 +189,16 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     _deferPendingShareForNotification();
 
     final pending = _pendingNotificationOpen;
-    if (_pendingNotificationKey == key && pending != null) return pending;
+    if (_pendingNotificationKey == key &&
+        _pendingNotificationFocus == focus &&
+        pending != null) {
+      return pending;
+    }
 
     final generation = ++_notificationOpenGeneration;
-    final opening = _openProfileNotificationTarget(key, generation);
+    final opening = _openProfileNotificationTarget(key, generation, focus);
     _pendingNotificationKey = key;
+    _pendingNotificationFocus = focus;
     _pendingNotificationOpen = opening;
     try {
       await opening;
@@ -199,6 +223,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   Future<void> _openProfileNotificationTarget(
     ProfileSessionKey key,
     int generation,
+    NotificationFocus? focus,
   ) async {
     try {
       final connection = (await widget.connManager.loadConnectionsWithSecrets())
@@ -223,6 +248,12 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         key,
         isCurrent: () => _isCurrentNotificationOpen(generation),
       );
+      final targetChat = controller.findNotificationChat(key);
+      if (targetChat != null) {
+        targetChat.notificationFocus = focus;
+        targetChat.notificationFocusGeneration++;
+        _restoreNotificationReadTarget(targetChat);
+      }
       final navigator = _navigatorKey.currentState;
       if (navigator == null) {
         throw StateError('Notification navigation is unavailable');
@@ -288,15 +319,12 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _profileNotifications = PluginTurnNotificationSink(
-      onOpen: (payload) {
-        if (payload.isNotEmpty) _deferPendingShareForNotification();
-        unawaited(
-          WidgetsBinding.instance.endOfFrame.then(
-            (_) => openProfileNotification(payload),
-          ),
-        );
-      },
+    _profileNotifications = NativeNotificationSink(
+      onInteraction: _notificationInteraction,
+    );
+    _chatNotices = ChatNotificationCoordinator(
+      widget.connManager.prefs,
+      _profileNotifications,
     );
     _notificationDeliveries = NotificationDeliveryLedger(
       widget.connManager.prefs,
@@ -304,6 +332,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     _backgroundMonitoring = BackgroundMonitoringService(
       preferences: widget.connManager.prefs,
       hasActiveChats: () => _profileControllers.hasActiveChats,
+      summary: () => _profileControllers.monitoringSummary,
       notificationsEnabled: _profileNotifications.notificationsEnabled,
     );
     _notificationsReady =
@@ -326,60 +355,258 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
             connection: connection,
             connectionIdentity: identity,
             preferences: widget.connManager.prefs,
-            onAttention: (notification) async {
-              final eventId = notification.eventId;
-              final preference = notification.content.needsAttention
-                  ? attentionNotificationsKey
-                  : completionNotificationsKey;
-              if (widget.connManager.prefs.getBool(preference) == false) return;
+            gatewayFactory: widget.gatewayFactory == null
+                ? null
+                : (scope) => widget.gatewayFactory!(connection, scope),
+            onAttention: _receiveProfileNotice,
+            onNotificationInputs: (snapshot) async {
               await _notificationsReady;
-              if (await _profileNotifications.notificationsEnabled() == false) {
-                return;
-              }
-              if (eventId != null &&
-                  !await _notificationDeliveries.claim(eventId)) {
-                return;
-              }
-              final payload = jsonEncode(notification.key.toJson());
-              try {
-                await _profileNotifications.show(
-                  TurnNotification.chat(
-                    payload: payload,
-                    title: notification.title,
-                    scopeLabel:
-                        '${notification.connectionLabel} / ${notification.key.workspace.profileName}',
-                    content: notification.content,
-                    showPreview:
-                        widget.connManager.prefs.getBool(
-                          notificationPreviewsKey,
-                        ) ??
-                        true,
-                    eventId: eventId,
-                  ),
-                );
-              } catch (_) {
-                if (eventId != null) {
-                  await _notificationDeliveries.release(eventId);
-                }
-                rethrow;
-              }
+              await _chatNotices.inputs(
+                chat: jsonEncode(snapshot.key.toJson()),
+                title: snapshot.title,
+                scope:
+                    '${snapshot.connectionLabel} / ${snapshot.key.workspace.profileName}',
+                inputs: snapshot.inputs,
+                alert: snapshot.alert,
+              );
             },
+            notificationResultFor: (key) {
+              final result = _chatNotices.resultFor(jsonEncode(key.toJson()));
+              return result == null
+                  ? null
+                  : NotificationFocus.fromJson(
+                      Map<String, dynamic>.from(result['focus']),
+                    );
+            },
+            onNotificationRead: (key, identity) =>
+                _chatNotices.read(jsonEncode(key.toJson()), identity),
           ),
         );
     _profileControllers.addListener(_monitoringActivityChanged);
+    _backgroundMonitoring.state.addListener(_monitoringStateChanged);
     _networkAvailability.start(
       _profileControllers.recoverConnections,
       _profileControllers.networkUnavailable,
     );
   }
 
+  Future<void> _receiveProfileNotice(ProfileNotification notice) async {
+    if (notice.content.category == ChatNotificationCategory.inputNeeded) {
+      final owner = _profileControllers.controllers
+          .where((c) => c.owns(notice.key))
+          .firstOrNull;
+      final chat = owner?.findNotificationChat(notice.key);
+      if (chat != null &&
+          (chat.approval != null ||
+              chat.pendingQuestion != null ||
+              chat.sensitivePrompt != null)) {
+        return;
+      }
+    }
+    await _notificationsReady;
+    final eventId = notice.eventId;
+    if (eventId != null && !await _notificationDeliveries.claim(eventId)) {
+      return;
+    }
+    try {
+      await _chatNotices.result(
+        chat: jsonEncode(notice.key.toJson()),
+        title: notice.title,
+        scope:
+            '${notice.connectionLabel} / ${notice.key.workspace.profileName}',
+        focus:
+            notice.focus ??
+            NotificationFocus(
+              'status',
+              eventId ?? DateTime.now().microsecondsSinceEpoch.toString(),
+            ),
+        content: notice.content,
+        alert: notice.alert,
+      );
+    } catch (_) {
+      if (eventId != null) await _notificationDeliveries.release(eventId);
+      rethrow;
+    }
+  }
+
+  void _restoreNotificationReadTarget(ProfileChat chat) {
+    final result = _chatNotices.resultFor(jsonEncode(chat.key.toJson()));
+    if (result != null && chat.notificationReadTarget == null) {
+      chat.notificationReadTarget = NotificationFocus.fromJson(
+        Map<String, dynamic>.from(result['focus']),
+      );
+    }
+  }
+
+  Future<void> _notificationInteraction(Map<String, dynamic> data) async {
+    try {
+      if (data['dismiss'] == true) {
+        if (data['chat'] is String && data['revision'] is String) {
+          await _chatNotices.dismissed(
+            data['chat'] as String,
+            data['revision'] as String,
+          );
+        }
+        return;
+      }
+      final payload = data['payload'] as String? ?? '';
+      if (payload.isEmpty) return;
+      final value = jsonDecode(payload) as Map<String, dynamic>;
+      final key = ProfileSessionKey.fromJson(value);
+      final choice = data['choice'] as String? ?? '';
+      if (choice.isEmpty) {
+        await WidgetsBinding.instance.endOfFrame;
+        await openProfileNotification(payload);
+        return;
+      }
+      final focus = NotificationFocus.fromJson(
+        Map<String, dynamic>.from(value['focus']),
+      );
+      if (focus.kind != 'approval' ||
+          !{'once', 'session', 'always', 'deny'}.contains(choice)) {
+        return;
+      }
+      final connection = (await widget.connManager.loadConnectionsWithSecrets())
+          .where((c) => c.id == key.workspace.connectionId)
+          .firstOrNull;
+      if (connection == null) {
+        _showNotificationOpenError();
+        return;
+      }
+      final owner = await _profileControllers.forSession(connection, key);
+      var chat = owner.findNotificationChat(key);
+      final mustReview =
+          data['review'] == true || choice == 'always' || chat == null;
+      if (mustReview) {
+        await WidgetsBinding.instance.endOfFrame;
+        await openProfileNotification(payload);
+        chat = owner.findNotificationChat(key);
+      }
+      if (chat == null ||
+          chat.opening ||
+          chat.offlineSnapshot ||
+          chat.status == ProfileTurnStatus.reconnecting) {
+        return;
+      }
+      final current = _chatNotices.inputFor(jsonEncode(key.toJson()));
+      if (current != null && current.focus.identity != focus.identity) return;
+      final request = chat.approval;
+      if (request == null || request['request_id'] != focus.id) return;
+      if (mustReview) {
+        final context = _navigatorKey.currentContext;
+        if (context == null || !context.mounted) return;
+        final approval = GatewayApprovalRequest.fromEventData(request);
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(
+              choice == 'always'
+                  ? 'Always allow this command pattern?'
+                  : 'Review command',
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SelectableText(approval.command),
+                  if (approval.description.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(approval.description),
+                  ],
+                  if (choice == 'always')
+                    const Padding(
+                      padding: EdgeInsets.only(top: 12),
+                      child: Text(
+                        'Hermes will permanently allow the matching command pattern, including future matching commands.',
+                      ),
+                    ),
+                  if (choice == 'session')
+                    const Padding(
+                      padding: EdgeInsets.only(top: 12),
+                      child: Text(
+                        'Allow the matching command pattern for this session.',
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(switch (choice) {
+                  'always' => 'Always allow',
+                  'session' => 'Allow for session',
+                  'deny' => 'Deny',
+                  _ => 'Allow once',
+                }),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true || _disposed) return;
+      }
+      await owner.approve(chat, choice, requestId: focus.id);
+    } catch (_) {
+      // The controller retains the exact request and exposes unconfirmed status.
+      // An intent is never saved as an authorization to retry on reconnect.
+    }
+  }
+
+  void _monitoringStateChanged() {
+    final active =
+        _backgroundMonitoring.state.value == BackgroundMonitoringState.active ||
+        _backgroundMonitoring.state.value ==
+            BackgroundMonitoringState.batteryRestricted;
+    if (!active) {
+      _notificationPoll?.cancel();
+      _notificationPoll = null;
+      return;
+    }
+    _notificationPoll ??= Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => unawaited(_reconcileNotices()),
+    );
+  }
+
+  Future<void> _reconcileNotices() async {
+    if (_pollingNotifications || _disposed) return;
+    _pollingNotifications = true;
+    try {
+      final keys = _chatNotices.chatsWithNotices
+          .map(
+            (v) => ProfileSessionKey.fromJson(
+              jsonDecode(v) as Map<String, dynamic>,
+            ),
+          )
+          .toSet();
+      for (final owner in _profileControllers.controllers) {
+        await owner.reconcileNotificationRequests(
+          keys.where(owner.owns).toSet(),
+        );
+      }
+    } finally {
+      _pollingNotifications = false;
+    }
+  }
+
   void _monitoringActivityChanged() {
+    for (final owner in _profileControllers.controllers) {
+      for (final chat in owner.notificationChats) {
+        _restoreNotificationReadTarget(chat);
+      }
+    }
     unawaited(_syncBackgroundMonitoring());
   }
 
   void refreshPreferences() {
     if (mounted) setState(() {});
     unawaited(_syncBackgroundMonitoring());
+    unawaited(_chatNotices.refreshPreferences());
   }
 
   Future<void> _requestStartupNotificationPermission() async {
@@ -412,6 +639,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_syncBackgroundMonitoring());
+      unawaited(_reconcileNotices());
     }
   }
 
@@ -479,6 +707,8 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _networkAvailability.dispose();
     _profileControllers.removeListener(_monitoringActivityChanged);
+    _notificationPoll?.cancel();
+    _backgroundMonitoring.state.removeListener(_monitoringStateChanged);
     _backgroundMonitoring.dispose();
     _profileControllers.dispose();
     super.dispose();
