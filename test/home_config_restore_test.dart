@@ -250,7 +250,8 @@ void main() {
       'New chat',
     );
     expect(find.byKey(const ValueKey('chat-filter-profile')), findsOneWidget);
-    expect(find.byKey(const ValueKey('chat-group-by')), findsOneWidget);
+    expect(find.byTooltip('Chat list options'), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-group-by')), findsNothing);
   });
 
   testWidgets('a cold-start launcher shortcut opens a Quick Chat directly', (

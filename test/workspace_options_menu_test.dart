@@ -94,6 +94,11 @@ void main() {
         );
         expect(tester.takeException(), isNull);
         expect(find.text('Show automated chats'), findsOneWidget);
+        await tester.scrollUntilVisible(find.text('New project'), 160);
+        await tester.pumpAndSettle();
+        expect(find.text('New project').hitTestable(), findsOneWidget);
+        await tester.drag(find.byType(ListView), const Offset(0, 600));
+        await tester.pumpAndSettle();
         final unread = find.byKey(
           const ValueKey('chat-menu-include-automated'),
         );
@@ -135,7 +140,9 @@ void main() {
   ) async {
     await show(tester);
     for (final label in [
-      'Show…',
+      'Group by…',
+      'Sort by…',
+      'Show details…',
       'Show automated chats',
       'Collapse all',
       'Mark all as read',

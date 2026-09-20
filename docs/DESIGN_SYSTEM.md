@@ -20,10 +20,15 @@ The [product plan](PRODUCT_PLAN.md) owns functionality. This document owns the a
 The owner approved implementing the [Target chat list](design/2026-09-19-chat-list-target.md).
 This supersedes earlier Chats-specific instructions for profile chips, a separate
 Projects section, Recents, separators, and the header's duplicated filters.
-Use the compact Status / Profile / Project row, direct Group by / Order by
-menus, five colored status dots and a continuous grouped list with three-chat
-previews. Tokens, when shown, include group totals. Preserve the conversation,
-Activity, tool presentation and composer; the list has its own dot component.
+Use the compact Status / Profile / Project row, five colored status dots and
+a continuous grouped list with three-chat previews. The owner’s 20 September
+refinement places Group by, Sort by and Show details directly in the header
+overflow menu, each opening an anchored menu at the ellipsis. There is no
+permanent grouping/sorting row or bottom sheet. Choices apply immediately and
+are remembered per connection on the device. Show details stays open for
+multiple selections, with Done reachable while the choices scroll. Tokens, when
+shown, include group totals. Preserve the conversation, Activity, tool
+presentation and composer; the list has its own dot component.
 The approved token refinement truncates titles to keep counts and updated ages
 in aligned columns on the same row. Use compact counts at existing precision
 and tabular numerals without a Tokens / Age legend. At enlarged text sizes,

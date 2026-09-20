@@ -186,6 +186,13 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> openViewMenu(WidgetTester tester, String id) async {
+    await tester.tap(find.byTooltip('Chat list options'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('chat-menu-$id')));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('profile bar toggles the shared filter without changing owner', (
     tester,
   ) async {
@@ -309,8 +316,7 @@ void main() {
           await tester.pumpWidget(const SizedBox());
           await show(tester);
         case 'order by':
-          await tester.tap(find.byKey(const ValueKey('chat-order-by')));
-          await tester.pumpAndSettle();
+          await openViewMenu(tester, 'sort-by');
           await tester.tap(find.byKey(const ValueKey('chat-menu-updated')));
       }
       await tester.pumpAndSettle();
@@ -415,7 +421,7 @@ void main() {
       await select(tester, 'profile', 'personal');
       await tester.tap(find.byTooltip('Chat list options'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('chat-menu-show')));
+      await tester.tap(find.byKey(const ValueKey('chat-menu-show-details')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('chat-menu-tokens')));
       await tester.pumpAndSettle();
@@ -444,29 +450,49 @@ void main() {
     },
   );
   testWidgets(
-    'view choices persist and direct menus have no obsolete back link',
+    'anchored view menus apply immediately and persist after reopening the browser',
     (tester) async {
       await show(tester);
-      await tester.tap(find.byKey(const ValueKey('chat-group-by')));
-      await tester.pumpAndSettle();
-      expect(find.text('Group by'), findsOneWidget);
-      expect(find.textContaining('Back to'), findsNothing);
+      expect(find.byKey(const ValueKey('chat-group-by')), findsNothing);
+      expect(find.byKey(const ValueKey('chat-order-by')), findsNothing);
+      final semantics = tester.ensureSemantics();
+      await openViewMenu(tester, 'group-by');
+      expect(find.byType(BottomSheet), findsNothing);
       await tester.tap(find.byKey(const ValueKey('chat-menu-status')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('chat-order-by')));
-      await tester.pumpAndSettle();
-      expect(find.text('Order by'), findsOneWidget);
+      await openViewMenu(tester, 'sort-by');
       await tester.tap(find.byKey(const ValueKey('chat-menu-tokens')));
       await tester.pumpAndSettle();
+      await openViewMenu(tester, 'show-details');
+      await tester.tap(find.byKey(const ValueKey('chat-menu-tokens')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('chat-menu-updated')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(find.text('Unread'), findsOneWidget);
+      expect(find.text('1.5k'), findsWidgets);
       await tester.pumpWidget(const SizedBox());
       await show(tester);
-      expect(
-        find.descendant(
-          of: find.byKey(const ValueKey('chat-order-by')),
-          matching: find.text('Tokens'),
-        ),
-        findsOneWidget,
-      );
+      bool selected(String id) =>
+          tester
+              .getSemantics(find.byKey(ValueKey('chat-menu-$id')))
+              .getSemanticsData()
+              .flagsCollection
+              .isSelected ==
+          ui.Tristate.isTrue;
+      await openViewMenu(tester, 'group-by');
+      expect(selected('status'), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await openViewMenu(tester, 'sort-by');
+      expect(selected('tokens'), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await openViewMenu(tester, 'show-details');
+      expect(selected('tokens'), isTrue);
+      expect(selected('updated'), isFalse);
+      semantics.dispose();
     },
   );
   testWidgets('loading and failure preserve readable rows', (tester) async {
@@ -541,10 +567,22 @@ void main() {
         await screenshot(tester, '${brightness.name}-$scale-profile-selected');
         await tester.tap(find.byKey(const ValueKey('chat-profile-work')));
         await tester.pumpAndSettle();
-        await tester.tap(find.byTooltip('Chat list options'));
+        await openViewMenu(tester, 'group-by');
+        expect(find.byType(BottomSheet), findsNothing);
+        await screenshot(tester, '${brightness.name}-$scale-group-options');
+        await tester.tap(find.byKey(const ValueKey('chat-menu-project')));
         await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const ValueKey('chat-menu-show')));
+        await openViewMenu(tester, 'sort-by');
+        await screenshot(tester, '${brightness.name}-$scale-sort-options');
+        await tester.tap(find.byKey(const ValueKey('chat-menu-updated')));
         await tester.pumpAndSettle();
+        await openViewMenu(tester, 'show-details');
+        expect(
+          find.byKey(const ValueKey('chat-menu-profile')).hitTestable(),
+          findsOneWidget,
+        );
+        expect(find.text('Done').hitTestable(), findsOneWidget);
+        await screenshot(tester, '${brightness.name}-$scale-show-details');
         await tester.tap(find.byKey(const ValueKey('chat-menu-tokens')));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Done'));

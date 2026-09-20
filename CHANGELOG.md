@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Move chat grouping, sorting and visible details into anchored menus under the
+  ellipsis, freeing the permanent control row for more chats.
+
 - Retry interrupted chats immediately when Wing regains focus or the chat screen
   reopens. Replace continuous reconnect polling with a short retry burst and
   focus/network triggers, preserving drafts without resending messages.

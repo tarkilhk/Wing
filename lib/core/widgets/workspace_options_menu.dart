@@ -23,11 +23,17 @@ class WorkspaceOptionsMenu extends StatelessWidget {
           : () => showChatListMenu(
               anchor,
               title: 'Chat list options',
-              maxVisible: 8,
+              maxVisible: 9,
               choices: () => [
                 const ChatMenuChoice(
-                  'show',
-                  'Show…',
+                  'group-by',
+                  'Group by…',
+                  Icon(Icons.account_tree_outlined),
+                ),
+                const ChatMenuChoice('sort-by', 'Sort by…', Icon(Icons.sort)),
+                const ChatMenuChoice(
+                  'show-details',
+                  'Show details…',
                   Icon(Icons.visibility_outlined),
                 ),
                 ChatMenuChoice(

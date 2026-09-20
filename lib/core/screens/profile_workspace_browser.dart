@@ -262,19 +262,6 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     ChatGrouping.status => Icons.monitor_heart_outlined,
     ChatGrouping.profile => Icons.person_outline,
   };
-  static IconData _orderIcon(ChatOrdering value) => switch (value) {
-    ChatOrdering.updated => Icons.schedule,
-    ChatOrdering.created => Icons.calendar_today_outlined,
-    ChatOrdering.status => Icons.monitor_heart_outlined,
-    ChatOrdering.tokens => Icons.tag,
-    ChatOrdering.cost => Icons.attach_money,
-  };
-  static IconData _detailIcon(ChatDetail value) => switch (value) {
-    ChatDetail.updated => Icons.schedule,
-    ChatDetail.tokens => Icons.tag,
-    ChatDetail.cost => Icons.attach_money,
-    ChatDetail.profile => Icons.person_outline,
-  };
   void _toggle(Set<String> values, String id) => _change(() {
     if (!values.remove(id)) values.add(id);
   });
@@ -467,21 +454,24 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       ),
     ),
   );
-  Widget _viewControls() => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 8),
-    child: Row(
-      children: [
-        Expanded(
-          child: Builder(
-            builder: (anchor) => TextButton(
-              key: const ValueKey('chat-group-by'),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-              ),
-              onPressed: () => showChatListMenu(
-                anchor,
-                title: 'Group by',
-                choices: () => [
+  void _menuAction(String id) {
+    switch (id) {
+      case 'group-by':
+      case 'sort-by':
+      case 'show-details':
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          unawaited(
+            showChatListMenu(
+              _optionsKey.currentContext!,
+              title: switch (id) {
+                'group-by' => 'Group by',
+                'sort-by' => 'Sort by',
+                _ => 'Show details',
+              },
+              multiple: id == 'show-details',
+              choices: () => switch (id) {
+                'group-by' => [
                   for (final value in ChatGrouping.values)
                     ChatMenuChoice(
                       value.name,
@@ -490,94 +480,51 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                       selected: _grouping == value,
                     ),
                 ],
-                onSelected: (id) => _change(() {
-                  _grouping = ChatGrouping.values.byName(id);
-                  _collapsed.clear();
-                  _expanded.clear();
-                }),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.account_tree_outlined, size: 16),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      _grouping.label,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-                  const Icon(Icons.expand_more, size: 14),
-                ],
-              ),
-            ),
-          ),
-        ),
-        Expanded(
-          child: Builder(
-            builder: (anchor) => TextButton(
-              key: const ValueKey('chat-order-by'),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-              ),
-              onPressed: () => showChatListMenu(
-                anchor,
-                title: 'Order by',
-                choices: () => [
+                'sort-by' => [
                   for (final value in ChatOrdering.values)
                     ChatMenuChoice(
                       value.name,
                       value.label,
-                      Icon(_orderIcon(value)),
+                      Icon(switch (value) {
+                        ChatOrdering.updated => Icons.schedule,
+                        ChatOrdering.created => Icons.calendar_today_outlined,
+                        ChatOrdering.status => Icons.monitor_heart_outlined,
+                        ChatOrdering.tokens => Icons.tag,
+                        ChatOrdering.cost => Icons.attach_money,
+                      }),
                       selected: _ordering == value,
                     ),
                 ],
-                onSelected: (id) => _change(() {
-                  _ordering = ChatOrdering.values.byName(id);
-                  _arrangement.reset();
-                }),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  const Icon(Icons.sort, size: 16),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      _ordering.label,
-                      style: const TextStyle(fontSize: 12),
+                _ => [
+                  for (final value in ChatDetail.values)
+                    ChatMenuChoice(
+                      value.name,
+                      value == ChatDetail.updated
+                          ? 'Updated time'
+                          : value.label,
+                      Icon(switch (value) {
+                        ChatDetail.updated => Icons.schedule,
+                        ChatDetail.tokens => Icons.tag,
+                        ChatDetail.cost => Icons.attach_money,
+                        ChatDetail.profile => Icons.person_outline,
+                      }),
+                      selected: _show.contains(value),
                     ),
-                  ),
-                  const Icon(Icons.expand_more, size: 14),
                 ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-  void _menuAction(String id) {
-    switch (id) {
-      case 'show':
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          unawaited(
-            showChatListMenu(
-              _optionsKey.currentContext!,
-              title: 'Show',
-              multiple: true,
-              choices: () => [
-                for (final value in ChatDetail.values)
-                  ChatMenuChoice(
-                    value.name,
-                    value.label,
-                    Icon(_detailIcon(value)),
-                    selected: _show.contains(value),
-                  ),
-              ],
-              onSelected: (id) => _change(() {
-                final value = ChatDetail.values.byName(id);
-                if (!_show.remove(value)) _show.add(value);
+              },
+              onSelected: (choice) => _change(() {
+                switch (id) {
+                  case 'group-by':
+                    _grouping = ChatGrouping.values.byName(choice);
+                    _collapsed.clear();
+                    _expanded.clear();
+                  case 'sort-by':
+                    _ordering = ChatOrdering.values.byName(choice);
+                    _arrangement.reset();
+                  case 'show-details':
+                    final value = ChatDetail.values.byName(choice);
+                    if (!_show.remove(value)) _show.add(value);
+                }
               }),
             ),
           );
@@ -1309,7 +1256,6 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                 ),
               ),
               _filters(),
-              _viewControls(),
               WorkspaceConnectionStatus(status: controller.connectionStatus),
               if (controller.error != null)
                 ListTile(
