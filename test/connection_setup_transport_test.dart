@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'support/gateway_application_requests.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/connection_setup_probe.dart';
@@ -25,7 +27,7 @@ void main() {
             expect(request.uri.queryParameters['ticket'], 'test-ticket');
             final active = await WebSocketTransformer.upgrade(request);
             socket = active;
-            active.listen(
+            gatewayApplicationRequests(active).listen(
               socketMessages.add,
               onDone: () {
                 if (!closed.isCompleted) closed.complete();

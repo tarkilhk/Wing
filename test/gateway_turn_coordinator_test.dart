@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'support/gateway_application_requests.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/gateway_turn_contract.dart';
 import 'package:wing/core/services/gateway_turn_coordinator.dart';
@@ -130,7 +132,7 @@ class _GatewayFixture {
       _socketClosed.add(closed);
       order.add('socket');
       socket.add(jsonEncode(readyFrame));
-      socket.listen(
+      gatewayApplicationRequests(socket).listen(
         (raw) async {
           final request = jsonDecode(raw as String) as Map<String, dynamic>;
           requests.add(request);

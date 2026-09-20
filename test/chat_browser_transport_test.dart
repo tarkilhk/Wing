@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'support/gateway_application_requests.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
@@ -19,7 +21,7 @@ void main() {
         if (request.uri.path == '/api/ws') {
           final socket = await WebSocketTransformer.upgrade(request);
           sockets.add(socket);
-          socket.listen((raw) {
+          gatewayApplicationRequests(socket).listen((raw) {
             final rpc = jsonDecode(raw as String) as Map;
             final params = rpc['params'] as Map;
             requestedProfiles.add(params['profile'] as String);

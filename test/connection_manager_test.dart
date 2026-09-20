@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'support/gateway_application_requests.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -85,7 +87,7 @@ Future<void> _expectFailClosedPromptDisconnect(
     socket,
   ) {
     connectionCount += 1;
-    socket.listen(
+    gatewayApplicationRequests(socket).listen(
       (raw) {
         final request = jsonDecode(raw as String) as Map<String, dynamic>;
         if (request['method'] != 'prompt.submit') return;
@@ -1409,7 +1411,7 @@ void main() {
             .transform(WebSocketTransformer())
             .listen((socket) {
               connectionCount += 1;
-              socket.listen((_) {});
+              gatewayApplicationRequests(socket).listen((_) {});
               if (connectionCount == 1) {
                 firstSocketSeen.complete(socket);
               } else {
@@ -1508,7 +1510,7 @@ void main() {
       final socketSubscription = server
           .transform(WebSocketTransformer())
           .listen((socket) {
-            socket.listen(
+            gatewayApplicationRequests(socket).listen(
               (_) {},
               onDone: () {
                 if (!serverSocketClosed.isCompleted) {
@@ -1546,7 +1548,7 @@ void main() {
         final socketSubscription = server
             .transform(WebSocketTransformer())
             .listen((socket) {
-              socket.listen((raw) {
+              gatewayApplicationRequests(socket).listen((raw) {
                 final request =
                     jsonDecode(raw as String) as Map<String, dynamic>;
                 requests.add(request);
@@ -1637,7 +1639,7 @@ void main() {
       final socketSubscription = server
           .transform(WebSocketTransformer())
           .listen((socket) {
-            socket.listen((raw) {
+            gatewayApplicationRequests(socket).listen((raw) {
               final request = jsonDecode(raw as String) as Map<String, dynamic>;
               requests.add(request);
               if (request['method'] == 'fixture.stream') {
@@ -1712,7 +1714,7 @@ void main() {
         final socketSubscription = server
             .transform(WebSocketTransformer())
             .listen((socket) {
-              socket.listen(
+              gatewayApplicationRequests(socket).listen(
                 (_) {},
                 onDone: () {
                   if (!serverSocketClosed.isCompleted) {
@@ -1783,7 +1785,7 @@ void main() {
         final socketSubscription = server
             .transform(WebSocketTransformer())
             .listen((socket) {
-              socket.listen((raw) {
+              gatewayApplicationRequests(socket).listen((raw) {
                 final request =
                     jsonDecode(raw as String) as Map<String, dynamic>;
                 requestCount += 1;
@@ -1871,7 +1873,7 @@ void main() {
             .transform(WebSocketTransformer())
             .listen((socket) {
               connectionCount += 1;
-              socket.listen((raw) {
+              gatewayApplicationRequests(socket).listen((raw) {
                 final request =
                     jsonDecode(raw as String) as Map<String, dynamic>;
                 requestCount += 1;
@@ -1976,7 +1978,7 @@ void main() {
       final socketSubscription = server
           .transform(WebSocketTransformer())
           .listen((socket) {
-            socket.listen((raw) {
+            gatewayApplicationRequests(socket).listen((raw) {
               final request = jsonDecode(raw as String) as Map<String, dynamic>;
               if (!requestSeen.isCompleted) requestSeen.complete(request);
               socket.add(
@@ -2010,7 +2012,7 @@ void main() {
       final socketSubscription = server
           .transform(WebSocketTransformer())
           .listen((socket) {
-            socket.listen((raw) {
+            gatewayApplicationRequests(socket).listen((raw) {
               final request = jsonDecode(raw as String) as Map<String, dynamic>;
               if (!requestSeen.isCompleted) requestSeen.complete(request);
               socket.add(
@@ -2061,7 +2063,7 @@ void main() {
       final socketSubscription = server
           .transform(WebSocketTransformer())
           .listen((socket) {
-            socket.listen((raw) {
+            gatewayApplicationRequests(socket).listen((raw) {
               final request = jsonDecode(raw as String) as Map<String, dynamic>;
               requestSeen.complete(request);
               socket.add(
@@ -2094,7 +2096,7 @@ void main() {
       final socketSubscription = server
           .transform(WebSocketTransformer())
           .listen((socket) {
-            socket.listen((raw) {
+            gatewayApplicationRequests(socket).listen((raw) {
               final request = jsonDecode(raw as String) as Map<String, dynamic>;
               requests.add(request);
               socket.add(
@@ -2138,7 +2140,7 @@ void main() {
       final socketSubscription = server
           .transform(WebSocketTransformer())
           .listen((socket) {
-            socket.listen((raw) {
+            gatewayApplicationRequests(socket).listen((raw) {
               final request = jsonDecode(raw as String) as Map<String, dynamic>;
               requests.add(request);
               socket.add(
@@ -2203,7 +2205,7 @@ void main() {
       final socketSubscription = server
           .transform(WebSocketTransformer())
           .listen((socket) {
-            socket.listen((raw) {
+            gatewayApplicationRequests(socket).listen((raw) {
               final request = jsonDecode(raw as String) as Map<String, dynamic>;
               if (!requestSeen.isCompleted) requestSeen.complete(request);
               socket.add(
@@ -2245,7 +2247,7 @@ void main() {
       final socketSubscription = server
           .transform(WebSocketTransformer())
           .listen((socket) {
-            socket.listen((raw) {
+            gatewayApplicationRequests(socket).listen((raw) {
               final request = jsonDecode(raw as String) as Map<String, dynamic>;
               if (!requestSeen.isCompleted) requestSeen.complete(request);
               socket.add(
@@ -2285,7 +2287,7 @@ void main() {
       final socketSubscription = server
           .transform(WebSocketTransformer())
           .listen((socket) {
-            socket.listen((raw) {
+            gatewayApplicationRequests(socket).listen((raw) {
               final request = jsonDecode(raw as String) as Map<String, dynamic>;
               if (!requestSeen.isCompleted) requestSeen.complete(request);
               socket.add(
@@ -2325,7 +2327,7 @@ void main() {
       final socketSubscription = server
           .transform(WebSocketTransformer())
           .listen((socket) {
-            socket.listen((raw) {
+            gatewayApplicationRequests(socket).listen((raw) {
               final request = jsonDecode(raw as String) as Map<String, dynamic>;
               if (!requestSeen.isCompleted) requestSeen.complete(request);
               socket.add(
@@ -2365,7 +2367,7 @@ void main() {
       final socketSubscription = server
           .transform(WebSocketTransformer())
           .listen((socket) {
-            socket.listen((raw) {
+            gatewayApplicationRequests(socket).listen((raw) {
               final request = jsonDecode(raw as String) as Map<String, dynamic>;
               if (!requestSeen.isCompleted) requestSeen.complete(request);
               socket.add(

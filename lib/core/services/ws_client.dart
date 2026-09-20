@@ -260,6 +260,17 @@ class WsClient {
           reason: 'connection_closed',
         );
       }
+      // Stock Hermes withdraws server requests for unadvertised transports.
+      // Announce on every socket, before connection observers can create or
+      // resume a session. WebSocket ordering puts this inline notification
+      // ahead of any operation that could need an approval or other input.
+      channel.sink.add(
+        jsonEncode({
+          'jsonrpc': '2.0',
+          'method': 'client.capabilities',
+          'params': {'server_requests': true},
+        }),
+      );
       _connected = true;
       try {
         onConnectionChanged?.call(true);
@@ -411,6 +422,22 @@ class WsClient {
                 'request_id': id,
             },
           ),
+        );
+        return;
+      }
+
+      // Advertising request support also obliges us to reject methods without
+      // an Android handler, so Hermes can settle them instead of waiting.
+      if (id is String && method != null) {
+        _channel?.sink.add(
+          jsonEncode({
+            'jsonrpc': '2.0',
+            'id': id,
+            'error': {
+              'code': -32601,
+              'message': 'Unsupported server request: $method',
+            },
+          }),
         );
         return;
       }

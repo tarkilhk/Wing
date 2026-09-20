@@ -18,6 +18,7 @@ void main() {
       () async {
         final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
         final connected = Completer<WebSocket>();
+        final advertised = Completer<void>();
         final replies = <Map<String, dynamic>>[];
         final subscription = server.listen((request) async {
           if (!WebSocketTransformer.isUpgradeRequest(request)) {
@@ -40,6 +41,11 @@ void main() {
             final frame = jsonDecode(raw as String) as Map<String, dynamic>;
             final method = frame['method'];
             final params = frame['params'] as Map;
+            if (method == 'client.capabilities') {
+              expect(params, {'server_requests': true});
+              advertised.complete();
+              return;
+            }
             replies.add(frame);
             // Upstream contracts/prompt_voice.py: neither reply is session-scoped.
             final allowed = method == 'clarify.lock'
@@ -114,6 +120,7 @@ void main() {
         await controller.initialize();
         final chat = await controller.createChat();
         final socket = await connected.future;
+        await advertised.future.timeout(const Duration(seconds: 2));
         socket.add(
           jsonEncode({
             'jsonrpc': '2.0',

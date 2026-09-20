@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'support/gateway_application_requests.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/administration_repository.dart';
@@ -19,7 +21,7 @@ void main() {
         if (request.uri.path == '/api/ws') {
           final socket = await WebSocketTransformer.upgrade(request);
           sockets.add(socket);
-          socket.listen((message) {
+          gatewayApplicationRequests(socket).listen((message) {
             final rpc = jsonDecode(message as String) as Map;
             socket.add(
               jsonEncode({

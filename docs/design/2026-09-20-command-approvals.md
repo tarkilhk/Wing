@@ -68,3 +68,55 @@ Validation on 20 September 2026:
   not repeated after the fixture correction.
 - Both themes and both text scales were rendered and inspected. The enlarged
   text review prompted a shorter command viewport to preserve button reachability.
+
+## Live backend follow-up
+
+Inspected stock upstream commit `59f9ff8dbc75b9c4f07ae10174df730f7882a505`.
+The missing integration was the per-connection `client.capabilities` announcement:
+
+- [Server request admission](https://github.com/NousResearch/hermes-agent/blob/59f9ff8dbc75b9c4f07ae10174df730f7882a505/tui_gateway/server_requests.py)
+  withholds requests from transports that have not advertised `server_requests`.
+- [Capability handler](https://github.com/NousResearch/hermes-agent/blob/59f9ff8dbc75b9c4f07ae10174df730f7882a505/tui_gateway/methods_voice.py)
+  records that support on the calling transport, so reconnecting must advertise
+  again. Stock dispatch accepts the announcement as a JSON-RPC notification.
+- [Shared desktop channel](https://github.com/NousResearch/hermes-agent/blob/59f9ff8dbc75b9c4f07ae10174df730f7882a505/apps/shared/src/json-rpc-channel.ts)
+  announces support and rejects unsupported server requests with `-32601`.
+
+The live emulator reproduction used Luna and two print-only `execute_code` calls.
+Before the fix, both tool results reported that approval was withdrawn because
+the attached client could not answer requests; Wing received no approval frames.
+The earlier mock servers always delivered requests and therefore missed this
+admission rule. A real-loopback regression now reproduces withdrawal without the
+announcement and checks both initial connection and reconnect, including an
+observer that submits immediately when connected.
+
+Wing sends the announcement before publishing the connected state. Socket
+ordering places it before session operations. Unsupported server requests get
+the standard terminal error instead of silently waiting for a timeout. No backend
+changes or compatibility fallback are involved.
+
+Live Android validation used the user's existing backend and session-specific
+`gpt-5.6-luna`, with low reasoning. With explicit permission, each scenario briefly
+selected Manual approval mode and restored Smart afterward:
+
+- Two sequential print-only code calls: both requests appeared, both Android
+  **Allow once** actions succeeded, and the turn completed.
+- Two parallel terminal calls removing distinct, nonexistent test-owned `/tmp`
+  paths: both requests were pending together; the UI advanced from **1/2** to
+  **2/2**, both Android actions succeeded, and the turn completed.
+- Four actual emulator render captures cover the first and second request in
+  each scenario. No desktop approval was needed.
+
+The opt-in reproduction is `integration_test/approval_queue_live_test.dart`.
+It reads an explicitly authorized connection from the emulator app's private
+`files/approval-connection.json`; credentials must not be committed or passed as
+build defines. Run with `RUN_LIVE_APPROVAL_QA=true`. The additional
+`APPROVAL_QA_MANUAL=true` flag requires permission to temporarily change the shared
+profile setting; the test restores the original mode on success and failure.
+
+Validation after the follow-up: both live scenarios passed; 194 focused approval,
+WebSocket, reconnect, browser and prompt checks passed after their fixture servers
+were updated to consume connection-level negotiation; repository-wide static
+analysis reported no issues. The restored Smart mode was independently read back
+from the live API, and temporary connection copies were deleted from the host and
+emulator.
