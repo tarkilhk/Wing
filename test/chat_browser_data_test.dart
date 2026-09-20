@@ -13,6 +13,10 @@ class ReaderFixture extends ProfilePagingFixture {
   final owners = <int, String>{};
   bool failNextPage = false;
   bool failNextTree = false;
+  bool failWorkIndex = false;
+  bool failWorkSearch = false;
+  bool permanentSearchFailure = false;
+  final attempts = <(String, String, String?)>[];
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
     final id = owners.length;
@@ -30,6 +34,18 @@ class ReaderFixture extends ProfilePagingFixture {
         base.close();
       },
       get: (path, query) async {
+        attempts.add((scope.profileName, path, query['q']));
+        if (scope.profileName == 'work') {
+          if (failWorkIndex && path == 'sessions') {
+            throw TimeoutException('Index offline');
+          }
+          if (failWorkSearch && path == 'sessions/search') {
+            if (permanentSearchFailure) {
+              throw const DashboardHttpException(403, 'sessions/search');
+            }
+            throw TimeoutException('Search offline');
+          }
+        }
         if (failNextPage && path == 'sessions' && query['offset'] == '100') {
           failNextPage = false;
           throw TimeoutException('Temporary page timeout');
@@ -73,6 +89,62 @@ void main() {
     data.dispose();
     controller.dispose();
   });
+  test(
+    'recovery reads only failed profiles and retains healthy search results',
+    () async {
+      fixture.failWorkIndex = true;
+      await data.refresh(archivedOnly: false);
+      expect(data.errors.keys, ['work']);
+      expect(data.complete, {'personal'});
+      fixture.failWorkSearch = true;
+      await data.search('chat 1');
+      final healthyMatches = data.searchRows['personal'];
+      expect(healthyMatches, isNotEmpty);
+      expect(data.needsRecovery, isTrue);
+      fixture.failWorkIndex = false;
+      fixture.failWorkSearch = false;
+      fixture.attempts.clear();
+      await data.recover();
+      expect(fixture.attempts.every((r) => r.$1 == 'work'), isTrue);
+      expect(data.searchRows['personal'], same(healthyMatches));
+      expect(data.searchRows['work'], isNotEmpty);
+      expect(data.errors, isEmpty);
+      expect(data.searchError, isNull);
+      expect(data.needsRecovery, isFalse);
+    },
+  );
+
+  test(
+    'new query supersedes an in-flight recovery and permanent errors do not recover',
+    () async {
+      fixture.failWorkSearch = true;
+      await data.search('chat 1');
+      fixture.failWorkSearch = false;
+      final gate = Completer<void>();
+      fixture.searchDelays['chat 1'] = gate;
+      final recovery = data.recover();
+      await data.search('chat 2');
+      final latest = data.searchRows['work'];
+      gate.complete();
+      await recovery;
+      expect(data.searchRows['work'], same(latest));
+      expect(
+        data.searchRows['work']!.every(
+          (r) => '${r['title']}'.contains('chat 2'),
+        ),
+        isTrue,
+      );
+      fixture.failWorkSearch = true;
+      fixture.permanentSearchFailure = true;
+      await data.search('chat 3');
+      expect(data.searchError, isNotNull);
+      expect(data.needsRecovery, isFalse);
+      fixture.attempts.clear();
+      await data.recover();
+      expect(fixture.attempts, isEmpty);
+    },
+  );
+
   test(
     'paging deduplicates pin backfills without touching navigation or live sockets',
     () async {

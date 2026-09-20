@@ -11,6 +11,7 @@ import '../services/profile_workspace_controller.dart';
 import '../theme/wing_theme.dart';
 import '../theme/wing_icons.dart';
 import '../widgets/chat_list_menu.dart';
+import '../widgets/read_recovery.dart';
 import '../widgets/chat_profile_bar.dart';
 import '../widgets/chat_status_dot.dart';
 import '../widgets/chat_working_border.dart';
@@ -1121,7 +1122,13 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ReadRecovery(
+    shouldRetry: () => _data.needsRecovery,
+    retry: _data.recover,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) {
     _allEntries = _data.entries;
     _visibleEntries = _filterMatches(_allEntries);
     final visibleKeys = _visibleEntries.map((e) => e.key).toSet();

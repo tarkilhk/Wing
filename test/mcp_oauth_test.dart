@@ -67,6 +67,26 @@ class FlowFixture {
 }
 
 void main() {
+  test('only temporary poll failures permit event recovery', () async {
+    final h = FlowFixture();
+    addTearDown(h.flow.dispose);
+    await h.flow.start();
+    expect(h.flow.canRecoverPoll, isTrue);
+    h.override = (_, _) async => throw TimeoutException('Offline');
+    await h.flow.poll();
+    expect(h.flow.canRecoverPoll, isTrue);
+    h.override = (_, _) async => {'ok': true, 'status': 'unknown'};
+    await h.flow.poll();
+    expect(h.flow.pending, isTrue);
+    expect(h.flow.canRecoverPoll, isFalse);
+    h.override = null;
+    h.pollStatus = 'approved';
+    await h.flow.poll(); // Explicit Check status is still available.
+    expect(h.flow.status, 'approved');
+    expect(h.flow.canRecoverPoll, isFalse);
+    expect(h.requests.where((r) => r.$1.endsWith('.start')).length, 1);
+  });
+
   test(
     'provider callback rejection explains the next action without losing its reason',
     () async {

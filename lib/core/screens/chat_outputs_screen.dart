@@ -15,6 +15,8 @@ import '../services/profile_gateway.dart';
 import '../services/remote_files_client.dart';
 import '../services/web_preview.dart';
 import '../widgets/chat_image_preview.dart';
+import '../widgets/read_recovery.dart';
+import '../services/workspace_connection_failure.dart';
 import '../widgets/markdown_code_block.dart';
 import '../widgets/markdown_message_content.dart';
 import '../widgets/web_output_preview.dart';
@@ -56,6 +58,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
   String? _initialError;
   bool _initialOpening = false;
   bool _retryRefresh = false;
+  bool _retryable = false;
   bool _working = false;
 
   @override
@@ -110,6 +113,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
     setState(() {
       _loading = true;
       _loadError = null;
+      _retryable = false;
     });
     try {
       final page = await widget.loadHistory(offset);
@@ -122,9 +126,10 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
         }
         _nextOffset = page.nextOffset;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
+        _retryable = isTemporaryWorkspaceFailure(error);
         _retryRefresh = refresh;
         _loadError = _outputs.isEmpty
             ? "Couldn't load this chat's files and links. Check the Hermes connection, then try again."
@@ -506,7 +511,14 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ReadRecovery(
+    shouldRetry: () =>
+        widget.initialOutput == null && !_working && !_loading && _retryable,
+    retry: () => _load(refresh: _retryRefresh),
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) {
     if (widget.initialOutput != null) {
       return Scaffold(
         appBar: AppBar(title: Text(widget.initialOutput!.label)),

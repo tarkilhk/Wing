@@ -21,6 +21,33 @@ void main() {
     File('assets/pricing/openai.json').readAsStringSync(),
   );
   test(
+    'failed yearly cache is evicted and only failed aggregate is retried',
+    () async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      var fail = true;
+      fixture.override = (_, path, _, _) async {
+        if (path == 'analytics/models') return {'models': []};
+        if (fail) throw TimeoutException('Offline');
+        return {'daily': []};
+      };
+      final reader = UsageAnalyticsReader(fixture.server.profile('personal'));
+      final partial = await reader.load(365);
+      expect(partial.models, isNotNull);
+      expect(partial.dailyRetryable, isTrue);
+      fail = false;
+      fixture.requests.clear();
+      final complete = await reader.load(365, retry: partial);
+      expect(complete.models, same(partial.models));
+      expect(complete.daily, isNotNull);
+      expect(complete.needsRecovery, isFalse);
+      expect(fixture.requests.map((r) => r.$2), ['analytics/usage']);
+      expect(await reader.loadYear(), same(complete.daily));
+      expect(fixture.requests.length, 1);
+    },
+  );
+
+  test(
     'rolling day includes both partial UTC dates, fills only absent days',
     () {
       final data = UsageDaily.fromJson(

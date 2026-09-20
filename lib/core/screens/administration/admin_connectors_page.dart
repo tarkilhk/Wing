@@ -1,3 +1,4 @@
+import '../../widgets/read_recovery.dart';
 import '../../widgets/studio_action_label.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -523,7 +524,13 @@ class _AdminMcpSignInState extends State<AdminMcpSignIn> {
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
+  Widget build(BuildContext context) => ReadRecovery(
+    shouldRetry: () => !_leave && _flow.canRecoverPoll,
+    retry: _flow.poll,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) => PopScope(
     canPop: _leave || (!_flow.pending && !_flow.busy),
     onPopInvokedWithResult: (didPop, _) {
       if (!didPop) _close();

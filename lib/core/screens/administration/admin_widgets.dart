@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 import '../../widgets/studio_error.dart';
 import '../../widgets/studio_action_label.dart';
+import '../../widgets/read_recovery.dart';
+import '../../services/workspace_connection_failure.dart';
 
 /// Inherit all Studio component states and the selected app accent.
 ThemeData administrationTheme(ThemeData base) => base;
@@ -358,6 +360,7 @@ class _AdminLoadState extends State<AdminLoad> {
   DateTime? _checkedAt;
   String? _error;
   bool _loading = true;
+  bool _retryable = false;
   int _generation = 0;
   @override
   void initState() {
@@ -371,6 +374,7 @@ class _AdminLoadState extends State<AdminLoad> {
     setState(() {
       _loading = true;
       _error = null;
+      _retryable = false;
     });
     try {
       final data = await widget.load();
@@ -382,7 +386,10 @@ class _AdminLoadState extends State<AdminLoad> {
       }
     } catch (e) {
       if (mounted && generation == _generation) {
-        setState(() => _error = administrationError(e));
+        setState(() {
+          _error = administrationError(e);
+          _retryable = isTemporaryWorkspaceFailure(e);
+        });
       }
     } finally {
       if (mounted && generation == _generation) {
@@ -392,7 +399,13 @@ class _AdminLoadState extends State<AdminLoad> {
   }
 
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) => ReadRecovery(
+    shouldRetry: () => !_loading && _retryable,
+    retry: _load,
+    child: _body(context),
+  );
+
+  Widget _body(BuildContext context) => Column(
     mainAxisSize: widget.expand ? MainAxisSize.max : MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -404,9 +417,12 @@ class _AdminLoadState extends State<AdminLoad> {
           _failure(context),
       if (_data != null)
         if (widget.expand)
-          Expanded(child: _content(context))
+          Expanded(key: const ValueKey('content'), child: _content(context))
         else
-          _content(context),
+          KeyedSubtree(
+            key: const ValueKey('content'),
+            child: _content(context),
+          ),
     ],
   );
 

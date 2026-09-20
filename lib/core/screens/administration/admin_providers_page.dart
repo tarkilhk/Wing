@@ -1,3 +1,5 @@
+import '../../widgets/read_recovery.dart';
+import '../../services/workspace_connection_failure.dart';
 import '../../widgets/studio_action_label.dart';
 import '../../widgets/studio_error.dart';
 import 'dart:async';
@@ -485,6 +487,7 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
   Map<String, dynamic>? _session;
   String? _error;
   String _status = '';
+  bool _pollBlocked = false;
   bool _busy = false;
   Timer? _timer;
   bool _leave = false;
@@ -518,6 +521,7 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
       setState(() {
         _session = session;
         _status = 'pending';
+        _pollBlocked = false;
       });
       _schedule();
     } catch (e) {
@@ -539,6 +543,7 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
 
   Future<void> _poll() async {
     if (!_pending || _busy) return;
+    _timer?.cancel();
     setState(() => _busy = true);
     try {
       final response = await _profile.read(
@@ -547,11 +552,17 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
       if (!mounted) return;
       setState(() {
         _status = response['status'] as String? ?? 'unknown';
+        _pollBlocked = false;
         _error = null;
       });
       if (_pending) _schedule();
     } catch (e) {
-      if (mounted) setState(() => _error = administrationError(e));
+      if (mounted) {
+        setState(() {
+          _error = administrationError(e);
+          _pollBlocked = !isTemporaryWorkspaceFailure(e);
+        });
+      }
     }
     if (mounted) setState(() => _busy = false);
   }
@@ -605,7 +616,13 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
+  Widget build(BuildContext context) => ReadRecovery(
+    shouldRetry: () => _pending && !_busy && !_leave && !_pollBlocked,
+    retry: _poll,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) => PopScope(
     canPop: _leave || (!_pending && !_busy),
     onPopInvokedWithResult: (didPop, _) {
       if (!didPop) _close();

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'administration_repository.dart';
 import 'mcp_error.dart';
 import 'ws_client.dart';
+import 'workspace_connection_failure.dart';
 
 typedef McpLoopbackFactory =
     Future<McpLoopback> Function(
@@ -69,6 +70,7 @@ class McpOAuth extends ChangeNotifier {
   Timer? _timer;
   bool _disposed = false;
   bool _polling = false;
+  bool _pollBlocked = false;
   bool _closing = false;
   String? _sessionId;
   String? _state;
@@ -81,6 +83,8 @@ class McpOAuth extends ChangeNotifier {
   bool busy = false;
   bool callbackAccepted = false;
   bool get pending => _sessionId != null && status == 'pending';
+  bool get canRecoverPoll =>
+      pending && !busy && !_polling && !_pollBlocked && !_disposed && !_closing;
 
   McpOAuth({
     required this.profile,
@@ -160,6 +164,7 @@ class McpOAuth extends ChangeNotifier {
   Future<void> start() async {
     if (busy || pending || _disposed) return;
     _sessionId = null;
+    _pollBlocked = true;
     authUrl = null;
     callbackAccepted = false;
     terminalRequired = false;
@@ -247,6 +252,7 @@ class McpOAuth extends ChangeNotifier {
       }
       authUrl = url;
       _state = url.queryParameters['state'];
+      _pollBlocked = false;
       _schedulePoll();
     } catch (e) {
       error = _failure(e);
@@ -329,6 +335,7 @@ class McpOAuth extends ChangeNotifier {
         );
       }
       status = result['status'] as String;
+      _pollBlocked = false;
       error = status == 'error'
           ? mcpErrorMessage(
               result['error_message'],
@@ -338,7 +345,10 @@ class McpOAuth extends ChangeNotifier {
       if (!pending) await _closeListener();
       _schedulePoll();
     } catch (e) {
-      if (!_closing) error = _failure(e);
+      if (!_closing) {
+        error = _failure(e);
+        _pollBlocked = !isTemporaryWorkspaceFailure(e);
+      }
     } finally {
       _polling = false;
       _changed();

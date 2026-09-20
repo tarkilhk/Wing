@@ -15,6 +15,10 @@ class ChatBrowserData extends ChangeNotifier {
   final projects = <String, List<Map<String, dynamic>>>{};
   final errors = <String, String>{};
   final complete = <String>{};
+  final _retryableProfiles = <String>{};
+  final _searchFailures = <String>{};
+  final _retryableSearch = <String>{};
+  String _query = '';
   final searchRows = <String, List<Map<String, dynamic>>>{};
   final _baselineRows = <String, Map<String, Map<String, dynamic>>>{};
   final searchMatches = <String, Set<String>>{};
@@ -32,33 +36,67 @@ class ChatBrowserData extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  Future<void> refresh({required bool archivedOnly}) {
+  bool get needsRecovery =>
+      !loading && _retryableProfiles.isNotEmpty ||
+      !searching && _retryableSearch.isNotEmpty;
+
+  Future<void> recover() async {
+    await Future.wait([
+      if (!loading && _retryableProfiles.isNotEmpty)
+        _startRefresh(archivedOnly: archived, failedOnly: true),
+      if (!searching && _retryableSearch.isNotEmpty)
+        _search(_query, failedOnly: true),
+    ]);
+  }
+
+  Future<void> refresh({required bool archivedOnly}) =>
+      _startRefresh(archivedOnly: archivedOnly, failedOnly: false);
+
+  Future<void> _startRefresh({
+    required bool archivedOnly,
+    required bool failedOnly,
+  }) {
     final active = _refreshing;
     if (active != null && _refreshingArchived == archivedOnly) return active;
     _refreshingArchived = archivedOnly;
     late final Future<void> pending;
-    pending = _refresh(archivedOnly: archivedOnly).whenComplete(() {
-      if (identical(_refreshing, pending)) _refreshing = null;
-    });
+    pending = _refresh(archivedOnly: archivedOnly, failedOnly: failedOnly)
+        .whenComplete(() {
+          if (identical(_refreshing, pending)) _refreshing = null;
+        });
     return _refreshing = pending;
   }
 
-  Future<void> _refresh({required bool archivedOnly}) async {
+  Future<void> _refresh({
+    required bool archivedOnly,
+    required bool failedOnly,
+  }) async {
     final generation = ++_generation;
-    _searchGeneration++;
-    searching = false;
-    searchMatches.clear();
-    searchRows.clear();
+    if (!failedOnly) {
+      _searchGeneration++;
+      searching = false;
+      _query = '';
+      searchMatches.clear();
+      searchRows.clear();
+      _searchFailures.clear();
+      _retryableSearch.clear();
+      searchError = null;
+    }
     if (archived != archivedOnly) {
       rows.clear();
       projects.clear();
     }
     archived = archivedOnly;
     loading = true;
-    complete.clear();
-    errors.clear();
+    final profiles = (controller.discovery?.profiles ?? [])
+        .where((p) => !failedOnly || _retryableProfiles.contains(p.name))
+        .toList();
+    if (!failedOnly) {
+      complete.clear();
+      errors.clear();
+      _retryableProfiles.clear();
+    }
     _changed();
-    final profiles = controller.discovery?.profiles ?? [];
     var cursor = 0;
     bool valid() => !_disposed && generation == _generation;
     Future<void> worker() async {
@@ -108,12 +146,19 @@ class ChatBrowserData extends ChangeNotifier {
           rows[profile] = fetched.values.toList();
           projects[profile] = tree;
           complete.add(profile);
-        } catch (_) {
+          errors.remove(profile);
+          _retryableProfiles.remove(profile);
+        } catch (error) {
           if (valid()) {
             if (!hadRows && fetched.isNotEmpty) {
               rows[profile] = fetched.values.toList();
             }
             errors[profile] = 'Could not finish loading $profile.';
+            if (isTemporaryWorkspaceFailure(error)) {
+              _retryableProfiles.add(profile);
+            } else {
+              _retryableProfiles.remove(profile);
+            }
           }
         }
         if (valid()) _changed();
@@ -129,12 +174,19 @@ class ChatBrowserData extends ChangeNotifier {
     }
   }
 
-  Future<void> search(String query) async {
+  Future<void> search(String query) => _search(query);
+
+  Future<void> _search(String query, {bool failedOnly = false}) async {
     final generation = ++_searchGeneration;
-    searchMatches.clear();
-    searchRows.clear();
-    searchError = null;
-    searchLimited = false;
+    _query = query;
+    if (!failedOnly) {
+      searchMatches.clear();
+      searchRows.clear();
+      _searchFailures.clear();
+      _retryableSearch.clear();
+      searchError = null;
+      searchLimited = false;
+    }
     if (query.isEmpty) {
       searching = false;
       _changed();
@@ -142,7 +194,9 @@ class ChatBrowserData extends ChangeNotifier {
     }
     searching = true;
     _changed();
-    final profiles = controller.discovery?.profiles ?? [];
+    final profiles = (controller.discovery?.profiles ?? [])
+        .where((p) => !failedOnly || _retryableSearch.contains(p.name))
+        .toList();
     var cursor = 0;
     bool valid() => !_disposed && generation == _searchGeneration;
     Future<void> worker() async {
@@ -159,10 +213,16 @@ class ChatBrowserData extends ChangeNotifier {
               .map((r) => r['id'] as String)
               .toSet();
           if (matches.length >= 100) searchLimited = true;
-        } catch (_) {
+          _searchFailures.remove(profile);
+          _retryableSearch.remove(profile);
+        } catch (error) {
           if (valid()) {
-            searchError =
-                'Some message searches failed. Loaded titles still match.';
+            _searchFailures.add(profile);
+            if (isTemporaryWorkspaceFailure(error)) {
+              _retryableSearch.add(profile);
+            } else {
+              _retryableSearch.remove(profile);
+            }
           }
         }
       }
@@ -173,6 +233,9 @@ class ChatBrowserData extends ChangeNotifier {
     );
     if (valid()) {
       searching = false;
+      searchError = _searchFailures.isEmpty
+          ? null
+          : 'Some message searches failed. Loaded titles still match.';
       _changed();
     }
   }

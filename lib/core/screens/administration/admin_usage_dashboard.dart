@@ -5,6 +5,8 @@ import '../../services/administration_repository.dart';
 import '../../services/usage_analytics.dart';
 import '../../theme/wing_theme.dart';
 import 'admin_widgets.dart';
+import '../../widgets/read_recovery.dart';
+import '../../services/workspace_connection_failure.dart';
 import 'usage_charts.dart';
 
 class UsageDashboard extends StatefulWidget {
@@ -22,6 +24,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
   UsageDaily? _year;
   String? _yearError;
   bool _yearLoading = false;
+  bool _yearRetryable = false;
   int _days = 7;
   String? _selected;
   bool _breakdownModels = true;
@@ -39,6 +42,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
   }
 
   Future<void> _loadYear({bool refresh = false}) async {
+    if (_yearLoading) return;
     setState(() => _yearLoading = true);
     try {
       final year = await _reader.loadYear(refresh: refresh);
@@ -46,9 +50,11 @@ class _UsageDashboardState extends State<UsageDashboard> {
       setState(() {
         _year = year;
         _yearError = null;
+        _yearRetryable = false;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
+      _yearRetryable = isTemporaryWorkspaceFailure(error);
       setState(
         () => _yearError = _year == null
             ? 'Could not load the activity year. Use Refresh to retry.'
@@ -63,11 +69,14 @@ class _UsageDashboardState extends State<UsageDashboard> {
     await Future.wait([_loadYear(refresh: true), _load()]);
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool failedOnly = false}) async {
     final days = _days;
     if (_pending.contains(days)) return;
     setState(() => _pending.add(days));
-    final result = await _reader.load(days);
+    final result = await _reader.load(
+      days,
+      retry: failedOnly ? _cache[days] : null,
+    );
     if (!mounted) return;
     final old = _cache[days];
     setState(() {
@@ -77,6 +86,8 @@ class _UsageDashboardState extends State<UsageDashboard> {
         daily: result.daily ?? old?.daily,
         modelsError: result.modelsError,
         dailyError: result.dailyError,
+        modelsRetryable: result.modelsRetryable,
+        dailyRetryable: result.dailyRetryable,
         loadedAt: result.modelsError != null || result.dailyError != null
             ? old?.loadedAt ?? result.loadedAt
             : result.loadedAt,
@@ -90,7 +101,11 @@ class _UsageDashboardState extends State<UsageDashboard> {
       _selected = null;
       Tooltip.dismissAllToolTips();
     });
-    if (!_cache.containsKey(days)) _load();
+    if (!_cache.containsKey(days)) {
+      _load();
+    } else if (_data!.needsRecovery) {
+      _load(failedOnly: true);
+    }
   }
 
   String _number(num? value) => value == null
@@ -101,8 +116,26 @@ class _UsageDashboardState extends State<UsageDashboard> {
   Widget _quiet(String text) =>
       Text(text, style: Theme.of(context).textTheme.bodySmall);
 
+  bool get _needsRecovery =>
+      _yearRetryable && !_yearLoading ||
+      _data?.needsRecovery == true && !_pending.contains(_days);
+
+  Future<void> _recover() async {
+    await Future.wait([
+      if (_yearRetryable && !_yearLoading) _loadYear(),
+      if (_data?.needsRecovery == true && !_pending.contains(_days))
+        _load(failedOnly: true),
+    ]);
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ReadRecovery(
+    shouldRetry: () => _needsRecovery,
+    retry: _recover,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) {
     final data = _data;
     final models = data?.models;
     final daily = data?.daily;
