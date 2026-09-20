@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -42,7 +44,11 @@ void main() {
       final chat = controller.current!.chat!;
       final intelligence = await controller.loadIntelligence(chat);
       expect(intelligence.choices.first.providerLabel, 'OpenAI subscription');
-      await controller.setIntelligence(chat, selection);
+      await controller.setIntelligence(
+        chat,
+        selection,
+        confirmModelChange: (_) async => fail('Unexpected confirmation'),
+      );
       expect(host.writes, hasLength(2));
       expect(
         host.writes.first['value'],
@@ -70,25 +76,177 @@ void main() {
   );
 
   test(
-    'confirmation and partial failure never report the requested effort as applied',
+    'declining keeps settings and partial failure preserves confirmed effort',
     () async {
       final chat = controller.current!.chat!;
       host.confirmModel = true;
-      await expectLater(
-        controller.setIntelligence(chat, selection),
-        throwsStateError,
+      await controller.setIntelligence(
+        chat,
+        selection,
+        confirmModelChange: (_) async => false,
       );
+      expect(host.writes, hasLength(1));
       expect(chat.model, 'gpt-6-astra');
       expect(chat.changingIntelligence, isFalse);
       host.confirmModel = false;
       host.failReasoning = true;
       await expectLater(
-        controller.setIntelligence(chat, selection),
+        controller.setIntelligence(
+          chat,
+          selection,
+          confirmModelChange: (_) async => fail('Unexpected confirmation'),
+        ),
         throwsStateError,
       );
       expect(chat.model, 'gpt-5.6-sol');
       expect(chat.reasoningEffort, 'high');
       expect(chat.changingIntelligence, isFalse);
+    },
+  );
+
+  for (final staleChange in [
+    'runtime',
+    'model',
+    'provider',
+    'profile',
+    'busy',
+  ]) {
+    test('confirmation cannot apply after $staleChange changes', () async {
+      host.confirmModel = true;
+      final chat = controller.current!.chat!;
+      await expectLater(
+        controller.setIntelligence(
+          chat,
+          selection,
+          confirmModelChange: (_) async {
+            switch (staleChange) {
+              case 'runtime':
+                chat.runtimeId = 'replacement';
+              case 'model':
+                chat.model = 'gpt-5.4-mini';
+              case 'provider':
+                chat.provider = 'other-provider';
+              case 'profile':
+                await controller.switchProfile('work');
+              case 'busy':
+                chat.status = ProfileTurnStatus.running;
+            }
+            return true;
+          },
+        ),
+        throwsStateError,
+      );
+      expect(host.writes, hasLength(1));
+      expect(chat.reasoningEffort, 'high');
+      expect(chat.changingIntelligence, isFalse);
+    });
+  }
+
+  for (final repeatedGuard in [false, true]) {
+    test(
+      'confirmed failure does not retry (repeated guard: $repeatedGuard)',
+      () async {
+        host
+          ..confirmModel = true
+          ..repeatConfirmation = repeatedGuard
+          ..failConfirmedModel = !repeatedGuard;
+        final chat = controller.current!.chat!;
+        var confirmations = 0;
+        await expectLater(
+          controller.setIntelligence(
+            chat,
+            selection,
+            confirmModelChange: (message) async {
+              expect(message, ProfileIntelligenceFixture.modelWarning);
+              confirmations++;
+              return true;
+            },
+          ),
+          throwsStateError,
+        );
+        expect(confirmations, 1);
+        expect(host.writes, hasLength(2));
+        expect(chat.model, 'gpt-6-astra');
+        expect(chat.reasoningEffort, 'high');
+        expect(chat.changingIntelligence, isFalse);
+      },
+    );
+  }
+
+  test('pending confirmation blocks duplicate switches and sending', () async {
+    host.confirmModel = true;
+    final chat = controller.current!.chat!;
+    final decision = Completer<bool>();
+    final requested = Completer<void>();
+    final applying = controller.setIntelligence(
+      chat,
+      selection,
+      confirmModelChange: (_) {
+        requested.complete();
+        return decision.future;
+      },
+    );
+    await requested.future;
+    expect(chat.changingIntelligence, isTrue);
+    await expectLater(
+      controller.setIntelligence(
+        chat,
+        selection,
+        confirmModelChange: (_) async => fail('Duplicate confirmation'),
+      ),
+      throwsStateError,
+    );
+    chat.draft = 'Keep this draft';
+    await controller.send(chat);
+    expect(chat.draft, 'Keep this draft');
+    expect(host.writes, hasLength(1));
+    decision.complete(false);
+    await applying;
+    expect(chat.changingIntelligence, isFalse);
+  });
+
+  testWidgets(
+    'large-context model switch offers a confirmation before applying',
+    (tester) async {
+      host.confirmModel = true;
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('chat-intelligence-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('choose-chat-model')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('model-search')), 'sol');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('model-openai-codex-gpt-5.6-sol')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(find.text('Confirm model change'), findsOneWidget);
+      expect(
+        find.text(ProfileIntelligenceFixture.modelWarning),
+        findsOneWidget,
+      );
+      expect(find.text('Cancel'), findsOneWidget);
+      expect(find.text('Switch model'), findsOneWidget);
+      expect(host.writes, hasLength(1));
+      expect(controller.current!.chat!.model, 'gpt-6-astra');
+      await tester.tap(find.text('Switch model'));
+      await tester.pumpAndSettle();
+      expect(host.writes, hasLength(3));
+      expect(host.writes[1], {
+        ...host.writes[0],
+        'confirm_expensive_model': true,
+      });
+      expect(host.writes.last['key'], 'reasoning');
+      expect(controller.current!.chat!.model, 'gpt-5.6-sol');
+      expect(tester.takeException(), isNull);
     },
   );
 

@@ -41,6 +41,7 @@ import '../theme/profile_workspace_theme.dart';
 import '../theme/wing_theme.dart';
 import '../widgets/profile_activity_status.dart';
 import '../widgets/chat_intelligence_picker.dart';
+import '../widgets/chat_model_confirmation.dart';
 import '../widgets/context_ring.dart';
 import '../widgets/profile_execution_activity.dart';
 import '../widgets/profile_subagent_panel.dart';
@@ -1906,7 +1907,14 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         defaultProvider: options.defaultProvider,
       );
       if (selection != null && mounted) {
-        await controller.setIntelligence(chat, selection);
+        await controller.setIntelligence(
+          chat,
+          selection,
+          confirmModelChange: (message) async {
+            if (!mounted || !context.mounted) return false;
+            return showChatModelConfirmation(context, message: message);
+          },
+        );
       }
     } finally {
       if (mounted) setState(() => _loadingIntelligence = null);

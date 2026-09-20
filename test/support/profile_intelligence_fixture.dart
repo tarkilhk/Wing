@@ -4,9 +4,18 @@ import 'profile_browser_fixture.dart';
 
 /// Isolated gateway responses for the real profile screen/controller device check.
 class ProfileIntelligenceFixture extends ProfileBrowserFixture {
+  static const modelWarning = '''!!! LARGE CONTEXT MODEL SWITCH !!!
+
+This session holds ~169,028 tokens of context.
+Switching to gpt-5.6-sol makes the next reply re-read all of it uncached (providers key prompt caches per model) — a one-time full-price input cost.
+
+Threshold: model.switch_context_confirm_tokens (currently 100,000; 0 disables this check).
+Confirm only if you intend to switch now.''';
   final writes = <Map<String, dynamic>>[];
   bool failReasoning = false;
   bool confirmModel = false;
+  bool repeatConfirmation = false;
+  bool failConfirmedModel = false;
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
@@ -34,8 +43,14 @@ class ProfileIntelligenceFixture extends ProfileBrowserFixture {
         if (method == 'config.get') return {'value': 'high'};
         if (method == 'config.set') {
           writes.add(Map.of(params));
-          if (params['key'] == 'model' && confirmModel) {
-            return {'confirm_required': true};
+          if (params['confirm_expensive_model'] == true && failConfirmedModel) {
+            throw StateError('Model rejected');
+          }
+          if (params['key'] == 'model' &&
+              confirmModel &&
+              (params['confirm_expensive_model'] != true ||
+                  repeatConfirmation)) {
+            return {'confirm_required': true, 'confirm_message': modelWarning};
           }
           if (params['key'] == 'reasoning' && failReasoning) {
             throw StateError('Reasoning rejected');

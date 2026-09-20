@@ -3790,28 +3790,63 @@ class ProfileWorkspaceController extends ChangeNotifier {
     );
   }
 
-  Future<void> _writeIntelligence(
+  Future<bool> _writeIntelligence(
     ProfileChat chat,
-    ChatIntelligenceSelection selection,
-  ) async {
+    ChatIntelligenceSelection selection, {
+    required Future<bool> Function(String message) confirmModelChange,
+  }) async {
     final gateway = _owned(chat).gateway;
     if (!WsClient.validReasoningEfforts.contains(selection.reasoningEffort)) {
       throw ArgumentError('Unsupported reasoning effort');
     }
-    await gateway.requireProfile();
     final runtime = chat.runtimeId;
-    final result = await gateway.call('config.set', {
+    final previousModel = chat.model;
+    final previousProvider = chat.provider;
+    void requireCurrentSelection() {
+      _owned(chat);
+      if (_closed ||
+          switching ||
+          current?.chat != chat ||
+          chat.runtimeId != runtime ||
+          chat.model != previousModel ||
+          chat.provider != previousProvider ||
+          chat.busy ||
+          chat.opening ||
+          chat.commandRunning ||
+          chat.changingAnswer) {
+        throw StateError('Chat changed. Choose the model again.');
+      }
+    }
+
+    await gateway.requireProfile();
+    requireCurrentSelection();
+    final params = <String, dynamic>{
       'session_id': runtime,
       'key': 'model',
       'value': WsClient.buildSessionModelValue(
         provider: selection.choice.provider,
         model: selection.choice.model,
       ),
-    });
+    };
+    var result = await gateway.call('config.set', params);
     if (result['confirm_required'] == true) {
-      throw StateError(
-        result['confirm_message']?.toString() ?? 'Model needs confirmation.',
+      requireCurrentSelection();
+      final message = result['confirm_message']?.toString().trim() ?? '';
+      final accepted = await confirmModelChange(
+        message.isEmpty
+            ? 'Hermes requires confirmation before using this model.'
+            : message,
       );
+      if (!accepted) return false;
+      requireCurrentSelection();
+      result = await gateway.call('config.set', {
+        ...params,
+        'confirm_expensive_model': true,
+      });
+      // A repeated guard is a failed switch, never another approval or retry.
+      if (result['confirm_required'] == true) {
+        throw StateError('Hermes did not accept the confirmed model change.');
+      }
     }
     if (chat.runtimeId != runtime) {
       throw StateError('Chat reconnected. Try applying again.');
@@ -3828,14 +3863,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     chat.reasoningEffort = selection.reasoningEffort;
     chat.intelligenceRuntime = runtime;
+    return true;
   }
 
   Future<void> setIntelligence(
     ProfileChat chat,
-    ChatIntelligenceSelection selection,
-  ) async {
+    ChatIntelligenceSelection selection, {
+    required Future<bool> Function(String message) confirmModelChange,
+  }) async {
     _owned(chat);
-    if (chat._replacingExpiredRuntime ||
+    if (_closed ||
+        chat._replacingExpiredRuntime ||
+        chat.opening ||
+        chat.commandRunning ||
         chat.busy ||
         chat.changingAnswer ||
         chat.changingIntelligence ||
@@ -3848,7 +3888,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat.changingIntelligence = true;
     _changed();
     try {
-      await _writeIntelligence(chat, selection);
+      final applied = await _writeIntelligence(
+        chat,
+        selection,
+        confirmModelChange: confirmModelChange,
+      );
+      if (!applied) return;
       chat.context = null;
       unawaited(refreshContext(chat));
     } finally {

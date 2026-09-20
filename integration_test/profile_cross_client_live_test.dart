@@ -107,7 +107,11 @@ void main() {
         expect(originalRow, isNotEmpty);
         originalUnread = originalRow.first['unread'] == true;
 
-        await first.setIntelligence(firstChat, changed);
+        await first.setIntelligence(
+          firstChat,
+          changed,
+          confirmModelChange: (message) async => throw StateError(message),
+        );
         await first.current!.gateway.updateSession(sessionId, {'unread': true});
 
         await second.refresh();
@@ -135,7 +139,11 @@ void main() {
       } finally {
         if (originalSelection != null && firstChat != null) {
           await first.openSession(firstChat.key);
-          await first.setIntelligence(firstChat, originalSelection);
+          await first.setIntelligence(
+            firstChat,
+            originalSelection,
+            confirmModelChange: (message) async => throw StateError(message),
+          );
         }
         if (originalUnread != null) {
           await first.current!.gateway.updateSession(sessionId, {
