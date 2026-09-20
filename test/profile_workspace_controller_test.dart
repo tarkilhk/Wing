@@ -56,6 +56,9 @@ class Host {
     'path': '/profile/images/upload.png',
   };
   bool approvalFails = false;
+  List<Map<String, dynamic>>? pendingApprovals;
+  List<Map<String, dynamic>> approvalOpenRequests = [];
+  Completer<void>? pendingApprovalDelay;
   Completer<void>? approvalDelay;
   Completer<void>? promptSubmitStarted;
   Completer<void>? promptSubmitDelay;
@@ -150,9 +153,19 @@ class Host {
         if (method == 'prompt.submit' && promptSubmitFails) {
           throw TimeoutException('Prompt acknowledgement was lost');
         }
+        if (method == 'approval.pending') {
+          final pending = pendingApprovals
+              ?.map(Map<String, dynamic>.of)
+              .toList();
+          await pendingApprovalDelay?.future;
+          return {'approvals': ?pending};
+        }
         if (method == 'approval.respond') {
           await approvalDelay?.future;
           if (approvalFails) throw TimeoutException('Approval failed');
+          pendingApprovals?.removeWhere(
+            (r) => r['request_id'] == params['request_id'],
+          );
         }
         if (method == 'session.steer') return steerResult;
         if (method == 'session.resume' && resumeFailures > 0) {
@@ -238,6 +251,7 @@ class Host {
             'messages': <Map<String, dynamic>>[],
             'running': method == 'session.resume' && running,
             'inflight': inflight,
+            'open_requests': approvalOpenRequests,
             'todo_state': todoState,
             'info': {'profile_name': name},
           };
@@ -968,11 +982,15 @@ void main() {
     final chat = await controller.createChat();
     chat.draft = 'hello';
     await controller.send(chat);
-    chat.approval = {
+    chat.approvals.add({
       'request_id': 'once',
       'choices': ['once', 'deny'],
-    };
-    await controller.approve(chat, 'once');
+    });
+    await controller.approve(
+      chat,
+      'once',
+      requestId: chat.approval!['request_id'] as String,
+    );
     await controller.stop(chat);
     expect(host.calls.every((c) => c.$3['profile'] == c.$1), isTrue);
     expect(host.reads.every((r) => r.$2['profile'] == 'a'), isTrue);
@@ -1015,21 +1033,65 @@ void main() {
     expect(host.calls.where((call) => call.$2 == 'session.steer'), isEmpty);
   });
 
+  testWidgets('long approval commands keep actions within a bounded panel', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await controller.createChat();
+    host.event('a', 'approval', {
+      'request_id': 'long',
+      'command': List.generate(100, (i) => 'echo command line $i').join('\n'),
+      'choices': ['once', 'deny'],
+    });
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    await tester.pump();
+    expect(
+      tester
+          .getSize(
+            find
+                .ancestor(
+                  of: find.byType(SelectableText).first,
+                  matching: find.byType(SingleChildScrollView),
+                )
+                .first,
+          )
+          .height,
+      lessThanOrEqualTo(160),
+    );
+    expect(find.text('Allow once').hitTestable(), findsOneWidget);
+    expect(find.text('Deny').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   test('approval accepts each server-supported scope', () async {
     final chat = await controller.createChat();
     chat.draft = 'hello';
     await controller.send(chat);
 
-    chat.approval = {
+    chat.approvals.add({
       'request_id': 'session',
       'choices': ['session', 'deny'],
-    };
-    await controller.approve(chat, 'session');
-    chat.approval = {
+    });
+    await controller.approve(
+      chat,
+      'session',
+      requestId: chat.approval!['request_id'] as String,
+    );
+    chat.approvals.add({
       'request_id': 'always',
       'choices': ['always', 'deny'],
-    };
-    await controller.approve(chat, 'always');
+    });
+    await controller.approve(
+      chat,
+      'always',
+      requestId: chat.approval!['request_id'] as String,
+    );
 
     expect(
       host.calls
@@ -1041,46 +1103,67 @@ void main() {
 
   test('approval sends request ID and keeps a replacement request', () async {
     final chat = await controller.createChat();
-    chat.approval = {
+    chat.approvals.add({
       'request_id': 'old-request',
       'choices': ['once', 'deny'],
       'command': 'old command',
-    };
+    });
     host.approvalDelay = Completer<void>();
-    final response = controller.approve(chat, 'once');
+    final response = controller.approve(
+      chat,
+      'once',
+      requestId: chat.approval!['request_id'] as String,
+    );
     await Future<void>.delayed(Duration.zero);
     expect(chat.approvalResponding, isTrue);
-    chat.approval = {
+    chat.approvals.add({
       'request_id': 'new-request',
       'choices': ['session', 'deny'],
       'command': 'new command',
-    };
+    });
     host.approvalDelay!.complete();
     await response;
     expect(chat.approval?['request_id'], 'new-request');
     expect(chat.approvalResponding, isFalse);
-    expect(host.calls.last.$3['request_id'], 'old-request');
+    expect(
+      host.calls.lastWhere((c) => c.$2 == 'approval.respond').$3['request_id'],
+      'old-request',
+    );
   });
 
   test('failed approval retains the request for retry', () async {
     final chat = await controller.createChat();
-    chat.approval = {
+    chat.approvals.add({
       'request_id': 'failed-request',
       'choices': ['always', 'deny'],
-    };
+    });
     host.approvalFails = true;
-    await expectLater(controller.approve(chat, 'always'), throwsException);
+    await expectLater(
+      controller.approve(
+        chat,
+        'always',
+        requestId: chat.approval!['request_id'] as String,
+      ),
+      throwsException,
+    );
     expect(chat.approval?['request_id'], 'failed-request');
     expect(chat.approvalResponding, isFalse);
   });
 
   test('approval rejects a scope the server did not offer', () async {
     final chat = await controller.createChat();
-    chat.approval = {
+    chat.approvals.add({
       'request_id': 'once-only',
       'choices': ['once', 'deny'],
-    };
-    await expectLater(controller.approve(chat, 'always'), throwsArgumentError);
+    });
+    await expectLater(
+      controller.approve(
+        chat,
+        'always',
+        requestId: chat.approval!['request_id'] as String,
+      ),
+      throwsArgumentError,
+    );
     expect(host.calls.where((call) => call.$2 == 'approval.respond'), isEmpty);
   });
 
@@ -1708,12 +1791,17 @@ void main() {
     a.draft = 'test';
     await controller.send(a);
     await controller.switchProfile('b');
-    host.event('a', 'approval.request', {'command': 'dummy'});
+    host.event('a', 'approval', {'request_id': 'dummy', 'command': 'dummy'});
     expect(a.status, ProfileTurnStatus.attention);
     expect(notifications, [a.key]);
-    await controller.approve(a, 'deny');
-    expect(host.calls.last.$3, {
+    await controller.approve(
+      a,
+      'deny',
+      requestId: a.approval!['request_id'] as String,
+    );
+    expect(host.calls.lastWhere((c) => c.$2 == 'approval.respond').$3, {
       'session_id': 'a-runtime',
+      'request_id': 'dummy',
       'choice': 'deny',
       'profile': 'a',
     });

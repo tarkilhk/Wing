@@ -63,7 +63,10 @@ void main() {
       chat.draft = 'An unsent follow-up';
       controller.showList();
       host.pending = {
-        'pending_approval': {'command': 'example'},
+        'pending_approval': {
+          'request_id': 'reopened-approval',
+          'command': 'example',
+        },
       };
       await controller.openSession(chat.key);
       expect(chat.status, ProfileTurnStatus.attention);
@@ -71,6 +74,7 @@ void main() {
       expect(chat.draft, 'An unsent follow-up');
 
       controller.showList();
+      host.pendingApprovals = [];
       host.pending = {
         'open_requests': [
           {
@@ -117,6 +121,7 @@ void main() {
     'resume restores unanswered batch questions from open_requests',
     () async {
       final chat = await controller.createChat();
+      host.pendingApprovals = [];
       host.pending = {
         'open_requests': [
           {

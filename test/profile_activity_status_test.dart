@@ -180,7 +180,10 @@ void main() {
     expect(label(), 'Thinking… · 1 subagent active');
     host.event('a', 'clarify', {'question': 'Which city?'});
     expect(label(), 'Waiting for your reply');
-    host.event('a', 'approval.request', {'command': 'Check a file'});
+    host.event('a', 'approval', {
+      'request_id': 'file',
+      'command': 'Check a file',
+    });
     expect(label(), 'Waiting for your approval');
     chat.status = ProfileTurnStatus.reconnecting;
     expect(label(), 'Reconnecting… · checking current activity');

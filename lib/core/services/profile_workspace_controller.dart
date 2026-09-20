@@ -152,7 +152,9 @@ class ProfileChat {
   ProfileTurnStatus? _commandPreflightReturnStatus;
   final List<String> commandOutput = [];
   final List<SideQuestionDelivery> sideQuestionDeliveries = [];
-  Map<String, dynamic>? approval;
+  final approvals = GatewayApprovalQueue();
+  Map<String, dynamic>? get approval => approvals.first;
+  int _approvalReadGeneration = 0;
   bool approvalResponding = false;
   Map<String, dynamic>? clarification;
   GatewaySensitivePromptRequest? sensitivePrompt;
@@ -4943,10 +4945,89 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
-  Future<void> approve(ProfileChat chat, String choice) async {
+  void _receiveApproval(ProfileChat chat, Map<String, dynamic> request) {
+    final added = chat.approvals.add(request);
+    if (chat.approval != null) chat.status = ProfileTurnStatus.attention;
+    if (!added) return;
+    _notifyApproval(chat, request);
+  }
+
+  void _notifyApproval(ProfileChat chat, Map<String, dynamic> request) {
+    _notify(
+      chat,
+      ChatNotificationContent.input(
+        request['description'] is String
+            ? request['description'] as String
+            : '',
+      ),
+      eventId: _notificationEventId(request),
+    );
+  }
+
+  void _updateApprovalStatus(ProfileChat chat) {
+    if (chat.approval != null ||
+        chat.clarification != null ||
+        chat.sensitivePrompt != null) {
+      chat.status = ProfileTurnStatus.attention;
+    } else if (chat.status == ProfileTurnStatus.attention) {
+      chat.status = ProfileTurnStatus.running;
+    }
+  }
+
+  Future<void> _refreshApprovals(ProfileChat chat) async {
+    final runtime = chat.runtimeId;
+    final revision = chat.approvals.revision;
+    final generation = ++chat._approvalReadGeneration;
+    try {
+      final result = await _owned(
+        chat,
+      ).gateway.call('approval.pending', {'session_id': runtime});
+      // A live request, response, cancellation or newer read supersedes this
+      // snapshot. Never resurrect a command already answered on this device.
+      if (_closed ||
+          runtime != chat.runtimeId ||
+          revision != chat.approvals.revision ||
+          generation != chat._approvalReadGeneration) {
+        return;
+      }
+      if (result['approvals'] is! List) return;
+      final previousIds = chat.approvals.requests
+          .map((r) => r['request_id'])
+          .toSet();
+      final pending = ProfileGateway.records(result['approvals']);
+      chat.approvals.reconcile(pending);
+      _updateApprovalStatus(chat);
+      for (final request in chat.approvals.requests) {
+        if (!previousIds.contains(request['request_id'])) {
+          _notifyApproval(chat, request);
+        }
+      }
+      _changed();
+      for (final request in chat.approvals.requests) {
+        if (runtime != chat.runtimeId || _closed) return;
+        await _owned(chat).gateway.call('approval.received', {
+          'session_id': runtime,
+          'request_id': request['request_id'],
+        });
+      }
+    } catch (_) {
+      // Keep known requests actionable; socket recovery will reconcile again.
+    }
+  }
+
+  Future<void> approve(
+    ProfileChat chat,
+    String choice, {
+    required String requestId,
+  }) async {
     final request = chat.approval;
     if (request == null) {
       throw StateError('There is no approval waiting for this chat.');
+    }
+    if (request['request_id'] != requestId) {
+      throw StateError(
+        'This approval has changed. Review the current command.',
+      );
     }
     if (chat.approvalResponding) {
       throw StateError('Approval is already being submitted.');
@@ -4962,16 +5043,28 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat.approvalResponding = true;
     _changed();
     try {
-      await _owned(chat).gateway.call('approval.respond', {
-        'session_id': runtime,
-        'choice': choice,
-        if (request['request_id'] != null) 'request_id': request['request_id'],
-      });
-      if (chat.runtimeId != runtime || !identical(chat.approval, request)) {
-        return;
+      final gateway = _owned(chat).gateway;
+      final serverRequestId = request['server_request_id'];
+      if (serverRequestId is String) {
+        final response = await gateway.call('request.answer', {
+          'id': serverRequestId,
+          'result': {'choice': choice},
+        });
+        if (response['status'] == 'expired' && chat.runtimeId == runtime) {
+          chat.error =
+              'This approval expired before your response was received.';
+        }
+      } else {
+        await gateway.call('approval.respond', {
+          'session_id': runtime,
+          'choice': choice,
+          'request_id': request['request_id'],
+        });
       }
-      chat.approval = null;
-      chat.status = ProfileTurnStatus.running;
+      if (chat.runtimeId != runtime) return;
+      chat.approvals.remove(request['request_id'] as String);
+      _updateApprovalStatus(chat);
+      await _refreshApprovals(chat);
     } finally {
       chat.approvalResponding = false;
       _changed();
@@ -5367,18 +5460,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
           SideQuestionDeliveryKind.backgroundTask,
           event.data,
         );
-      case 'approval.request':
-        chat.approval = event.data;
-        chat.status = ProfileTurnStatus.attention;
-        _notify(
-          chat,
-          ChatNotificationContent.input(
-            event.data['description'] is String
-                ? event.data['description'] as String
-                : '',
-          ),
-          eventId: _notificationEventId(event.data),
-        );
+      case 'approval':
+        _receiveApproval(chat, event.data);
+        unawaited(_refreshApprovals(chat));
       case 'clarify':
         chat.clarification = event.data;
         chat.status = ProfileTurnStatus.attention;
@@ -5392,6 +5476,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
           eventId: _notificationEventId(event.data),
         );
       case 'request.cancel':
+        final cancelledApprovals = chat.approvals.requests
+            .where(
+              (request) => request['server_request_id'] == event.data['id'],
+            )
+            .toList();
+        for (final request in cancelledApprovals) {
+          chat.approvals.remove(request['request_id'] as String);
+        }
+        if (cancelledApprovals.isNotEmpty) {
+          _updateApprovalStatus(chat);
+          if (event.data['reason'] == 'timeout') {
+            chat.error = 'An approval expired before you responded.';
+          }
+        }
         if (chat.clarification != null &&
             event.data['method'] == 'clarify' &&
             event.data['id'] == chat.clarification?['request_id']) {
@@ -5520,7 +5618,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
               .toString()
         : null;
     chat.tool = null;
-    chat.approval = null;
+    chat.approvals.clear();
     chat.clarification = null;
     chat.sensitivePrompt = null;
     chat.sensitivePromptResponding = false;
@@ -5629,7 +5727,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileChat chat,
     ProfileNotification notification,
   ) {
-    if (visible && current?.chat == chat) return;
+    if (visible &&
+        current?.chat == chat &&
+        !notification.content.needsAttention) {
+      return;
+    }
     final callback = onAttention;
     if (callback != null) {
       _pendingNotifications++;
@@ -5937,6 +6039,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final wasBusy = chat.busy;
     final runtime = result['session_id'] as String;
     if (chat.runtimeId != runtime) {
+      chat.approvals.clear();
       chat.context = null;
       chat.contextGeneration++;
       chat.toolActivities.clear();
@@ -5980,9 +6083,27 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _applyTodoSnapshot(chat, result['todo_state']);
     final inflight = result['inflight'] as Map?;
     chat.streaming = inflight?['assistant']?.toString() ?? '';
-    chat.approval = result['pending_approval'] is Map
-        ? Map<String, dynamic>.from(result['pending_approval'])
-        : null;
+    if (result['pending_approval'] is Map) {
+      _receiveApproval(
+        chat,
+        Map<String, dynamic>.from(result['pending_approval']),
+      );
+    }
+    for (final request in ProfileGateway.records(
+      result['open_requests'] ?? const [],
+    )) {
+      final params = request['params'];
+      if (request['method'] == 'approval' &&
+          params is Map &&
+          params['session_id'] == runtime &&
+          request['id'] is String) {
+        _receiveApproval(chat, {
+          ...Map<String, dynamic>.from(params),
+          'server_request_id': request['id'],
+        });
+      }
+    }
+    unawaited(_refreshApprovals(chat));
     chat.clarification = null;
     for (final request in ProfileGateway.records(
       result['open_requests'] ?? const [],

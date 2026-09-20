@@ -568,7 +568,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       await show(tester);
       await tester.drag(list, const Offset(0, 450));
       await tester.pumpAndSettle();
-      chat.approval = {'command': 'test command'};
+      chat.approvals.add({'request_id': 'test', 'command': 'test command'});
       await publish(tester);
       expect(find.text('Input needed'), findsOneWidget);
       final before = host.calls.length;

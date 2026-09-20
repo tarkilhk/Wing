@@ -64,7 +64,9 @@ class TurnNotification {
       expandedBody: content.body(showPreview: showPreview, limit: 800),
       scopeLabel: notificationTextLimit(notificationPlainText(scopeLabel), 120),
       payload: payload,
-      channel: TurnNotificationService.turnChannel,
+      channel: content.needsAttention
+          ? TurnNotificationService.attentionChannel
+          : TurnNotificationService.turnChannel,
     );
   }
 }
@@ -154,6 +156,18 @@ class PluginTurnNotificationSink implements TurnNotificationSink {
             importance: Importance.defaultImportance,
           ),
         );
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(
+          AndroidNotificationChannel(
+            TurnNotificationService.attentionChannel.id,
+            TurnNotificationService.attentionChannel.name,
+            description: TurnNotificationService.attentionChannel.description,
+            importance: Importance.high,
+          ),
+        );
     final launch = await _plugin.getNotificationAppLaunchDetails();
     final payload = launch?.notificationResponse?.payload;
     if (launch?.didNotificationLaunchApp == true && payload != null) {
@@ -197,13 +211,17 @@ class PluginTurnNotificationSink implements TurnNotificationSink {
   @override
   Future<void> show(TurnNotification notification) async {
     await initialize();
+    final needsAttention =
+        notification.channel.id == TurnNotificationService.attentionChannel.id;
     final androidDetails = AndroidNotificationDetails(
       notification.channel.id,
       notification.channel.name,
       channelDescription: notification.channel.description,
       icon: 'ic_stat_wing',
-      importance: Importance.defaultImportance,
-      priority: Priority.defaultPriority,
+      importance: needsAttention
+          ? Importance.high
+          : Importance.defaultImportance,
+      priority: needsAttention ? Priority.high : Priority.defaultPriority,
       autoCancel: true,
       visibility: NotificationVisibility.private,
       subText: notification.scopeLabel,
@@ -240,7 +258,7 @@ class PluginTurnNotificationSink implements TurnNotificationSink {
 /// Delivers Android notifications when a gateway turn completes while the app
 /// is backgrounded, mirroring the Hermes Desktop tray notification behaviour.
 ///
-/// The service owns a single notification channel ("Wing Turns") and exposes
+/// The service owns completion and action-required notification channels and exposes
 /// one idempotent [ensureInitialized] method safe to call from any lifecycle
 /// point (including before the Flutter engine binding is ready).
 class TurnNotificationService {
@@ -248,6 +266,13 @@ class TurnNotificationService {
     id: 'wing_turn_notifications',
     name: 'Wing Turns',
     description: 'Notifications for completed background turns',
+  );
+
+  static const attentionChannel = TurnNotificationChannel(
+    id: 'wing_attention_notifications',
+    name: 'Wing Needs Your Attention',
+    description:
+        'Approvals, questions and failed turns that need your attention',
   );
 
   final TurnNotificationSink _sink;

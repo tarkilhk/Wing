@@ -390,7 +390,8 @@ class WsClient {
 
       // Hermes asks the client directly using a server-owned string ID. These
       // frames are requests, not responses to our integer-ID RPC calls.
-      if ((method == 'clarify' ||
+      if ((method == 'approval' ||
+              method == 'clarify' ||
               GatewaySensitivePromptRequest.kindForMethod(method) != null) &&
           id is String &&
           id.isNotEmpty &&
@@ -401,7 +402,14 @@ class WsClient {
           StreamEvent(
             type: method!,
             sessionId: sessionId,
-            data: {...params, 'request_id': id},
+            data: {
+              ...params,
+              // Approval has both a queue-entry ID and a server-request ID.
+              if (method == 'approval')
+                'server_request_id': id
+              else
+                'request_id': id,
+            },
           ),
         );
         return;
@@ -768,11 +776,19 @@ class WsClient {
     }
   }
 
-  /// Resolves the single in-flight Hermes approval for one gateway session.
+  /// Resolves one exact queue entry in a Hermes gateway session.
   Future<void> respondToApproval({
     required String sessionId,
+    required String requestId,
     required String choice,
   }) async {
+    if (requestId.trim().isEmpty) {
+      throw ArgumentError.value(
+        requestId,
+        'requestId',
+        'An approval ID is required',
+      );
+    }
     const allowedChoices = {'once', 'session', 'always', 'deny'};
     if (!allowedChoices.contains(choice)) {
       throw ArgumentError.value(
@@ -783,6 +799,7 @@ class WsClient {
     }
     final response = await send('approval.respond', {
       'session_id': sessionId,
+      'request_id': requestId,
       'choice': choice,
     });
     final error = response['error'];

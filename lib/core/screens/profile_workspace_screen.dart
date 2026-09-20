@@ -34,6 +34,7 @@ import '../models/chat_output.dart';
 import '../widgets/answer_actions.dart';
 import '../models/gateway_clarify.dart';
 import '../models/gateway_approval.dart';
+import '../widgets/gateway_approval_panel.dart';
 import '../widgets/gateway_sensitive_prompt_panel.dart';
 import '../widgets/gateway_clarify_dialog.dart';
 import '../widgets/chat_find_sheet.dart';
@@ -1329,60 +1330,20 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               if (chat.approval != null)
                 Builder(
                   builder: (context) {
-                    final approval = GatewayApprovalRequest.fromEventData(
-                      chat.approval!,
-                    );
-                    return Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Approval needed'),
-                            SelectableText(
-                              chat.approval!['command']?.toString() ??
-                                  chat.approval!['description']?.toString() ??
-                                  'The agent needs permission to continue.',
-                            ),
-                            Wrap(
-                              spacing: 8,
-                              children: [
-                                for (final choice in approval.choices)
-                                  choice == GatewayApprovalChoice.deny
-                                      ? OutlinedButton(
-                                          onPressed: chat.approvalResponding
-                                              ? null
-                                              : () => _run(
-                                                  () => controller.approve(
-                                                    chat,
-                                                    choice.wireValue,
-                                                  ),
-                                                ),
-                                          child: const Text('Deny'),
-                                        )
-                                      : FilledButton(
-                                          onPressed: chat.approvalResponding
-                                              ? null
-                                              : () => _run(
-                                                  () => controller.approve(
-                                                    chat,
-                                                    choice.wireValue,
-                                                  ),
-                                                ),
-                                          child: Text(switch (choice) {
-                                            GatewayApprovalChoice.once =>
-                                              'Allow once',
-                                            GatewayApprovalChoice.session =>
-                                              'Allow for session',
-                                            GatewayApprovalChoice.always =>
-                                              'Always allow',
-                                            GatewayApprovalChoice.deny =>
-                                              'Deny',
-                                          }),
-                                        ),
-                              ],
-                            ),
-                          ],
+                    final request = chat.approval!;
+                    return GatewayApprovalPanel(
+                      key: ValueKey((chat.key, request['request_id'])),
+                      request: GatewayApprovalRequest.fromEventData(request),
+                      position: chat.approvals.position,
+                      total: chat.approvals.total,
+                      enabled:
+                          !chat.approvalResponding &&
+                          chat.status != ProfileTurnStatus.reconnecting,
+                      onRespond: (choice) => _run(
+                        () => controller.approve(
+                          chat,
+                          choice.wireValue,
+                          requestId: request['request_id'] as String,
                         ),
                       ),
                     );

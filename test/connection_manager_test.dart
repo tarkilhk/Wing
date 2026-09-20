@@ -2221,6 +2221,7 @@ void main() {
         await client.connect();
         await client.respondToApproval(
           sessionId: 'gateway-session-123',
+          requestId: 'approval-123',
           choice: 'session',
         );
         final request = await requestSeen.future;
@@ -2228,6 +2229,7 @@ void main() {
         expect(request['method'], 'approval.respond');
         expect(request['params'], {
           'session_id': 'gateway-session-123',
+          'request_id': 'approval-123',
           'choice': 'session',
         });
       } finally {
@@ -2405,6 +2407,7 @@ void main() {
       expect(
         () => client.respondToApproval(
           sessionId: 'gateway-session-123',
+          requestId: 'approval-123',
           choice: 'unsafe',
         ),
         throwsArgumentError,

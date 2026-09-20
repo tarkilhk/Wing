@@ -377,10 +377,10 @@ class DesktopGatewayClient {
     return true;
   }
 
-  /// Resolves an approval against the gateway session mapped to this mobile
-  /// chat. Approval requests are session-keyed and do not carry a request ID.
+  /// Resolves an exact approval in the gateway session mapped to this chat.
   Future<void> respondToApproval({
     required String sessionId,
+    required String requestId,
     required String choice,
   }) async {
     final gatewaySessionId = _gatewaySessionIds[sessionId];
@@ -388,7 +388,11 @@ class DesktopGatewayClient {
     if (gatewaySessionId == null || client == null || !client.isConnected) {
       throw StateError('The Desktop gateway session is no longer connected');
     }
-    await client.respondToApproval(sessionId: gatewaySessionId, choice: choice);
+    await client.respondToApproval(
+      sessionId: gatewaySessionId,
+      requestId: requestId,
+      choice: choice,
+    );
   }
 
   Future<void> respondToSudo({

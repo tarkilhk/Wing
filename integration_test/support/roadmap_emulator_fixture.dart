@@ -549,7 +549,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
   void requestApproval(String profile, String runtimeId) {
     gateways[profile]!.onEvent!(
       StreamEvent(
-        type: 'approval.request',
+        type: 'approval',
         sessionId: runtimeId,
         data: const {
           'request_id': 'roadmap-approval',

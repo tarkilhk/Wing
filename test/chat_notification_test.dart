@@ -134,6 +134,50 @@ token=not-for-alerts
     });
     tearDown(() => controller.dispose());
 
+    test('visible approval still alerts when action is required', () {
+      controller.visible = true;
+      host.event('a', 'approval', {
+        'request_id': 'first',
+        'command': 'private command',
+        'description': 'Review this action',
+      });
+      expect(alerts, hasLength(1));
+      expect(alerts.single.content.needsAttention, isTrue);
+    });
+
+    test(
+      'successive approvals remain available after the first response',
+      () async {
+        for (final id in ['first', 'second']) {
+          host.event('a', 'approval', {
+            'request_id': id,
+            'command': 'command $id',
+            'choices': ['once', 'deny'],
+          });
+        }
+        expect(chat.approval?['request_id'], 'first');
+        await controller.approve(
+          chat,
+          'once',
+          requestId: chat.approval!['request_id'] as String,
+        );
+        expect(chat.approval?['request_id'], 'second');
+        expect(chat.status, ProfileTurnStatus.attention);
+        await controller.approve(
+          chat,
+          'deny',
+          requestId: chat.approval!['request_id'] as String,
+        );
+        expect(chat.approval, isNull);
+        expect(
+          host.calls
+              .where((c) => c.$2 == 'approval.respond')
+              .map((c) => c.$3['request_id']),
+          ['first', 'second'],
+        );
+      },
+    );
+
     test(
       'completion keeps its text and title across delayed history refresh',
       () async {
@@ -186,7 +230,8 @@ token=not-for-alerts
     test(
       'questions and approvals share input presentation without commands',
       () {
-        host.event('a', 'approval.request', {
+        host.event('a', 'approval', {
+          'request_id': 'private',
           'command': 'raw private command',
           'description': 'Restart the service',
         });

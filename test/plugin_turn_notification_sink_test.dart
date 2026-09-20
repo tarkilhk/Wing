@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wing/core/models/chat_notification_content.dart';
 import 'package:wing/core/services/turn_notification_service.dart';
 
 void main() {
@@ -21,6 +22,37 @@ void main() {
     messenger.setMockMethodCallHandler(channel, null);
     debugDefaultTargetPlatformOverride = null;
   });
+
+  test(
+    'action-required alerts use a high-importance Android channel',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'initialize') return true;
+        if (call.method == 'getNotificationAppLaunchDetails') {
+          return <String, Object?>{'notificationLaunchedApp': false};
+        }
+        return null;
+      });
+      await PluginTurnNotificationSink().show(
+        TurnNotification.chat(
+          payload: 'approval-chat',
+          title: 'Review command',
+          scopeLabel: 'Home / a',
+          content: ChatNotificationContent.input('Review this action'),
+          showPreview: true,
+        ),
+      );
+      final details =
+          (calls.singleWhere((c) => c.method == 'show').arguments
+                  as Map)['platformSpecifics']
+              as Map;
+      expect(details['importance'], Importance.high.value);
+      expect(details['priority'], Priority.high.value);
+      expect(details['channelId'], 'wing_attention_notifications');
+    },
+  );
 
   test(
     'chat alerts keep their wing icon and individual tap payloads',

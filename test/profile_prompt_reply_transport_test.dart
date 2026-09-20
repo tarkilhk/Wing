@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'profile_workspace_controller_test.dart' show Host;
 
 void main() {
-  for (final kind in ['single', 'batch', 'secret']) {
+  for (final kind in ['single', 'batch', 'secret', 'approval']) {
     test(
       '$kind reply passes strict validation over the real gateway socket',
       () async {
@@ -72,6 +72,7 @@ void main() {
         SharedPreferences.setMockInitialValues({});
         final host = Host();
         final delivered = Completer<void>();
+        final secondApprovalDelivered = Completer<void>();
         final connection = SavedConnection(
           id: 'reply-transport',
           label: 'Fixture',
@@ -100,6 +101,10 @@ void main() {
             );
             wire.onEvent = (event) {
               gateway.onEvent?.call(event);
+              if (event.data['request_id'] == 'queue-second' &&
+                  !secondApprovalDelivered.isCompleted) {
+                secondApprovalDelivered.complete();
+              }
               if (!delivered.isCompleted) delivered.complete();
             };
             return gateway;
@@ -113,9 +118,18 @@ void main() {
           jsonEncode({
             'jsonrpc': '2.0',
             'id': 'srq-fixture',
-            'method': kind == 'secret' ? 'secret' : 'clarify',
+            'method': kind == 'approval'
+                ? 'approval'
+                : kind == 'secret'
+                ? 'secret'
+                : 'clarify',
             'params': {
               'session_id': chat.runtimeId,
+              if (kind == 'approval') ...{
+                'request_id': 'queue-fixture',
+                'command': 'echo fixture',
+                'choices': ['once', 'deny'],
+              },
               if (kind == 'batch')
                 'questions': [
                   {
@@ -131,8 +145,37 @@ void main() {
             },
           }),
         );
+        if (kind == 'approval') {
+          socket.add(
+            jsonEncode({
+              'jsonrpc': '2.0',
+              'id': 'srq-second',
+              'method': 'approval',
+              'params': {
+                'session_id': chat.runtimeId,
+                'request_id': 'queue-second',
+                'command': 'echo second',
+                'choices': ['once', 'deny'],
+              },
+            }),
+          );
+          await secondApprovalDelivered.future.timeout(
+            const Duration(seconds: 2),
+          );
+        }
         await delivered.future.timeout(const Duration(seconds: 2));
-        if (kind == 'secret') {
+        if (kind == 'approval') {
+          expect(chat.approval?['request_id'], 'queue-fixture');
+          await controller.approve(
+            chat,
+            'once',
+            requestId: chat.approval!['request_id'] as String,
+          );
+          expect(chat.approval?['request_id'], 'queue-second');
+          expect((chat.approvals.position, chat.approvals.total), (2, 2));
+          await controller.approve(chat, 'deny', requestId: 'queue-second');
+          expect(chat.approval, isNull);
+        } else if (kind == 'secret') {
           await controller.respondSensitivePrompt(
             chat,
             'dummy-fixture-value',
@@ -147,12 +190,19 @@ void main() {
           );
           expect(chat.clarification, isNull);
         }
-        expect(replies, hasLength(1));
+        expect(replies, hasLength(kind == 'approval' ? 2 : 1));
+        if (kind == 'approval') {
+          expect(replies.last['params'], {
+            'profile': 'a',
+            'id': 'srq-second',
+            'result': {'choice': 'deny'},
+          });
+        }
         expect(
-          replies.single['method'],
+          replies.first['method'],
           kind == 'batch' ? 'clarify.lock' : 'request.answer',
         );
-        expect(replies.single['params'], {
+        expect(replies.first['params'], {
           'profile': 'a',
           if (kind == 'batch') ...{
             'request_id': 'srq-fixture',
@@ -160,7 +210,9 @@ void main() {
             'answer': 'Bedroom',
           } else ...{
             'id': 'srq-fixture',
-            'result': kind == 'secret'
+            'result': kind == 'approval'
+                ? {'choice': 'once'}
+                : kind == 'secret'
                 ? {'value': 'dummy-fixture-value'}
                 : {'answer': 'Bedroom'},
           },

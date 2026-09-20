@@ -3,6 +3,14 @@ import 'package:wing/core/models/gateway_approval.dart';
 
 void main() {
   group('GatewayApprovalRequest', () {
+    test('preserves command indentation and trailing newlines for review', () {
+      const command = '  echo fixture\n';
+      expect(
+        GatewayApprovalRequest.fromEventData({'command': command}).command,
+        command,
+      );
+    });
+
     test('uses all official choices when the gateway allows them', () {
       final request = GatewayApprovalRequest.fromEventData({
         'command': 'echo fixture',
@@ -26,6 +34,16 @@ void main() {
       expect(request.choices, [
         GatewayApprovalChoice.once,
         GatewayApprovalChoice.session,
+        GatewayApprovalChoice.deny,
+      ]);
+    });
+
+    test('pending queue entries respect disabled session approval', () {
+      final request = GatewayApprovalRequest.fromEventData({
+        'allow_session': false,
+      });
+      expect(request.choices, [
+        GatewayApprovalChoice.once,
         GatewayApprovalChoice.deny,
       ]);
     });
