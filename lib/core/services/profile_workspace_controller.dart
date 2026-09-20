@@ -5889,7 +5889,30 @@ class ProfileWorkspaceController extends ChangeNotifier {
             (sideTasks is int && sideTasks > 0)) {
           workingRuntimes.add(runtimeId);
         }
-        if (_hasLoadedNotificationChat(runtimeId, sessionId)) continue;
+        final loaded = _loadedNotificationChat(runtimeId, sessionId);
+        if (loaded != null) {
+          // An idle chat can be omitted when the socket reconnects from the
+          // chat list. A later desktop turn therefore arrives first through
+          // the global working snapshot, not through message.start.
+          if (!loaded.busy &&
+              !loaded.commandRunning &&
+              (status == 'working' || status == 'starting')) {
+            final generation = loaded._turnGeneration;
+            final owner = _resources[loaded.key.workspace]!;
+            final resumed = await owner.gateway.resume(sessionId);
+            if (_closed) return;
+            // A live start or navigation can overtake the resume response.
+            if (loaded.runtimeId == runtimeId &&
+                loaded._turnGeneration == generation &&
+                !loaded.busy &&
+                !loaded.commandRunning) {
+              _hydrate(loaded, resumed);
+              loaded.offlineSnapshot = false;
+              await _journal();
+            }
+          }
+          continue;
+        }
         final tracked = _notificationSnapshot?[runtimeId];
         final relevant =
             status == 'waiting' ||
@@ -6007,12 +6030,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   bool _hasLoadedNotificationChat(String runtimeId, String sessionId) =>
-      _resources.values.any(
-        (resource) => resource.chats.values.any(
-          (chat) =>
-              chat.runtimeId == runtimeId && chat.key.sessionId == sessionId,
-        ),
-      );
+      _loadedNotificationChat(runtimeId, sessionId) != null;
+
+  ProfileChat? _loadedNotificationChat(String runtimeId, String sessionId) =>
+      _resources.values
+          .expand((resource) => resource.chats.values)
+          .where(
+            (chat) =>
+                chat.runtimeId == runtimeId && chat.key.sessionId == sessionId,
+          )
+          .firstOrNull;
 
   void _scheduleReconnect(ProfileWorkspaceData resource) {
     if (_closed || resource.retry != null || resource.reconnecting) {

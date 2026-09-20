@@ -18,6 +18,9 @@ Install the notification-revamp Wing build first. Enable Wing's reply and
 attention notifications and allow their Android channels. Start with previews
 on and normal text size. Do not change your usual battery settings for the first
 run. This is a guided test prompt, not a command to modify Hermes configuration.
+For repeated desktop turns after an idle reconnect, use build 2325 or later;
+the [live test record](2026-09-20-notification-live-results.md) documents the
+loaded-chat subscription failure found in build 2323 and its recovery fix.
 
 ```text
 Help me manually test Wing's Android notifications using this ONE chat.
@@ -282,6 +285,12 @@ check found no Wing monitoring service. This is consistent with the documented
 idle monitoring lifetime; a receipt trace of the original turns was not captured.
 The original prompt incorrectly assumed continuous delivery between backgrounded
 desktop turns. The per-round monitoring prerequisite above corrects that test.
+
+Subsequent controlled LIVE-4 testing also reproduced a client bug **with Wing
+foregrounded**: after idle reconnect, loaded chats were excluded from working
+snapshots without reattaching their event subscription. Build 2325 repairs that
+path. The monitoring prerequisite alone did not fix the older build; see the
+linked live results for the failing and fixed-run evidence.
 
 Focused checks pass (26 tests): stock start/completion sequences preserve setup,
 A, B and an identical C reply; the coordinator updates both compact and expanded

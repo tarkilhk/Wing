@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -18,6 +20,8 @@ class NotificationCoverageHost {
   };
   List<Map<String, dynamic>> active = [];
   int activeReads = 0;
+  final resumeCalls = <Map<String, dynamic>>[];
+  Completer<void>? resumeDelay;
   bool activeFails = false;
   final workingProfiles = <String>{};
   final waitingProfiles = <String>{};
@@ -82,6 +86,10 @@ class NotificationCoverageHost {
           }
           if (method == 'projects.tree') return {'projects': []};
           if (method == 'session.create' || method == 'session.resume') {
+            if (method == 'session.resume') {
+              resumeCalls.add(Map.of(params));
+              await resumeDelay?.future;
+            }
             final sessionId = method == 'session.create'
                 ? 'loaded'
                 : params['session_id'] as String;

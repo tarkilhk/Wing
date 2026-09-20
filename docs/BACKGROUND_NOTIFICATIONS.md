@@ -44,6 +44,14 @@ While the existing watcher runs, a single 30-second timer reconciles pending not
 
 Loaded chats receive session events through their attached transport. The server's global `sessions.changed` broadcast is an empty, coalesced invalidation. Android uses it to reconcile status snapshots for connected targets; it does not treat it as a completion payload or attach every historical chat.
 
+After an idle connection reconnects from the chat list, a previously loaded chat
+may no longer have a session event subscription. If the global snapshot reports
+that chat working or starting while Wing considers it nonbusy, Wing reattaches
+that chat with stock `session.resume` and `omit_messages=true`. This restores the
+watcher and subsequent answer events without reopening its transcript, fetching
+history, resuming every idle chat, or adding background polling. A live event that
+overtakes the reattach response takes precedence over that older response.
+
 Establish a silent initial baseline, retain verified profile ownership and reconcile meaningful running/waiting/completed transitions. Unknown, disconnected or failed reads must not become completion alerts. Rapid turns can occur between snapshots, an idle transition can be missing, and a failed read can leave a gap. See [issue #9](https://github.com/tarkilhk/Wing/issues/9).
 
 Unopened child-only work also depends on the global backend contract described in [HUP-003](UPSTREAM_HERMES_BUGS.md#hup-003-global-activity-omits-child-only-work). Adding switches or passing a test notification does not close that gap.

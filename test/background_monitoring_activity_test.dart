@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/profile_connection_identity.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_workspace_registry.dart';
+import 'package:wing/core/services/ws_client.dart';
 
 import 'profile_connection_identity_test.dart'
     show MemoryIdentityStore, identityTestConnection;
@@ -150,6 +151,89 @@ void main() {
       expect(chat.status, ProfileTurnStatus.completed);
     },
   );
+
+  test(
+    'desktop work on an already loaded idle chat starts monitoring',
+    () async {
+      final host = NotificationCoverageHost();
+      final replies = <ProfileNotification>[];
+      final owner = ProfileWorkspaceController(
+        connection: identityTestConnection(),
+        connectionIdentity: 'desktop-loaded-activity',
+        preferences: preferences,
+        gatewayFactory: host.gateway,
+        onAttention: (notice) async => replies.add(notice),
+      );
+      addTearDown(owner.dispose);
+      await owner.initialize();
+      final chat = await owner.createChat();
+      expect(owner.hasActiveChats, isFalse);
+      final reads = host.activeReads;
+      host.workingProfiles.add('a');
+      host.active = [row(chat.runtimeId, chat.key.sessionId, 'working')];
+      host.changed();
+      await waitForReads(host, reads + 1);
+      await until(() => owner.hasActiveChats);
+      expect(host.resumeCalls.single['omit_messages'], isTrue);
+      expect(chat.status, ProfileTurnStatus.running);
+      host.changed();
+      await waitForReads(host, reads + 2);
+      expect(
+        host.resumeCalls,
+        hasLength(1),
+        reason: 'Do not reattach a running chat on every snapshot',
+      );
+      host.gateways['a']!.onEvent!(
+        StreamEvent(
+          type: 'message.complete',
+          sessionId: chat.runtimeId,
+          data: const {'text': 'WING-LIVE-4: Replacement after reconnect'},
+        ),
+      );
+      await until(() => replies.isNotEmpty && !owner.hasActiveChats);
+      expect(
+        replies.single.content.preview,
+        'WING-LIVE-4: Replacement after reconnect',
+      );
+    },
+  );
+
+  test('live completion overtakes a delayed desktop reattachment', () async {
+    final host = NotificationCoverageHost();
+    final replies = <ProfileNotification>[];
+    final owner = ProfileWorkspaceController(
+      connection: identityTestConnection(),
+      connectionIdentity: 'desktop-reattach-race',
+      preferences: preferences,
+      gatewayFactory: host.gateway,
+      onAttention: (notice) async => replies.add(notice),
+    );
+    addTearDown(owner.dispose);
+    await owner.initialize();
+    final chat = await owner.createChat();
+    host.workingProfiles.add('a');
+    host.resumeDelay = Completer<void>();
+    host.active = [row(chat.runtimeId, chat.key.sessionId, 'working')];
+    host.changed();
+    await until(() => host.resumeCalls.isNotEmpty);
+    for (final type in ['message.start', 'message.complete']) {
+      host.gateways['a']!.onEvent!(
+        StreamEvent(
+          type: type,
+          sessionId: chat.runtimeId,
+          data: const {'text': 'Finished while reconnecting'},
+        ),
+      );
+    }
+    await until(
+      () => chat.status == ProfileTurnStatus.completed && replies.isNotEmpty,
+    );
+    host.resumeDelay!.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(chat.status, ProfileTurnStatus.completed);
+    expect(owner.hasActiveChats, isFalse);
+    expect(replies.single.content.preview, 'Finished while reconnecting');
+  });
 
   test(
     'remote working state survives uncertain reads, but waiting stops it',
