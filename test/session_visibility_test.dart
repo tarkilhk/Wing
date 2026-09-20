@@ -269,7 +269,16 @@ void main() {
       controller.showList();
       await controller.setSessionVisibility(SessionVisibility.chats);
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          // This test waits for menus to settle while a working chat is visible.
+          // Exercise filtering with reduced motion; the border's motion has its
+          // own lifecycle and interaction tests.
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
+          home: ProfileWorkspaceScreen(controller: controller),
+        ),
       );
       await tester.pumpAndSettle();
       expect(find.byType(SegmentedButton<SessionVisibility>), findsNothing);
