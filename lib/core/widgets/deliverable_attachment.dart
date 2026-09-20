@@ -113,6 +113,7 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
           ),
           const SizedBox(height: WingSpacing.xs),
           Wrap(
+            alignment: WrapAlignment.center,
             spacing: WingSpacing.sm,
             runSpacing: WingSpacing.xs,
             children: [
@@ -123,16 +124,14 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
                 child: StudioActionLabel.compact(
                   'Download',
                   busy: _downloading,
+                  icon: Icons.download_outlined,
                 ),
               ),
               OutlinedButton(
                 onPressed: widget.onOpen == null || _opening
                     ? null
                     : () => _run(download: false),
-                child: StudioActionLabel.compact(
-                  'Open preview',
-                  busy: _opening,
-                ),
+                child: const Text('Open preview', textAlign: TextAlign.center),
               ),
             ],
           ),

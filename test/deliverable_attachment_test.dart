@@ -171,22 +171,44 @@ void main() {
     'pending download prevents duplicate requests and cancellation is quiet',
     (tester) async {
       final pending = Completer<bool>();
+      final previewPending = Completer<void>();
       var calls = 0;
       await tester.pumpWidget(
         message(
           'MEDIA:$reportPath',
+          open: (_) => previewPending.future,
           download: (_) {
             calls++;
             return pending.future;
           },
         ),
       );
+      expect(find.byIcon(Icons.download_outlined), findsOneWidget);
+      final captionBefore = tester.getRect(find.text('Download'));
+      final previewButton = find.widgetWithText(OutlinedButton, 'Open preview');
+      expect(
+        tester.getCenter(find.text('Open preview')).dx,
+        tester.getCenter(previewButton).dx,
+      );
+      await tester.tap(find.text('Open preview'));
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(
+        find.descendant(of: previewButton, matching: find.byType(Icon)),
+        findsNothing,
+      );
+      previewPending.complete();
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Download'));
       await tester.pump();
+      expect(find.byIcon(Icons.download_outlined), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(tester.getRect(find.text('Download')), captionBefore);
       await tester.tap(find.text('Download'));
       expect(calls, 1);
       pending.complete(false);
       await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.download_outlined), findsOneWidget);
       expect(find.text('File saved'), findsNothing);
       expect(tester.takeException(), isNull);
     },

@@ -8,10 +8,14 @@ class StudioActionLabel extends StatelessWidget {
     : _leadingIcon = null,
       _compact = false;
 
-  /// Reserves just the leading indicator slot for adjacent compact actions.
-  const StudioActionLabel.compact(this.label, {required this.busy, super.key})
-    : _leadingIcon = null,
-      _compact = true;
+  /// Centers an icon and caption as a group, replacing the icon while pending.
+  const StudioActionLabel.compact(
+    this.label, {
+    required this.busy,
+    required IconData icon,
+    super.key,
+  }) : _leadingIcon = icon,
+       _compact = true;
 
   /// A left-aligned row caption whose icon reserves the pending indicator space.
   const StudioActionLabel.row(
@@ -32,7 +36,7 @@ class StudioActionLabel extends StatelessWidget {
     label: busy ? '$label, in progress' : label,
     liveRegion: busy,
     child: ExcludeSemantics(
-      child: _leadingIcon != null
+      child: _leadingIcon != null && !_compact
           ? Row(
               children: [
                 SizedBox.square(
@@ -55,12 +59,14 @@ class StudioActionLabel extends StatelessWidget {
                   padding: EdgeInsets.only(left: 24, right: _compact ? 0 : 24),
                   child: Text(label, textAlign: TextAlign.center),
                 ),
-                if (busy)
-                  const Positioned(
+                if (busy || _leadingIcon != null)
+                  Positioned(
                     left: 0,
                     child: SizedBox.square(
                       dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: busy
+                          ? const CircularProgressIndicator(strokeWidth: 2)
+                          : Icon(_leadingIcon, size: 16),
                     ),
                   ),
               ],

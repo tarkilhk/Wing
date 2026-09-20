@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Center deliverable actions, show a Download icon that becomes a spinner while
+  downloading, and keep Open preview as centered text.
+
 - Open assistant deliverables directly from chat with desktop-style Download and
   Open preview cards, a Rendered/Source Markdown reader, and Android file saving.
 
