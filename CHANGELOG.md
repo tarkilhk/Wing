@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Show desktop's travelling rectangular border around working chats, with
+  reduced-motion support and unchanged row layout and actions.
+
 - Hide idle and cancelled chat status rows. Activity and connection notices now
   expand and fade smoothly only when needed, with support for reduced motion.
 

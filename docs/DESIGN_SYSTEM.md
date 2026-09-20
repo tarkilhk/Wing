@@ -45,6 +45,18 @@ The owner also requested a 1.5 dp outside border around selected profile squares
 for visibility, using their profile color (neutral for default). This is an
 explicit exception to the selection-border rule; square size and spacing stay fixed.
 
+Working chat rows show desktop's travelling rectangular arc: a flush 1.25 dp
+border, 160-degree gradient with a fading tail, and a 2.23-second linear loop.
+Use Studio control corners and neutral theme colors, retaining the colored status
+dot. The border overlays the existing row without changing its size or gestures;
+only its paint layer animates. Reduced motion freezes the arc. Needs-input and
+idle rows have no arc. This reflects live working status, not recent REST activity.
+Verified against upstream main `80154cf3cfee087fbc72bf1dd58f9906b8a2f66e`
+on 20 September 2026: desktop `src/app/chat/sidebar/session-row.tsx`,
+`src/store/session-dot-state.ts`, and `src/styles.css` (`arc-border arc-row`).
+Stock `tui_gateway/methods_session.py` still exposes `session.active_list`;
+the client uses its existing activity projection with no protocol changes.
+
 ## App and notification identity
 
 The official app name and wordmark are **Wing**, with a capital **W** and

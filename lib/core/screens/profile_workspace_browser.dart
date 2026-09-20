@@ -13,6 +13,7 @@ import '../theme/wing_icons.dart';
 import '../widgets/chat_list_menu.dart';
 import '../widgets/chat_profile_bar.dart';
 import '../widgets/chat_status_dot.dart';
+import '../widgets/chat_working_border.dart';
 import '../widgets/server_connection_label.dart';
 import '../widgets/studio_error.dart';
 import '../widgets/workspace_connection_status.dart';
@@ -768,56 +769,59 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     return Builder(
       builder: (anchor) => Padding(
         padding: const EdgeInsets.only(left: 28, right: 8),
-        child: ListTile(
-          key: ValueKey('chat-${e.profile}-${e.id}'),
-          contentPadding: EdgeInsets.zero,
-          minTileHeight: 48,
-          minVerticalPadding: largeText ? 6 : 0,
-          horizontalTitleGap: 6,
-          minLeadingWidth: 18,
-          leading: ChatStatusDot(e.status),
-          title: largeText || !hasMetrics
-              ? title
-              : Row(
-                  children: [
-                    Expanded(child: title),
-                    const SizedBox(width: 8),
-                    if (showTokens) SizedBox(width: 56, child: metrics.first),
-                    if (showTokens && showUpdated) const SizedBox(width: 8),
-                    if (showUpdated) SizedBox(width: 28, child: metrics.last),
-                  ],
-                ),
-          subtitle: detail.isEmpty && !(largeText && hasMetrics)
-              ? null
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (largeText && hasMetrics)
-                      Wrap(spacing: 12, children: metrics),
-                    if (detail.isNotEmpty)
-                      Text(
-                        detail.join(' · '),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: WingTokens.of(context).muted,
+        child: ChatWorkingBorder(
+          working: e.status == ChatListStatus.working,
+          child: ListTile(
+            key: ValueKey('chat-${e.profile}-${e.id}'),
+            contentPadding: EdgeInsets.zero,
+            minTileHeight: 48,
+            minVerticalPadding: largeText ? 6 : 0,
+            horizontalTitleGap: 6,
+            minLeadingWidth: 18,
+            leading: ChatStatusDot(e.status),
+            title: largeText || !hasMetrics
+                ? title
+                : Row(
+                    children: [
+                      Expanded(child: title),
+                      const SizedBox(width: 8),
+                      if (showTokens) SizedBox(width: 56, child: metrics.first),
+                      if (showTokens && showUpdated) const SizedBox(width: 8),
+                      if (showUpdated) SizedBox(width: 28, child: metrics.last),
+                    ],
+                  ),
+            subtitle: detail.isEmpty && !(largeText && hasMetrics)
+                ? null
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (largeText && hasMetrics)
+                        Wrap(spacing: 12, children: metrics),
+                      if (detail.isNotEmpty)
+                        Text(
+                          detail.join(' · '),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: WingTokens.of(context).muted,
+                          ),
                         ),
-                      ),
-                  ],
-                ),
-          trailing: Builder(
-            builder: (button) => IconButton(
-              tooltip: 'Chat actions',
-              icon: const Icon(Icons.more_horiz, size: 18),
-              onPressed: _busy || controller.switching
-                  ? null
-                  : () => _run(() => _chatActions(button, e), refresh: true),
+                    ],
+                  ),
+            trailing: Builder(
+              builder: (button) => IconButton(
+                tooltip: 'Chat actions',
+                icon: const Icon(Icons.more_horiz, size: 18),
+                onPressed: _busy || controller.switching
+                    ? null
+                    : () => _run(() => _chatActions(button, e), refresh: true),
+              ),
             ),
+            onLongPress: _busy || controller.switching
+                ? null
+                : () => _run(() => _chatActions(anchor, e), refresh: true),
+            onTap: _busy ? null : () => _openChat(e),
           ),
-          onLongPress: _busy || controller.switching
-              ? null
-              : () => _run(() => _chatActions(anchor, e), refresh: true),
-          onTap: _busy ? null : () => _openChat(e),
         ),
       ),
     );

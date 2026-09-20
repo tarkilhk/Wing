@@ -13,11 +13,29 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/chat_profile_bar.dart';
+import 'package:wing/core/widgets/chat_working_border.dart';
 import 'support/profile_browser_fixture.dart';
 
 class TargetFixture extends ProfileBrowserFixture {
   final rowUpdates = <String, Map<String, dynamic>>{};
   final tokenInputs = <int, num>{};
+
+  @override
+  List<Map<String, dynamic>> searchRows(String profile, String query) {
+    if (liveSessions.values
+        .expand((rows) => rows)
+        .any((row) => row['session_key'] == query)) {
+      return [
+        for (final row in sessions(profile))
+          if (row['id'] == query &&
+              (liveSessions[profile] ?? []).any(
+                (live) => live['session_key'] == query,
+              ))
+            {...row, 'session_id': row['id']},
+      ];
+    }
+    return super.searchRows(profile, query);
+  }
 
   @override
   List<Map<String, dynamic>> sessions(String profile) => [
@@ -464,6 +482,51 @@ void main() {
   });
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets('working border ${brightness.name} $scale', (tester) async {
+        await show(tester, brightness: brightness, scale: scale);
+        final row = find.byKey(const ValueKey('chat-personal-session-11'));
+        final initialBounds = tester.getRect(row);
+        fixture.liveSessions['personal'] = [
+          {
+            'id': 'personal-runtime',
+            'session_key': 'session-11',
+            'profile': 'personal',
+            'status': 'working',
+          },
+        ];
+        await controller.refreshActivity();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        final border = find.ancestor(
+          of: row,
+          matching: find.byType(ChatWorkingBorder),
+        );
+        expect(tester.widget<ChatWorkingBorder>(border).working, isTrue);
+        expect(tester.getRect(row), initialBounds);
+        await screenshot(tester, '${brightness.name}-$scale-working');
+        await tester.pump(const Duration(milliseconds: 600));
+        await screenshot(tester, '${brightness.name}-$scale-working-later');
+        expect(tester.binding.hasScheduledFrame, isTrue);
+
+        fixture.liveSessions['personal']!.single['status'] = 'waiting';
+        await controller.refreshActivity();
+        await tester.pumpAndSettle();
+        expect(tester.widget<ChatWorkingBorder>(border).working, isFalse);
+        expect(tester.binding.hasScheduledFrame, isFalse);
+
+        fixture.liveSessions['personal']!.single['status'] = 'working';
+        await controller.refreshActivity();
+        await tester.pump();
+        expect(tester.widget<ChatWorkingBorder>(border).working, isTrue);
+
+        fixture.liveSessions.clear();
+        await controller.refreshActivity();
+        await tester.pumpAndSettle();
+        expect(tester.widget<ChatWorkingBorder>(border).working, isFalse);
+        expect(tester.getRect(row), initialBounds);
+        expect(tester.binding.hasScheduledFrame, isFalse);
+      });
+
       testWidgets('render ${brightness.name} $scale', (tester) async {
         fixture.tokenInputs.addAll({0: 412300, 1: 14500000, 2: 8399});
         await show(tester, brightness: brightness, scale: scale);
