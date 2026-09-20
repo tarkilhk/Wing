@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Align the notice arrow, fork and retry icons at their centers and reduce the shared row height. Expanded background-agent results use the full message width.
+
 - Bring fork and retry closer to each answer and share the following background-agent notice row when available.
 
 - Move chat grouping, sorting and visible details into anchored menus under the

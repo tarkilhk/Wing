@@ -90,11 +90,11 @@ class ProfileMessage extends StatelessWidget {
       );
       final noticeBody = result == null
           ? Center(child: label)
-          : AnchoredExpansionTile(
+          : _TranscriptNotice(
               key: ValueKey(('transcript-notice', message['id'])),
               title: label,
               subtitle: Text(delivery?.disclosure ?? 'View result'),
-              shape: const Border(),
+              actions: actions,
               children: [
                 Padding(
                   padding: const EdgeInsets.all(12),
@@ -118,10 +118,10 @@ class ProfileMessage extends StatelessWidget {
         padding: actions == null
             ? const EdgeInsets.symmetric(vertical: 8, horizontal: 8)
             : EdgeInsets.zero,
-        child: actions == null
+        child: actions == null || result != null
             ? noticeBody
             : Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(child: noticeBody),
                   actions!,
@@ -369,4 +369,61 @@ class ProfileMessage extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Keep answer actions centered on the disclosure header, not its expanded body.
+class _TranscriptNotice extends StatefulWidget {
+  const _TranscriptNotice({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.children,
+    this.actions,
+  });
+
+  final Widget title;
+  final Widget subtitle;
+  final List<Widget> children;
+  final Widget? actions;
+
+  @override
+  State<_TranscriptNotice> createState() => _TranscriptNoticeState();
+}
+
+class _TranscriptNoticeState extends State<_TranscriptNotice> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) => AnchoredExpansionTile(
+    title: widget.title,
+    subtitle: widget.subtitle,
+    minTileHeight: widget.actions == null ? null : 56,
+    shape: const Border(),
+    tilePadding: widget.actions == null
+        ? null
+        : const EdgeInsets.only(left: WingSpacing.lg),
+    trailing: widget.actions == null
+        ? null
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox.square(
+                dimension: 48,
+                child: Center(
+                  child: AnimatedRotation(
+                    turns: _expanded ? .5 : 0,
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : WingMotion.standard,
+                    curve: WingMotion.curve,
+                    child: const Icon(Icons.expand_more),
+                  ),
+                ),
+              ),
+              widget.actions!,
+            ],
+          ),
+    onExpansionChanged: (expanded) => setState(() => _expanded = expanded),
+    children: widget.children,
+  );
 }
