@@ -834,13 +834,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _changed();
     } catch (failure) {
       if (!valid()) return;
-      if (isTemporaryWorkspaceFailure(failure)) {
+      if (isTemporaryWorkspaceFailure(failure) &&
+          _notificationAttempts < _maxRecoveryRetries) {
         error = null;
-        // A notification remains the selected destination through an outage.
-        // Cap the delay, not recovery: the server can return without another
-        // Android network or foreground event. Never replay a submitted prompt.
+        // Give a waking network a short burst, then wait for focus or a network
+        // change to restart recovery. Never replay a submitted prompt.
         final delay = _recoveryDelay(_notificationAttempts);
-        if (_notificationAttempts < 5) _notificationAttempts++;
+        _notificationAttempts++;
         _notificationRetry = Timer(delay, () {
           if (valid()) unawaited(_retryNotification());
         });
@@ -995,8 +995,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
+  static const _maxRecoveryRetries = 5;
   static Duration _recoveryDelay(int attempt) =>
-      Duration(seconds: attempt < 5 ? 1 << attempt : 30);
+      Duration(seconds: 1 << attempt);
 
   void _initializationFailed(Object failure) {
     _initializationFailure = failure;
@@ -1005,7 +1006,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (_recoveringInitialization &&
         !_closed &&
         _notificationTarget == null &&
-        _initializationAttempt < 5) {
+        _initializationAttempt < _maxRecoveryRetries) {
       _initializationRetry?.cancel();
       _initializationRetry = Timer(
         _recoveryDelay(_initializationAttempt++),
@@ -5780,13 +5781,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (_closed || resource.retry != null || resource.reconnecting) {
       return;
     }
+    if (resource.reconnectAttempt >= _maxRecoveryRetries) {
+      // Still awaiting reconciliation: keep sending disabled while waiting
+      // for the next focus/network event, without an active retry indicator.
+      resource.recovering = true;
+      connectionStatus.endRecovery(resource.scope.profileName);
+      _changed();
+      return;
+    }
     resource.recovering = true;
     connectionStatus.beginRecovery(resource.scope.profileName);
     final delay = _recoveryDelay(resource.reconnectAttempt);
-    // Keep observing temporary outages after the initial burst. A server can
-    // return without Android reporting a new network or an app-resume event.
-    // Cap the delay and counter, rather than abandoning live updates.
-    if (resource.reconnectAttempt < 5) resource.reconnectAttempt++;
+    // Further attempts are driven by app/screen focus or network changes.
+    resource.reconnectAttempt++;
     resource.retry = Timer(delay, () {
       resource.retry = null;
       unawaited(_reconnect(resource));

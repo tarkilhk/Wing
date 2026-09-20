@@ -305,14 +305,57 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       !controller.switching &&
       !_launchingCamera;
   late AppDestination _destination;
+  bool _routeIsCurrent = true;
+  bool _appIsActive = true;
+  bool _focusRecoveryScheduled = false;
+
+  bool get _hasChatFocus =>
+      _routeIsCurrent && _appIsActive && _destination == AppDestination.chats;
+
+  bool get _needsRecovery =>
+      !controller.initialized ||
+      controller.recovering ||
+      controller.notificationChat != null ||
+      controller.current?.reconnectError != null ||
+      (controller.current != null &&
+          !controller.connectionStatus.liveAvailable(
+            controller.current!.scope.profileName,
+          ));
+
+  void _recoverOnFocus() {
+    if (!_hasChatFocus || _focusRecoveryScheduled) return;
+    _focusRecoveryScheduled = true;
+    // Route changes notify dependents during build. Publish recovery after the
+    // frame, coalescing route and app-focus events into one attempt.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusRecoveryScheduled = false;
+      if (mounted && _hasChatFocus) {
+        unawaited(controller.resumeConnection());
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final isCurrent = ModalRoute.isCurrentOf(context) ?? true;
+    final returned = !_routeIsCurrent && isCurrent;
+    _routeIsCurrent = isCurrent;
+    controller.visible = _hasChatFocus;
+    if (returned && _needsRecovery) _recoverOnFocus();
+  }
 
   @override
   void initState() {
     super.initState();
     _destination = widget.initialDestination;
+    _appIsActive =
+        WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     controller.addListener(_voiceWorkspaceChanged);
     WidgetsBinding.instance.addObserver(this);
-    controller.visible = _destination == AppDestination.chats;
+    controller.visible = _hasChatFocus;
     // Shortcut navigation can reuse an owner still observed by the outgoing
     // route. Start its notifications after both routes finish building.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -323,6 +366,8 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Future<void> _enter() async {
     if (!controller.initialized && controller.notificationChat == null) {
       await controller.initialize();
+    } else if (_hasChatFocus && _needsRecovery) {
+      await controller.resumeConnection();
     }
     if (!mounted || controller.current == null) return;
     if (_destination == AppDestination.activity) {
@@ -352,11 +397,10 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }.contains(state)) {
       _cancelVoice();
     }
-    controller.visible =
-        state == AppLifecycleState.resumed &&
-        _destination == AppDestination.chats;
+    _appIsActive = state == AppLifecycleState.resumed;
+    controller.visible = _hasChatFocus;
     if (state == AppLifecycleState.resumed) {
-      unawaited(controller.resumeConnection());
+      _recoverOnFocus();
     }
   }
 
@@ -2260,8 +2304,12 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       }
       return;
     }
+    final returningToChats =
+        _destination != AppDestination.chats &&
+        destination == AppDestination.chats;
     setState(() => _destination = destination);
-    controller.visible = destination == AppDestination.chats;
+    controller.visible = _hasChatFocus;
+    if (returningToChats && _needsRecovery) _recoverOnFocus();
     if (destination == AppDestination.activity) {
       unawaited(_run(controller.refreshActivity));
     }

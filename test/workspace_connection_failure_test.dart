@@ -10,6 +10,7 @@ void main() {
       for (final method in ['session.resume', 'prompt.submit']) {
         for (final entry in [
           (5000, 'Failed to resume session'),
+          (-32603, 'internal error'),
           (4009, 'session disconnect interrupt settling'),
           (4007, 'session no longer live; retry resume'),
         ]) {

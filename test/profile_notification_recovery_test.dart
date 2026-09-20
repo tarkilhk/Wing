@@ -246,6 +246,7 @@ void main() {
       code: 4007,
     ),
     JsonRpcError('session.resume', 'Failed to resume session', code: 5000),
+    JsonRpcError('session.resume', 'internal error', code: -32603),
   ]) {
     testWidgets(
       'resume ${failure.code} recovers automatically without resending',
@@ -269,30 +270,54 @@ void main() {
   }
 
   testWidgets(
-    'notification recovers after an outage longer than the initial retry burst',
+    'foreground resume retries a gateway internal error without user action',
     (tester) async {
-      host.resumeError = TimeoutException('Synthetic resume timeout');
-      await controller.openNotification(chat.key);
-      for (final seconds in [1, 2, 4, 8, 16]) {
-        await tester.pump(Duration(seconds: seconds));
-      }
-      expect(host.resumeCalls, 6);
-      expect(chat.openingError, isNull);
-      expect(
-        controller.connectionStatus.phase,
-        ServerConnectionPhase.reconnecting,
+      host.resumeError = JsonRpcError(
+        'session.resume',
+        'internal error',
+        code: -32603,
       );
-      expect(chat.draft, 'My unsent follow-up');
+      await controller.resumeConnection();
+      expect(controller.current!.reconnectError, isNull);
+      expect(controller.recovering, isTrue);
+      expect(host.resumeCalls, 1);
+
       host.resumeError = null;
-      await tester.pump(const Duration(seconds: 30));
-      expect(host.resumeCalls, 7);
-      expect(controller.notificationChat, isNull);
-      expect(chat.opening, isFalse);
-      expect(
-        controller.connectionStatus.phase,
-        ServerConnectionPhase.connected,
-      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
+      expect(host.resumeCalls, 2);
+      expect(controller.recovering, isFalse);
+      expect(controller.current!.chat, same(chat));
+      expect(chat.draft, 'My unsent follow-up');
+      expect(chat.messages.single['content'], 'a completed');
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
     },
   );
+
+  testWidgets('notification waits for focus after its short retry burst', (
+    tester,
+  ) async {
+    host.resumeError = TimeoutException('Synthetic resume timeout');
+    await controller.openNotification(chat.key);
+    for (final seconds in [1, 2, 4, 8, 16]) {
+      await tester.pump(Duration(seconds: seconds));
+    }
+    expect(host.resumeCalls, 6);
+    expect(chat.openingError, isNotNull);
+    expect(
+      controller.connectionStatus.phase,
+      ServerConnectionPhase.disconnected,
+    );
+    expect(chat.draft, 'My unsent follow-up');
+    host.resumeError = null;
+    await tester.pump(const Duration(minutes: 2));
+    expect(host.resumeCalls, 6);
+    await controller.resumeConnection();
+    expect(host.resumeCalls, 7);
+    expect(controller.notificationChat, isNull);
+    expect(chat.opening, isFalse);
+    expect(controller.connectionStatus.phase, ServerConnectionPhase.connected);
+    expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+  });
 }

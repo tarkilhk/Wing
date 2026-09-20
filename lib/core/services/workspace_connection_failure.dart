@@ -23,10 +23,12 @@ bool isTemporaryWorkspaceFailure(Object error) {
       error is JsonRpcError &&
           ({'connection_closed', 'request_timeout'}.contains(error.reason) ||
               // Stock session.resume can race disconnect cleanup or fail while
-              // rebuilding its runtime. These observations may be retried;
+              // rebuilding its runtime. The WS dispatcher reports an uncaught
+              // handler failure as -32603 rather than the resume handler's 5000.
+              // These observations may be retried;
               // identical codes on prompt.submit must not replay a message.
               error.method == 'session.resume' &&
-                  (error.code == 5000 ||
+                  ({5000, -32603}.contains(error.code) ||
                       error.code == 4009 &&
                           error.message ==
                               'session disconnect interrupt settling' ||

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Retry interrupted chats immediately when Wing regains focus or the chat screen
+  reopens. Replace continuous reconnect polling with a short retry burst and
+  focus/network triggers, preserving drafts without resending messages.
+
 - Show desktop's travelling rectangular border around working chats, with
   reduced-motion support and unchanged row layout and actions.
 
@@ -11,7 +15,7 @@
 - Add profile-scoped provider credential renewal, sign-in recovery and reviewed credential removal, and remove obsolete shared-account redirects.
 - Clarify connection deadlines, notification recovery, local reading snapshots and configuration-backup limits.
 
-- Restore Send immediately after a chat reopens, automatically retry recoverable session-resume failures and longer notification outages, and preserve drafts with a visible retry action when recovery needs attention.
+- Restore Send immediately after a chat reopens, automatically retry recoverable session-resume failures, and preserve drafts with a visible retry action when recovery needs attention.
 
 - Add Ask Hermes to each Doctor finding, opening an editable new-chat draft under the selected profile with the finding and available diagnostic log.
 

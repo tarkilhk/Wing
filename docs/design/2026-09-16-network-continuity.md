@@ -53,13 +53,16 @@ messages.
 
 ## Recovery and local reading
 
-Live-channel recovery retries after 1, 2, 4, 8 and 16 seconds, then continues
-once every 30 seconds while the connection controller is alive. The delay is
-bounded; a temporary outage does not permanently stop observation. Sign-in, TLS
-and other non-transient failures stop automatic retries and require user action.
-Initial workspace opening retains its bounded cycle. Notification-target recovery
-keeps observing temporary failures every 30 seconds after the initial retry burst,
-until the destination opens or the user leaves it. Successful opening publishes
+The owner's 20 September focus refinement replaces continuous polling with
+event-driven recovery. Live-channel, initial workspace and notification-target
+recovery retry after 1, 2, 4, 8 and 16 seconds, then stop the timer. Returning to
+Wing with Chats visible, navigating back to its chat route, selecting Chats from
+another destination, an Android network change, or explicit Retry starts a fresh
+attempt immediately. Overlapping focus events share in-flight recovery. A route
+covered by another page does not reconnect just because the app becomes active.
+Sign-in, TLS and other non-transient failures stop the automatic retry burst.
+Notification destinations and drafts remain available while waiting for the next
+event. Successful opening publishes
 the ready conversation state immediately so the composer can enable Send.
 An Android network-return event, foreground entry or explicit
 Retry attempts live recovery immediately. Android network availability only triggers verification;
@@ -88,6 +91,9 @@ in an empty destination.
 
 Integration rechecked those resume codes and messages against latest stock
 Hermes `76fe8f7f5f68a8c4ff3477b0e3904c3e26245df2` on 20 September 2026.
+Focus recovery rechecked `session.resume` and the WS dispatcher's `-32603`
+internal-error response against `07c1953ea16d4c6990efb78d3da801e379ca86ff` that
+day. Resume internal errors also use the bounded retry burst.
 
 ## Verification
 
