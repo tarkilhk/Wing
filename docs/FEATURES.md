@@ -42,6 +42,8 @@ Sent images appear below your message on your side of the chat. Previews are cap
 
 Find in chat starts with recent messages and can search older history. View in chat shows a result with nearby context; Back to latest returns to the conversation. Outputs lists recent file references and can load older ones.
 
+Assistant `MEDIA:` deliverables and explicit file links have Download and Open preview actions directly in the conversation. Download opens Android's save destination picker. Markdown opens rendered with a Source control; Back returns to the chat.
+
 Authenticated viewers support Markdown/source, images, SVG, PDF pages/zoom and common audio/video playback. Completed Mermaid blocks open an offline diagram viewer. Web links use browser previews; self-contained HTML up to 1 MiB can open interactively. Downloads are capped at 32 MiB, and Save or share delivers actual bytes through Android. Old server references may no longer resolve.
 
 See [Sharing and capture](SHARING_AND_CAPTURE.md), [Find and Outputs](EXECUTION_FIND_AND_OUTPUTS.md) and [output viewers](OPENING_OUTPUT_FILES.md).

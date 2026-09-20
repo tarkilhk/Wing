@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'media_reference.dart';
+
 enum ChatOutputKind { image, file, link }
 
 class ChatOutput {
@@ -41,6 +43,25 @@ ChatOutput? explicitRemoteFileOutput(String target) {
 String _decodedPathLabel(String path) =>
     path.split(RegExp(r'[\\/]')).where((part) => part.isNotEmpty).lastOrNull ??
     path;
+
+/// MEDIA carries a literal server filename; percent signs, query characters
+/// and Windows separators are not URL syntax (except in an explicit file URI).
+ChatOutput? mediaRemoteFileOutput(String target) {
+  final path = _normalizeTarget(target);
+  if (_isUrl(path) ||
+      _hasUnsupportedScheme(path) ||
+      !_looksLikeExplicitFileTarget(path)) {
+    return null;
+  }
+  return ChatOutput(
+    kind: _imageExtension.hasMatch(path)
+        ? ChatOutputKind.image
+        : ChatOutputKind.file,
+    path: path,
+    url: null,
+    label: _decodedPathLabel(path),
+  );
+}
 
 String? _normalizeExplicitMarkdownTarget(String target) {
   final value = target.trim();
@@ -86,10 +107,7 @@ bool _looksLikeExplicitFileTarget(String value) {
 
 final _markdownImage = RegExp(r'!\[([^\]]*)\]\(([^)\s]+)\)');
 final _markdownLink = RegExp(r'\[([^\]]+)\]\(([^)\s]+)\)');
-final _media = RegExp(
-  r'''[`"']?MEDIA:\s*(`[^`\n]+`|"[^"\n]+"|'[^'\n]+'|\S+)[`"']?''',
-  caseSensitive: false,
-);
+final _media = RegExp(mediaReferencePattern, caseSensitive: false);
 final _url = RegExp(r'''https?://[^\s<>"')]+''');
 final _unixPath = RegExp(
   r'''(^|[\s("'`])((?:/|~[\\/]|\.\.?[\\/]|\\\\)[^\s"'`<>]+(?:\.[a-z0-9]{1,8})?)''',
@@ -165,7 +183,7 @@ List<ChatOutput> extractChatOutputs(Iterable<Map<String, dynamic>> history) {
 
 void _collectText(String text, _AddOutput add) {
   for (final match in _media.allMatches(text)) {
-    add(_unquote(match.group(1) ?? ''), explicit: true);
+    add(mediaReferenceTarget(match.group(1) ?? ''), explicit: true);
   }
   for (final match in _markdownImage.allMatches(text)) {
     add(match.group(2) ?? '', explicit: true);
@@ -198,7 +216,7 @@ void _collectTool(Map<String, dynamic> message, String text, _AddOutput add) {
       _producerTool.hasMatch(name) || name.startsWith('bfl_flux3_');
   if (producer) {
     for (final match in _media.allMatches(text)) {
-      add(_unquote(match.group(1) ?? ''), explicit: true);
+      add(mediaReferenceTarget(match.group(1) ?? ''), explicit: true);
     }
   }
   if (name == 'browser_vision') {
@@ -248,7 +266,7 @@ void _visitPayload(
         );
     if (!allowed) return;
     for (final match in _media.allMatches(value)) {
-      add(_unquote(match.group(1) ?? ''), explicit: true);
+      add(mediaReferenceTarget(match.group(1) ?? ''), explicit: true);
     }
     add(value, explicit: true);
   } else if (value is List) {
@@ -302,16 +320,6 @@ String _normalizeTarget(String value) {
   if (uri.host.isNotEmpty) path = '//${uri.host}$path';
   if (RegExp(r'^/[A-Za-z]:/').hasMatch(path)) path = path.substring(1);
   return path;
-}
-
-String _unquote(String value) {
-  var result = value.trim();
-  if (result.length > 1 &&
-      {'`', '"', "'"}.contains(result[0]) &&
-      result[0] == result[result.length - 1]) {
-    result = result.substring(1, result.length - 1);
-  }
-  return result.replaceFirst(RegExp(r'''[`"'*_]{1,3}$'''), '');
 }
 
 bool _isFilePath(String value) => RegExp(

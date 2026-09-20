@@ -979,16 +979,16 @@ void main() {
         findsOneWidget,
       );
 
-      await tester.tap(find.byTooltip('Show source'));
+      await tester.tap(find.text('Source'));
       await tester.pump();
       expect(find.byType(MarkdownMessageContent), findsNothing);
       expect(find.byType(MarkdownCodeBlock), findsOneWidget);
-      expect(find.byTooltip('Show preview'), findsOneWidget);
+      expect(find.text('Rendered'), findsOneWidget);
       await tester.tap(find.byTooltip('Copy code'));
       await tester.pump();
       expect(copied, source);
 
-      await tester.tap(find.byTooltip('Show preview'));
+      await tester.tap(find.text('Rendered'));
       await tester.pump();
       expect(find.byType(MarkdownMessageContent), findsOneWidget);
     },
@@ -1104,10 +1104,10 @@ void main() {
         await tester.pumpAndSettle();
         if (cases[index].binary) {
           expect(find.byType(MarkdownMessageContent), findsNothing);
-          expect(find.byTooltip('Show source'), findsNothing);
+          expect(find.text('Source'), findsNothing);
         } else {
           expect(find.byType(MarkdownMessageContent), findsOneWidget);
-          expect(find.byTooltip('Show source'), findsOneWidget);
+          expect(find.text('Source'), findsOneWidget);
         }
         await tester.pageBack();
         await tester.pumpAndSettle();

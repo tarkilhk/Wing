@@ -21,6 +21,7 @@ import '../models/composer_action.dart';
 import '../widgets/composer_action_button.dart';
 import '../widgets/composer_attachment_tile.dart';
 import '../services/remote_files_client.dart';
+import '../services/remote_file_saver.dart';
 import '../widgets/profile_message.dart';
 import '../widgets/profile_transcript_disclosure.dart';
 import '../widgets/anchored_expansion_tile.dart';
@@ -944,6 +945,30 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
   }
 
+  Future<bool> _downloadAnswerOutput(
+    ProfileChat chat,
+    ChatOutput output,
+  ) async {
+    final owner = chat.key;
+    final files = controller.outputFiles(chat);
+    try {
+      final file = await OwnedRemoteFiles(
+        source: files,
+        profileName: owner.workspace.profileName,
+        storedSessionId: owner.sessionId,
+      ).download(output.path!);
+      // A completed network request must not open a picker over another chat.
+      if (!mounted ||
+          controller.current?.chat?.key != owner ||
+          ModalRoute.of(context)?.isCurrent != true) {
+        return false;
+      }
+      return await saveRemoteFile(file);
+    } finally {
+      files.close();
+    }
+  }
+
   Future<Uint8List> _loadAttachmentImage(ProfileChat chat, String path) async {
     final owner = chat.key;
     final files = controller.outputFiles(chat);
@@ -1010,6 +1035,8 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             message: message,
             loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
             onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
+            onDownloadRemoteFile: (output) =>
+                _downloadAnswerOutput(chat, output),
           ),
         ],
       );
@@ -1056,6 +1083,8 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   loadAttachmentImage: (path) =>
                       _loadAttachmentImage(chat, path),
                   onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
+                  onDownloadRemoteFile: (output) =>
+                      _downloadAnswerOutput(chat, output),
                 ),
               ),
               Positioned(
@@ -1092,6 +1121,8 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 (chat.key, answerMessageId(message) ?? message),
             loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
             onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
+            onDownloadRemoteFile: (output) =>
+                _downloadAnswerOutput(chat, output),
           ),
       ],
     );

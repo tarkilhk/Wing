@@ -15,12 +15,13 @@ import 'profile_review_notice_card.dart';
 import 'playful_portrait.dart';
 import 'user_message_attachment.dart';
 
-/// User attachments render inline. Authored Markdown links remain tap-to-open;
-/// server attachment paths are resolved only by the owning chat's loader.
+/// User attachments and explicit assistant deliverables render inline;
+/// server paths are resolved only by the owning chat's loader.
 class ProfileMessage extends StatelessWidget {
   final Map<String, dynamic> message;
   final bool streaming;
   final Future<void> Function(ChatOutput output)? onOpenRemoteFile;
+  final Future<bool> Function(ChatOutput output)? onDownloadRemoteFile;
   final UserAttachmentImageLoader? loadAttachmentImage;
   final VoidCallback? onReadAloud;
   final bool readingAloud;
@@ -30,6 +31,7 @@ class ProfileMessage extends StatelessWidget {
     required this.message,
     this.streaming = false,
     this.onOpenRemoteFile,
+    this.onDownloadRemoteFile,
     this.loadAttachmentImage,
     this.onReadAloud,
     this.readingAloud = false,
@@ -110,6 +112,8 @@ class ProfileMessage extends StatelessWidget {
                       : MarkdownMessageContent(
                           data: result,
                           onOpenRemoteFile: onOpenRemoteFile,
+                          onDownloadRemoteFile: onDownloadRemoteFile,
+                          deliverables: true,
                         ),
                 ),
               ],
@@ -304,6 +308,8 @@ class ProfileMessage extends StatelessWidget {
                             data: content,
                             streaming: streaming,
                             onOpenRemoteFile: onOpenRemoteFile,
+                            onDownloadRemoteFile: onDownloadRemoteFile,
+                            deliverables: true,
                           ),
                   ),
                 ),

@@ -5,7 +5,13 @@ import '../theme/wing_theme.dart';
 /// Keeps an action's caption and measured size unchanged while work is pending.
 class StudioActionLabel extends StatelessWidget {
   const StudioActionLabel(this.label, {required this.busy, super.key})
-    : _leadingIcon = null;
+    : _leadingIcon = null,
+      _compact = false;
+
+  /// Reserves just the leading indicator slot for adjacent compact actions.
+  const StudioActionLabel.compact(this.label, {required this.busy, super.key})
+    : _leadingIcon = null,
+      _compact = true;
 
   /// A left-aligned row caption whose icon reserves the pending indicator space.
   const StudioActionLabel.row(
@@ -13,11 +19,13 @@ class StudioActionLabel extends StatelessWidget {
     required this.busy,
     required IconData icon,
     super.key,
-  }) : _leadingIcon = icon;
+  }) : _leadingIcon = icon,
+       _compact = false;
 
   final String label;
   final bool busy;
   final IconData? _leadingIcon;
+  final bool _compact;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -44,7 +52,7 @@ class StudioActionLabel extends StatelessWidget {
               alignment: Alignment.center,
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  padding: EdgeInsets.only(left: 24, right: _compact ? 0 : 24),
                   child: Text(label, textAlign: TextAlign.center),
                 ),
                 if (busy)

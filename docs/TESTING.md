@@ -93,6 +93,15 @@ error fixtures. `profile_device_ui_check.dart` supplies clarification retry
 and 200% text scenarios with an injected gateway. Restore the normal debug
 APK after using either target.
 
+Deliverable card renders use `test/deliverable_attachment_test.dart` with
+`CAPTURE_DELIVERABLES=true` and the same `CAPTURE_FONT_DIR`. Captures cover both
+themes at 320 dp with normal and 200% text under `build/deliverables-review/`.
+The offline debug target `integration_test/deliverables_native_preview.dart`
+uses production cards, the reader and Android's save picker with a synthetic
+Markdown report. Check Rendered/Source, Back, save/cancel and the saved bytes;
+restore the normal debug APK afterward. This establishes native UI and file
+delivery behavior, not access to a live server's files.
+
 ## Voice acceptance
 
 Voice host tests cover all four Local/Hermes input/output combinations, preference

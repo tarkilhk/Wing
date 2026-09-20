@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Open assistant deliverables directly from chat with desktop-style Download and
+  Open preview cards, a Rendered/Source Markdown reader, and Android file saving.
+
 - Reveal ten additional chats per tap with Show more, keeping the action until the group is fully shown.
 
 - Align the notice arrow, fork and retry icons at their centers and reduce the shared row height. Expanded background-agent results use the full message width.

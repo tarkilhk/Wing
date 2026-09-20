@@ -13,6 +13,7 @@ import '../services/file_open_error_message.dart';
 import '../services/media_preview_service.dart';
 import '../services/profile_gateway.dart';
 import '../services/remote_files_client.dart';
+import '../services/remote_file_saver.dart';
 import '../services/web_preview.dart';
 import '../widgets/chat_image_preview.dart';
 import '../widgets/read_recovery.dart';
@@ -22,7 +23,7 @@ import '../widgets/markdown_message_content.dart';
 import '../widgets/web_output_preview.dart';
 import 'pdf_preview_screen.dart';
 
-enum _FileAction { share, open, play, previewHtml }
+enum _FileAction { share, save, open, play, previewHtml }
 
 class ChatOutputsScreen extends StatefulWidget {
   final String chatTitle;
@@ -292,6 +293,13 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                 switch (action) {
                   case _FileAction.share:
                     await _share(file);
+                  case _FileAction.save:
+                    final saved = await saveRemoteFile(file);
+                    if (saved && previewContext.mounted) {
+                      ScaffoldMessenger.of(previewContext).showSnackBar(
+                        const SnackBar(content: Text('File saved')),
+                      );
+                    }
                   case _FileAction.open:
                     final opened = await widget.fileDelivery.openInApp(
                       file,
@@ -404,21 +412,39 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 actions: [
-                  if (isMarkdown)
-                    IconButton(
-                      tooltip: showMarkdownSource
-                          ? 'Show preview'
-                          : 'Show source',
-                      icon: Icon(
-                        showMarkdownSource
-                            ? Icons.visibility_outlined
-                            : Icons.code_outlined,
-                      ),
-                      onPressed: () => setPreviewState(
-                        () => showMarkdownSource = !showMarkdownSource,
-                      ),
-                    ),
+                  IconButton(
+                    tooltip: 'Download',
+                    icon: const Icon(Icons.download_outlined),
+                    onPressed: delivering
+                        ? null
+                        : () => deliverFile(_FileAction.save),
+                  ),
                 ],
+                bottom: isMarkdown
+                    ? PreferredSize(
+                        preferredSize: Size.fromHeight(
+                          MediaQuery.textScalerOf(previewContext).scale(14) +
+                              48,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                          child: SegmentedButton<bool>(
+                            showSelectedIcon: false,
+                            segments: const [
+                              ButtonSegment(
+                                value: false,
+                                label: Text('Rendered'),
+                              ),
+                              ButtonSegment(value: true, label: Text('Source')),
+                            ],
+                            selected: {showMarkdownSource},
+                            onSelectionChanged: (selection) => setPreviewState(
+                              () => showMarkdownSource = selection.single,
+                            ),
+                          ),
+                        ),
+                      )
+                    : null,
               ),
               body: ListView(
                 padding: const EdgeInsets.all(16),

@@ -1,12 +1,30 @@
 # Output viewers and downloads
 
-Open a chat's Outputs, select a reference and choose its reading or delivery action. Files are fetched through that chat's original authenticated connection/profile, even if the foreground selection changes. Outputs is a history reference index; old paths may be unavailable.
+Assistant deliverables (`MEDIA:` references and explicit file links) appear as
+file cards with separate **Download** and **Open preview** actions. Download opens
+Android's save destination picker; cancelling does not save a file. Open preview
+opens the existing full-screen reader, and Back returns to the conversation.
+Markdown starts in **Rendered** mode with a **Source** control. Copy message
+retains the original authored text, including the server path.
+
+A chat's Outputs list provides another way to find and open references, including
+older history. Files are fetched through their original authenticated connection
+and profile. Relative text-preview paths resolve against the originating saved
+chat's directory; an unavailable directory is an error. Leaving the chat while a
+download is pending prevents a late save picker. Old paths may be unavailable.
+
+This follows stock Hermes desktop's `PreviewAttachment`, MEDIA parsing and
+Markdown preview at upstream commit
+[`0caf219aafdf40522f7bfc3ce8756e4eae463a04`](https://github.com/NousResearch/hermes-agent/tree/0caf219aafdf40522f7bfc3ce8756e4eae463a04/apps/desktop/src),
+inspected on 20 September 2026. Android uses a full-screen reader in place of the
+desktop side pane. The integration uses stock `/api/fs/read-text`,
+`/api/fs/download` and `/api/sessions/{session_id}`; no backend changes are needed.
 
 ## Supported reading
 
 | Content | In-app behavior | Boundary |
 | --- | --- | --- |
-| Markdown and code | Formatted/source toggle, copying, tables and supported diagrams | Keep server truncation notices visible. Save or share downloads the full file. Relative links are not silently resolved against the phone or server. |
+| Markdown and code | Rendered/Source controls, copying, tables and supported diagrams | Keep server truncation notices visible. Download or Save or share retrieves the full file within the download limit. Relative file links use the saved chat directory. |
 | Images and SVG | Explicit loading and zoom; SVG uses the restricted diagram viewer | Preserve a useful source or save/open fallback. |
 | PDF | Read PDF, Previous/Next page and pinch zoom | Viewing only; no editing, forms, text search or selection. Password-protected/unsupported files can use another app. |
 | Audio and video | Play media, timeline, pause and seek through Android controls | Explicit Play; device codecs determine support. No background playback or authenticated-URL streaming. |

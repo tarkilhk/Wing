@@ -2,25 +2,32 @@ import 'studio_task_marker.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:markdown/markdown.dart' as md;
 
 import '../models/chat_output.dart';
+import '../models/deliverable_reference.dart';
 import '../services/file_open_error_message.dart';
 import '../services/web_preview.dart';
 import '../theme/profile_markdown_style.dart';
 import 'chat_image_preview.dart';
 import 'markdown_code_block.dart';
+import 'deliverable_attachment.dart';
 
 /// Renders Markdown message content without conversation chrome.
 class MarkdownMessageContent extends StatelessWidget {
   final String data;
   final bool streaming;
   final Future<void> Function(ChatOutput output)? onOpenRemoteFile;
+  final Future<bool> Function(ChatOutput output)? onDownloadRemoteFile;
+  final bool deliverables;
 
   const MarkdownMessageContent({
     super.key,
     required this.data,
     this.streaming = false,
     this.onOpenRemoteFile,
+    this.onDownloadRemoteFile,
+    this.deliverables = false,
   });
 
   Future<void> _open(BuildContext context, String href) async {
@@ -98,6 +105,17 @@ class MarkdownMessageContent extends StatelessWidget {
                   checkboxBuilder: (checked) =>
                       StudioTaskMarker(completed: checked),
                   data: segment as String,
+                  inlineSyntaxes: deliverables
+                      ? [MediaReferenceSyntax(), DeliverableLinkSyntax()]
+                      : null,
+                  builders: {
+                    if (deliverables)
+                      deliverableElementTag: _DeliverableBuilder(
+                        onOpenRemoteFile,
+                        onDownloadRemoteFile,
+                        maxWidth: MediaQuery.sizeOf(context).width,
+                      ),
+                  },
                   selectable: true,
                   onTapLink: (_, href, _) {
                     if (href != null) _open(context, href);
@@ -120,6 +138,39 @@ class MarkdownMessageContent extends StatelessWidget {
               ),
             ),
       ],
+    );
+  }
+}
+
+class _DeliverableBuilder extends MarkdownElementBuilder {
+  _DeliverableBuilder(this.onOpen, this.onDownload, {required this.maxWidth});
+
+  final Future<void> Function(ChatOutput)? onOpen;
+  final Future<bool> Function(ChatOutput)? onDownload;
+  final double maxWidth;
+
+  @override
+  Widget visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    final path = element.attributes['path']!;
+    // Keep this an inline node: Markdown tables and emphasized links cannot
+    // contain block nodes. Bound table cells, which scroll horizontally, too.
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: DeliverableAttachment(
+        output: ChatOutput(
+          kind: ChatOutputKind.values.byName(element.attributes['kind']!),
+          path: path,
+          url: null,
+          label: element.attributes['name']!,
+        ),
+        onOpen: onOpen,
+        onDownload: onDownload,
+      ),
     );
   }
 }
