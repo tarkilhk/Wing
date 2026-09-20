@@ -1,10 +1,18 @@
 # One-chat Hermes notification test
 
 Paste the entire code block below into one new Hermes chat in Wing. Open **that
-same chat** on desktop if possible: sending the test controls there lets Wing
-stay backgrounded without accidentally reading the answer under test. Reply
-`RUN 01`, then advance through the scenarios when ready. Hermes must wait for
-your observations; it cannot see Android's notification shade.
+same chat** on desktop if possible so you can send controls without reading the
+answer in Wing. Reply `RUN 01`, then advance through the scenarios when ready.
+Hermes must wait for your observations; it cannot see Android's notification shade.
+
+**Before each new desktop-triggered background test**, open Wing on the owning
+connection's chat list, without opening the test conversation. Send the control
+from desktop, confirm Wing's **Watching…** notification appears during the tool
+wait, then background Wing before the answer finishes. Monitoring stops when
+known work ends: an unread notification does not keep it running. Staying
+backgrounded between separate desktop turns does not establish delivery.
+If Watching never appears, record a monitoring/delivery prerequisite failure;
+do not call it a notification-text replacement failure.
 
 Install the notification-revamp Wing build first. Enable Wing's reply and
 attention notifications and allow their Android channels. Start with previews
@@ -22,8 +30,13 @@ CONTROL AND EVIDENCE
 - I control progression with RUN <number>, REPEAT <number>, SKIP <number>,
   OBSERVED <number> <my observations>, and REPORT. Never run the whole suite
   automatically. Before an unfamiliar test, state my setup and expected result;
-  wait for GO before creating the event. Give me eight seconds to leave Wing
-  when a background notification is needed, using a bounded normal tool wait.
+  wait for GO before creating the event. For every desktop-triggered background
+  round, including NEXT B and NEXT C, use a bounded 20-second tool wait before
+  producing the tested event. I first open Wing on the owning connection's chat
+  list, send the control from desktop, check Watching appears, then background
+  Wing. Do not assume an unread notice keeps monitoring active between turns.
+  If I report no Watching notification, record that prerequisite failure and
+  pause the scenario; do not assert that content replacement was exercised.
 - Do not use the structured question tool for test administration. Reserve it
   for scenarios explicitly testing real questions. Otherwise use normal chat.
 - Label test content WING-N01, WING-N02, etc. Make each reply's opening sentence
@@ -41,7 +54,7 @@ CONTROL AND EVIDENCE
 
 SAFE TEST OPERATIONS
 - Use only harmless print/sleep operations and disposable test files. Keep
-  waits finite: normally 8–15 seconds, at most 90 seconds of work per run.
+  waits finite: normally 20 seconds, at most 90 seconds of work per run.
   Use waits, not CPU-intensive loops. No detached processes or persistent jobs.
 - If approval tests need filesystem work, create a fresh OS temporary directory
   with a unique wing-notification-test- prefix. Operate only on children created
@@ -75,14 +88,20 @@ SCENARIOS (only run the one I select)
   I reach the latest answer. I report whether that distinction was observable.
 
 02 — Replacement and identical replies
-  Run this in three separately controlled rounds, commanded from desktop while
-  Wing stays backgrounded. Round A produces a short sample result labelled A.
+  Run this in three separately controlled rounds, commanded from desktop.
+  Before EACH round I reopen Wing's owning connection chat list, leaving the
+  conversation unread. While your 20-second tool wait runs, I check Watching
+  appears, then background Wing before completion. Round A produces a short
+  sample result labelled A.
   Round B produces a different result labelled B. Do not start B until I say
   NEXT B. Expected: B replaces A in the SAME chat notification slot.
   After NEXT C, complete another genuine turn with exactly the same final text
   as B. Expected: this is a new reply event even though its words are identical.
   Do not claim exact historic-message navigation: when Hermes supplies no
   stable answer ID, Wing deliberately opens the latest available reply.
+  Do not send NEXT B or NEXT C with Wing already idle in the background and
+  assume delivery. If reopening Wing reads/clears the prior result, repeat with
+  Wing outside the conversation; that run cannot prove replacement either.
 
 03 — Foreground behavior
   I keep this chat visible for a normal short reply: no new completion alert
@@ -254,3 +273,22 @@ Contract references checked when preparing this prompt:
 The prompt asks Hermes to inspect its own exposed schemas rather than treating
 internal Python helpers as model-callable tools. The scenarios are a test plan,
 not a claim that the installed backend can generate every condition on demand.
+
+### Round 2 field correction
+
+The first phone run retained the setup notification after A and B completed on
+desktop. The user did not observe Watching, and a subsequent read-only device
+check found no Wing monitoring service. This is consistent with the documented
+idle monitoring lifetime; a receipt trace of the original turns was not captured.
+The original prompt incorrectly assumed continuous delivery between backgrounded
+desktop turns. The per-round monitoring prerequisite above corrects that test.
+
+Focused checks pass (26 tests): stock start/completion sequences preserve setup,
+A, B and an identical C reply; the coordinator updates both compact and expanded
+text in the same notification slot; monitoring ends after known work finishes.
+A completion-only synthetic sequence initially failed because it omitted the
+start event. Stock [`prompt_turn.py`](https://github.com/NousResearch/hermes-agent/blob/2ed6387d87b4db091af2f05db32faab6e0dbb9a2/tui_gateway/prompt_turn.py)
+was verified at `2ed6387d87b4db091af2f05db32faab6e0dbb9a2`; adding that real event
+made the fixture pass without changing production code. These checks do not
+establish receipt of the original phone events. Retry with Watching observed
+before attributing a remaining failure to replacement or delivery logic.

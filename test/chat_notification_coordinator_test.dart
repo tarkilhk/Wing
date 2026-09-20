@@ -50,7 +50,10 @@ void main() {
     'latest answer replaces the same chat slot; an old read cannot clear it',
     () async {
       await reply('a');
+      expect(sink.shown.last.body, 'Answer a');
       await reply('b');
+      expect(sink.shown.last.body, 'Answer b');
+      expect(sink.shown.last.expandedBody, 'Answer b');
       expect(sink.shown.map((n) => n.id).toSet(), hasLength(1));
       await notices.read(chat, 'answer:a');
       expect(sink.cancelled, isEmpty);

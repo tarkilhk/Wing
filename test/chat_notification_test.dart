@@ -206,6 +206,25 @@ token=not-for-alerts
       expect(alerts.single.content.preview, 'Open the chat to read the reply.');
     });
 
+    test('delivered turns retain setup, A, B and identical C reply text', () async {
+      for (final text in [
+        'Round setup',
+        'WING-N02-A: First result',
+        'WING-N02-B: Replacement result',
+        'WING-N02-B: Replacement result',
+      ]) {
+        host.event('a', 'message.start');
+        host.event('a', 'message.complete', {'text': text});
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(alerts.map((notice) => notice.content.preview), [
+        'Round setup',
+        'WING-N02-A: First result',
+        'WING-N02-B: Replacement result',
+        'WING-N02-B: Replacement result',
+      ]);
+    });
+
     test(
       'side and background results use their own content while main runs',
       () {
