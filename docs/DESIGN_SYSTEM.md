@@ -212,6 +212,14 @@ commit `603007ead347608c81bf95fd7b40c3fff9e4bed5`, desktop
 
 Keep activity status and queued-message controls above the composer. Preserve the two-row composer: draft first, then attachment/capture controls, the compact model/reasoning selector and Send/Stop. Preserve existing voice states and attachment options.
 
+The activity summary occupies no space while idle, after completion or after
+cancellation. Keep notices for ongoing work, active subagents, input requests,
+loading, recovery and errors. Both this summary and the connection notice below
+the header expand/fade in and collapse/fade out using the shared 200 ms motion.
+Update visible status text in place; omit transitions when reduced motion is
+enabled. Neither notice reserves an empty row. Brief connection interruptions
+retain the existing two-second grace period before showing a notice.
+
 The model/reasoning selector opens Intelligence. Model selection retains search and collapsible groups by actual technical provider route. Selecting a model returns to Intelligence; Apply confirms the selection for this chat. Keep existing busy/loading/disabled rules and full route identifiers in the picker.
 
 Preserve the current Send/Steer/Queue/Stop and Enter behavior. Preserve the message-actions entry points present in the implementation baseline, including long-press. Do not restore controls removed by later approved UX work. Fork, Steer and Queue remain one-shot choices with current eligibility rules, never persistent composer modes. Preserve queued-message review, edit, delete and pause/resume behavior. Do not show unavailable actions as usable in a running chat.

@@ -732,10 +732,7 @@ class _HermesAdministrationContentState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (widget.controller.switching) const LinearProgressIndicator(),
-          WorkspaceConnectionStatus(
-            status: widget.controller.connectionStatus,
-            reserveSpace: false,
-          ),
+          WorkspaceConnectionStatus(status: widget.controller.connectionStatus),
           if (widget.controller.error != null)
             ListTile(
               title: StudioError(widget.controller.error!),

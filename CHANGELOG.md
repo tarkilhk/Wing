@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Hide idle and cancelled chat status rows. Activity and connection notices now
+  expand and fade smoothly only when needed, with support for reduced motion.
+
 - Add profile-scoped provider credential renewal, sign-in recovery and reviewed credential removal, and remove obsolete shared-account redirects.
 - Clarify connection deadlines, notification recovery, local reading snapshots and configuration-backup limits.
 

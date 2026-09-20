@@ -1,16 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/server_connection_status.dart';
+import 'status_transition.dart';
 
-/// Quiet recovery feedback, with space reserved only when reading a transcript.
+/// Quiet recovery feedback that takes space only while a notice is needed.
 class WorkspaceConnectionStatus extends StatefulWidget {
   final ServerConnectionStatus status;
-  final bool reserveSpace;
   final bool showHint;
   const WorkspaceConnectionStatus({
     super.key,
     required this.status,
-    required this.reserveSpace,
     this.showHint = true,
   });
   @override
@@ -64,29 +63,29 @@ class _WorkspaceConnectionStatusState extends State<WorkspaceConnectionStatus> {
   }
 
   @override
-  Widget build(BuildContext context) => SizedBox(
+  Widget build(BuildContext context) => StatusTransition(
     key: const ValueKey('workspace-connection-status'),
-    height: widget.reserveSpace || (_show && widget.showHint)
-        ? MediaQuery.textScalerOf(context).scale(16) + 8
-        : 0,
     child: _show && widget.showHint
-        ? Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Semantics(
-              liveRegion: true,
-              child: Text(
-                switch (widget.status.phase) {
-                  ServerConnectionPhase.reconnecting =>
-                    'Reconnecting… Your draft stays here.',
-                  ServerConnectionPhase.disconnected =>
-                    widget.status.recoveryProblem == null
-                        ? 'Offline · Tap the status icon to retry.'
-                        : 'Chat unavailable · Your draft stays here.',
-                  _ => widget.status.description,
-                },
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall,
+        ? SizedBox(
+            height: MediaQuery.textScalerOf(context).scale(16) + 8,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  switch (widget.status.phase) {
+                    ServerConnectionPhase.reconnecting =>
+                      'Reconnecting… Your draft stays here.',
+                    ServerConnectionPhase.disconnected =>
+                      widget.status.recoveryProblem == null
+                          ? 'Offline · Tap the status icon to retry.'
+                          : 'Chat unavailable · Your draft stays here.',
+                    _ => widget.status.description,
+                  },
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
             ),
           )

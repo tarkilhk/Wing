@@ -41,9 +41,11 @@ connection selection. Status targets are at least 48 dp. On connection-selection
 rows, the LED opens details while the row/name retains its navigation action.
 Conversation title/project navigation and server status have separate targets.
 
-Short drops use the LED. After two seconds, a reserved metadata line can explain
-recovery without moving the transcript. Reserve this space only in conversations;
-Chats and other screens collapse the line when there is no recovery hint.
+Short drops use the LED. After two seconds, a metadata line can explain recovery.
+The owner's 20 September density refinement removes reserved empty space in all
+screens, including conversations. Expand/fade the line in while needed and
+collapse/fade it out afterward, using the same 200 ms transition as the activity
+summary above the composer. Reduced motion applies the change immediately.
 An empty notification destination uses
 its central explanation rather than repeating the same cue above it. Technical
 exceptions, DNS hostnames and timeout details do not appear as routine recovery

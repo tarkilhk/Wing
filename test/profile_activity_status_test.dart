@@ -29,7 +29,103 @@ void main() {
 
   tearDown(() => controller.dispose());
 
-  String label() => ProfileActivityStatus(chat: chat).label;
+  String? label() => ProfileActivityStatus(chat: chat).label;
+
+  test(
+    'idle and cancelled hide while other status messages remain available',
+    () {
+      for (final status in [
+        ProfileTurnStatus.idle,
+        ProfileTurnStatus.completed,
+        ProfileTurnStatus.cancelled,
+      ]) {
+        chat.status = status;
+        expect(label(), isNull);
+      }
+      chat.error = 'History failed';
+      expect(label(), 'History needs attention');
+      chat.error = null;
+      chat.commandRunning = true;
+      expect(label(), 'Running command…');
+      chat.commandRunning = false;
+      host.event('a', 'subagent.start', {'subagent_id': 'child'});
+      expect(label(), 'Waiting for 1 subagent…');
+      for (final entry in {
+        ProfileTurnStatus.submitting: 'Sending message…',
+        ProfileTurnStatus.settling: 'Updating history…',
+        ProfileTurnStatus.failed: 'Something went wrong',
+      }.entries) {
+        chat.status = entry.key;
+        expect(label(), entry.value);
+      }
+    },
+  );
+
+  testWidgets('activity expands and fades, then fully collapses on cancel', (
+    tester,
+  ) async {
+    Future<void> render({bool reducedMotion = false}) => tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(disableAnimations: reducedMotion),
+          child: Scaffold(
+            body: Column(children: [ProfileActivityStatus(chat: chat)]),
+          ),
+        ),
+      ),
+    );
+    final row = find.byType(ProfileActivityStatus);
+    await render();
+    expect(tester.getSize(row).height, 0);
+    chat.status = ProfileTurnStatus.running;
+    await render();
+    expect(tester.getSize(row).height, 0);
+    await tester.pump(const Duration(milliseconds: 60));
+    final entering = tester.getSize(row).height;
+    expect(entering, greaterThan(0));
+    expect(
+      tester
+          .widget<FadeTransition>(find.byType(FadeTransition).last)
+          .opacity
+          .value,
+      inExclusiveRange(0, 1),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    final expanded = tester.getSize(row).height;
+    expect(expanded, greaterThan(entering));
+
+    chat.status = ProfileTurnStatus.cancelled;
+    await render();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(tester.getSize(row).height, inExclusiveRange(0, expanded));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(tester.getSize(row).height, 0);
+    expect(find.text('Stopped'), findsNothing);
+    expect(find.text('Hermes is working…'), findsNothing);
+
+    // A quick new turn during collapse must restore the current status.
+    chat.status = ProfileTurnStatus.running;
+    await render();
+    await tester.pump(const Duration(milliseconds: 60));
+    chat.status = ProfileTurnStatus.cancelled;
+    await render();
+    await tester.pump(const Duration(milliseconds: 40));
+    chat.status = ProfileTurnStatus.failed;
+    await render();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('Something went wrong'), findsOneWidget);
+    expect(find.text('Hermes is working…'), findsNothing);
+
+    await render(reducedMotion: true);
+    chat.status = ProfileTurnStatus.cancelled;
+    await render(reducedMotion: true);
+    expect(tester.getSize(row).height, 0);
+    chat.status = ProfileTurnStatus.running;
+    await render(reducedMotion: true);
+    expect(tester.getSize(row).height, expanded);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   test('latest main event replaces writing and completed tool activity', () {
     host.event('a', 'message.start');
@@ -94,7 +190,7 @@ void main() {
       'subagent_id': 'child',
       'status': 'completed',
     });
-    expect(label(), 'Waiting for your message');
+    expect(label(), isNull);
   });
 
   test('same-name tools show latest progress after a third call completes', () {
@@ -157,7 +253,8 @@ void main() {
         ),
       ),
     );
-    expect(find.text('Waiting for your message'), findsOneWidget);
+    expect(find.text('Waiting for your message'), findsNothing);
+    expect(tester.getSize(find.byType(ProfileActivityStatus)).height, 0);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.byType(ShaderMask), findsNothing);
     host.event('a', 'message.start');
@@ -244,7 +341,7 @@ void main() {
       ),
     );
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.byTooltip(label()), findsOneWidget);
+    expect(find.byTooltip(label()!), findsOneWidget);
     expect(find.byType(ShaderMask), findsNothing);
     expect(tester.takeException(), isNull);
   });

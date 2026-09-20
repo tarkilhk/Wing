@@ -5,6 +5,7 @@ import '../models/profile_live_activity.dart';
 import '../services/profile_workspace_controller.dart';
 import 'activity_shimmer.dart';
 import 'profile_chat_indicator.dart';
+import 'status_transition.dart';
 
 /// A current activity summary, independent of the scrollable transcript.
 class ProfileActivityStatus extends StatelessWidget {
@@ -12,7 +13,7 @@ class ProfileActivityStatus extends StatelessWidget {
 
   const ProfileActivityStatus({super.key, required this.chat});
 
-  String get label {
+  String? get label {
     if (chat.openingError != null) {
       return 'Chat unavailable · Your draft is kept';
     }
@@ -38,9 +39,8 @@ class ProfileActivityStatus extends StatelessWidget {
     final childLabel = '$children subagent${children == 1 ? '' : 's'}';
     if (chat.status != ProfileTurnStatus.running) {
       if (children > 0) return 'Waiting for $childLabel…';
-      if (chat.status == ProfileTurnStatus.cancelled) return 'Stopped';
       if (chat.error != null) return 'History needs attention';
-      return 'Waiting for your message';
+      return null;
     }
     final mainLabel = switch (chat.mainActivity) {
       ProfileMainActivity.writing => 'Writing response…',
@@ -66,6 +66,12 @@ class ProfileActivityStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = label;
+    return StatusTransition(
+      child: text == null ? null : _status(context, text),
+    );
+  }
+
+  Widget _status(BuildContext context, String text) {
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
     final active =
         chat.status != ProfileTurnStatus.attention &&

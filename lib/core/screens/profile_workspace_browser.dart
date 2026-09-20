@@ -1306,10 +1306,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
               ),
               _filters(),
               _viewControls(),
-              WorkspaceConnectionStatus(
-                status: controller.connectionStatus,
-                reserveSpace: false,
-              ),
+              WorkspaceConnectionStatus(status: controller.connectionStatus),
               if (controller.error != null)
                 ListTile(
                   title: StudioError(controller.error!),
