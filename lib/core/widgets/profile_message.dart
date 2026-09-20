@@ -24,6 +24,7 @@ class ProfileMessage extends StatelessWidget {
   final UserAttachmentImageLoader? loadAttachmentImage;
   final VoidCallback? onReadAloud;
   final bool readingAloud;
+  final Widget? actions;
   const ProfileMessage({
     super.key,
     required this.message,
@@ -32,6 +33,7 @@ class ProfileMessage extends StatelessWidget {
     this.loadAttachmentImage,
     this.onReadAloud,
     this.readingAloud = false,
+    this.actions,
   });
 
   static Uri? externalLink(String href) => externalWebLink(href);
@@ -86,33 +88,43 @@ class ProfileMessage extends StatelessWidget {
           color: theme.colorScheme.onSurfaceVariant,
         ),
       );
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-        child: result == null
-            ? Center(child: label)
-            : AnchoredExpansionTile(
-                key: ValueKey(('transcript-notice', message['id'])),
-                title: label,
-                subtitle: Text(delivery?.disclosure ?? 'View result'),
-                shape: const Border(),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: delivery != null
-                        ? SelectableText(
-                            result,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              fontFamily:
-                                  delivery.kind == 'process_notification'
-                                  ? 'monospace'
-                                  : null,
-                            ),
-                          )
-                        : MarkdownMessageContent(
-                            data: result,
-                            onOpenRemoteFile: onOpenRemoteFile,
+      final noticeBody = result == null
+          ? Center(child: label)
+          : AnchoredExpansionTile(
+              key: ValueKey(('transcript-notice', message['id'])),
+              title: label,
+              subtitle: Text(delivery?.disclosure ?? 'View result'),
+              shape: const Border(),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: delivery != null
+                      ? SelectableText(
+                          result,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontFamily: delivery.kind == 'process_notification'
+                                ? 'monospace'
+                                : null,
                           ),
-                  ),
+                        )
+                      : MarkdownMessageContent(
+                          data: result,
+                          onOpenRemoteFile: onOpenRemoteFile,
+                        ),
+                ),
+              ],
+            );
+      return Padding(
+        padding: actions == null
+            ? const EdgeInsets.symmetric(vertical: 8, horizontal: 8)
+            : EdgeInsets.zero,
+        child: actions == null
+            ? noticeBody
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: noticeBody),
+                  actions!,
                 ],
               ),
       );
@@ -185,7 +197,7 @@ class ProfileMessage extends StatelessWidget {
     final user = role == 'user';
     final timestamp = _timestamp(context);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.only(bottom: user ? WingSpacing.md : 0),
       child: Column(
         crossAxisAlignment: user
             ? CrossAxisAlignment.end
@@ -318,6 +330,8 @@ class ProfileMessage extends StatelessWidget {
                 ),
               ),
           if (user && content.isEmpty && timestamp != null) timestamp,
+          if (actions != null)
+            Align(alignment: Alignment.centerRight, child: actions),
         ],
       ),
     );

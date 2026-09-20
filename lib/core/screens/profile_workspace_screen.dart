@@ -1016,11 +1016,21 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         allowSavedActions &&
         isHumanAnswerPrompt(message) &&
         answerMessageId(message) != null;
-    final savedAnswer =
+    final index = displayedHistory.indexOf(message);
+    final previous = index > 0 ? displayedHistory[index - 1] : null;
+    final next = index >= 0 && index + 1 < displayedHistory.length
+        ? displayedHistory[index + 1]
+        : null;
+    final sharesPreviousActions =
         allowSavedActions &&
-        message['role'] == 'assistant' &&
-        answerMessageId(message) != null &&
-        isBranchMessage(message);
+        transcriptNoticeKind(message) == 'async_delegation_complete' &&
+        previous != null &&
+        _hasAnswerActions(displayedHistory, previous);
+    final sharesNextNotice =
+        next != null &&
+        transcriptNoticeKind(next) == 'async_delegation_complete';
+    final savedAnswer =
+        allowSavedActions && _hasAnswerActions(displayedHistory, message);
     final enabled =
         !chat.opening &&
         !chat.offlineSnapshot &&
@@ -1070,35 +1080,55 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             onReadAloud: message['role'] == 'assistant'
                 ? () => _run(() => _readAloud(chat, message))
                 : null,
+            actions: sharesPreviousActions
+                ? _answerActions(chat, previous, enabled: enabled)
+                : savedAnswer && !sharesNextNotice
+                ? _answerActions(chat, message, enabled: enabled)
+                : null,
             readingAloud:
                 _voiceOutput.owner ==
                 (chat.key, answerMessageId(message) ?? message),
             loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
             onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
           ),
-        if (savedAnswer)
-          AnswerActions(
-            key: ValueKey('answer-actions-${answerMessageId(message)}'),
-            busy: chat.changingAnswer,
-            onBranch: enabled
-                ? () => _run(() async {
-                    await controller.branchAnswer(
-                      chat,
-                      chat.messages.indexOf(message),
-                    );
-                  })
-                : null,
-            onRegenerate: enabled
-                ? () => _run(() async {
-                    await controller.branchAnswer(
-                      chat,
-                      chat.messages.indexOf(message),
-                      regenerate: true,
-                    );
-                  })
-                : null,
-          ),
       ],
+    );
+  }
+
+  bool _hasAnswerActions(
+    List<Map<String, dynamic>> history,
+    Map<String, dynamic> message,
+  ) =>
+      message['role'] == 'assistant' &&
+      answerMessageId(message) != null &&
+      isBranchMessage(message) &&
+      interAgentReplySender(history, history.indexOf(message)) == null;
+
+  Widget _answerActions(
+    ProfileChat chat,
+    Map<String, dynamic> message, {
+    required bool enabled,
+  }) {
+    return AnswerActions(
+      key: ValueKey('answer-actions-${answerMessageId(message)}'),
+      busy: chat.changingAnswer,
+      onBranch: enabled
+          ? () => _run(() async {
+              await controller.branchAnswer(
+                chat,
+                chat.messages.indexOf(message),
+              );
+            })
+          : null,
+      onRegenerate: enabled
+          ? () => _run(() async {
+              await controller.branchAnswer(
+                chat,
+                chat.messages.indexOf(message),
+                regenerate: true,
+              );
+            })
+          : null,
     );
   }
 

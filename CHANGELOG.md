@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Bring fork and retry closer to each answer and share the following background-agent notice row when available.
+
 - Move chat grouping, sorting and visible details into anchored menus under the
   ellipsis, freeing the permanent control row for more chats.
 

@@ -1029,6 +1029,44 @@ fixture-value-amber-729
     },
   );
 
+  testWidgets('notice shares actions for the preceding saved answer', (
+    tester,
+  ) async {
+    host.history('a', 'original').insert(3, {
+      'role': 'user',
+      'text': 'Background result',
+      'row_id': 6,
+      'display_kind': 'async_delegation_complete',
+      'display_metadata': {'task_count': 1},
+    });
+    await controller.refreshHistory(original);
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    final actions = find.byKey(const ValueKey('answer-actions-3'));
+    final notice = find.text('1 background agent finished');
+    expect(actions, findsOneWidget);
+    expect(notice, findsOneWidget);
+    expect(tester.getRect(actions).overlaps(tester.getRect(notice)), isFalse);
+    expect(
+      tester.getTopLeft(actions).dy,
+      lessThan(tester.getBottomLeft(notice).dy),
+    );
+    await tester.tap(
+      find.descendant(
+        of: actions,
+        matching: find.byTooltip('Branch in new session'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      host.calls.lastWhere((call) => call.$1 == 'session.branch').$2['count'],
+      2,
+    );
+    expect(controller.current!.chat!.messages.last['text'], 'Original answer');
+  });
+
   testWidgets(
     'server branch controls fit a narrow phone without version arrows',
     (tester) async {
