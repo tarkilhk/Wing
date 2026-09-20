@@ -80,6 +80,19 @@ Future<void> main() async {
           };
           host.pendingApprovals!.add(approval);
           event(chat, 'approval', approval);
+        case '/question':
+          final count = (data['count'] as num?)?.toInt() ?? 3;
+          event(chat, 'clarify', {
+            'request_id': 'qa-question-count',
+            'questions': [
+              for (var index = 0; index < count; index++)
+                {
+                  'qid': 'q$index',
+                  'question': 'Which sample output should I prepare?',
+                  'choices': ['Summary', 'Checklist'],
+                },
+            ],
+          });
         case '/reply':
           if (!chat.busy) {
             chat.draft = 'Update the website';

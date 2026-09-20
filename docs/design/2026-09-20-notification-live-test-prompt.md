@@ -1,5 +1,10 @@
 # One-chat Hermes notification test
 
+**Next session:** start with the [build 2326 bug-fix retests](#build-2326-bug-fix-retests--run-first-next-session)
+below. Build 2326 is installed on the phone. Sound is confirmed working by the
+user; it does not need a dedicated repeat. Continue the remaining gaps from the
+[clean status](2026-09-20-notification-test-status.md) afterward.
+
 Paste the entire code block below into one new Hermes chat in Wing. Open **that
 same chat** on desktop if possible so you can send controls without reading the
 answer in Wing. Reply `RUN 01`, then advance through the scenarios when ready.
@@ -301,3 +306,88 @@ was verified at `2ed6387d87b4db091af2f05db32faab6e0dbb9a2`; adding that real eve
 made the fixture pass without changing production code. These checks do not
 establish receipt of the original phone events. Retry with Watching observed
 before attributing a remaining failure to replacement or delivery logic.
+
+
+## Build 2326 bug-fix retests — run first next session
+
+These are required live regressions for the two bugs fixed after tonight's tests.
+They revisit scenarios 05, 10, 15 and 16; they are not extra scenarios in the
+19-scenario count. Automated checks passed, but **all retests below remain pending**.
+The user drives the same Hermes desktop chat; Codex operates Wing and records
+Android state. Do not start tonight. No approval-policy changes are needed.
+
+### R1 — Remaining question count (scenario 05)
+
+Open Wing's connected chat list with previews enabled. Send this on desktop:
+
+```text
+WING-RETEST-COUNT: Use a terminal tool to sleep for 20 seconds, then use
+one real stock structured clarification batch containing three questions:
+environment (Preview/Production), color (Blue/Green), and output
+(Summary/Checklist). Use your exposed tool's actual schema. Wait for my answers;
+do not substitute ordinary chat questions or answer yourself. After all three
+are answered, reply briefly with the three selected values. If the real batch
+is unavailable, report BLOCKED instead.
+```
+
+1. Confirm Watching starts, then background Wing before the batch arrives.
+2. Inspect collapsed and expanded notifications: both must display **3 questions**
+   and useful first-question text, with Review opening the correct chat/form.
+3. Answer Preview in Wing, inspect the shade: **2 questions**, next question text.
+   Answer Blue, inspect again: **1 question**, final question text. There must
+   remain only one notification slot for this chat.
+4. While the last question is pending, turn previews off. Its count must remain,
+   but question/choice text must be hidden. Restore previews before continuing.
+5. Answer Summary. The resolved-input notice must advance/clear; no old question
+   or count may remain. A later unread result may occupy the same slot.
+
+Record each actual count and any clipped text; do not infer counts from Wing's
+in-chat “1 of 3” form. Restore previews if the run is interrupted.
+
+### R2 — Dismissed question, restart, desktop resolution (scenarios 10/15/16)
+
+Open Wing's connected chat list. Send on desktop:
+
+```text
+WING-RETEST-STALE: Sleep for 20 seconds using a terminal tool, then ask one
+real structured clarification question: "WING-RETEST-STALE: Which output
+should I prepare?" with Summary and Checklist. Keep it pending until I answer.
+After my answer, reply briefly with the selected output and do not create any
+further request. If the structured tool is unavailable, report BLOCKED.
+```
+
+1. Confirm Watching, background Wing, and capture the pending question notice.
+2. Swipe away that notice. Reopen only the connected chat list: Needs input is
+   correct while the question is unanswered; the dismissed notice must stay gone.
+3. Explicitly force-stop and relaunch Wing, then return to that chat list. Confirm
+   the still-pending state and retained dismissal. Do not expect delivery while
+   force-stopped; complete relaunch/reconnection before the next step.
+4. Ask the user to answer Summary **on desktop** and let Hermes finish, while
+   Wing remains connected on the chat list. Record when it loses Needs input.
+   Do not open the chat, visit Settings, or manually refresh to make it pass.
+5. Background and resume to the chat list once more. It must remain Idle, with
+   no old question resurrected. Finally open the chat to verify the completed
+   answer and absence of a question form, then return: the badge must still be Idle.
+
+Pass requires the actual list status to clear, including its cached activity
+state. A completed answer visible inside the chat alone is insufficient—the
+original bug persisted in the list even after that check. A fresh completion
+notification is allowed; it is not resurrection of the dismissed input notice.
+
+### R2b — Visible request resolves while work continues (scenario 15)
+
+Repeat R2's prompt with label `WING-RETEST-CONTINUE`, adding this instruction:
+“After I answer the question, use a terminal tool to sleep for 30 seconds before
+your final reply.” Start from the connected Wing chat list, observe Watching,
+then background Wing for the question. Keep its notification visible this time.
+
+When the question is ready, return only to Wing's connected chat list, then have
+the user answer on desktop. While Hermes continues the 30-second wait, verify
+Needs input clears to Working and monitoring starts. Background Wing once it
+starts. The old question/choices must disappear; the final answer must arrive
+and monitoring must end. Never require a lone waiting question to keep watching.
+
+If any variant lacks a required backend event or reconnect, record the observed
+state and prerequisite failure. Do not mark it passed because unit tests passed.
+After these retests, continue only the outstanding items in the clean status;
+do not rerun blocked approval probes without a new safe way to produce them.

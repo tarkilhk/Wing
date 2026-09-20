@@ -5861,6 +5861,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileWorkspaceData source,
   ) async {
     if (_closed || onAttention == null) return;
+    final cachedActivity = _liveActivity;
     try {
       final profiles = await source.gateway.discover();
       final response = await source.gateway.call('session.active_list');
@@ -5894,18 +5895,34 @@ class ProfileWorkspaceController extends ChangeNotifier {
           // An idle chat can be omitted when the socket reconnects from the
           // chat list. A later desktop turn therefore arrives first through
           // the global working snapshot, not through message.start.
-          if (!loaded.busy &&
-              !loaded.commandRunning &&
-              (status == 'working' || status == 'starting')) {
+          final remoteWorking = status == 'working' || status == 'starting';
+          final localInputs = jsonEncode(
+            _notificationInputs(loaded).map((input) => input.toJson()).toList(),
+          );
+          // Desktop can resolve input without sending request.cancel. A global
+          // non-waiting snapshot is a reason to read the current request state,
+          // not permission to discard a locally pending request on its own.
+          final inputStateChanged =
+              loaded.status == ProfileTurnStatus.attention &&
+              (status == 'idle' || remoteWorking);
+          if (!loaded.commandRunning &&
+              ((!loaded.busy && remoteWorking) || inputStateChanged)) {
             final generation = loaded._turnGeneration;
+            final previousStatus = loaded.status;
             final owner = _resources[loaded.key.workspace]!;
             final resumed = await owner.gateway.resume(sessionId);
             if (_closed) return;
-            // A live start or navigation can overtake the resume response.
+            // A live start, new input, answer or navigation can overtake it.
             if (loaded.runtimeId == runtimeId &&
                 loaded._turnGeneration == generation &&
-                !loaded.busy &&
-                !loaded.commandRunning) {
+                loaded.status == previousStatus &&
+                !loaded.commandRunning &&
+                localInputs ==
+                    jsonEncode(
+                      _notificationInputs(
+                        loaded,
+                      ).map((input) => input.toJson()).toList(),
+                    )) {
               _hydrate(loaded, resumed);
               loaded.offlineSnapshot = false;
               await _journal();
@@ -5947,6 +5964,25 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }),
       );
       if (_closed) return;
+
+      // This already-fetched snapshot also supersedes the list's earlier
+      // activity read. Otherwise a resolved question can stay Needs input even
+      // after the loaded chat has cleared it. Only update known identities;
+      // missing/unknown rows are not evidence of completion, and a newer full
+      // activity refresh must win over this in-flight reconciliation.
+      if (identical(_liveActivity, cachedActivity)) {
+        final reported = {
+          for (final row in ProfileGateway.records(response['sessions']))
+            (row['id'], row['session_key']): row,
+        };
+        _liveActivity = List.unmodifiable([
+          for (final item in cachedActivity)
+            ..._reconciledActivity(
+              item,
+              reported[(item.runtimeId, item.sessionId)],
+            ),
+        ]);
+      }
 
       final next = <String, _NotificationSession>{};
       for (final row in rows) {
@@ -6027,6 +6063,30 @@ class ProfileWorkspaceController extends ChangeNotifier {
     } finally {
       _changed();
     }
+  }
+
+  Iterable<ProfileLiveActivity> _reconciledActivity(
+    ProfileLiveActivity item,
+    Map<String, dynamic>? row,
+  ) sync* {
+    if (row == null ||
+        !{'waiting', 'starting', 'working', 'idle'}.contains(row['status'])) {
+      yield item;
+      return;
+    }
+    final sideTasks = row['side_tasks_running'] as int? ?? 0;
+    if (row['status'] == 'idle' && sideTasks == 0) return;
+    yield ProfileLiveActivity(
+      workspace: item.workspace,
+      runtimeId: item.runtimeId,
+      sessionId: item.sessionId,
+      title: item.title,
+      lastActive: (row['last_active'] as num?)?.toDouble() ?? item.lastActive,
+      state: row['status'] == 'waiting'
+          ? ProfileLiveActivityState.needsInput
+          : ProfileLiveActivityState.running,
+      sideTasksRunning: sideTasks,
+    );
   }
 
   bool _hasLoadedNotificationChat(String runtimeId, String sessionId) =>

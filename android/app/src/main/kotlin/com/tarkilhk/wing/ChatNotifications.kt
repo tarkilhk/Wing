@@ -167,6 +167,7 @@ object ChatNotifications {
         val pending = data["pending"] as? String ?: ""
         val error = data["error"] as? String
         val busy = data["submitting"] == true
+        val body = listOf(pending, data["body"] as String).filter { it.isNotEmpty() }.joinToString(" · ")
         val icon = when(data["icon"]) {
             "ic_stat_wing_input" -> R.drawable.ic_stat_wing_input
             "ic_stat_wing_stopped" -> R.drawable.ic_stat_wing_stopped
@@ -174,7 +175,7 @@ object ChatNotifications {
         }
         val builder = NotificationCompat.Builder(context, data["channel"] as String)
             .setSmallIcon(icon).setContentTitle(data["title"] as String)
-            .setContentText(data["body"] as String).setSubText(data["scope"] as? String)
+            .setContentText(body).setSubText(data["scope"] as? String)
             .setAutoCancel(false).setOnlyAlertOnce(data["alert"] != true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(NotificationCompat.Builder(context, data["channel"] as String)
@@ -203,7 +204,8 @@ object ChatNotifications {
             }
             builder.setStyle(NotificationCompat.DecoratedCustomViewStyle()).setCustomBigContentView(views)
         } else {
-            builder.setStyle(NotificationCompat.BigTextStyle().bigText(data["expanded"] as String))
+            val expanded = listOf(pending, data["expanded"] as String).filter { it.isNotEmpty() }.joinToString("\n")
+            builder.setStyle(NotificationCompat.BigTextStyle().bigText(expanded))
             if (pending.isNotEmpty()) builder.addAction(0, "Review", intent(context, data, "", true))
         }
         NotificationManagerCompat.from(context).notify(id, builder.build())

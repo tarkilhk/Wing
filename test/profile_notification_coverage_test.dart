@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/models/chat_list_view.dart';
+import 'package:wing/core/models/profile_live_activity.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
@@ -23,6 +25,7 @@ class NotificationCoverageHost {
   final resumeCalls = <Map<String, dynamic>>[];
   Completer<void>? resumeDelay;
   bool activeFails = false;
+  bool resumeFails = false;
   final workingProfiles = <String>{};
   final waitingProfiles = <String>{};
   final failedSearchProfiles = <String>{};
@@ -89,6 +92,7 @@ class NotificationCoverageHost {
             if (method == 'session.resume') {
               resumeCalls.add(Map.of(params));
               await resumeDelay?.future;
+              if (resumeFails) throw StateError('resume unavailable');
             }
             final sessionId = method == 'session.create'
                 ? 'loaded'
@@ -235,6 +239,155 @@ void main() {
 
     expect(alerts, [(profile: 'a', session: 'loaded', input: true)]);
   });
+
+  test(
+    'desktop resolution clears loaded question state from the chat list',
+    () async {
+      final chat = await controller.createChat();
+      host.gateways['a']!.onEvent!(
+        StreamEvent(
+          type: 'clarify',
+          sessionId: chat.runtimeId,
+          data: const {
+            'request_id': 'desktop-question',
+            'question': 'Continue?',
+          },
+        ),
+      );
+      host.active = [row(chat.runtimeId, chat.key.sessionId, 'waiting')];
+      host.changed();
+      await waitForReads(host, 1);
+      expect(chat.pendingQuestion, isNotNull);
+      expect(chatListStatus(const {}, chat: chat), ChatListStatus.needsInput);
+
+      // Desktop answered and finished while this chat was not selected. The
+      // global snapshot arrives without request.cancel or message.complete.
+      host.active = [row(chat.runtimeId, chat.key.sessionId, 'idle', 2)];
+      host.changed();
+      await waitForReads(host, 2);
+      for (var i = 0; i < 20 && chat.pendingQuestion != null; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(chat.pendingQuestion, isNull);
+      expect(chatListStatus(const {}, chat: chat), ChatListStatus.idle);
+      expect(controller.hasActiveChats, isFalse);
+    },
+  );
+
+  test(
+    'desktop completion clears an earlier waiting activity snapshot',
+    () async {
+      final chat = await controller.createChat();
+      host.active = [row(chat.runtimeId, chat.key.sessionId, 'waiting')];
+      await controller.refreshActivity();
+      expect(
+        controller.liveActivity.single.state,
+        ProfileLiveActivityState.needsInput,
+      );
+      final reads = host.activeReads;
+      host.gateways['a']!.onEvent!(
+        StreamEvent(
+          type: 'message.complete',
+          sessionId: chat.runtimeId,
+          data: const {'text': 'Desktop question resolved'},
+        ),
+      );
+      host.active = [row(chat.runtimeId, chat.key.sessionId, 'idle', 2)];
+      host.changed();
+      await waitForReads(host, reads + 1);
+      expect(chat.pendingQuestion, isNull);
+      expect(chat.busy, isFalse);
+      expect(controller.liveActivity, isEmpty);
+    },
+  );
+
+  test('a newer question survives a delayed desktop-resolution read', () async {
+    final chat = await controller.createChat();
+    void question(String id) => host.gateways['a']!.onEvent!(
+      StreamEvent(
+        type: 'clarify',
+        sessionId: chat.runtimeId,
+        data: {'request_id': id, 'question': 'Continue?'},
+      ),
+    );
+    question('old');
+    host.resumeDelay = Completer<void>();
+    host.active = [row(chat.runtimeId, chat.key.sessionId, 'idle')];
+    host.changed();
+    await waitForReads(host, 1);
+    expect(host.resumeCalls, hasLength(1));
+    question('new');
+    host.resumeDelay!.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(chat.pendingQuestion?['request_id'], 'new');
+    expect(chat.status, ProfileTurnStatus.attention);
+  });
+
+  test('failed request refresh preserves the pending question', () async {
+    final chat = await controller.createChat();
+    host.gateways['a']!.onEvent!(
+      StreamEvent(
+        type: 'clarify',
+        sessionId: chat.runtimeId,
+        data: const {'request_id': 'pending', 'question': 'Continue?'},
+      ),
+    );
+    host.resumeFails = true;
+    host.active = [row(chat.runtimeId, chat.key.sessionId, 'idle')];
+    host.changed();
+    await waitForReads(host, 1);
+    expect(chat.pendingQuestion?['request_id'], 'pending');
+    expect(chat.status, ProfileTurnStatus.attention);
+  });
+
+  test('desktop resolution resumes monitoring while work continues', () async {
+    final chat = await controller.createChat();
+    host.gateways['a']!.onEvent!(
+      StreamEvent(
+        type: 'clarify',
+        sessionId: chat.runtimeId,
+        data: const {'request_id': 'pending', 'question': 'Continue?'},
+      ),
+    );
+    host.workingProfiles.add('a');
+    host.active = [row(chat.runtimeId, chat.key.sessionId, 'working')];
+    host.changed();
+    await waitForReads(host, 1);
+    expect(chat.pendingQuestion, isNull);
+    expect(chat.status, ProfileTurnStatus.running);
+    expect(controller.hasActiveChats, isTrue);
+  });
+
+  for (final status in ['idle', 'unknown', 'missing', 'failed']) {
+    test(
+      'activity reconciliation preserves side work or uncertainty: $status',
+      () async {
+        final chat = await controller.createChat();
+        host.active = [row(chat.runtimeId, chat.key.sessionId, 'waiting')];
+        await controller.refreshActivity();
+        final reads = host.activeReads;
+        host.activeFails = status == 'failed';
+        host.active = [
+          if (status != 'missing')
+            {
+              ...row(chat.runtimeId, chat.key.sessionId, status),
+              'side_tasks_running': 1,
+            },
+        ];
+        host.changed();
+        await waitForReads(host, reads + 1);
+        expect(
+          controller.liveActivity.single.state,
+          status == 'idle'
+              ? ProfileLiveActivityState.running
+              : ProfileLiveActivityState.needsInput,
+        );
+        if (status == 'idle') {
+          expect(controller.liveActivity.single.sideTasksRunning, 1);
+        }
+      },
+    );
+  }
 
   test('failed and reconnected snapshots never imply completion', () async {
     host.active = [row('outside-runtime', 'outside', 'working')];
