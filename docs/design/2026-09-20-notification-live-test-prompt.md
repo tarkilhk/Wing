@@ -1,29 +1,14 @@
 # One-chat Hermes notification test
 
-**Subsequent investigation:** the actual phone trace identified an earlier
-saved-chat guard preventing request hydration. It is fixed and reproduced before/
-after on Android; see [the cached-chat investigation](2026-09-22-notification-cached-chat-investigation.md).
-The first question's fixed-phone live pass remains pending; B already passed.
+**23 September update:** both focused bug-fix retests now pass on the physical
+phone. A passed on 2329; B passed on 2328. **Zero focused retests remain.**
+[Final result](2026-09-23-notification-final-live-result.md) and
+[current ledger](2026-09-20-notification-test-status.md). Original broader ledger:
+7 passed, 2 partial, 0 failed, 10 blocked. No request remains pending.
 
-**Latest live result on build 2328:** both focused retests are finished:
-**A failed again; B passed**, including read clearing and no resurrection after
-restart. See [the live record](2026-09-22-notification-2328-live-results.md).
-No desktop prompt is pending. Do not repeat A unchanged; its complete live cause
-remains unresolved despite the fixed fixture race. Earlier preparation and
-validation notes below are historical where superseded by this result.
-
-**22 September update:** build **2328** is installed. Both causes of the failed
-build 2327 follow-ups have been reproduced and fixed, with passing Android
-emulator checks; see the [investigation](2026-09-22-notification-root-causes.md).
-**Two fresh live cases remain** in the
-[focused follow-up script](2026-09-22-notification-followup-retests.md): unopened
-structured input delivery and restored-reply tap/read clearing. Historical
-[results](2026-09-22-notification-followup-live-results.md) remain A failed/B partial
-until the fresh live runs pass. No desktop request is currently pending.
-Sound is confirmed. New activity/full-bottom remains a separate UX follow-up.
-For desktop decisions, give an explicit **NOW: select Summary on desktop** cue
-in the conversation as well as any question card; account for the stock request's
-observed five-minute timeout.
+For future desktop decisions, give an explicit NOW cue in the conversation and
+account for the observed five-minute request timeout. The original script below
+remains available for capability-dependent or broader regression tests.
 
 Paste the entire code block below into one new Hermes chat in Wing. Open **that
 same chat** on desktop if possible so you can send controls without reading the

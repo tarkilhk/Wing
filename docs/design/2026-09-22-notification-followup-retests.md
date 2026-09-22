@@ -1,31 +1,12 @@
 # Focused notification follow-up retests
 
-**Build 2329 is installed:** only **A** needs a fresh live pass for the
-saved-chat adoption fix. The phone trace proves the previously missed cache guard;
-see [the investigation](2026-09-22-notification-cached-chat-investigation.md).
-B passed on 2328 and does not need an unchanged repeat. Confirm no diagnostic
-question remains pending, then explicitly ensure the target chat has a saved
-reading copy: open it once, return to the list, force-stop/relaunch, and do not
-open it again before the background question arrives. This persisted-state
-precondition is essential. Build 2329 installation status is in the canonical
-[test status](2026-09-20-notification-test-status.md).
+**Completed:** A passed on build 2329 on 23 September; B passed on build 2328.
+**Zero focused retests remain.** [Final result](2026-09-23-notification-final-live-result.md).
+The procedures below are retained for future regression testing.
 
-**Latest live result on build 2328:** both focused retests are finished:
-**A failed again; B passed**, including read clearing and no resurrection after
-restart. See [the live record](2026-09-22-notification-2328-live-results.md).
-No desktop prompt is pending. Do not repeat A unchanged; its complete live cause
-remains unresolved despite the fixed fixture race. Earlier preparation and
-validation notes below are historical where superseded by this result.
-
-Build **2328** is installed on the phone (Android version code **23282**).
-Run these **two fresh live cases** to verify the root-cause fixes. The previous
-build 2327 outcomes remain **A failed; B partially passed** in the
-[live results](2026-09-22-notification-followup-live-results.md).
-Both actual bug conditions now reproduce before their fixes and pass afterward,
-including actual Android emulator checks; see the
-[root-cause investigation](2026-09-22-notification-root-causes.md).
-After installation, the old stuck reply was already absent, so case B needs a
-fresh desktop reply. That absence does not count as a successful tap/read retest.
+For case A, first open the target chat once with no pending request, return to
+the list, force-stop/relaunch, then leave it unopened until notification arrival.
+This ensures the saved reading copy that caused the actual bug is present.
 
 The user operates the same Hermes desktop chat. Codex operates Wing and records
 native notification state. Show desktop prompts directly in the conversation.

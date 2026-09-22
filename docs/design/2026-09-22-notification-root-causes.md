@@ -1,5 +1,11 @@
 # Root causes after the failed build 2327 live retests
 
+**Final verification, 23 September:** the corrected saved-cache path passed on
+the physical phone: first useful notification before opening, Review, same-slot
+3→2→1, accepted answers and cleanup. Both focused bug-fix retests are complete.
+[Final live result](2026-09-23-notification-final-live-result.md). Earlier pending
+verification statements below describe the historical investigation stage.
+
 **Subsequent investigation:** the actual phone trace identified an earlier
 saved-chat guard preventing request hydration. It is fixed and reproduced before/
 after on Android; see [the cached-chat investigation](2026-09-22-notification-cached-chat-investigation.md).
