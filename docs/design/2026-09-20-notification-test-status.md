@@ -1,58 +1,62 @@
 # Notification test status
 
-Updated 20 September 2026 after live testing on a Galaxy S23 Ultra, Android 16.
-Phone build: **2326 installed and verified** (Android version code 23262).
-Live evidence below comes from build 2325; both fixes await tomorrow’s live retest.
-Detailed evidence: [live results](2026-09-20-notification-live-results.md).
-Test instructions: [19-scenario script](2026-09-20-notification-live-test-prompt.md).
+Updated **22 September 2026**. Phone: Galaxy S23 Ultra, Android 16; Wing **2326**
+(Android version code 23262). No source changes were made during today's tests.
 
-## Summary
+Evidence: [20 September live results](2026-09-20-notification-live-results.md),
+[22 September retest results](2026-09-22-notification-retest-results.md).
+Instructions: [test script](2026-09-20-notification-live-test-prompt.md).
 
-- **19 scenarios accounted for:** 4 passed, 5 partially covered or with an issue,
-  10 blocked by the current safe test conditions.
-- Both confirmed issues are fixed in the client; no further user-driven phone tests
-  tonight. Remaining live checks resume tomorrow.
-- Test capture is stopped. Message previews and Android's attention category
-  were restored to their original enabled settings. Backend policy and phone
-  authentication settings were not changed.
+## Current summary
 
-## Confirmed issues
+- Today's **five runs are finished: 3 passed, 1 partially passed, 1 failed**.
+- Original **19-scenario ledger: 5 passed, 3 partial, 1 failed, 10 blocked**.
+  A passed row covers its runnable checks; separately documented blocked branches
+  are not silently treated as passed.
+- Sound is **confirmed working by the user**. No dedicated repeat is needed.
+- Capture stopped; previews restored to enabled; Android attention category
+  remains enabled; phone left on Home. No backend policy, credentials or phone
+  authentication changes. No test request remains pending.
 
-| Issue | Evidence | Fix status |
-| --- | --- | --- |
-| Missing unanswered-question count | N05: a real three-question batch advanced correctly, but the notification never showed its remaining count | Fixed: count in collapsed and expanded notification text; Android emulator regression passes |
-| Stale Needs input chat-list status after desktop resolution | N10: after dismissal and process restart, desktop finished; list still said Needs input after reconnect; opening chat showed the completed answer | Fixed: refresh resolved requests and reconcile the cached activity snapshot; regression tests pass |
+## Fixes and remaining issues
 
-The original watcher/replacement bug is already fixed in main commit `120868e`
-and build 2325. LIVE-5/6 verified that fix on the phone.
+| Item | Current evidence / disposition |
+| --- | --- |
+| Missing remaining-question count | Build 2326 renders 3 → 2 → 1 correctly in collapsed/expanded notifications once the request is loaded; hidden previews retain count and hide content. Live-verified today. |
+| Stale Needs input after desktop resolution | Actual desktop Summary submission after dismissal/force-stop/relaunch cleared the untouched list to Idle. Continued-work variant resumed monitoring, delivered exact reply and stopped. Live-verified today. |
+| Initial generic input notice | First background notice said only Open the chat to continue until chat opening loaded the real batch. Still a content/coverage gap. |
+| Unread reply after force-stop/relaunch | Failed restoration: notice disappeared and did not return after reconnect, without reading or dismissal. Separate from ordinary backgrounding. |
+| New activity versus full-bottom reading | Older history correctly retained the notice. New activity showed the answer but did not clear; a full-bottom scroll did. Accepted bottom rule passes; shortcut behavior warrants UX follow-up. |
 
-## Scenario checklist
+The original idle-reconnect watcher/replacement defect was fixed in `120868e`
+(build 2325); LIVE-5/6 verified it. Build 2326 fixes were committed in `f291f59`.
+Today's observed gaps are not silently counted as fixed.
+
+## Original scenario checklist
 
 | # | Scenario | Status |
 | --- | --- | --- |
-| 01 | Reply and reading | Partial: tap/latest-answer clearing passed; older-history case tomorrow |
-| 02 | Replacement and identical replies | Passed: exact identical text still produced a fresh same-slot update |
+| 01 | Reply and reading | Passed: tap/latest-answer clearing plus older-history retention/full-bottom clearing; shortcut detail above |
+| 02 | Replacement and identical replies | Passed: exact identical text produced a fresh same-slot update |
 | 03 | Foreground behavior | Passed: normal reply suppressed; real input notification allowed |
 | 04 | Monitoring and interruption | Passed: live summary, lock-screen delivery, real desktop Stop and watcher shutdown |
-| 05 | Three-question batch | Partial: Review, advancement and completion passed; original count display failed; fix awaits phone retest |
+| 05 | Three-question batch | Partial: counts, advancement, Review, earlier completion and privacy covered; first background notification still generic until opening |
 | 06 | Once | Blocked: Smart auto-approved the safe operation |
 | 07 | Deny | Blocked: no real safe approval request |
 | 08 | FIFO approvals | Blocked: no real safe approval requests; concurrency unverified |
 | 09 | Mixed input priority | Blocked: no real safe approval request; concurrency unverified |
-| 10 | Swipe dismissal | Partial: retained across reconnect and process restart; new-request branch not covered |
+| 10 | Swipe dismissal | Partial: preserved across reconnect and force-stop/relaunch; concurrent new-request branch uncovered |
 | 11 | Long command / large-text approval layout | Blocked: no real safe approval request |
-| 12 | Hidden previews / channels | Passed for questions and category diagnostics; approval privacy branch blocked |
+| 12 | Hidden previews / channels | Passed for questions/counts and category diagnostics; approval privacy branch blocked |
 | 13 | Unlocking approval actions | Blocked: no real safe approval request |
 | 14 | Offline / stale approval actions | Blocked: no real safe approval request |
-| 15 | Desktop resolution | Partial: N15 reconnect cleanup passed; N10 fix awaits phone retest; watcher-active branch untested |
-| 16 | Restart / reconnect | Partial: idle reconnect, unread retention and dismissed pending-question restart passed |
-| 17 | Secure input | Blocked: exposed masked flows affect credentials/accounts; no harmless dummy flow reported |
+| 15 | Desktop resolution | Partial: actual desktop answer/reconnect and continued-work cleanup pass; already-running watcher polling branch untested |
+| 16 | Restart / reconnect | Failed explicit force-stop unread-reply restoration; pending dismissal, idle reconnect and ordinary unread retention covered |
+| 17 | Secure input | Blocked: no harmless generic dummy-data flow exposed by runtime |
 | 18 | Session permission | Blocked: no real safe approval request |
 | 19 | Always permission | Blocked: no real safe approval request; no permanent grant attempted |
 
-Audible sound is **confirmed working as expected by the user**, during the
-follow-up fix session. Multi-chat/profile isolation and counts cannot be proved
-by this one-chat run.
+Multi-chat/profile isolation and counts cannot be proved by these one-chat runs.
 
 ## Fixes and automated evidence
 
@@ -82,7 +86,8 @@ by this one-chat run.
   build 2326. Signed ARM64 APK verification passes: production package, version
   code 23262, non-debuggable, expected pinned release certificate.
 - Installed with data-preserving `adb install -r`; package readback confirms
-  version code 23262 and version name 1.0.1. No live scenario was run after install.
+  version code 23262 and version name 1.0.1. Installation was on 20 September;
+  the subsequent live retest evidence is recorded above for 22 September.
 - APK: `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`; SHA-256
   `723f63df15c54e59699a560e4749b1b1b57af2130f969846578682bb6f64c085`.
 
@@ -90,22 +95,19 @@ These are automated/client-fixture results. They do not upgrade the live scenari
 statuses above or establish stock approval capability. Sound confirmation above
 comes from the user, independently of automated checks.
 
-## Resume tomorrow
+## Next work
 
-1. Run the script’s [required build 2326 retests](2026-09-20-notification-live-test-prompt.md#build-2326-bug-fix-retests--run-first-next-session)
-   first. A three-question batch must show
-   3/2/1 remaining; after desktop resolution, the chat list must lose Needs input
-   without opening Settings. Include the dismissed-question/restart sequence and
-   the variant where desktop resolution leads to continued work and monitoring.
-2. Finish older-history/latest-answer clearing and remaining restart branches.
-3. Decide how to obtain a genuine harmless approval under the deployed policy.
-   Do not change approval policy or escalate command risk without a separate
-   decision. Run scope-granting cases last; permanent acceptance still needs
-   explicit instruction and a verified narrow scope.
-4. Cover supported concurrency/watcher-active branches; retain explicit blocked
-   or unobserved labels for conditions the runtime cannot generate safely.
-5. Ask Hermes to clean up its remaining disposable test parent when requested:
+1. Investigate/fix initial structured-input content for unopened chats and unread
+   reply restoration on relaunch after force-stop; review New activity's read
+   acknowledgment behavior. Retest those specific gaps afterward.
+2. Keep actual approval tests blocked until a genuine harmless request can be
+   produced under the deployed policy. No policy changes or riskier probes are
+   authorized merely to make the test produce an approval. Run scope-granting
+   cases last; permanent acceptance still requires explicit instruction and a
+   verified narrow scope.
+3. Cover safely supported concurrent-input and watcher-already-running branches.
+4. Ask Hermes to clean up the remaining disposable test parent when requested:
    `/home/tarkil/.hermes/cache/scratch/wing-notification-test-CZeiJPit`.
 
-Private phone captures and raw observations remain under
-`/tmp/wing-live-notification-test/`; they are not committed.
+Raw captures remain private under `/tmp/wing-live-notification-test/` and
+`/tmp/wing-notification-retest-2026-09-22/`; neither is committed.

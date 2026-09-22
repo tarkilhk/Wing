@@ -1,9 +1,14 @@
 # One-chat Hermes notification test
 
-**Next session:** start with the [build 2326 bug-fix retests](#build-2326-bug-fix-retests--run-first-next-session)
-below. Build 2326 is installed on the phone. Sound is confirmed working by the
-user; it does not need a dedicated repeat. Continue the remaining gaps from the
-[clean status](2026-09-20-notification-test-status.md) afterward.
+**22 September update:** the five selected live runs are finished; see the
+[retest results](2026-09-22-notification-retest-results.md) and
+[current status](2026-09-20-notification-test-status.md). Build 2326 remains on
+the phone. Sound is confirmed. Do not rerun the whole suite: next targeted checks
+are initial input content for unopened chats, unread-reply restoration after
+force-stop/relaunch, and the New activity/full-bottom read interaction. For
+future desktop decisions, give an explicit **NOW: select Summary on desktop**
+cue in the conversation as well as any question card, and account for the stock
+request's observed five-minute timeout.
 
 Paste the entire code block below into one new Hermes chat in Wing. Open **that
 same chat** on desktop if possible so you can send controls without reading the
@@ -312,9 +317,10 @@ before attributing a remaining failure to replacement or delivery logic.
 
 These are required live regressions for the two bugs fixed after tonight's tests.
 They revisit scenarios 05, 10, 15 and 16; they are not extra scenarios in the
-19-scenario count. Automated checks passed, but **all retests below remain pending**.
+19-scenario count. These instructions were exercised on 22 September; consult
+the linked results for passes, partial coverage, timeouts and remaining gaps.
 The user drives the same Hermes desktop chat; Codex operates Wing and records
-Android state. Do not start tonight. No approval-policy changes are needed.
+Android state. No approval-policy changes are needed.
 
 ### R1 — Remaining question count (scenario 05)
 
