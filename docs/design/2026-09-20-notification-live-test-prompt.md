@@ -1,5 +1,12 @@
 # One-chat Hermes notification test
 
+**Latest live result on build 2328:** both focused retests are finished:
+**A failed again; B passed**, including read clearing and no resurrection after
+restart. See [the live record](2026-09-22-notification-2328-live-results.md).
+No desktop prompt is pending. Do not repeat A unchanged; its complete live cause
+remains unresolved despite the fixed fixture race. Earlier preparation and
+validation notes below are historical where superseded by this result.
+
 **22 September update:** build **2328** is installed. Both causes of the failed
 build 2327 follow-ups have been reproduced and fixed, with passing Android
 emulator checks; see the [investigation](2026-09-22-notification-root-causes.md).

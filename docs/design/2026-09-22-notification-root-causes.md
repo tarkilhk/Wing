@@ -1,5 +1,12 @@
 # Root causes after the failed build 2327 live retests
 
+**Latest live result on build 2328:** both focused retests are finished:
+**A failed again; B passed**, including read clearing and no resurrection after
+restart. See [the live record](2026-09-22-notification-2328-live-results.md).
+No desktop prompt is pending. Do not repeat A unchanged; its complete live cause
+remains unresolved despite the fixed fixture race. Earlier preparation and
+validation notes below are historical where superseded by this result.
+
 The [build 2327 live failures](2026-09-22-notification-followup-live-results.md)
 remain historical evidence. This investigation replaces the earlier confidence
 based on tests that did not cover the actual response and navigation sequence.

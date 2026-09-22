@@ -1,11 +1,10 @@
 # Notification test status
 
-Updated **22 September 2026** after root-cause fixes and deployment. Phone:
-Galaxy S23 Ultra, Android 16; Wing **2328** (Android version code **23282**).
-The two build 2327 live failures are preserved below. Their actual causes now
-have red-before/green-after regressions and passing Android emulator checks;
-**two fresh desktop/phone follow-up cases remain unverified on 2328**.
-See the [root-cause investigation](2026-09-22-notification-root-causes.md).
+Updated **22 September 2026** after build **2328** live retests on Galaxy S23
+Ultra / Android 16 (Android version code **23282**). **Both retests finished:
+A failed; B passed.** Restored-reply reading now clears correctly and stays clear
+after restart. First unopened-chat question delivery remains unresolved.
+See the [latest live evidence](2026-09-22-notification-2328-live-results.md).
 
 Evidence: [20 September live results](2026-09-20-notification-live-results.md),
 [22 September retest results](2026-09-22-notification-retest-results.md).
@@ -15,12 +14,13 @@ Fix evidence: [build 2327 fixes](2026-09-22-notification-followup-fixes.md).
 
 ## Current summary
 
-- Build 2328: both root causes fixed and emulator-verified; two fresh live follow-ups remain.
+- Build 2328: **2/2 live retests complete — 1 passed, 1 failed**. No more prompts
+  pending from this run; first input needs further diagnosis before repeating.
 - Today's **five runs are finished: 3 passed, 1 partially passed, 1 failed**.
 - Follow-up build 2327: **2 of 2 retests finished — 0 fully passed, 1 partial,
   1 failed**. No further desktop prompts remain from this run. First input
   notification is absent; unread reply restoration passes but read clearing fails.
-- Original **19-scenario ledger: 5 passed, 3 partial, 1 failed, 10 blocked**.
+- Original **19-scenario ledger: 6 passed, 2 partial, 1 failed, 10 blocked**.
   A passed row covers its runnable checks; separately documented blocked branches
   are not silently treated as passed.
 - Sound is **confirmed working by the user**. No dedicated repeat is needed.
@@ -34,15 +34,15 @@ Fix evidence: [build 2327 fixes](2026-09-22-notification-followup-fixes.md).
 | --- | --- |
 | Missing remaining-question count | Build 2326 renders 3 → 2 → 1 correctly in collapsed/expanded notifications once the request is loaded; hidden previews retain count and hide content. Live-verified today. |
 | Stale Needs input after desktop resolution | Actual desktop Summary submission after dismissal/force-stop/relaunch cleared the untouched list to Idle. Continued-work variant resumed monitoring, delivered exact reply and stopped. Live-verified today. |
-| Initial input notification | Case A FAIL on 2327: genuine three-question batch pending; no notification and list Idle until opening revealed the form. Questions completed successfully afterward. Client-fixture pass did not establish this live path. |
-| Unread reply after force-stop/relaunch | Case B restoration PASS on 2327: same native ID/text returned with silent flags; correct tap destination. Overall PARTIAL: reading the restored answer at full bottom did not clear its notification. |
+| Initial input notification | Case A FAIL again on 2328: real three-question batch pending; no notification and list Idle until opening. All questions then completed on the phone. The fixed fixture race does not explain the entire live failure. |
+| Unread reply after force-stop/relaunch | Case B PASS on 2328: same native ID/text restored silently; actual shade tap opened the whole answer and cleared the notice; another restart left it absent. |
 | New activity versus full-bottom reading | Older history correctly retained the notice. New activity showed the answer but did not clear; a full-bottom scroll did. Accepted bottom rule passes; shortcut behavior warrants UX follow-up. |
 
 The original idle-reconnect watcher/replacement defect was fixed in `120868e`
 (build 2325); LIVE-5/6 verified it. Build 2326 fixes were committed in `f291f59`.
 Build 2327's two targeted changes have now been live-tested. Restoration works,
-and build 2328 addresses the two reproduced causes. Fresh live evidence remains
-required before upgrading those historical live outcomes.
+and build 2328 live-verifies the restored-read fix. The first-input failure still
+reproduces; its fixed client race was not a complete explanation of the live issue.
 
 ## Original scenario checklist
 
@@ -52,7 +52,7 @@ required before upgrading those historical live outcomes.
 | 02 | Replacement and identical replies | Passed: exact identical text produced a fresh same-slot update |
 | 03 | Foreground behavior | Passed: normal reply suppressed; real input notification allowed |
 | 04 | Monitoring and interruption | Passed: live summary, lock-screen delivery, real desktop Stop and watcher shutdown |
-| 05 | Three-question batch | Failed first delivery on 2327 case A; real batch visible/answerable only after opening. Earlier loaded-chat counts, advancement, Review and privacy covered |
+| 05 | Three-question batch | Failed first delivery again on 2328 case A; real batch visible/answerable only after opening. Loaded-chat advancement/counts work |
 | 06 | Once | Blocked: Smart auto-approved the safe operation |
 | 07 | Deny | Blocked: no real safe approval request |
 | 08 | FIFO approvals | Blocked: no real safe approval requests; concurrency unverified |
@@ -63,12 +63,19 @@ required before upgrading those historical live outcomes.
 | 13 | Unlocking approval actions | Blocked: no real safe approval request |
 | 14 | Offline / stale approval actions | Blocked: no real safe approval request |
 | 15 | Desktop resolution | Partial: actual desktop answer/reconnect and continued-work cleanup pass; already-running watcher polling branch untested |
-| 16 | Restart / reconnect | Partial on 2327 case B: silent same-ID/text restoration and tap destination pass; restored-reply read clearing fails even at full bottom. Read-cleared relaunch branch unrun |
+| 16 | Restart / reconnect | Passed on 2328 case B: silent same-ID/text restoration, actual tap/latest-answer read clearing, and no resurrection after restart |
 | 17 | Secure input | Blocked: no harmless generic dummy-data flow exposed by runtime |
 | 18 | Session permission | Blocked: no real safe approval request |
 | 19 | Always permission | Blocked: no real safe approval request; no permanent grant attempted |
 
 Multi-chat/profile isolation and counts cannot be proved by these one-chat runs.
+
+## Build 2328 live result
+
+**A failed; B passed.** The later [live record](2026-09-22-notification-2328-live-results.md)
+supersedes the pre-retest uncertainty below. There are no pending desktop prompts.
+The first-input race fixed in 2328 is covered by a regression, but the complete
+real first-delivery failure is still unexplained. Read clearing is live-verified.
 
 ## Build 2328 validation and installation
 
@@ -154,11 +161,10 @@ comes from the user, independently of automated checks.
 
 ## Next work
 
-1. Run the **two focused live cases on build 2328**: A, first structured input
-   before opening the chat; B, a fresh unread reply restored after restart,
-   tapped from the ordinary list, read and confirmed absent after another restart.
-   Both underlying causes are fixed and reproduced in automated/native tests.
-   Keep New activity's earlier extra-scroll detail separate.
+1. Diagnose **first unopened-chat input delivery**, which failed again on 2328.
+   Capture the actual runtime state/event path; do not rely on another passing
+   synthetic fixture or ask for an unchanged repeat. Preserve the confirmed
+   restored-read fix. New activity's earlier extra-scroll detail is separate.
 2. Keep actual approval tests blocked until a genuine harmless request can be
    produced under the deployed policy. No policy changes or riskier probes are
    authorized merely to make the test produce an approval. Run scope-granting

@@ -1,5 +1,12 @@
 # Focused notification follow-up retests
 
+**Latest live result on build 2328:** both focused retests are finished:
+**A failed again; B passed**, including read clearing and no resurrection after
+restart. See [the live record](2026-09-22-notification-2328-live-results.md).
+No desktop prompt is pending. Do not repeat A unchanged; its complete live cause
+remains unresolved despite the fixed fixture race. Earlier preparation and
+validation notes below are historical where superseded by this result.
+
 Build **2328** is installed on the phone (Android version code **23282**).
 Run these **two fresh live cases** to verify the root-cause fixes. The previous
 build 2327 outcomes remain **A failed; B partially passed** in the
