@@ -8,6 +8,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_connection_identity.dart';
+import 'package:wing/core/services/workspace_snapshot_store.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/turn_notification_service.dart';
 import 'package:wing/main.dart';
@@ -40,6 +42,34 @@ Future<void> main() async {
   ]) {
     await prefs.setBool(key, true);
   }
+  // The real phone has a saved reading copy after using this chat previously.
+  // A new process must reconnect it without requiring the user to open it.
+  final identity = await ProfileConnectionIdentity().resolve(connection);
+  await WorkspaceSnapshotStore(prefs, identity).write({
+    'selected': 'a',
+    'profiles': [
+      {
+        'name': 'a',
+        'sessions': [
+          {'id': 'outside', 'title': 'Outside task', 'profile': 'a'},
+        ],
+        'chats': [
+          {
+            'id': 'outside',
+            'title': 'Outside task',
+            'history_session': 'outside',
+            'messages': [
+              {
+                'id': 1,
+                'role': 'assistant',
+                'content': 'Earlier cached answer',
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
   final host = NotificationCoverageHost();
   final app = GlobalKey<WingAppState>();
   runApp(
@@ -51,6 +81,9 @@ Future<void> main() async {
   );
   await WidgetsBinding.instance.endOfFrame;
   final controller = await app.currentState!.profileController(connection);
+  final cached = controller.notificationChats.single;
+  final restoredOffline = cached.offlineSnapshot;
+  final restoredRuntime = cached.runtimeId;
   await controller.initialize();
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 18766);
   await for (final request in server) {
@@ -86,12 +119,20 @@ Future<void> main() async {
     request.response.write(
       jsonEncode({
         'ready': true,
+        'restoredOffline': restoredOffline,
+        'restoredRuntime': restoredRuntime,
+        'retainedCache': identical(controller.notificationChats.single, cached),
+        'cachedHistoryPresent': cached.messages.any(
+          (message) => message['content'] == 'Earlier cached answer',
+        ),
         'openedChat': controller.current?.chat?.key.sessionId,
         'loaded': controller.notificationChats
             .map(
               (chat) => {
                 'session': chat.key.sessionId,
                 'status': chat.status.name,
+                'runtime': chat.runtimeId,
+                'offline': chat.offlineSnapshot,
                 'pendingQuestion': chat.pendingQuestion != null,
               },
             )

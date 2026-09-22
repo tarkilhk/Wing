@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fix first question notifications after restarting Wing with a previously read
+  chat in its local cache. Attach the cached chat to the verified live session
+  while preserving its history and protecting newer events and navigation.
+
 - Prevent a normal empty approval refresh from suppressing the first question
   notification. Clear restored reply notifications when read after opening them
   over the chat list; each screen now owns its visibility state.

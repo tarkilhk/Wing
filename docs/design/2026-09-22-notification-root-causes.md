@@ -1,5 +1,10 @@
 # Root causes after the failed build 2327 live retests
 
+**Subsequent investigation:** the actual phone trace identified an earlier
+saved-chat guard preventing request hydration. It is fixed and reproduced before/
+after on Android; see [the cached-chat investigation](2026-09-22-notification-cached-chat-investigation.md).
+The first question's fixed-phone live pass remains pending; B already passed.
+
 **Latest live result on build 2328:** both focused retests are finished:
 **A failed again; B passed**, including read clearing and no resurrection after
 restart. See [the live record](2026-09-22-notification-2328-live-results.md).

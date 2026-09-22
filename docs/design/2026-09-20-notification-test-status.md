@@ -1,10 +1,13 @@
 # Notification test status
 
-Updated **22 September 2026** after build **2328** live retests on Galaxy S23
-Ultra / Android 16 (Android version code **23282**). **Both retests finished:
-A failed; B passed.** Restored-reply reading now clears correctly and stays clear
-after restart. First unopened-chat question delivery remains unresolved.
-See the [latest live evidence](2026-09-22-notification-2328-live-results.md).
+Updated **22 September 2026** after a traced investigation of the repeated first
+question failure. The physical phone confirmed a saved-chat guard preventing the
+request read. The correction is installed as **2329** (Android version code **23292**), with before/after Android
+verification and guarded-cache regressions. [Investigation and evidence](2026-09-22-notification-cached-chat-investigation.md).
+
+The completed 2328 live retests remain **A failed; B passed**. Only A needs a fresh
+fixed-phone live run; the investigation is now based on its captured internal
+failure path. Installation and validation details for 2329 are below.
 
 Evidence: [20 September live results](2026-09-20-notification-live-results.md),
 [22 September retest results](2026-09-22-notification-retest-results.md).
@@ -15,7 +18,8 @@ Fix evidence: [build 2327 fixes](2026-09-22-notification-followup-fixes.md).
 ## Current summary
 
 - Build 2328: **2/2 live retests complete — 1 passed, 1 failed**. No more prompts
-  pending from this run; first input needs further diagnosis before repeating.
+  pending from this run; first input now has a phone-confirmed cause and correction; fixed-phone live
+  verification remains pending.
 - Today's **five runs are finished: 3 passed, 1 partially passed, 1 failed**.
 - Follow-up build 2327: **2 of 2 retests finished — 0 fully passed, 1 partial,
   1 failed**. No further desktop prompts remain from this run. First input
@@ -34,7 +38,7 @@ Fix evidence: [build 2327 fixes](2026-09-22-notification-followup-fixes.md).
 | --- | --- |
 | Missing remaining-question count | Build 2326 renders 3 → 2 → 1 correctly in collapsed/expanded notifications once the request is loaded; hidden previews retain count and hide content. Live-verified today. |
 | Stale Needs input after desktop resolution | Actual desktop Summary submission after dismissal/force-stop/relaunch cleared the untouched list to Idle. Continued-work variant resumed monitoring, delivered exact reply and stopped. Live-verified today. |
-| Initial input notification | Case A FAIL again on 2328: real three-question batch pending; no notification and list Idle until opening. All questions then completed on the phone. The fixed fixture race does not explain the entire live failure. |
+| Initial input notification | 2328 live FAIL; diagnostic phone trace confirms the offline cached chat blocks request hydration. 2329 reuses and attaches that cache; exact native before/after check passes. Fresh fixed-phone pass pending. |
 | Unread reply after force-stop/relaunch | Case B PASS on 2328: same native ID/text restored silently; actual shade tap opened the whole answer and cleared the notice; another restart left it absent. |
 | New activity versus full-bottom reading | Older history correctly retained the notice. New activity showed the answer but did not clear; a full-bottom scroll did. Accepted bottom rule passes; shortcut behavior warrants UX follow-up. |
 
@@ -69,6 +73,29 @@ reproduces; its fixed client race was not a complete explanation of the live iss
 | 19 | Always permission | Blocked: no real safe approval request; no permanent grant attempted |
 
 Multi-chat/profile isolation and counts cannot be proved by these one-chat runs.
+
+## Build 2329 confirmed-cause correction
+
+Phone trace: actual working → waiting, one verified owner, then
+`input-skipped-existing` for the offline cached chat and no resume attempt. The
+saved-cache regression and native fixture reproduce the same failure before the
+fix and pass after it. See the linked investigation for failed-read, newer-event
+and user-navigation protection. No backend changes, new polling or compatibility
+paths. Temporary tracing is removed from source.
+
+**39 focused tests** and the full Flutter suite (**2,698 passed, 12 skipped**)
+pass. Analysis is clean; **28 release-tooling tests** and version check pass.
+Native Android old/fixed comparison passes; cached history is preserved and the
+first useful notification arrives with monitoring shutdown.
+
+Signed production ARM64 build **2329** installed with data preserved; phone
+package readback confirms **1.0.1 / 23292**. Pinned certificate, package and
+non-debuggable release verification pass. APK SHA-256:
+`d354d43a09a106e5bce0660a049637981e9db2d4cafe2f545908701f2b0becd2`.
+Temporary trace removed; emulator/captures stopped. No fresh fixed-phone live
+pass is claimed. The diagnostic question
+was not answered while phone availability was pending; check its current state
+before the next live test. Do not assume it was answered or count it as a pass.
 
 ## Build 2328 live result
 
@@ -161,10 +188,11 @@ comes from the user, independently of automated checks.
 
 ## Next work
 
-1. Diagnose **first unopened-chat input delivery**, which failed again on 2328.
-   Capture the actual runtime state/event path; do not rely on another passing
-   synthetic fixture or ask for an unchanged repeat. Preserve the confirmed
-   restored-read fix. New activity's earlier extra-scroll detail is separate.
+1. Build 2329 is validated and installed. Run **A once** with the saved
+   chat explicitly present after restart. Phone tracing has confirmed the exact
+   guard; automated and native before/after checks pass. Check the diagnostic
+   request state first. Preserve the live-verified restored-read fix; no unchanged
+   repeat of B is required.
 2. Keep actual approval tests blocked until a genuine harmless request can be
    produced under the deployed policy. No policy changes or riskier probes are
    authorized merely to make the test produce an approval. Run scope-granting

@@ -5,6 +5,7 @@ import json
 import re
 import subprocess
 import time
+import urllib.error
 import urllib.request
 
 PACKAGE = 'com.tarkilhk.wing.notificationqa'
@@ -29,7 +30,18 @@ def main():
         with urllib.request.urlopen(req, timeout=15) as response:
             return json.load(response)
 
-    assert post('state')['openedChat'] is None
+    deadline = time.monotonic() + 20
+    while True:
+        try:
+            initial = post('state')
+            break
+        except (urllib.error.URLError, ConnectionError):
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(.25)
+    assert initial['openedChat'] is None
+    assert initial['restoredOffline'] and initial['restoredRuntime'] == 'outside', initial
+    assert initial['cachedHistoryPresent'], initial
     post('work')
     for _ in range(30):
         services = command('shell', 'dumpsys', 'activity', 'services', PACKAGE)
@@ -59,8 +71,12 @@ def main():
         assert all(text in found.group(1) for text in ['3 questions', 'WING-COLD-QA', 'Preview', 'Production']), found.group(1)
     assert 'Review' in notice, 'Missing Review action'
     assert 'ONLY_ALERT_ONCE' not in notice.splitlines()[0], 'Fresh request was rendered silently'
-    assert post('state')['openedChat'] is None
-    print('PASS: unopened chat posts one fresh native notification with 3 questions, real text/options and Review')
+    final = post('state')
+    assert final['openedChat'] is None
+    assert final['retainedCache'] and final['cachedHistoryPresent'], final
+    assert final['loaded'][0]['runtime'] == 'outside-runtime', final
+    assert final['loaded'][0]['offline'] is False, final
+    print('PASS: cached unopened chat posts one fresh native notification with 3 questions, real text/options and Review')
     for _ in range(30):
         services = command('shell', 'dumpsys', 'activity', 'services', PACKAGE)
         if 'BackgroundMonitoringService' not in services:

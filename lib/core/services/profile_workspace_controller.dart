@@ -6086,51 +6086,77 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<void> _loadNotificationInput(ProfileChat candidate) async {
     final owner = _resources[candidate.key.workspace]!;
     final session = candidate.key.sessionId;
+    final runtime = candidate.runtimeId;
     if (owner.deletedSessions.contains(session)) return;
     final existing = owner.chats[session];
-    if (existing != null) return;
-    owner.chats[session] = candidate;
+    if (existing != null &&
+        (existing.key != candidate.key ||
+            !existing.offlineSnapshot ||
+            existing.busy ||
+            existing.opening ||
+            current?.chat == existing)) {
+      return;
+    }
+    // Reading snapshots restore durable IDs, not current runtime IDs. Reuse the
+    // cached object so its transcript and any navigation/draft references survive.
+    final chat = existing ?? candidate;
+    final previousRuntime = chat.runtimeId;
+    final previousOffline = chat.offlineSnapshot;
+    owner.chats[session] = chat;
+    // Bind the verified live runtime before resume so an overtaking event owns
+    // live state on this same object. A failed unchanged read rolls both back.
+    chat
+      ..runtimeId = runtime
+      ..offlineSnapshot = false;
     _pendingNotifications++;
-    final generation = candidate._turnGeneration;
-    final resumeGeneration = candidate._resumeGeneration;
-    final status = candidate.status;
+    final generation = chat._turnGeneration;
+    final resumeGeneration = chat._resumeGeneration;
+    final status = chat.status;
     bool unchanged() =>
-        identical(owner.chats[session], candidate) &&
-        candidate._turnGeneration == generation &&
-        candidate._resumeGeneration == resumeGeneration &&
-        !candidate.opening &&
-        candidate.status == status &&
-        _notificationInputs(candidate).isEmpty;
+        identical(owner.chats[session], chat) &&
+        chat.runtimeId == runtime &&
+        chat._turnGeneration == generation &&
+        chat._resumeGeneration == resumeGeneration &&
+        !chat.opening &&
+        chat.status == status &&
+        _notificationInputs(chat).isEmpty;
+    void rollback() {
+      if (existing == null) {
+        owner.chats.remove(session);
+      } else {
+        chat.runtimeId = previousRuntime;
+        chat.offlineSnapshot = previousOffline;
+      }
+      _notificationSnapshot?.remove(runtime);
+    }
+
     try {
       final resumed = await owner.gateway.resume(session);
       if (_closed || owner.deletedSessions.contains(session)) return;
       if (!unchanged()) return;
-      if (resumed['session_id'] != candidate.runtimeId ||
+      if (resumed['session_id'] != runtime ||
           resumed['session_key'] != session) {
-        owner.chats.remove(session);
-        _notificationSnapshot?.remove(candidate.runtimeId);
+        rollback();
         return;
       }
-      _hydrate(candidate, resumed);
-      if (_notificationInputs(candidate).isEmpty) {
-        // The request may have resolved while its active-list read was in flight.
-        // Do not retain an idle placeholder that hides later global transitions.
-        if (!candidate.busy) owner.chats.remove(session);
+      _hydrate(chat, resumed);
+      chat.offlineSnapshot = false;
+      if (_notificationInputs(chat).isEmpty) {
+        // Resolution during the read does not justify deleting saved reading
+        // state. Only discard an idle placeholder created solely by this read.
+        if (existing == null && !chat.busy) owner.chats.remove(session);
         return;
       }
       // This snapshot is an observed new request, not a reconnect baseline.
       // Publish before yielding: hydration also starts approval.pending, whose
       // completion calls _changed and would otherwise consume the input's
       // fingerprint quietly before this notification can alert.
-      _notify(candidate, ChatNotificationContent.input(''));
+      _notify(chat, ChatNotificationContent.input(''));
       await _journal();
     } catch (_) {
-      // A failed request read cannot invent an actionable request. Preserve any
-      // live event that arrived during the read; otherwise allow a later retry.
-      if (unchanged()) {
-        owner.chats.remove(session);
-        _notificationSnapshot?.remove(candidate.runtimeId);
-      }
+      // Failed reads roll back only our provisional runtime binding. A newer
+      // event or navigation owns its state and must never be undone here.
+      if (unchanged()) rollback();
       return;
     } finally {
       _pendingNotifications--;

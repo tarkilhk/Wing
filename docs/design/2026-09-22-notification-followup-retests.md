@@ -1,5 +1,15 @@
 # Focused notification follow-up retests
 
+**Build 2329 is installed:** only **A** needs a fresh live pass for the
+saved-chat adoption fix. The phone trace proves the previously missed cache guard;
+see [the investigation](2026-09-22-notification-cached-chat-investigation.md).
+B passed on 2328 and does not need an unchanged repeat. Confirm no diagnostic
+question remains pending, then explicitly ensure the target chat has a saved
+reading copy: open it once, return to the list, force-stop/relaunch, and do not
+open it again before the background question arrives. This persisted-state
+precondition is essential. Build 2329 installation status is in the canonical
+[test status](2026-09-20-notification-test-status.md).
+
 **Latest live result on build 2328:** both focused retests are finished:
 **A failed again; B passed**, including read clearing and no resurrection after
 restart. See [the live record](2026-09-22-notification-2328-live-results.md).
