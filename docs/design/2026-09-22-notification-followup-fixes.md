@@ -4,7 +4,10 @@ Scope: the initial generic input notification (partial R1) and unread reply
 restoration after Android force-stop/relaunch (failed R5). Historical live
 outcomes remain in the [retest results](2026-09-22-notification-retest-results.md).
 The [two focused live retests](2026-09-22-notification-followup-retests.md)
-must pass on the updated phone before those outcomes change.
+ran on the updated phone: **A failed; B partially passed**. See the
+[live outcomes](2026-09-22-notification-followup-live-results.md): cold input was
+not delivered; restored replies returned correctly but did not clear on reading.
+The automated evidence below does not override those failures.
 
 ## Initial structured input
 

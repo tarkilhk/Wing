@@ -5,7 +5,9 @@ Build **2327** is validated and installed on the phone (Android version code
 23272). These address the partial and failed runs in the
 [22 September results](2026-09-22-notification-retest-results.md), without repeating
 all five cases. Automated/native evidence is in the
-[fix record](2026-09-22-notification-followup-fixes.md). Both live cases remain pending.
+[fix record](2026-09-22-notification-followup-fixes.md). Both live cases are finished: **A failed; B partially passed** (restoration
+passed, read clearing failed). See the [live results](2026-09-22-notification-followup-live-results.md).
+The steps below remain the reproductions for the next fixes.
 
 The user operates the same Hermes desktop chat. Codex operates Wing and records
 native notification state. Show desktop prompts directly in the conversation.
