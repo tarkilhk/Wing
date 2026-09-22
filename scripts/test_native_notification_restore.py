@@ -77,6 +77,15 @@ def main():
             time.sleep(.25)
         return {}
 
+    def ready():
+        for _ in range(30):
+            try:
+                return request('', {})
+            except OSError:
+                time.sleep(.5)
+        raise AssertionError('QA fixture did not restart')
+
+    ready()
     request('preview', {'enabled': True})
     request('reply', {'text': answer})
     before = wait_for_notice()
@@ -97,21 +106,46 @@ def main():
     assert 'ONLY_ALERT_ONCE' in head and 'SILENT' in head, head
     print('PASS: relaunch restores the same unread reply and ID silently', flush=True)
 
-    # Exercise the actual Android delete intent, not a coordinator-only call.
-    command('shell', 'cmd', 'statusbar', 'expand-notifications')
-    target = None
-    for _ in range(4):
-        command('shell', 'uiautomator', 'dump', '/sdcard/wing-qa-restore.xml')
-        xml = command('shell', 'cat', '/sdcard/wing-qa-restore.xml')
-        target = next((
-            node for node in ET.fromstring(xml).iter('node')
-            if node.get('text') == 'Website refresh'
-        ), None)
-        if target is not None:
+    def shade_target():
+        command('shell', 'cmd', 'statusbar', 'expand-notifications')
+        for _ in range(4):
+            command('shell', 'rm', '-f', '/sdcard/wing-qa-restore.xml')
+            command('shell', 'uiautomator', 'dump', '/sdcard/wing-qa-restore.xml')
+            xml = command('shell', 'cat', '/sdcard/wing-qa-restore.xml')
+            target = next((node for node in ET.fromstring(xml).iter('node')
+                           if node.get('text') == 'Website refresh'), None)
+            if target is not None:
+                return list(map(int, re.findall(r'\d+', target.get('bounds'))))
+            time.sleep(.5)
+        raise AssertionError('QA reply not found in notification shade')
+
+    ready()
+    request('list', {})
+    assert identifier in notices(), 'Opening only the list marked the answer read'
+    x1, y1, x2, y2 = shade_target()
+    command('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
+    for _ in range(40):
+        state = ready()
+        if identifier not in notices(only_answer=False):
+            assert state['chat_visible'] and state['selected_chat'], state
             break
-        time.sleep(.5)
-    assert target is not None, 'QA reply not found in the Android notification shade'
-    x1, y1, x2, y2 = map(int, re.findall(r'\d+', target.get('bounds')))
+        time.sleep(.25)
+    else:
+        raise AssertionError(f'Restored reply not cleared by reading via native tap: {state}')
+    print('PASS: native notification tap from the chat list opens the answer and clears its notice', flush=True)
+    command('shell', 'am', 'force-stop', PACKAGE)
+    command('shell', 'am', 'start', '-n', ACTIVITY)
+    ready()
+    for _ in range(12):
+        assert identifier not in notices(only_answer=False), 'Read reply resurrected'
+        time.sleep(.25)
+    print('PASS: read reply stays absent after another launch', flush=True)
+
+    # A separate fresh result tests the actual Android delete intent.
+    answer = f'WING-DISMISS-QA-{time.time_ns()}: Swipe this fresh result.'
+    request('reply', {'text': answer})
+    assert wait_for_notice(), 'Fresh dismissal sample did not arrive'
+    x1, y1, x2, y2 = shade_target()
     width = int(re.search(r'(\d+)x\d+', command('shell', 'wm', 'size')).group(1))
     command(
         'shell', 'input', 'swipe', str(width // 8), str((y1 + y2) // 2),

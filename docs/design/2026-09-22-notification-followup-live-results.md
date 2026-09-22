@@ -1,5 +1,10 @@
 # Build 2327 notification follow-up live retests
 
+**Later investigation:** build 2328 fixes the two reproduced root causes; see
+[the investigation](2026-09-22-notification-root-causes.md) and
+[current status](2026-09-20-notification-test-status.md). Historical build 2327
+observations below are preserved.
+
 Phone: Galaxy S23 Ultra, Android 16, Wing 1.0.1 / Android version code 23272.
 The user drives the same desktop Hermes chat; Codex operates the phone. Raw
 captures remain private at `/tmp/wing-notification-followup-2026-09-22/`.

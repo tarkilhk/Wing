@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Prevent a normal empty approval refresh from suppressing the first question
+  notification. Clear restored reply notifications when read after opening them
+  over the chat list; each screen now owns its visibility state.
+
 - Show structured question text, counts and Review in the first notification for
   an unopened chat. Preserve newer requests and chat navigation during loading.
 - Restore unread chat notifications silently after force-stop and relaunch,

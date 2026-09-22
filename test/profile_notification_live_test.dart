@@ -64,7 +64,7 @@ void main() {
           await observer.initialize();
           expect(observer.error, isNull);
           expect(await observer.switchProfile('android-qa-b'), isTrue);
-          observer.visible = false;
+          observer.setRouteVisibility(observer, false);
           final producer = client('notification-producer-live-qa');
           await producer.initialize();
           expect(producer.error, isNull);
@@ -152,7 +152,7 @@ void main() {
 
         final chat = await live.createChat();
         ownedChat = chat;
-        live.visible = false;
+        live.setRouteVisibility(live, false);
         await live.updateDraft(
           chat,
           'Reply exactly NOTIFICATION_EVENT_OK. Do not use tools or perform '

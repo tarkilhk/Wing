@@ -1316,7 +1316,7 @@ void main() {
     final a = await controller.createChat();
     a.draft = 'A work';
     await controller.send(a);
-    controller.visible = true;
+    controller.setRouteVisibility(controller, true);
     await controller.switchProfile('b');
     final b = await controller.createChat();
     b.draft = 'B draft';

@@ -1,13 +1,14 @@
 # Focused notification follow-up retests
 
-These are the two live cases to run **after the fixes are validated and installed**.
-Build **2327** is validated and installed on the phone (Android version code
-23272). These address the partial and failed runs in the
-[22 September results](2026-09-22-notification-retest-results.md), without repeating
-all five cases. Automated/native evidence is in the
-[fix record](2026-09-22-notification-followup-fixes.md). Both live cases are finished: **A failed; B partially passed** (restoration
-passed, read clearing failed). See the [live results](2026-09-22-notification-followup-live-results.md).
-The steps below remain the reproductions for the next fixes.
+Build **2328** is installed on the phone (Android version code **23282**).
+Run these **two fresh live cases** to verify the root-cause fixes. The previous
+build 2327 outcomes remain **A failed; B partially passed** in the
+[live results](2026-09-22-notification-followup-live-results.md).
+Both actual bug conditions now reproduce before their fixes and pass afterward,
+including actual Android emulator checks; see the
+[root-cause investigation](2026-09-22-notification-root-causes.md).
+After installation, the old stuck reply was already absent, so case B needs a
+fresh desktop reply. That absence does not count as a successful tap/read retest.
 
 The user operates the same Hermes desktop chat. Codex operates Wing and records
 native notification state. Show desktop prompts directly in the conversation.

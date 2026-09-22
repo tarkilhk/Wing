@@ -1,5 +1,10 @@
 # Notification fixes after the 22 September retests
 
+**Later investigation:** build 2328 fixes the two reproduced root causes; see
+[the investigation](2026-09-22-notification-root-causes.md) and
+[current status](2026-09-20-notification-test-status.md). Historical build 2327
+observations below are preserved.
+
 Scope: the initial generic input notification (partial R1) and unread reply
 restoration after Android force-stop/relaunch (failed R5). Historical live
 outcomes remain in the [retest results](2026-09-22-notification-retest-results.md).

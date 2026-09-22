@@ -379,7 +379,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     final isCurrent = ModalRoute.isCurrentOf(context) ?? true;
     final returned = !_routeIsCurrent && isCurrent;
     _routeIsCurrent = isCurrent;
-    controller.visible = _hasChatFocus;
+    controller.setRouteVisibility(this, _hasChatFocus);
     if (returned && _needsRecovery) _recoverOnFocus();
   }
 
@@ -392,7 +392,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     controller.addListener(_voiceWorkspaceChanged);
     WidgetsBinding.instance.addObserver(this);
-    controller.visible = _hasChatFocus;
+    controller.setRouteVisibility(this, _hasChatFocus);
     // Shortcut navigation can reuse an owner still observed by the outgoing
     // route. Start its notifications after both routes finish building.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -435,7 +435,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       _cancelVoice();
     }
     _appIsActive = state == AppLifecycleState.resumed;
-    controller.visible = _hasChatFocus;
+    controller.setRouteVisibility(this, _hasChatFocus);
     if (state == AppLifecycleState.resumed) {
       _recoverOnFocus();
     }
@@ -467,7 +467,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     controller.removeListener(_voiceWorkspaceChanged);
     _voiceInput.dispose();
     _voiceOutput.dispose();
-    controller.visible = false;
+    controller.setRouteVisibility(this, false);
     WidgetsBinding.instance.removeObserver(this);
     _profileNavigation.dispose();
     _composer.dispose();
@@ -2404,7 +2404,7 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         _destination != AppDestination.chats &&
         destination == AppDestination.chats;
     setState(() => _destination = destination);
-    controller.visible = _hasChatFocus;
+    controller.setRouteVisibility(this, _hasChatFocus);
     if (returningToChats && _needsRecovery) _recoverOnFocus();
     if (destination == AppDestination.activity) {
       unawaited(_run(controller.refreshActivity));

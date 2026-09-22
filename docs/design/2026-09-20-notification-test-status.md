@@ -1,9 +1,11 @@
 # Notification test status
 
-Updated **22 September 2026** after fixes and deployment. Phone: Galaxy S23 Ultra,
-Android 16; Wing **2327** (Android version code 23272). The five live runs below
-were performed on build 2326. The two follow-up runs on build 2327 are finished:
-**A failed; B partially passed**. See the [latest live results](2026-09-22-notification-followup-live-results.md).
+Updated **22 September 2026** after root-cause fixes and deployment. Phone:
+Galaxy S23 Ultra, Android 16; Wing **2328** (Android version code **23282**).
+The two build 2327 live failures are preserved below. Their actual causes now
+have red-before/green-after regressions and passing Android emulator checks;
+**two fresh desktop/phone follow-up cases remain unverified on 2328**.
+See the [root-cause investigation](2026-09-22-notification-root-causes.md).
 
 Evidence: [20 September live results](2026-09-20-notification-live-results.md),
 [22 September retest results](2026-09-22-notification-retest-results.md).
@@ -13,6 +15,7 @@ Fix evidence: [build 2327 fixes](2026-09-22-notification-followup-fixes.md).
 
 ## Current summary
 
+- Build 2328: both root causes fixed and emulator-verified; two fresh live follow-ups remain.
 - Today's **five runs are finished: 3 passed, 1 partially passed, 1 failed**.
 - Follow-up build 2327: **2 of 2 retests finished — 0 fully passed, 1 partial,
   1 failed**. No further desktop prompts remain from this run. First input
@@ -38,7 +41,8 @@ Fix evidence: [build 2327 fixes](2026-09-22-notification-followup-fixes.md).
 The original idle-reconnect watcher/replacement defect was fixed in `120868e`
 (build 2325); LIVE-5/6 verified it. Build 2326 fixes were committed in `f291f59`.
 Build 2327's two targeted changes have now been live-tested. Restoration works,
-but first input delivery and restored-reply read clearing require more work.
+and build 2328 addresses the two reproduced causes. Fresh live evidence remains
+required before upgrading those historical live outcomes.
 
 ## Original scenario checklist
 
@@ -65,6 +69,32 @@ but first input delivery and restored-reply read clearing require more work.
 | 19 | Always permission | Blocked: no real safe approval request; no permanent grant attempted |
 
 Multi-chat/profile isolation and counts cannot be proved by these one-chat runs.
+
+## Build 2328 validation and installation
+
+- Root causes: a stock empty approval response consumed the first question as a
+  silent baseline; overlapping routes overwrote a shared visibility flag and
+  prevented restored-answer read clearing. See the linked investigation for
+  reproductions and why previous tests missed both failures.
+- Complete Flutter suite: **2,688 passed, 12 skipped**. Analysis clean; all **28
+  release-tooling tests**, version check and patch whitespace check pass.
+- Android 16 emulator: first unopened three-question notification with useful
+  content/Review and watcher shutdown; silent same-ID restoration; actual shade
+  tap from the normal list clears the read reply; read and swiped replies stay
+  absent after restart. These are isolated client fixtures, not live Hermes runs.
+- Signed production ARM64 package verified: pinned certificate, non-debuggable,
+  package identity and version **1.0.1 / 23282**. Data-preserving installation
+  succeeded; physical phone version readback matches. Wing opens to Claw's
+  connected chat list.
+- APK SHA-256: `88f16e9cc1bec1dd5991f8c36f0a7579dd4e31eb7c025ed77e23c1f5a6c74bb6`.
+- After installation/relaunch, the old stuck reply notice was already absent.
+  Therefore its tap/read path could not be exercised on the phone. This absence
+  is not proof that the fix cleared it; the exact reason was not captured.
+  Generate a fresh reply for case B. No new Hermes prompt was sent in this step.
+- Latest stock Hermes inspected at `fde4997f580c3480798fdf9c7e92c0079d6e03d6`.
+  No backend changes, compatibility paths, polling loops or monitoring extensions.
+- Temporary emulator stopped. Private captures remain under `/tmp`; no raw
+  device logs or connection/session identifiers are included in the commit.
 
 ## Build 2327 validation and installation
 
@@ -124,11 +154,11 @@ comes from the user, independently of automated checks.
 
 ## Next work
 
-1. Fix the **two live findings** from build 2327: unopened-chat input delivery
-   (no notice despite a real pending batch), and restored-reply read clearing
-   (notice remains with the whole answer visible at the bottom). Add regressions
-   for the actual conditions, then rerun the focused cases. Keep New activity's
-   earlier extra-scroll detail distinct from the restored-reply failure.
+1. Run the **two focused live cases on build 2328**: A, first structured input
+   before opening the chat; B, a fresh unread reply restored after restart,
+   tapped from the ordinary list, read and confirmed absent after another restart.
+   Both underlying causes are fixed and reproduced in automated/native tests.
+   Keep New activity's earlier extra-scroll detail separate.
 2. Keep actual approval tests blocked until a genuine harmless request can be
    produced under the deployed policy. No policy changes or riskier probes are
    authorized merely to make the test produce an approval. Run scope-granting

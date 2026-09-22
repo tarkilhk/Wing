@@ -92,6 +92,7 @@ class NotificationCoverageHost {
             return {'sessions': active};
           }
           if (method == 'projects.tree') return {'projects': []};
+          if (method == 'approval.pending') return {'approvals': []};
           if (method == 'session.create' || method == 'session.resume') {
             int? resumeCall;
             if (method == 'session.resume') {
@@ -195,7 +196,7 @@ void main() {
     );
     await controller.initialize();
     host.activeReads = 0;
-    controller.visible = false;
+    controller.setRouteVisibility(controller, false);
   });
 
   tearDown(() {

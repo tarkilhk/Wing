@@ -370,7 +370,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
   String? _error;
   String? get error => _error ?? current?.reconnectError;
   set error(String? value) => _error = value;
-  bool visible = false;
+  final Set<Object> _visibleRoutes = {};
+  bool get visible => _visibleRoutes.isNotEmpty;
+
+  /// A covered or disposed route releases only its own visibility claim. The
+  /// same retained controller can also be displayed by a notification route.
+  void setRouteVisibility(Object route, bool isVisible) {
+    if (isVisible) {
+      _visibleRoutes.add(route);
+    } else {
+      _visibleRoutes.remove(route);
+    }
+  }
+
   int _generation = 0;
   int _navigationGeneration = 0;
   bool _closed = false;
@@ -6052,11 +6064,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
         if (after.activity == _NotificationActivity.waiting &&
             before?.activity != _NotificationActivity.waiting) {
-          final inputChat = await _loadNotificationInput(after.chat);
+          await _loadNotificationInput(after.chat);
           if (_closed) return;
-          if (inputChat != null) {
-            _notify(inputChat, ChatNotificationContent.input(''));
-          }
         } else if (after.activity == _NotificationActivity.idle &&
             before != null &&
             before.activity != _NotificationActivity.idle) {
@@ -6074,12 +6083,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
   /// Adopt only the live request state; opening a conversation and loading its
   /// transcript remain separate user actions. Register before awaiting resume
   /// so a newer live request can overtake the snapshot safely.
-  Future<ProfileChat?> _loadNotificationInput(ProfileChat candidate) async {
+  Future<void> _loadNotificationInput(ProfileChat candidate) async {
     final owner = _resources[candidate.key.workspace]!;
     final session = candidate.key.sessionId;
-    if (owner.deletedSessions.contains(session)) return null;
+    if (owner.deletedSessions.contains(session)) return;
     final existing = owner.chats[session];
-    if (existing != null) return null;
+    if (existing != null) return;
     owner.chats[session] = candidate;
     _pendingNotifications++;
     final generation = candidate._turnGeneration;
@@ -6094,23 +6103,27 @@ class ProfileWorkspaceController extends ChangeNotifier {
         _notificationInputs(candidate).isEmpty;
     try {
       final resumed = await owner.gateway.resume(session);
-      if (_closed || owner.deletedSessions.contains(session)) return null;
-      if (!unchanged()) return null;
+      if (_closed || owner.deletedSessions.contains(session)) return;
+      if (!unchanged()) return;
       if (resumed['session_id'] != candidate.runtimeId ||
           resumed['session_key'] != session) {
         owner.chats.remove(session);
         _notificationSnapshot?.remove(candidate.runtimeId);
-        return null;
+        return;
       }
       _hydrate(candidate, resumed);
       if (_notificationInputs(candidate).isEmpty) {
         // The request may have resolved while its active-list read was in flight.
         // Do not retain an idle placeholder that hides later global transitions.
         if (!candidate.busy) owner.chats.remove(session);
-        return null;
+        return;
       }
+      // This snapshot is an observed new request, not a reconnect baseline.
+      // Publish before yielding: hydration also starts approval.pending, whose
+      // completion calls _changed and would otherwise consume the input's
+      // fingerprint quietly before this notification can alert.
+      _notify(candidate, ChatNotificationContent.input(''));
       await _journal();
-      return _notificationInputs(candidate).isNotEmpty ? candidate : null;
     } catch (_) {
       // A failed request read cannot invent an actionable request. Preserve any
       // live event that arrived during the read; otherwise allow a later retry.
@@ -6118,7 +6131,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         owner.chats.remove(session);
         _notificationSnapshot?.remove(candidate.runtimeId);
       }
-      return null;
+      return;
     } finally {
       _pendingNotifications--;
     }

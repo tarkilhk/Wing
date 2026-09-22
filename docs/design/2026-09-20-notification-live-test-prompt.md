@@ -1,16 +1,17 @@
 # One-chat Hermes notification test
 
-**22 September update:** the five selected live runs are finished; see the
-[retest results](2026-09-22-notification-retest-results.md) and
-[current status](2026-09-20-notification-test-status.md). Build **2327** is installed
-and the [two follow-up live runs](2026-09-22-notification-followup-live-results.md)
-are finished: **A failed; B partially passed**. First input notification is absent;
-restoration works but the restored reply does not clear on reading. No more
-desktop prompts are pending. Fix those findings before repeating the
-[two focused cases](2026-09-22-notification-followup-retests.md). Sound is confirmed. New activity/full-bottom remains a separate UX follow-up. For
-future desktop decisions, give an explicit **NOW: select Summary on desktop**
-cue in the conversation as well as any question card, and account for the stock
-request's observed five-minute timeout.
+**22 September update:** build **2328** is installed. Both causes of the failed
+build 2327 follow-ups have been reproduced and fixed, with passing Android
+emulator checks; see the [investigation](2026-09-22-notification-root-causes.md).
+**Two fresh live cases remain** in the
+[focused follow-up script](2026-09-22-notification-followup-retests.md): unopened
+structured input delivery and restored-reply tap/read clearing. Historical
+[results](2026-09-22-notification-followup-live-results.md) remain A failed/B partial
+until the fresh live runs pass. No desktop request is currently pending.
+Sound is confirmed. New activity/full-bottom remains a separate UX follow-up.
+For desktop decisions, give an explicit **NOW: select Summary on desktop** cue
+in the conversation as well as any question card; account for the stock request's
+observed five-minute timeout.
 
 Paste the entire code block below into one new Hermes chat in Wing. Open **that
 same chat** on desktop if possible so you can send controls without reading the

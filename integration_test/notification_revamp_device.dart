@@ -11,6 +11,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/turn_notification_service.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/main.dart';
+import 'package:wing/core/widgets/app_drawer.dart';
 import '../test/profile_connection_identity_test.dart' show MemoryIdentityStore;
 import '../test/profile_workspace_controller_test.dart' show Host;
 
@@ -33,7 +34,13 @@ Future<void> main() async {
   await prefs.setBool(attentionNotificationsKey, true);
   await prefs.setBool('notification_permission_requested', true);
   await prefs.setBool('microphone_permission_requested', true);
+  final savedHistory = prefs.getString('notification_qa_reply_history');
   final host = Host()
+    ..historyMessages = savedHistory == null
+        ? null
+        : (jsonDecode(savedHistory) as List)
+              .map((row) => Map<String, dynamic>.from(row as Map))
+              .toList()
     ..running = false
     ..pendingApprovals = [];
   final app = GlobalKey<WingAppState>();
@@ -104,6 +111,10 @@ Future<void> main() async {
           host.historyMessages = [
             {'id': ++sequence, 'role': 'assistant', 'content': answer},
           ];
+          await prefs.setString(
+            'notification_qa_reply_history',
+            jsonEncode(host.historyMessages),
+          );
           event(chat, 'message.complete', {'text': answer});
         case '/error':
           event(chat, 'turn.error', {
@@ -130,6 +141,24 @@ Future<void> main() async {
           event(other, 'message.complete', {
             'text': 'The weekly report is ready to read.',
           });
+        case '/list':
+          // Use the ordinary Home navigation route underneath the later native
+          // notification route; a direct /open alone misses shared visibility.
+          HomeScreenState? home;
+          void findHome(Element element) {
+            if (element is StatefulElement &&
+                element.state is HomeScreenState) {
+              home = element.state as HomeScreenState;
+            }
+            element.visitChildren(findHome);
+          }
+          findHome(WidgetsBinding.instance.rootElement!);
+          if (home == null) throw StateError('QA Home route is unavailable');
+          controller.showList();
+          await home!.selectWorkspaceConnection(
+            connection,
+            AppDestination.chats,
+          );
         case '/open':
           await app.currentState!.openProfileNotification(
             jsonEncode(chat.key.toJson()),
@@ -150,6 +179,9 @@ Future<void> main() async {
               .toList(),
           'notices': prefs.getString('chat_notification_state'),
           'lifecycle': WidgetsBinding.instance.lifecycleState?.name,
+          'chat_visible': controller.visible,
+          'selected_chat': controller.current?.chat?.key.sessionId,
+          'read_target': chat.notificationReadTarget?.toJson(),
         }),
       );
     } catch (error, stack) {

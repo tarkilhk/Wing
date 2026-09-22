@@ -27,7 +27,7 @@ void main() {
     );
     await controller.initialize();
     chat = await controller.createChat();
-    controller.visible = true;
+    controller.setRouteVisibility(controller, true);
     chat.messages = [
       for (var i = 1; i <= 40; i++)
         {
@@ -102,10 +102,10 @@ void main() {
   testWidgets('background route and failed history cannot mark answer read', (
     tester,
   ) async {
-    controller.visible = false;
+    controller.setRouteVisibility(controller, false);
     await mount(tester);
     expect(reads, isEmpty);
-    controller.visible = true;
+    controller.setRouteVisibility(controller, true);
     chat.historyError = 'Unavailable';
     await mount(tester);
     expect(reads, isEmpty);

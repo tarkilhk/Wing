@@ -135,7 +135,7 @@ token=not-for-alerts
     tearDown(() => controller.dispose());
 
     test('visible approval still alerts when action is required', () {
-      controller.visible = true;
+      controller.setRouteVisibility(controller, true);
       host.event('a', 'approval', {
         'request_id': 'first',
         'command': 'private command',
