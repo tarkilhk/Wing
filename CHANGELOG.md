@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Show structured question text, counts and Review in the first notification for
+  an unopened chat. Preserve newer requests and chat navigation during loading.
+- Restore unread chat notifications silently after force-stop and relaunch,
+  while keeping read or dismissed notifications cleared.
+
 - Center deliverable actions, show a Download icon that becomes a spinner while
   downloading, and keep Open preview as centered text.
 

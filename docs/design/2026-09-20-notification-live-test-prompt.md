@@ -2,10 +2,11 @@
 
 **22 September update:** the five selected live runs are finished; see the
 [retest results](2026-09-22-notification-retest-results.md) and
-[current status](2026-09-20-notification-test-status.md). Build 2326 remains on
-the phone. Sound is confirmed. Do not rerun the whole suite: next targeted checks
-are initial input content for unopened chats, unread-reply restoration after
-force-stop/relaunch, and the New activity/full-bottom read interaction. For
+[current status](2026-09-20-notification-test-status.md). Build **2327** is installed
+with fixes for the partial/failed cases. Sound is confirmed. Do not rerun the
+whole suite: use the [two focused retests](2026-09-22-notification-followup-retests.md)
+for initial unopened-chat input content and unread-reply restoration/read clearing
+after force-stop. New activity/full-bottom remains a separate UX follow-up. For
 future desktop decisions, give an explicit **NOW: select Summary on desktop**
 cue in the conversation as well as any question card, and account for the stock
 request's observed five-minute timeout.

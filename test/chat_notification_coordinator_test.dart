@@ -47,6 +47,75 @@ void main() {
     notices = ChatNotificationCoordinator(prefs, sink);
   });
   test(
+    'restoration silently redraws only the current unread revision',
+    () async {
+      await reply('old');
+      await reply('latest');
+      final posted = sink.shown.last;
+      sink = RecordingTurnNotificationSink();
+      notices = ChatNotificationCoordinator(prefs, sink);
+      await notices.restore(owns: (_) => true);
+      expect(sink.shown, hasLength(1));
+      expect(sink.shown.single.id, posted.id);
+      expect(sink.shown.single.revision, posted.revision);
+      expect(sink.shown.single.body, 'Answer latest');
+      expect(sink.shown.single.alert, isFalse);
+      await notices.read(chat, 'answer:old');
+      expect(sink.cancelled, isEmpty);
+      await notices.read(chat, 'answer:latest');
+      expect(sink.cancelled, [posted.id]);
+    },
+  );
+  for (final disposition in ['read', 'dismissed', 'silent baseline']) {
+    test('restoration does not revive $disposition', () async {
+      await reply('a', alert: disposition != 'silent baseline');
+      if (disposition == 'read') await notices.read(chat, 'answer:a');
+      if (disposition == 'dismissed') {
+        await notices.dismissed(chat, sink.shown.single.revision!);
+      }
+      sink = RecordingTurnNotificationSink();
+      notices = ChatNotificationCoordinator(prefs, sink);
+      await notices.restore(owns: (_) => true);
+      expect(sink.shown, isEmpty);
+    });
+  }
+  test(
+    'restoration respects current preview and category preferences',
+    () async {
+      await inputs([approval('a')]);
+      await prefs.setBool(notificationPreviewsKey, false);
+      sink = RecordingTurnNotificationSink();
+      notices = ChatNotificationCoordinator(prefs, sink);
+      await notices.restore(owns: (_) => true);
+      expect(sink.shown.single.choices, isEmpty);
+      expect(sink.shown.single.body, 'Approval needed');
+      expect(sink.shown.single.pending, '1 approval');
+      expect(sink.shown.single.alert, isFalse);
+      await prefs.setBool(attentionNotificationsKey, false);
+      sink = RecordingTurnNotificationSink();
+      notices = ChatNotificationCoordinator(prefs, sink);
+      await notices.restore(owns: (_) => true);
+      expect(sink.shown, isEmpty);
+      expect(sink.cancelled, hasLength(1));
+    },
+  );
+  test(
+    'restoration discards notices whose saved owner is no longer current',
+    () async {
+      await reply('a');
+      sink = RecordingTurnNotificationSink();
+      notices = ChatNotificationCoordinator(prefs, sink);
+      await notices.restore(owns: (_) => false);
+      expect(sink.shown, isEmpty);
+      expect(sink.cancelled, hasLength(1));
+      expect(notices.resultFor(chat), isNull);
+      notices = ChatNotificationCoordinator(prefs, sink);
+      await notices.restore(owns: (_) => true);
+      expect(sink.shown, isEmpty);
+    },
+  );
+
+  test(
     'latest answer replaces the same chat slot; an old read cannot clear it',
     () async {
       await reply('a');

@@ -382,11 +382,37 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
                 _chatNotices.read(jsonEncode(key.toJson()), identity),
           ),
         );
+    unawaited(_restoreChatNotifications().catchError((Object _) {}));
     _profileControllers.addListener(_monitoringActivityChanged);
     _backgroundMonitoring.state.addListener(_monitoringStateChanged);
     _networkAvailability.start(
       _profileControllers.recoverConnections,
       _profileControllers.networkUnavailable,
+    );
+  }
+
+  Future<void> _restoreChatNotifications() async {
+    await _notificationsReady;
+    final connections = await widget.connManager.loadConnectionsWithSecrets();
+    final identities = <String, String>{};
+    for (final connection in connections) {
+      identities[connection.id] = await _profileControllers.identities.resolve(
+        connection,
+      );
+    }
+    if (!mounted) return;
+    await _chatNotices.restore(
+      owns: (chat) {
+        try {
+          final key = ProfileSessionKey.fromJson(
+            jsonDecode(chat) as Map<String, dynamic>,
+          );
+          return identities[key.workspace.connectionId] ==
+              key.workspace.connectionIdentity;
+        } on Object {
+          return false;
+        }
+      },
     );
   }
 

@@ -181,6 +181,29 @@ class ChatNotificationCoordinator {
     await _write();
   });
 
+  /// Android removes notifications on force-stop. Persisted render equality is
+  /// not evidence that the system still displays a slot in a new process.
+  /// Only previously posted, still-owned notices qualify for a silent redraw.
+  Future<void> restore({required bool Function(String chat) owns}) =>
+      _serialize(() async {
+        for (final entry in _chats.entries.toList()) {
+          final state = entry.value;
+          if (!owns(entry.key)) {
+            if (state.posted != null) {
+              await sink.cancel(
+                TurnNotificationService.notificationIdFor(entry.key),
+              );
+            }
+            _chats.remove(entry.key);
+            continue;
+          }
+          if (state.posted == null) continue;
+          state.rendered = null;
+          await _render(entry.key, state, alert: false);
+        }
+        await _write();
+      });
+
   Future<void> refreshPreferences() => _serialize(() async {
     for (final entry in _chats.entries) {
       entry.value.rendered = null;

@@ -199,6 +199,7 @@ class ProfileChat {
   bool _submissionInFlight = false;
   bool get sendingPrompt => _submissionInFlight;
   int _turnGeneration = 0;
+  int _resumeGeneration = 0;
   Completer<void>? _replacementCompletion;
   Future<void>? _draftWrites;
   ProfileTurnStatus status = ProfileTurnStatus.idle;
@@ -2409,6 +2410,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _hydrate(chat, response);
       await _restoreDraft(chat);
     } else if (chat.status != ProfileTurnStatus.submitting) {
+      chat._resumeGeneration++;
       // A chat opened elsewhere may have progressed while this view was away.
       // Keep an in-flight local submission intact until its acknowledgement.
       Map<String, dynamic>? response;
@@ -6050,7 +6052,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
         if (after.activity == _NotificationActivity.waiting &&
             before?.activity != _NotificationActivity.waiting) {
-          _notify(after.chat, ChatNotificationContent.input(''));
+          final inputChat = await _loadNotificationInput(after.chat);
+          if (_closed) return;
+          if (inputChat != null) {
+            _notify(inputChat, ChatNotificationContent.input(''));
+          }
         } else if (after.activity == _NotificationActivity.idle &&
             before != null &&
             before.activity != _NotificationActivity.idle) {
@@ -6062,6 +6068,59 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _notificationSnapshot = null;
     } finally {
       _changed();
+    }
+  }
+
+  /// Adopt only the live request state; opening a conversation and loading its
+  /// transcript remain separate user actions. Register before awaiting resume
+  /// so a newer live request can overtake the snapshot safely.
+  Future<ProfileChat?> _loadNotificationInput(ProfileChat candidate) async {
+    final owner = _resources[candidate.key.workspace]!;
+    final session = candidate.key.sessionId;
+    if (owner.deletedSessions.contains(session)) return null;
+    final existing = owner.chats[session];
+    if (existing != null) return null;
+    owner.chats[session] = candidate;
+    _pendingNotifications++;
+    final generation = candidate._turnGeneration;
+    final resumeGeneration = candidate._resumeGeneration;
+    final status = candidate.status;
+    bool unchanged() =>
+        identical(owner.chats[session], candidate) &&
+        candidate._turnGeneration == generation &&
+        candidate._resumeGeneration == resumeGeneration &&
+        !candidate.opening &&
+        candidate.status == status &&
+        _notificationInputs(candidate).isEmpty;
+    try {
+      final resumed = await owner.gateway.resume(session);
+      if (_closed || owner.deletedSessions.contains(session)) return null;
+      if (!unchanged()) return null;
+      if (resumed['session_id'] != candidate.runtimeId ||
+          resumed['session_key'] != session) {
+        owner.chats.remove(session);
+        _notificationSnapshot?.remove(candidate.runtimeId);
+        return null;
+      }
+      _hydrate(candidate, resumed);
+      if (_notificationInputs(candidate).isEmpty) {
+        // The request may have resolved while its active-list read was in flight.
+        // Do not retain an idle placeholder that hides later global transitions.
+        if (!candidate.busy) owner.chats.remove(session);
+        return null;
+      }
+      await _journal();
+      return _notificationInputs(candidate).isNotEmpty ? candidate : null;
+    } catch (_) {
+      // A failed request read cannot invent an actionable request. Preserve any
+      // live event that arrived during the read; otherwise allow a later retry.
+      if (unchanged()) {
+        owner.chats.remove(session);
+        _notificationSnapshot?.remove(candidate.runtimeId);
+      }
+      return null;
+    } finally {
+      _pendingNotifications--;
     }
   }
 
@@ -6211,6 +6270,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   void _hydrate(ProfileChat chat, Map<String, dynamic> result) {
+    chat._resumeGeneration++;
     final source = (result['info'] as Map?)?['source'];
     if (source is String && source.isNotEmpty) chat.source = source;
     final wasBusy = chat.busy;

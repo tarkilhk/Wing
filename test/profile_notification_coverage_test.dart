@@ -24,8 +24,12 @@ class NotificationCoverageHost {
   int activeReads = 0;
   final resumeCalls = <Map<String, dynamic>>[];
   Completer<void>? resumeDelay;
+  final resumeDelays = <int, Completer<void>>{};
+  final resumeSnapshots = <int, Map<String, dynamic>>{};
   bool activeFails = false;
   bool resumeFails = false;
+  List<Map<String, dynamic>>? questions;
+  Map<String, dynamic> resumeOverrides = {};
   final workingProfiles = <String>{};
   final waitingProfiles = <String>{};
   final failedSearchProfiles = <String>{};
@@ -89,9 +93,11 @@ class NotificationCoverageHost {
           }
           if (method == 'projects.tree') return {'projects': []};
           if (method == 'session.create' || method == 'session.resume') {
+            int? resumeCall;
             if (method == 'session.resume') {
               resumeCalls.add(Map.of(params));
-              await resumeDelay?.future;
+              resumeCall = resumeCalls.length;
+              await (resumeDelays[resumeCall] ?? resumeDelay)?.future;
               if (resumeFails) throw StateError('resume unavailable');
             }
             final sessionId = method == 'session.create'
@@ -112,11 +118,16 @@ class NotificationCoverageHost {
                     'method': 'clarify',
                     'params': {
                       'session_id': '$sessionId-runtime',
-                      'question': 'Continue?',
+                      if (questions == null)
+                        'question': 'Continue?'
+                      else
+                        'questions': questions,
                     },
                   },
               ],
               'info': {'profile_name': scope.profileName},
+              if (method == 'session.resume') ...resumeOverrides,
+              ...?resumeSnapshots[resumeCall],
             };
           }
           return {};
@@ -155,6 +166,7 @@ void main() {
   late NotificationCoverageHost host;
   late ProfileWorkspaceController controller;
   late bool disposed;
+  late List<ProfileInputNotification> inputNotices;
   late List<({String profile, String session, bool input})> alerts;
 
   setUp(() async {
@@ -162,6 +174,7 @@ void main() {
     host = NotificationCoverageHost();
     disposed = false;
     alerts = [];
+    inputNotices = [];
     controller = ProfileWorkspaceController(
       connection: SavedConnection(
         id: 'host',
@@ -173,6 +186,7 @@ void main() {
       connectionIdentity: 'notification-coverage',
       preferences: await SharedPreferences.getInstance(),
       gatewayFactory: host.gateway,
+      onNotificationInputs: (snapshot) async => inputNotices.add(snapshot),
       onAttention: (notification) async => alerts.add((
         profile: notification.key.workspace.profileName,
         session: notification.key.sessionId,
@@ -189,36 +203,181 @@ void main() {
   });
 
   test(
-    'alerts for authoritative unopened task transitions without history',
+    'first unopened batch notification contains its current question and count',
+    () async {
+      host.active = [row('outside-runtime', 'outside', 'working')];
+      host.changed();
+      await waitForReads(host, 1);
+      host.questions = [
+        for (var i = 0; i < 3; i++)
+          {
+            'qid': 'q$i',
+            'question': 'Which environment $i?',
+            'choices': ['Preview', 'Production'],
+          },
+      ];
+      host.waitingProfiles.add('a');
+      host.active = [row('outside-runtime', 'outside', 'waiting', 2)];
+      host.changed();
+      await waitForReads(host, 2);
+      expect(
+        controller.current?.chat,
+        isNull,
+        reason: 'no chat opening may be required',
+      );
+      expect(inputNotices, hasLength(1));
+      final notice = inputNotices.single;
+      expect(notice.alert, isTrue);
+      expect(notice.inputs.single.count, 3);
+      expect(
+        notice.inputs.single.content.preview,
+        contains('Which environment 0?'),
+      );
+      expect(notice.inputs.single.focus.kind, 'question');
+      expect(notice.inputs.single.focus.id, 'question-a');
+      expect(notice.key.workspace.profileName, 'a');
+    },
+  );
+
+  test(
+    'unopened request is adopted without history and later live replies replace it',
     () async {
       host.active = [row('outside-runtime', 'outside', 'working')];
       host.changed();
       await waitForReads(host, 1);
       expect(alerts, isEmpty, reason: 'the first snapshot is only a baseline');
-
+      host.waitingProfiles.add('a');
       host.active = [row('outside-runtime', 'outside', 'waiting', 2)];
       host.changed();
       await waitForReads(host, 2);
       expect(alerts, [(profile: 'a', session: 'outside', input: true)]);
-
-      host.active = [row('outside-runtime', 'outside', 'idle', 3)];
-      host.changed();
-      await waitForReads(host, 3);
-      expect(alerts.last, (profile: 'a', session: 'outside', input: false));
-
-      host.active = [row('outside-runtime', 'outside', 'working', 4)];
-      host.changed();
-      await waitForReads(host, 4);
-      host.active = [row('outside-runtime', 'outside', 'idle', 5)];
-      host.changed();
-      await waitForReads(host, 5);
-      expect(
-        alerts.where((alert) => !alert.input),
-        hasLength(2),
-        reason: 'a later turn on the same runtime is a new transition',
-      );
+      expect(host.resumeCalls.single['omit_messages'], isTrue);
+      expect(controller.current?.chat, isNull);
+      for (var turn = 0; turn < 2; turn++) {
+        host.waitingProfiles.clear();
+        host.gateways['a']!.onEvent!(
+          StreamEvent(
+            type: 'message.start',
+            sessionId: 'outside-runtime',
+            data: {},
+          ),
+        );
+        host.gateways['a']!.onEvent!(
+          StreamEvent(
+            type: 'message.complete',
+            sessionId: 'outside-runtime',
+            data: {'text': 'Answer $turn'},
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(alerts.where((alert) => !alert.input), hasLength(2));
+      expect(controller.current?.chat, isNull);
     },
   );
+
+  test('new live request wins over delayed first-request hydration', () async {
+    host.active = [row('outside-runtime', 'outside', 'working')];
+    host.changed();
+    await waitForReads(host, 1);
+    host.waitingProfiles.add('a');
+    host.resumeDelay = Completer<void>();
+    host.active = [row('outside-runtime', 'outside', 'waiting', 2)];
+    host.changed();
+    await waitForReads(host, 2);
+    expect(
+      controller.hasActiveChats,
+      isTrue,
+      reason: 'in-flight notification data must finish before monitoring stops',
+    );
+    host.gateways['a']!.onEvent!(
+      StreamEvent(
+        type: 'clarify',
+        sessionId: 'outside-runtime',
+        data: {'request_id': 'newer', 'question': 'New question?'},
+      ),
+    );
+    host.resumeDelay!.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(inputNotices.single.inputs.single.focus.id, 'newer');
+    expect(
+      controller.notificationChats.single.pendingQuestion!['request_id'],
+      'newer',
+    );
+    expect(controller.hasActiveChats, isFalse);
+  });
+
+  test(
+    'failed first request read retries on the next invalidation without inventing actions',
+    () async {
+      host.active = [row('outside-runtime', 'outside', 'working')];
+      host.changed();
+      await waitForReads(host, 1);
+      host.resumeFails = true;
+      host.waitingProfiles.add('a');
+      host.active = [row('outside-runtime', 'outside', 'waiting', 2)];
+      host.changed();
+      await waitForReads(host, 2);
+      expect(inputNotices, isEmpty);
+      expect(controller.notificationChats, isEmpty);
+      host.resumeFails = false;
+      host.changed();
+      await waitForReads(host, 3);
+      expect(inputNotices.single.inputs.single.focus.id, 'question-a');
+    },
+  );
+
+  test(
+    'opening the chat wins over an older empty first-request resume',
+    () async {
+      host.active = [row('outside-runtime', 'outside', 'working')];
+      host.changed();
+      await waitForReads(host, 1);
+      host.waitingProfiles.add('a');
+      host.resumeDelays[1] = Completer<void>();
+      host.resumeDelays[2] = Completer<void>();
+      host.resumeSnapshots[1] = {'open_requests': [], 'running': false};
+      host.active = [row('outside-runtime', 'outside', 'waiting', 2)];
+      host.changed();
+      await waitForReads(host, 2);
+      final candidate = controller.notificationChats.single;
+      final opening = controller.openSession(candidate.key);
+      await Future<void>.delayed(Duration.zero);
+      expect(host.resumeCalls, hasLength(2));
+      host.resumeDelays[1]!.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.notificationChats, contains(same(candidate)));
+      host.resumeDelays[2]!.complete();
+      await opening;
+      expect(controller.current!.chat, same(candidate));
+      expect(candidate.pendingQuestion!['request_id'], 'question-a');
+    },
+  );
+
+  for (final mismatch in [
+    {'session_id': 'other-runtime'},
+    {'session_key': 'other-chat'},
+    {
+      'info': {'profile_name': 'b'},
+    },
+  ]) {
+    test(
+      'first-request read rejects conflicting ownership: $mismatch',
+      () async {
+        host.active = [row('outside-runtime', 'outside', 'working')];
+        host.changed();
+        await waitForReads(host, 1);
+        host.waitingProfiles.add('a');
+        host.resumeOverrides = mismatch;
+        host.active = [row('outside-runtime', 'outside', 'waiting', 2)];
+        host.changed();
+        await waitForReads(host, 2);
+        expect(inputNotices, isEmpty);
+        expect(controller.notificationChats, isEmpty);
+        expect(controller.current?.chat, isNull);
+      },
+    );
+  }
 
   test('deduplicates loaded event and reconciliation paths', () async {
     final loaded = await controller.createChat();

@@ -40,7 +40,14 @@ class NativeNotificationSink extends PluginTurnNotificationSink {
     });
     final pending = await channel.invokeListMethod<dynamic>('initialize');
     for (final item in pending ?? const []) {
-      unawaited(_dispatch(Map<String, dynamic>.from(item as Map)));
+      final interaction = Map<String, dynamic>.from(item as Map);
+      if (interaction['dismiss'] == true) {
+        // Startup restoration must observe queued swipe dismissals first.
+        await _dispatch(interaction);
+      } else {
+        // Navigation/action handling may await startup readiness itself.
+        unawaited(_dispatch(interaction));
+      }
     }
   }
 

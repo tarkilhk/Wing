@@ -1,15 +1,20 @@
 # Notification test status
 
-Updated **22 September 2026**. Phone: Galaxy S23 Ultra, Android 16; Wing **2326**
-(Android version code 23262). No source changes were made during today's tests.
+Updated **22 September 2026** after fixes and deployment. Phone: Galaxy S23 Ultra,
+Android 16; Wing **2327** (Android version code 23272). The five live runs below
+were performed on build 2326; their two gaps are fixed in code and await live retest.
 
 Evidence: [20 September live results](2026-09-20-notification-live-results.md),
 [22 September retest results](2026-09-22-notification-retest-results.md).
-Instructions: [test script](2026-09-20-notification-live-test-prompt.md).
+Instructions: [two focused follow-up retests](2026-09-22-notification-followup-retests.md)
+and [original test script](2026-09-20-notification-live-test-prompt.md).
+Fix evidence: [build 2327 fixes](2026-09-22-notification-followup-fixes.md).
 
 ## Current summary
 
 - Today's **five runs are finished: 3 passed, 1 partially passed, 1 failed**.
+- Both newly identified gaps are fixed, automatically tested and installed in
+  build 2327. **Two focused live retests remain** before changing those outcomes.
 - Original **19-scenario ledger: 5 passed, 3 partial, 1 failed, 10 blocked**.
   A passed row covers its runnable checks; separately documented blocked branches
   are not silently treated as passed.
@@ -24,13 +29,14 @@ Instructions: [test script](2026-09-20-notification-live-test-prompt.md).
 | --- | --- |
 | Missing remaining-question count | Build 2326 renders 3 → 2 → 1 correctly in collapsed/expanded notifications once the request is loaded; hidden previews retain count and hide content. Live-verified today. |
 | Stale Needs input after desktop resolution | Actual desktop Summary submission after dismissal/force-stop/relaunch cleared the untouched list to Idle. Continued-work variant resumed monitoring, delivered exact reply and stopped. Live-verified today. |
-| Initial generic input notice | First background notice said only Open the chat to continue until chat opening loaded the real batch. Still a content/coverage gap. |
-| Unread reply after force-stop/relaunch | Failed restoration: notice disappeared and did not return after reconnect, without reading or dismissal. Separate from ordinary backgrounding. |
+| Initial generic input notice | Fixed in build 2327: first unopened-chat transition loads the current structured request without history/navigation. Regression tests pass; exact live case A pending. |
+| Unread reply after force-stop/relaunch | Fixed in build 2327: silent same-slot restoration after relaunch, respecting read/dismissal/ownership/preferences. Actual Android emulator regression passes; exact live case B pending. |
 | New activity versus full-bottom reading | Older history correctly retained the notice. New activity showed the answer but did not clear; a full-bottom scroll did. Accepted bottom rule passes; shortcut behavior warrants UX follow-up. |
 
 The original idle-reconnect watcher/replacement defect was fixed in `120868e`
 (build 2325); LIVE-5/6 verified it. Build 2326 fixes were committed in `f291f59`.
-Today's observed gaps are not silently counted as fixed.
+Today's two observed gaps are fixed in build 2327, but are not counted as live
+passes until their focused retests complete.
 
 ## Original scenario checklist
 
@@ -40,7 +46,7 @@ Today's observed gaps are not silently counted as fixed.
 | 02 | Replacement and identical replies | Passed: exact identical text produced a fresh same-slot update |
 | 03 | Foreground behavior | Passed: normal reply suppressed; real input notification allowed |
 | 04 | Monitoring and interruption | Passed: live summary, lock-screen delivery, real desktop Stop and watcher shutdown |
-| 05 | Three-question batch | Partial: counts, advancement, Review, earlier completion and privacy covered; first background notification still generic until opening |
+| 05 | Three-question batch | Partial on 2326: initial notice generic. Fix installed in 2327; case A pending. Counts, advancement, Review, earlier completion/privacy covered |
 | 06 | Once | Blocked: Smart auto-approved the safe operation |
 | 07 | Deny | Blocked: no real safe approval request |
 | 08 | FIFO approvals | Blocked: no real safe approval requests; concurrency unverified |
@@ -51,14 +57,30 @@ Today's observed gaps are not silently counted as fixed.
 | 13 | Unlocking approval actions | Blocked: no real safe approval request |
 | 14 | Offline / stale approval actions | Blocked: no real safe approval request |
 | 15 | Desktop resolution | Partial: actual desktop answer/reconnect and continued-work cleanup pass; already-running watcher polling branch untested |
-| 16 | Restart / reconnect | Failed explicit force-stop unread-reply restoration; pending dismissal, idle reconnect and ordinary unread retention covered |
+| 16 | Restart / reconnect | Failed explicit force-stop unread-reply restoration on 2326. Fix installed in 2327; case B pending. Dismissal, idle reconnect and ordinary retention covered |
 | 17 | Secure input | Blocked: no harmless generic dummy-data flow exposed by runtime |
 | 18 | Session permission | Blocked: no real safe approval request |
 | 19 | Always permission | Blocked: no real safe approval request; no permanent grant attempted |
 
 Multi-chat/profile isolation and counts cannot be proved by these one-chat runs.
 
-## Fixes and automated evidence
+## Build 2327 validation and installation
+
+- **95 focused tests** pass, including cold structured input, same-revision silent
+  restoration, queued swipe dismissals, current ownership/preferences, and delayed
+  live-event/navigation races. Full Flutter suite: **2,687 passed, 12 skipped**.
+  Code analysis clean; all **28 release-tooling tests** and source version check pass.
+- Actual Android 16 emulator: same-ID/text reply restored silently after force-stop;
+  real swipe dismissal stays absent on relaunch; counts 3/2/1 and privacy pass.
+- Signed production ARM64 build verified against the pinned certificate, package,
+  non-debuggable flag and version. Installed with data-preserving `adb install -r`;
+  phone package readback confirms **1.0.1 / 23272** on 22 September.
+- APK SHA-256: `be514fc658fa1f9dbf4db2f33979d1dcc687402b46ebe9f534ad6e5f41074968`.
+- Latest stock Hermes source inspected at
+  `e2f8a0731bf26e95b31e35d73e71e183a1045b81`; no backend changes or new polling.
+- Temporary emulator stopped. No live Hermes request was started during fixes.
+
+## Earlier build 2326 fixes and automated evidence
 
 - **Question counts:** Dart already supplied the remaining-input count, but the
   native standard notification template ignored it. Both collapsed and expanded
@@ -97,9 +119,10 @@ comes from the user, independently of automated checks.
 
 ## Next work
 
-1. Investigate/fix initial structured-input content for unopened chats and unread
-   reply restoration on relaunch after force-stop; review New activity's read
-   acknowledgment behavior. Retest those specific gaps afterward.
+1. Run the **two focused live retests** on installed build 2327 in the current
+   conversation: initial structured-input content before opening the chat, then
+   unread reply restoration/read clearing after force-stop. Keep New activity's
+   extra-scroll behavior as a separate UX follow-up.
 2. Keep actual approval tests blocked until a genuine harmless request can be
    produced under the deployed policy. No policy changes or riskier probes are
    authorized merely to make the test produce an approval. Run scope-granting

@@ -4,6 +4,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:wing/core/models/chat_notification_content.dart';
+import 'package:wing/core/models/notification_focus.dart';
+import 'package:wing/core/services/chat_notification_coordinator.dart';
+import 'package:wing/core/services/native_notification_sink.dart';
+import 'support/recording_turn_notification_sink.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/android_share_intent_service.dart';
@@ -121,6 +127,95 @@ Future<void> _pumpNavigation(WidgetTester tester) async {
 }
 
 void main() {
+  for (final state in [
+    'unread',
+    'native-dismissed',
+    'removed connection',
+    'changed credentials',
+  ]) {
+    testWidgets(
+      'cold app launch handles $state notice without opening its chat',
+      (tester) async {
+        final harness = await _harness();
+        final previous = RecordingTurnNotificationSink();
+        final notices = ChatNotificationCoordinator(
+          harness.manager.prefs,
+          previous,
+        );
+        await notices.result(
+          chat: _payload(harness, 'a'),
+          title: 'Result',
+          scope: 'Home / a',
+          focus: const NotificationFocus('answer', 'unread'),
+          content: ChatNotificationContent.reply('Unread result'),
+        );
+        if (state == 'removed connection') {
+          await harness.manager.deleteConnection(harness.connection.id);
+        }
+        if (state == 'changed credentials') {
+          await harness.manager.updateApiKey(
+            harness.connection.id,
+            'changed-test-key',
+          );
+        }
+        final posted = <Map<dynamic, dynamic>>[];
+        AndroidFlutterLocalNotificationsPlugin.registerWith();
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        const plugin = MethodChannel(
+          'dexterous.com/flutter/local_notifications',
+        );
+        messenger.setMockMethodCallHandler(
+          plugin,
+          (call) async => switch (call.method) {
+            'initialize' => true,
+            'getNotificationAppLaunchDetails' => {
+              'notificationLaunchedApp': false,
+            },
+            'areNotificationsEnabled' => true,
+            _ => null,
+          },
+        );
+        messenger.setMockMethodCallHandler(NativeNotificationSink.channel, (
+          call,
+        ) async {
+          if (call.method == 'show') posted.add(call.arguments as Map);
+          return call.method == 'initialize'
+              ? [
+                  if (state == 'native-dismissed')
+                    {
+                      'dismiss': true,
+                      'chat': _payload(harness, 'a'),
+                      'revision': previous.shown.single.revision,
+                      'interaction_id': 'queued-dismissal',
+                    },
+                ]
+              : null;
+        });
+        addTearDown(() {
+          messenger.setMockMethodCallHandler(plugin, null);
+          messenger.setMockMethodCallHandler(
+            NativeNotificationSink.channel,
+            null,
+          );
+        });
+        await _pumpApp(tester, harness);
+        await tester.pumpAndSettle();
+        if (state == 'unread') {
+          expect(posted, hasLength(1));
+          expect(posted.single['body'], 'Unread result');
+          expect(posted.single['alert'], isFalse);
+          expect(posted.single['id'], previous.shown.single.id);
+          expect(posted.single['revision'], previous.shown.single.revision);
+        } else {
+          expect(posted, isEmpty);
+        }
+        expect(harness.controller.current?.chat, isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets('notification taps open the named chat within the same profile', (
     tester,
   ) async {
