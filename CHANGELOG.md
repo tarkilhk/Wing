@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Long-press an Administration profile pill to choose from Desktop's profile
+  color palette or restore its automatic color. The device-saved choice also
+  colors that profile in Chats.
+
 ## [1.1.0] - 2026-09-24
 
 Wing 1.1.0 brings a more capable mobile workspace, clearer server administration,

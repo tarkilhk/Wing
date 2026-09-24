@@ -1,10 +1,78 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/profile_color_store.dart';
+import 'package:wing/core/theme/profile_colors.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/profile_selector.dart';
 
 void main() {
+  testWidgets('long press changes a profile color without selecting it', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final colors = ProfileColorStore(preferences, 'connection-a');
+    String? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.light),
+        home: Scaffold(
+          body: ProfileSelector(
+            profiles: const [
+              HermesProfile(name: 'default'),
+              HermesProfile(name: 'work', displayName: 'Work'),
+            ],
+            selectedProfile: 'default',
+            onSelected: (name) => selected = name,
+            colors: colors,
+          ),
+        ),
+      ),
+    );
+    await tester.longPress(find.byKey(const ValueKey('profile-work')));
+    await tester.pumpAndSettle();
+    expect(selected, isNull);
+    expect(find.text('Color for Work'), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-color-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-color-11')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('profile-color-8')));
+    await tester.pumpAndSettle();
+    expect(colors.read('work'), 8);
+    expect(selected, isNull);
+    expect(desktopProfileSwatches.length, 12);
+
+    await tester.longPress(find.byKey(const ValueKey('profile-work')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('profile-color-automatic')));
+    await tester.pumpAndSettle();
+    expect(colors.read('work'), isNull);
+    await tester.tap(find.byKey(const ValueKey('profile-work')));
+    expect(selected, 'work');
+  });
+
+  test(
+    'profile colors survive reopening and stay with their connection',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final first = ProfileColorStore(preferences, 'connection-a');
+      expect(await first.write('work', 3), isTrue);
+      expect(ProfileColorStore(preferences, 'connection-a').read('work'), 3);
+      expect(
+        ProfileColorStore(preferences, 'connection-b').read('work'),
+        isNull,
+      );
+      expect(first.read('default'), isNull);
+      expect(await first.write('work', null), isTrue);
+      expect(
+        ProfileColorStore(preferences, 'connection-a').read('work'),
+        isNull,
+      );
+    },
+  );
+
   testWidgets('selected profile is visible without moving the enclosing page', (
     tester,
   ) async {

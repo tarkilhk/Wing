@@ -12,6 +12,7 @@ import 'admin_profile_overview.dart';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 import '../../services/profile_workspace_controller.dart';
+import '../../services/profile_color_store.dart';
 import 'admin_identity_page.dart';
 import 'admin_profiles_page.dart';
 import '../profile_capabilities_screen.dart';
@@ -258,6 +259,10 @@ class _HermesAdministrationContentState
           )
         : ProfileSelector(
             profiles: profiles,
+            colors: ProfileColorStore(
+              widget.controller.preferences,
+              widget.controller.connectionIdentity,
+            ),
             selectedProfile: name,
             padding: EdgeInsets.zero,
             trailing: manageAction,

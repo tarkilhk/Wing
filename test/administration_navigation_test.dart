@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/profile_color_store.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/screens/administration/administration_content.dart';
@@ -224,6 +225,36 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final (brightness, scale, width) in [
+    (Brightness.light, 1.0, 390.0),
+    (Brightness.dark, 1.0, 390.0),
+    (Brightness.light, 2.0, 320.0),
+    (Brightness.dark, 2.0, 320.0),
+  ]) {
+    testWidgets('profile color picker ${brightness.name} $scale', (
+      tester,
+    ) async {
+      await show(tester, brightness, scale: scale, width: width);
+      await tester.ensureVisible(find.byKey(const ValueKey('profile-work')));
+      await tester.pumpAndSettle();
+      await tester.longPress(find.byKey(const ValueKey('profile-work')));
+      await tester.pumpAndSettle();
+      expect(find.text('Color for work'), findsOneWidget);
+      await screenshot(tester, '${brightness.name}-$scale-profile-colors');
+      await tester.tap(find.byKey(const ValueKey('profile-color-8')));
+      await tester.pumpAndSettle();
+      expect(
+        ProfileColorStore(
+          controller.preferences,
+          controller.connectionIdentity,
+        ).read('work'),
+        8,
+      );
+      await screenshot(tester, '${brightness.name}-$scale-profile-blue');
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   for (final mode in ['light', 'dark', 'narrow']) {
     testWidgets('profile brief and attention hierarchy $mode', (tester) async {

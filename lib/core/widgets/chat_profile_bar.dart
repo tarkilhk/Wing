@@ -1,19 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/hermes_profile.dart';
+import '../services/profile_color_store.dart';
+import '../theme/profile_colors.dart';
 import '../theme/wing_theme.dart';
-
-/// Desktop's name-derived profile hue (unsigned 32-bit UTF-16 hash).
-/// Verified against Hermes 7c6f21a5e12ba9b1c674ec9b410fa6b8c45de4f8.
-Color? desktopProfileColor(String name) {
-  final key = name.trim();
-  if (key.isEmpty || key == 'default') return null;
-  final hash = key.codeUnits.fold<int>(
-    0,
-    (hash, unit) => (hash * 31 + unit) & 0xffffffff,
-  );
-  return HSLColor.fromAHSL(1, (hash % 360).toDouble(), .68, .58).toColor();
-}
 
 /// A bounded viewport: more profiles scroll inside, never widen the header.
 class ChatProfileBar extends StatelessWidget {
@@ -22,11 +12,13 @@ class ChatProfileBar extends StatelessWidget {
     required this.profiles,
     required this.selectedProfiles,
     required this.onSelected,
+    this.colors,
   });
 
   final List<HermesProfile> profiles;
   final Set<String> selectedProfiles;
   final ValueChanged<String> onSelected;
+  final ProfileColorStore? colors;
 
   @override
   Widget build(BuildContext context) {
@@ -47,8 +39,10 @@ class ChatProfileBar extends StatelessWidget {
                   Builder(
                     builder: (context) {
                       final selected = selectedProfiles.contains(profile.name);
-                      final color =
-                          desktopProfileColor(profile.name) ?? tokens.muted;
+                      final choice = colors?.read(profile.name);
+                      final color = choice == null
+                          ? desktopProfileColor(profile.name) ?? tokens.muted
+                          : desktopProfileSwatches[choice];
                       final hint = selected
                           ? 'Clear profile filter'
                           : 'Filter chats by ${profile.label}';

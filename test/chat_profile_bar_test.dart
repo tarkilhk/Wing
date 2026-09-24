@@ -1,10 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/profile_color_store.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/profile_colors.dart';
 import 'package:wing/core/widgets/chat_profile_bar.dart';
 
 void main() {
+  testWidgets('chat profile bar uses the saved administration color', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final colors = ProfileColorStore(preferences, 'connection-a');
+    await colors.write('work', 8);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        home: Scaffold(
+          body: ChatProfileBar(
+            profiles: const [HermesProfile(name: 'work')],
+            selectedProfiles: const {},
+            colors: colors,
+            onSelected: (_) {},
+          ),
+        ),
+      ),
+    );
+    final box = tester.widget<Container>(
+      find.descendant(
+        of: find.byKey(const ValueKey('chat-profile-work')),
+        matching: find.byType(Container),
+      ),
+    );
+    expect(
+      (box.decoration! as BoxDecoration).color,
+      desktopProfileSwatches[8].withValues(alpha: .22),
+    );
+  });
+
   test('profile colors match desktop, including unsigned hash overflow', () {
     expect(desktopProfileColor('default'), isNull);
     for (final (name, hue) in [

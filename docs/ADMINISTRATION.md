@@ -33,6 +33,16 @@ The profile brief groups the shared Chats profile chips with a one-line descript
 and direct Identity edit, or Describe this agent when absent. Selected profiles are
 kept in view. Setup needs, expired sign-ins and schedule issues use separate semantic
 attention labels; task names stay on one line with run time/outcome beneath.
+Long-press an Administration profile pill to choose one of Desktop's twelve profile
+hues or Automatic color. The choice is saved on this device for that connection and
+also colors the profile square in Chats. Automatic uses Desktop's name-derived hue;
+the default profile is neutral. Color edits do not switch profiles or call Hermes.
+The picker follows Studio light/dark tokens and remains reachable at 320 dp with
+200% text. Verified with `profile_selector_test.dart`, `chat_profile_bar_test.dart`
+and `administration_navigation_test.dart`, plus rendered Administration captures
+in both themes at normal and enlarged text. Desktop reference: [profile color
+picker](https://github.com/NousResearch/hermes-agent/blob/main/apps/desktop/src/app/chat/sidebar/profile-switcher.tsx)
+and [local color storage](https://github.com/NousResearch/hermes-agent/blob/main/apps/desktop/src/store/profile.ts).
 Returning from an editor refreshes only the affected observations and briefly emphasizes changed values;
 reduced motion suppresses the emphasis. Health visits and search preserve profile
 observations and scroll context. Search shows the full owner/editor/field path and opens the exact field without

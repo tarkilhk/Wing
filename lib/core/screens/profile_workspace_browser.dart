@@ -8,6 +8,7 @@ import '../models/session_visibility.dart';
 import '../services/chat_browser_data.dart';
 import '../services/composer_draft_store.dart';
 import '../services/profile_workspace_controller.dart';
+import '../services/profile_color_store.dart';
 import '../theme/wing_theme.dart';
 import '../theme/wing_icons.dart';
 import '../widgets/chat_list_menu.dart';
@@ -1218,6 +1219,10 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                   Expanded(
                     child: ChatProfileBar(
                       profiles: controller.discovery?.profiles ?? const [],
+                      colors: ProfileColorStore(
+                        controller.preferences,
+                        controller.connectionIdentity,
+                      ),
                       selectedProfiles: _profiles,
                       onSelected: (name) => _change(() {
                         final selected = _profiles.contains(name);

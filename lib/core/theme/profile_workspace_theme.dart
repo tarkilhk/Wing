@@ -28,28 +28,3 @@ ThemeData profileWorkspaceTheme(
     accent: base.brightness == Brightness.dark ? accent.dark : accent.light,
   );
 }
-
-/// Stable profile colors, independent of discovery order and connection state.
-Color profileAccent(BuildContext context, String name) {
-  final dark = Theme.of(context).brightness == Brightness.dark;
-  final palette = dark
-      ? const [
-          Color(0xFF45D9B5),
-          Color(0xFFE28B76),
-          Color(0xFF59C8D1),
-          Color(0xFFB6A0EE),
-          Color(0xFFE2BB67),
-        ]
-      : const [
-          Color(0xFF087560),
-          Color(0xFFAA4936),
-          Color(0xFF087681),
-          Color(0xFF7150AF),
-          Color(0xFF876000),
-        ];
-  final hash = name.codeUnits.fold<int>(
-    0,
-    (hash, unit) => (hash * 31 + unit) & 0x7fffffff,
-  );
-  return palette[hash % palette.length];
-}
