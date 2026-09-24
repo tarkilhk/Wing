@@ -1,25 +1,61 @@
 version: 2
+# Version updates run monthly; enabled security updates are raised separately.
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
+    groups:
+      routine:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: pub
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
+    groups:
+      routine:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        exclude-patterns:
+          # Changes to saved credentials need an individual upgrade review.
+          - flutter_secure_storage
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: gradle
     directory: /android
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
+    groups:
+      routine:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: pip
     directory: /tools/fake_gateway
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
+    groups:
+      routine:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
