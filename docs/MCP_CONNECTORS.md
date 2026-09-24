@@ -2,9 +2,8 @@
 
 Wing targets unmodified upstream Hermes main, verified at
 `d177b119e9c56c9ddc0b7379ffce52341ec06584` on 18 September 2026.
-The [research and stock API evidence](MCP_AUTH_RESEARCH.md) distinguish runtime,
-CLI and remote-client capabilities. This implementation supersedes the earlier
-dashboard-callback OAuth description in Administration's MCP failure notes.
+Hermes runtime, CLI and remote-client capabilities differ. The controls below
+describe what Wing can offer through the stock remote API.
 
 ## Setup
 

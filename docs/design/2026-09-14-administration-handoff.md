@@ -1,6 +1,6 @@
 # Administration ownership and design
 
-This is the ownership contract for Administration, updated on 17 September 2026 to use a tab-free Profile root and a standalone Health destination, with versions in the global menu, and provider ownership corrected to follow the latest-upstream policy in [AGENTS.md](../../AGENTS.md). Use the shared [Studio tokens](../DESIGN_SYSTEM.md). [Administration](../ADMINISTRATION.md) lists implemented controls and backend limitations; the [roadmap](../ADMINISTRATION_ROADMAP.md) owns feature scope. Generated mockups are not evidence of implemented backend operations.
+This is the ownership contract for Administration: a Profile root, a separate Health destination, versions in the global menu, and provider ownership that follows the latest-upstream policy in [AGENTS.md](../../AGENTS.md). Use the shared [Studio tokens](../DESIGN_SYSTEM.md). [Administration](../ADMINISTRATION.md) lists implemented controls and backend limits.
 
 ## Navigation
 
@@ -37,8 +37,7 @@ Provider accounts, API keys and model choices belong to the selected profile,
 including the canonical `default` profile. Upstream removed automatic root
 `auth.json` inheritance in commit `93889b7` on 16 September 2026 UTC. A blank
 profile needs provider access configured; cloning can copy API keys and settings,
-which is separate from inheritance. See the [verified ownership research](../research/2026-09-17-hermes-provider-ownership.md)
-for source evidence and provider-specific external/shared credential mechanisms.
+which is separate from inheritance. Verify provider-specific external and shared credential mechanisms against current upstream before changing this flow.
 
 The Server / Providers entry has been removed; provider searches route to
 Profile / Access and connectors. Provider recovery now removes the obsolete shared-account links and labels;

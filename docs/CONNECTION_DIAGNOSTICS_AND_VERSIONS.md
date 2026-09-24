@@ -1,6 +1,6 @@
 # Connections, diagnostics and backend updates
 
-Use [Getting started](GETTING_STARTED.md) for password connection setup. The app requires the authenticated modern dashboard and Desktop Gateway. Connection identity includes the configured endpoint and credentials; changing it invalidates the old transport and its pending results.
+Use [Getting started](GETTING_STARTED.md) for the first connection and [self-hosted setup](SELF_HOSTING.md) for dashboard authentication and proxy details. Wing requires the modern dashboard and Desktop Gateway. Connection identity includes the configured endpoint and credentials; changing it invalidates the old transport and its pending results.
 
 ## Access headers
 

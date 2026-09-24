@@ -30,6 +30,11 @@ flutter pub outdated
 flutter build apk --release --split-per-abi
 ```
 
+Keep the normal pub step on the release build. Flutter regenerates its Android
+plugin registration for release mode there, excluding the dev-only
+`integration_test` plugin after test runs. Adding `--no-pub` to this build can
+leave a stale test plugin reference and fail Java compilation.
+
 Record dependency update decisions rather than upgrading everything during a release. Follow [Contributing](../CONTRIBUTING.md) for toolchain requirements and the Windows launcher. Complete the [release checklist](CODE_QUALITY_CHECKLIST.md). Live gateway tests are opt-in and require their own authorized disposable data.
 
 ## Sign and verify
@@ -110,7 +115,7 @@ The certificate must match `android/wing-release-certificate.sha256`. Keep the p
 A manual Release workflow run uses the workflow and release tooling on `main` to build and publish an existing version tag. Set the required `release_tag` input to the tag being retried:
 
 ```sh
-gh workflow run release.yml --ref main -f release_tag=v1.0.0
+gh workflow run release.yml --ref main -f release_tag="$WING_RELEASE_TAG"
 ```
 
 This allows a workflow fix to retry an unpublished release while preserving the tag's exact application source. The workflow checks out tooling and source separately; `release.json` records both the source commit and workflow commit. Run release scripts from the source checkout root. Manual runs on other branches are skipped. Signing requires all three secrets and the alias variable.
@@ -177,7 +182,7 @@ Configure and verify the intended upload/app-signing arrangement before distribu
 
 Before submitting, verify the final bundle on a device and follow [Android's page-size checks](https://developer.android.com/guide/practices/page-sizes). Prepare the store description from [the maintained listing text](../fastlane/metadata/android/en-US/full_description.txt), screenshots from the actual release, and reviewer access to a disposable compatible server if required.
 
-Publish [PRIVACY.md](../PRIVACY.md) at a public URL and enter that URL in Play Console. The app already bundles the same policy for offline reading in App settings. Complete Data safety using [the data-handling inventory](PLAY_DATA_SAFETY.md) and the actual artifact's SDK configuration. This document does not represent completed Play Console declarations. Include complete license/copyright notices consistent with the [recorded upstream MIT identification](../NOTICE.md).
+Publish [PRIVACY.md](../PRIVACY.md) at a public URL and enter that URL in Play Console. Before submitting a Play build, verify that its bundled offline policy in App settings matches the published policy. Complete Data safety using [the data-handling inventory](PLAY_DATA_SAFETY.md) and the actual artifact's SDK configuration. This document does not represent completed Play Console declarations. Include complete license/copyright notices consistent with the [recorded upstream MIT identification](../NOTICE.md).
 
 ## Local data and backups
 
