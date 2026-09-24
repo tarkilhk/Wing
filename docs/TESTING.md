@@ -165,7 +165,7 @@ The 13–14 September 2026 acceptance used local Hermes 0.21.2 at `e16f686706b1e
 | Mobile intake | Samsung picker/camera/share review and recovery checks passed; real image/text contents were checked. Remote file contents and reopen passed via tool read, while automatic `@file` expansion still rejected an out-of-workspace path. |
 | Notifications | Local posting/routing plus foreground-service lifecycle checks cover Home, activity destruction/recreation, Doze with battery exemption and stop/restart. Server event gaps and process termination still limit delivery. |
 
-Backend reproductions and closure criteria are retained in [Upstream Hermes bugs](UPSTREAM_HERMES_BUGS.md). App reliability gaps are linked from [Known limitations](KNOWN_LIMITATIONS.md) and the [bug tracker](BUG_TRACKER.md). Retest a reproduced limitation when its relevant contract changes; do not relabel it as a pass to produce an all-green report.
+Backend reproductions and closure criteria are retained in [Upstream Hermes bugs](UPSTREAM_HERMES_BUGS.md). App reliability gaps are tracked in the [bug tracker](BUG_TRACKER.md); [Good to know](KNOWN_LIMITATIONS.md) gives users practical expectations. Retest a reproduced limitation when its relevant contract changes; do not relabel it as a pass to produce an all-green report.
 
 ## Administration experience review
 

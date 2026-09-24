@@ -7,15 +7,17 @@ The drawer opens Chats, Activity, Connections, App settings and Hermes administr
 Chats browses all profiles on the selected connection. Search stays above one
 compact Status / Profile / Project filter row. Each filter opens its own anchored
 multi-select menu, with scrolling after five visible rows. The cross clears only
-these filters. Profiles sort alphabetically; projects sort by recent activity.
+these filters. The default profile appears first, followed by canonical profile
+names; projects sort by recent activity.
 
-Group by (Project by default) and Order by (Updated by default) sit below the
-filters. Pinned chats appear once, followed by compact groups with three-chat
-previews and per-group Show all. Headings, indentation and proximity establish
-grouping without cards or separators. Show → Tokens adds totals across every
-matching row, including rows outside the preview and in collapsed groups.
+**Group by** (Project by default), **Sort by** (Updated by default) and **Show details**
+are in the chat list's ellipsis menu. Pinned chats appear once, followed by
+compact groups with three-chat previews. **Show more** reveals ten more chats at
+a time. Headings, indentation and proximity establish grouping without cards
+or separators. Show details → Tokens adds totals across every matching row,
+including rows outside the preview and in collapsed groups.
 
-The header menu contains Show, Show automated chats, Collapse/Expand all, Mark
+The header menu also contains Show automated chats, Collapse/Expand all, Mark
 all as read, Archived/Active chats and New project, each with an icon. The floating
 pen creates a chat. Creation asks for an owning profile unless exactly one profile
 is filtered or available. Project row menus retain New chat, Rename, Appearance

@@ -1,6 +1,14 @@
 # Administration
 
-Administration opens directly on the profile overview without tabs. Hermes health is a dedicated destination in the global navigation. The selected server stays visible. Profile opens with a compact profile brief and current-value navigation: Models and reasoning, Identity, Memory and Behavior under Agent setup; Skills and tools, Access and connectors and Scheduled tasks under Capabilities and automation. Manage profiles is its own pill after the last profile in the horizontally scrolling selector. The global menu shows a larger Wing identity above a low server footer. The connection icon, name and LED open connection details; the server version opens Versions & updates. Back restores the open menu. Client version remains in App settings. Provider settings remain under Profile / Access and connectors. Version and upstream update availability load automatically; an update icon marks newer backend code. Health separates server diagnostics from selected-profile readiness. Hermes analytics is a separate drawer destination for usage history, tokens and estimated costs.
+Wing puts everyday profile settings, server checks and usage in three clear places:
+
+| Go to | Use it for |
+| --- | --- |
+| **Administration** | Models, identity, skills, provider access, MCP connectors and scheduled tasks for the selected profile. |
+| **Hermes health** | Server diagnostics and checks for the selected profile. |
+| **Hermes analytics** | Activity, token usage and estimated costs. |
+
+Open these destinations from Wing's navigation drawer. The connection name and status open connection details; the server version opens Versions & updates. The rest of this guide records the exact controls and server boundaries for contributors.
 
 Read the [ownership handoff](design/2026-09-14-administration-handoff.md) before changing these flows. The [roadmap](ADMINISTRATION_ROADMAP.md) preserves selected priorities and exclusions.
 

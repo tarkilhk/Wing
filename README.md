@@ -8,7 +8,7 @@
 
 Continue a conversation, steer running work, and send the next idea from your Android phone. Wing connects to a [Hermes Agent](https://github.com/NousResearch/hermes-agent) server that you control or have access to.
 
-[**Download Wing for Android**](https://github.com/tarkilhk/Wing/releases/latest) · [Get started](docs/GETTING_STARTED.md) · [Explore all features](docs/FEATURES.md) · [Support Wing](#support-wing)
+[**Download Wing for Android**](https://github.com/tarkilhk/Wing/releases/latest) · [Get started](docs/GETTING_STARTED.md) · [Explore Wing](docs/FEATURES.md) · [Support Wing](#support-wing)
 
 ## See Wing in action
 

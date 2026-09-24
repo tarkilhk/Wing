@@ -1,6 +1,6 @@
 # Contributing
 
-Start with [Getting started](docs/GETTING_STARTED.md) for the user flow and [the feature guide](docs/FEATURES.md) for delivered behavior. The [product plan](docs/PRODUCT_PLAN.md) owns scope. Dated plans and generated design boards do not establish that a backend operation exists.
+Start with [Getting started](docs/GETTING_STARTED.md) for the user flow and [Explore Wing](docs/FEATURES.md) for a product overview. The [documentation index](docs/README.md) points to detailed references; the [product plan](docs/PRODUCT_PLAN.md) owns scope. Dated plans and generated design boards do not establish that a backend operation exists.
 
 ## Development setup
 
