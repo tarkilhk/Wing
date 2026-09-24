@@ -58,10 +58,7 @@ brand-card and banner copy. Retain the comma in the tagline.
 ## Source and implementation boundary
 
 The checked-in [board](images/wing-identity-board.png) is the approved raster
-design reference, regenerated for the capital-W identity. The
-[capitalization prompts](2026-09-17-wing-capitalization.md) record this update;
-the [feather refinement prompt](2026-09-15-wing-identity-prompt.md) records the
-original accent direction. Earlier experimental boards are unselected.
+design reference for the capital-W identity and feather accent.
 The board does not identify a verified font family. The
 [WingWordmark](../../lib/core/widgets/wing_wordmark.dart) widget now provides
 scalable drawn lettering and feather paths for the approved arrival screens.

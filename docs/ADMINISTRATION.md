@@ -1,8 +1,16 @@
 # Administration
 
-Administration opens directly on the profile overview without tabs. Hermes health is a dedicated destination in the global navigation. The selected server stays visible. Profile opens with a compact profile brief and current-value navigation: Models and reasoning, Identity, Memory and Behavior under Agent setup; Skills and tools, Access and connectors and Scheduled tasks under Capabilities and automation. Manage profiles is its own pill after the last profile in the horizontally scrolling selector. The global menu shows a larger Wing identity above a low server footer. The connection icon, name and LED open connection details; the server version opens Versions & updates. Back restores the open menu. Client version remains in App settings. Provider settings remain under Profile / Access and connectors. Version and upstream update availability load automatically; an update icon marks newer backend code. Health separates server diagnostics from selected-profile readiness. Hermes analytics is a separate drawer destination for usage history, tokens and estimated costs.
+Wing puts everyday profile settings, server checks and usage in three clear places:
 
-Read the [ownership handoff](design/2026-09-14-administration-handoff.md) before changing these flows. The [roadmap](ADMINISTRATION_ROADMAP.md) preserves selected priorities and exclusions.
+| Go to | Use it for |
+| --- | --- |
+| **Administration** | Models, identity, skills, provider access, MCP connectors and scheduled tasks for the selected profile. |
+| **Hermes health** | Server diagnostics and checks for the selected profile. |
+| **Hermes analytics** | Activity, token usage and estimated costs. |
+
+Open these destinations from Wing's navigation drawer. The connection name and status open connection details; the server version opens Versions & updates. The rest of this guide records the exact controls and server boundaries for contributors.
+
+Read the [ownership handoff](design/2026-09-14-administration-handoff.md) before changing these flows.
 
 Target correction, 17 September 2026: Wing follows the latest upstream Hermes as
 specified in [AGENTS.md](../AGENTS.md). Provider credentials belong to profiles;
@@ -184,16 +192,14 @@ retains its package, source component, advisory, description and reported fixed
 versions. Audit notices remain separate from vulnerability counts. Diagnostic
 output is available in a disclosure, collapsed by default. Only a complete current
 report with exit 0 or 1 supplies structured audit counts; exit 2 is an audit error.
-Unrecognized or truncated output never implies no vulnerabilities. See the
-[audit report contract](research/2026-09-18-security-audit-report.md).
+Unrecognized or truncated output never implies no vulnerabilities.
 Stock Hermes exposes no remote Doctor repair action, so Wing adds none.
 Each Doctor finding has an **Ask Hermes** action that opens a new chat using the
 selected profile, with that finding and the available diagnostic log in an
 editable, unsent draft. The prompt asks for an explanation and proposed solution,
 including data-loss risks and verification, and says not to make changes or run
 repairs yet. The user reviews and sends it. Doctor output is requested up to the
-stock limit of 2,000 lines / 256 KiB; it is not guaranteed to be complete. See the
-[per-finding design and API verification](design/2026-09-18-doctor-summary.md#ask-hermes-about-a-finding).
+stock limit of 2,000 lines / 256 KiB; it is not guaranteed to be complete.
 
 Run-all contract rechecked on 19 September 2026 against upstream
 [`96b6c534c3fc1681ecbf2df0f92d1b3c6cce4f62`](https://github.com/NousResearch/hermes-agent/commit/96b6c534c3fc1681ecbf2df0f92d1b3c6cce4f62):
@@ -214,8 +220,7 @@ and a stacked token trend. Tappable chart titles switch model/token grouping;
 Tokens/Cost controls are independent for each chart. Breakdown rows combine all
 providers and auxiliary contributions for each model and have no detail action.
 The header dropdown offers profiles only; chart toggle icons precede their titles. Unknown costs stay unavailable
-and partial coverage is stated. See the [usage dashboard](design/2026-09-18-usage-dashboard.md)
-and its [stock API boundary](research/2026-09-18-usage-redesign-data-contract.md).
+and partial coverage is stated.
 Logs keeps server source, severity, submitted text search, a 100-line limit and
 explicit empty/error states.
 
@@ -320,7 +325,7 @@ script upload, workflow builder or unlimited history is provided.
 Provider details now offer **Renew access**, **Sign in again / Sign-in options**,
 **Check status**, and a source-specific removal action. Implemented entirely in
 Wing against stock Hermes `9dda4332f80c66994fe0e21197a8065a73a88991` (18 September
-2026); see the [implementation contract](design/2026-09-18-provider-recovery.md).
+2026).
 Renewal supports identified Anthropic/Claude, Nous device-code, Codex and xAI OAuth
 credentials through the scoped stock console. Multiple identifiable matches need
 an explicit choice. Other providers retain their supported sign-in/key workflow.
@@ -344,8 +349,6 @@ Profile. Current upstream no longer falls back to root `auth.json` when a named
 profile lacks credentials.
 Credential sources still differ by provider: external CLI accounts and explicit
 shared-store mechanisms must be described according to verified backend behavior.
-See the [ownership research](research/2026-09-17-hermes-provider-ownership.md) for
-the exact upstream change, API limits and source-specific exceptions.
 
 Capture the connection and canonical profile when an editor opens. Profile writes recheck that identity and use it consistently in query and body. Server collection/runtime operations do not inherit the currently selected profile. Administration RPC transports must not replace chat event handlers.
 
@@ -376,7 +379,7 @@ These are base-rate estimates at the bundled catalogue's current prices, applied
 
 Maintain [the bundled OpenAI catalogue](../assets/pricing/openai.json) by adding exact model IDs with all three USD-per-million rates, their official source URL and `verified_on` date. Check the standard/base rates in official OpenAI documentation; do not copy Fast/Batch rates or infer prices for similarly named variants. The initial catalogue covers Astra, Sol, Terra, Luna, GPT-5.5, GPT-5.4, GPT-5.4 Mini and GPT-5.3 Codex. Spark and unlisted variants show unavailable. Updating this file ships with the app and requires no runtime pricing service or server changes. Run `test/usage_cost_test.dart` and `test/administration_usage_test.dart` after updating it.
 
-The stock pricing rule, model catalogue and analytics response were rechecked against upstream main **`d177b119e9c56c9ddc0b7379ffce52341ec06584`** on 2026-09-18. The [source investigation](research/2026-09-18-subscription-api-equivalent-cost.md) records the API and pricing evidence. Render the actual Usage screen with `CAPTURE_USAGE=true` and `CAPTURE_FONT_DIR` pointing to Flutter's `bin/cache/artifacts/material_fonts`; `test/administration_usage_test.dart` writes captures to ignored `build/usage-review/`.
+The stock pricing rule, model catalogue and analytics response were rechecked against upstream main **`d177b119e9c56c9ddc0b7379ffce52341ec06584`** on 2026-09-18. Render the actual Usage screen with `CAPTURE_USAGE=true` and `CAPTURE_FONT_DIR` pointing to Flutter's `bin/cache/artifacts/material_fonts`; `test/administration_usage_test.dart` writes captures to ignored `build/usage-review/`.
 
 ## Backend limits and verification
 

@@ -68,6 +68,7 @@ import '../services/android_voice.dart';
 import '../services/hermes_voice.dart';
 import '../services/voice_preferences.dart';
 import 'administration/voice_settings_navigation.dart';
+import 'administration/provider_access_navigation.dart';
 
 enum _AttachmentChoice { camera, photos, files }
 
@@ -108,10 +109,10 @@ class ProfileWorkspaceScreen extends StatefulWidget {
     this.voiceDevice,
   });
   @override
-  State<ProfileWorkspaceScreen> createState() => _ProfileWorkspaceScreenState();
+  ProfileWorkspaceScreenState createState() => ProfileWorkspaceScreenState();
 }
 
-class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
+class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     with WidgetsBindingObserver {
   ProfileWorkspaceController get controller => widget.controller;
   final _composer = TextEditingController();
@@ -1963,6 +1964,15 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         initialReasoningEffort: chat.reasoningEffort ?? 'medium',
         defaultModel: options.defaultModel,
         defaultProvider: options.defaultProvider,
+        profileName: chat.key.workspace.profileName,
+        refreshModels: () => controller.refreshModelChoices(chat),
+        reviewProviderAccess: () => openProfileProviderAccess(
+          context,
+          connection: controller.connection,
+          connectionIdentity: controller.connectionIdentity,
+          connectionStatus: controller.connectionStatus,
+          profileName: chat.key.workspace.profileName,
+        ),
       );
       if (selection != null && mounted) {
         await controller.setIntelligence(
@@ -2408,6 +2418,13 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     if (returningToChats && _needsRecovery) _recoverOnFocus();
     if (destination == AppDestination.activity) {
       unawaited(_run(controller.refreshActivity));
+    }
+  }
+
+  /// Bring a reused workspace route back to its chat after a notification tap.
+  void showNotificationChat() {
+    if (_destination != AppDestination.chats) {
+      _selectDestination(AppDestination.chats);
     }
   }
 

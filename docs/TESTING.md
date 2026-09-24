@@ -151,26 +151,9 @@ quality or full feature validation:
 
 Synthetic tones and mock transcripts do not satisfy these speech-quality checks.
 
-## Recorded live baseline
+## Administration checks
 
-The 13–14 September 2026 acceptance used local Hermes 0.21.2 at `e16f686706b1e0d5334fd1ae82190058d2a19694`, an Android emulator and disposable data. Separate Samsung and remote-server runs covered selected flows. This dated baseline is useful evidence, not a current certification of every later APK.
-
-| Area | Established result and boundary |
-| --- | --- |
-| Conversations | Real prompt/reopen, server context, older Find/Outputs, regeneration replacement and separate fork reopen passed. Shared superseded answers have no verified persistence contract. |
-| Projects/profile settings | Lifecycle, appearance, description/SOUL, settings readback and cleanup passed. Administration used temporary fields/credentials and MCP fixtures; it did not establish every provider's account approval/inference, SDK installation or backend self-update. |
-| Input/approvals | Clarification, sudo/secret cancellation, stock expiry, Deny/Allow once/Session/Always and profile isolation passed. Vault save/cancel forms worked, but correct origin/fill and OTP acceptance remain blocked. External-manager unlock was not configured. |
-| Supervision | Goals and default-profile controls passed. Non-default loop scope and unopened child-only Activity reproduced backend gaps. |
-| Native files | Real downloaded PDF/image/SVG zoom and WAV/MP3/MP4/WebM playback, seek, pause/return and invalid-format recovery passed. Device codecs/speakers and native HTML behavior need their own coverage. |
-| Mobile intake | Samsung picker/camera/share review and recovery checks passed; real image/text contents were checked. Remote file contents and reopen passed via tool read, while automatic `@file` expansion still rejected an out-of-workspace path. |
-| Notifications | Local posting/routing plus foreground-service lifecycle checks cover Home, activity destruction/recreation, Doze with battery exemption and stop/restart. Server event gaps and process termination still limit delivery. |
-
-Backend reproductions and closure criteria are retained in [Upstream Hermes bugs](UPSTREAM_HERMES_BUGS.md). App reliability gaps are linked from [Known limitations](KNOWN_LIMITATIONS.md) and the [bug tracker](BUG_TRACKER.md). Retest a reproduced limitation when its relevant contract changes; do not relabel it as a pass to produce an all-green report.
-
-## Administration experience review
-
-The 17 September redesign is specified in
-[Plan 003](../plans/003-administration-experience.md). Its fixtures establish UI
+The administration fixtures establish UI
 behavior without contacting real profiles, speech providers or service accounts.
 
 ```bash
@@ -197,7 +180,7 @@ capture point after the capability checks for external `adb` screenshot/tree
 collection. This is fixture-based Android interaction evidence, not certification
 of a live backend, every installed screen reader or production account access.
 
-## Notification revamp
+## Notification checks
 
 The production notification path has an isolated emulator fixture:
 
@@ -213,7 +196,4 @@ checks FIFO approval identity, failed submission retention, Always confirmation,
 privacy Review, watcher-only remote resolution, latest-reply reading, and native
 100%/200% layouts in both themes. Screenshots are in `build/notification-review/`.
 
-For manual checks against stock Hermes, use the
-[one-chat notification test prompt](design/2026-09-20-notification-live-test-prompt.md).
-It generates supported events one scenario at a time and keeps backend outcomes
-separate from observations on the phone.
+For manual checks against stock Hermes, generate supported notification events one scenario at a time. Record backend outcomes separately from observations on the phone.

@@ -16,6 +16,8 @@ Confirm only if you intend to switch now.''';
   bool confirmModel = false;
   bool repeatConfirmation = false;
   bool failConfirmedModel = false;
+  bool codexAppearsOnRefresh = false;
+  final modelOptionReads = <Map<String, String>>[];
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
@@ -27,13 +29,21 @@ Confirm only if you intend to switch now.''';
           return {'model': 'gpt-6-astra', 'provider': 'openai-codex'};
         }
         if (path == 'model/options') {
+          modelOptionReads.add(Map.of(query));
           return {
             'providers': [
-              {
-                'slug': 'openai-codex',
-                'name': 'OpenAI subscription',
-                'models': ['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.4-mini'],
-              },
+              if (!codexAppearsOnRefresh || query['refresh'] == '1')
+                {
+                  'slug': 'openai-codex',
+                  'name': 'OpenAI subscription',
+                  'models': ['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.4-mini'],
+                },
+              if (codexAppearsOnRefresh && query['refresh'] != '1')
+                {
+                  'slug': 'openrouter',
+                  'name': 'OpenRouter',
+                  'models': ['openai/gpt-6-astra'],
+                },
             ],
           };
         }

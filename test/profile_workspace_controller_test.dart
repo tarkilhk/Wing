@@ -11,6 +11,7 @@ import 'package:wing/core/services/composer_draft_store.dart';
 import 'package:wing/core/services/attachment_draft_service.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/server_connection_status.dart';
 import 'package:wing/core/services/profile_selection_store.dart';
 import 'package:wing/core/services/profiles_repository.dart';
 import 'package:wing/core/services/ws_client.dart';
@@ -66,6 +67,7 @@ class Host {
   Completer<void>? promptSubmitStarted;
   Completer<void>? promptSubmitDelay;
   Completer<void>? connectDelay;
+  Completer<void>? activeListDelay;
   int connectFailures = 0;
   Object? connectError;
   int connectCalls = 0;
@@ -146,6 +148,7 @@ class Host {
       rpc: (method, params) async {
         calls.add((name, method, params));
         if (method == 'session.active_list') {
+          await activeListDelay?.future;
           return {'sessions': notificationActiveSessions};
         }
         if (method == 'session.events.since') return notificationReplay ?? {};
@@ -1835,12 +1838,43 @@ void main() {
     host.connectError = null;
     expect(controller.current, same(owner));
     expect(await owner.gateway.call('session.active_list'), {'sessions': []});
-    expect(controller.connectionStatus.description, 'Live updates interrupted');
+    expect(controller.connectionStatus.description, 'Reconnecting');
 
     await controller.resumeConnection();
 
     expect(await owner.gateway.call('session.active_list'), {'sessions': []});
     expect(controller.connectionStatus.description, 'Connected');
+  });
+
+  testWidgets('failed unopened profile reconnects while current chat works', (
+    tester,
+  ) async {
+    host.connectFailures = 1;
+    expect(await controller.switchProfile('b'), isFalse);
+    expect(controller.current!.scope.profileName, 'a');
+    expect(await controller.current!.gateway.call('tools.list'), isEmpty);
+    expect(controller.connectionStatus.liveAvailable('b'), isFalse);
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump();
+
+    expect(controller.connectionStatus.description, 'Connected');
+    expect(controller.current!.scope.profileName, 'a');
+    expect(controller.error, isNull);
+  });
+
+  test('restored chat socket clears warning during slow notification checks', () async {
+    host.activeListDelay = Completer<void>();
+    final recovery = controller.reconnect(controller.current!.scope);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(await controller.current!.gateway.call('tools.list'), isEmpty);
+    expect(controller.connectionStatus.liveAvailable('a'), isTrue);
+    expect(controller.connectionStatus.phase, ServerConnectionPhase.connected);
+
+    host.activeListDelay!.complete();
+    await recovery;
   });
 
   test('retry recovers an interrupted activity-only profile', () async {

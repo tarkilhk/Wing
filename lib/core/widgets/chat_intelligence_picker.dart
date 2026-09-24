@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/wing_theme.dart';
+import 'studio_error.dart';
 
 /// One model exposed by the active Hermes profile.
 class ChatModelChoice {
@@ -204,9 +205,13 @@ Future<ChatIntelligenceSelection?> showChatIntelligencePicker({
   required ChatModelChoice initialChoice,
   required String initialReasoningEffort,
   required String defaultModel,
+  required String profileName,
+  required Future<List<ChatModelChoice>> Function() refreshModels,
+  required Future<void> Function() reviewProviderAccess,
   String? defaultProvider,
-}) {
-  return showModalBottomSheet<ChatIntelligenceSelection>(
+}) async {
+  var reviewAccess = false;
+  final selection = await showModalBottomSheet<ChatIntelligenceSelection>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
@@ -217,10 +222,18 @@ Future<ChatIntelligenceSelection?> showChatIntelligencePicker({
       initialReasoningEffort: initialReasoningEffort,
       defaultModel: defaultModel,
       defaultProvider: defaultProvider,
+      profileName: profileName,
+      onRefreshModels: refreshModels,
+      onReviewProviderAccess: () {
+        reviewAccess = true;
+        Navigator.pop(sheetContext);
+      },
       onCancel: () => Navigator.pop(sheetContext),
       onApply: (selection) => Navigator.pop(sheetContext, selection),
     ),
   );
+  if (reviewAccess && context.mounted) await reviewProviderAccess();
+  return selection;
 }
 
 /// Model and reasoning picker used by the modal route and widget tests.
@@ -230,6 +243,9 @@ class ChatIntelligenceSheet extends StatefulWidget {
   final String initialReasoningEffort;
   final String defaultModel;
   final String? defaultProvider;
+  final String profileName;
+  final Future<List<ChatModelChoice>> Function() onRefreshModels;
+  final VoidCallback onReviewProviderAccess;
   final ValueChanged<ChatIntelligenceSelection> onApply;
   final VoidCallback onCancel;
 
@@ -238,6 +254,9 @@ class ChatIntelligenceSheet extends StatefulWidget {
     required this.initialChoice,
     required this.initialReasoningEffort,
     required this.defaultModel,
+    required this.profileName,
+    required this.onRefreshModels,
+    required this.onReviewProviderAccess,
     required this.onApply,
     required this.onCancel,
     this.defaultProvider,
@@ -249,19 +268,58 @@ class ChatIntelligenceSheet extends StatefulWidget {
 }
 
 class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
+  late List<ChatModelChoice> _choices;
   late ChatModelChoice _selectedChoice;
   late String _selectedEffort;
   bool _choosingModel = false;
+  bool _refreshing = false;
+  bool _refreshed = false;
+  bool _catalogChangedOnRefresh = false;
+  String? _refreshError;
   String _modelQuery = '';
 
   @override
   void initState() {
     super.initState();
+    _choices = widget.choices;
     _selectedChoice = widget.initialChoice;
     final normalized = widget.initialReasoningEffort.trim().toLowerCase();
     _selectedEffort = chatReasoningEffortLabels.containsKey(normalized)
         ? normalized
         : 'medium';
+  }
+
+  Future<void> _refreshModels() async {
+    if (_refreshing) return;
+    setState(() {
+      _refreshing = true;
+      _refreshed = false;
+      _refreshError = null;
+    });
+    try {
+      final choices = await widget.onRefreshModels();
+      if (!mounted) return;
+      setState(() {
+        final before = _choices
+            .map((choice) => (choice.provider, choice.model))
+            .toSet();
+        final after = choices
+            .map((choice) => (choice.provider, choice.model))
+            .toSet();
+        _catalogChangedOnRefresh =
+            before.length != after.length || !before.containsAll(after);
+        _choices = choices;
+        _refreshed = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _refreshed = true;
+        _refreshError = 'Refresh failed. Previous list shown.';
+      });
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
   }
 
   @override
@@ -397,7 +455,7 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
   Widget _buildModelPage() {
     final tokens = WingTokens.of(context);
     final normalizedQuery = _modelQuery.trim().toLowerCase();
-    final visibleChoices = widget.choices
+    final visibleChoices = _choices
         .where((choice) {
           if (normalizedQuery.isEmpty) return true;
           return choice.model.toLowerCase().contains(normalizedQuery) ||
@@ -409,6 +467,7 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
     for (final choice in visibleChoices) {
       groups.putIfAbsent(choice.provider, () => []).add(choice);
     }
+    final showRecovery = _refreshed;
 
     return Column(
       key: const ValueKey('model-page'),
@@ -418,66 +477,164 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
           onBack: () => setState(() => _choosingModel = false),
           onClose: widget.onCancel,
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            WingSpacing.lg,
-            0,
-            WingSpacing.lg,
-            WingSpacing.sm,
-          ),
-          child: TextField(
-            key: const Key('model-search'),
-            decoration: const InputDecoration(
-              hintText: 'Search models',
-              prefixIcon: Icon(Icons.search_rounded),
-              border: OutlineInputBorder(borderRadius: WingRadius.control),
-              isDense: true,
-            ),
-            onChanged: (value) => setState(() => _modelQuery = value),
-          ),
-        ),
         Expanded(
-          child: visibleChoices.isEmpty
-              ? Center(
-                  child: Text(
-                    'No matching models',
-                    style: tokens.typography.body.copyWith(color: tokens.muted),
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    WingSpacing.lg,
+                    0,
+                    WingSpacing.lg,
+                    WingSpacing.sm,
+                  ),
+                  child: TextField(
+                    key: const Key('model-search'),
+                    decoration: const InputDecoration(
+                      hintText: 'Search models',
+                      prefixIcon: Icon(Icons.search_rounded),
+                      border: OutlineInputBorder(
+                        borderRadius: WingRadius.control,
+                      ),
+                      isDense: true,
+                    ),
+                    onChanged: (value) => setState(() => _modelQuery = value),
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    WingSpacing.lg,
+                    0,
+                    WingSpacing.lg,
+                    WingSpacing.xs,
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Wrap(
+                      spacing: WingSpacing.sm,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          'Models for ${widget.profileName}',
+                          style: tokens.typography.label.copyWith(
+                            color: tokens.muted,
+                          ),
+                        ),
+                        TextButton.icon(
+                          key: const Key('refresh-chat-models'),
+                          onPressed: _refreshing ? null : _refreshModels,
+                          icon: _refreshing
+                              ? const SizedBox.square(
+                                  dimension: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.refresh_rounded, size: 18),
+                          label: Text(
+                            _refreshing ? 'Refreshing…' : 'Refresh models',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              if (showRecovery)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      WingSpacing.lg,
+                      0,
+                      WingSpacing.lg,
+                      WingSpacing.sm,
+                    ),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Wrap(
+                        spacing: WingSpacing.sm,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (_refreshError != null)
+                            StudioError(_refreshError!)
+                          else
+                            Semantics(
+                              liveRegion: true,
+                              child: Text(
+                                _choices.isEmpty
+                                    ? 'Hermes returned no models for this profile.'
+                                    : _catalogChangedOnRefresh
+                                    ? 'Models updated. Still missing a model?'
+                                    : 'List refreshed. Still missing a model?',
+                                style: tokens.typography.label.copyWith(
+                                  color: tokens.muted,
+                                ),
+                              ),
+                            ),
+                          TextButton(
+                            key: const Key('review-model-provider-access'),
+                            onPressed: widget.onReviewProviderAccess,
+                            child: const Text('Review provider access'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              if (visibleChoices.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Text(
+                      _choices.isEmpty && normalizedQuery.isEmpty
+                          ? 'No models available for this profile'
+                          : 'No matching models',
+                      style: tokens.typography.body.copyWith(
+                        color: tokens.muted,
+                      ),
+                    ),
                   ),
                 )
-              : ListView.builder(
+              else
+                SliverPadding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: WingSpacing.sm,
                   ),
-                  itemCount: groups.length,
-                  itemBuilder: (context, index) {
-                    final provider = groups.keys.elementAt(index);
-                    final choices = groups[provider]!;
-                    final label = choices.first.routeLabel;
-                    return ExpansionTile(
-                      key: Key('model-provider-$provider'),
-                      initiallyExpanded: provider == _selectedChoice.provider,
-                      title: Text(label),
-                      subtitle: Text(provider),
-                      children: [
-                        for (final choice in choices)
-                          _PickerTile(
-                            key: Key(
-                              'model-${choice.provider}-${choice.model}',
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final provider = groups.keys.elementAt(index);
+                      final choices = groups[provider]!;
+                      final label = choices.first.routeLabel;
+                      return ExpansionTile(
+                        key: Key('model-provider-$provider'),
+                        initiallyExpanded: provider == _selectedChoice.provider,
+                        title: Text(label),
+                        subtitle: Text(provider),
+                        children: [
+                          for (final choice in choices)
+                            _PickerTile(
+                              key: Key(
+                                'model-${choice.provider}-${choice.model}',
+                              ),
+                              title: choice.model,
+                              selected:
+                                  choice.model == _selectedChoice.model &&
+                                  choice.provider == _selectedChoice.provider,
+                              onTap: () => setState(() {
+                                _selectedChoice = choice;
+                                _choosingModel = false;
+                                _modelQuery = '';
+                              }),
                             ),
-                            title: choice.model,
-                            selected:
-                                choice.model == _selectedChoice.model &&
-                                choice.provider == _selectedChoice.provider,
-                            onTap: () => setState(() {
-                              _selectedChoice = choice;
-                              _choosingModel = false;
-                              _modelQuery = '';
-                            }),
-                          ),
-                      ],
-                    );
-                  },
+                        ],
+                      );
+                    }, childCount: groups.length),
+                  ),
                 ),
+            ],
+          ),
         ),
       ],
     );

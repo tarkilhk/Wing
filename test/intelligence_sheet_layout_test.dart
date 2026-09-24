@@ -64,6 +64,9 @@ void main() {
                         initialReasoningEffort: 'high',
                         defaultModel: choice.model,
                         defaultProvider: choice.provider,
+                        profileName: 'personal',
+                        refreshModels: () async => const [choice],
+                        reviewProviderAccess: () async {},
                       );
                     },
                     child: const Text('Open intelligence'),
@@ -114,5 +117,98 @@ void main() {
       expect(result?.choice.model, choice.model);
       expect(tester.takeException(), isNull);
     });
+  }
+
+  for (final brightness in [Brightness.light, Brightness.dark]) {
+    for (final (size, scale) in [
+      (const Size(412, 823), 1.0),
+      (const Size(320, 640), 2.0),
+    ]) {
+      testWidgets('model recovery fits $brightness $size at $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: frame,
+            child: MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: Builder(
+                  builder: (context) => TextButton(
+                    onPressed: () => showChatIntelligencePicker(
+                      context: context,
+                      choices: const [choice],
+                      initialChoice: choice,
+                      initialReasoningEffort: 'high',
+                      defaultModel: choice.model,
+                      profileName: 'client-work',
+                      refreshModels: () async {
+                        if (scale == 2) throw StateError('offline');
+                        return const [choice];
+                      },
+                      reviewProviderAccess: () async {},
+                    ),
+                    child: const Text('Open intelligence'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('Open intelligence'));
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('choose-chat-model')),
+          120,
+          scrollable: find.byType(Scrollable).first,
+        );
+        if (!tester.any(
+          find.byKey(const Key('choose-chat-model')).hitTestable(),
+        )) {
+          await tester.drag(
+            find.byType(Scrollable).first,
+            const Offset(0, -120),
+          );
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(find.byKey(const Key('choose-chat-model')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('refresh-chat-models')).hitTestable(),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.byKey(const Key('refresh-chat-models')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('review-model-provider-access')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        if (capture) {
+          await tester.runAsync(() async {
+            final image = await tester
+                .renderObject<RenderRepaintBoundary>(find.byKey(frame))
+                .toImage();
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            await File(
+              'build/intelligence-model-${brightness.name}-${size.width.toInt()}-${scale == 2 ? 'large' : 'normal'}.png',
+            ).writeAsBytes(bytes!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
+      });
+    }
   }
 }
