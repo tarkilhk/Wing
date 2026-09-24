@@ -2,12 +2,13 @@
 
 Updated **24 September 2026** during the remaining physical-phone tests.
 Galaxy S23 Ultra / Android 16; Wing **2330**, version **1.0.1 / 23302**.
-Clean fix installed; live disconnected-Once retest pending.
+Clean fix installed; live Once passed with monitoring active. The separate
+idle/disconnected recovery regression remains pending.
 
 **Both bug-fix follow-ups now pass. Zero focused retests remain.**
 [Final live result](2026-09-23-notification-final-live-result.md).
 
-[24 September live session](2026-09-24-notification-live-results.md): the direct-action failure is traced and fixed in 2330; automated/native QA passed, real-phone approval retest pending. Earlier focused fixes remain passed.
+[24 September live session](2026-09-24-notification-live-results.md): the direct-action failure is traced and fixed in 2330; automated/native QA and live Once passed; real-phone idle/disconnected recovery retest pending. Earlier focused fixes remain passed.
 
 ## Current summary
 
@@ -18,11 +19,13 @@ Clean fix installed; live disconnected-Once retest pending.
 - **B — Restored reply read clearing: PASS on 2328.** Same reply/ID restored
   silently; actual shade tap opened the latest answer and cleared the notice;
   another restart kept it absent. No unchanged repeat was needed.
-- Original **19-scenario ledger: 8 passed, 1 partial, 1 failed, 9 blocked**.
+- Original **19-scenario ledger: 9 passed, 1 partial, 0 failed, 9 blocked**.
   Supported checks passing does not establish the blocked or uncovered branches.
 - Sound is **confirmed working by the user**; no dedicated repeat is needed.
 - Latest trace approval timed out without execution. Temporary Manual approval
-  policy was authorized for this session and **Smart was restored**. No backend,
+  policy was authorized for this session. Smart was restored after the trace;
+  **Manual remains temporarily enabled for the continuing approval test batch.
+  Restore Smart afterward.** No backend,
   credential, authentication, channel or battery-setting changes. See the live
   session document for the diagnostic-build replacement and current deployment.
 
@@ -49,7 +52,7 @@ UX observation, not an outstanding failure of these two focused retests.
 | 03 | Foreground behavior | Passed: normal reply suppressed; real input notification allowed |
 | 04 | Monitoring and interruption | Passed: live summary, lock-screen delivery, real desktop Stop and watcher shutdown |
 | 05 | Three-question batch | Passed on 2329: first delivery before opening after a saved-cache restart, useful text/options/Review, same-slot 3→2→1 and successful completion |
-| 06 | Once | Failed on 2329: real print-only approval delivered under authorized temporary Manual; Android received Once tap, Hermes received no decision and request timed out |
+| 06 | Once | Passed on 2330: real pending print-only approval resolved after the exact notification Once tap and same-slot result arrived. Other chats kept monitoring active; the disconnected recovery regression is separately pending |
 | 07 | Deny | Blocked: no real safe approval request |
 | 08 | FIFO approvals | Blocked: no real safe approval requests; concurrency unverified |
 | 09 | Mixed input priority | Blocked: no real safe approval request; concurrency unverified |

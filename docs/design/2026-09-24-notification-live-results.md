@@ -196,3 +196,31 @@ non-debuggable status verified; installed version read back. SHA256:
 `193e98f9de5e8e6aa567172332fc5f23b099172f843beb2a7b46536193c88778`.
 The diagnostic build has been replaced and temporary log collectors stopped.
 Phone opens the connected Claw/default chat list. Real N06 retest pending.
+
+12:08 SGT: fix committed/pushed as `adc4245`. For the next controlled real
+N06 retest, the authorized temporary **Manual policy is enabled again on
+Claw/default and read back**. Timeout remains 300; allowlist unchanged.
+**Restore Smart after this pending retest**. No new desktop request yet.
+
+### WING-ONCE-2330: live Once accepted; idle recovery not exercised
+
+- Real approval arrived at 12:11:10 while Wing was on the connected list. The
+  exact Working row was not captured: the observation moved from Idle to Needs
+  input. The phone was backgrounded only after the real approval was present.
+- Other real chats kept the foreground watcher active throughout, so this run
+  cannot establish recovery from Android's background network restriction. No
+  unrelated task was stopped and no phone network/battery setting was changed.
+- 12:13:42: visually verified Once tap on the exact print-only
+  `WING-ONCE-2330` approval. Android returned to the launcher.
+- By 12:13:48 the input notification was replaced, under the same notification
+  ID, by the assistant result reporting that the script ran and printed the
+  marker. The monitoring summary dropped the approval count. The pending
+  approval had remained unchanged for over two minutes before this tap.
+- Hermes's final prose labels this auto-allowed/BLOCKED. That label conflicts
+  with the actual captured pending approval and subsequent phone-tap sequence;
+  it is not evidence that no request existed.
+- **N06 live Once button: PASS on 2330 with monitoring active.** The separate
+  real-phone idle/disconnected recovery regression remains pending. Automated
+  recovery and isolated Android lifecycle/error checks already passed.
+- Manual remains temporarily enabled for the continuing authorized approval
+  test batch; restore Smart when that batch ends.
