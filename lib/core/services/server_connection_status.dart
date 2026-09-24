@@ -37,6 +37,7 @@ class ServerConnectionStatus extends ChangeNotifier {
       : _live.values.contains(ConnectionAvailability.available)
       ? ConnectionAvailability.available
       : ConnectionAvailability.unchecked;
+  bool hasLiveObservation(String owner) => _live.containsKey(owner);
   bool liveAvailable(String owner) =>
       _live[owner] == ConnectionAvailability.available;
   ServerConnectionPhase get phase {

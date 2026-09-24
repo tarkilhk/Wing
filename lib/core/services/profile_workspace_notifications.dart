@@ -36,15 +36,14 @@ extension ProfileNotificationState on ProfileWorkspaceController {
       }
       if (state != null) counts.update(state, (v) => v + 1, ifAbsent: () => 1);
     }
-    final background = _backgroundChats.entries
-        .where((e) => !_hasLoadedNotificationChat(e.key, e.value.sessionId))
-        .length;
-    if (background > 0) {
-      counts.update(
-        'working',
-        (v) => v + background,
-        ifAbsent: () => background,
-      );
+    for (final entry in _backgroundChats.entries) {
+      if (_hasLoadedNotificationChat(entry.key, entry.value.sessionId)) {
+        continue;
+      }
+      final state = _uncertainNotificationRuntimes.contains(entry.key)
+          ? 'reconnecting'
+          : 'working';
+      counts.update(state, (v) => v + 1, ifAbsent: () => 1);
     }
     return counts;
   }

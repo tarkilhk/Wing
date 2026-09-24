@@ -1,10 +1,15 @@
 # Notification test status
 
-Updated **23 September 2026** after the final physical-phone retest.
-Galaxy S23 Ultra / Android 16; Wing **2329**, version **1.0.1 / 23292**.
+Updated **24 September 2026** during the remaining physical-phone tests.
+Galaxy S23 Ultra / Android 16; Wing **2332**, version **1.0.1 / 23322**.
+Latest notification live checks ran on 2331. The separate connection-status fix
+is now installed; initial startup shows Connected. Live Once also passed after
+watcher shutdown, without proving a specific pre-tap network restriction.
 
 **Both bug-fix follow-ups now pass. Zero focused retests remain.**
 [Final live result](2026-09-23-notification-final-live-result.md).
+
+[24 September live session](2026-09-24-notification-live-results.md): the direct-action failure is traced and fixed in 2330; automated/native QA and live Once passed; real-phone idle/disconnected recovery retest pending. Earlier focused fixes remain passed.
 
 ## Current summary
 
@@ -15,12 +20,16 @@ Galaxy S23 Ultra / Android 16; Wing **2329**, version **1.0.1 / 23292**.
 - **B — Restored reply read clearing: PASS on 2328.** Same reply/ID restored
   silently; actual shade tap opened the latest answer and cleared the notice;
   another restart kept it absent. No unchanged repeat was needed.
-- Original **19-scenario ledger: 7 passed, 2 partial, 0 failed, 10 blocked**.
+- Original **19-scenario ledger: 16 passed, 2 partial, 0 failed, 1 blocked**.
   Supported checks passing does not establish the blocked or uncovered branches.
 - Sound is **confirmed working by the user**; no dedicated repeat is needed.
-- Capture stopped; phone left on Home; no pending test request. The earlier
-  diagnostic batch was confirmed timed out before this run. No backend, policy,
-  credentials, authentication, preview/channel or battery-setting changes.
+- Earlier trace approval timed out without execution; subsequent live Once,
+  Deny, FIFO and Always-cancellation checks completed. Temporary Manual approval
+  policy was authorized for this session. Smart was restored after the previous
+  batch. **Smart was restored and read back after the final-four batch, with timeout
+  300 and the allowlist unchanged. Original font scale 1.0 remains restored.** No backend code,
+  credential, authentication, channel or battery-setting changes. See the live
+  session document for the diagnostic-build replacement and current deployment.
 
 ## Confirmed fixes
 
@@ -45,25 +54,32 @@ UX observation, not an outstanding failure of these two focused retests.
 | 03 | Foreground behavior | Passed: normal reply suppressed; real input notification allowed |
 | 04 | Monitoring and interruption | Passed: live summary, lock-screen delivery, real desktop Stop and watcher shutdown |
 | 05 | Three-question batch | Passed on 2329: first delivery before opening after a saved-cache restart, useful text/options/Review, same-slot 3→2→1 and successful completion |
-| 06 | Once | Blocked: Smart auto-approved the safe operation |
-| 07 | Deny | Blocked: no real safe approval request |
-| 08 | FIFO approvals | Blocked: no real safe approval requests; concurrency unverified |
-| 09 | Mixed input priority | Blocked: no real safe approval request; concurrency unverified |
-| 10 | Swipe dismissal | Partial: preserved across reconnect and force-stop/relaunch; concurrent new-request branch uncovered |
-| 11 | Long command / large-text approval layout | Blocked: no real safe approval request |
+| 06 | Once | Passed on 2330: real pending print-only approval resolved after the exact notification Once tap and same-slot result arrived. Other chats kept monitoring active; the disconnected recovery regression is separately pending |
+| 07 | Deny | Passed on 2330: actual notification Deny cleared the request; same-slot result confirmed no execution or retry |
+| 08 | FIFO approvals | Passed on 2330 short-path repeat: two simultaneous requests; same slot advances 2→1→result; a approved Once, b denied with no execution. Two-item live sample, not the original three-item example |
+| 09 | Mixed input priority | Partial: isolated native QA retains approval ahead of question and newer answer, then Deny advances to the question. Stock same-chat combination remains ungenerated; final question-to-answer branch not covered in this run |
+| 10 | Swipe dismissal | Passed for stock sequential requests: user dismissed A, answered A on desktop, and confirmed a new B notification appeared. Earlier reconnect/restart retention also passed. Simultaneously pending requests are a separate synthetic coverage limit, not demonstrated by this sequence |
+| 11 | Long command / large-text approval layout | Passed for inspected layouts: clipped command requires full review; four actions remain readable in two rows at 200% on physical Samsung light shade and isolated Android dark shade. Review controls reachable; warning-below-fold usability issue remains for the fix pass |
 | 12 | Hidden previews / channels | Passed for questions/counts and category diagnostics; approval privacy branch blocked |
-| 13 | Unlocking approval actions | Blocked: no real safe approval request |
-| 14 | Offline / stale approval actions | Blocked: no real safe approval request |
-| 15 | Desktop resolution | Partial: actual desktop answer/reconnect and continued-work cleanup pass; already-running watcher polling branch untested |
+| 13 | Unlocking approval actions | Passed: securely locked phone hides actions; normal unlock exposes choices and explicit Once succeeds. User confirmed this is the intended behavior; cancel-authentication from a hidden button is not a required test |
+| 14 | Offline / stale approval actions | Partial: prior isolated native QA verified failure visibility, pending retention and no RPC while recovery fails. Live expired request clears on reconnect; expired Session tap also cleared its notice without execution. Physical outage attempt invalid because capture/helper stopped before any verified action; live offline decision/retry not proven |
+| 15 | Desktop resolution | Passed: 24 September question cleared/replaced after desktop answer while Wing stayed on Home and watcher continued for other work; observation does not isolate timer versus streamed updates |
 | 16 | Restart / reconnect | Passed on 2328 case B: silent same-ID/text restoration, actual tap/latest-answer read clearing, and no resurrection after restart |
 | 17 | Secure input | Blocked: no harmless generic dummy-data flow exposed by runtime |
-| 18 | Session permission | Blocked: no real safe approval request |
-| 19 | Always permission | Blocked: no real safe approval request; no permanent grant attempted |
+| 18 | Session permission | Passed on 2331 in a new disposable chat: user tapped native Session; Hermes reports A and B executed, B without another approval; same-slot result notice agrees. Scope is broad execute_code within that test session, not a print-specific grant |
+| 19 | Always permission | Passed for the authorized confirmation/cancellation flow on 2330: native Always opens correct review, Cancel retains the pending request, subsequent Deny accepted. Broad permanent grant deliberately not attempted |
 
 
 Multi-chat/profile isolation and counts cannot be proved by these one-chat runs.
 
 ## Installed build and validation
+
+- Previous installed update **2331 / 23312**, source `d6cf733`, fixes connection
+  recovery membership. Full suite **2,708 passed / 12 skipped**, clean analysis,
+  signed non-debuggable ARM64 verification and data-preserving install passed.
+  [Investigation and deployment evidence](2026-09-24-connection-status-investigation.md).
+- Earlier notification-specific release evidence follows; these older build
+  numbers are historical, not the currently installed package.
 
 - Production fix: `8dae23b`; signed build **2329**, Android version code **23292**.
   Data-preserving installation and physical phone package readback verified.
@@ -94,10 +110,9 @@ Failed runs remain recorded; their outcomes are not rewritten into passes:
 
 ## Remaining optional / capability-dependent coverage
 
-1. Actual approval tests remain blocked until a genuine harmless request is
-   available under the deployed policy. Do not change policy or make riskier
-   requests solely to generate approvals. Permanent grants require explicit
-   instruction and a verified narrow scope.
+1. Real Once, Deny, FIFO, Session and Always-cancellation checks completed.
+   Secure input remains blocked by lack of a generated safe stock flow.
+   Permanent grant acceptance remains outside the authorized cancellation test.
 2. Cover safely supported concurrent-input and already-running-watcher branches,
    plus multi-chat/profile behavior, when resuming broader testing.
 3. Review the previously documented New activity extra-scroll UX separately.
@@ -105,3 +120,30 @@ Failed runs remain recorded; their outcomes are not rewritten into passes:
    `/home/tarkil/.hermes/cache/scratch/wing-notification-test-CZeiJPit`.
 
 Private captures remain under `/tmp`; none are committed.
+
+The duplicate monitoring-card observation was corrected in 2332; subsequent
+native inspection verifies one app-owned monitoring notification.
+
+## 2332 follow-up
+
+Current installed build is **2333 / 23332**, source `bc1ce59`; installation
+and package readback confirmed on 24 September at 19:26 Singapore. See
+[2332 review fixes and retests](2026-09-24-notification-review-fixes.md).
+Physical-phone follow-up: offline review/retry passed by user operation; Session
+and Always scope visibility passed at enlarged text; one app-owned monitoring
+record was verified. The 2332 combined outage run failed to deliver the missed
+reply; its 2333 retest subsequently passed as recorded below.
+
+The [outage investigation](2026-09-24-monitoring-outage-investigation.md)
+reproduces the lost completion tracking: one normal control passes, three outage
+variants failed before the correction. Build 2333 now retains verified work
+and its completion history across outages. Release validation is complete;
+installation is confirmed. **Final 2333 outage-recovery phone retest: PASS.**
+The exact new test chat was verified Working with one Watching notification;
+user confirmed reconnecting status during the outage, exact latest reply after
+reconnection, monitoring shutdown, and notification clearing upon reading the
+answer. All requested fix retests are complete; the previously documented
+optional/capability-dependent coverage limits remain unchanged.
+Cleanup complete: normal font scale 1.0 was restored and read back; the user
+confirmed Claw/default Smart mode was saved. Timeout 300 and the allowlist were
+unchanged in the pre-save inspection.

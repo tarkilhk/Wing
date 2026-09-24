@@ -3,10 +3,9 @@
 Wing keeps its authenticated Hermes event connections running in an Android foreground service while at least one chat is working. The ongoing notification shows a live summary such as **Watching 3 chats · 2 working · 1 needs approval**. Firebase and server push registration are not required.
 
 The monitoring indicator uses the **wing with circular arrows**; replies use
-the plain wing, and input/stopped alerts add small type cues. Monitoring has its own notification
-group, with a summary and the foreground-service notification, so Android does
-not combine it with chat alerts. Both monitoring entries reopen Wing without
-selecting a chat. Expand a chat notification group and tap the individual alert
+the plain wing, and input/stopped alerts add small type cues. Monitoring posts one
+foreground-service notification, without a duplicate app-owned group summary.
+It reopens Wing without selecting a chat. Expand a chat notification group and tap the individual alert
 to open its original chat. Android controls grouping and available status-bar
 space; see [Android notification groups](https://developer.android.com/develop/ui/views/notifications/group).
 
@@ -52,7 +51,7 @@ watcher and subsequent answer events without reopening its transcript, fetching
 history, resuming every idle chat, or adding background polling. A live event that
 overtakes the reattach response takes precedence over that older response.
 
-Establish a silent initial baseline, retain verified profile ownership and reconcile meaningful running/waiting/completed transitions. Unknown, disconnected or failed reads must not become completion alerts. Rapid turns can occur between snapshots, an idle transition can be missing, and a failed read can leave a gap. See [issue #9](https://github.com/tarkilhk/Wing/issues/9).
+Establish a silent initial baseline, retain verified profile ownership and reconcile meaningful running/waiting/completed transitions. Previously verified unfinished work survives connection loss and failed reads, with a reconnecting summary while uncertain. A confirmed idle result is fetched from official history and posted before monitoring is released. Missing/unknown runtimes or conflicting ownership do not establish completion; a failed history read retains the pending result for the next existing reconciliation. Unknown, disconnected or failed reads must not become completion alerts. Rapid turns can occur between snapshots, an idle transition can be missing, and a failed read can leave a gap. See [issue #9](https://github.com/tarkilhk/Wing/issues/9).
 
 Unopened child-only work also depends on the global backend contract described in [HUP-003](UPSTREAM_HERMES_BUGS.md#hup-003-global-activity-omits-child-only-work). Adding switches or passing a test notification does not close that gap.
 

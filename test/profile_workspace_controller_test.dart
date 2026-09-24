@@ -65,6 +65,7 @@ class Host {
   Completer<void>? approvalDelay;
   Completer<void>? promptSubmitStarted;
   Completer<void>? promptSubmitDelay;
+  Completer<void>? connectDelay;
   int connectFailures = 0;
   Object? connectError;
   int connectCalls = 0;
@@ -101,6 +102,7 @@ class Host {
       discover: discover,
       connect: () async {
         connectCalls++;
+        await connectDelay?.future;
         if (connectError != null) throw connectError!;
         if (connectFailures > 0) {
           connectFailures--;
@@ -310,6 +312,143 @@ void main() {
     await controller.initialize();
   });
   tearDown(() => controller.dispose());
+
+  test(
+    'reconnect notification uses recovered answer instead of generic status',
+    () async {
+      final received = <ProfileNotification>[];
+      final connection = controller.connection;
+      controller.dispose();
+      controller = ProfileWorkspaceController(
+        connectionIdentity: 'original-settings',
+        connection: connection,
+        preferences: preferences,
+        gatewayFactory: host.gateway,
+        onAttention: (notice) async => received.add(notice),
+      );
+      await controller.initialize();
+      final chat = await controller.createChat();
+      chat.draft = 'work';
+      await controller.send(chat);
+      host.historyMessages = [
+        {
+          'id': 42,
+          'role': 'assistant',
+          'content': 'The report is ready for review.',
+        },
+      ];
+      host.running = false;
+      await controller.reconnect(chat.key.workspace);
+      await Future<void>.delayed(Duration.zero);
+      expect(received.last.content.preview, 'The report is ready for review.');
+      expect(received.last.focus?.kind, 'answer');
+    },
+  );
+
+  test(
+    'cold approval review loads requests without selecting the chat',
+    () async {
+      host.running = false;
+      host.pendingApprovals = [
+        {
+          'request_id': 'cold-review',
+          'command': 'print(1)',
+          'choices': ['once', 'deny'],
+        },
+      ];
+      final key = ProfileSessionKey(controller.current!.scope, 'same');
+      controller.showList();
+      final chat = await controller.loadNotificationApproval(key);
+      await Future<void>.delayed(Duration.zero);
+      expect(chat?.approval?['request_id'], 'cold-review');
+      expect(controller.notificationChat, isNull);
+      expect(controller.visible, isFalse);
+      expect(
+        host.calls.where((call) => call.$2 == 'approval.respond'),
+        isEmpty,
+      );
+    },
+  );
+
+  for (final outcome in [
+    'recovered',
+    'failed',
+    'replaced',
+    'joined',
+    'timed out',
+  ]) {
+    test('notification approval recovery: $outcome', () async {
+      host.running = false;
+      final chat = await controller.createChat();
+      final request = <String, dynamic>{
+        'request_id': 'notification-original',
+        'command': 'print("test")',
+        'choices': ['once', 'deny'],
+      };
+      host.pendingApprovals = [request];
+      host.event('a', 'approval', request);
+      host.gateways['a']!.onConnectionChanged!(false);
+      if (outcome == 'failed') host.connectFailures = 20;
+      if (outcome == 'replaced') {
+        host.pendingApprovals = [
+          {...request, 'request_id': 'replacement'},
+        ];
+      }
+      if (outcome == 'joined' || outcome == 'timed out') {
+        host.connectDelay = Completer<void>();
+      }
+      Future<void>? recovering;
+      if (outcome == 'joined') {
+        recovering = controller.reconnect(chat.key.workspace);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      Object? failure;
+      var finished = false;
+      final action = controller
+          .approveNotification(chat, 'once', requestId: 'notification-original')
+          .catchError((Object error) {
+            failure = error;
+          })
+          .whenComplete(() {
+            finished = true;
+          });
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      if (outcome == 'joined') {
+        expect(finished, isFalse);
+        host.connectDelay!.complete();
+      }
+      if (outcome == 'timed out') {
+        await Future<void>.delayed(const Duration(seconds: 16));
+        expect(finished, isTrue);
+        // Completing recovery later must not submit the timed-out intent.
+        host.connectDelay!.complete();
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await action;
+      if (recovering != null) await recovering;
+      final decisions = host.calls
+          .where((c) => c.$2 == 'approval.respond')
+          .toList();
+      if (outcome == 'recovered' || outcome == 'joined') {
+        expect(failure, isNull);
+        expect(decisions, hasLength(1));
+        expect(decisions.single.$3['request_id'], 'notification-original');
+      } else {
+        expect(failure, isNotNull);
+        expect(decisions, isEmpty);
+        if (outcome == 'failed' || outcome == 'timed out') {
+          expect(
+            chat.notificationActionErrorRequestId,
+            'notification-original',
+          );
+          expect(chat.notificationActionError, isNotNull);
+        }
+        host.connectFailures = 0;
+        await controller.reconnect(chat.key.workspace);
+        expect(host.calls.where((c) => c.$2 == 'approval.respond'), isEmpty);
+      }
+    });
+  }
 
   test('restores draft text after controller restart', () async {
     final chat = await controller.createChat();
@@ -1688,6 +1827,77 @@ void main() {
     expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  test('retry clears a failed unopened profile while chat works', () async {
+    final owner = controller.current!;
+    host.connectError = const SocketException('Connection interrupted');
+    expect(await controller.switchProfile('b'), isFalse);
+    host.connectError = null;
+    expect(controller.current, same(owner));
+    expect(await owner.gateway.call('session.active_list'), {'sessions': []});
+    expect(controller.connectionStatus.description, 'Live updates interrupted');
+
+    await controller.resumeConnection();
+
+    expect(await owner.gateway.call('session.active_list'), {'sessions': []});
+    expect(controller.connectionStatus.description, 'Connected');
+  });
+
+  test('retry recovers an interrupted activity-only profile', () async {
+    final owner = controller.current!;
+    final background = controller.browserResource('b');
+    await background.gateway.connect();
+    expect(background.loaded, isFalse);
+    expect(background.chats, isEmpty);
+    host.resumeFailures = 1;
+    await expectLater(
+      background.gateway.resume('same'),
+      throwsA(isA<TimeoutException>()),
+    );
+    expect(controller.connectionStatus.liveAvailable('b'), isFalse);
+    expect(background.retry, isNotNull);
+
+    await controller.resumeConnection();
+
+    expect(await owner.gateway.call('session.active_list'), {'sessions': []});
+    expect(controller.connectionStatus.description, 'Connected');
+    expect(controller.current, same(owner));
+    expect(background.loaded, isFalse);
+    expect(background.retry, isNull);
+  });
+
+  test(
+    'network loss includes a live profile whose list was never loaded',
+    () async {
+      final background = controller.browserResource('b');
+      await background.gateway.connect();
+      expect(background.loaded, isFalse);
+      final before = host.disconnectCalls;
+
+      controller.networkUnavailable();
+
+      expect(host.disconnectCalls, before + 2);
+      expect(controller.connectionStatus.liveAvailable('a'), isFalse);
+      expect(controller.connectionStatus.liveAvailable('b'), isFalse);
+      await controller.resumeConnection();
+      expect(controller.connectionStatus.description, 'Connected');
+    },
+  );
+
+  test(
+    'retry leaves browser-only profiles without sockets unchecked',
+    () async {
+      final background = controller.browserResource('b');
+      final before = host.connectCalls;
+
+      await controller.resumeConnection();
+
+      expect(host.connectCalls, before + 1);
+      expect(background.loaded, isFalse);
+      expect(controller.connectionStatus.liveAvailable('b'), isFalse);
+      expect(controller.connectionStatus.description, 'Connected');
+    },
+  );
 
   testWidgets('network change restarts exhausted chat-list recovery', (
     tester,
