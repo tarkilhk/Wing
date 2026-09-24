@@ -1771,6 +1771,77 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  test('retry clears a failed unopened profile while chat works', () async {
+    final owner = controller.current!;
+    host.connectError = const SocketException('Connection interrupted');
+    expect(await controller.switchProfile('b'), isFalse);
+    host.connectError = null;
+    expect(controller.current, same(owner));
+    expect(await owner.gateway.call('session.active_list'), {'sessions': []});
+    expect(controller.connectionStatus.description, 'Live updates interrupted');
+
+    await controller.resumeConnection();
+
+    expect(await owner.gateway.call('session.active_list'), {'sessions': []});
+    expect(controller.connectionStatus.description, 'Connected');
+  });
+
+  test('retry recovers an interrupted activity-only profile', () async {
+    final owner = controller.current!;
+    final background = controller.browserResource('b');
+    await background.gateway.connect();
+    expect(background.loaded, isFalse);
+    expect(background.chats, isEmpty);
+    host.resumeFailures = 1;
+    await expectLater(
+      background.gateway.resume('same'),
+      throwsA(isA<TimeoutException>()),
+    );
+    expect(controller.connectionStatus.liveAvailable('b'), isFalse);
+    expect(background.retry, isNotNull);
+
+    await controller.resumeConnection();
+
+    expect(await owner.gateway.call('session.active_list'), {'sessions': []});
+    expect(controller.connectionStatus.description, 'Connected');
+    expect(controller.current, same(owner));
+    expect(background.loaded, isFalse);
+    expect(background.retry, isNull);
+  });
+
+  test(
+    'network loss includes a live profile whose list was never loaded',
+    () async {
+      final background = controller.browserResource('b');
+      await background.gateway.connect();
+      expect(background.loaded, isFalse);
+      final before = host.disconnectCalls;
+
+      controller.networkUnavailable();
+
+      expect(host.disconnectCalls, before + 2);
+      expect(controller.connectionStatus.liveAvailable('a'), isFalse);
+      expect(controller.connectionStatus.liveAvailable('b'), isFalse);
+      await controller.resumeConnection();
+      expect(controller.connectionStatus.description, 'Connected');
+    },
+  );
+
+  test(
+    'retry leaves browser-only profiles without sockets unchecked',
+    () async {
+      final background = controller.browserResource('b');
+      final before = host.connectCalls;
+
+      await controller.resumeConnection();
+
+      expect(host.connectCalls, before + 1);
+      expect(background.loaded, isFalse);
+      expect(controller.connectionStatus.liveAvailable('b'), isFalse);
+      expect(controller.connectionStatus.description, 'Connected');
+    },
+  );
+
   testWidgets('network change restarts exhausted chat-list recovery', (
     tester,
   ) async {

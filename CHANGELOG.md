@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Recover interrupted profile connections even when their chat list was never
+  opened, so Retry can clear stale connection warnings while another chat works.
+
 - Recover a disconnected chat when an approval notification is tapped, keep the
   Android action alive through acknowledgement, and show unconfirmed decisions
   without replaying them after later reconnection.

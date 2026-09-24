@@ -957,6 +957,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
+  // Live transports may be opened for Activity or restored pending input
+  // without loading that profile's chat list. Every observation contributing
+  // to the connection label must remain eligible for recovery.
+  bool _needsLiveRecovery(ProfileWorkspaceData resource) =>
+      resource.loaded ||
+      resource.chats.values.any((chat) => chat.busy) ||
+      connectionStatus.hasLiveObservation(resource.scope.profileName);
+
   ProfileWorkspaceData _resource(String name) {
     final scope = WorkspaceScope(
       connectionId: connection.id,
@@ -974,8 +982,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
             chat.sensitivePromptResponding = false;
             chat.status = ProfileTurnStatus.reconnecting;
           }
-          if (resource.loaded ||
-              resource.chats.values.any((chat) => chat.busy)) {
+          if (_needsLiveRecovery(resource)) {
             connectionStatus.liveChanged(scope.profileName, false);
             if (_notificationTarget == null) _scheduleReconnect(resource);
           }
@@ -1071,7 +1078,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       return;
     }
     connectionStatus.accessFailed(const SocketException('Network unavailable'));
-    for (final resource in _resources.values.where((r) => r.loaded)) {
+    for (final resource in _resources.values.where(_needsLiveRecovery)) {
       resource.gateway.disconnect();
       resource.gateway.onConnectionChanged?.call(false);
     }
@@ -1100,7 +1107,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     } else {
       await Future.wait(
         _resources.values
-            .where((r) => r.loaded || r.chats.values.any((chat) => chat.busy))
+            .where(_needsLiveRecovery)
             .map((resource) => reconnect(resource.scope)),
       );
     }
