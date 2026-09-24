@@ -279,7 +279,15 @@ void main() {
       host.active = [];
       host.changed();
       await waitForReads(host, ++reads);
-      expect(owner.hasActiveChats, isFalse);
+      expect(
+        owner.hasActiveChats,
+        isTrue,
+        reason: 'A missing row cannot prove the side task finished',
+      );
+      host.active = [row('outside-runtime', 'outside', 'waiting')];
+      host.changed();
+      await waitForReads(host, ++reads);
+      await until(() => !owner.hasActiveChats);
     },
   );
 }

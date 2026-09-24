@@ -397,3 +397,32 @@ If any variant lacks a required backend event or reconnect, record the observed
 state and prerequisite failure. Do not mark it passed because unit tests passed.
 After these retests, continue only the outstanding items in the clean status;
 do not rerun blocked approval probes without a new safe way to produce them.
+
+
+## 24 September: disconnected Once regression (2330)
+
+Before continuing N07–N19, retest N06 against the actual failure condition.
+The operator must verify the exact test chat is Working and Android monitoring
+is foreground before sending the phone Home. An unrelated working chat is not
+sufficient. Temporarily use the explicitly authorized Manual approval policy;
+record and restore Smart after the check.
+
+Desktop prompt:
+
+> WING-ONCE-2330: First run a terminal sleep for 45 seconds. Then use the actual
+> execute_code tool with only print('WING-ONCE-2330'). Leave its real stock
+> approval pending for my Wing decision. Do not change any policy, grant a
+> permission, or substitute a different operation. If unavailable or auto-allowed,
+> report BLOCKED. After the decision, report whether the operation executed.
+
+Phone operator: leave the resulting approval unread until the watcher has
+actually stopped and background connection recovery is needed, within the
+request's expiry window. Tap the real notification Once button. Require actual
+backend acceptance/execution and notice resolution; Activity launch alone is
+not a pass. If connection fails, require visible unconfirmed-decision feedback,
+request retention, and no grant replay after reconnect. Recheck Smart afterward.
+
+Implementation verification already passed: production callback regression;
+recovery success/failure/replacement/join/timeout tests; native delayed-ack
+Activity lifetime; native visible outage feedback. These do not replace this
+real-phone retest.

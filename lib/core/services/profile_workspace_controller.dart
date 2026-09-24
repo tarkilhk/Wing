@@ -280,6 +280,7 @@ class ProfileWorkspaceData {
   int reconnectAttempt = 0;
   Timer? retry;
   bool reconnecting = false;
+  Future<void>? reconnectFuture;
   bool recovering = false;
   bool loaded = false;
   bool offlineSnapshot = false;
@@ -419,6 +420,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   int _activityGeneration = 0;
   Map<String, _NotificationSession>? _notificationSnapshot;
   Map<String, ProfileSessionKey> _backgroundChats = const {};
+  final _uncertainNotificationRuntimes = <String>{};
   int _pendingNotifications = 0;
   int _pendingCompletions = 0;
 
@@ -956,6 +958,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
+  // Live transports may be opened for Activity or restored pending input
+  // without loading that profile's chat list. Every observation contributing
+  // to the connection label must remain eligible for recovery.
+  bool _needsLiveRecovery(ProfileWorkspaceData resource) =>
+      resource.loaded ||
+      resource.chats.values.any((chat) => chat.busy) ||
+      connectionStatus.hasLiveObservation(resource.scope.profileName);
+
   ProfileWorkspaceData _resource(String name) {
     final scope = WorkspaceScope(
       connectionId: connection.id,
@@ -968,13 +978,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
       resource.gateway.onEvent = (event) => _event(resource, event);
       resource.gateway.onConnectionChanged = (connected) {
         if (!connected && !_closed) {
-          _notificationSnapshot = null;
+          // Losing transport does not erase work already verified as unfinished.
+          _uncertainNotificationRuntimes.addAll(_backgroundChats.keys);
           for (final chat in resource.chats.values.where((c) => c.busy)) {
             chat.sensitivePromptResponding = false;
             chat.status = ProfileTurnStatus.reconnecting;
           }
-          if (resource.loaded ||
-              resource.chats.values.any((chat) => chat.busy)) {
+          if (_needsLiveRecovery(resource)) {
             connectionStatus.liveChanged(scope.profileName, false);
             if (_notificationTarget == null) _scheduleReconnect(resource);
           }
@@ -1070,7 +1080,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       return;
     }
     connectionStatus.accessFailed(const SocketException('Network unavailable'));
-    for (final resource in _resources.values.where((r) => r.loaded)) {
+    for (final resource in _resources.values.where(_needsLiveRecovery)) {
       resource.gateway.disconnect();
       resource.gateway.onConnectionChanged?.call(false);
     }
@@ -1099,7 +1109,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     } else {
       await Future.wait(
         _resources.values
-            .where((r) => r.loaded || r.chats.values.any((chat) => chat.busy))
+            .where(_needsLiveRecovery)
             .map((resource) => reconnect(resource.scope)),
       );
     }
@@ -5074,6 +5084,70 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
+  /// Load the request for review without opening a second chat route.
+  Future<ProfileChat?> loadNotificationApproval(ProfileSessionKey key) async {
+    if (!owns(key) || _closed) return null;
+    final owner = _resource(key.workspace.profileName);
+    final existing = owner.chats[key.sessionId];
+    if (existing != null) return existing;
+    await owner.gateway.connect();
+    final resumed = await owner.gateway.resume(key.sessionId);
+    final title = await _pendingChatTitle(owner, key.sessionId);
+    if (_closed || owner.deletedSessions.contains(key.sessionId)) return null;
+    if (owner.chats[key.sessionId] case final concurrent?) return concurrent;
+    if (resumed['session_key'] != key.sessionId) return null;
+    final chat = ProfileChat(
+      key: key,
+      runtimeId: resumed['session_id'] as String,
+      title: title,
+    );
+    owner.chats[key.sessionId] = chat;
+    _hydrate(chat, resumed);
+    await _journal();
+    _changed();
+    return chat;
+  }
+
+  /// An explicit notification tap owns one bounded recovery attempt. The choice
+  /// is never queued for replay, and approval rechecks its exact request after
+  /// recovery (which may have discovered a resolved or replaced request).
+  Future<void> approveNotification(
+    ProfileChat chat,
+    String choice, {
+    required String requestId,
+  }) async {
+    final runtime = chat.runtimeId;
+    final resource = _owned(chat);
+    try {
+      if (resource.recovering ||
+          resource.reconnectError != null ||
+          chat.offlineSnapshot ||
+          chat.status == ProfileTurnStatus.reconnecting) {
+        await reconnect(
+          chat.key.workspace,
+        ).timeout(const Duration(seconds: 15));
+      }
+      if (_closed ||
+          resource.recovering ||
+          resource.reconnectError != null ||
+          chat.runtimeId != runtime ||
+          chat.opening ||
+          chat.offlineSnapshot ||
+          chat.status == ProfileTurnStatus.reconnecting) {
+        throw StateError('Reconnect to review this approval.');
+      }
+      await approve(chat, choice, requestId: requestId);
+    } catch (_) {
+      if (!_closed && chat.approval?['request_id'] == requestId) {
+        chat.notificationActionError =
+            'Decision not confirmed · review or retry';
+        chat.notificationActionErrorRequestId = requestId;
+        _changed();
+      }
+      rethrow;
+    }
+  }
+
   Future<void> approve(
     ProfileChat chat,
     String choice, {
@@ -5791,6 +5865,44 @@ class ProfileWorkspaceController extends ChangeNotifier {
     focus: focus,
   );
 
+  void _notifyRecoveredResult(ProfileChat chat) {
+    if (chat.status == ProfileTurnStatus.failed) {
+      _notify(chat, ChatNotificationContent.failed);
+      return;
+    }
+    if (chat.status == ProfileTurnStatus.cancelled) {
+      _notify(chat, ChatNotificationContent.stopped);
+      return;
+    }
+    if (chat.historyError != null) return;
+    final answer = chat.messages.reversed
+        .takeWhile((row) => row['role'] != 'user')
+        .where(
+          (row) =>
+              row['role'] == 'assistant' &&
+              !isHiddenAnswerMessage(row) &&
+              answerMessageText(row).trim().isNotEmpty,
+        )
+        .firstOrNull;
+    if (answer == null) {
+      if (notificationResultFor?.call(chat.key)?.kind == 'answer') return;
+      _notify(chat, ChatNotificationContent.updated);
+      return;
+    }
+    final id = answer['id'];
+    _notify(
+      chat,
+      ChatNotificationContent.reply(answerMessageText(answer)),
+      focus: NotificationFocus(
+        'answer',
+        id is int
+            ? '${chat.runtimeId}:$id'
+            : '${chat.runtimeId}:${DateTime.now().microsecondsSinceEpoch}',
+        messageId: id is int ? id : null,
+      ),
+    );
+  }
+
   void _notify(
     ProfileChat chat,
     ChatNotificationContent content, {
@@ -6031,26 +6143,25 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
 
       final previous = _notificationSnapshot;
-      _notificationSnapshot = {
-        for (final entry in next.entries)
-          if (entry.value.activity != _NotificationActivity.idle)
-            entry.key: entry.value,
-      };
-      _backgroundChats = {
-        for (final entry in _notificationSnapshot!.entries)
-          if (workingRuntimes.contains(entry.key))
-            entry.key: entry.value.chat.key,
-        // An unknown state is not evidence that an unfinished chat is done.
-        for (final row in ProfileGateway.records(response['sessions']))
-          if (!{
-                'waiting',
-                'starting',
-                'working',
-                'idle',
-              }.contains(row['status']) &&
-              _backgroundChats[row['id']]?.sessionId == row['session_key'])
-            row['id'] as String: _backgroundChats[row['id']]!,
-      };
+      // Retain verified unfinished identities until a corroborated observation
+      // settles them. Missing rows, ownership ambiguity and unknown states are
+      // uncertainty, not completion. A cold snapshot still has no prior work.
+      _notificationSnapshot = {...?previous};
+      _backgroundChats = {..._backgroundChats};
+      _uncertainNotificationRuntimes.addAll(_backgroundChats.keys);
+      for (final entry in next.entries) {
+        final before = previous?[entry.key];
+        final after = entry.value;
+        if (before != null && before.chat.key != after.chat.key) continue;
+        if (after.activity == _NotificationActivity.idle) continue;
+        _notificationSnapshot![entry.key] = after;
+        _uncertainNotificationRuntimes.remove(entry.key);
+        if (workingRuntimes.contains(entry.key)) {
+          _backgroundChats[entry.key] = after.chat.key;
+        } else {
+          _backgroundChats.remove(entry.key);
+        }
+      }
       if (previous == null) return;
       for (final entry in next.entries) {
         final before = previous[entry.key];
@@ -6069,12 +6180,37 @@ class ProfileWorkspaceController extends ChangeNotifier {
         } else if (after.activity == _NotificationActivity.idle &&
             before != null &&
             before.activity != _NotificationActivity.idle) {
-          _notify(after.chat, ChatNotificationContent.updated);
+          final owner = _resources[after.chat.key.workspace]!;
+          try {
+            final history = await owner.gateway.history(
+              after.chat.key.sessionId,
+              runtimeId: after.chat.runtimeId,
+            );
+            if (_closed ||
+                _hasLoadedNotificationChat(
+                  after.chat.runtimeId,
+                  after.chat.key.sessionId,
+                )) {
+              continue;
+            }
+            after.chat.messages = answerHistoryRows(history.rows);
+          } catch (_) {
+            // Keep this exact work pending for the next existing recovery or
+            // activity observation; do not replace a useful reply with a guess.
+            continue;
+          }
+          if (!_closed) {
+            _notifyRecoveredResult(after.chat);
+            _notificationSnapshot?.remove(entry.key);
+            _backgroundChats.remove(entry.key);
+            _uncertainNotificationRuntimes.remove(entry.key);
+          }
         }
       }
     } catch (_) {
-      // A failed read cannot prove a transition. The next success is a baseline.
-      _notificationSnapshot = null;
+      // A failed read cannot settle previously verified work. Preserve its
+      // transition history; only a genuinely cold connection needs a baseline.
+      _uncertainNotificationRuntimes.addAll(_backgroundChats.keys);
     } finally {
       _changed();
     }
@@ -6224,7 +6360,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   Future<void> reconnect(WorkspaceScope scope) async {
     final resource = _resources[scope];
-    if (resource == null || resource.reconnecting || _closed) return;
+    if (resource == null || _closed) return;
     // A user retry or app resume doesn't wait for the next scheduled attempt.
     resource.retry?.cancel();
     resource.retry = null;
@@ -6233,8 +6369,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
     await _reconnect(resource);
   }
 
-  Future<void> _reconnect(ProfileWorkspaceData resource) async {
-    if (resource.reconnecting || _closed) return;
+  Future<void> _reconnect(ProfileWorkspaceData resource) {
+    // A notification tap must await recovery already started by another caller.
+    return resource.reconnectFuture ??= _performReconnect(
+      resource,
+    ).whenComplete(() => resource.reconnectFuture = null);
+  }
+
+  Future<void> _performReconnect(ProfileWorkspaceData resource) async {
+    if (_closed) return;
     resource.reconnecting = true;
     resource.recovering = true;
     connectionStatus.beginRecovery(resource.scope.profileName);
@@ -6262,11 +6405,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         if (!chat.busy) chat.streaming = '';
         chat.offlineSnapshot = false;
         if (wasBusy && !chat.busy) {
-          _notify(chat, switch (chat.status) {
-            ProfileTurnStatus.failed => ChatNotificationContent.failed,
-            ProfileTurnStatus.cancelled => ChatNotificationContent.stopped,
-            _ => ChatNotificationContent.updated,
-          });
+          _notifyRecoveredResult(chat);
         }
         if (result != null) await _drainQueuedPrompts(chat);
       }
@@ -6542,11 +6681,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         await _drainQueuedPrompts(chat);
         _unrestoredPending.remove(key);
         if (!chat.busy) {
-          _notify(chat, switch (chat.status) {
-            ProfileTurnStatus.failed => ChatNotificationContent.failed,
-            ProfileTurnStatus.cancelled => ChatNotificationContent.stopped,
-            _ => ChatNotificationContent.updated,
-          });
+          _notifyRecoveredResult(chat);
         }
       } catch (_) {
         error =

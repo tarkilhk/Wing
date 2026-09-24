@@ -26,7 +26,10 @@ class NotificationCoverageHost {
   Completer<void>? resumeDelay;
   final resumeDelays = <int, Completer<void>>{};
   final resumeSnapshots = <int, Map<String, dynamic>>{};
+  List<Map<String, dynamic>> history = [];
   bool activeFails = false;
+  bool historyFails = false;
+  Completer<void>? historyDelay;
   bool resumeFails = false;
   List<Map<String, dynamic>>? questions;
   Map<String, dynamic> resumeOverrides = {};
@@ -74,13 +77,15 @@ class NotificationCoverageHost {
               'total': rows.length,
             };
           }
+          await historyDelay?.future;
+          if (historyFails) throw StateError('history unavailable');
           return {
             'session_id': path.split('/')[1],
-            'messages': <Map<String, dynamic>>[],
+            'messages': history,
             'pagination': {
               'offset': 0,
               'limit': 50,
-              'returned': 0,
+              'returned': history.length,
               'order': 'latest',
             },
           };
@@ -168,6 +173,7 @@ void main() {
   late ProfileWorkspaceController controller;
   late bool disposed;
   late List<ProfileInputNotification> inputNotices;
+  late List<String> previews;
   late List<({String profile, String session, bool input})> alerts;
 
   setUp(() async {
@@ -175,6 +181,7 @@ void main() {
     host = NotificationCoverageHost();
     disposed = false;
     alerts = [];
+    previews = [];
     inputNotices = [];
     controller = ProfileWorkspaceController(
       connection: SavedConnection(
@@ -188,11 +195,14 @@ void main() {
       preferences: await SharedPreferences.getInstance(),
       gatewayFactory: host.gateway,
       onNotificationInputs: (snapshot) async => inputNotices.add(snapshot),
-      onAttention: (notification) async => alerts.add((
-        profile: notification.key.workspace.profileName,
-        session: notification.key.sessionId,
-        input: notification.content.needsAttention,
-      )),
+      onAttention: (notification) async {
+        previews.add(notification.content.preview);
+        alerts.add((
+          profile: notification.key.workspace.profileName,
+          session: notification.key.sessionId,
+          input: notification.content.needsAttention,
+        ));
+      },
     );
     await controller.initialize();
     host.activeReads = 0;
@@ -581,6 +591,19 @@ void main() {
     });
   }
 
+  test('unopened completion reads the latest official answer text', () async {
+    host.active = [row('outside-runtime', 'outside', 'working')];
+    host.changed();
+    await waitForReads(host, 1);
+    host.history = [
+      {'id': 42, 'role': 'assistant', 'content': 'The export is ready.'},
+    ];
+    host.active = [row('outside-runtime', 'outside', 'idle', 2)];
+    host.changed();
+    await waitForReads(host, 2);
+    expect(previews, ['The export is ready.']);
+  });
+
   test('does not alert without one verified profile owner', () async {
     host.saved['b'] = [
       {'id': 'outside', 'title': 'Collision', 'profile': 'b'},
@@ -605,7 +628,8 @@ void main() {
     expect(
       alerts,
       isEmpty,
-      reason: 'a failed ownership read resets the baseline',
+      reason:
+          'a chat without verified ownership never establishes tracked work',
     );
   });
 
