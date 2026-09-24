@@ -55,10 +55,24 @@ jobs:
           (cd current && flutter pub get && flutter build apk --debug --no-pub -t tool/storage_upgrade_probe.dart --dart-define=WING_UPGRADE_PROBE=verify)
 
       - name: Upgrade installed app and verify saved values
-        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_6
-          script: bash current/scripts/storage_upgrade_check.sh
+        run: |
+          set -euo pipefail
+          sudo chmod 666 /dev/kvm
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "system-images;android-35;google_apis;x86_64" "emulator" || test "${PIPESTATUS[1]}" -eq 0
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
+            --name wing-upgrade --package "system-images;android-35;google_apis;x86_64"
+          "$ANDROID_HOME/emulator/emulator" -avd wing-upgrade -no-window \
+            -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot \
+            >/tmp/wing-upgrade-emulator.log 2>&1 &
+          emulator_pid=$!
+          trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
+          adb wait-for-device
+          for attempt in $(seq 1 120); do
+            if [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; then
+              break
+            fi
+            sleep 3
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+          bash current/scripts/storage_upgrade_check.sh
