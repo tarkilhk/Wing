@@ -224,3 +224,67 @@ Claw/default and read back**. Timeout remains 300; allowlist unchanged.
   recovery and isolated Android lifecycle/error checks already passed.
 - Manual remains temporarily enabled for the continuing authorized approval
   test batch; restore Smart when that batch ends.
+
+### WING-DENY-2330: live Deny passed
+
+- 12:16:40: exact test chat Working and foreground monitoring captured before
+  Home. Real print-only approval appeared by 12:17:01.
+- 12:18:44: visually verified native Deny tap on that exact command.
+- By 12:18:50 the same notification slot changed to the final result: Wing
+  approval denied, script did not run, no retry or substitute tool used.
+- **N07 PASS on 2330.** Other work kept the foreground service active; current
+  Android netpolicy showed effective=NONE for Wing, so this is not the separate
+  disconnected-recovery regression. No scope grant was made.
+- Manual remains temporarily enabled for the continuing approved test batch.
+
+### WING-FIFO-2330: queue advancement passed; second decision timed out
+
+- 12:20:45: exact test chat Working and foreground service captured before Home.
+- By 12:21:20, **two real approvals** shared notification ID 1495764829,
+  with absent-a at the head. This directly establishes simultaneous pending
+  requests, despite Hermes's later prose incorrectly claiming no queue existed.
+- Long paths were truncated in the notification. Once opened the correct chat
+  and full-command review dialog; no grant occurred before confirmation.
+- 12:24:13: confirmed Once for absent-a. By 12:24:16, the same notification
+  showed **one approval**, now absent-b. The first command completed as the
+  intended no-op, and the second remained unresolved.
+- 12:25:52: tapped the second notification's Deny. Long-command review opened
+  with absent-b. Confirmation at 12:26:23 was too late; Hermes reported its
+  approval had timed out and it did not run. This was an operator timing miss.
+- **N08 partial:** real simultaneous queue and 2→1 head advancement passed;
+  the second decision was not accepted. Repeat with shorter /tmp test paths
+  that fit the notification so both decisions complete promptly.
+- **N11 partial:** actual long-command clipping correctly routes through full
+  review, preserving request identity; enlarged-font coverage still pending.
+- Final result verified parent retained, both children absent, no retry or
+  policy change. No permanent/session permission was granted.
+
+Additional observation to investigate after pending live decisions: Samsung's
+expanded Wing group showed two identical monitoring cards in captures at 12:17
+and 12:22 (native foreground notice plus group summary records). Do not dismiss
+this as transient without checking native rendering and lifecycle. It is not
+resolved by the notification-action fix. Raw captures remain private.
+
+### WING-FIFO-SHORT: complete live FIFO pass
+
+- 12:30:57: exact test chat Working captured before Home.
+- 12:31:46: **two approvals** in one notification, head child a. Hermes chose
+  its safe scratch directory instead of /tmp; shorter child names fit in the
+  expanded notification, so no additional review navigation was necessary.
+- 12:33:11: actual native Once tap on a. The same notification ID advanced to
+  **one approval for b**, while b remained pending independently.
+- 12:34:29: actual native Deny tap on b. By 12:34:41, the same slot showed the
+  final result: a approved and completed as a no-op on its verified absent path;
+  b denied and did not run. No retry, persistent grant, or policy change.
+- **N08 PASS on 2330 for the agreed two-request queue.** Original script's
+  three-item sample was reduced to two for this live run; concurrency, exact
+  head advancement and both accepted decisions are directly evidenced.
+- Hermes again labelled its prose BLOCKED/FIFO not established. It cannot infer
+  the Android observations from its tool result alone. Actual captured two-then-
+  one counts, commands and successful outcomes are the evidence for this pass.
+- Manual remains enabled for the continuing approved batch; restore Smart
+  afterward. Both FIFO test parents were deliberately left intact.
+
+User preference for subsequent test prompts: provide a copyable text block plus
+separate clickable Sent confirmation, rather than putting the prompt only in a
+question or blockquote.

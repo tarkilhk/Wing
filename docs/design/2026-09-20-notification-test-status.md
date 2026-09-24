@@ -19,7 +19,7 @@ idle/disconnected recovery regression remains pending.
 - **B — Restored reply read clearing: PASS on 2328.** Same reply/ID restored
   silently; actual shade tap opened the latest answer and cleared the notice;
   another restart kept it absent. No unchanged repeat was needed.
-- Original **19-scenario ledger: 9 passed, 1 partial, 0 failed, 9 blocked**.
+- Original **19-scenario ledger: 11 passed, 2 partial, 0 failed, 6 blocked**.
   Supported checks passing does not establish the blocked or uncovered branches.
 - Sound is **confirmed working by the user**; no dedicated repeat is needed.
 - Latest trace approval timed out without execution. Temporary Manual approval
@@ -53,11 +53,11 @@ UX observation, not an outstanding failure of these two focused retests.
 | 04 | Monitoring and interruption | Passed: live summary, lock-screen delivery, real desktop Stop and watcher shutdown |
 | 05 | Three-question batch | Passed on 2329: first delivery before opening after a saved-cache restart, useful text/options/Review, same-slot 3→2→1 and successful completion |
 | 06 | Once | Passed on 2330: real pending print-only approval resolved after the exact notification Once tap and same-slot result arrived. Other chats kept monitoring active; the disconnected recovery regression is separately pending |
-| 07 | Deny | Blocked: no real safe approval request |
-| 08 | FIFO approvals | Blocked: no real safe approval requests; concurrency unverified |
+| 07 | Deny | Passed on 2330: actual notification Deny cleared the request; same-slot result confirmed no execution or retry |
+| 08 | FIFO approvals | Passed on 2330 short-path repeat: two simultaneous requests; same slot advances 2→1→result; a approved Once, b denied with no execution. Two-item live sample, not the original three-item example |
 | 09 | Mixed input priority | Blocked: no real safe approval request; concurrency unverified |
 | 10 | Swipe dismissal | Partial: preserved across reconnect and force-stop/relaunch; concurrent new-request branch uncovered |
-| 11 | Long command / large-text approval layout | Blocked: no real safe approval request |
+| 11 | Long command / large-text approval layout | Partial on 2330: clipped command correctly requires full in-chat review before decision; enlarged-font branch pending |
 | 12 | Hidden previews / channels | Passed for questions/counts and category diagnostics; approval privacy branch blocked |
 | 13 | Unlocking approval actions | Blocked: no real safe approval request |
 | 14 | Offline / stale approval actions | Blocked: no real safe approval request |
@@ -112,3 +112,5 @@ Failed runs remain recorded; their outcomes are not rewritten into passes:
    `/home/tarkil/.hermes/cache/scratch/wing-notification-test-CZeiJPit`.
 
 Private captures remain under `/tmp`; none are committed.
+
+New observation awaiting investigation: duplicate monitoring cards appeared in Samsung’s expanded Wing group during the 24 September run. See the live results for evidence and scope.
