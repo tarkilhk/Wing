@@ -4,7 +4,7 @@
 
 # Wing
 
-**Your Hermes Agent, wherever you are.** Continue a conversation, see what your agent is doing, and send the next idea from your Android phone. Wing connects to a [Hermes Agent](https://github.com/NousResearch/hermes-agent) server that you control or have access to.
+**Hermes Agent in your pocket.** Continue a conversation, steer running work, and send the next idea from your Android phone. Wing connects to a [Hermes Agent](https://github.com/NousResearch/hermes-agent) server that you control or have access to.
 
 [**Download Wing for Android**](https://github.com/tarkilhk/Wing/releases/latest) · [Get started](docs/GETTING_STARTED.md) · [Explore all features](docs/FEATURES.md) · [Support Wing](#support-wing)
 
@@ -51,7 +51,7 @@
 
 These are renders of Wing's Flutter interface with **sample conversations, profiles and server data**. No personal chat, credential or live server data appears in the gallery. [Screenshot sources and capture details](docs/screenshots/README.md).
 
-## A capable companion for Hermes
+## Your Hermes workflow, on your phone
 
 - **Talk naturally.** Stream replies, inspect reasoning and tool activity, read code and tables, search within a chat, and open images, PDFs, Markdown, media and supported diagrams.
 - **Stay in control.** Steer or stop work, queue a follow-up, review supported approvals, inspect subagents and goals, and return to a chat after a connection interruption. Unsent drafts and staged files survive navigation and restart.
@@ -110,4 +110,4 @@ The official name and wordmark are **Wing**, with a capital **W**. Development b
 
 Found a client problem? [Open an issue](https://github.com/tarkilhk/Wing/issues) with reproducible steps, following the [redaction guidance](SECURITY.md). The [privacy policy](PRIVACY.md) covers storage, server processing, dictation and deletion, and is available offline in App settings.
 
-Wing is an independently developed Android companion for Hermes Agent, built on the open-source work of [rusty4444](https://github.com/rusty4444) and the Hermes Android contributors. Licensed under [MIT](LICENSE). See [NOTICE.md](NOTICE.md) for credits and third-party notices.
+Wing is an independently developed Android client for Hermes Agent, built on the open-source work of [rusty4444](https://github.com/rusty4444) and the Hermes Android contributors. Licensed under [MIT](LICENSE). See [NOTICE.md](NOTICE.md) for credits and third-party notices.
