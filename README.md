@@ -60,7 +60,7 @@ Continue a conversation, steer running work, and send the next idea from your An
 - **Operate your agent.** Manage supported profile settings, model access, MCP connectors and scheduled tasks. Check server and profile health, run diagnostics, and explore usage in Hermes analytics.
 - **Keep the phone in the loop.** Get local progress, reply and approval notifications while Wing is connected. Backup or restore connection and app preferences, optionally protected with a passphrase.
 
-Wing is an independent Android client for upstream Hermes. Features that require server support follow the capabilities of your connected Hermes version. [Explore the feature guide](docs/FEATURES.md) and [known limitations](docs/KNOWN_LIMITATIONS.md).
+[Explore the full feature guide](docs/FEATURES.md) · [Good to know before you start](docs/KNOWN_LIMITATIONS.md)
 
 ## Get started
 
