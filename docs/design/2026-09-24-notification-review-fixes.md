@@ -169,3 +169,10 @@ user to tap Save on the current screen and confirm No unsaved changes.
 Cleanup complete: user confirmed the selected Smart approval mode is now saved.
 Font scale 1.0 was previously restored and read back remotely. Smart save is
 user-confirmed; no subsequent remote readback was available.
+
+Final follow-up: the outage finding was fixed and deployed in 2333. The new-chat
+WING-FINAL-2333 phone retest passed: exact target working and single foreground
+monitor verified remotely before outage; user confirmed reconnecting status,
+exact recovered reply, watcher shutdown, and clearing on reaching the answer.
+See 2026-09-24-monitoring-outage-investigation.md. All requested fix retests are
+complete; earlier optional/capability coverage limits remain unchanged.

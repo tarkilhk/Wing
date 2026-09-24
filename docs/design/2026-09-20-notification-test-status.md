@@ -121,7 +121,8 @@ Failed runs remain recorded; their outcomes are not rewritten into passes:
 
 Private captures remain under `/tmp`; none are committed.
 
-New observation awaiting investigation: duplicate monitoring cards appeared in Samsung’s expanded Wing group during the 24 September run. See the live results for evidence and scope.
+The duplicate monitoring-card observation was corrected in 2332; subsequent
+native inspection verifies one app-owned monitoring notification.
 
 ## 2332 follow-up
 
@@ -130,16 +131,19 @@ and package readback confirmed on 24 September at 19:26 Singapore. See
 [2332 review fixes and retests](2026-09-24-notification-review-fixes.md).
 Physical-phone follow-up: offline review/retry passed by user operation; Session
 and Always scope visibility passed at enlarged text; one app-owned monitoring
-record was verified. Combined outage recovery did not deliver the missed reply,
-so recovered-preview/read-clear verification remains incomplete.
+record was verified. The 2332 combined outage run failed to deliver the missed
+reply; its 2333 retest subsequently passed as recorded below.
 
 The [outage investigation](2026-09-24-monitoring-outage-investigation.md)
 reproduces the lost completion tracking: one normal control passes, three outage
 variants failed before the correction. Build 2333 now retains verified work
 and its completion history across outages. Release validation is complete;
-installation is confirmed. The combined outage-recovery phone retest remains
-pending; this deployment is not a live-test pass. Earlier
-scenario passes are historical and do not establish this new outage branch.
+installation is confirmed. **Final 2333 outage-recovery phone retest: PASS.**
+The exact new test chat was verified Working with one Watching notification;
+user confirmed reconnecting status during the outage, exact latest reply after
+reconnection, monitoring shutdown, and notification clearing upon reading the
+answer. All requested fix retests are complete; the previously documented
+optional/capability-dependent coverage limits remain unchanged.
 Cleanup complete: normal font scale 1.0 was restored and read back; the user
 confirmed Claw/default Smart mode was saved. Timeout 300 and the allowlist were
 unchanged in the pre-save inspection.

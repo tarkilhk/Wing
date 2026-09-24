@@ -2,7 +2,7 @@
 
 Status: root cause reproduced; client correction implemented for build 2333.
 Release validation complete; signed 2333 installed on the phone. The combined
-outage recovery live retest remains pending.
+outage recovery live retest passed by user confirmation on 24 September.
 
 ## Finding
 
@@ -175,8 +175,8 @@ no duplicate alerts, message identity, and silent cold idle baseline. Existing
 loaded-chat, pending-input, ownership and foreground rules remain covered.
 
 This establishes a reproducible code-level cause and correction. The phone logs
-still do not prove the exact instant its service stopped. The next live test must
-confirm the corrected full device behavior; automated results are not a live pass.
+still do not prove the exact instant its service stopped. The later phone retest below confirms the corrected device behavior separately
+from the automated evidence.
 
 Final regression validation: complete suite ran **2,727 passed / 12 intentional
 skips / 1 outdated expectation failed**. That test had explicitly treated a
@@ -201,3 +201,23 @@ outage-final-focused.txt, and outage-release-tooling.txt under the evidence dir.
   backgrounded, user disconnects phone networking, desktop finishes, reconnect,
   exact latest reply notified once, watcher settles, reading that answer clears
   its notification. Prior offline approval and scope-layout checks passed.
+
+## Final physical-phone retest — PASS
+
+WING-FINAL-2333 ran in a new desktop chat, exercising the previously unopened
+chat path. At 19:34:43 Singapore, the phone Chats list showed that exact chat
+as Working. Native inspection corroborated one app-owned monitoring record,
+214601, titled Watching 1 chat with 1 working, and its active foreground service.
+The operator sent the phone Home before the user disabled Wi-Fi/mobile data.
+
+User confirmed monitoring remained and showed reconnecting while offline, then
+the exact reply arrived after desktop completion and phone reconnection:
+“WING-FINAL-2333: Recovery succeeded. This is the latest answer.”
+User then confirmed Watching disappeared and tapping the reply/reaching the
+latest answer in Wing cleared the reply notification. These post-outage results
+are user-confirmed observations; remote pre-outage UI/service records are saved
+privately under /tmp/wing-notification-fixes/recovery2333-before-*.txt and the
+UI helper capture recovery2333-running.xml.
+
+The requested final recovery retest is complete. Earlier mixed-input/capability
+coverage limits are not converted into passes by this single-chat test.
