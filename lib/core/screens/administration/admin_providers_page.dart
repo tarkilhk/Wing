@@ -449,6 +449,7 @@ class _AdminSecretPageState extends State<AdminSecretPage> {
             enabled: !_busy,
             autocorrect: false,
             enableSuggestions: false,
+            autofillHints: const [AutofillHints.password],
             decoration: const InputDecoration(labelText: 'New credential'),
             onChanged: (_) => setState(() {}),
           ),

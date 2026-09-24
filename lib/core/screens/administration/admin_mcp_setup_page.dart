@@ -94,6 +94,9 @@ class _AdminMcpSetupPageState extends State<AdminMcpSetupPage> {
               obscureText: secret,
               autocorrect: false,
               enableSuggestions: false,
+              autofillHints: secret
+                  ? const [AutofillHints.password]
+                  : const <String>[],
               maxLines: lines,
               decoration: InputDecoration(
                 labelText: largeText ? null : label,

@@ -178,6 +178,7 @@ class _GatewayHeadersEditorState extends State<GatewayHeadersEditor> {
                 validator: (_) => _valueError(entry.$1),
                 onChanged: (_) => _changed(),
                 obscureText: true,
+                autofillHints: const [AutofillHints.password],
                 decoration: InputDecoration(
                   labelText: 'Value',
                   hintText: entry.$2.savedName == null

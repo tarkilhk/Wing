@@ -88,6 +88,7 @@ class _ExportPassphraseSheetState extends State<ExportPassphraseSheet> {
               key: const Key('export_passphrase_field'),
               controller: _passphrase,
               obscureText: _obscure,
+              autofillHints: const [AutofillHints.newPassword],
               autofocus: true,
               decoration: InputDecoration(
                 labelText: 'Passphrase (optional)',
@@ -108,6 +109,7 @@ class _ExportPassphraseSheetState extends State<ExportPassphraseSheet> {
               key: const Key('export_passphrase_confirm_field'),
               controller: _confirm,
               obscureText: _obscure,
+              autofillHints: const [AutofillHints.newPassword],
               decoration: const InputDecoration(
                 labelText: 'Confirm passphrase',
                 border: OutlineInputBorder(borderRadius: WingRadius.control),
@@ -188,6 +190,7 @@ class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
               key: const Key('import_passphrase_field'),
               controller: _passphrase,
               obscureText: _obscure,
+              autofillHints: const [AutofillHints.password],
               autofocus: true,
               decoration: InputDecoration(
                 labelText: 'Passphrase (if encrypted)',

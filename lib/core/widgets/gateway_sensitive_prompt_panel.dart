@@ -135,7 +135,15 @@ class _GatewaySensitivePromptPanelState
             obscureText: !showsCode && !savesLogin,
             autocorrect: false,
             enableSuggestions: false,
-            autofillHints: const <String>[],
+            autofillHints: switch (request.kind) {
+              GatewaySensitivePromptKind.vaultSaveLogin => const [
+                AutofillHints.username,
+              ],
+              GatewaySensitivePromptKind.vaultCode => const [
+                AutofillHints.oneTimeCode,
+              ],
+              _ => const [AutofillHints.password],
+            },
             keyboardType: showsCode ? TextInputType.number : null,
             textInputAction: savesLogin
                 ? TextInputAction.next
@@ -161,7 +169,7 @@ class _GatewaySensitivePromptPanelState
               obscureText: true,
               autocorrect: false,
               enableSuggestions: false,
-              autofillHints: const <String>[],
+              autofillHints: const [AutofillHints.password],
               textInputAction: TextInputAction.done,
               decoration: InputDecoration(
                 isDense: true,
