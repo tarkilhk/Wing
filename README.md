@@ -1,10 +1,12 @@
 <p align="center">
-  <img src="docs/design/images/wing-readme-hero-slim-w.png" alt="Wing — Your agent, with you" width="1000">
+  <img src="docs/design/images/wing-readme-hero-tagline.png" alt="Wing — Your agent, with you" width="1000">
 </p>
 
 # Wing
 
-**Hermes Agent in your pocket.** Continue a conversation, steer running work, and send the next idea from your Android phone. Wing connects to a [Hermes Agent](https://github.com/NousResearch/hermes-agent) server that you control or have access to.
+**Your agent, with you**
+
+Continue a conversation, steer running work, and send the next idea from your Android phone. Wing connects to a [Hermes Agent](https://github.com/NousResearch/hermes-agent) server that you control or have access to.
 
 [**Download Wing for Android**](https://github.com/tarkilhk/Wing/releases/latest) · [Get started](docs/GETTING_STARTED.md) · [Explore all features](docs/FEATURES.md) · [Support Wing](#support-wing)
 
@@ -48,8 +50,6 @@
     <td>Connect your Hermes dashboard or restore a saved configuration.</td>
   </tr>
 </table>
-
-These are renders of Wing's Flutter interface with **sample conversations, profiles and server data**. No personal chat, credential or live server data appears in the gallery. [Screenshot sources and capture details](docs/screenshots/README.md).
 
 ## Your Hermes workflow, on your phone
 
