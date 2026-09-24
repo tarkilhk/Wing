@@ -68,12 +68,18 @@ jobs:
             >/tmp/wing-upgrade-emulator.log 2>&1 &
           emulator_pid=$!
           trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
-          adb wait-for-device
+          if ! timeout 180 adb wait-for-device; then
+            cat /tmp/wing-upgrade-emulator.log
+            exit 1
+          fi
           for attempt in $(seq 1 120); do
             if [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; then
               break
             fi
             sleep 3
           done
-          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+          if [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" != 1 ]]; then
+            cat /tmp/wing-upgrade-emulator.log
+            exit 1
+          fi
           bash current/scripts/storage_upgrade_check.sh
