@@ -44,10 +44,10 @@ class TargetFixture extends ProfileBrowserFixture {
         'id': 'session-$i',
         'profile': profile,
         'title': [
-          'Check Hindsight Codex token refresh',
-          'List rugby games by date and city',
-          'Find budget car rental in Perth',
-          'Research third-leg hotels and activities',
+          'Prepare release notes',
+          'Summarize a research paper',
+          'Sketch a landing page',
+          'Plan a weekend hike',
         ][i % 4],
         'message_count': i == 4 ? 0 : 10,
         'last_active': now - i * 3600,
@@ -68,10 +68,10 @@ class TargetFixture extends ProfileBrowserFixture {
         'id': 'p$i',
         'label':
             [
-              'australia-rwc-2027',
-              'sluice',
-              'hermes-android',
-              'investment-tracking',
+              'demo-app',
+              'research-notes',
+              'design-work',
+              'weekend-plans',
             ][i % 4] +
             (i > 3 ? ' $i' : ''),
         'path': '/p$i',
@@ -114,7 +114,7 @@ void main() {
     controller = ProfileWorkspaceController(
       connection: SavedConnection(
         id: 'host',
-        label: 'Claw',
+        label: 'Demo server',
         host: 'localhost',
         port: 1,
         apiKey: '',
@@ -357,7 +357,7 @@ void main() {
   );
   for (final (kind, firstQuery, firstId, secondQuery, secondId) in [
     ('profile', ' WORK ', 'work', 'personal', 'personal'),
-    ('project', ' SLUICE ', 'personal/p1', 'hermes', 'personal/p2'),
+    ('project', ' RESEARCH-NOTES ', 'personal/p1', 'design', 'personal/p2'),
   ]) {
     testWidgets('$kind search keeps selections across local queries', (
       tester,
@@ -433,7 +433,7 @@ void main() {
       final tokenCount = find.descendant(of: chat, matching: find.text('1.5k'));
       final title = find.descendant(
         of: chat,
-        matching: find.text('Check Hindsight Codex token refresh'),
+        matching: find.text('Prepare release notes'),
       );
       expect(tester.getCenter(tokenCount).dy, tester.getCenter(title).dy);
       expect(tester.getSize(chat).height, 48);
@@ -624,7 +624,7 @@ void main() {
           addTearDown(tester.view.resetViewInsets);
           await tester.enterText(
             find.byKey(const ValueKey('chat-menu-search')),
-            kind == 'project' ? 'sluice' : 'work',
+            kind == 'project' ? 'research-notes' : 'work',
           );
           await tester.pumpAndSettle();
           expect(find.text('Done').hitTestable(), findsOneWidget);

@@ -30,6 +30,11 @@ flutter pub outdated
 flutter build apk --release --split-per-abi
 ```
 
+Keep the normal pub step on the release build. Flutter regenerates its Android
+plugin registration for release mode there, excluding the dev-only
+`integration_test` plugin after test runs. Adding `--no-pub` to this build can
+leave a stale test plugin reference and fail Java compilation.
+
 Record dependency update decisions rather than upgrading everything during a release. Follow [Contributing](../CONTRIBUTING.md) for toolchain requirements and the Windows launcher. Complete the [release checklist](CODE_QUALITY_CHECKLIST.md). Live gateway tests are opt-in and require their own authorized disposable data.
 
 ## Sign and verify
