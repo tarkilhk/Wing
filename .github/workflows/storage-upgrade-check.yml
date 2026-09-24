@@ -1,0 +1,64 @@
+name: Secure storage upgrade check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - pubspec.yaml
+      - pubspec.lock
+      - tool/storage_upgrade_probe.dart
+      - scripts/storage_upgrade_check.sh
+      - .github/workflows/storage-upgrade-check.yml
+
+permissions:
+  contents: read
+
+jobs:
+  upgrade:
+    if: github.event.pull_request.number == 29
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out updated app
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: current
+          persist-credentials: false
+
+      - name: Check out installed app version
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: previous
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: ./current/.github/actions/setup-flutter
+        with:
+          flutter-version: '3.44.0'
+          channel: stable
+          cache: true
+          pub-cache: false
+
+      - name: Build installed and updated debug APKs
+        run: |
+          mkdir -p previous/tool
+          cp current/tool/storage_upgrade_probe.dart previous/tool/storage_upgrade_probe.dart
+          (cd previous && flutter pub get && flutter build apk --debug --no-pub -t tool/storage_upgrade_probe.dart --dart-define=WING_UPGRADE_PROBE=seed)
+          (cd current && flutter pub get && flutter build apk --debug --no-pub -t tool/storage_upgrade_probe.dart --dart-define=WING_UPGRADE_PROBE=verify)
+
+      - name: Upgrade installed app and verify saved values
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          script: bash current/scripts/storage_upgrade_check.sh
