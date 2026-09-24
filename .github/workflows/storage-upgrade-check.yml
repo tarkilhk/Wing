@@ -61,8 +61,13 @@ jobs:
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" "system-images;android-35;google_apis;x86_64" "emulator" || test "${PIPESTATUS[1]}" -eq 0
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
-            --name wing-upgrade --package "system-images;android-35;google_apis;x86_64"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/wing-avds"
+          mkdir -p "$ANDROID_AVD_HOME"
+          printf 'no\n' | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
+            --name wing-upgrade --package "system-images;android-35;google_apis;x86_64" \
+            --path "$ANDROID_AVD_HOME/wing-upgrade.avd"
+          "$ANDROID_HOME/emulator/emulator" -list-avds
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fxq wing-upgrade
           "$ANDROID_HOME/emulator/emulator" -avd wing-upgrade -no-window \
             -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot \
             >/tmp/wing-upgrade-emulator.log 2>&1 &
