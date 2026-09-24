@@ -65,6 +65,7 @@ class Host {
   Completer<void>? approvalDelay;
   Completer<void>? promptSubmitStarted;
   Completer<void>? promptSubmitDelay;
+  Completer<void>? connectDelay;
   int connectFailures = 0;
   Object? connectError;
   int connectCalls = 0;
@@ -101,6 +102,7 @@ class Host {
       discover: discover,
       connect: () async {
         connectCalls++;
+        await connectDelay?.future;
         if (connectError != null) throw connectError!;
         if (connectFailures > 0) {
           connectFailures--;
@@ -310,6 +312,86 @@ void main() {
     await controller.initialize();
   });
   tearDown(() => controller.dispose());
+
+  for (final outcome in [
+    'recovered',
+    'failed',
+    'replaced',
+    'joined',
+    'timed out',
+  ]) {
+    test('notification approval recovery: $outcome', () async {
+      host.running = false;
+      final chat = await controller.createChat();
+      final request = <String, dynamic>{
+        'request_id': 'notification-original',
+        'command': 'print("test")',
+        'choices': ['once', 'deny'],
+      };
+      host.pendingApprovals = [request];
+      host.event('a', 'approval', request);
+      host.gateways['a']!.onConnectionChanged!(false);
+      if (outcome == 'failed') host.connectFailures = 20;
+      if (outcome == 'replaced') {
+        host.pendingApprovals = [
+          {...request, 'request_id': 'replacement'},
+        ];
+      }
+      if (outcome == 'joined' || outcome == 'timed out') {
+        host.connectDelay = Completer<void>();
+      }
+      Future<void>? recovering;
+      if (outcome == 'joined') {
+        recovering = controller.reconnect(chat.key.workspace);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      Object? failure;
+      var finished = false;
+      final action = controller
+          .approveNotification(chat, 'once', requestId: 'notification-original')
+          .catchError((Object error) {
+            failure = error;
+          })
+          .whenComplete(() {
+            finished = true;
+          });
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      if (outcome == 'joined') {
+        expect(finished, isFalse);
+        host.connectDelay!.complete();
+      }
+      if (outcome == 'timed out') {
+        await Future<void>.delayed(const Duration(seconds: 16));
+        expect(finished, isTrue);
+        // Completing recovery later must not submit the timed-out intent.
+        host.connectDelay!.complete();
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await action;
+      if (recovering != null) await recovering;
+      final decisions = host.calls
+          .where((c) => c.$2 == 'approval.respond')
+          .toList();
+      if (outcome == 'recovered' || outcome == 'joined') {
+        expect(failure, isNull);
+        expect(decisions, hasLength(1));
+        expect(decisions.single.$3['request_id'], 'notification-original');
+      } else {
+        expect(failure, isNotNull);
+        expect(decisions, isEmpty);
+        if (outcome == 'failed' || outcome == 'timed out') {
+          expect(
+            chat.notificationActionErrorRequestId,
+            'notification-original',
+          );
+          expect(chat.notificationActionError, isNotNull);
+        }
+        host.connectFailures = 0;
+        await controller.reconnect(chat.key.workspace);
+        expect(host.calls.where((c) => c.$2 == 'approval.respond'), isEmpty);
+      }
+    });
+  }
 
   test('restores draft text after controller restart', () async {
     final chat = await controller.createChat();

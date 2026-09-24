@@ -1,10 +1,13 @@
 # Notification test status
 
-Updated **23 September 2026** after the final physical-phone retest.
-Galaxy S23 Ultra / Android 16; Wing **2329**, version **1.0.1 / 23292**.
+Updated **24 September 2026** during the remaining physical-phone tests.
+Galaxy S23 Ultra / Android 16; Wing **2330**, version **1.0.1 / 23302**.
+Clean fix installed; live disconnected-Once retest pending.
 
 **Both bug-fix follow-ups now pass. Zero focused retests remain.**
 [Final live result](2026-09-23-notification-final-live-result.md).
+
+[24 September live session](2026-09-24-notification-live-results.md): the direct-action failure is traced and fixed in 2330; automated/native QA passed, real-phone approval retest pending. Earlier focused fixes remain passed.
 
 ## Current summary
 
@@ -15,12 +18,13 @@ Galaxy S23 Ultra / Android 16; Wing **2329**, version **1.0.1 / 23292**.
 - **B — Restored reply read clearing: PASS on 2328.** Same reply/ID restored
   silently; actual shade tap opened the latest answer and cleared the notice;
   another restart kept it absent. No unchanged repeat was needed.
-- Original **19-scenario ledger: 7 passed, 2 partial, 0 failed, 10 blocked**.
+- Original **19-scenario ledger: 8 passed, 1 partial, 1 failed, 9 blocked**.
   Supported checks passing does not establish the blocked or uncovered branches.
 - Sound is **confirmed working by the user**; no dedicated repeat is needed.
-- Capture stopped; phone left on Home; no pending test request. The earlier
-  diagnostic batch was confirmed timed out before this run. No backend, policy,
-  credentials, authentication, preview/channel or battery-setting changes.
+- Latest trace approval timed out without execution. Temporary Manual approval
+  policy was authorized for this session and **Smart was restored**. No backend,
+  credential, authentication, channel or battery-setting changes. See the live
+  session document for the diagnostic-build replacement and current deployment.
 
 ## Confirmed fixes
 
@@ -45,7 +49,7 @@ UX observation, not an outstanding failure of these two focused retests.
 | 03 | Foreground behavior | Passed: normal reply suppressed; real input notification allowed |
 | 04 | Monitoring and interruption | Passed: live summary, lock-screen delivery, real desktop Stop and watcher shutdown |
 | 05 | Three-question batch | Passed on 2329: first delivery before opening after a saved-cache restart, useful text/options/Review, same-slot 3→2→1 and successful completion |
-| 06 | Once | Blocked: Smart auto-approved the safe operation |
+| 06 | Once | Failed on 2329: real print-only approval delivered under authorized temporary Manual; Android received Once tap, Hermes received no decision and request timed out |
 | 07 | Deny | Blocked: no real safe approval request |
 | 08 | FIFO approvals | Blocked: no real safe approval requests; concurrency unverified |
 | 09 | Mixed input priority | Blocked: no real safe approval request; concurrency unverified |
@@ -54,7 +58,7 @@ UX observation, not an outstanding failure of these two focused retests.
 | 12 | Hidden previews / channels | Passed for questions/counts and category diagnostics; approval privacy branch blocked |
 | 13 | Unlocking approval actions | Blocked: no real safe approval request |
 | 14 | Offline / stale approval actions | Blocked: no real safe approval request |
-| 15 | Desktop resolution | Partial: actual desktop answer/reconnect and continued-work cleanup pass; already-running watcher polling branch untested |
+| 15 | Desktop resolution | Passed: 24 September question cleared/replaced after desktop answer while Wing stayed on Home and watcher continued for other work; observation does not isolate timer versus streamed updates |
 | 16 | Restart / reconnect | Passed on 2328 case B: silent same-ID/text restoration, actual tap/latest-answer read clearing, and no resurrection after restart |
 | 17 | Secure input | Blocked: no harmless generic dummy-data flow exposed by runtime |
 | 18 | Session permission | Blocked: no real safe approval request |

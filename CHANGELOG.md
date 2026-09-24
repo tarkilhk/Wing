@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Recover a disconnected chat when an approval notification is tapped, keep the
+  Android action alive through acknowledgement, and show unconfirmed decisions
+  without replaying them after later reconnection.
+
 - Fix first question notifications after restarting Wing with a previously read
   chat in its local cache. Attach the cached chat to the verified live session
   while preserving its history and protecting newer events and navigation.

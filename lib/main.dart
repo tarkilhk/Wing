@@ -508,12 +508,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         await openProfileNotification(payload);
         chat = owner.findNotificationChat(key);
       }
-      if (chat == null ||
-          chat.opening ||
-          chat.offlineSnapshot ||
-          chat.status == ProfileTurnStatus.reconnecting) {
-        return;
-      }
+      if (chat == null) return;
       final current = _chatNotices.inputFor(jsonEncode(key.toJson()));
       if (current != null && current.focus.identity != focus.identity) return;
       final request = chat.approval;
@@ -576,7 +571,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         );
         if (confirmed != true || _disposed) return;
       }
-      await owner.approve(chat, choice, requestId: focus.id);
+      await owner.approveNotification(chat, choice, requestId: focus.id);
     } catch (_) {
       // The controller retains the exact request and exposes unconfirmed status.
       // An intent is never saved as an authorization to retry on reconnect.

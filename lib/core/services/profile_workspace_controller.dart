@@ -280,6 +280,7 @@ class ProfileWorkspaceData {
   int reconnectAttempt = 0;
   Timer? retry;
   bool reconnecting = false;
+  Future<void>? reconnectFuture;
   bool recovering = false;
   bool loaded = false;
   bool offlineSnapshot = false;
@@ -5074,6 +5075,46 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
+  /// An explicit notification tap owns one bounded recovery attempt. The choice
+  /// is never queued for replay, and approval rechecks its exact request after
+  /// recovery (which may have discovered a resolved or replaced request).
+  Future<void> approveNotification(
+    ProfileChat chat,
+    String choice, {
+    required String requestId,
+  }) async {
+    final runtime = chat.runtimeId;
+    final resource = _owned(chat);
+    try {
+      if (resource.recovering ||
+          resource.reconnectError != null ||
+          chat.offlineSnapshot ||
+          chat.status == ProfileTurnStatus.reconnecting) {
+        await reconnect(
+          chat.key.workspace,
+        ).timeout(const Duration(seconds: 15));
+      }
+      if (_closed ||
+          resource.recovering ||
+          resource.reconnectError != null ||
+          chat.runtimeId != runtime ||
+          chat.opening ||
+          chat.offlineSnapshot ||
+          chat.status == ProfileTurnStatus.reconnecting) {
+        throw StateError('Reconnect to review this approval.');
+      }
+      await approve(chat, choice, requestId: requestId);
+    } catch (_) {
+      if (!_closed && chat.approval?['request_id'] == requestId) {
+        chat.notificationActionError =
+            'Decision not confirmed · review or retry';
+        chat.notificationActionErrorRequestId = requestId;
+        _changed();
+      }
+      rethrow;
+    }
+  }
+
   Future<void> approve(
     ProfileChat chat,
     String choice, {
@@ -6224,7 +6265,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   Future<void> reconnect(WorkspaceScope scope) async {
     final resource = _resources[scope];
-    if (resource == null || resource.reconnecting || _closed) return;
+    if (resource == null || _closed) return;
     // A user retry or app resume doesn't wait for the next scheduled attempt.
     resource.retry?.cancel();
     resource.retry = null;
@@ -6233,8 +6274,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
     await _reconnect(resource);
   }
 
-  Future<void> _reconnect(ProfileWorkspaceData resource) async {
-    if (resource.reconnecting || _closed) return;
+  Future<void> _reconnect(ProfileWorkspaceData resource) {
+    // A notification tap must await recovery already started by another caller.
+    return resource.reconnectFuture ??= _performReconnect(
+      resource,
+    ).whenComplete(() => resource.reconnectFuture = null);
+  }
+
+  Future<void> _performReconnect(ProfileWorkspaceData resource) async {
+    if (_closed) return;
     resource.reconnecting = true;
     resource.recovering = true;
     connectionStatus.beginRecovery(resource.scope.profileName);
