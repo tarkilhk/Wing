@@ -313,6 +313,63 @@ void main() {
   });
   tearDown(() => controller.dispose());
 
+  test(
+    'reconnect notification uses recovered answer instead of generic status',
+    () async {
+      final received = <ProfileNotification>[];
+      final connection = controller.connection;
+      controller.dispose();
+      controller = ProfileWorkspaceController(
+        connectionIdentity: 'original-settings',
+        connection: connection,
+        preferences: preferences,
+        gatewayFactory: host.gateway,
+        onAttention: (notice) async => received.add(notice),
+      );
+      await controller.initialize();
+      final chat = await controller.createChat();
+      chat.draft = 'work';
+      await controller.send(chat);
+      host.historyMessages = [
+        {
+          'id': 42,
+          'role': 'assistant',
+          'content': 'The report is ready for review.',
+        },
+      ];
+      host.running = false;
+      await controller.reconnect(chat.key.workspace);
+      await Future<void>.delayed(Duration.zero);
+      expect(received.last.content.preview, 'The report is ready for review.');
+      expect(received.last.focus?.kind, 'answer');
+    },
+  );
+
+  test(
+    'cold approval review loads requests without selecting the chat',
+    () async {
+      host.running = false;
+      host.pendingApprovals = [
+        {
+          'request_id': 'cold-review',
+          'command': 'print(1)',
+          'choices': ['once', 'deny'],
+        },
+      ];
+      final key = ProfileSessionKey(controller.current!.scope, 'same');
+      controller.showList();
+      final chat = await controller.loadNotificationApproval(key);
+      await Future<void>.delayed(Duration.zero);
+      expect(chat?.approval?['request_id'], 'cold-review');
+      expect(controller.notificationChat, isNull);
+      expect(controller.visible, isFalse);
+      expect(
+        host.calls.where((call) => call.$2 == 'approval.respond'),
+        isEmpty,
+      );
+    },
+  );
+
   for (final outcome in [
     'recovered',
     'failed',

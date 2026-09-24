@@ -371,3 +371,145 @@ checks. Startup shows Connected; exact previous failed owner was not captured.
 The native notification layout remains the tested 2330 implementation. Attempt
 to finish dark-shade 200% inspection in the isolated emulator was interrupted
 when that emulator disconnected; do not record a visual pass for that attempt.
+
+### Final four: resumed testing, fixes deferred
+
+User requested finishing N09/N14/N17/N18 before the next fix pass. On 2331,
+temporarily re-enabled the previously authorized Manual mode on Claw/default,
+read back with unchanged timeout 300 and allowlist. Restore Smart after this
+batch. Font remains 1.0. N14 is first; phone Wi-Fi/mobile-data initial states
+are both enabled. A detached-process probe completed successfully; a bounded
+offline helper with independent restoration watchdog is staged but not run.
+The helper will only tap coordinates verified against the actual pending test
+notification. Real Hermes outcome and synthetic emulator evidence remain
+separate. No new application fix has been made during this test phase.
+
+N14 live attempt in progress: exact WING-N14-2331 approval first captured at
+13:31:56. The physical shade showed its full print-only command and four
+choices. Fresh UI exposed the Once action as `com.tarkilhk.wing:id/once` with
+content description “Allow this request once”. The staged offline helper was
+updated to require a fresh offline UI dump, exact test marker and exactly one
+Once node before tapping; it aborts if these checks fail.
+
+13:35:52: detached bounded outage helper launched with a 45-second independent
+restoration watchdog. Wireless debugging subsequently stopped responding; the
+old address did not reconnect and automatic restoration could not be verified.
+User received an explicit NOW cue to check/re-enable Wi-Fi/mobile data and send
+the current debugging address. Until private phone logs/captures are recovered,
+do not infer that a button tap occurred, that restoration completed, or that an
+application failure was reproduced. The late start also limits retry coverage
+before the five-minute approval expiry. No automatic decision retry was staged.
+
+Recovered outcome: user restored/confirmed Wi-Fi and mobile data enabled.
+Wireless-debugging ports changed several times; stable reconnection ultimately
+used port 37837. Recovered helper log contains only its starting timestamp;
+no offline UI dump, tap marker, or screenshots exist. No test helper process
+remained at the final connection check. Both network settings read back as 1.
+**Offline action attempt is invalid/inconclusive, not a Wing failure.** Do not
+repeat this wireless-debugging-dependent approach on the physical phone.
+
+User confirmed on desktop that WING-N14-2331 timed out and did not run. A stale
+approval was still posted at initial recovery; after reopening only Wing's list
+and reconnecting, it disappeared. At 13:45, the active notification dump had no
+test marker and the actual shade agreed. **Expired-request reconciliation
+passed; no stale-action tap was available afterward.** Live offline and stale
+target decision branches remain unverified; use isolated native QA separately.
+
+### Isolated mixed-input and dark visual coverage
+
+Existing isolated Android 16 QA app, fake Hermes only: posted an approval,
+then one question, then a newer answer in the same synthetic chat. Actual
+native notification retained the approval head and showed **1 approval ·
+1 question**. Stored state retained the newer answer beneath both inputs.
+Native Deny produced exactly one approval.respond for qa-1 and advanced the
+same chat notice to **1 question**, with no premature answer replacement.
+This covers the client sequence; it is not evidence that stock Hermes can
+generate that same-chat combination on demand.
+
+Actual expanded dark Android shade at font scale 2.0 showed readable command,
+both counts and all four choices in two rows. This closes the dark visual
+coverage gap with emulator evidence, alongside the earlier physical Samsung
+light-shade check. No production UI changes were made. The warning-below-fold
+and contradictory backend-description observations remain for the fix pass.
+
+### N18 first attempt: operator missed expiry
+
+WING-N18-2331-A appeared in the new disposable chat at 13:55:58.
+The operator reached Session only after the five-minute expiry, around 14:02.
+The notification disappeared after that tap. Reading the actual chat confirmed
+A timed out without a decision, B was not called, and no second approval was
+applicable. This is an invalid Session test due to operator delay, not a Wing
+Session failure or pass. The user will operate the phone action on the retry.
+
+### N18 retry: PASS on 2331
+
+User sent WING-N18-RETRY in the same new disposable desktop chat and personally
+tapped Session on the phone notification within the pending window. At 14:07,
+the observed same-slot result (ID 931318455) reported A executed successfully,
+B executed successfully, and no additional approval for B because the Session
+grant applied. The chat list showed that test idle. This establishes the live
+Session flow; it does not imply a print-only permission pattern.
+
+Final cleanup: Claw/default saved back to **Smart** and read back as smart,
+timeout **300**, unchanged allowlist, and **No unsaved changes**. No permanent
+grant was accepted. Session permission belongs to the disposable test chat.
+
+Ledger after this batch: **14 passed, 4 partial, 0 failed, 1 blocked**. The four
+partial cases are mixed input (synthetic coverage only), dismissal concurrency,
+locked-action authentication (hidden by phone privacy), and offline/stale
+actions (live outage attempt invalid). Secure input remains blocked. These
+counts describe scenario coverage; they do not dismiss the separately recorded
+duplicate Watching cards, generic recovery text, or Always-warning usability
+observations awaiting investigation. No new production fixes in this batch.
+
+User clarified the lock-screen acceptance criterion: no actions while locked is expected. N13 is PASS; the artificial hidden-button/cancel-authentication branch is removed. Current ledger: 15 passed, 3 partial, 1 blocked. User requested mixed-priority, dismissal/new-request, and manually operated offline retests.
+
+### Dismissal retest: PASS for stock sequential requests
+
+User dismissed WING-DISMISS-A on the physical phone, then answered Summary on desktop after the NOW cue. User confirmed a new WING-DISMISS-B notification appeared. Dismissal does not suppress the next distinct request. This is sequential replacement, not a simultaneous-request race. N10 passes with earlier dismissal retention across reconnect/restart. Ledger: 16 passed, 2 partial, 1 blocked.
+
+Manual offline retest preparation: temporarily saved Claw/default Manual again, read back timeout 300 and existing allowlist unchanged. Smart restoration is pending this test. User will exclusively operate the offline action and reconnection; no remote outage helper will run. Use a fresh chat to avoid the previous execute_code Session grant.
+
+### User-operated offline retest: retained request and successful retry; review UX issue
+
+User generated WING-OFFLINE-RETEST in a fresh chat, disabled both phone network
+transports, and tapped native Once. Wing opened the chat and Review command
+dialog. Confirming Allow once returned to an Approval needed card with disabled
+buttons. After restoring connectivity, desktop still showed the approval pending
+and the phone notification remained. A fresh notification Once tap reopened the
+review dialog; confirming then successfully approved the operation. Thus this
+review-routed offline attempt did not silently approve or automatically retry;
+request retention and explicit online retry passed by user observation. This is
+not a trace of the short-command direct-action route while offline.
+
+User screenshots show Reconnecting and enabled dialog confirmation above a
+disabled chat approval card. They also show an Executed successfully response
+already visible above the pending card; the origin/turn of that response is
+unverified and must not be interpreted as proof of execution while offline.
+
+Source verification: native ChatNotifications.kt routes choices to review when
+its estimated command layout exceeds three lines (one at enlarged text);
+main.dart also requires review for Always or an unloaded chat. The review path
+opens the chat before displaying its dialog; confirming closes the dialog and
+attempts the decision, leaving the same underlying approval card on failure.
+Exact triggering branch for this phone request is not traced. Dialog confirmation
+is not disabled for disconnected state. UX finding: duplicate review surfaces
+and poor explanation of why offline confirmation cannot complete. No production
+code changed. Wireless debugging is disconnected after the test; restoring Smart
+remains pending access or a manual user change.
+
+Post-offline cleanup verified at 14:34: reconnected at the user-provided wireless
+debugging address, saved Claw/default back to Smart, and read back smart, timeout
+300, unchanged allowlist and No unsaved changes. The prior screenshot's apparent
+execution contradiction is resolved by the current chat view: a 14:26 completed
+turn precedes the repeated user prompt at 14:27 and its successful 14:28 reply.
+The earlier success text is not evidence of execution during the tested outage.
+
+Mixed-priority regression rerun: flutter test --no-pub
+test/chat_notification_coordinator_test.dart --plain-name input: **3 passed**.
+Verified input retains priority over a newer answer and exposes the answer after
+resolution; mixed inputs retain first-seen FIFO and question counts; reading a
+hidden answer does not resolve pending input. These are coordinator tests, not
+a completed end-to-end emulator question-to-answer sequence. The latter remains
+unproven: reopening the existing native fixture showed the answer without a
+question form. Do not upgrade N09 to a full native/live pass from these tests.

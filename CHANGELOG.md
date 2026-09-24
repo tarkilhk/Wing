@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Keep notification approval review on one screen, show offline/retry state,
+  and keep permission scope visible above long commands and request details.
+- Show one monitoring notification and recover useful reply text after reconnect.
+
 - Recover interrupted profile connections even when their chat list was never
   opened, so Retry can clear stale connection warnings while another chat works.
 
