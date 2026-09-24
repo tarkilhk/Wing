@@ -84,3 +84,88 @@ Private captures/logs are under `/tmp/wing-notification-fixes*` and are not comm
 
 Mixed same-chat input priority remains a separately recorded synthetic/live
 coverage limit; these fixes do not convert that scenario into a verified live pass.
+
+## Physical phone combined retest — 18:09–18:15 Singapore
+
+WING-RECOVERY-2332 ran a desktop 120-second terminal sleep and returned the
+requested answer while the user had disabled phone Wi-Fi and mobile data.
+Before the outage, native records showed one app-owned foreground monitoring
+notification (214601), no former duplicate 214602, and a running foreground
+service. Its summary was Watching 2 chats / 2 working; unrelated work was also
+active, so this does not isolate the target chat or prove correct count updates.
+Android also retained an automatic Wing grouping summary; this is not a second
+app-owned Watching card.
+
+After connectivity was restored, the user reported no target reply notification.
+Read-only inspection before reopening Wing found its process alive (PID 9228),
+no monitoring service, and no target reply notification. Opening only the Chats
+list showed Connected but still did not produce the target notification. The
+latest activity was under Run WING-OFFLINE-RETEST execution check; the older
+Manually test Wing Android notifications chat had not changed. No target answer
+was opened/read during this inspection.
+
+Result: duplicate app-owned monitor removal verified in native records;
+background recovery delivery did not pass, and recovered-preview/read-clear
+checks remain unverified. Logs captured after reconnection did not retain the
+relevant stop event. Do not claim that the app was killed or that connectivity
+loss itself is already proven to be the stop trigger. Investigate why known
+unfinished work ceased to retain monitoring, and whether the actual target chat
+was tracked. User confirmed the intended behavior: connectivity loss must not
+stop monitoring of known unfinished work; retain it while reconnecting until the
+outcome can be confirmed. No production changes made during this retest.
+
+Private evidence: /tmp/wing-notification-fixes/recovery2332-before-*.txt,
+recovery2332-after-*.txt, and recovery2332-reopened-notifications.txt.
+
+### Session wording at enlarged text — user screenshot 18:46
+
+Physical-phone screenshot confirms the Session review shows “Allow matching
+commands for this session.” above the long command at font scale 2.0. Cancel
+and Allow for session are visible; confirmation is disabled and the explicit
+“Offline—approval not sent. Reconnect to retry.” message is present. The dialog
+overlays the Chats list, with no duplicate approval chat route underneath.
+Session layout branch passes by screenshot. This alone does not prove actual
+network availability, absence of automatic retry, or successful online retry.
+Always review remains pending. Wireless ADB could not connect to supplied port
+33139; user is operating manually. Font scale 2.0 and temporary Claw/default
+Manual mode still require restoration after the remaining tests.
+
+User subsequently confirmed the Always permanent-scope warning is visible.
+Together with the Session screenshot, test 4 scope visibility passes at enlarged
+text. Asked user to cancel Always and report whether the desktop request remains
+pending so the offline test can reuse it if still valid. No permanent permission
+grant was requested. Cleanup of temporary font scale and Manual mode is pending.
+
+### Final manual offline approval retest — PASS for review route
+
+User generated a fresh WING-OFFLINE-2332 approval after the scope request timed
+out. While offline, notification Once opened the single review popup with Allow
+once disabled. User restored connectivity with the popup open: the confirmation
+became enabled, desktop still showed the request pending, and only the explicit
+Allow once tap approved it successfully and removed the desktop request.
+User-reported sequence verifies no automatic approval on reconnect and successful
+manual retry. This is the reviewed-command route, not a separate direct-action
+branch test; native notification removal after success was not separately
+reported in this run.
+
+Four planned follow-up checks: (1) offline review/retry PASS by user operation;
+(2) one app-owned monitor record verified, but complete lifecycle/count changes
+not independently proven; (3) outage recovery delivery FAILED and therefore
+preview/read-clear unverified; (4) Session/Always large-text scopes PASS.
+Investigation reproduced lost completion tracking across disconnect/failed reads:
+see 2026-09-24-monitoring-outage-investigation.md. No fix deployed for that issue.
+
+Cleanup remains outstanding: wireless debugging port 33139 refused connection
+after user restored phone connectivity. Requested current address to restore
+font scale 1.0 and Claw/default Smart approval mode, preserving timeout 300 and
+the existing allowlist.
+
+Cleanup update: connected on port 36901 and restored/read back font scale 1.0.
+Navigated Claw/default approval policy, selected Smart, and verified unchanged
+timeout 300 and allowlist before Save. Wireless debugging went offline before
+the Save tap was sent; Smart is selected but not yet confirmed saved. Asked
+user to tap Save on the current screen and confirm No unsaved changes.
+
+Cleanup complete: user confirmed the selected Smart approval mode is now saved.
+Font scale 1.0 was previously restored and read back remotely. Smart save is
+user-confirmed; no subsequent remote readback was available.

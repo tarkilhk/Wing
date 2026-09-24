@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Preserve verified unfinished work through network outages and failed reads,
+  recover the actual missed reply before stopping monitoring, and show
+  reconnecting status while its outcome is uncertain.
+
 - Keep notification approval review on one screen, show offline/retry state,
   and keep permission scope visible above long commands and request details.
 - Show one monitoring notification and recover useful reply text after reconnect.

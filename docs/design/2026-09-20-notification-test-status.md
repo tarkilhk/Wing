@@ -74,7 +74,7 @@ Multi-chat/profile isolation and counts cannot be proved by these one-chat runs.
 
 ## Installed build and validation
 
-- Current installed update **2331 / 23312**, source `d6cf733`, fixes connection
+- Previous installed update **2331 / 23312**, source `d6cf733`, fixes connection
   recovery membership. Full suite **2,708 passed / 12 skipped**, clean analysis,
   signed non-debuggable ARM64 verification and data-preserving install passed.
   [Investigation and deployment evidence](2026-09-24-connection-status-investigation.md).
@@ -125,8 +125,19 @@ New observation awaiting investigation: duplicate monitoring cards appeared in S
 
 ## 2332 follow-up
 
-The duplicate review, monitoring-card and recovered-preview issues are fixed in
-[2332 review fixes](2026-09-24-notification-review-fixes.md). Automated and native
-evidence, limitations, and the exact phone retests are recorded there. Phone installation of 2332 is confirmed, with app data preserved and Claw
-Connected on launch. The documented phone retests remain outstanding; this
-startup check does not establish their outcomes.
+Current installed build is **2332 / 23322**. See
+[2332 review fixes and retests](2026-09-24-notification-review-fixes.md).
+Physical-phone follow-up: offline review/retry passed by user operation; Session
+and Always scope visibility passed at enlarged text; one app-owned monitoring
+record was verified. Combined outage recovery did not deliver the missed reply,
+so recovered-preview/read-clear verification remains incomplete.
+
+The [outage investigation](2026-09-24-monitoring-outage-investigation.md)
+reproduces the lost completion tracking: one normal control passes, three outage
+variants failed before the correction. Build 2333 now retains verified work
+and its completion history across outages. Release validation is complete;
+installation is pending a reachable phone debugging address. Earlier
+scenario passes are historical and do not establish this new outage branch.
+Cleanup complete: normal font scale 1.0 was restored and read back; the user
+confirmed Claw/default Smart mode was saved. Timeout 300 and the allowlist were
+unchanged in the pre-save inspection.

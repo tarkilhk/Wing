@@ -28,6 +28,8 @@ class NotificationCoverageHost {
   final resumeSnapshots = <int, Map<String, dynamic>>{};
   List<Map<String, dynamic>> history = [];
   bool activeFails = false;
+  bool historyFails = false;
+  Completer<void>? historyDelay;
   bool resumeFails = false;
   List<Map<String, dynamic>>? questions;
   Map<String, dynamic> resumeOverrides = {};
@@ -75,6 +77,8 @@ class NotificationCoverageHost {
               'total': rows.length,
             };
           }
+          await historyDelay?.future;
+          if (historyFails) throw StateError('history unavailable');
           return {
             'session_id': path.split('/')[1],
             'messages': history,
@@ -624,7 +628,8 @@ void main() {
     expect(
       alerts,
       isEmpty,
-      reason: 'a failed ownership read resets the baseline',
+      reason:
+          'a chat without verified ownership never establishes tracked work',
     );
   });
 

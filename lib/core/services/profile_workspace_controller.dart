@@ -420,6 +420,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   int _activityGeneration = 0;
   Map<String, _NotificationSession>? _notificationSnapshot;
   Map<String, ProfileSessionKey> _backgroundChats = const {};
+  final _uncertainNotificationRuntimes = <String>{};
   int _pendingNotifications = 0;
   int _pendingCompletions = 0;
 
@@ -977,7 +978,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
       resource.gateway.onEvent = (event) => _event(resource, event);
       resource.gateway.onConnectionChanged = (connected) {
         if (!connected && !_closed) {
-          _notificationSnapshot = null;
+          // Losing transport does not erase work already verified as unfinished.
+          _uncertainNotificationRuntimes.addAll(_backgroundChats.keys);
           for (final chat in resource.chats.values.where((c) => c.busy)) {
             chat.sensitivePromptResponding = false;
             chat.status = ProfileTurnStatus.reconnecting;
@@ -6141,26 +6143,25 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
 
       final previous = _notificationSnapshot;
-      _notificationSnapshot = {
-        for (final entry in next.entries)
-          if (entry.value.activity != _NotificationActivity.idle)
-            entry.key: entry.value,
-      };
-      _backgroundChats = {
-        for (final entry in _notificationSnapshot!.entries)
-          if (workingRuntimes.contains(entry.key))
-            entry.key: entry.value.chat.key,
-        // An unknown state is not evidence that an unfinished chat is done.
-        for (final row in ProfileGateway.records(response['sessions']))
-          if (!{
-                'waiting',
-                'starting',
-                'working',
-                'idle',
-              }.contains(row['status']) &&
-              _backgroundChats[row['id']]?.sessionId == row['session_key'])
-            row['id'] as String: _backgroundChats[row['id']]!,
-      };
+      // Retain verified unfinished identities until a corroborated observation
+      // settles them. Missing rows, ownership ambiguity and unknown states are
+      // uncertainty, not completion. A cold snapshot still has no prior work.
+      _notificationSnapshot = {...?previous};
+      _backgroundChats = {..._backgroundChats};
+      _uncertainNotificationRuntimes.addAll(_backgroundChats.keys);
+      for (final entry in next.entries) {
+        final before = previous?[entry.key];
+        final after = entry.value;
+        if (before != null && before.chat.key != after.chat.key) continue;
+        if (after.activity == _NotificationActivity.idle) continue;
+        _notificationSnapshot![entry.key] = after;
+        _uncertainNotificationRuntimes.remove(entry.key);
+        if (workingRuntimes.contains(entry.key)) {
+          _backgroundChats[entry.key] = after.chat.key;
+        } else {
+          _backgroundChats.remove(entry.key);
+        }
+      }
       if (previous == null) return;
       for (final entry in next.entries) {
         final before = previous[entry.key];
@@ -6194,14 +6195,22 @@ class ProfileWorkspaceController extends ChangeNotifier {
             }
             after.chat.messages = answerHistoryRows(history.rows);
           } catch (_) {
-            // Without a reply snapshot, keep the existing outcome fallback.
+            // Keep this exact work pending for the next existing recovery or
+            // activity observation; do not replace a useful reply with a guess.
+            continue;
           }
-          if (!_closed) _notifyRecoveredResult(after.chat);
+          if (!_closed) {
+            _notifyRecoveredResult(after.chat);
+            _notificationSnapshot?.remove(entry.key);
+            _backgroundChats.remove(entry.key);
+            _uncertainNotificationRuntimes.remove(entry.key);
+          }
         }
       }
     } catch (_) {
-      // A failed read cannot prove a transition. The next success is a baseline.
-      _notificationSnapshot = null;
+      // A failed read cannot settle previously verified work. Preserve its
+      // transition history; only a genuinely cold connection needs a baseline.
+      _uncertainNotificationRuntimes.addAll(_backgroundChats.keys);
     } finally {
       _changed();
     }
