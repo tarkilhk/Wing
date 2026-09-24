@@ -369,6 +369,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
   ProfileWorkspaceData? current;
   String? pendingProfile;
   String? _error;
+  String? _failedSwitchProfile;
+  String? _failedSwitchError;
   String? get error => _error ?? current?.reconnectError;
   set error(String? value) => _error = value;
   final Set<Object> _visibleRoutes = {};
@@ -1129,6 +1131,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final sessionReadGeneration = target.sessionGeneration;
     pendingProfile = navigating ? name : null;
     error = null;
+    _failedSwitchProfile = null;
+    _failedSwitchError = null;
     _changed();
     try {
       final profiles = await target.gateway.discover();
@@ -1194,8 +1198,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
         _initializationFailure = e;
         if (!initialized) {
           _initializationFailed(e);
-        } else if (target == current && isTemporaryWorkspaceFailure(e)) {
+        } else if (isTemporaryWorkspaceFailure(e)) {
           _scheduleReconnect(target);
+          if (target != current) {
+            error = workspaceFailureMessage(e);
+            _failedSwitchProfile = target.scope.profileName;
+            _failedSwitchError = error;
+          }
         } else {
           error = e is StateError
               ? e.message.toString()
@@ -6418,12 +6427,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       await _journal();
       await _refreshSessions(resource);
-      await _scheduleNotificationReconciliation(resource);
       resource.reconnectAttempt = 0;
       resource.reconnectError = null;
       resource.recovering = false;
       resource.offlineSnapshot = false;
       connectionStatus.endRecovery(resource.scope.profileName);
+      if (_failedSwitchProfile == resource.scope.profileName) {
+        if (_error == _failedSwitchError) error = null;
+        _failedSwitchProfile = null;
+        _failedSwitchError = null;
+      }
+      // Notification reconciliation can scan every profile and continue while
+      // sessions change. A restored chat socket must not stay orange during it.
+      await _scheduleNotificationReconciliation(resource);
     } catch (failure) {
       retry = isTemporaryWorkspaceFailure(failure);
       if (retry &&
