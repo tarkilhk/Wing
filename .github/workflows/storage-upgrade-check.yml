@@ -58,8 +58,9 @@ jobs:
         run: |
           set -euo pipefail
           sudo chmod 666 /dev/kvm
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "system-images;android-35;google_apis;x86_64" "emulator" || test "${PIPESTATUS[1]}" -eq 0
+            "platform-tools" "system-images;android-35;google_apis;x86_64" "emulator" || test "${PIPESTATUS[1]}" -eq 0
           echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
             --name wing-upgrade --package "system-images;android-35;google_apis;x86_64"
           "$ANDROID_HOME/emulator/emulator" -avd wing-upgrade -no-window \
