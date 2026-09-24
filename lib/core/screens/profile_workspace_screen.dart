@@ -108,10 +108,10 @@ class ProfileWorkspaceScreen extends StatefulWidget {
     this.voiceDevice,
   });
   @override
-  State<ProfileWorkspaceScreen> createState() => _ProfileWorkspaceScreenState();
+  ProfileWorkspaceScreenState createState() => ProfileWorkspaceScreenState();
 }
 
-class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
+class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     with WidgetsBindingObserver {
   ProfileWorkspaceController get controller => widget.controller;
   final _composer = TextEditingController();
@@ -2408,6 +2408,13 @@ class _ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     if (returningToChats && _needsRecovery) _recoverOnFocus();
     if (destination == AppDestination.activity) {
       unawaited(_run(controller.refreshActivity));
+    }
+  }
+
+  /// Bring a reused workspace route back to its chat after a notification tap.
+  void showNotificationChat() {
+    if (_destination != AppDestination.chats) {
+      _selectDestination(AppDestination.chats);
     }
   }
 

@@ -119,7 +119,11 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
       'notification_permission_requested';
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _homeKey = GlobalKey<HomeScreenState>();
-  final _notificationRoutes = <ProfileWorkspaceController, Route<void>>{};
+  final _notificationRoutes =
+      <
+        ProfileWorkspaceController,
+        ({Route<void> route, GlobalKey<ProfileWorkspaceScreenState> screenKey})
+      >{};
   late final ProfileWorkspaceRegistry _profileControllers;
   late final NativeNotificationSink _profileNotifications;
   late final ChatNotificationCoordinator _chatNotices;
@@ -239,7 +243,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
       final previous = _openingNotificationController;
       if (previous != null && previous != controller) {
         previous.cancelNotificationOpen();
-        final previousRoute = _notificationRoutes.remove(previous);
+        final previousRoute = _notificationRoutes.remove(previous)?.route;
         if (previousRoute != null && previousRoute.isActive) {
           _navigatorKey.currentState?.removeRoute(previousRoute);
         }
@@ -260,13 +264,17 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         throw StateError('Notification navigation is unavailable');
       }
       final existingRoute = _notificationRoutes[controller];
-      if (existingRoute != null && existingRoute.isActive) {
-        navigator.popUntil((route) => identical(route, existingRoute));
+      if (existingRoute != null && existingRoute.route.isCurrent) {
+        existingRoute.screenKey.currentState?.showNotificationChat();
         await opening;
         return;
       }
+      // An administration editor may guard its route against popping while
+      // unsaved changes remain. Open the chat above it instead of removing it.
+      final screenKey = GlobalKey<ProfileWorkspaceScreenState>();
       final route = MaterialPageRoute<void>(
         builder: (_) => ProfileWorkspaceScreen(
+          key: screenKey,
           controller: controller,
           enableNotifications: enableProfileNotifications,
           backgroundMonitoringState: _backgroundMonitoring.state,
@@ -285,10 +293,10 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
           onPreferencesChanged: refreshPreferences,
         ),
       );
-      _notificationRoutes[controller] = route;
+      _notificationRoutes[controller] = (route: route, screenKey: screenKey);
       unawaited(
         route.popped.then((_) {
-          if (identical(_notificationRoutes[controller], route)) {
+          if (identical(_notificationRoutes[controller]?.route, route)) {
             _notificationRoutes.remove(controller);
             controller.cancelNotificationOpen();
           }

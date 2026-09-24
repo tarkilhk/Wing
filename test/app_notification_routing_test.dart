@@ -12,6 +12,7 @@ import 'package:wing/core/services/native_notification_sink.dart';
 import 'support/recording_turn_notification_sink.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/screens/administration/administration_content.dart';
 import 'package:wing/core/services/android_share_intent_service.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_connection_identity.dart';
@@ -238,6 +239,73 @@ void main() {
     expect(harness.controller.current!.chat!.key.sessionId, 'same');
     expect(find.text('a chat'), findsOneWidget);
     await _expectSinglePopReturnsHome(tester);
+  });
+
+  testWidgets('notification tap leaves administration and shows its chat', (
+    tester,
+  ) async {
+    final harness = await _harness();
+    final app = await _pumpApp(tester, harness);
+
+    await app.currentState!.openProfileNotification(_payload(harness, 'a'));
+    await _pumpNavigation(tester);
+    await tester.tap(find.byTooltip('Open navigation menu').hitTestable().last);
+    await _pumpNavigation(tester);
+    await tester.tap(find.byKey(const ValueKey('nav-administration')));
+    await _pumpNavigation(tester);
+    expect(find.byType(HermesAdministrationContent), findsOneWidget);
+
+    await app.currentState!.openProfileNotification(
+      _payload(harness, 'a', session: 'second'),
+    );
+    await _pumpNavigation(tester);
+
+    expect(harness.controller.current!.chat!.key.sessionId, 'second');
+    expect(find.byType(HermesAdministrationContent), findsNothing);
+    expect(find.text('Chat'), findsOneWidget);
+  });
+
+  testWidgets('notification opens above a guarded administration editor', (
+    tester,
+  ) async {
+    final harness = await _harness();
+    final app = await _pumpApp(tester, harness);
+    await app.currentState!.openProfileNotification(_payload(harness, 'a'));
+    await _pumpNavigation(tester);
+
+    final workspaceContext = tester.element(
+      find.byType(ProfileWorkspaceScreen).last,
+    );
+    final workspaceRoute = ModalRoute.of(workspaceContext)!;
+    final navigator = Navigator.of(workspaceContext);
+    navigator.push<void>(
+      MaterialPageRoute(
+        builder: (_) => const PopScope(
+          canPop: false,
+          child: Scaffold(body: Text('Unsaved administration editor')),
+        ),
+      ),
+    );
+    await _pumpNavigation(tester);
+    expect(find.text('Unsaved administration editor'), findsOneWidget);
+    expect(workspaceRoute.isCurrent, isFalse);
+
+    await app.currentState!.openProfileNotification(
+      _payload(harness, 'a', session: 'second'),
+    );
+    await _pumpNavigation(tester);
+    await tester.pump(const Duration(seconds: 2));
+    expect(harness.controller.current!.chat!.key.sessionId, 'second');
+    expect(find.byType(ProfileWorkspaceScreen), findsOneWidget);
+    expect(find.text('Unsaved administration editor'), findsNothing);
+    expect(find.text('Chat'), findsOneWidget);
+
+    final chatRoute = ModalRoute.of(
+      tester.element(find.byType(ProfileWorkspaceScreen).last),
+    )!;
+    navigator.removeRoute(chatRoute);
+    await _pumpNavigation(tester);
+    expect(find.text('Unsaved administration editor'), findsOneWidget);
   });
 
   testWidgets(
