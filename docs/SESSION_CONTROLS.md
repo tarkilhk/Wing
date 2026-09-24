@@ -39,4 +39,4 @@ A targeted stop uses `process.kill {session_id:<parent runtime>,process_id:<row 
 
 All reads and actions belong to the original profile gateway and parent runtime. Newer server events must survive older reads. A control acknowledgement must be handled without erasing unsent text, attachments or queued messages. No failed or uncertain action is retried automatically. Goal/loop continuation uses the existing prompt submission path.
 
-This work does not reopen the deferred Cron, bots, messaging or webhook administration scope. See [Testing](TESTING.md) for recorded live acceptance. Non-default profile loops retain the [HUP-002 scope mismatch](UPSTREAM_HERMES_BUGS.md#hup-002-non-default-profile-loop-commandcontrol-mismatch).
+Scheduled tasks are managed separately under Profile / Scheduled tasks. Bots, messaging and webhook administration remain separate candidates. See [Testing](TESTING.md) for recorded live acceptance. Non-default profile loops retain the [HUP-002 scope mismatch](UPSTREAM_HERMES_BUGS.md#hup-002-non-default-profile-loop-commandcontrol-mismatch).

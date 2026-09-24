@@ -2,7 +2,7 @@
 
 Studio is the app's selected design language. This charter records the current shared tokens, component rules and behavior-preservation contract, including the September 2026 portrait, theme and menu updates.
 
-The [product plan](PRODUCT_PLAN.md) owns functionality. This document owns the appearance of all new and existing UI. Written owner decisions take precedence over generated images. Existing behavior remains the reference for interactions. Earlier Folio and Instrument proposals are unselected.
+This charter owns the appearance of new and existing UI. [Feature guides](FEATURES.md) and current behavior describe functionality. Written owner decisions take precedence over generated images.
 
 ## Owner decisions
 
@@ -17,7 +17,7 @@ The [product plan](PRODUCT_PLAN.md) owns functionality. This document owns the a
 
 ## Chats Target, 19 September 2026
 
-The owner approved implementing the [Target chat list](design/2026-09-19-chat-list-target.md).
+The chat list follows these rules.
 This supersedes earlier Chats-specific instructions for profile chips, a separate
 Projects section, Recents, separators, and the header's duplicated filters.
 Use the compact Status / Profile / Project row, five colored status dots and
@@ -91,9 +91,7 @@ mark for chat alerts and the optional Android themed launcher mark. The permanen
 monitoring notification uses the same full-size wing with a softer circular-arrow
 ring behind it, centered on the wing's visual center. This 20 September decision
 supersedes the earlier caduceus. Replies use the plain wing; input and stopped-work
-variants add small type cues. The normal launcher keeps the portrait. See the
-[notification specification](design/2026-09-20-notification-improvements.md) for
-approved monitoring artwork and notification behavior. Brand colors do not replace
+variants add small type cues. The normal launcher keeps the portrait. Brand colors do not replace
 Studio's screen tokens or the user's selected accent family.
 
 See the [icon assets and production record](design/2026-09-14-app-icon.md) for
@@ -109,8 +107,7 @@ themes. Treat the portrait as decorative beside existing labels. Preserve
 the author row and message width. The empty greeting yields to messages,
 history loading or errors, and active work; keep it scrollable on short screens.
 
-The owner approved the [Wing arrival screens](design/2026-09-15-wing-arrival.md)
-on 15 September 2026. First connection now uses a 144 dp circular portrait,
+First connection uses a 144 dp circular portrait,
 the scalable title-case Wing wordmark and the tagline, with Connect your agent,
 Restore configuration and an offline Connection guide. This supersedes the
 112 dp first-connection placement above. Keep the existing drawer reachable.
@@ -118,9 +115,7 @@ Use Studio screen and action tokens in both themes; preserve text scaling and
 scrolling on short screens. Native launch uses the portrait on brand navy,
 without a timed hold, extra loading route or a network-readiness requirement.
 
-On 16 September 2026, the owner approved implementing the
-[connection journey](design/2026-09-16-connection-journey.md), with fewer visible
-options and more approved identity artwork. Add and Edit connection now use a
+Add and Edit connection use a
 full-screen address, sign-in, check and review flow. Use the 112 dp circular
 Playful portrait and the wordmark's original pointed feather cluster on the
 address and verified screens; hide the address artwork while the keyboard is
@@ -136,10 +131,9 @@ horizontal alignment. Use the approved drawn lettering and feather accent in
 the header, rather than a plain text substitute.
 This supersedes the earlier 48 dp drawer placement. Keep only the app identity
 in this header. The low footer uses icon → connection name → LED on the left and
-version → update indicator on the right. See the [menu specification](design/2026-09-17-menu-versions.md).
+version → update indicator on the right.
 
-The owner approved adding [Hermes Cloud discovery](design/2026-09-17-hermes-cloud-connection.md)
-after the connection design review. Keep the welcome unchanged, then offer equally
+Offer equally
 weighted Hermes Cloud and Use an address routes. Both destination screens use the
 same 112 dp portrait, feather cluster, “Where’s your Hermes?” heading and bottom
 Continue action. Preserve the complete address journey. Cloud instance selection
@@ -186,7 +180,7 @@ showing a profile offer connections and profiles, except Analytics, whose dropdo
 offers only profiles following the owner’s 19 September refinement. Each target is at least 48 dp.
 Use the standard Studio popup surface and selected background tint. This applies
 to Chats, conversations, Activity, Administration, Health and administration
-drill-downs. See [workspace selection](design/2026-09-18-workspace-picker.md).
+drill-downs.
 
 Use Android's Roboto sans typography explicitly across component themes and monospace for code. Keep the existing compact Activity geometry. Its tabs, badges and disclosures are deliberate density exceptions to the general control dimensions.
 
@@ -210,11 +204,10 @@ The selection audit covers App settings and composer preferences; Activity filte
 
 ## Conversation preservation
 
-The owner approved the [network continuity behavior](design/2026-09-16-network-continuity.md)
-on 16 September 2026: a shared LED on the left of each server identity, quiet
+Network continuity uses a shared LED on the left of each server identity, quiet
 bounded recovery, retained conversation state, and immediate notification
-navigation with cached reading where available. Use that specification for
-connection cues, accessible status targets and the two recovery journeys.
+navigation with cached reading where available. Use these rules for
+connection cues, accessible status targets and recovery journeys.
 
 Keep the existing Activity disclosure, tool counts, Tools/Tasks/Agents/Work tabs when available, thinking disclosure, nested tool rows, guide line, selection, expansion state, scroll anchoring and copyable details. Do not add extra outer cards, timeline dots or permanent rows simply because the raster mockup draws them. Use the current component geometry as the baseline and apply color/type/border refinements. Approvals and questions remain outside collapsible tool results.
 
@@ -358,8 +351,7 @@ and expired profile checks refresh automatically. Missing server results trigger
 Growing select-only values, page titles and large-text field labels must remain
 readable at 320 dp/200%. Keep 48 dp controls and keyboard-safe editor actions.
 Transient changed-value emphasis respects reduced motion. Failed saves reveal their
-explanation while preserving the draft. The accepted requirements and evidence are
-in [Plan 003](../plans/003-administration-experience.md).
+explanation while preserving the draft.
 
 ## Verification
 
