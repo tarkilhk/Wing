@@ -288,3 +288,79 @@ resolved by the notification-action fix. Raw captures remain private.
 User preference for subsequent test prompts: provide a copyable text block plus
 separate clickable Sent confirmation, rather than putting the prompt only in a
 question or blockquote.
+
+### WING-LOCK-2330: privacy observed; post-unlock decision missed expiry
+
+- 12:39:53: exact test chat Working before Home/screen sleep. Existing lock
+  delay was respected; keyguard showing=true and inputRestricted=true by
+  12:40:26. Secure/enabled lock verified; no security settings changed.
+- Real approval delivered by 12:40:23. Locked Samsung shade exposes generic
+  Wing text, with command and approval buttons hidden by phone privacy policy.
+- 12:43:12: Wing entry tapped while keyguard remained showing=true and input
+  restricted; the same approval remained pending. No approval choice was sent.
+- Explicit NOW unlock cue and clickable Phone unlocked question sent; user
+  confirmed normal unlock. Keyguard readback showed showing=false and
+  inputRestricted=false. No decision was tapped after unlocking before expiry.
+- By 12:46:49 the same notification showed the final result: approval timed
+  out, script did not run, no retry or policy change. Operator delay prevented
+  the post-unlock decision; this is neither an app failure nor a complete pass.
+- The locked-entry tap did not establish that the action Activity launched:
+  screen timeout and hidden controls limit that evidence. Repeat promptly with
+  a new print-only request and complete the explicit decision after unlocking.
+- This configuration cannot exercise a visible Once button while locked because
+  Samsung hides its content/actions. Preserve that limit in the final evidence.
+
+### WING-LOCK-RETRY: locked privacy and post-unlock Once accepted
+
+- 12:54:50: exact test chat Working observed on the list; backgrounded and
+  screen put to sleep. Existing secure keyguard became showing=true and
+  inputRestricted=true. No security settings changed.
+- By 12:55:44, real print-only approval existed. Actual locked screen showed
+  generic Wing content without command or choices. User received an explicit
+  NOW unlock cue, then confirmed normal unlock. Readback showed showing=false
+  and inputRestricted=false; command and four choices were visible afterward.
+- 12:57:46: explicit native Once tap on the verified WING-LOCK-RETRY command.
+  By 12:57:54, the same notification ID held its successful execution result.
+  Hermes's prose again said no approval was generated, contradicted by the
+  actual pending request, captured controls, and accepted phone decision.
+- Monitoring disappeared by 12:57:21 and remained absent before the tap. This
+  is a successful real-phone approval after watcher shutdown. No pre-tap
+  socket/netpolicy trace was captured, so do not claim APP_BACKGROUND blocking
+  or a particular disconnected recovery branch was established by this run.
+- **N13 partial:** privacy and normal-unlock/explicit-action flow passed.
+  Direct action while locked followed by cancelled authentication remains
+  unexercised because Samsung hides actions under the current privacy policy.
+- Manual remains temporarily enabled for the continuing approval tests.
+
+### WING-LARGE-ALWAYS: enlarged actions and cancellation passed
+
+- 13:05:39: recorded original system font scale 1.0, temporarily set 2.0.
+  Exact test chat Working observed before backgrounding. Actual print-only
+  approval arrived by 13:06:15.
+- In Samsung's light notification shade at 200% text, all four choices remained
+  visible in two rows. The command clipped, so full-command review was required.
+- 13:07:34: native Always tap opened the owning chat and its dark review dialog;
+  correct command displayed. Cancel and Always allow remained reachable at
+  enlarged size. Cancel tapped; fresh UI still showed the same pending approval.
+- Then explicitly denied in chat. Final answer confirmed no execution, retry,
+  policy change, or substitute operation. No permanent/session grant was made.
+  Original font scale 1.0 restored after the check.
+- **N19 controlled confirmation/cancellation PASS.** Permanent acceptance was
+  deliberately not tested because the stock execute_code pattern is broad.
+- **N11 enlarged-text light shade and dark dialog coverage passed.** Dark
+  notification shade remains uninspected; preserve that visual coverage limit.
+- Usability observation: at 200% text, the permanent-pattern warning follows
+  a long backend description below the initially visible scroll area. The
+  description itself says approval is one-shot, creating confusing wording
+  alongside Always. The existing warning is present in the scrollable content
+  in source; it was not scrolled into view in this capture. No scope change
+  was inferred from the backend prose and no Always confirmation was accepted.
+
+The user separately reported that the connection indicator can say unavailable
+while chatting still works, and explicitly requested one subagent. Its focused
+investigation and regression evidence are recorded in
+[connection status investigation](2026-09-24-connection-status-investigation.md).
+
+Post-batch cleanup: original font scale **1.0** restored. Claw/default approval
+mode saved back to **Smart** and read back with no unsaved changes; timeout 300
+and existing allowlist retained. No live test approval remains pending.
