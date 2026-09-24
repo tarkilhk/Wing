@@ -446,6 +446,10 @@ class _AdminToolModelsPageState extends State<AdminToolModelsPage> {
                   keyPrefix: 'tool-model',
                   groupByProvider: false,
                   promoteSelected: true,
+                  selectedStatus:
+                      _pendingModel != null && _pendingModel != current
+                      ? 'Pending selection · Use model to apply'
+                      : 'Selected',
                   enabled: !_busy,
                 ),
               ),

@@ -109,6 +109,7 @@ class ModelChooser extends StatefulWidget {
   final Key? refreshKey;
   final bool groupByProvider;
   final bool promoteSelected;
+  final String? selectedStatus;
   final bool enabled;
   final VoidCallback? onReviewProviderAccess;
 
@@ -125,6 +126,7 @@ class ModelChooser extends StatefulWidget {
     this.refreshKey,
     this.groupByProvider = true,
     this.promoteSelected = false,
+    this.selectedStatus,
     this.enabled = true,
     this.onReviewProviderAccess,
   });
@@ -216,7 +218,23 @@ class _ModelChooserState extends State<ModelChooser> {
       value: ModelSelection.model(choice),
       enabled: widget.enabled,
       title: Text(choice.label),
-      subtitle: description.isEmpty ? null : Text(description.join(' · ')),
+      subtitle: selected && widget.selectedStatus != null
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.selectedStatus!,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (description.isNotEmpty) Text(description.join(' · ')),
+              ],
+            )
+          : description.isEmpty
+          ? null
+          : Text(description.join(' · ')),
     );
     return selected ? KeyedSubtree(key: _selectedAnchor, child: tile) : tile;
   }

@@ -58,12 +58,23 @@ void main() {
       tester.getTopLeft(oldModel).dy,
       lessThan(tester.getTopLeft(newModel).dy),
     );
+    expect(
+      find.descendant(of: oldModel, matching: find.text('Selected')),
+      findsOneWidget,
+    );
 
     await tester.tap(newModel);
     await tester.pumpAndSettle();
     expect(
       tester.getTopLeft(newModel).dy,
       lessThan(tester.getTopLeft(oldModel).dy),
+    );
+    expect(
+      find.descendant(
+        of: newModel,
+        matching: find.text('Pending selection · Use model to apply'),
+      ),
+      findsOneWidget,
     );
     expect(fixture.requests.where((request) => request.$1 == 'PUT'), isEmpty);
     await tester.tap(find.text('Use model'));
@@ -75,6 +86,10 @@ void main() {
     await tester.tap(find.text('Use model'));
     await tester.pumpAndSettle();
     expect(current, 'new-model');
+    expect(
+      find.descendant(of: newModel, matching: find.text('Selected')),
+      findsOneWidget,
+    );
     expect(
       fixture.requests.where((request) => request.$1 == 'PUT'),
       hasLength(2),

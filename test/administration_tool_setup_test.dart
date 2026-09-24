@@ -6,7 +6,7 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'support/administration_fixture.dart';
 
 void main() {
-  testWidgets('selected tool provider moves to the top with a tinted card', (
+  testWidgets('selected tool provider moves to the top with an outlined card', (
     tester,
   ) async {
     final fixture = AdministrationFixture();
@@ -57,6 +57,19 @@ void main() {
           )
           .color,
       wingTheme(Brightness.light).colorScheme.primaryContainer,
+    );
+    expect(
+      (tester
+                  .widget<Card>(
+                    find.descendant(of: selected, matching: find.byType(Card)),
+                  )
+                  .shape
+              as RoundedRectangleBorder)
+          .side,
+      BorderSide(
+        color: wingTheme(Brightness.light).colorScheme.primary,
+        width: 2,
+      ),
     );
     expect(
       find.descendant(of: selected, matching: find.text('Selected')),

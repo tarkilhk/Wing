@@ -109,6 +109,15 @@ class AdminGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
     color: selected ? Theme.of(context).colorScheme.primaryContainer : null,
+    shape: selected
+        ? RoundedRectangleBorder(
+            borderRadius: WingRadius.card,
+            side: BorderSide(
+              color: Theme.of(context).colorScheme.primary,
+              width: 2,
+            ),
+          )
+        : null,
     child: Column(
       children: [
         for (var i = 0; i < children.length; i++) ...[
