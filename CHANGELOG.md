@@ -2,9 +2,27 @@
 
 ## Unreleased
 
+## [1.1.1] - 2026-09-25
+
 - Long-press an Administration profile pill to choose from Desktop's profile
   color palette or restore its automatic color. The device-saved choice also
   colors that profile in Chats.
+- Choose models through a consistent search and selection flow in Chat, profile
+  defaults, helper and fallback settings, scheduled tasks, and image and video
+  tools. Keep pending choices visible through refresh or save errors, and use
+  one clearly labelled confirmation for each setting. Remove the misleading
+  speech Models entry where Hermes has no model catalogue.
+- Refresh the chat model catalogue, reveal matching provider groups during
+  search, and link to provider access when a model is missing.
+- Put selected tool providers and models first. Outline the selected provider
+  card, label saved and pending model choices, and distinguish Web search and
+  extraction providers.
+- Offer Android autofill in provider keys, connector credentials, connection
+  headers, sensitive prompts, and backup password fields.
+- Recover stalled profile connections without leaving a stale warning, and
+  open the intended chat when a notification is tapped from Administration.
+- Update Android secure storage, Gradle and GitHub Actions dependencies;
+  refresh public guides and remove outdated planning documents.
 
 ## [1.1.0] - 2026-09-24
 
