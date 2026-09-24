@@ -34,10 +34,6 @@ jobs:
           cache-provider: basic
           cache-read-only: true
 
-      - name: Verify Gradle setup
-        working-directory: android
-        run: ./gradlew help --no-daemon
-
       - name: Set up Flutter
         uses: ./.github/actions/setup-flutter
         with:
@@ -56,6 +52,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
         id: pub_get
+
+      - name: Verify Gradle setup with Android debug build
+        run: flutter build apk --debug --no-pub
 
       - name: Test release tooling
         run: python3 -m unittest discover -s scripts/tests -v
