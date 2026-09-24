@@ -29,7 +29,7 @@ Back unwinds the current preview or editor, then returns from a conversation to 
 
 Profile selection belongs to this client. It must not call `POST /api/profiles/active` to change the server's sticky selection. Discover canonical profiles before opening their workspace. Capture the connection/profile/chat when beginning an operation; late responses cannot retarget writes or replace a newer selection.
 
-Modern profile-aware dashboard and Desktop Gateway contracts are required. Missing discovery/authentication is an error to explain and repair, not a reason to enter an implicit legacy profile. Selecting another profile must leave accepted work running under its original owner. See the [profile ADR](adr/0001-request-scoped-hermes-profiles.md) and [background lifetime ADR](adr/0002-background-session-continuity.md) for the original decisions.
+Modern profile-aware dashboard and Desktop Gateway contracts are required. Missing discovery/authentication is an error to explain and repair. Selecting another profile must leave accepted work running under its original owner.
 
 ## Filters and search
 

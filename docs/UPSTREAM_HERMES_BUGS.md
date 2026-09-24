@@ -90,9 +90,7 @@ a stdio MCP service, and enable/test it. Delete that profile through
 backend process tree releases the handle and permits filesystem cleanup. The
 same emulator lifecycle test deletes profiles without MCP handles successfully.
 
-**Evidence:** [Administration acceptance](TESTING.md#recorded-live-baseline),
-local `build/admin-live-run2.log` and `build/admin-live-run2-backend.err.log`,
-backend revision `e16f686706b1e0d5334fd1ae82190058d2a19694`.
+**Evidence:** The original reproduction is recorded in [Wing issue #8](https://github.com/tarkilhk/Wing/issues/8) and [the upstream report](https://github.com/NousResearch/hermes-agent/issues/110953).
 
 **Retest to close:** Start/test a stdio connector in a disposable Windows profile,
 delete it while Hermes remains running, and verify successful deletion and
