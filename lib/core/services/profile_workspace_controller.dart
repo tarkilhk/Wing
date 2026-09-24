@@ -3846,6 +3846,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     );
   }
 
+  Future<List<ChatModelChoice>> refreshModelChoices(ProfileChat chat) async {
+    final gateway = _owned(chat).gateway;
+    final response = await gateway.read('model/options', {'refresh': '1'});
+    _owned(chat);
+    return ChatModelChoice.fromOptions(response);
+  }
+
   Future<bool> _writeIntelligence(
     ProfileChat chat,
     ChatIntelligenceSelection selection, {

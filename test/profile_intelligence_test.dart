@@ -280,4 +280,41 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('model picker refreshes the current profile and reveals Codex', (
+    tester,
+  ) async {
+    host.codexAppearsOnRefresh = true;
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('chat-intelligence-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('choose-chat-model')));
+    await tester.pumpAndSettle();
+    expect(find.text('OpenAI subscription'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('refresh-chat-models')));
+    await tester.pumpAndSettle();
+
+    expect(host.modelOptionReads, [
+      {'profile': 'personal'},
+      {'profile': 'personal', 'refresh': '1'},
+    ]);
+    expect(find.text('OpenAI subscription'), findsOneWidget);
+    expect(find.text('Models updated. Still missing a model?'), findsOneWidget);
+    expect(
+      find.byKey(const Key('review-model-provider-access')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('model-openai-codex-gpt-5.6-sol')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
 }

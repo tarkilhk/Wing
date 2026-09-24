@@ -68,6 +68,7 @@ import '../services/android_voice.dart';
 import '../services/hermes_voice.dart';
 import '../services/voice_preferences.dart';
 import 'administration/voice_settings_navigation.dart';
+import 'administration/provider_access_navigation.dart';
 
 enum _AttachmentChoice { camera, photos, files }
 
@@ -1963,6 +1964,15 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         initialReasoningEffort: chat.reasoningEffort ?? 'medium',
         defaultModel: options.defaultModel,
         defaultProvider: options.defaultProvider,
+        profileName: chat.key.workspace.profileName,
+        refreshModels: () => controller.refreshModelChoices(chat),
+        reviewProviderAccess: () => openProfileProviderAccess(
+          context,
+          connection: controller.connection,
+          connectionIdentity: controller.connectionIdentity,
+          connectionStatus: controller.connectionStatus,
+          profileName: chat.key.workspace.profileName,
+        ),
       );
       if (selection != null && mounted) {
         await controller.setIntelligence(

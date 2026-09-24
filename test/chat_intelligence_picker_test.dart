@@ -83,6 +83,9 @@ void main() {
               initialReasoningEffort: 'high',
               defaultModel: 'gpt-6-astra',
               defaultProvider: 'openai',
+              profileName: 'personal',
+              onRefreshModels: () async => choices,
+              onReviewProviderAccess: () {},
               onCancel: () {},
               onApply: (selection) => result = selection,
             ),
@@ -148,6 +151,9 @@ void main() {
             initialChoice: grouped.first,
             initialReasoningEffort: 'high',
             defaultModel: 'shared-model',
+            profileName: 'personal',
+            onRefreshModels: () async => grouped,
+            onReviewProviderAccess: () {},
             onCancel: () {},
             onApply: (selection) => result = selection,
           ),
@@ -209,6 +215,79 @@ void main() {
       ),
     );
 
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('failed model refresh keeps choices and offers account review', (
+    tester,
+  ) async {
+    var reviewed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        home: Scaffold(
+          body: ChatIntelligenceSheet(
+            choices: choices,
+            initialChoice: choices.first,
+            initialReasoningEffort: 'high',
+            defaultModel: choices.first.model,
+            profileName: 'client-work',
+            onRefreshModels: () async => throw StateError('offline'),
+            onReviewProviderAccess: () => reviewed = true,
+            onCancel: () {},
+            onApply: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('choose-chat-model')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('refresh-chat-models')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Refresh failed. Previous list shown.'), findsOneWidget);
+    expect(find.byKey(const Key('model-provider-openai')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('review-model-provider-access')));
+    expect(reviewed, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('account review closes the picker and invokes navigation', (
+    tester,
+  ) async {
+    var reviewed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showChatIntelligencePicker(
+                context: context,
+                choices: choices,
+                initialChoice: choices.first,
+                initialReasoningEffort: 'high',
+                defaultModel: choices.first.model,
+                profileName: 'client-work',
+                refreshModels: () async => choices,
+                reviewProviderAccess: () async => reviewed = true,
+              ),
+              child: const Text('Open picker'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open picker'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('choose-chat-model')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('refresh-chat-models')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('review-model-provider-access')));
+    await tester.pumpAndSettle();
+
+    expect(reviewed, isTrue);
+    expect(find.byKey(const Key('model-page')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
