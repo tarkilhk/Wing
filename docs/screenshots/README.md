@@ -14,7 +14,7 @@ APK or evidence of a live Hermes connection.
 | `appearance-dark.png` | `test/app_settings_design_test.dart`, dark Appearance view with default preferences |
 | `welcome-light.png` | `docs/design/images/wing-welcome-light.png`, Studio welcome preview |
 
-The generated previews were captured from the Flutter renderer on 24 September
-2026. Their test fixtures use synthetic labels, values and dates. Before replacing
-them, inspect each new image at full resolution and ensure that no personal or
-server data is visible.
+The new test-rendered previews were captured on 24 September 2026; the welcome
+preview is an existing Studio asset. Their fixtures use synthetic labels, values
+and dates. Before replacing them, inspect each new image at full resolution and
+ensure that no personal or server data is visible.
