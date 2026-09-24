@@ -76,38 +76,10 @@ If Wing makes your Hermes setup more useful, you can help fund its development. 
 
 [**Sponsor on GitHub**](https://github.com/sponsors/tarkilhk) · [**Buy me a coffee**](https://ko-fi.com/tarkil)
 
-## Build and contribute
-
-Use Flutter 3.44.0 with its bundled Dart SDK, Java 17 and Android SDK platform 36, matching CI.
-
-```sh
-flutter pub get
-flutter analyze --fatal-infos
-flutter test
-flutter build apk --debug
-```
-
-On Windows, use the guarded launcher in [Contributing](CONTRIBUTING.md). Run tests and Android builds sequentially. Live-server tests are opt-in and can create or change server data; read their prerequisites first.
-
-[Contributing](CONTRIBUTING.md) · [Release instructions](docs/ANDROID_RELEASE_PLAN.md) · [Changelog](CHANGELOG.md) · [Documentation](docs/README.md) · [Wing identity and artwork](docs/design/2026-09-15-wing-identity.md)
-
-<details>
-<summary>App identity and repository name</summary>
-
-The official name and wordmark are **Wing**, with a capital **W**. Development builds use **Wing Dev**. Package identifiers remain lowercase.
-
-- Release package: `com.tarkilhk.wing`.
-- Ordinary debug package: `com.tarkilhk.wing.dev`. Signed development builds can use the release package, as described in the [release guide](docs/ANDROID_RELEASE_PLAN.md#identity-and-versioning).
-- Wing uses a new application ID with separate local data. Backups and recovery journals from the previous identity are not migrated.
-- Repository: `tarkilhk/Wing`.
-- Wing's package and signing identity are separate from the original Hermes Android client.
-
-[pubspec.yaml](pubspec.yaml) declares the source version. App settings shows the installed version. Source changes do not imply a published APK.
-
-</details>
-
-## Help and provenance
+## Help and contribute
 
 Found a client problem? [Open an issue](https://github.com/tarkilhk/Wing/issues) with reproducible steps, following the [redaction guidance](SECURITY.md). The [privacy policy](PRIVACY.md) covers storage, server processing, dictation and deletion, and is available offline in App settings.
 
 Wing is an independently developed Android client for Hermes Agent, built on the open-source work of [rusty4444](https://github.com/rusty4444) and the Hermes Android contributors. Licensed under [MIT](LICENSE). See [NOTICE.md](NOTICE.md) for credits and third-party notices.
+
+[Contribute](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Documentation](docs/README.md)
