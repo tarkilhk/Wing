@@ -73,7 +73,18 @@ After deployment, exercise the same multiple-profile connection and return from
 background/lock. Confirm that working chat plus successful retry returns the
 connection-wide label to Connected. If it still reports interrupted, capture the
 specific profile observations and recovery membership before another change.
-This change has not yet been deployed or marked phone-verified.
+The exact formerly failed owner still needs a targeted phone retest; deployment
+and startup evidence alone do not prove which owner caused that occurrence.
+
+Deployment follow-up: committed as `d6cf733`, pushed to main, and installed as
+signed non-debuggable Wing **2331 / 23312** with app data preserved. Package,
+ARM64 architecture and pinned release certificate verified before installation;
+installed package version read back. APK SHA256:
+`05d8d6a6f299fc83fb9602963e07c0688445943fc5329bf1fa990c49b0726841`.
+Initial launch now displays **Claw, Connected** with the existing chat list.
+The same Connected label remained after a 20-second Home interval and resume.
+These are startup/resume smoke passes, not proof of the exact pre-update failed
+owner or a reproduced interrupted background-profile recovery on the phone.
 
 The prevention is to keep status contributors and recovery ownership aligned;
 connection health must not depend on whether the user happened to open a

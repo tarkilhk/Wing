@@ -364,3 +364,10 @@ investigation and regression evidence are recorded in
 Post-batch cleanup: original font scale **1.0** restored. Claw/default approval
 mode saved back to **Smart** and read back with no unsaved changes; timeout 300
 and existing allowlist retained. No live test approval remains pending.
+
+Connection-status follow-up: 2331 / 23312 (`d6cf733`) installed after full-suite
+2,708 passes / 12 opt-in skips, clean analysis and release identity/signature
+checks. Startup shows Connected; exact previous failed owner was not captured.
+The native notification layout remains the tested 2330 implementation. Attempt
+to finish dark-shade 200% inspection in the isolated emulator was interrupted
+when that emulator disconnected; do not record a visual pass for that attempt.

@@ -1,9 +1,10 @@
 # Notification test status
 
 Updated **24 September 2026** during the remaining physical-phone tests.
-Galaxy S23 Ultra / Android 16; Wing **2330**, version **1.0.1 / 23302**.
-Clean fix installed; live Once passed with monitoring active. The separate
-idle/disconnected recovery regression remains pending.
+Galaxy S23 Ultra / Android 16; Wing **2331**, version **1.0.1 / 23312**.
+Latest notification live checks ran on 2330. The separate connection-status fix
+is now installed; initial startup shows Connected. Live Once also passed after
+watcher shutdown, without proving a specific pre-tap network restriction.
 
 **Both bug-fix follow-ups now pass. Zero focused retests remain.**
 [Final live result](2026-09-23-notification-final-live-result.md).
@@ -71,6 +72,13 @@ UX observation, not an outstanding failure of these two focused retests.
 Multi-chat/profile isolation and counts cannot be proved by these one-chat runs.
 
 ## Installed build and validation
+
+- Current installed update **2331 / 23312**, source `d6cf733`, fixes connection
+  recovery membership. Full suite **2,708 passed / 12 skipped**, clean analysis,
+  signed non-debuggable ARM64 verification and data-preserving install passed.
+  [Investigation and deployment evidence](2026-09-24-connection-status-investigation.md).
+- Earlier notification-specific release evidence follows; these older build
+  numbers are historical, not the currently installed package.
 
 - Production fix: `8dae23b`; signed build **2329**, Android version code **23292**.
   Data-preserving installation and physical phone package readback verified.
