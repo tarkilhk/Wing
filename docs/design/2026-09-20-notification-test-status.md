@@ -1,7 +1,7 @@
 # Notification test status
 
 Updated **24 September 2026** during the remaining physical-phone tests.
-Galaxy S23 Ultra / Android 16; Wing **2331**, version **1.0.1 / 23312**.
+Galaxy S23 Ultra / Android 16; Wing **2332**, version **1.0.1 / 23322**.
 Latest notification live checks ran on 2331. The separate connection-status fix
 is now installed; initial startup shows Connected. Live Once also passed after
 watcher shutdown, without proving a specific pre-tap network restriction.
@@ -127,6 +127,6 @@ New observation awaiting investigation: duplicate monitoring cards appeared in S
 
 The duplicate review, monitoring-card and recovered-preview issues are fixed in
 [2332 review fixes](2026-09-24-notification-review-fixes.md). Automated and native
-evidence, limitations, and the exact phone retests are recorded there. Phone
-still has 2331 until deployment is confirmed; do not treat build completion as
-a device test pass.
+evidence, limitations, and the exact phone retests are recorded there. Phone installation of 2332 is confirmed, with app data preserved and Claw
+Connected on launch. The documented phone retests remain outstanding; this
+startup check does not establish their outcomes.

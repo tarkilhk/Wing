@@ -65,7 +65,9 @@ transitions fetch one history page, only at that observed transition.
 - Actual Studio dialog captures inspected in light/dark themes at 100% and 200%.
   Scope and confirmation controls remain visible; long commands scroll.
 - Production 2332 / 23322 built as signed, non-debuggable ARM64. Final APK SHA-256:
-  `b97b84376ed03dfc4ef78d0948c18892b0ca3cea05bbb230a29335bdac809fb4`. Deployment awaits the phone's current debugging port.
+  `b97b84376ed03dfc4ef78d0948c18892b0ca3cea05bbb230a29335bdac809fb4`. Installed on the physical phone with app data preserved. Package version
+  read back as 23322; launch showed Chats and Claw, Connected. This is a
+  deployment smoke check; the phone scenarios below still require retesting.
 
 Private captures/logs are under `/tmp/wing-notification-fixes*` and are not committed.
 
