@@ -21,8 +21,7 @@ class BackgroundMonitoringService : Service() {
         notification.setContentTitle(MonitoringRuntime.summary["title"])
             .setContentText(MonitoringRuntime.summary["text"])
         val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(notificationId, notification.setGroupSummary(false).build())
-        manager.notify(summaryId, notification.setGroupSummary(true).build())
+        manager.notify(notificationId, notification.build())
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -66,8 +65,6 @@ class BackgroundMonitoringService : Service() {
                 .setShowWhen(false)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setGroup(groupKey)
-                .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
             this.builder = builder
             instance = this
             val notification = builder.build()
@@ -76,9 +73,8 @@ class BackgroundMonitoringService : Service() {
             } else {
                 startForeground(notificationId, notification)
             }
-            // A complete group keeps the connection separate from chat alerts.
-            // Android 16 can regroup a lone child or a summary without children.
-            manager.notify(summaryId, builder.setGroupSummary(true).build())
+            // The foreground service owns exactly one monitoring card.
+            manager.cancel(summaryId)
             if (wakeLock == null) {
                 wakeLock = getSystemService(PowerManager::class.java)
                     .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:hermes-monitoring")
@@ -110,6 +106,5 @@ class BackgroundMonitoringService : Service() {
         private const val channelId = "hermes_monitoring"
         private const val notificationId = 214601
         private const val summaryId = 214602
-        private const val groupKey = "wing_connection"
     }
 }

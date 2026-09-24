@@ -1,3 +1,4 @@
+import 'core/widgets/notification_approval_review.dart';
 import 'core/screens/administration/admin_widgets.dart' show adminToolbarHeight;
 import 'core/widgets/server_connection_label.dart';
 import 'core/widgets/connection_icon_picker.dart';
@@ -503,17 +504,22 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
       var chat = owner.findNotificationChat(key);
       final mustReview =
           data['review'] == true || choice == 'always' || chat == null;
-      if (mustReview) {
-        await WidgetsBinding.instance.endOfFrame;
-        await openProfileNotification(payload);
-        chat = owner.findNotificationChat(key);
-      }
-      if (chat == null ||
-          chat.opening ||
-          chat.offlineSnapshot ||
-          chat.status == ProfileTurnStatus.reconnecting) {
+      try {
+        chat ??= await owner.loadNotificationApproval(key);
+      } catch (_) {
+        final context = _navigatorKey.currentContext;
+        if (context != null && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Approval could not be loaded. Reconnect and tap the notification again.',
+              ),
+            ),
+          );
+        }
         return;
       }
+      if (chat == null) return;
       final current = _chatNotices.inputFor(jsonEncode(key.toJson()));
       if (current != null && current.focus.identity != focus.identity) return;
       final request = chat.approval;
@@ -522,61 +528,25 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         final context = _navigatorKey.currentContext;
         if (context == null || !context.mounted) return;
         final approval = GatewayApprovalRequest.fromEventData(request);
-        final confirmed = await showDialog<bool>(
+        final target = chat;
+        await showDialog<void>(
           context: context,
-          builder: (context) => AlertDialog(
-            title: Text(
-              choice == 'always'
-                  ? 'Always allow this command pattern?'
-                  : 'Review command',
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SelectableText(approval.command),
-                  if (approval.description.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text(approval.description),
-                  ],
-                  if (choice == 'always')
-                    const Padding(
-                      padding: EdgeInsets.only(top: 12),
-                      child: Text(
-                        'Hermes will permanently allow the matching command pattern, including future matching commands.',
-                      ),
-                    ),
-                  if (choice == 'session')
-                    const Padding(
-                      padding: EdgeInsets.only(top: 12),
-                      child: Text(
-                        'Allow the matching command pattern for this session.',
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: Text(switch (choice) {
-                  'always' => 'Always allow',
-                  'session' => 'Allow for session',
-                  'deny' => 'Deny',
-                  _ => 'Allow once',
-                }),
-              ),
-            ],
+          barrierDismissible: false,
+          builder: (_) => NotificationApprovalReview(
+            request: approval,
+            choice: choice,
+            changes: owner,
+            offline: () =>
+                target.offlineSnapshot ||
+                target.status == ProfileTurnStatus.reconnecting,
+            pending: () => target.approval?['request_id'] == focus.id,
+            submit: () =>
+                owner.approveNotification(target, choice, requestId: focus.id),
           ),
         );
-        if (confirmed != true || _disposed) return;
+        return;
       }
-      await owner.approve(chat, choice, requestId: focus.id);
+      await owner.approveNotification(chat, choice, requestId: focus.id);
     } catch (_) {
       // The controller retains the exact request and exposes unconfirmed status.
       // An intent is never saved as an authorization to retry on reconnect.

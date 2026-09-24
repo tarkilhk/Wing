@@ -102,7 +102,7 @@ object ChatNotifications {
     }
     fun detach() { channel?.setMethodCallHandler(null); channel = null; ready = false; pendingActions.clear() }
 
-    fun interact(context: Context, value: JSONObject) {
+    fun interact(context: Context, value: JSONObject, completed: (() -> Unit)? = null) {
         // Only dismissals survive process death. A permission choice must never
         // become a deferred grant replayed on some later launch.
         if (value.optBoolean("dismiss")) {
@@ -112,8 +112,16 @@ object ChatNotifications {
             queue.put(value)
             prefs.edit().putString("pending", queue.toString()).commit()
         }
-        if (ready && channel != null) channel!!.invokeMethod("interaction", asMap(value))
-        else if (!value.optBoolean("dismiss")) pendingActions.add(value)
+        if (ready && channel != null) {
+            channel!!.invokeMethod("interaction", asMap(value), object : MethodChannel.Result {
+                override fun success(result: Any?) { completed?.invoke() }
+                override fun error(code: String, message: String?, details: Any?) { completed?.invoke() }
+                override fun notImplemented() { completed?.invoke() }
+            })
+        } else {
+            if (!value.optBoolean("dismiss")) pendingActions.add(value)
+            completed?.invoke()
+        }
     }
     private fun asMap(value: JSONObject): Map<String, Any?> = value.keys().asSequence().associateWith {
         val item = value.get(it)
@@ -223,6 +231,7 @@ class NotificationDismissReceiver : BroadcastReceiver() {
 /** An activity PendingIntent permits unlock and cold-start UI without a trampoline. */
 class NotificationActionActivity : Activity() {
     private var sent = false
+    private var resumed = false
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         if (Build.VERSION.SDK_INT >= 27) setShowWhenLocked(true)
@@ -233,19 +242,32 @@ class NotificationActionActivity : Activity() {
                 override fun onDismissCancelled() { finish() }
                 override fun onDismissError() { finish() }
             })
-        } else if (!keyguard.isKeyguardLocked) deliver()
-        else {
+        } else if (keyguard.isKeyguardLocked) {
             // On API 24/25 let the normal app activity wait behind the lock screen.
             openMain()
         }
     }
+    override fun onResume() {
+        super.onResume()
+        resumed = true
+        deliver()
+    }
+    override fun onPause() {
+        resumed = false
+        super.onPause()
+    }
     private fun deliver() {
-        if (sent || getSystemService(KeyguardManager::class.java).isKeyguardLocked) return
+        if (!resumed || sent || getSystemService(KeyguardManager::class.java).isKeyguardLocked) return
         sent = true
         val raw = intent.getStringExtra(ChatNotifications.extra) ?: return finish()
         val value = JSONObject(raw)
         if (value.optBoolean("review") || !ChatNotifications.hasLiveEngine()) openMain()
-        else { ChatNotifications.interact(this, value); finish() }
+        else {
+            // A retained engine does not give a background UID network access.
+            // Keep this user-started activity resumed through recovery and the
+            // decision acknowledgement, rather than finishing at dispatch.
+            ChatNotifications.interact(this, value) { finish() }
+        }
     }
     private fun openMain() {
         startActivity(Intent(this, MainActivity::class.java)

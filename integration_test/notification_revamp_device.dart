@@ -2,6 +2,7 @@
 /// install this fixture under the production package. Hermes is entirely fake.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -57,11 +58,13 @@ Future<void> main() async {
   await controller.switchProfile('a');
   final chat = await controller.createChat()
     ..title = 'Website refresh';
+  final chatGateway = host.gateways['a']!;
   await controller.switchProfile('b');
   final other = await controller.createChat()
     ..title = 'Weekly report';
+  final otherGateway = host.gateways['b']!;
   void event(ProfileChat target, String type, Map<String, dynamic> data) {
-    host.gateways[target.key.workspace.profileName]!.onEvent!(
+    (identical(target, chat) ? chatGateway : otherGateway).onEvent!(
       StreamEvent(type: type, sessionId: target.runtimeId, data: data),
     );
   }
@@ -121,6 +124,16 @@ Future<void> main() async {
             'message':
                 'The provider is unavailable. Review the chat before retrying.',
           });
+        case '/disconnect':
+          host.connectFailures = data['fail'] == true ? 20 : 0;
+          chatGateway.onConnectionChanged!(
+            false,
+          );
+        case '/delay-decision':
+          host.approvalDelay = Completer<void>();
+        case '/release-decision':
+          host.approvalDelay?.complete();
+          host.approvalDelay = null;
         case '/fail':
           host.approvalFails = data['enabled'] == true;
         case '/remote':
