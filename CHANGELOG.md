@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+## [1.1.0] - 2026-09-24
+
+Wing 1.1.0 brings a more capable mobile workspace, clearer server administration,
+and stronger recovery while Hermes works in the background. These notes cover
+changes since the `v1.0.1` source tag.
+
+### Highlights
+
+- Browse chats with profile and project filters, compact working-state animation,
+  more useful menus, and a steadier reading position while replies stream.
+- Inspect a redesigned analytics dashboard with token trends, a year of daily
+  activity, model breakdowns, and clearly labelled API-equivalent cost estimates.
+- Manage profile scheduled tasks, MCP connections and sign-in, provider access,
+  and server/profile health from the reorganized administration screens.
+- Dictate into editable drafts and read replies aloud using separately chosen
+  on-device or Hermes speech processing. Live provider and speech-quality checks
+  remain pending.
+- Review approval requests from Android notifications, recover missed replies
+  after connection interruptions, and retry uncertain work without resending a
+  draft automatically. Background delivery still depends on Android and the
+  connected Hermes session.
+- Connect through Nous Portal to discover Hermes Cloud instances, with live
+  hosted-instance connection still awaiting acceptance testing. Add launcher
+  shortcuts for Quick Chat, Activity and Search chats; support development
+  voluntarily through GitHub Sponsors or Ko-fi.
+
+### Detailed changes
+
+- Confirm server warnings before switching a chat model, including large-context
+  cost warnings.
+
 - Preserve verified unfinished work through network outages and failed reads,
   recover the actual missed reply before stopping monitoring, and show
   reconnecting status while its outcome is uncertain.

@@ -85,7 +85,7 @@ void main() {
   late List<Map<String, dynamic>> rows;
   bool offline = false;
   setUp(() {
-    fixture = AdministrationFixture('Claw');
+    fixture = AdministrationFixture('Demo server');
     addTearDown(fixture.server.close);
     rows = [_sol(), _astra()];
     offline = false;
