@@ -104,9 +104,11 @@ double adminToolbarHeight(
 
 class AdminGroup extends StatelessWidget {
   final List<Widget> children;
-  const AdminGroup({super.key, required this.children});
+  final bool selected;
+  const AdminGroup({super.key, required this.children, this.selected = false});
   @override
   Widget build(BuildContext context) => Card(
+    color: selected ? Theme.of(context).colorScheme.primaryContainer : null,
     child: Column(
       children: [
         for (var i = 0; i < children.length; i++) ...[

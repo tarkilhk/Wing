@@ -76,6 +76,26 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
   bool _busy = false;
   String? _notice;
   bool _noticeIsError = false;
+
+  String? _selectedLabel(Map<String, dynamic> data, Map<String, dynamic> row) {
+    if (widget.name == 'web') {
+      final backend = row['web_backend'];
+      if (backend == null) return null;
+      final capabilities = [
+        for (final capability in ['search', 'extract'])
+          if (data['active_${capability}_backend'] == backend) capability,
+      ];
+      return capabilities.isEmpty
+          ? null
+          : 'Selected for ${capabilities.join(' and ')}';
+    }
+    return row['is_active'] == true ||
+            (data['active_provider'] != null &&
+                data['active_provider'] == row['name'])
+        ? 'Selected'
+        : null;
+  }
+
   Future<void> _provider(
     Map<String, dynamic> row,
     VoidCallback refresh, [
@@ -183,6 +203,10 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
       load: () => _profile.read('$_base/config'),
       builder: (context, data, refresh) {
         final providers = administrationRows(data['providers']);
+        final orderedProviders = [
+          ...providers.where((row) => _selectedLabel(data, row) != null),
+          ...providers.where((row) => _selectedLabel(data, row) == null),
+        ];
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -196,15 +220,32 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
               const AdminNotice(
                 'No guided provider setup is reported for this toolset.',
               ),
-            for (final row in providers)
+            for (final row in orderedProviders)
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: AdminGroup(
+                  key: Key('tool-provider-${row['name']}'),
+                  selected: _selectedLabel(data, row) != null,
                   children: [
-                    ListTile(
-                      title: Text('${row['name']}'),
-                      subtitle: Text(
-                        '${row['status'] ?? 'Unknown readiness'}${row['is_active'] == true ? ' · Selected' : ''}',
+                    Semantics(
+                      selected: _selectedLabel(data, row) != null,
+                      child: ListTile(
+                        selected: _selectedLabel(data, row) != null,
+                        title: Text('${row['name']}'),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (_selectedLabel(data, row) case final label?)
+                              Text(
+                                label,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            Text('${row['status'] ?? 'Unknown readiness'}'),
+                          ],
+                        ),
                       ),
                     ),
                     Padding(
@@ -404,6 +445,7 @@ class _AdminToolModelsPageState extends State<AdminToolModelsPage> {
                   scopeLabel: 'Models for ${widget.provider}',
                   keyPrefix: 'tool-model',
                   groupByProvider: false,
+                  promoteSelected: true,
                   enabled: !_busy,
                 ),
               ),

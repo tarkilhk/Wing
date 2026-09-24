@@ -108,6 +108,7 @@ class ModelChooser extends StatefulWidget {
   final String keyPrefix;
   final Key? refreshKey;
   final bool groupByProvider;
+  final bool promoteSelected;
   final bool enabled;
   final VoidCallback? onReviewProviderAccess;
 
@@ -123,6 +124,7 @@ class ModelChooser extends StatefulWidget {
     this.keyPrefix = 'model',
     this.refreshKey,
     this.groupByProvider = true,
+    this.promoteSelected = false,
     this.enabled = true,
     this.onReviewProviderAccess,
   });
@@ -226,6 +228,15 @@ class _ModelChooserState extends State<ModelChooser> {
     final filtered = _choices
         .where((choice) => _matches(choice, query))
         .toList();
+    final selected = widget.selected?.choice;
+    if (widget.promoteSelected && selected != null) {
+      final index = filtered.indexWhere(
+        (choice) =>
+            choice.provider == selected.provider &&
+            choice.model == selected.model,
+      );
+      if (index > 0) filtered.insert(0, filtered.removeAt(index));
+    }
     final groups = <String, List<ModelChoice>>{};
     for (final choice in filtered) {
       groups.putIfAbsent(choice.provider, () => []).add(choice);

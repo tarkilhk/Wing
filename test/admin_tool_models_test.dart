@@ -52,8 +52,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('tool-model-example-new-model')));
+    final oldModel = find.byKey(const Key('tool-model-example-old-model'));
+    final newModel = find.byKey(const Key('tool-model-example-new-model'));
+    expect(
+      tester.getTopLeft(oldModel).dy,
+      lessThan(tester.getTopLeft(newModel).dy),
+    );
+
+    await tester.tap(newModel);
     await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(newModel).dy,
+      lessThan(tester.getTopLeft(oldModel).dy),
+    );
     expect(fixture.requests.where((request) => request.$1 == 'PUT'), isEmpty);
     await tester.tap(find.text('Use model'));
     await tester.pumpAndSettle();
