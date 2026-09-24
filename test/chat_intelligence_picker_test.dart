@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/chat_intelligence_picker.dart';
+import 'package:wing/core/widgets/model_chooser.dart';
 
 void main() {
   test('model options reject malformed lists instead of partial choices', () {
@@ -17,16 +18,16 @@ void main() {
       ],
     ]) {
       expect(
-        () => ChatModelChoice.fromOptions({'providers': providers}),
+        () => ModelChoice.fromOptions({'providers': providers}),
         throwsFormatException,
       );
     }
   });
 
   const choices = [
-    ChatModelChoice(provider: 'openai', model: 'gpt-6-astra'),
-    ChatModelChoice(provider: 'openai', model: 'gpt-5.6-luna'),
-    ChatModelChoice(provider: 'anthropic', model: 'claude-sonnet-4.6'),
+    ModelChoice(provider: 'openai', model: 'gpt-6-astra'),
+    ModelChoice(provider: 'openai', model: 'gpt-5.6-luna'),
+    ModelChoice(provider: 'anthropic', model: 'claude-sonnet-4.6'),
   ];
 
   test('builds a compact label without changing the model ID', () {
@@ -130,12 +131,12 @@ void main() {
     tester,
   ) async {
     const grouped = [
-      ChatModelChoice(
+      ModelChoice(
         provider: 'opencode-go',
         providerLabel: 'OpenCode',
         model: 'shared-model',
       ),
-      ChatModelChoice(
+      ModelChoice(
         provider: 'anthropic-subscription',
         providerLabel: 'Anthropic subscription',
         model: 'shared-model',
@@ -251,6 +252,49 @@ void main() {
     expect(reviewed, isTrue);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'refreshed choices remain available after returning to reasoning',
+    (tester) async {
+      const added = ModelChoice(provider: 'new-route', model: 'new-model');
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: ChatIntelligenceSheet(
+              choices: choices,
+              initialChoice: choices.first,
+              initialReasoningEffort: 'high',
+              defaultModel: choices.first.model,
+              profileName: 'client-work',
+              onRefreshModels: () async => const [...choices, added],
+              onReviewProviderAccess: () {},
+              onCancel: () {},
+              onApply: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('choose-chat-model')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('refresh-chat-models')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('model-search')),
+        'new-model',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('model-new-route-new-model')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('choose-chat-model')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('model-new-route-new-model')),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('account review closes the picker and invokes navigation', (
     tester,

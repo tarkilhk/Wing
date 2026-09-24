@@ -17,6 +17,7 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/theme/wing_icons.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/widgets/chat_intelligence_picker.dart';
+import 'package:wing/core/widgets/model_chooser.dart';
 import 'package:wing/core/widgets/compact_switch.dart';
 import 'package:wing/core/widgets/playful_portrait.dart';
 import 'package:wing/main.dart';
@@ -590,7 +591,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await _capture(tester, '${brightness.name}-controls');
-      const choice = ChatModelChoice(provider: 'openai', model: 'gpt-6-astra');
+      const choice = ModelChoice(provider: 'openai', model: 'gpt-6-astra');
       await tester.pumpWidget(
         RepaintBoundary(
           key: _frame,
@@ -601,7 +602,7 @@ void main() {
               body: ChatIntelligenceSheet(
                 choices: const [
                   choice,
-                  ChatModelChoice(provider: 'anthropic', model: 'claude-opus'),
+                  ModelChoice(provider: 'anthropic', model: 'claude-opus'),
                 ],
                 initialChoice: choice,
                 initialReasoningEffort: 'high',

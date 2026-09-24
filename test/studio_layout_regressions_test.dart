@@ -18,7 +18,7 @@ import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/config_backup_card.dart';
 import 'package:wing/core/widgets/profile_default_model_sheet.dart';
-import 'package:wing/core/widgets/chat_intelligence_picker.dart';
+import 'package:wing/core/widgets/model_chooser.dart';
 import 'support/administration_fixture.dart';
 
 const export = bool.fromEnvironment('STUDIO_AUDIT_REVIEW');
@@ -409,9 +409,16 @@ void main() {
             Scaffold(
               body: Builder(
                 builder: (context) => TextButton(
-                  onPressed: () => chooseAdminModel(context, const [
-                    ChatModelChoice(provider: 'example', model: 'first-model'),
-                  ]),
+                  onPressed: () => chooseAdminModel(
+                    context,
+                    const [
+                      ModelChoice(provider: 'example', model: 'first-model'),
+                    ],
+                    scopeLabel: 'Models for example',
+                    onRefresh: () async => const [
+                      ModelChoice(provider: 'example', model: 'first-model'),
+                    ],
+                  ),
                   child: const Text('Choose'),
                 ),
               ),
@@ -423,13 +430,15 @@ void main() {
         await tester.pumpAndSettle();
         await tester.enterText(find.byType(TextField), 'no-such-model');
         await tester.pumpAndSettle();
-        expect(find.text('No models match this search.'), findsOneWidget);
+        expect(find.text('No matching models'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await capture(tester, 'admin-model-${brightness.name}-200-keyboard');
-        await tester.ensureVisible(find.text('Clear search'));
-        await tester.tap(find.text('Clear search'));
+        await tester.tap(find.byTooltip('Clear model search'));
         await tester.pumpAndSettle();
-        expect(find.text('first-model'), findsOneWidget);
+        expect(
+          find.byKey(const Key('admin-model-provider-example')),
+          findsOneWidget,
+        );
       },
     );
   }

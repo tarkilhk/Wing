@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 import '../../widgets/chat_intelligence_picker.dart';
+import '../../widgets/model_chooser.dart';
 import '../../widgets/profile_default_model_sheet.dart';
 import 'admin_widgets.dart';
 import 'admin_settings_page.dart';
@@ -18,15 +19,30 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
   late final _profile = widget.profile;
   bool _busy = false;
   String? _error;
+  final _pendingAux = <String, ModelSelection>{};
   Future<void> _aux(
     String task,
-    List<ChatModelChoice> choices,
-    VoidCallback refresh,
-  ) async {
-    final choice = task == '__reset__'
-        ? const ChatModelChoice(provider: 'auto', model: '')
-        : await chooseAdminModel(context, choices, allowAuto: true);
-    if (choice == null || !mounted) return;
+    List<ModelChoice> choices,
+    VoidCallback refresh, {
+    ModelSelection? initialSelection,
+  }) async {
+    final selection = task == '__reset__'
+        ? const ModelSelection.special(ModelSpecialChoice.automatic)
+        : await chooseAdminModel(
+            context,
+            choices,
+            scopeLabel: 'Helper model for ${task.replaceAll('_', ' ')}',
+            onRefresh: () async => ModelChoice.fromOptions(
+              await _profile.read('model/options', {
+                'explicit_only': '1',
+                'refresh': '1',
+              }),
+            ),
+            initialSelection: _pendingAux[task] ?? initialSelection,
+            allowAuto: true,
+            actionLabel: 'Set helper model',
+          );
+    if (selection == null || !mounted) return;
     if (task == '__reset__' &&
         !await adminConfirm(
           context,
@@ -36,16 +52,32 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
         )) {
       return;
     }
+    await _saveAux(task, selection, refresh);
+  }
+
+  Future<void> _saveAux(
+    String task,
+    ModelSelection selection,
+    VoidCallback refresh,
+  ) async {
+    final choice = selection.choice;
+    final provider = selection.special == ModelSpecialChoice.automatic
+        ? 'auto'
+        : choice!.provider;
+    final model = selection.special == ModelSpecialChoice.automatic
+        ? ''
+        : choice!.model;
     setState(() {
       _busy = true;
       _error = null;
+      if (task != '__reset__') _pendingAux[task] = selection;
     });
     try {
       final body = {
         'scope': 'auxiliary',
         'task': task,
-        'provider': choice.provider,
-        'model': choice.model,
+        'provider': provider,
+        'model': model,
       };
       var result = await _profile.write('POST', 'model/set', body);
       if (result['confirm_required'] == true) {
@@ -74,8 +106,7 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
       );
       if (targets.isEmpty ||
           targets.any(
-            (r) =>
-                r['provider'] != choice.provider || r['model'] != choice.model,
+            (r) => r['provider'] != provider || r['model'] != model,
           )) {
         throw const AdministrationFailure(
           'Helper model save could not be confirmed.',
@@ -83,6 +114,7 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
       }
       refresh();
       if (mounted) {
+        setState(() => _pendingAux.remove(task));
         adminMessage(context, 'Helper defaults saved for ${_profile.name}.');
       }
     } catch (e) {
@@ -92,6 +124,22 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  String _auxSummary(Map<String, dynamic> task, List<ModelChoice> choices) {
+    final pending = _pendingAux[task['task']];
+    if (pending != null) {
+      final choice = pending.choice;
+      return choice == null
+          ? 'Pending: Automatic'
+          : 'Pending: ${choice.provider} / ${choice.model}';
+    }
+    if (task['provider'] == 'auto') return 'Automatic';
+    final listed = choices.any(
+      (choice) =>
+          choice.provider == task['provider'] && choice.model == task['model'],
+    );
+    return '${task['provider']} / ${task['model']}${listed ? '' : ' · Not in the available model list'}';
   }
 
   @override
@@ -110,7 +158,7 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
       builder: (context, data, refresh) {
         final info = data['info'] as Map;
         final options = Map<String, dynamic>.from(data['options'] as Map);
-        final choices = ChatModelChoice.fromOptions(options);
+        final choices = ModelChoice.fromOptions(options);
         final provider = administrationRows(
           options['providers'],
         ).where((r) => (r['slug'] ?? r['id']) == info['provider']).firstOrNull;
@@ -250,15 +298,36 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
                 for (final task in tasks)
                   ListTile(
                     title: Text('${task['task']}'.replaceAll('_', ' ')),
-                    subtitle: Text(
-                      task['provider'] == 'auto'
-                          ? 'Automatic'
-                          : '${task['provider']} / ${task['model']}${choices.any((c) => c.provider == task['provider'] && c.model == task['model']) ? '' : ' · Not in the available model list'}',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
+                    subtitle: Text(_auxSummary(task, choices)),
+                    trailing: _pendingAux.containsKey(task['task'])
+                        ? TextButton(
+                            onPressed: _busy
+                                ? null
+                                : () => _saveAux(
+                                    task['task'] as String,
+                                    _pendingAux[task['task']]!,
+                                    refresh,
+                                  ),
+                            child: const Text('Retry'),
+                          )
+                        : const Icon(Icons.chevron_right),
                     onTap: _busy
                         ? null
-                        : () => _aux(task['task'] as String, choices, refresh),
+                        : () => _aux(
+                            task['task'] as String,
+                            choices,
+                            refresh,
+                            initialSelection: task['provider'] == 'auto'
+                                ? const ModelSelection.special(
+                                    ModelSpecialChoice.automatic,
+                                  )
+                                : ModelSelection.model(
+                                    ModelChoice(
+                                      provider: task['provider'] as String,
+                                      model: task['model'] as String,
+                                    ),
+                                  ),
+                          ),
                   ),
               ],
             ),
@@ -275,101 +344,92 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
   );
 }
 
-Future<ChatModelChoice?> chooseAdminModel(
+Future<ModelSelection?> chooseAdminModel(
   BuildContext context,
-  List<ChatModelChoice> choices, {
+  List<ModelChoice> choices, {
+  required String scopeLabel,
+  required Future<List<ModelChoice>> Function() onRefresh,
+  ModelSelection? initialSelection,
   bool allowAuto = false,
-}) => showDialog<ChatModelChoice>(
-  context: context,
-  builder: (_) => _AdminModelPicker(choices: choices, allowAuto: allowAuto),
-);
-
-class _AdminModelPicker extends StatefulWidget {
-  final List<ChatModelChoice> choices;
-  final bool allowAuto;
-  const _AdminModelPicker({required this.choices, required this.allowAuto});
-  @override
-  State<_AdminModelPicker> createState() => _AdminModelPickerState();
-}
-
-class _AdminModelPickerState extends State<_AdminModelPicker> {
-  String _query = '';
-  final _search = TextEditingController();
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    scrollable: true,
-    title: const Text('Choose model'),
-    content: SizedBox(
-      width: 480,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _search,
-            decoration: const InputDecoration(labelText: 'Search models'),
-            onChanged: (v) => setState(() => _query = v.toLowerCase()),
-          ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!widget.choices.any(
-                (c) =>
-                    '${c.provider} ${c.model}'.toLowerCase().contains(_query),
-              )) ...[
-                AdminNotice(
-                  _query.isEmpty
-                      ? 'No models are available from this provider.'
-                      : 'No models match this search.',
-                ),
-                if (_query.isNotEmpty)
-                  TextButton(
-                    onPressed: () {
-                      _search.clear();
-                      setState(() => _query = '');
-                    },
-                    child: const Text('Clear search'),
+  String actionLabel = 'Use model',
+}) {
+  ModelSelection? selected = initialSelection;
+  return showModalBottomSheet<ModelSelection>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (context, update) {
+        final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+        final height = (MediaQuery.sizeOf(context).height - keyboard - 24)
+            .clamp(0.0, MediaQuery.sizeOf(context).height * .82);
+        return Padding(
+          padding: EdgeInsets.only(bottom: keyboard),
+          child: SizedBox(
+            height: height,
+            child: Column(
+              children: [
+                ListTile(
+                  title: const Text('Choose model'),
+                  trailing: IconButton(
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.pop(sheetContext),
+                    icon: const Icon(Icons.close_rounded),
                   ),
+                ),
+                Expanded(
+                  child: ModelChooser(
+                    choices: choices,
+                    selected: selected,
+                    onSelected: (value) => update(() => selected = value),
+                    onRefresh: onRefresh,
+                    specialOptions: allowAuto
+                        ? const [
+                            ModelSpecialOption(
+                              ModelSpecialChoice.automatic,
+                              'Automatic',
+                              description:
+                                  'Hermes chooses for this helper task',
+                            ),
+                          ]
+                        : const [],
+                    scopeLabel: scopeLabel,
+                    keyPrefix: 'admin-model',
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: OverflowBar(
+                    alignment: MainAxisAlignment.end,
+                    spacing: 8,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(sheetContext),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        onPressed:
+                            selected == null || selected == initialSelection
+                            ? null
+                            : () => Navigator.pop(sheetContext, selected),
+                        child: Text(actionLabel),
+                      ),
+                    ],
+                  ),
+                ),
               ],
-              if (widget.allowAuto)
-                ListTile(
-                  title: const Text('Automatic'),
-                  onTap: () => Navigator.pop(
-                    context,
-                    const ChatModelChoice(provider: 'auto', model: ''),
-                  ),
-                ),
-              for (final choice in widget.choices.where(
-                (c) =>
-                    '${c.provider} ${c.model}'.toLowerCase().contains(_query),
-              ))
-                ListTile(
-                  title: Text(choice.model),
-                  subtitle: Text(choice.routeLabel),
-                  onTap: () => Navigator.pop(context, choice),
-                ),
-            ],
+            ),
           ),
-        ],
-      ),
+        );
+      },
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-    ],
   );
 }
 
 class AdminFallbackPage extends StatefulWidget {
   final ProfileAdministration profile;
-  final List<ChatModelChoice> choices;
+  final List<ModelChoice> choices;
   const AdminFallbackPage({
     super.key,
     required this.profile,
@@ -381,8 +441,10 @@ class AdminFallbackPage extends StatefulWidget {
 
 class _AdminFallbackPageState extends State<AdminFallbackPage> {
   List<Map<String, dynamic>>? _rows;
+  List<Map<String, dynamic>>? _pendingRows;
   Object? _loadedValue;
   bool _busy = false;
+  bool _conflict = false;
   String? _error;
   @override
   void initState() {
@@ -438,12 +500,14 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
     setState(() {
       _busy = true;
       _error = null;
+      _pendingRows = next;
     });
     try {
       final latest = await widget.profile.config();
       if (!sameSetting(latest['fallback_providers'] ?? [], _loadedValue)) {
+        _conflict = true;
         throw const AdministrationFailure(
-          'Fallback models changed elsewhere. Refresh before applying this change.',
+          'Fallback models changed elsewhere. Review the current and pending lists before applying.',
         );
       }
       await widget.profile.saveSettings({'fallback_providers': complete});
@@ -451,6 +515,8 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
         setState(() {
           _rows = next;
           _loadedValue = complete;
+          _pendingRows = null;
+          _conflict = false;
         });
       }
     } catch (e) {
@@ -459,6 +525,81 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
       }
     }
     if (mounted) setState(() => _busy = false);
+  }
+
+  String _summary(List<Map<String, dynamic>> rows) => rows.isEmpty
+      ? 'None'
+      : rows.map((row) => '${row['provider']} / ${row['model']}').join('\n');
+
+  Future<void> _reviewPending() async {
+    final pending = _pendingRows;
+    if (pending == null || _busy) return;
+    await _load();
+    if (!mounted || _error != null || _rows == null) return;
+    final accepted = await adminConfirm(
+      context,
+      'Review fallback changes',
+      'Current list:\n${_summary(_rows!)}\n\n'
+          'Your pending list:\n${_summary(pending)}',
+      action: 'Apply pending list',
+    );
+    if (!mounted || !accepted) return;
+    await _save(pending);
+  }
+
+  Future<List<ModelChoice>> _catalog({bool refresh = false}) async =>
+      ModelChoice.fromOptions(
+        await widget.profile.read('model/options', {
+          'explicit_only': '1',
+          if (refresh) 'refresh': '1',
+        }),
+      );
+
+  Future<void> _pickFallback({int? index}) async {
+    List<ModelChoice> choices;
+    try {
+      choices = await _catalog();
+    } catch (e) {
+      choices = widget.choices;
+      if (mounted) {
+        setState(
+          () => _error =
+              'Current model choices could not be loaded. Previous list shown.',
+        );
+      }
+    }
+    if (!mounted) return;
+    final row = index == null ? null : _rows![index];
+    final selected = await chooseAdminModel(
+      context,
+      choices,
+      scopeLabel: 'Fallback model for ${widget.profile.name}',
+      onRefresh: () => _catalog(refresh: true),
+      initialSelection:
+          row == null || row['provider'] == '' || row['model'] == ''
+          ? null
+          : ModelSelection.model(
+              ModelChoice(
+                provider: row['provider'] as String,
+                model: row['model'] as String,
+              ),
+            ),
+      actionLabel: index == null ? 'Add fallback' : 'Save fallback',
+    );
+    final choice = selected?.choice;
+    if (choice == null || !mounted) return;
+    final next = [..._rows!];
+    final value = <String, dynamic>{
+      ...?row,
+      'provider': choice.provider,
+      'model': choice.model,
+    };
+    if (index == null) {
+      next.add(value);
+    } else {
+      next[index] = value;
+    }
+    await _save(next);
   }
 
   @override
@@ -472,6 +613,19 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
           'Hermes tries these models in order. Changes are saved individually.',
         ),
         if (_error != null) AdminNotice.error(_error!, retry: _load),
+        if (_pendingRows != null)
+          TextButton(
+            onPressed: _busy
+                ? null
+                : _conflict
+                ? _reviewPending
+                : () => _save(_pendingRows!),
+            child: Text(
+              _conflict
+                  ? 'Review pending fallback change'
+                  : 'Retry pending fallback change',
+            ),
+          ),
         if (_rows == null && _error == null) const LinearProgressIndicator(),
         if (_rows != null) ...[
           if (_rows!.isEmpty)
@@ -488,22 +642,7 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
                     ? 'Choose provider'
                     : entry.$2['provider'] as String,
               ),
-              onTap: _busy
-                  ? null
-                  : () async {
-                      final choice = await chooseAdminModel(
-                        context,
-                        widget.choices,
-                      );
-                      if (choice == null || !mounted) return;
-                      final next = [..._rows!];
-                      next[entry.$1] = {
-                        ...entry.$2,
-                        'provider': choice.provider,
-                        'model': choice.model,
-                      };
-                      await _save(next);
-                    },
+              onTap: _busy ? null : () => _pickFallback(index: entry.$1),
               trailing: PopupMenuButton<String>(
                 tooltip: 'Manage fallback ${entry.$1 + 1}',
                 enabled: !_busy,
@@ -528,20 +667,7 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
               ),
             ),
           FilledButton.icon(
-            onPressed: _busy
-                ? null
-                : () async {
-                    final choice = await chooseAdminModel(
-                      context,
-                      widget.choices,
-                    );
-                    if (choice != null && mounted) {
-                      await _save([
-                        ..._rows!,
-                        {'provider': choice.provider, 'model': choice.model},
-                      ]);
-                    }
-                  },
+            onPressed: _busy ? null : () => _pickFallback(),
             icon: const Icon(Icons.add),
             label: const Text('Add fallback'),
           ),

@@ -44,6 +44,7 @@ import '../theme/profile_workspace_theme.dart';
 import '../theme/wing_theme.dart';
 import '../widgets/profile_activity_status.dart';
 import '../widgets/chat_intelligence_picker.dart';
+import '../widgets/model_chooser.dart';
 import '../widgets/chat_model_confirmation.dart';
 import '../widgets/context_ring.dart';
 import '../widgets/profile_execution_activity.dart';
@@ -1953,11 +1954,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       // Keep an existing model visible even if it is absent from today's catalog.
       final initial =
           choice ??
-          ChatModelChoice(
+          ModelChoice(
             provider: chat.provider ?? options.defaultProvider ?? '',
             model: chat.model ?? options.defaultModel,
           );
-      final selection = await showChatIntelligencePicker(
+      await showChatIntelligencePicker(
         context: context,
         choices: options.choices,
         initialChoice: initial,
@@ -1973,17 +1974,17 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           connectionStatus: controller.connectionStatus,
           profileName: chat.key.workspace.profileName,
         ),
+        onCommit: (selection) async {
+          return controller.setIntelligence(
+            chat,
+            selection,
+            confirmModelChange: (message) async {
+              if (!mounted || !context.mounted) return false;
+              return showChatModelConfirmation(context, message: message);
+            },
+          );
+        },
       );
-      if (selection != null && mounted) {
-        await controller.setIntelligence(
-          chat,
-          selection,
-          confirmModelChange: (message) async {
-            if (!mounted || !context.mounted) return false;
-            return showChatModelConfirmation(context, message: message);
-          },
-        );
-      }
     } finally {
       if (mounted) setState(() => _loadingIntelligence = null);
     }

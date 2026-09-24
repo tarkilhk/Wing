@@ -156,6 +156,48 @@ void main() {
     expect(find.text('Scheduled tasks'), findsOneWidget);
     expect(tester.takeException(), null);
   });
+  testWidgets('task model choice stays in the draft until task Save', (
+    tester,
+  ) async {
+    final c = await controller();
+    await show(tester, AdminScheduledTaskEditorPage(controller: c));
+    await tester.scrollUntilVisible(
+      find.text('Profile default'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Profile default'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('model-provider-anthropic')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('model-anthropic-claude-sonnet-4-5')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Use in task'), findsOneWidget);
+    expect(fixture.mutations, 0);
+    await tester.tap(find.text('Use in task'));
+    await tester.pumpAndSettle();
+    expect(fixture.mutations, 0);
+
+    await tester.scrollUntilVisible(
+      find.widgetWithText(TextFormField, 'Instructions'),
+      -300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Instructions'),
+      'Summarize my calendar.',
+    );
+    await tester.tap(find.text('Create task'));
+    await tester.pumpAndSettle();
+    final request = fixture.admin.requests.firstWhere(
+      (r) => r.$1 == 'POST' && r.$2 == 'cron/jobs',
+    );
+    expect(request.$4!['model'], 'claude-sonnet-4-5');
+    expect(request.$4!['provider'], 'anthropic');
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'edit name does not re-anchor schedule or erase advanced settings',
     (tester) async {

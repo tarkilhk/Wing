@@ -1,68 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../theme/wing_theme.dart';
+import 'model_chooser.dart';
 import 'studio_error.dart';
-
-/// One model exposed by the active Hermes profile.
-class ChatModelChoice {
-  final String provider;
-  final String model;
-  final String? providerLabel;
-
-  const ChatModelChoice({
-    required this.provider,
-    required this.model,
-    this.providerLabel,
-  });
-
-  String get routeLabel => providerLabel?.trim().isNotEmpty == true
-      ? providerLabel!.trim()
-      : provider;
-
-  /// Shared model/options response for per-chat and profile-default pickers.
-  static List<ChatModelChoice> fromOptions(Map<String, dynamic> response) {
-    final choices = <ChatModelChoice>[];
-    final providers = response['providers'];
-    if (providers is! List || providers.any((row) => row is! Map)) {
-      throw const FormatException('Expected a list of records');
-    }
-    for (final row in providers) {
-      final provider = Map<String, dynamic>.from(row as Map);
-      final slug =
-          (provider['slug'] ?? provider['id'])?.toString().trim() ?? '';
-      final label =
-          (provider['name'] ?? provider['display_name'] ?? provider['title'])
-              ?.toString()
-              .trim();
-      final models = provider['models'];
-      if (slug.isEmpty || models is! List) continue;
-      for (final value in models) {
-        final model = value is String
-            ? value.trim()
-            : value is Map
-            ? (value['id'] ?? value['model'] ?? value['name'])
-                      ?.toString()
-                      .trim() ??
-                  ''
-            : '';
-        if (model.isNotEmpty) {
-          choices.add(
-            ChatModelChoice(
-              provider: slug,
-              model: model,
-              providerLabel: label?.isEmpty == true ? null : label,
-            ),
-          );
-        }
-      }
-    }
-    return choices;
-  }
-}
+import 'studio_selection_tile.dart';
 
 /// The per-chat model and reasoning values chosen in the picker.
 class ChatIntelligenceSelection {
-  final ChatModelChoice choice;
+  final ModelChoice choice;
   final String reasoningEffort;
 
   const ChatIntelligenceSelection({
@@ -201,13 +146,14 @@ class ChatIntelligenceButton extends StatelessWidget {
 
 Future<ChatIntelligenceSelection?> showChatIntelligencePicker({
   required BuildContext context,
-  required List<ChatModelChoice> choices,
-  required ChatModelChoice initialChoice,
+  required List<ModelChoice> choices,
+  required ModelChoice initialChoice,
   required String initialReasoningEffort,
   required String defaultModel,
   required String profileName,
-  required Future<List<ChatModelChoice>> Function() refreshModels,
+  required Future<List<ModelChoice>> Function() refreshModels,
   required Future<void> Function() reviewProviderAccess,
+  Future<bool> Function(ChatIntelligenceSelection)? onCommit,
   String? defaultProvider,
 }) async {
   var reviewAccess = false;
@@ -216,6 +162,8 @@ Future<ChatIntelligenceSelection?> showChatIntelligencePicker({
     showDragHandle: true,
     isScrollControlled: true,
     useSafeArea: true,
+    isDismissible: false,
+    enableDrag: false,
     builder: (sheetContext) => ChatIntelligenceSheet(
       choices: choices,
       initialChoice: initialChoice,
@@ -230,6 +178,7 @@ Future<ChatIntelligenceSelection?> showChatIntelligencePicker({
       },
       onCancel: () => Navigator.pop(sheetContext),
       onApply: (selection) => Navigator.pop(sheetContext, selection),
+      onCommit: onCommit,
     ),
   );
   if (reviewAccess && context.mounted) await reviewProviderAccess();
@@ -238,15 +187,16 @@ Future<ChatIntelligenceSelection?> showChatIntelligencePicker({
 
 /// Model and reasoning picker used by the modal route and widget tests.
 class ChatIntelligenceSheet extends StatefulWidget {
-  final List<ChatModelChoice> choices;
-  final ChatModelChoice initialChoice;
+  final List<ModelChoice> choices;
+  final ModelChoice initialChoice;
   final String initialReasoningEffort;
   final String defaultModel;
   final String? defaultProvider;
   final String profileName;
-  final Future<List<ChatModelChoice>> Function() onRefreshModels;
+  final Future<List<ModelChoice>> Function() onRefreshModels;
   final VoidCallback onReviewProviderAccess;
   final ValueChanged<ChatIntelligenceSelection> onApply;
+  final Future<bool> Function(ChatIntelligenceSelection)? onCommit;
   final VoidCallback onCancel;
 
   const ChatIntelligenceSheet({
@@ -259,6 +209,7 @@ class ChatIntelligenceSheet extends StatefulWidget {
     required this.onReviewProviderAccess,
     required this.onApply,
     required this.onCancel,
+    this.onCommit,
     this.defaultProvider,
     super.key,
   });
@@ -268,15 +219,50 @@ class ChatIntelligenceSheet extends StatefulWidget {
 }
 
 class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
-  late List<ChatModelChoice> _choices;
-  late ChatModelChoice _selectedChoice;
+  late List<ModelChoice> _choices;
+  late ModelChoice _selectedChoice;
   late String _selectedEffort;
   bool _choosingModel = false;
-  bool _refreshing = false;
-  bool _refreshed = false;
-  bool _catalogChangedOnRefresh = false;
-  String? _refreshError;
-  String _modelQuery = '';
+  bool _applying = false;
+  String? _applyError;
+
+  Future<void> _apply() async {
+    if (_applying) return;
+    final selection = ChatIntelligenceSelection(
+      choice: _selectedChoice,
+      reasoningEffort: _selectedEffort,
+    );
+    final commit = widget.onCommit;
+    if (commit == null) {
+      widget.onApply(selection);
+      return;
+    }
+    setState(() {
+      _applying = true;
+      _applyError = null;
+    });
+    try {
+      final applied = await commit(selection);
+      if (!mounted) return;
+      if (applied) {
+        widget.onApply(selection);
+      } else {
+        setState(
+          () => _applyError =
+              'Model change cancelled. Your choice is still here.',
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(
+        () => _applyError = error is StateError
+            ? error.message.toString()
+            : 'Could not apply the model and reasoning. Your choice is still here.',
+      );
+    } finally {
+      if (mounted) setState(() => _applying = false);
+    }
+  }
 
   @override
   void initState() {
@@ -289,58 +275,32 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
         : 'medium';
   }
 
-  Future<void> _refreshModels() async {
-    if (_refreshing) return;
-    setState(() {
-      _refreshing = true;
-      _refreshed = false;
-      _refreshError = null;
-    });
-    try {
-      final choices = await widget.onRefreshModels();
-      if (!mounted) return;
-      setState(() {
-        final before = _choices
-            .map((choice) => (choice.provider, choice.model))
-            .toSet();
-        final after = choices
-            .map((choice) => (choice.provider, choice.model))
-            .toSet();
-        _catalogChangedOnRefresh =
-            before.length != after.length || !before.containsAll(after);
-        _choices = choices;
-        _refreshed = true;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _refreshed = true;
-        _refreshError = 'Refresh failed. Previous list shown.';
-      });
-    } finally {
-      if (mounted) setState(() => _refreshing = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     final availableHeight = MediaQuery.sizeOf(context).height * 0.86 - keyboard;
-    return Padding(
-      padding: EdgeInsets.only(bottom: keyboard),
-      child: SafeArea(
-        top: false,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: availableHeight.clamp(0, 720)),
-          child: AnimatedSize(
-            duration: WingMotion.standard,
-            alignment: Alignment.bottomCenter,
-            curve: WingMotion.curve,
-            child: AnimatedSwitcher(
+    return PopScope(
+      canPop: !_applying,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: keyboard),
+        child: SafeArea(
+          top: false,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: availableHeight.clamp(0, 720),
+            ),
+            child: AnimatedSize(
               duration: WingMotion.standard,
-              switchInCurve: WingMotion.curve,
-              switchOutCurve: WingMotion.curve,
-              child: _choosingModel ? _buildModelPage() : _buildReasoningPage(),
+              alignment: Alignment.bottomCenter,
+              curve: WingMotion.curve,
+              child: AnimatedSwitcher(
+                duration: WingMotion.standard,
+                switchInCurve: WingMotion.curve,
+                switchOutCurve: WingMotion.curve,
+                child: _choosingModel
+                    ? _buildModelPage()
+                    : _buildReasoningPage(),
+              ),
             ),
           ),
         ),
@@ -354,7 +314,10 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
       key: const ValueKey('reasoning-page'),
       mainAxisSize: MainAxisSize.min,
       children: [
-        _SheetHeader(title: 'Intelligence', onClose: widget.onCancel),
+        _SheetHeader(
+          title: 'Intelligence',
+          onClose: _applying ? null : widget.onCancel,
+        ),
         Flexible(
           child: ListView(
             shrinkWrap: true,
@@ -377,23 +340,27 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
                   style: tokens.typography.label.copyWith(color: tokens.muted),
                 ),
               ),
-              LayoutBuilder(
-                builder: (context, constraints) => Wrap(
-                  spacing: WingSpacing.sm,
-                  runSpacing: WingSpacing.xs,
-                  children: [
-                    for (final entry in chatReasoningEffortLabels.entries)
-                      SizedBox(
-                        width: (constraints.maxWidth - WingSpacing.sm) / 2,
-                        child: _PickerTile(
-                          key: Key('reasoning-${entry.key}'),
-                          title: entry.value,
-                          selected: entry.key == _selectedEffort,
-                          onTap: () =>
-                              setState(() => _selectedEffort = entry.key),
+              RadioGroup<String>(
+                groupValue: _selectedEffort,
+                onChanged: (value) {
+                  if (value != null) setState(() => _selectedEffort = value);
+                },
+                child: LayoutBuilder(
+                  builder: (context, constraints) => Wrap(
+                    spacing: WingSpacing.sm,
+                    runSpacing: WingSpacing.xs,
+                    children: [
+                      for (final entry in chatReasoningEffortLabels.entries)
+                        SizedBox(
+                          width: (constraints.maxWidth - WingSpacing.sm) / 2,
+                          child: StudioRadioTile<String>(
+                            key: Key('reasoning-${entry.key}'),
+                            value: entry.key,
+                            title: Text(entry.value),
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               const Divider(height: WingSpacing.md),
@@ -439,212 +406,55 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
             ],
           ),
         ),
+        if (_applyError != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: WingSpacing.lg),
+            child: StudioError(_applyError!),
+          ),
         _SheetActions(
-          onCancel: widget.onCancel,
-          onApply: () => widget.onApply(
-            ChatIntelligenceSelection(
-              choice: _selectedChoice,
-              reasoningEffort: _selectedEffort,
-            ),
-          ),
+          onCancel: _applying ? null : widget.onCancel,
+          onApply: _applying ? null : _apply,
+          applying: _applying,
         ),
       ],
     );
   }
 
-  Widget _buildModelPage() {
-    final tokens = WingTokens.of(context);
-    final normalizedQuery = _modelQuery.trim().toLowerCase();
-    final visibleChoices = _choices
-        .where((choice) {
-          if (normalizedQuery.isEmpty) return true;
-          return choice.model.toLowerCase().contains(normalizedQuery) ||
-              choice.provider.toLowerCase().contains(normalizedQuery) ||
-              choice.routeLabel.toLowerCase().contains(normalizedQuery);
-        })
-        .toList(growable: false);
-    final groups = <String, List<ChatModelChoice>>{};
-    for (final choice in visibleChoices) {
-      groups.putIfAbsent(choice.provider, () => []).add(choice);
-    }
-    final showRecovery = _refreshed;
-
-    return Column(
-      key: const ValueKey('model-page'),
-      children: [
-        _SheetHeader(
-          title: 'Model',
-          onBack: () => setState(() => _choosingModel = false),
-          onClose: widget.onCancel,
+  Widget _buildModelPage() => Column(
+    key: const ValueKey('model-page'),
+    children: [
+      _SheetHeader(
+        title: 'Model',
+        onBack: () => setState(() => _choosingModel = false),
+        onClose: _applying ? null : widget.onCancel,
+      ),
+      Expanded(
+        child: ModelChooser(
+          choices: _choices,
+          selected: ModelSelection.model(_selectedChoice),
+          onSelected: (selection) {
+            final choice = selection.choice;
+            if (choice == null) return;
+            setState(() {
+              _selectedChoice = choice;
+              _choosingModel = false;
+            });
+          },
+          onRefresh: widget.onRefreshModels,
+          onChoicesChanged: (choices) => setState(() => _choices = choices),
+          onReviewProviderAccess: widget.onReviewProviderAccess,
+          scopeLabel: 'Models for ${widget.profileName}',
+          refreshKey: const Key('refresh-chat-models'),
         ),
-        Expanded(
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    WingSpacing.lg,
-                    0,
-                    WingSpacing.lg,
-                    WingSpacing.sm,
-                  ),
-                  child: TextField(
-                    key: const Key('model-search'),
-                    decoration: const InputDecoration(
-                      hintText: 'Search models',
-                      prefixIcon: Icon(Icons.search_rounded),
-                      border: OutlineInputBorder(
-                        borderRadius: WingRadius.control,
-                      ),
-                      isDense: true,
-                    ),
-                    onChanged: (value) => setState(() => _modelQuery = value),
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    WingSpacing.lg,
-                    0,
-                    WingSpacing.lg,
-                    WingSpacing.xs,
-                  ),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Wrap(
-                      spacing: WingSpacing.sm,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          'Models for ${widget.profileName}',
-                          style: tokens.typography.label.copyWith(
-                            color: tokens.muted,
-                          ),
-                        ),
-                        TextButton.icon(
-                          key: const Key('refresh-chat-models'),
-                          onPressed: _refreshing ? null : _refreshModels,
-                          icon: _refreshing
-                              ? const SizedBox.square(
-                                  dimension: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.refresh_rounded, size: 18),
-                          label: Text(
-                            _refreshing ? 'Refreshing…' : 'Refresh models',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              if (showRecovery)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      WingSpacing.lg,
-                      0,
-                      WingSpacing.lg,
-                      WingSpacing.sm,
-                    ),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Wrap(
-                        spacing: WingSpacing.sm,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          if (_refreshError != null)
-                            StudioError(_refreshError!)
-                          else
-                            Semantics(
-                              liveRegion: true,
-                              child: Text(
-                                _choices.isEmpty
-                                    ? 'Hermes returned no models for this profile.'
-                                    : _catalogChangedOnRefresh
-                                    ? 'Models updated. Still missing a model?'
-                                    : 'List refreshed. Still missing a model?',
-                                style: tokens.typography.label.copyWith(
-                                  color: tokens.muted,
-                                ),
-                              ),
-                            ),
-                          TextButton(
-                            key: const Key('review-model-provider-access'),
-                            onPressed: widget.onReviewProviderAccess,
-                            child: const Text('Review provider access'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              if (visibleChoices.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Text(
-                      _choices.isEmpty && normalizedQuery.isEmpty
-                          ? 'No models available for this profile'
-                          : 'No matching models',
-                      style: tokens.typography.body.copyWith(
-                        color: tokens.muted,
-                      ),
-                    ),
-                  ),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: WingSpacing.sm,
-                  ),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate((context, index) {
-                      final provider = groups.keys.elementAt(index);
-                      final choices = groups[provider]!;
-                      final label = choices.first.routeLabel;
-                      return ExpansionTile(
-                        key: Key('model-provider-$provider'),
-                        initiallyExpanded: provider == _selectedChoice.provider,
-                        title: Text(label),
-                        subtitle: Text(provider),
-                        children: [
-                          for (final choice in choices)
-                            _PickerTile(
-                              key: Key(
-                                'model-${choice.provider}-${choice.model}',
-                              ),
-                              title: choice.model,
-                              selected:
-                                  choice.model == _selectedChoice.model &&
-                                  choice.provider == _selectedChoice.provider,
-                              onTap: () => setState(() {
-                                _selectedChoice = choice;
-                                _choosingModel = false;
-                                _modelQuery = '';
-                              }),
-                            ),
-                        ],
-                      );
-                    }, childCount: groups.length),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
 }
 
 class _SheetHeader extends StatelessWidget {
   final String title;
   final VoidCallback? onBack;
-  final VoidCallback onClose;
+  final VoidCallback? onClose;
 
   const _SheetHeader({required this.title, required this.onClose, this.onBack});
 
@@ -690,40 +500,16 @@ class _SheetHeader extends StatelessWidget {
   }
 }
 
-class _PickerTile extends StatelessWidget {
-  final String title;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _PickerTile({
-    required this.title,
-    required this.selected,
-    required this.onTap,
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = WingTokens.of(context);
-    return ListTile(
-      dense: true,
-      minTileHeight: 48,
-      minVerticalPadding: WingSpacing.xs,
-      contentPadding: const EdgeInsets.symmetric(horizontal: WingSpacing.sm),
-      shape: RoundedRectangleBorder(borderRadius: WingRadius.card),
-      selected: selected,
-      selectedTileColor: tokens.accent.withValues(alpha: 0.1),
-      title: Text(title, style: tokens.typography.body),
-      onTap: onTap,
-    );
-  }
-}
-
 class _SheetActions extends StatelessWidget {
-  final VoidCallback onCancel;
-  final VoidCallback onApply;
+  final VoidCallback? onCancel;
+  final VoidCallback? onApply;
+  final bool applying;
 
-  const _SheetActions({required this.onCancel, required this.onApply});
+  const _SheetActions({
+    required this.onCancel,
+    required this.onApply,
+    this.applying = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -745,7 +531,10 @@ class _SheetActions extends StatelessWidget {
         overflowSpacing: WingSpacing.xs,
         children: [
           TextButton(onPressed: onCancel, child: const Text('Cancel')),
-          FilledButton(onPressed: onApply, child: const Text('Apply')),
+          FilledButton(
+            onPressed: onApply,
+            child: Text(applying ? 'Applying…' : 'Apply'),
+          ),
         ],
       ),
     );

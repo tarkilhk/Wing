@@ -36,6 +36,7 @@ import 'workspace_connection_failure.dart';
 import 'server_connection_status.dart';
 import 'workspace_snapshot_store.dart';
 import '../widgets/chat_intelligence_picker.dart';
+import '../widgets/model_chooser.dart';
 import '../models/gateway_approval.dart';
 import '../models/gateway_sensitive_prompt.dart';
 import 'android_share_intent_service.dart';
@@ -3821,11 +3822,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   /// Reads and writes always use this chat's immutable profile owner and live ID.
   Future<
-    ({
-      List<ChatModelChoice> choices,
-      String defaultModel,
-      String? defaultProvider,
-    })
+    ({List<ModelChoice> choices, String defaultModel, String? defaultProvider})
   >
   loadIntelligence(ProfileChat chat) async {
     final gateway = _owned(chat).gateway;
@@ -3838,7 +3835,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }),
     ]);
     final defaults = results[0];
-    final choices = ChatModelChoice.fromOptions(results[1]);
+    final choices = ModelChoice.fromOptions(results[1]);
     if (choices.isEmpty) {
       throw StateError('This profile returned no selectable models.');
     }
@@ -3855,11 +3852,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
     );
   }
 
-  Future<List<ChatModelChoice>> refreshModelChoices(ProfileChat chat) async {
+  Future<List<ModelChoice>> refreshModelChoices(ProfileChat chat) async {
     final gateway = _owned(chat).gateway;
     final response = await gateway.read('model/options', {'refresh': '1'});
     _owned(chat);
-    return ChatModelChoice.fromOptions(response);
+    return ModelChoice.fromOptions(response);
   }
 
   Future<bool> _writeIntelligence(
@@ -3892,32 +3889,34 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
     await gateway.requireProfile();
     requireCurrentSelection();
-    final params = <String, dynamic>{
-      'session_id': runtime,
-      'key': 'model',
-      'value': WsClient.buildSessionModelValue(
-        provider: selection.choice.provider,
-        model: selection.choice.model,
-      ),
-    };
-    var result = await gateway.call('config.set', params);
-    if (result['confirm_required'] == true) {
-      requireCurrentSelection();
-      final message = result['confirm_message']?.toString().trim() ?? '';
-      final accepted = await confirmModelChange(
-        message.isEmpty
-            ? 'Hermes requires confirmation before using this model.'
-            : message,
-      );
-      if (!accepted) return false;
-      requireCurrentSelection();
-      result = await gateway.call('config.set', {
-        ...params,
-        'confirm_expensive_model': true,
-      });
-      // A repeated guard is a failed switch, never another approval or retry.
+    if (previousModel != selection.choice.model ||
+        previousProvider != selection.choice.provider) {
+      final params = <String, dynamic>{
+        'session_id': runtime,
+        'key': 'model',
+        'value': WsClient.buildSessionModelValue(
+          provider: selection.choice.provider,
+          model: selection.choice.model,
+        ),
+      };
+      var result = await gateway.call('config.set', params);
       if (result['confirm_required'] == true) {
-        throw StateError('Hermes did not accept the confirmed model change.');
+        requireCurrentSelection();
+        final message = result['confirm_message']?.toString().trim() ?? '';
+        final accepted = await confirmModelChange(
+          message.isEmpty
+              ? 'Hermes requires confirmation before using this model.'
+              : message,
+        );
+        if (!accepted) return false;
+        requireCurrentSelection();
+        result = await gateway.call('config.set', {
+          ...params,
+          'confirm_expensive_model': true,
+        });
+        if (result['confirm_required'] == true) {
+          throw StateError('Hermes did not accept the confirmed model change.');
+        }
       }
     }
     if (chat.runtimeId != runtime) {
@@ -3925,11 +3924,22 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     chat.model = selection.choice.model;
     chat.provider = selection.choice.provider;
-    await gateway.call('config.set', {
-      'session_id': runtime,
-      'key': 'reasoning',
-      'value': selection.reasoningEffort,
-    });
+    try {
+      await gateway.call('config.set', {
+        'session_id': runtime,
+        'key': 'reasoning',
+        'value': selection.reasoningEffort,
+      });
+    } catch (_) {
+      if (previousModel != selection.choice.model ||
+          previousProvider != selection.choice.provider) {
+        throw StateError(
+          'The model changed, but reasoning could not be confirmed. '
+          'Your choice is still here; Apply again to retry reasoning.',
+        );
+      }
+      rethrow;
+    }
     if (chat.runtimeId != runtime) {
       throw StateError('Chat reconnected. Try applying again.');
     }
@@ -3938,7 +3948,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     return true;
   }
 
-  Future<void> setIntelligence(
+  Future<bool> setIntelligence(
     ProfileChat chat,
     ChatIntelligenceSelection selection, {
     required Future<bool> Function(String message) confirmModelChange,
@@ -3965,9 +3975,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
         selection,
         confirmModelChange: confirmModelChange,
       );
-      if (!applied) return;
+      if (!applied) return false;
       chat.context = null;
       unawaited(refreshContext(chat));
+      return true;
     } finally {
       chat.changingIntelligence = false;
       _changed();

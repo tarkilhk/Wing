@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_defaults_page.dart';
 import 'package:wing/core/theme/wing_theme.dart';
-import 'package:wing/core/widgets/chat_intelligence_picker.dart';
+import 'package:wing/core/widgets/model_chooser.dart';
 
 import 'support/administration_fixture.dart';
 
@@ -27,7 +27,7 @@ Future<void> _open(WidgetTester tester, AdministrationFixture fixture) async {
     MaterialApp(
       home: AdminFallbackPage(
         profile: fixture.server.profile('default'),
-        choices: const [ChatModelChoice(provider: 'example', model: 'second')],
+        choices: const [ModelChoice(provider: 'example', model: 'second')],
       ),
     ),
   );
@@ -38,6 +38,19 @@ Future<void> _manage(WidgetTester tester, int index, String action) async {
   await tester.tap(find.byTooltip('Manage fallback $index'));
   await tester.pumpAndSettle();
   await tester.tap(find.text(action));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _selectSecond(WidgetTester tester, String action) async {
+  final model = find.byKey(const Key('admin-model-example-second'));
+  if (!tester.any(model.hitTestable())) {
+    await tester.tap(find.byKey(const Key('admin-model-provider-example')));
+    await tester.pumpAndSettle();
+  }
+  await tester.ensureVisible(model);
+  await tester.tap(model);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(action).last);
   await tester.pumpAndSettle();
 }
 
@@ -56,8 +69,7 @@ void main() {
       expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
       await tester.tap(find.text('Choose model'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('second'));
-      await tester.pumpAndSettle();
+      await _selectSecond(tester, 'Save fallback');
       expect(fixture.configs['default']!['fallback_providers'], [
         {'provider': 'example', 'model': 'second'},
         _entry,
@@ -81,8 +93,7 @@ void main() {
       expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
       await tester.tap(find.text('Add fallback'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('second'));
-      await tester.pumpAndSettle();
+      await _selectSecond(tester, 'Add fallback');
       expect(fixture.configs['default']!['fallback_providers'], [
         {'provider': 'example', 'model': 'team/model'},
         _entry,
@@ -111,8 +122,7 @@ void main() {
     await _open(tester, fixture);
     await tester.tap(find.text('backup-model'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('second'));
-    await tester.pumpAndSettle();
+    await _selectSecond(tester, 'Save fallback');
     expect(fixture.configs['default']!['fallback_providers'], [
       {..._entry, 'model': 'second'},
     ]);
@@ -129,6 +139,41 @@ void main() {
     expect(find.textContaining('changed elsewhere'), findsOneWidget);
     expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
   });
+
+  testWidgets(
+    'concurrent fallback changes require review before applying a pending list',
+    (tester) async {
+      final fixture = AdministrationFixture();
+      fixture.configs['default']!['fallback_providers'] = [_entry];
+      await _open(tester, fixture);
+      fixture.configs['default']!['fallback_providers'] = [
+        {'provider': 'example', 'model': 'external-model'},
+      ];
+
+      await tester.tap(find.text('Add fallback'));
+      await tester.pumpAndSettle();
+      await _selectSecond(tester, 'Add fallback');
+      expect(fixture.requests.where((request) => request.$1 == 'PUT'), isEmpty);
+      expect(find.text('Review pending fallback change'), findsOneWidget);
+
+      await tester.tap(find.text('Review pending fallback change'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('external-model'), findsWidgets);
+      expect(find.textContaining('second'), findsWidgets);
+      await tester.tap(find.text('Cancel').last);
+      await tester.pumpAndSettle();
+      expect(fixture.requests.where((request) => request.$1 == 'PUT'), isEmpty);
+
+      await tester.tap(find.text('Review pending fallback change'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply pending list'));
+      await tester.pumpAndSettle();
+      expect(
+        fixture.requests.where((request) => request.$1 == 'PUT'),
+        hasLength(1),
+      );
+    },
+  );
 
   const capture = bool.fromEnvironment('CAPTURE_FALLBACK');
   setUpAll(() async {
@@ -254,8 +299,7 @@ void main() {
     await _open(tester, fixture);
     await tester.tap(find.text('Add fallback'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('second'));
-    await tester.pumpAndSettle();
+    await _selectSecond(tester, 'Add fallback');
     expect(fixture.configs['default']!['fallback_providers'], [
       _entry,
       {'provider': 'example', 'model': 'second'},

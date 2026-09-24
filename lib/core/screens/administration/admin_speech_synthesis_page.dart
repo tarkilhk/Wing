@@ -16,11 +16,9 @@ import 'admin_widgets.dart';
 class AdminSpeechSynthesisPage extends StatefulWidget {
   final ProfileAdministration profile;
   final VoiceDevice? device;
-  final Future<void> Function(String provider) openModels;
   const AdminSpeechSynthesisPage({
     super.key,
     required this.profile,
-    required this.openModels,
     this.device,
   });
   @override
@@ -428,15 +426,6 @@ class _AdminSpeechSynthesisPageState extends State<AdminSpeechSynthesisPage>
                         : () => _setup(provider['post_setup'] as String),
                     child: const Text('Setup requirements'),
                   ),
-                TextButton(
-                  onPressed: _busy || _voices.saving
-                      ? null
-                      : () => _run(() async {
-                          await widget.openModels(provider['name'] as String);
-                          if (mounted) await _read();
-                        }),
-                  child: const Text('Models'),
-                ),
               ],
             ),
           ],

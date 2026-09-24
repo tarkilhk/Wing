@@ -137,12 +137,7 @@ void main() {
   ) async {
     await open(tester);
     expect(find.text('work on Central server'), findsOneWidget);
-    expect(
-      find.text(
-        'Sets the server default for this profile and applies to new sessions only. Running chats keep their current model.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('For new chats only'), findsOneWidget);
     expect(fixture.reads.singleWhere((read) => read.$1 == 'model/options').$2, {
       'explicit_only': '1',
       'profile': 'work',

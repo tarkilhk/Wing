@@ -138,6 +138,17 @@ class AdministrationFixture {
     if (path == 'model/info') {
       return {'provider': 'Example provider', 'model': 'Research model'};
     }
+    if (path == 'model/options') {
+      return {
+        'providers': [
+          {
+            'slug': 'example',
+            'name': 'Example',
+            'models': ['second', 'backup-model'],
+          },
+        ],
+      };
+    }
     if (path == 'tools/toolsets') return {'data': []};
     if (path == 'cron/jobs') return {'data': []};
     if (path == 'mcp/servers') return {'servers': []};

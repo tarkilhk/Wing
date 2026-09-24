@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
+import '../../widgets/model_chooser.dart';
 import 'admin_widgets.dart';
 import 'admin_operations_page.dart';
 import 'admin_providers_page.dart';
@@ -170,18 +171,7 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
   @override
   Widget build(BuildContext context) {
     if (widget.name == 'tts') {
-      return AdminSpeechSynthesisPage(
-        profile: _profile,
-        openModels: (provider) => adminPushProfile(
-          context,
-          _profile,
-          (context, profile) => AdminToolModelsPage(
-            profile: profile,
-            tool: 'tts',
-            provider: provider,
-          ),
-        ),
-      );
+      return AdminSpeechSynthesisPage(profile: _profile);
     }
     return _toolSetup(context);
   }
@@ -240,20 +230,24 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
                                   : () => _provider(row, refresh),
                               child: const Text('Use provider'),
                             ),
-                          TextButton(
-                            onPressed: _busy
-                                ? null
-                                : () => adminPushProfile(
-                                    context,
-                                    _profile,
-                                    (context, profile) => AdminToolModelsPage(
-                                      profile: profile,
-                                      tool: widget.name,
-                                      provider: row['name'] as String,
+                          if (const {
+                            'image_gen',
+                            'video_gen',
+                          }.contains(widget.name))
+                            TextButton(
+                              onPressed: _busy
+                                  ? null
+                                  : () => adminPushProfile(
+                                      context,
+                                      _profile,
+                                      (context, profile) => AdminToolModelsPage(
+                                        profile: profile,
+                                        tool: widget.name,
+                                        provider: row['name'] as String,
+                                      ),
                                     ),
-                                  ),
-                            child: const Text('Models'),
-                          ),
+                              child: const Text('Models'),
+                            ),
                           if (row['post_setup'] is String)
                             TextButton(
                               onPressed: _busy
@@ -317,33 +311,53 @@ class AdminToolModelsPage extends StatefulWidget {
 
 class _AdminToolModelsPageState extends State<AdminToolModelsPage> {
   bool _busy = false;
+  String? _error;
+  String? _pendingModel;
   String get _base => 'tools/toolsets/${Uri.encodeComponent(widget.tool)}';
-  Future<void> _select(String model, VoidCallback refresh) async {
-    setState(() => _busy = true);
+
+  Future<Map<String, dynamic>> _readCatalog() =>
+      widget.profile.read('$_base/models', {'provider': widget.provider});
+
+  List<ModelChoice> _choices(Map<String, dynamic> data) => [
+    for (final model in administrationRows(data['models'] ?? []))
+      if (model['id'] is String && (model['id'] as String).isNotEmpty)
+        ModelChoice(
+          provider: widget.provider,
+          model: model['id'] as String,
+          displayName: model['display']?.toString(),
+          detail: [model['strengths'], model['speed'], model['price']]
+              .where((value) => value != null && value.toString().isNotEmpty)
+              .join(' · '),
+        ),
+  ];
+
+  Future<void> _select(VoidCallback refresh) async {
+    final model = _pendingModel;
+    if (model == null || _busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
       await widget.profile.write('PUT', '$_base/model', {
         'model': model,
         'provider': widget.provider,
       });
-      final after = await widget.profile.read('$_base/models', {
-        'provider': widget.provider,
-      });
+      final after = await _readCatalog();
       if (after['current'] != model) {
         throw const AdministrationFailure(
           'Model selection could not be confirmed.',
         );
       }
+      if (mounted) setState(() => _pendingModel = null);
       refresh();
     } catch (e) {
       if (mounted) {
-        adminMessage(
-          context,
-          administrationError(e, writing: true),
-          isError: true,
-        );
+        setState(() => _error = administrationError(e, writing: true));
       }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    if (mounted) setState(() => _busy = false);
   }
 
   @override
@@ -351,29 +365,67 @@ class _AdminToolModelsPageState extends State<AdminToolModelsPage> {
     title: '${widget.provider} models',
     scope: widget.profile.label,
     child: AdminLoad(
-      load: () =>
-          widget.profile.read('$_base/models', {'provider': widget.provider}),
-      builder: (context, data, refresh) => ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (data['has_models'] != true)
-            const AdminNotice(
-              'This tool provider does not expose a model catalog here.',
-            ),
-          for (final model in administrationRows(data['models'] ?? []))
-            ListTile(
-              selected: data['current'] == model['id'],
-              enabled: !_busy,
-              title: Text('${model['display'] ?? model['id']}'),
-              subtitle: Text(
-                '${model['strengths'] ?? ''} ${model['price'] ?? ''}',
+      load: _readCatalog,
+      builder: (context, data, refresh) {
+        final choices = _choices(data);
+        final current = data['current']?.toString();
+        final selectedId = _pendingModel ?? current;
+        return Column(
+          children: [
+            if (_busy) const LinearProgressIndicator(),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: AdminNotice.error(_error!),
               ),
-              onTap: _busy
-                  ? null
-                  : () => _select(model['id'] as String, refresh),
-            ),
-        ],
-      ),
+            if (data['has_models'] != true)
+              const Expanded(
+                child: Center(
+                  child: AdminNotice(
+                    'This tool provider does not expose a model catalog here.',
+                  ),
+                ),
+              )
+            else
+              Expanded(
+                child: ModelChooser(
+                  choices: choices,
+                  selected: selectedId == null || selectedId.isEmpty
+                      ? null
+                      : ModelSelection.model(
+                          ModelChoice(
+                            provider: widget.provider,
+                            model: selectedId,
+                          ),
+                        ),
+                  onSelected: (selection) =>
+                      setState(() => _pendingModel = selection.choice?.model),
+                  onRefresh: () async => _choices(await _readCatalog()),
+                  scopeLabel: 'Models for ${widget.provider}',
+                  keyPrefix: 'tool-model',
+                  groupByProvider: false,
+                  enabled: !_busy,
+                ),
+              ),
+            if (data['has_models'] == true)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                    onPressed:
+                        _busy ||
+                            _pendingModel == null ||
+                            _pendingModel == current
+                        ? null
+                        : () => _select(refresh),
+                    child: Text(_busy ? 'Saving…' : 'Use model'),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     ),
   );
 }

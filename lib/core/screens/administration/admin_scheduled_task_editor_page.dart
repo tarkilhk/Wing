@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../models/scheduled_task.dart';
 import '../../services/scheduled_tasks_controller.dart';
-import '../../widgets/chat_intelligence_picker.dart';
+import '../../widgets/model_chooser.dart';
 import '../../widgets/studio_action_label.dart';
 import '../../widgets/studio_select.dart';
 import '../../widgets/studio_selection_tile.dart';
-import 'admin_defaults_page.dart';
 import 'admin_widgets.dart';
 import 'scheduled_task_widgets.dart';
 
@@ -46,7 +45,7 @@ class _AdminScheduledTaskEditorPageState
   late String model = widget.original?.text('model') ?? '';
   late String provider = widget.original?.text('provider') ?? '';
   List<TaskDeliveryTarget>? targets;
-  List<ChatModelChoice>? models;
+  List<ModelChoice>? models;
   List<TaskTemplate>? templates;
   TaskTemplate? template;
   final templateValues = <String, String>{};
@@ -132,7 +131,7 @@ class _AdminScheduledTaskEditorPageState
       });
       if (mounted) {
         setState(() {
-          models = ChatModelChoice.fromOptions(data);
+          models = ModelChoice.fromOptions(data);
           modelError = null;
         });
       }
@@ -686,44 +685,88 @@ class _AdminScheduledTaskEditorPageState
   }
 
   Future<void> chooseModel() async {
-    final choice = await showModalBottomSheet<String>(
+    final initial = model.isEmpty
+        ? const ModelSelection.special(ModelSpecialChoice.profileDefault)
+        : ModelSelection.model(ModelChoice(provider: provider, model: model));
+    ModelSelection pending = initial;
+    final selected = await showModalBottomSheet<ModelSelection>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: const Text('Use profile default'),
-              subtitle: const Text('Resolved when the task runs'),
-              onTap: () => Navigator.pop(context, 'default'),
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, update) {
+          final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+          final height = (MediaQuery.sizeOf(context).height - keyboard - 24)
+              .clamp(0.0, MediaQuery.sizeOf(context).height * .82);
+          return Padding(
+            padding: EdgeInsets.only(bottom: keyboard),
+            child: SizedBox(
+              height: height,
+              child: Column(
+                children: [
+                  ListTile(
+                    title: const Text('Task model'),
+                    trailing: IconButton(
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.pop(sheetContext),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ),
+                  Expanded(
+                    child: ModelChooser(
+                      choices: models ?? const [],
+                      selected: pending,
+                      specialOptions: const [
+                        ModelSpecialOption(
+                          ModelSpecialChoice.profileDefault,
+                          'Profile default',
+                          description: 'Follows future profile model changes',
+                        ),
+                      ],
+                      scopeLabel:
+                          'Models for ${controller.repository.profile.name}',
+                      onRefresh: () async => ModelChoice.fromOptions(
+                        await controller.repository.profile.read(
+                          'model/options',
+                          {'explicit_only': '1', 'refresh': '1'},
+                        ),
+                      ),
+                      onSelected: (choice) => update(() => pending = choice),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    child: OverflowBar(
+                      alignment: MainAxisAlignment.end,
+                      spacing: 8,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(sheetContext),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: pending == initial
+                              ? null
+                              : () => Navigator.pop(sheetContext, pending),
+                          child: const Text('Use in task'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-            ListTile(
-              title: const Text('Choose a model'),
-              enabled: models != null,
-              onTap: () => Navigator.pop(context, 'choose'),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
-    if (!mounted || choice == null) return;
-    if (choice == 'default') {
-      setState(() {
-        model = '';
-        provider = '';
-        dirty = true;
-      });
-      return;
-    }
-    final selected = await chooseAdminModel(context, models!);
-    if (selected != null && mounted) {
-      setState(() {
-        model = selected.model;
-        provider = selected.provider;
-        dirty = true;
-      });
-    }
+    if (!mounted || selected == null) return;
+    setState(() {
+      model = selected.choice?.model ?? '';
+      provider = selected.choice?.provider ?? '';
+      dirty = true;
+    });
   }
 
   Future<void> chooseTemplate() async {

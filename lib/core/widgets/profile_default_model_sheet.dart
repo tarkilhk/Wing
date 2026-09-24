@@ -1,4 +1,3 @@
-import 'studio_selection_tile.dart';
 import 'studio_action_label.dart';
 import 'studio_error.dart';
 import 'dart:async';
@@ -7,7 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../services/profile_gateway.dart';
 import '../theme/wing_theme.dart';
-import 'chat_intelligence_picker.dart';
+import 'model_chooser.dart';
 
 Future<bool> showProfileDefaultModelSheet(
   BuildContext context, {
@@ -46,13 +45,12 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
   late final ProfileGateway _gateway;
   late final String _profileName;
   late final String _connectionLabel;
-  List<ChatModelChoice> _choices = const [];
-  ChatModelChoice? _saved;
-  ChatModelChoice? _selected;
+  List<ModelChoice> _choices = const [];
+  ModelChoice? _saved;
+  ModelChoice? _selected;
   bool _loading = true;
   bool _saving = false;
   bool _allowPop = false;
-  String _query = '';
   String? _error;
   String? _notice;
 
@@ -83,12 +81,9 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
         _gateway.read('model/options', {'explicit_only': '1'}),
       ]);
       final current = _choiceFrom(values[0]);
-      final choices = ChatModelChoice.fromOptions(values[1]);
-      if (choices.isEmpty) {
-        throw const FormatException('Invalid model response');
-      }
+      final choices = ModelChoice.fromOptions(values[1]);
       final selected = current == null
-          ? const <ChatModelChoice>[]
+          ? const <ModelChoice>[]
           : choices
                 .where(
                   (choice) =>
@@ -106,6 +101,13 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
       if (mounted) setState(() => _loading = false);
     }
   }
+
+  Future<List<ModelChoice>> _refreshChoices() async => ModelChoice.fromOptions(
+    await _gateway.read('model/options', {
+      'explicit_only': '1',
+      'refresh': '1',
+    }),
+  );
 
   Future<void> _save() async {
     final wanted = _selected;
@@ -176,7 +178,7 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
   }
 
   Future<Map<String, dynamic>> _write(
-    ChatModelChoice wanted, {
+    ModelChoice wanted, {
     bool confirmed = false,
   }) async {
     await _gateway.requireProfile();
@@ -191,178 +193,98 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
   @override
   Widget build(BuildContext context) {
     final tokens = WingTokens.of(context);
-    final groups = <String, List<ChatModelChoice>>{};
-    final query = _query.trim().toLowerCase();
-    for (final choice in _choices.where(
-      (choice) =>
-          query.isEmpty ||
-          choice.model.toLowerCase().contains(query) ||
-          choice.provider.toLowerCase().contains(query) ||
-          choice.routeLabel.toLowerCase().contains(query),
-    )) {
-      groups.putIfAbsent(choice.provider, () => []).add(choice);
-    }
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final height = (MediaQuery.sizeOf(context).height - keyboard - 24).clamp(
+      0.0,
+      MediaQuery.sizeOf(context).height * 0.82,
+    );
     return PopScope(
       canPop: !_saving || _allowPop,
       child: AnimatedPadding(
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(context).bottom,
-        ),
+        duration: WingMotion.standard,
+        curve: WingMotion.curve,
+        padding: EdgeInsets.only(bottom: keyboard),
         child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * 0.82,
+          height: height,
           child: Column(
             children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      ListTile(
-                        title: Text(
-                          'Profile default model',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        subtitle: Text('$_profileName on $_connectionLabel'),
-                        trailing: IconButton(
-                          tooltip: 'Close',
-                          onPressed: _saving
-                              ? null
-                              : () => Navigator.pop(context, false),
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: WingSpacing.lg,
-                        ),
-                        child: Text(
-                          'Sets the server default for this profile and applies to new sessions only. Running chats keep their current model.',
-                          style: tokens.typography.body.copyWith(
-                            color: tokens.muted,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: WingSpacing.sm),
-                      if (!_loading && _choices.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: WingSpacing.lg,
-                          ),
-                          child: TextField(
-                            key: const Key('profile-model-search'),
-                            enabled: !_saving,
-                            decoration: const InputDecoration(
-                              hintText: 'Search models',
-                              prefixIcon: Icon(Icons.search_rounded),
-                              border: OutlineInputBorder(
-                                borderRadius: WingRadius.control,
-                              ),
-                              isDense: true,
-                            ),
-                            onChanged: (value) =>
-                                setState(() => _query = value),
-                          ),
-                        ),
-                      if (_error != null)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: WingSpacing.lg,
-                          ),
-                          child: StudioError(
-                            _error!,
-                            key: const Key('profile-model-error'),
-                          ),
-                        ),
-                      if (_notice != null)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: WingSpacing.lg,
-                          ),
-                          child: Text(
-                            _notice!,
-                            key: const Key('profile-model-notice'),
-                          ),
-                        ),
-                      _loading
-                          ? const Center(child: CircularProgressIndicator())
-                          : _choices.isEmpty
-                          ? Center(
-                              child: TextButton(
-                                key: const Key('profile-model-retry'),
-                                onPressed: _load,
-                                child: const Text('Retry'),
-                              ),
-                            )
-                          : groups.isEmpty
-                          ? Center(
-                              child: Text(
-                                'No matching models',
-                                style: tokens.typography.body.copyWith(
-                                  color: tokens.muted,
-                                ),
-                              ),
-                            )
-                          : RadioGroup<String>(
-                              groupValue: _selected == null
-                                  ? null
-                                  : '${_selected!.provider}/${_selected!.model}',
-                              onChanged: (value) {
-                                if (_saving || value == null) return;
-                                final choice = _choices.firstWhere(
-                                  (choice) =>
-                                      '${choice.provider}/${choice.model}' ==
-                                      value,
-                                );
-                                setState(() {
-                                  _selected = choice;
-                                  _error = null;
-                                  _notice = null;
-                                });
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: WingSpacing.lg,
-                                ),
-                                child: Column(
-                                  children: [
-                                    for (final entry in groups.entries)
-                                      ExpansionTile(
-                                        key: Key(
-                                          'profile-model-provider-${entry.key}',
-                                        ),
-                                        tilePadding: EdgeInsets.zero,
-                                        childrenPadding: EdgeInsets.zero,
-                                        initiallyExpanded:
-                                            entry.key == _selected?.provider,
-                                        title: Text(
-                                          entry.value.first.routeLabel,
-                                        ),
-                                        subtitle: Text(entry.key),
-                                        children: [
-                                          for (final choice in entry.value)
-                                            StudioRadioTile<String>(
-                                              contentPadding: EdgeInsets.zero,
-                                              minTileHeight: 48,
-                                              minVerticalPadding: 8,
-                                              key: Key(
-                                                'profile-model-${choice.provider}-${choice.model}',
-                                              ),
-                                              value:
-                                                  '${choice.provider}/${choice.model}',
-                                              enabled: !_saving,
-                                              title: Text(choice.model),
-                                            ),
-                                        ],
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                    ],
+              ListTile(
+                dense: true,
+                title: Text(
+                  'Profile default model',
+                  style: Theme.of(context).textTheme.titleLarge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  '$_profileName on $_connectionLabel',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: IconButton(
+                  tooltip: 'Close',
+                  onPressed: _saving
+                      ? null
+                      : () => Navigator.pop(context, false),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: WingSpacing.lg),
+                child: Text(
+                  'For new chats only',
+                  style: tokens.typography.body.copyWith(color: tokens.muted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: WingSpacing.lg,
+                  ),
+                  child: StudioError(
+                    _error!,
+                    key: const Key('profile-model-error'),
                   ),
                 ),
+              if (_notice != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: WingSpacing.lg,
+                  ),
+                  child: Text(_notice!, key: const Key('profile-model-notice')),
+                ),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _error != null && _choices.isEmpty
+                    ? Center(
+                        child: TextButton(
+                          key: const Key('profile-model-retry'),
+                          onPressed: _load,
+                          child: const Text('Retry'),
+                        ),
+                      )
+                    : ModelChooser(
+                        choices: _choices,
+                        selected: _selected == null
+                            ? null
+                            : ModelSelection.model(_selected!),
+                        onSelected: (selection) {
+                          final choice = selection.choice;
+                          if (_saving || choice == null) return;
+                          setState(() {
+                            _selected = choice;
+                            _error = null;
+                            _notice = null;
+                          });
+                        },
+                        onRefresh: _refreshChoices,
+                        scopeLabel: 'Models for $_profileName',
+                        keyPrefix: 'profile-model',
+                        enabled: !_saving,
+                      ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
@@ -386,7 +308,7 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                     FilledButton(
                       key: const Key('profile-model-save'),
                       onPressed: _dirty && !_saving ? _save : null,
-                      child: StudioActionLabel('Save', busy: _saving),
+                      child: StudioActionLabel('Save default', busy: _saving),
                     ),
                   ],
                 ),
@@ -399,10 +321,10 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
   }
 }
 
-ChatModelChoice? _choiceFrom(Map<String, dynamic> value) {
+ModelChoice? _choiceFrom(Map<String, dynamic> value) {
   final provider = value['provider']?.toString().trim() ?? '';
   final model = value['model']?.toString().trim() ?? '';
   return provider.isEmpty || model.isEmpty
       ? null
-      : ChatModelChoice(provider: provider, model: model);
+      : ModelChoice(provider: provider, model: model);
 }

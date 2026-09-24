@@ -12,7 +12,7 @@ import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
-import 'package:wing/core/widgets/chat_intelligence_picker.dart';
+import 'package:wing/core/widgets/model_chooser.dart';
 import 'package:wing/core/widgets/gateway_approval_panel.dart';
 
 /// Opt-in device test. Supply an explicitly authorized connection JSON in the
@@ -42,7 +42,7 @@ void main() {
         SharedPreferences.setMockInitialValues({});
         final wireRequests = <String>{};
         String? runtime;
-        ChatModelChoice? luna;
+        ModelChoice? luna;
         final controller = ProfileWorkspaceController(
           connectionIdentity: 'approval-device-qa',
           connection: connection,
@@ -98,7 +98,7 @@ void main() {
         if (profile.isNotEmpty) {
           expect(await controller.switchProfile(profile), isTrue);
         }
-        final options = ChatModelChoice.fromOptions(
+        final options = ModelChoice.fromOptions(
           await controller.current!.gateway.read('model/options'),
         );
         luna = options.firstWhere((choice) => choice.model == 'gpt-5.6-luna');

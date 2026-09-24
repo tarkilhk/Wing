@@ -7,14 +7,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/chat_intelligence_picker.dart';
+import 'package:wing/core/widgets/model_chooser.dart';
 
 void main() {
   const capture = bool.fromEnvironment('CAPTURE_INTELLIGENCE');
   const frame = Key('intelligence-preview');
-  const choice = ChatModelChoice(
-    provider: 'openai-codex',
-    model: 'gpt-5.6-sol',
-  );
+  const choice = ModelChoice(provider: 'openai-codex', model: 'gpt-5.6-sol');
   setUpAll(() async {
     if (!capture) return;
     for (final entry in {

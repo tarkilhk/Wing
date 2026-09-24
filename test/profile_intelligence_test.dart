@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/widgets/chat_intelligence_picker.dart';
+import 'package:wing/core/widgets/model_chooser.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_intelligence_fixture.dart';
 
@@ -27,7 +28,7 @@ void main() {
   }
 
   const selection = ChatIntelligenceSelection(
-    choice: ChatModelChoice(provider: 'openai-codex', model: 'gpt-5.6-sol'),
+    choice: ModelChoice(provider: 'openai-codex', model: 'gpt-5.6-sol'),
     reasoningEffort: 'xhigh',
   );
   setUp(() async {
@@ -233,7 +234,13 @@ void main() {
         find.text(ProfileIntelligenceFixture.modelWarning),
         findsOneWidget,
       );
-      expect(find.text('Cancel'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Cancel'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Switch model'), findsOneWidget);
       expect(host.writes, hasLength(1));
       expect(controller.current!.chat!.model, 'gpt-6-astra');
@@ -249,6 +256,40 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('partial Chat save keeps the draft and retries reasoning alone', (
+    tester,
+  ) async {
+    host.failReasoning = true;
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('chat-intelligence-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('choose-chat-model')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('model-search')), 'sol');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('model-openai-codex-gpt-5.6-sol')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('model changed, but reasoning'), findsOneWidget);
+    expect(find.text('Intelligence'), findsOneWidget);
+    expect(host.writes, hasLength(2));
+    host.failReasoning = false;
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(host.writes, hasLength(3));
+    expect(host.writes.last['key'], 'reasoning');
+    expect(controller.current!.chat!.model, 'gpt-5.6-sol');
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'the shipped profile composer opens picker and applies both choices',

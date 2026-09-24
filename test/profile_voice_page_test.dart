@@ -59,7 +59,6 @@ void main() {
             child: AdminSpeechSynthesisPage(
               profile: f.server.profile('personal'),
               device: device,
-              openModels: (_) async {},
             ),
           ),
         ),
