@@ -21,7 +21,7 @@ Monitoring uses additional battery. Its partial wake lock is held only while the
 
 Android force-stop, process termination, a reboot, lost connectivity and manufacturer restrictions can still interrupt delivery. Reopen Wing after the process is terminated. Work started from another client cannot wake a stopped Wing process; reopening Wing reconnects it. While Wing remains connected, global status reconciliation provides the unopened-chat coverage described below. The service deliberately does not restart without its live clients or display a monitoring notification for an empty process. Accepted Hermes work continues on the server.
 
-Temporary network loss while the process survives uses [network continuity](design/2026-09-16-network-continuity.md): automatic retry and verification when Android reports network return, and retained conversation/draft/partial reply. Notification destinations survive failed opening attempts, with recent cached reading available after restart. This improves reconnection and reading; it does not add a server push sender or guarantee replay of missed completion events.
+Temporary network loss while the process survives triggers automatic retry and verification when Android reports network return, while retaining the conversation, draft and partial reply. Notification destinations survive failed opening attempts, with recent cached reading available after restart. This improves reconnection and reading; it does not add a server push sender or guarantee replay of missed completion events.
 
 ## Android implementation
 

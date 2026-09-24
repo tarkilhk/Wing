@@ -1,19 +1,19 @@
-Continue conversations with your own Hermes Agent from an Android phone.
+Your agent, with you
 
-Wing is an independent Android client. It requires a compatible Hermes dashboard and Desktop Gateway that you operate or have permission to use. It does not run a model on the phone or provide a hosted AI account. Your server and model provider may have their own costs.
+Wing brings your Hermes Agent to Android. Pick up a conversation, follow work in progress, and send the next idea wherever you are.
 
-Features:
-- Streaming chats with per-chat model and reasoning choices
-- Profiles, projects, pinned chats, filters and conversation search
-- Tool activity, approvals, subagent and goal supervision where supported by the server
-- Durable unsent drafts, text/file follow-up queues and text-only steering
-- Photo/file attachments, reviewed Android shares, voice dictation and read-aloud
-- Output reading and sharing, including images, PDFs, Markdown and supported diagrams
-- Profile scheduled tasks, MCP connectors, server/profile health and usage analytics
-- Device themes, accent colors, text size and configuration backup/restore
+FIND YOUR FLOW
+Browse chats across profiles and projects. Search, pin and filter conversations, watch replies stream in, and jump back to the right message or output.
 
-Local notifications require an active client connection and have limited coverage of unopened chats. Follow-up queues drain while the app is running and connected. If Android closes during a send, check server history before resending a recovered draft.
+STAY IN CONTROL
+Steer work as it happens, queue a follow-up, review supported approvals, and see what subagents and goals are doing. Drafts and staged files stay with you through navigation and connection interruptions.
 
-Use HTTPS or an encrypted private network for remote connections. Server capabilities determine which operations are available. There is no offline conversation archive, general remote filesystem browser or messaging administration.
+USE YOUR PHONE
+Attach photos and files, share content from another app, dictate into an editable draft, and read replies aloud. Preview images, PDFs, Markdown, diagrams and supported media; save useful outputs through Android.
 
-Read the setup guide and privacy policy in the project repository. The privacy policy is also available offline in App settings.
+RUN YOUR HERMES SETUP
+Manage profiles, models, MCP connectors and server-run scheduled tasks. Check health and diagnostics, explore usage and model trends, and choose a theme, accent color and text size that feel right.
+
+Wing connects to a compatible Hermes dashboard and Desktop Gateway that you operate or have permission to use. It does not run a model on your phone. Android 7.0 or newer is required; local on-device dictation needs Android 12 or newer and a supported speech service. Your server and model provider may have their own costs.
+
+For remote connections, use HTTPS or an encrypted private network. Wing's privacy policy and setup guide are available in the project repository; the policy is also available offline in App settings.
