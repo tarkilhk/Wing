@@ -1,8 +1,8 @@
 # Monitoring outage investigation — Wing 2332
 
 Status: root cause reproduced; client correction implemented for build 2333.
-Release validation complete; signed 2333 is ready. Phone deployment and live
-retest remain pending the wireless debugging connection.
+Release validation complete; signed 2333 installed on the phone. The combined
+outage recovery live retest remains pending.
 
 ## Finding
 
@@ -193,8 +193,10 @@ outage-final-focused.txt, and outage-release-tooling.txt under the evidence dir.
 - Signed release ARM64 APK; non-debuggable and pinned certificate verified.
 - SHA-256: `dc05f94dfbcc215201ca15ac7f8c8c27e18e0d3227da8a52100d7b9d07b5c003`.
 - Final static analysis: clean; release version/whitespace checks pass.
-- Phone deployment pending: last address 10.30.1.2:36901 refuses connection;
-  automatic mDNS discovery found no endpoint. Requested current address.
+- Phone deployment confirmed at 19:26:42 Singapore on 24 September: data-
+  preserving installation succeeded; package versionCode read back as 23332 and
+  versionName 1.0.1. Launch started process 32579 behind the locked system UI;
+  chat connectivity was not visually verified while locked. Source `bc1ce59`.
 - Retest only the combined outage recovery: known test chat working, phone
   backgrounded, user disconnects phone networking, desktop finishes, reconnect,
   exact latest reply notified once, watcher settles, reading that answer clears

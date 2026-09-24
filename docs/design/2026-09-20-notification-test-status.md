@@ -125,7 +125,8 @@ New observation awaiting investigation: duplicate monitoring cards appeared in S
 
 ## 2332 follow-up
 
-Current installed build is **2332 / 23322**. See
+Current installed build is **2333 / 23332**, source `bc1ce59`; installation
+and package readback confirmed on 24 September at 19:26 Singapore. See
 [2332 review fixes and retests](2026-09-24-notification-review-fixes.md).
 Physical-phone follow-up: offline review/retry passed by user operation; Session
 and Always scope visibility passed at enlarged text; one app-owned monitoring
@@ -136,7 +137,8 @@ The [outage investigation](2026-09-24-monitoring-outage-investigation.md)
 reproduces the lost completion tracking: one normal control passes, three outage
 variants failed before the correction. Build 2333 now retains verified work
 and its completion history across outages. Release validation is complete;
-installation is pending a reachable phone debugging address. Earlier
+installation is confirmed. The combined outage-recovery phone retest remains
+pending; this deployment is not a live-test pass. Earlier
 scenario passes are historical and do not establish this new outage branch.
 Cleanup complete: normal font scale 1.0 was restored and read back; the user
 confirmed Claw/default Smart mode was saved. Timeout 300 and the allowlist were
