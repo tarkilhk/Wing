@@ -129,3 +129,38 @@ Tests cover changing those callbacks, removing actions, changing content and
 switching the theme/viewport. Run the Markdown, deliverable and streaming-scroll
 suites too. Workspace status, approvals and live answer text still update through
 their existing paths; this optimization changes only unchanged message rendering.
+
+## Reading snapshot regression boundary
+
+```sh
+flutter test test/workspace_snapshot_work_budget_test.dart test/workspace_reading_snapshot_test.dart
+```
+
+Large reading snapshots are encoded and pruned in a worker isolate. A bounded
+size walk keeps small snapshots local to avoid isolate startup overhead. Writes
+remain ordered, including a small save following a large background save.
+Pruning measures candidate lists once and updates only the shortened list;
+sorting no longer serializes each candidate for every comparison. The two MiB
+UTF-8 bound and newest-message retention are covered by tests. Draft persistence
+does not use this store.
+
+The work-budget test uses 2,400 synthetic messages and checks that an event-loop
+turn runs before the large save completes. The original implementation failed
+that assertion. On the development host its synchronous call took about
+2.8–3.0 seconds; the revised call took about 5–12 ms with a total background save
+of 154–206 ms. These debug measurements diagnose the algorithm; they do not
+establish phone latency or battery improvement. Snapshot collection in the
+controller still runs on the UI isolate and should be included in future CPU
+profiles.
+
+During a phone slowdown investigation, a release system trace caught two main
+thread CPU slices of 184–189 ms immediately preceding preference writes. That
+correlation motivates this fix but does not identify the Dart call stacks.
+A separate eight-gesture scroll capture submitted 778 frames without any
+32–200 ms inter-submission gaps, and the owner subsequently reported normal
+typing. Do not describe the intermittent phone symptom as conclusively fixed
+without a matched device reproduction. Flutter uses a SurfaceView here; the
+trace did not expose Wing rows in the FrameTimeline table, so native `gfxinfo`
+and other apps' jank classifications must not be substituted for Wing's frames.
+See [Perfetto FrameTimeline documentation](https://perfetto.dev/docs/data-sources/frametimeline)
+for the distinction between frame scheduling, submission and presentation.

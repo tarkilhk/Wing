@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Process large offline reading snapshots away from the UI thread and avoid
+  repeatedly encoding history while trimming the cache.
 - Keep draft typing and queued-message edits from rebuilding unchanged chat
   history or waking workspace-wide notification observers.
 - Reuse unchanged Markdown rendering while replies stream, reducing repeated
