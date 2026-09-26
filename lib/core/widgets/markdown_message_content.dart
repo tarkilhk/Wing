@@ -14,7 +14,7 @@ import 'markdown_code_block.dart';
 import 'deliverable_attachment.dart';
 
 /// Renders Markdown message content without conversation chrome.
-class MarkdownMessageContent extends StatelessWidget {
+class MarkdownMessageContent extends StatefulWidget {
   final String data;
   final bool streaming;
   final Future<void> Function(ChatOutput output)? onOpenRemoteFile;
@@ -30,6 +30,36 @@ class MarkdownMessageContent extends StatelessWidget {
     this.deliverables = false,
   });
 
+  @override
+  State<MarkdownMessageContent> createState() => _MarkdownMessageContentState();
+}
+
+class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
+  // Retain only this mounted message's rendering. Unrelated stream/activity
+  // updates must not split code fences, recreate styles and reparse its prose.
+  Widget? _content;
+
+  @override
+  void didUpdateWidget(covariant MarkdownMessageContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.data != oldWidget.data ||
+        widget.streaming != oldWidget.streaming ||
+        widget.deliverables != oldWidget.deliverables ||
+        (widget.onOpenRemoteFile == null) !=
+            (oldWidget.onOpenRemoteFile == null) ||
+        (widget.onDownloadRemoteFile == null) !=
+            (oldWidget.onDownloadRemoteFile == null)) {
+      _content = null;
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Theme, text scale and viewport changes still refresh the rendered content.
+    _content = null;
+  }
+
   Future<void> _open(BuildContext context, String href) async {
     final uri = externalWebLink(href);
     var opened = false;
@@ -37,9 +67,9 @@ class MarkdownMessageContent extends StatelessWidget {
       opened = await openWebPreview(uri);
     } else {
       final output = explicitRemoteFileOutput(href);
-      if (output != null && onOpenRemoteFile != null) {
+      if (output != null && widget.onOpenRemoteFile != null) {
         try {
-          await onOpenRemoteFile!(output);
+          await widget.onOpenRemoteFile!(output);
           return;
         } catch (error) {
           if (context.mounted) {
@@ -82,14 +112,16 @@ class MarkdownMessageContent extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => _content ??= _buildContent(context);
+
+  Widget _buildContent(BuildContext context) {
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final segment in splitMarkdownCodeBlocks(
-          data,
-          streaming: streaming,
+          widget.data,
+          streaming: widget.streaming,
         ))
           if (segment is MarkdownCodeBlock)
             segment
@@ -105,14 +137,18 @@ class MarkdownMessageContent extends StatelessWidget {
                   checkboxBuilder: (checked) =>
                       StudioTaskMarker(completed: checked),
                   data: segment as String,
-                  inlineSyntaxes: deliverables
+                  inlineSyntaxes: widget.deliverables
                       ? [MediaReferenceSyntax(), DeliverableLinkSyntax()]
                       : null,
                   builders: {
-                    if (deliverables)
+                    if (widget.deliverables)
                       deliverableElementTag: _DeliverableBuilder(
-                        onOpenRemoteFile,
-                        onDownloadRemoteFile,
+                        widget.onOpenRemoteFile == null
+                            ? null
+                            : (output) => widget.onOpenRemoteFile!(output),
+                        widget.onDownloadRemoteFile == null
+                            ? null
+                            : (output) => widget.onDownloadRemoteFile!(output),
                         maxWidth: MediaQuery.sizeOf(context).width,
                       ),
                   },

@@ -95,3 +95,23 @@ publication. Draft saving remains ordered and immediate.
 Run the composer, queue, voice, draft recovery, notification, streaming-scroll
 and reading-snapshot suites when changing this boundary. This regression
 protects unnecessary work, not end-to-end keyboard latency or battery life.
+
+## Streaming regression boundary
+
+```sh
+flutter test test/streaming_work_budget_test.dart test/markdown_render_reuse_test.dart
+```
+
+The streaming workload sends real controller events through an injected gateway
+and requires zero saved-Markdown rebuilds while answer chunks arrive. Each
+mounted `MarkdownMessageContent` retains its rendered subtree until its content,
+streaming mode, deliverable mode, action availability or inherited environment
+changes. This also avoids regenerating a stylesheet that would cause
+`flutter_markdown` to parse unchanged text again. The retained tree lives only
+with its message widget; there is no application-wide message cache.
+
+Reused link and file actions dispatch through the current widget callbacks.
+Tests cover changing those callbacks, removing actions, changing content and
+switching the theme/viewport. Run the Markdown, deliverable and streaming-scroll
+suites too. Workspace status, approvals and live answer text still update through
+their existing paths; this optimization changes only unchanged message rendering.
