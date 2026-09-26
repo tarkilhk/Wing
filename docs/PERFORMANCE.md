@@ -59,6 +59,20 @@ connections and drafts. Configure an equivalent test connection/data set there.
 flutter build apk --profile -t tools/performance/chat_frames.dart
 ```
 
+With that build running, capture a bounded CPU sample without changing the
+screen or sending a message:
+
+```sh
+python3 tools/qa/sample_flutter_cpu.py --serial <device> --seconds 30 --label idle-chat --output build/performance/idle-chat-cpu.json
+```
+
+The sampler uses a private ADB tunnel, records Dart function tick counts and
+isolate heap usage, and restores the prior profiler flag afterward. It omits
+VM-service credentials and object contents. These are main-isolate CPU samples;
+use the resource recorder and Android tracing for raster/native work and other
+processes. Sampling overhead means these captures are diagnostic, not battery
+benchmarks.
+
 The existing entry point records Flutter build/raster timings for all screens;
 its `snapshot`/`top`/`refresh` service extensions and
 `tools/qa/measure_chat_scrolling.py` specifically target the Chats browser.
