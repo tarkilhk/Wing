@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -141,7 +142,12 @@ void main() {
           });
         }
         // Responding disables every scope, including denial.
-        controller.current!.chat!.approvalResponding = true;
+        host.approvalDelay = Completer<void>();
+        final response = controller.approve(
+          controller.current!.chat!,
+          'once',
+          requestId: 'one',
+        );
         await tester.runAsync(
           () => controller.updateDraft(
             controller.current!.chat!,
@@ -158,6 +164,8 @@ void main() {
         )) {
           expect(button.onPressed, isNull);
         }
+        host.approvalDelay!.complete();
+        await tester.runAsync(() => response);
         await tester.pumpWidget(const SizedBox.shrink());
       });
     }
