@@ -333,6 +333,39 @@ class ProfileWorkspaceController extends ChangeNotifier {
   final _composerChanges = ChangeNotifier();
   Listenable get composerChanges => _composerChanges;
 
+  // Runtime events invalidate one browser row. A null chat means saved lists,
+  // discovery, navigation or other workspace state may have changed.
+  final _browserChanges =
+      ValueNotifier<({int revision, ProfileSessionKey? chat})>((
+        revision: 0,
+        chat: null,
+      ));
+  ValueListenable<({int revision, ProfileSessionKey? chat})>
+  get browserChanges => _browserChanges;
+
+  ProfileLiveActivityState? reportedActivityFor(ProfileSessionKey key) =>
+      _liveActivity
+          .where(
+            (item) =>
+                item.workspace == key.workspace &&
+                item.sessionId == key.sessionId,
+          )
+          .firstOrNull
+          ?.state;
+
+  /// Unsorted identities whose live state can affect the browser. Saved chats
+  /// without a runtime do not need to be visited on an activity notification.
+  Iterable<ProfileSessionKey> get browserRuntimeKeys sync* {
+    for (final item in _liveActivity) {
+      yield ProfileSessionKey(item.workspace, item.sessionId);
+    }
+    for (final resource in _resources.values) {
+      for (final chat in resource.chats.values) {
+        yield chat.key;
+      }
+    }
+  }
+
   static const _maxReviewNotices = 20;
 
   /// App-owned failure; distinguish it from opaque command output in the UI.
@@ -689,7 +722,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
-  void _changed() {
+  void _changed({ProfileSessionKey? browserChat}) {
     if (_closed) return;
     if (_lastSnapshot == null ||
         DateTime.now().difference(_lastSnapshot!).inSeconds >= 1) {
@@ -702,6 +735,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       _publishNotificationInputs(chat);
     }
+    _browserChanges.value = (
+      revision: _browserChanges.value.revision + 1,
+      chat: browserChat,
+    );
     notifyListeners();
   }
 
@@ -1491,7 +1528,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat.historyLoading = true;
     chat.historyError = null;
     chat.historyUnavailable = false;
-    _changed();
+    _changed(browserChat: chat.key);
     try {
       final page = await resource.gateway.history(
         chat.key.sessionId,
@@ -1528,7 +1565,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           !chat.messages.any(
             (row) => isAnswerPrompt(row) && !isHiddenAnswerMessage(row),
           )) {
-        _changed();
+        _changed(browserChat: chat.key);
         final olderPage = await resource.gateway.history(
           chat.historySessionId!,
           offset: chat.nextHistoryOffset!,
@@ -1565,7 +1602,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     } finally {
       if (!_closed && chat.historyGeneration == generation) {
         chat.historyLoading = false;
-        _changed();
+        _changed(browserChat: chat.key);
       }
     }
   }
@@ -5767,7 +5804,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         );
         unawaited(_journal().catchError((Object _) {}));
     }
-    _changed();
+    _changed(browserChat: chat.key);
   }
 
   Future<void> _settle(
@@ -5780,7 +5817,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       await _settleTurn(resource, chat, completion);
     } finally {
       _pendingCompletions--;
-      _changed();
+      _changed(browserChat: chat.key);
     }
   }
 
@@ -6766,6 +6803,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   void dispose() {
     _closed = true;
     _composerChanges.dispose();
+    _browserChanges.dispose();
     _healthSession?.dispose();
     _notificationRetry?.cancel();
     unawaited(_saveReadingSnapshot());

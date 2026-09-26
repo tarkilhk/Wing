@@ -58,7 +58,11 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   String _query = '';
   List<ChatListEntry> _allEntries = [], _visibleEntries = [];
   List<ChatListGroup> _currentGroups = [];
-  List<ChatListEntry> get _matches => _visibleEntries;
+  final _visibleKeys = <ProfileSessionKey>{};
+  Object? _controllerState;
+  List<ChatListEntry> get _matches => [
+    for (final entry in _visibleEntries) _data.row(entry.sessionKey).value,
+  ];
   List<ChatListGroup> get _groups => _currentGroups;
   Timer? _debounce;
   Future<void>? _refreshing;
@@ -97,7 +101,8 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       }
     }
     _data = ChatBrowserData(controller)..addListener(_dataChanged);
-    controller.addListener(_controllerChanged);
+    _data.rowsChanged.addListener(_rowsChanged);
+    controller.browserChanges.addListener(_controllerChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _controllerChanged());
   }
 
@@ -109,7 +114,34 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       _started = true;
       unawaited(_refresh());
     }
-    setState(() {});
+    if (controller.browserChanges.value.chat != null) return;
+    final state = (
+      controller.current,
+      controller.discovery,
+      controller.error,
+      controller.switching,
+      controller.recovering,
+      controller.current?.offlineSnapshot,
+      controller.sessionVisibility,
+      controller.preferences.getString(
+        'composer_drafts_v1_${controller.connectionIdentity}',
+      ),
+    );
+    if (_controllerState != state) {
+      _controllerState = state;
+      setState(() {});
+    }
+  }
+
+  void _rowsChanged() {
+    if (!mounted || _statuses.isEmpty && _query.isEmpty) return;
+    for (final key in _data.rowsChanged.value) {
+      final matches = _filterMatches([_data.row(key).value]).isNotEmpty;
+      if (matches != _visibleKeys.contains(key)) {
+        setState(() {});
+        return;
+      }
+    }
   }
 
   void _dataChanged() {
@@ -120,7 +152,8 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   void dispose() {
     _debounce?.cancel();
     _search.dispose();
-    controller.removeListener(_controllerChanged);
+    controller.browserChanges.removeListener(_controllerChanged);
+    _data.rowsChanged.removeListener(_rowsChanged);
     _data.dispose();
     super.dispose();
   }
@@ -193,13 +226,13 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     if (!mounted) return;
     if (_archived != archived || generation != _refreshGeneration) return;
     if (_query.isNotEmpty) unawaited(_data.search(_query));
-    await controller.refreshActivity();
-    if (mounted &&
-        _archived == archived &&
-        generation == _refreshGeneration &&
-        _reorderAfterRefresh) {
+    // The loaded list establishes this visit's order. Activity can require
+    // slower per-profile lookups; its eventual completion must not reset
+    // positions after answers have arrived while the user is reading.
+    if (_reorderAfterRefresh) {
       setState(_arrangement.reset);
     }
+    unawaited(controller.refreshActivity());
   }
 
   void _setQuery(String value) {
@@ -229,7 +262,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       )
       .toList();
   List<ChatListGroup> _buildGroups(List<ChatListEntry> matches) {
-    final groups = groupChats(matches, _grouping, _ordering);
+    final groups = <ChatListGroup>[];
     if (_grouping == ChatGrouping.project &&
         !_archived &&
         _query.isEmpty &&
@@ -239,7 +272,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         for (final project in _data.projects[profile.name] ?? []) {
           final key = '${profile.name}/${project['id']}';
           if (project['isNoProject'] == true ||
-              groups.any((g) => g.key == key) ||
+              matches.any((entry) => entry.projectKey == key) ||
               _projects.isNotEmpty && !_projects.contains(key)) {
             continue;
           }
@@ -255,7 +288,12 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         }
       }
     }
-    return groups;
+    return _arrangement.apply(
+      matches,
+      _grouping,
+      _ordering,
+      emptyGroups: groups,
+    );
   }
 
   String _groupKey(ChatListGroup group) => '${_grouping.name}/${group.key}';
@@ -568,7 +606,6 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                 e.sessionKey,
                 changes: {'unread': false},
               );
-              e.row['unread'] = false;
             }
           }, refresh: true),
         );
@@ -668,8 +705,13 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     }
   }
 
-  Widget _session(ChatListEntry e) {
-    final local = e.owner.chats[e.id];
+  Widget _session(ChatListEntry entry) => ValueListenableBuilder<ChatListEntry>(
+    key: ValueKey(('chat-row', entry.sessionKey)),
+    valueListenable: _data.row(entry.sessionKey),
+    builder: (context, entry, _) => _sessionContent(context, entry),
+  );
+
+  Widget _sessionContent(BuildContext context, ChatListEntry e) {
     final largeText = MediaQuery.textScalerOf(context).scale(16) > 20;
     final showTokens = _show.contains(ChatDetail.tokens);
     final showUpdated = _show.contains(ChatDetail.updated);
@@ -717,8 +759,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       if (_show.contains(ChatDetail.cost))
         '\$${chatCost(e.row).toStringAsFixed(2)}',
       if (_show.contains(ChatDetail.profile)) e.profile,
-      if (local?.status == ProfileTurnStatus.failed) 'Failed',
-      if (local?.status == ProfileTurnStatus.reconnecting) 'Reconnecting',
+      if (e.runtimeLabel != null) e.runtimeLabel!,
     ];
     return Builder(
       builder: (anchor) => Padding(
@@ -791,6 +832,27 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       await showProjectActions(anchor, controller, group.project!);
     }
   }
+
+  Widget _liveGroupHeading(ChatListGroup group) =>
+      !_show.contains(ChatDetail.tokens)
+      ? _groupHeading(group)
+      : ListenableBuilder(
+          listenable: Listenable.merge(
+            group.entries.map((entry) => _data.row(entry.sessionKey)).toList(),
+          ),
+          builder: (_, _) => _groupHeading(
+            ChatListGroup(
+              group.key,
+              group.label,
+              [
+                for (final entry in group.entries)
+                  _data.row(entry.sessionKey).value,
+              ],
+              project: group.project,
+              owner: group.owner,
+            ),
+          ),
+        );
 
   Widget _groupHeading(ChatListGroup group) {
     final key = _groupKey(group);
@@ -938,7 +1000,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         ),
       ..._draftRows(entries),
       for (final group in groups) ...[
-        _groupHeading(group),
+        _liveGroupHeading(group),
         if (!_collapsed.contains(_groupKey(group))) ...[
           for (final entry in group.entries.take(_visibleCount(group)))
             _session(entry),
@@ -1132,28 +1194,28 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   Widget _buildContent(BuildContext context) {
     _allEntries = _data.entries;
     _visibleEntries = _filterMatches(_allEntries);
-    final visibleKeys = _visibleEntries.map((e) => e.key).toSet();
-    final arranged = _arrangement.apply(
-      _buildGroups(
-        _allEntries
-            .where(
-              (e) => controller.sessionVisibility.includes(
-                e.row['source'] as String?,
-              ),
-            )
-            .toList(),
-      ),
-      _grouping,
-      _ordering,
+    _visibleKeys
+      ..clear()
+      ..addAll(_visibleEntries.map((e) => e.sessionKey));
+    final arranged = _buildGroups(
+      _allEntries
+          .where(
+            (e) => controller.sessionVisibility.includes(
+              e.row['source'] as String?,
+            ),
+          )
+          .toList(),
     );
     _currentGroups = [
       for (final group in arranged)
         if (group.entries.isEmpty ||
-            group.entries.any((e) => visibleKeys.contains(e.key)))
+            group.entries.any((e) => _visibleKeys.contains(e.sessionKey)))
           ChatListGroup(
             group.key,
             group.label,
-            group.entries.where((e) => visibleKeys.contains(e.key)).toList(),
+            group.entries
+                .where((e) => _visibleKeys.contains(e.sessionKey))
+                .toList(),
             project: group.project,
             owner: group.owner,
           ),
@@ -1236,17 +1298,20 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
             ],
           ),
           actions: [
-            WorkspaceOptionsMenu(
-              key: _optionsKey,
-              enabled: enabled,
-              archived: _archived,
-              includeAutomated:
-                  controller.sessionVisibility == SessionVisibility.all,
-              collapsed:
-                  groups.isNotEmpty &&
-                  groups.every((g) => _collapsed.contains(_groupKey(g))),
-              hasUnread: _matches.any((e) => e.row['unread'] == true),
-              onSelected: _menuAction,
+            ValueListenableBuilder<Set<ProfileSessionKey>>(
+              valueListenable: _data.rowsChanged,
+              builder: (_, _, _) => WorkspaceOptionsMenu(
+                key: _optionsKey,
+                enabled: enabled,
+                archived: _archived,
+                includeAutomated:
+                    controller.sessionVisibility == SessionVisibility.all,
+                collapsed:
+                    groups.isNotEmpty &&
+                    groups.every((g) => _collapsed.contains(_groupKey(g))),
+                hasUnread: _matches.any((e) => e.row['unread'] == true),
+                onSelected: _menuAction,
+              ),
             ),
           ],
         ),

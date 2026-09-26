@@ -6,11 +6,167 @@ import '../models/session_visibility.dart';
 import 'profile_workspace_controller.dart';
 import 'workspace_connection_failure.dart';
 
+typedef _BrowserSources = ({
+  List<Object> snapshots,
+  Set<ProfileSessionKey> chats,
+});
+
 /// A read-only connection-wide index. Four profiles at a time, 100 rows per
 /// request. Publication is generation guarded and never changes chat ownership.
 class ChatBrowserData extends ChangeNotifier {
-  ChatBrowserData(this.controller);
+  ChatBrowserData(this.controller) {
+    _publishEntries();
+    controller.browserChanges.addListener(_controllerChanged);
+  }
   final ProfileWorkspaceController controller;
+  final _values = <ProfileSessionKey, ValueNotifier<ChatListEntry>>{};
+  final _positions = <ProfileSessionKey, int>{};
+  final _localEntries = <ProfileSessionKey>{};
+  _BrowserSources _sources = (snapshots: [], chats: {});
+  Set<ProfileSessionKey> _activityKeys = {};
+  List<ChatListEntry> _entries = [];
+  final rowsChanged = ValueNotifier<Set<ProfileSessionKey>>({});
+
+  List<ChatListEntry> get entries => _entries;
+  ValueListenable<ChatListEntry> row(ProfileSessionKey key) => _values[key]!;
+
+  String? _runtimeLabel(ProfileChat? chat) => switch (chat?.status) {
+    ProfileTurnStatus.failed => 'Failed',
+    ProfileTurnStatus.reconnecting => 'Reconnecting',
+    _ => null,
+  };
+
+  bool _sameEntry(ChatListEntry a, ChatListEntry b) =>
+      a.owner == b.owner &&
+      a.status == b.status &&
+      a.runtimeLabel == b.runtimeLabel &&
+      mapEquals(a.row, b.row) &&
+      mapEquals(a.project, b.project);
+
+  bool _samePlacement(ChatListEntry a, ChatListEntry b) =>
+      a.projectKey == b.projectKey &&
+      a.row['pinned'] == b.row['pinned'] &&
+      a.row['source'] == b.row['source'] &&
+      mapEquals(a.project, b.project);
+
+  void _controllerChanged() {
+    if (_disposed) return;
+    final key = controller.browserChanges.value.chat;
+    if (key != null) {
+      if (_positions.containsKey(key)) {
+        _refreshRow(key);
+      } else if (!_sources.chats.contains(key)) {
+        if (_publishEntries()) notifyListeners();
+      }
+      return;
+    }
+    final sources = _readSources();
+    final membershipChanged =
+        sources.chats
+            .difference(_sources.chats)
+            .any((key) => !_positions.containsKey(key)) ||
+        _sources.chats.difference(sources.chats).any(_localEntries.contains);
+    if (!listEquals(sources.snapshots, _sources.snapshots) ||
+        membershipChanged) {
+      if (_publishEntries(sources)) notifyListeners();
+      return;
+    }
+    _sources = sources;
+    final active = controller.browserRuntimeKeys.toSet();
+    for (final key in {..._activityKeys, ...active}) {
+      if (_positions.containsKey(key)) _refreshRow(key);
+    }
+    _activityKeys = active;
+  }
+
+  _BrowserSources _readSources() {
+    final snapshots = <Object>[];
+    final chats = <ProfileSessionKey>{};
+    for (final profile in controller.discovery?.profiles ?? []) {
+      final owner = controller.browserResource(profile.name);
+      snapshots.add((
+        profile.name,
+        owner.sessions,
+        owner.sessionGeneration,
+        owner.projects,
+        owner.projectGeneration,
+        owner.archivedOnly,
+        owner.offlineSnapshot,
+        owner.deletedSessions.length,
+      ));
+      chats.addAll(owner.chats.values.map((chat) => chat.key));
+    }
+    return (snapshots: snapshots, chats: chats);
+  }
+
+  void _refreshRow(ProfileSessionKey key) {
+    final before = _values[key]!.value;
+    final chat = before.owner.chats[key.sessionId];
+    final next = ChatListEntry(
+      owner: before.owner,
+      row: _localEntries.contains(key) && chat != null
+          ? _localRow(chat)
+          : before.row,
+      project: before.project,
+      status: chatListStatus(
+        before.row,
+        chat: chat,
+        activity: chat?.activityState ?? controller.reportedActivityFor(key),
+      ),
+      runtimeLabel: _runtimeLabel(chat),
+    );
+    if (_sameEntry(before, next)) return;
+    _entries[_positions[key]!] = next;
+    _values[key]!.value = next;
+    rowsChanged.value = {key};
+  }
+
+  /// Reconcile saved snapshots only on a workspace/data change. Transcript
+  /// deltas use the single-row path above and never rebuild this index.
+  bool _publishEntries([_BrowserSources? sources]) {
+    _sources = sources ?? _readSources();
+    _activityKeys = controller.browserRuntimeKeys.toSet();
+    final next = _readEntries();
+    var structural = next.length != _entries.length;
+    final changed = <ProfileSessionKey>{};
+    for (final entry in next) {
+      final key = entry.sessionKey;
+      final before = _values[key]?.value;
+      if (!_positions.containsKey(key) || before == null) {
+        structural = true;
+      } else if (!_samePlacement(before, entry)) {
+        structural = true;
+      }
+      if (before == null || !_sameEntry(before, entry)) changed.add(key);
+    }
+    if (structural) {
+      _entries = next;
+      _positions.clear();
+      for (var i = 0; i < next.length; i++) {
+        _positions[next[i].sessionKey] = i;
+      }
+    }
+    for (final entry in next) {
+      final key = entry.sessionKey;
+      if (!_values.containsKey(key)) {
+        _values[key] = ValueNotifier(entry);
+      } else if (changed.contains(key)) {
+        _entries[_positions[key]!] = entry;
+        _values[key]!.value = entry;
+      }
+    }
+    if (changed.isNotEmpty) rowsChanged.value = changed;
+    return structural;
+  }
+
+  Map<String, dynamic> _localRow(ProfileChat chat) => {
+    'id': chat.key.sessionId,
+    'title': chat.title,
+    'source': chat.source,
+    'message_count': chat.messages.length,
+    'last_active': chat.lastActive,
+    'archived': chat.archived,
+  };
   final rows = <String, List<Map<String, dynamic>>>{};
   final projects = <String, List<Map<String, dynamic>>>{};
   final errors = <String, String>{};
@@ -33,7 +189,10 @@ class ChatBrowserData extends ChangeNotifier {
   bool? _refreshingArchived;
 
   void _changed() {
-    if (!_disposed) notifyListeners();
+    if (!_disposed) {
+      _publishEntries();
+      notifyListeners();
+    }
   }
 
   bool get needsRecovery =>
@@ -240,8 +399,9 @@ class ChatBrowserData extends ChangeNotifier {
     }
   }
 
-  List<ChatListEntry> get entries {
+  List<ChatListEntry> _readEntries() {
     final result = <ChatListEntry>[];
+    _localEntries.clear();
     final activity = {
       for (final item in controller.liveActivity)
         ProfileSessionKey(item.workspace, item.sessionId): item.state,
@@ -284,17 +444,10 @@ class ChatBrowserData extends ChangeNotifier {
             chat.offlineSnapshot && !owner.offlineSnapshot) {
           continue;
         }
-        merged.putIfAbsent(
-          chat.key.sessionId,
-          () => {
-            'id': chat.key.sessionId,
-            'title': chat.title,
-            'source': chat.source,
-            'message_count': chat.messages.length,
-            'last_active': chat.lastActive,
-            'archived': chat.archived,
-          },
-        );
+        if (!merged.containsKey(chat.key.sessionId)) {
+          _localEntries.add(chat.key);
+        }
+        merged.putIfAbsent(chat.key.sessionId, () => _localRow(chat));
       }
       for (final row in merged.values) {
         final id = row['id'] as String;
@@ -307,8 +460,9 @@ class ChatBrowserData extends ChangeNotifier {
         result.add(
           ChatListEntry(
             owner: owner,
-            row: row,
-            project: members[id],
+            row: Map.of(row),
+            project: members[id] == null ? null : Map.of(members[id]!),
+            runtimeLabel: _runtimeLabel(owner.chats[id]),
             status: chatListStatus(
               row,
               chat: owner.chats[id],
@@ -324,6 +478,11 @@ class ChatBrowserData extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    controller.browserChanges.removeListener(_controllerChanged);
+    rowsChanged.dispose();
+    for (final value in _values.values) {
+      value.dispose();
+    }
     _generation++;
     _searchGeneration++;
     super.dispose();

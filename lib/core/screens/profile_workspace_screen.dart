@@ -589,6 +589,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
   }
 
+  ProfileWorkspaceBrowser? _browser;
+
   Widget _buildWorkspace(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([controller, _voiceInput, _voiceOutput]),
     builder: (context, _) {
@@ -596,17 +598,25 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       final chat = controller.notificationChat ?? current?.chat;
       _syncComposer(chat);
       if (_destination != AppDestination.chats) {
+        _browser = null;
         return _secondaryDestination(context);
       }
       if (chat == null) {
-        return ProfileWorkspaceBrowser(
-          key: ValueKey(current?.scope),
-          controller: controller,
-          newProject: _projectDialog,
-          drawer: _drawer(),
-          searchFocusNode: _chatSearchFocus,
-        );
+        // Transcript notifications must not recreate the Chats subtree.
+        // Leaving the list or changing its owner starts a fresh visit.
+        if (_browser?.key != ValueKey(current?.scope) ||
+            _browser?.controller != controller) {
+          _browser = ProfileWorkspaceBrowser(
+            key: ValueKey(current?.scope),
+            controller: controller,
+            newProject: _projectDialog,
+            drawer: _drawer(),
+            searchFocusNode: _chatSearchFocus,
+          );
+        }
+        return _browser!;
       }
+      _browser = null;
       final parentSessionId = controller.parentSessionId(chat);
       final stackChatScope =
           MediaQuery.textScalerOf(context).scale(12) > 18 &&

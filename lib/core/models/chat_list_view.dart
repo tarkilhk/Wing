@@ -93,11 +93,13 @@ class ChatListEntry {
     required this.row,
     required this.status,
     this.project,
+    this.runtimeLabel,
   });
   final ProfileWorkspaceData owner;
   final Map<String, dynamic> row;
   final ChatListStatus status;
   final Map<String, dynamic>? project;
+  final String? runtimeLabel;
   String get id => row['id'] as String;
   String get profile => owner.scope.profileName;
   String get key => '${owner.scope.storageNamespace}/$id';
@@ -118,28 +120,60 @@ class ChatListGroup {
 /// Keeps presentation positions stable while the entries themselves stay live.
 /// Reset only at an explicit ordering boundary, not on controller notifications.
 class ChatListArrangement {
-  final _groupPositions = <String, int>{};
-  final _entryPositions = <String, int>{};
-  final _buckets = <String, String>{};
+  final _entryOrder = <ProfileSessionKey>{};
+  final _buckets = <ProfileSessionKey, String>{};
   final _headings = <String, ChatListGroup>{};
   ChatGrouping? _grouping;
   ChatOrdering? _ordering;
+  bool _initialized = false;
 
   void reset() {
-    _groupPositions.clear();
-    _entryPositions.clear();
+    _entryOrder.clear();
     _buckets.clear();
     _headings.clear();
+    _initialized = false;
   }
 
   List<ChatListGroup> apply(
-    List<ChatListGroup> groups,
+    List<ChatListEntry> entries,
     ChatGrouping grouping,
-    ChatOrdering ordering,
-  ) {
+    ChatOrdering ordering, {
+    List<ChatListGroup> emptyGroups = const [],
+    DateTime? now,
+  }) {
     if (_grouping != grouping || _ordering != ordering) reset();
     _grouping = grouping;
     _ordering = ordering;
+    final today = now ?? DateTime.now();
+    if (!_initialized) {
+      for (final group in groupChats(entries, grouping, ordering, now: today)) {
+        _headings[group.key] = group;
+        for (final entry in group.entries) {
+          _entryOrder.add(entry.sessionKey);
+          if (group.key != 'pinned') _buckets[entry.sessionKey] = group.key;
+        }
+      }
+      _initialized = true;
+    }
+
+    final live = {for (final entry in entries) entry.sessionKey: entry};
+    final placement = <ProfileSessionKey, String>{};
+    for (final entry in entries) {
+      final key = entry.sessionKey;
+      _entryOrder.add(key);
+      if (entry.row['pinned'] == true) {
+        _headings['pinned'] = ChatListGroup('pinned', 'Pinned chats', []);
+        placement[key] = 'pinned';
+      } else if ((grouping == ChatGrouping.status ||
+              grouping == ChatGrouping.updated) &&
+          _buckets.containsKey(key)) {
+        placement[key] = _buckets[key]!;
+      } else {
+        final group = _chatGroup(entry, grouping, today);
+        _headings[group.key] = group;
+        placement[key] = _buckets[key] = group.key;
+      }
+    }
     final result = <String, ChatListGroup>{};
     ChatListGroup groupFor(String key) => result.putIfAbsent(key, () {
       final heading = _headings[key]!;
@@ -151,53 +185,32 @@ class ChatListArrangement {
         owner: heading.owner,
       );
     });
-    for (final group in groups) {
-      _groupPositions.putIfAbsent(group.key, () => _groupPositions.length);
-      _headings[group.key] = ChatListGroup(
-        group.key,
-        group.label,
-        [],
-        project: group.project,
-        owner: group.owner,
-      );
-      if (group.entries.isEmpty) groupFor(group.key);
-      for (final entry in group.entries) {
-        _entryPositions.putIfAbsent(entry.key, () => _entryPositions.length);
-        // Status dots and dates remain live, but their changing buckets must
-        // not move a row to another section while the user is reading it.
-        final key = group.key == 'pinned'
-            ? group.key
-            : grouping == ChatGrouping.status ||
-                  grouping == ChatGrouping.updated
-            ? _buckets.putIfAbsent(entry.key, () => group.key)
-            : group.key;
-        groupFor(key).entries.add(entry);
-      }
+    for (final group in emptyGroups) {
+      _headings[group.key] = group;
+      groupFor(group.key);
     }
-    for (final group in result.values) {
-      group.entries.sort(
-        (a, b) => _entryPositions[a.key]!.compareTo(_entryPositions[b.key]!),
-      );
+    // Reconcile membership by walking the established order. Live updates
+    // never sort, even when status/date filters alter the visible subset.
+    for (final key in _entryOrder) {
+      final entry = live[key];
+      if (entry != null) groupFor(placement[key]!).entries.add(entry);
     }
-    return result.values.toList()..sort((a, b) {
-      // Explicit pin/unpin actions retain the dedicated pinned section.
-      if (a.key == 'pinned') return b.key == 'pinned' ? 0 : -1;
-      if (b.key == 'pinned') return 1;
-      return _groupPositions[a.key]!.compareTo(_groupPositions[b.key]!);
-    });
+    return [
+      ?result['pinned'],
+      for (final key in _headings.keys)
+        if (key != 'pinned' && result.containsKey(key)) result[key]!,
+    ];
   }
 }
 
-List<ChatListGroup> groupChats(
-  List<ChatListEntry> entries,
+ChatListGroup _chatGroup(
+  ChatListEntry entry,
   ChatGrouping grouping,
-  ChatOrdering ordering, {
-  DateTime? now,
-}) {
-  final today = now ?? DateTime.now();
-  String dateBucket(ChatListEntry e) {
+  DateTime today,
+) {
+  String dateBucket() {
     final date = DateTime.fromMillisecondsSinceEpoch(
-      (chatUpdated(e.row) * 1000).round(),
+      (chatUpdated(entry.row) * 1000).round(),
     );
     final days = DateTime(
       today.year,
@@ -212,6 +225,32 @@ List<ChatListGroup> groupChats(
         ? 'Previous 7 days'
         : 'Older';
   }
+
+  final (key, label) = switch (grouping) {
+    ChatGrouping.project => (
+      entry.projectKey,
+      entry.project?['name']?.toString() ?? '< ${entry.profile} >',
+    ),
+    ChatGrouping.profile => (entry.profile, entry.profile),
+    ChatGrouping.status => (entry.status.name, entry.status.label),
+    ChatGrouping.updated => (dateBucket(), dateBucket()),
+  };
+  return ChatListGroup(
+    key,
+    label,
+    [],
+    project: grouping == ChatGrouping.project ? entry.project : null,
+    owner: entry.owner,
+  );
+}
+
+List<ChatListGroup> groupChats(
+  List<ChatListEntry> entries,
+  ChatGrouping grouping,
+  ChatOrdering ordering, {
+  DateTime? now,
+}) {
+  final today = now ?? DateTime.now();
 
   int compare(ChatListEntry a, ChatListEntry b) {
     final result = switch (ordering) {
@@ -232,29 +271,10 @@ List<ChatListGroup> groupChats(
   final groups = <String, ChatListGroup>{};
   final pinned = sorted.where((e) => e.row['pinned'] == true).toList();
   for (final e in sorted.where((e) => e.row['pinned'] != true)) {
-    final (key, label) = switch (grouping) {
-      ChatGrouping.project => (
-        e.projectKey,
-        e.project?['name']?.toString() ?? '< ${e.profile} >',
-      ),
-      ChatGrouping.profile => (e.profile, e.profile),
-      ChatGrouping.status => (e.status.name, e.status.label),
-      ChatGrouping.updated => (dateBucket(e), dateBucket(e)),
-    };
-    groups
-        .putIfAbsent(
-          key,
-          () => ChatListGroup(
-            key,
-            label,
-            [],
-            project: grouping == ChatGrouping.project ? e.project : null,
-            owner: e.owner,
-          ),
-        )
-        .entries
-        .add(e);
+    final group = _chatGroup(e, grouping, today);
+    groups.putIfAbsent(group.key, () => group).entries.add(e);
   }
+
   final result = groups.values.toList();
   if (grouping == ChatGrouping.status) {
     result.sort(

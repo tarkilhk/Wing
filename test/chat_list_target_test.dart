@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -7,10 +8,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/chat_list_view.dart';
+import 'package:wing/core/models/profile_live_activity.dart';
 import 'package:wing/core/screens/profile_workspace_browser.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/chat_profile_bar.dart';
 import 'package:wing/core/widgets/chat_working_border.dart';
@@ -67,12 +71,8 @@ class TargetFixture extends ProfileBrowserFixture {
       {
         'id': 'p$i',
         'label':
-            [
-              'demo-app',
-              'research-notes',
-              'design-work',
-              'weekend-plans',
-            ][i % 4] +
+            ['demo-app', 'research-notes', 'design-work', 'weekend-plans'][i %
+                4] +
             (i > 3 ? ' $i' : ''),
         'path': '/p$i',
         'lastActive': now - i * 3600,
@@ -88,10 +88,53 @@ class _ChatListReviewBinding extends AutomatedTestWidgetsFlutterBinding {
   bool get disableShadows => false;
 }
 
+class _CountingController extends ProfileWorkspaceController {
+  _CountingController({
+    required super.connection,
+    required super.connectionIdentity,
+    required super.preferences,
+    required super.gatewayFactory,
+    super.onAttention,
+  });
+  int browserReads = 0;
+  int activityProjectionReads = 0;
+  @override
+  List<ProfileLiveActivity> get liveActivity {
+    activityProjectionReads++;
+    return super.liveActivity;
+  }
+
+  @override
+  ProfileWorkspaceData browserResource(String name) {
+    browserReads++;
+    return super.browserResource(name);
+  }
+}
+
+class _SortReadCounter extends MapBase<String, dynamic> {
+  _SortReadCounter(this.valuesByKey);
+  final Map<String, dynamic> valuesByKey;
+  int sortReads = 0;
+  @override
+  dynamic operator [](Object? key) {
+    if (key == 'started_at') sortReads++;
+    return valuesByKey[key];
+  }
+
+  @override
+  void operator []=(String key, dynamic value) => valuesByKey[key] = value;
+  @override
+  Iterable<String> get keys => valuesByKey.keys;
+  @override
+  void clear() => valuesByKey.clear();
+  @override
+  dynamic remove(Object? key) => valuesByKey.remove(key);
+}
+
 void main() {
   if (const bool.fromEnvironment('CHAT_LIST_REVIEW')) _ChatListReviewBinding();
   late TargetFixture fixture;
-  late ProfileWorkspaceController controller;
+  late _CountingController controller;
   const capture = bool.fromEnvironment('CHAT_LIST_REVIEW');
   setUpAll(() async {
     if (!capture) return;
@@ -111,7 +154,7 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     fixture = TargetFixture();
-    controller = ProfileWorkspaceController(
+    controller = _CountingController(
       connection: SavedConnection(
         id: 'host',
         label: 'Demo server',
@@ -122,6 +165,7 @@ void main() {
       connectionIdentity: 'target',
       preferences: await SharedPreferences.getInstance(),
       gatewayFactory: fixture.gateway,
+      onAttention: (_) async {},
     );
     await controller.initialize();
   });
@@ -131,6 +175,8 @@ void main() {
     Brightness brightness = Brightness.dark,
     double scale = 1,
     bool settle = true,
+    bool workspace = false,
+    bool reducedMotion = false,
   }) async {
     await tester.binding.setSurfaceSize(Size(scale == 1 ? 390 : 320, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -141,16 +187,19 @@ void main() {
           debugShowCheckedModeBanner: false,
           theme: wingTheme(brightness),
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(scale)),
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(scale),
+              disableAnimations: reducedMotion,
+            ),
             child: child!,
           ),
-          home: ProfileWorkspaceBrowser(
-            controller: controller,
-            drawer: const Drawer(),
-            newProject: () async {},
-          ),
+          home: workspace
+              ? ProfileWorkspaceScreen(controller: controller)
+              : ProfileWorkspaceBrowser(
+                  controller: controller,
+                  drawer: const Drawer(),
+                  newProject: () async {},
+                ),
         ),
       ),
     );
@@ -159,6 +208,29 @@ void main() {
     } else {
       await tester.pump(const Duration(milliseconds: 100));
     }
+  }
+
+  Future<void> finishCompletion(
+    WidgetTester tester,
+    VoidCallback complete,
+  ) async {
+    // Completion includes persistence; wait for the controller rather than
+    // relying on unrelated list redraws to keep pumpAndSettle alive.
+    await tester.runAsync(() async {
+      final done = Completer<void>();
+      void changed() {
+        if (!controller.hasActiveChats && !done.isCompleted) done.complete();
+      }
+
+      controller.addListener(changed);
+      try {
+        complete();
+        await done.future.timeout(const Duration(seconds: 2));
+      } finally {
+        controller.removeListener(changed);
+      }
+    });
+    await tester.pumpAndSettle();
   }
 
   Future<void> screenshot(WidgetTester tester, String name) async {
@@ -276,7 +348,7 @@ void main() {
     testWidgets('live updates keep chat positions until $boundary', (
       tester,
     ) async {
-      await show(tester);
+      await show(tester, workspace: true);
       await select(tester, 'profile', 'personal');
       final first = find.byKey(const ValueKey('chat-personal-session-0'));
       final second = find.byKey(const ValueKey('chat-personal-session-1'));
@@ -325,6 +397,424 @@ void main() {
         lessThan(tester.getTopLeft(first).dy),
       );
     });
+  }
+  testWidgets('background answer completion keeps chat positions', (
+    tester,
+  ) async {
+    final owner = controller.browserResource('personal');
+    final chat = ProfileChat(
+      key: ProfileSessionKey(owner.scope, 'session-1'),
+      runtimeId: 'answer-runtime',
+      title: 'Summarize a research paper',
+    );
+    owner.chats[chat.key.sessionId] = chat;
+    await show(tester, workspace: true);
+    await select(tester, 'profile', 'personal');
+    final first = find.byKey(const ValueKey('chat-personal-session-0'));
+    final second = find.byKey(const ValueKey('chat-personal-session-1'));
+    final initial = tester.getTopLeft(second);
+    owner.gateway.onEvent!(
+      StreamEvent(
+        type: 'message.start',
+        sessionId: chat.runtimeId,
+        data: const {},
+      ),
+    );
+    await tester.pump();
+    for (var i = 0; i < 3; i++) {
+      owner.gateway.onEvent!(
+        StreamEvent(
+          type: 'message.delta',
+          sessionId: chat.runtimeId,
+          data: {'text': 'answer $i'},
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+      expect(tester.getTopLeft(second), initial);
+    }
+    fixture.rowUpdates['personal/session-1'] = {
+      'last_active': fixture.now + 100,
+      'title': 'Completed answer',
+    };
+    await finishCompletion(
+      tester,
+      () => owner.gateway.onEvent!(
+        StreamEvent(
+          type: 'message.complete',
+          sessionId: chat.runtimeId,
+          data: const {'text': 'Completed answer'},
+        ),
+      ),
+    );
+    expect(chat.status, ProfileTurnStatus.completed);
+    expect(
+      owner.sessions.singleWhere((row) => row['id'] == 'session-1')['title'],
+      'Completed answer',
+    );
+    expect(chat.error, isNull);
+    expect(find.text('Completed answer'), findsOneWidget);
+    expect(tester.getTopLeft(second), initial);
+    expect(tester.getTopLeft(first).dy, lessThan(tester.getTopLeft(second).dy));
+  });
+  for (final profile in ['personal', 'work']) {
+    testWidgets('streaming $profile answers do not rebuild the Chats list', (
+      tester,
+    ) async {
+      final owner = controller.browserResource(profile);
+      final chat = ProfileChat(
+        key: ProfileSessionKey(owner.scope, 'session-1'),
+        runtimeId: 'streaming-runtime',
+        title: 'Background answer',
+      );
+      owner.chats[chat.key.sessionId] = chat;
+      await show(tester, workspace: true);
+      void event(String type) => owner.gateway.onEvent!(
+        StreamEvent(
+          type: type,
+          sessionId: chat.runtimeId,
+          data: const {'text': 'more answer'},
+        ),
+      );
+      event('message.start');
+      await tester.pump();
+      controller.browserReads = 0;
+      final builds = <String, int>{};
+      final previous = debugOnRebuildDirtyWidget;
+      debugOnRebuildDirtyWidget = (element, builtOnce) {
+        previous?.call(element, builtOnce);
+        if (element.widget is ProfileWorkspaceBrowser ||
+            element.widget is ListTile) {
+          final name = element.widget.runtimeType.toString();
+          builds.update(name, (n) => n + 1, ifAbsent: () => 1);
+        }
+      };
+      addTearDown(() => debugOnRebuildDirtyWidget = previous);
+      for (var i = 0; i < 10; i++) {
+        event('message.delta');
+        event('reasoning.delta');
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(builds, isEmpty, reason: 'Answer text is not displayed in Chats');
+      expect(
+        controller.browserReads,
+        0,
+        reason: 'Streaming must not rebuild the connection-wide index',
+      );
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+  testWidgets('status and completion update only their own chat row', (
+    tester,
+  ) async {
+    final owner = controller.browserResource('personal');
+    final chat = ProfileChat(
+      key: ProfileSessionKey(owner.scope, 'session-1'),
+      runtimeId: 'row-runtime',
+      title: 'Live row',
+    );
+    owner.chats[chat.key.sessionId] = chat;
+    await show(tester, workspace: true);
+    await select(tester, 'profile', 'personal');
+    final unaffected = find.byKey(const ValueKey('chat-personal-session-0'));
+    final affected = find.byKey(const ValueKey('chat-personal-session-1'));
+    final list = find.byKey(const ValueKey('chat-list-false'));
+    final originalRow = tester.widget(unaffected);
+    final originalList = tester.widget(list);
+    owner.gateway.onEvent!(
+      StreamEvent(
+        type: 'message.start',
+        sessionId: chat.runtimeId,
+        data: const {},
+      ),
+    );
+    await tester.pump();
+    expect(
+      tester.widget<ChatWorkingBorder>(
+        find.ancestor(of: affected, matching: find.byType(ChatWorkingBorder)),
+      ),
+      isA<ChatWorkingBorder>().having((w) => w.working, 'working', isTrue),
+    );
+    expect(tester.widget(unaffected), same(originalRow));
+    expect(tester.widget(list), same(originalList));
+    fixture.rowUpdates['personal/session-1'] = {
+      'last_active': fixture.now + 100,
+      'title': 'New answer title',
+    };
+    await finishCompletion(
+      tester,
+      () => owner.gateway.onEvent!(
+        StreamEvent(
+          type: 'message.complete',
+          sessionId: chat.runtimeId,
+          data: const {'text': 'Done'},
+        ),
+      ),
+    );
+    expect(find.text('New answer title'), findsOneWidget);
+    expect(tester.widget(unaffected), same(originalRow));
+    expect(tester.widget(list), same(originalList));
+    expect(
+      tester.getTopLeft(unaffected).dy,
+      lessThan(tester.getTopLeft(affected).dy),
+    );
+  });
+  test(
+    'arrangement reads sort fields only at explicit ordering boundaries',
+    () {
+      final owner = controller.browserResource('personal');
+      final first = _SortReadCounter({'id': 'a', 'started_at': 100});
+      final second = _SortReadCounter({'id': 'b', 'started_at': 90});
+      final entries = [
+        for (final row in [first, second])
+          ChatListEntry(owner: owner, row: row, status: ChatListStatus.idle),
+      ];
+      final arrangement = ChatListArrangement();
+      List<String> arranged() => arrangement
+          .apply(entries, ChatGrouping.profile, ChatOrdering.created)
+          .single
+          .entries
+          .map((e) => e.id)
+          .toList();
+      expect(arranged(), ['a', 'b']);
+      expect(first.sortReads + second.sortReads, greaterThan(0));
+      first.sortReads = second.sortReads = 0;
+      second['started_at'] = 200;
+      expect(arranged(), ['a', 'b']);
+      expect(first.sortReads + second.sortReads, 0);
+      arrangement.reset();
+      expect(arranged(), ['b', 'a']);
+      expect(first.sortReads + second.sortReads, greaterThan(0));
+    },
+  );
+  testWidgets('unopened chat activity updates without rebuilding the index', (
+    tester,
+  ) async {
+    await show(tester, workspace: true, reducedMotion: true);
+    await select(tester, 'profile', 'personal');
+    final list = find.byKey(const ValueKey('chat-list-false'));
+    final originalList = tester.widget(list);
+    final affected = find.byKey(const ValueKey('chat-personal-session-1'));
+    final border = find.ancestor(
+      of: affected,
+      matching: find.byType(ChatWorkingBorder),
+    );
+    controller.activityProjectionReads = 0;
+    fixture.liveSessions['personal'] = [
+      {
+        'id': 'outside-runtime',
+        'session_key': 'session-1',
+        'status': 'working',
+        'last_active': fixture.now,
+      },
+    ];
+    await controller.refreshActivity();
+    await tester.pumpAndSettle();
+    expect(tester.widget<ChatWorkingBorder>(border).working, isTrue);
+    fixture.liveSessions.clear();
+    await controller.refreshActivity();
+    await tester.pumpAndSettle();
+    expect(tester.widget<ChatWorkingBorder>(border).working, isFalse);
+    expect(tester.widget(list), same(originalList));
+    expect(
+      controller.activityProjectionReads,
+      0,
+      reason: 'An activity snapshot must not rebuild the saved chat index',
+    );
+  });
+  testWidgets('global completion notification does not rebuild the index', (
+    tester,
+  ) async {
+    fixture.liveSessions['personal'] = [
+      {
+        'id': 'outside-runtime',
+        'session_key': 'session-1',
+        'status': 'working',
+        'last_active': fixture.now,
+      },
+    ];
+    await show(tester, workspace: true, reducedMotion: true);
+    await select(tester, 'profile', 'personal');
+    final affected = find.byKey(const ValueKey('chat-personal-session-1'));
+    final border = find.ancestor(
+      of: affected,
+      matching: find.byType(ChatWorkingBorder),
+    );
+    expect(tester.widget<ChatWorkingBorder>(border).working, isTrue);
+    final owner = controller.browserResource('personal');
+    final list = find.byKey(const ValueKey('chat-list-false'));
+    final originalList = tester.widget(list);
+    controller.activityProjectionReads = 0;
+    fixture.liveSessions['personal']!.single['status'] = 'idle';
+    await tester.runAsync(() async {
+      final changed = Completer<void>();
+      void complete() {
+        if (!changed.isCompleted) changed.complete();
+      }
+
+      controller.addListener(complete);
+      try {
+        owner.gateway.onEvent!(
+          StreamEvent(type: 'sessions.changed', data: const {}),
+        );
+        await changed.future.timeout(const Duration(seconds: 2));
+      } finally {
+        controller.removeListener(complete);
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(tester.widget<ChatWorkingBorder>(border).working, isFalse);
+    expect(tester.widget(list), same(originalList));
+    expect(controller.activityProjectionReads, 0);
+  });
+  testWidgets('live token totals update without rebuilding the chat list', (
+    tester,
+  ) async {
+    await show(tester, workspace: true);
+    await select(tester, 'profile', 'personal');
+    await openViewMenu(tester, 'show-details');
+    await tester.tap(find.byKey(const ValueKey('chat-menu-tokens')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(find.text('9.0k'), findsOneWidget);
+    final list = find.byKey(const ValueKey('chat-list-false'));
+    final originalList = tester.widget(list);
+    final owner = controller.browserResource('personal');
+    owner.sessions = [
+      for (final row in owner.sessions)
+        {...row, if (row['id'] == 'session-1') 'input_tokens': 2000},
+    ];
+    controller.clearSearch();
+    await tester.pumpAndSettle();
+    expect(find.text('10.0k'), findsOneWidget);
+    expect(find.text('2.5k'), findsOneWidget);
+    expect(tester.widget(list), same(originalList));
+  });
+  testWidgets('status filter membership follows live row changes', (
+    tester,
+  ) async {
+    final owner = controller.browserResource('personal');
+    final chat = ProfileChat(
+      key: ProfileSessionKey(owner.scope, 'session-1'),
+      runtimeId: 'filter-runtime',
+      title: 'Filtered chat',
+    );
+    owner.chats[chat.key.sessionId] = chat;
+    await show(tester, workspace: true, reducedMotion: true);
+    await select(tester, 'status', 'working');
+    final row = find.byKey(const ValueKey('chat-personal-session-1'));
+    expect(row, findsNothing);
+    owner.gateway.onEvent!(
+      StreamEvent(
+        type: 'message.start',
+        sessionId: chat.runtimeId,
+        data: const {},
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(row, findsOneWidget);
+    await finishCompletion(
+      tester,
+      () => owner.gateway.onEvent!(
+        StreamEvent(
+          type: 'message.complete',
+          sessionId: chat.runtimeId,
+          data: const {'text': 'Done'},
+        ),
+      ),
+    );
+    expect(row, findsNothing);
+  });
+  for (final boundary in ['entry', 'refresh']) {
+    testWidgets(
+      'late $boundary activity read cannot reorder already loaded chats',
+      (tester) async {
+        if (boundary == 'refresh') await show(tester, workspace: true);
+        final delay = Completer<void>();
+        fixture.searchDelays['session-1'] = delay;
+        fixture.liveSessions['personal'] = [
+          {
+            'id': 'answer-runtime',
+            'session_key': 'session-1',
+            'status': 'working',
+            'last_active': fixture.now,
+          },
+        ];
+        final owner = controller.browserResource('personal');
+        final chat = ProfileChat(
+          key: ProfileSessionKey(owner.scope, 'session-1'),
+          runtimeId: 'answer-runtime',
+          title: 'Pending answer',
+        );
+        owner.chats[chat.key.sessionId] = chat;
+        if (boundary == 'entry') {
+          await show(tester, workspace: true, settle: false);
+        } else {
+          unawaited(
+            tester
+                .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+                .onRefresh(),
+          );
+        }
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        expect(
+          fixture.reads.any(
+            (read) =>
+                read.$1 == 'sessions/search' && read.$2['q'] == 'session-1',
+          ),
+          isTrue,
+        );
+        final browserState = tester.state(find.byType(ProfileWorkspaceBrowser));
+        final first = find.byKey(const ValueKey('chat-personal-session-0'));
+        final second = find.byKey(const ValueKey('chat-personal-session-1'));
+        expect(
+          tester.getTopLeft(first).dy,
+          lessThan(tester.getTopLeft(second).dy),
+        );
+        fixture.rowUpdates['personal/session-1'] = {
+          'last_active': fixture.now + 100,
+        };
+        owner.gateway.onEvent!(
+          StreamEvent(
+            type: 'message.start',
+            sessionId: chat.runtimeId,
+            data: const {},
+          ),
+        );
+        owner.gateway.onEvent!(
+          StreamEvent(
+            type: 'message.complete',
+            sessionId: chat.runtimeId,
+            data: const {'text': 'Completed answer'},
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(
+          owner.sessions.singleWhere(
+            (row) => row['id'] == 'session-1',
+          )['last_active'],
+          fixture.now + 100,
+        );
+        expect(
+          tester.getTopLeft(first).dy,
+          lessThan(tester.getTopLeft(second).dy),
+        );
+        delay.complete();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(controller.activityLoading, isFalse);
+        expect(
+          tester.state(find.byType(ProfileWorkspaceBrowser)),
+          same(browserState),
+        );
+        expect(
+          tester.getTopLeft(first).dy,
+          lessThan(tester.getTopLeft(second).dy),
+        );
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
   }
   testWidgets(
     'project popup has five visible rows and scrolls without closing',
@@ -677,11 +1167,7 @@ void main() {
         );
         final arrangement = ChatListArrangement();
         List<ChatListGroup> arrange(List<ChatListEntry> entries) =>
-            arrangement.apply(
-              groupChats(entries, ChatGrouping.project, ordering),
-              ChatGrouping.project,
-              ordering,
-            );
+            arrangement.apply(entries, ChatGrouping.project, ordering);
         final a = entry('a', 100);
         arrange([a, entry('b', 90), entry('other', 80, project: 'p1')]);
         final b = entry('b', 200);
@@ -725,9 +1211,10 @@ void main() {
             );
         final arrangement = ChatListArrangement();
         List<ChatListGroup> arrange(ChatListEntry entry) => arrangement.apply(
-          groupChats([entry], grouping, ChatOrdering.updated, now: now),
+          [entry],
           grouping,
           ChatOrdering.updated,
+          now: now,
         );
         final initial = arrange(entry(active: false)).single.key;
         final live = arrange(entry(active: true)).single;
