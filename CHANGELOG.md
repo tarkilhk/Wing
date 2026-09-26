@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep draft typing and queued-message edits from rebuilding unchanged chat
+  history or waking workspace-wide notification observers.
 - Show a home icon for the backend's default profile in Chats. Limit the
   profile strip to five visible squares, with horizontal scrolling for more.
 

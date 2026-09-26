@@ -328,6 +328,11 @@ typedef ProfileAttention =
 /// Owned by the application, not the workspace/chat widgets. A foreground
 /// switch never closes a socket, changes a chat owner, or cancels a turn.
 class ProfileWorkspaceController extends ChangeNotifier {
+  // Draft text affects the composer, not saved history, notification inputs or
+  // background monitoring. Keep keystrokes off the workspace-wide update path.
+  final _composerChanges = ChangeNotifier();
+  Listenable get composerChanges => _composerChanges;
+
   static const _maxReviewNotices = 20;
 
   /// App-owned failure; distinguish it from opaque command output in the UI.
@@ -3267,7 +3272,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     chat.draft = text;
     chat.draftSubmissionUncertain = false;
-    _changed();
+    if (!_closed) _composerChanges.notifyListeners();
     if (chat.queueMutating) {
       chat.queueDraftChanged = true;
       return Future.value();
@@ -4752,7 +4757,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _owned(chat);
     if (chat.editingQueuedPrompt == null || chat.queueMutating) return;
     chat.queuedEditText = text;
-    _changed();
+    if (!_closed) _composerChanges.notifyListeners();
   }
 
   Future<void> cancelQueuedPromptEdit(ProfileChat chat) async {
@@ -6760,6 +6765,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   @override
   void dispose() {
     _closed = true;
+    _composerChanges.dispose();
     _healthSession?.dispose();
     _notificationRetry?.cancel();
     unawaited(_saveReadingSnapshot());

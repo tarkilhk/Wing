@@ -8,6 +8,9 @@ Host unit/widget tests establish client behavior with their supplied responses. 
 
 Keep logs and generated captures under ignored `build/`. Record source revision, backend revision, device, executed scenario and remaining limit in the PR or issue. Do not create another release-by-release documentation journal. Redact evidence using [Security](../SECURITY.md).
 
+For CPU attribution, input latency, thermal load and battery investigations, use
+the [performance procedure](PERFORMANCE.md) and its repeatable phone recorder.
+
 ## Useful test entry points
 
 | Boundary | Entry points |
