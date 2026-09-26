@@ -52,6 +52,14 @@ The subsequent density refinement matches desktop's 20 dp squares, 4 dp gaps,
 The owner also requested a 1.5 dp outside border around selected profile squares
 for visibility, using their profile color (neutral for default). This is an
 explicit exception to the selection-border rule; square size and spacing stay fixed.
+The owner's 26 September refinement replaces the initial with a 14 dp outlined
+home icon when the backend profile has `is_default: true`. Use the backend flag,
+including after display-name changes; selection does not change the glyph.
+Other profiles retain their initials. This is independent of the desktop's local
+“Set as default” preference; see [the verified contract](DEFAULT_PROFILE.md).
+The Chats profile viewport is right-aligned and capped at five 24 dp tap targets
+(120 dp). Additional profiles remain available by horizontal scrolling; narrower
+headers can show fewer than five at once.
 
 Working chat rows show desktop's travelling rectangular arc: a flush 1.25 dp
 border, 160-degree gradient with a fading tail, and a 2.23-second linear loop.

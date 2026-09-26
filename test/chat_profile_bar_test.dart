@@ -54,7 +54,7 @@ void main() {
     }
   });
 
-  testWidgets('bounded bar scrolls both ways and exposes named selection', (
+  testWidgets('five-profile bar scrolls and exposes named selection', (
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
@@ -88,12 +88,20 @@ void main() {
     );
     final bar = find.byKey(const ValueKey('chat-profile-scroll'));
     final last = find.byKey(const ValueKey('chat-profile-profile-11'));
-    expect(tester.getSize(bar), const Size(144, 48));
+    expect(tester.getSize(bar), const Size(120, 48));
     expect(
       tester.getTopLeft(find.byKey(const ValueKey('chat-profile-default'))).dx,
       lessThan(
         tester.getTopLeft(find.byKey(const ValueKey('chat-profile-aaa'))).dx,
       ),
+    );
+    expect(
+      find.byKey(const ValueKey('chat-profile-profile-02')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('chat-profile-profile-03')).hitTestable(),
+      findsNothing,
     );
     expect(last.hitTestable(), findsNothing);
     await tester.drag(bar, const Offset(-600, 0));
@@ -118,7 +126,7 @@ void main() {
       find.byKey(const ValueKey('chat-profile-profile-00')).hitTestable(),
       findsOneWidget,
     );
-    expect(tester.getSize(bar), const Size(144, 48));
+    expect(tester.getSize(bar), const Size(120, 48));
     semantics.dispose();
   });
 }

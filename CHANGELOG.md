@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Show a home icon for the backend's default profile in Chats. Limit the
+  profile strip to five visible squares, with horizontal scrolling for more.
+
 ## [1.1.1] - 2026-09-25
 
 - Long-press an Administration profile pill to choose from Desktop's profile
