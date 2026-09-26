@@ -1539,11 +1539,10 @@ class HomeScreenState extends State<HomeScreen> {
         floatingActionButton:
             _destination == AppDestination.connections &&
                 _connections.isNotEmpty
-            ? FloatingActionButton.extended(
+            ? FloatingActionButton(
                 tooltip: 'Add instance',
                 onPressed: _addConnection,
-                icon: const Icon(Icons.add),
-                label: const Text('Add instance'),
+                child: const Icon(Icons.add),
               )
             : null,
       ),

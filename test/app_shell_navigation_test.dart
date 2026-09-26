@@ -147,7 +147,21 @@ void main() {
         );
         expect(find.text('Hermes instances'), findsOneWidget);
         expect(find.text('Homelab'), findsOneWidget);
-        expect(find.text('Add instance'), findsOneWidget);
+        final addInstanceFinder = find.byType(FloatingActionButton);
+        expect(find.byTooltip('Add instance'), findsOneWidget);
+        expect(addInstanceFinder, findsOneWidget);
+        expect(find.text('Add instance'), findsNothing);
+        expect(
+          tester.widget<FloatingActionButton>(addInstanceFinder).isExtended,
+          isFalse,
+        );
+        expect(
+          find.descendant(
+            of: addInstanceFinder,
+            matching: find.byIcon(Icons.add),
+          ),
+          findsOneWidget,
+        );
         expect(find.byTooltip('Backup configuration'), findsNothing);
         expect(find.byTooltip('Restore configuration'), findsNothing);
         await snapshot(tester, 'instances-${brightness.name}-$scale');
