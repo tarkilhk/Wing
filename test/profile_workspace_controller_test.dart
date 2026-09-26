@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/widgets/composer_action_button.dart';
 import 'package:wing/core/models/attachment_draft.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/queued_prompt_draft.dart';
@@ -1410,8 +1411,125 @@ void main() {
     },
   );
 
+  testWidgets('send is available while completed history is still loading', (
+    tester,
+  ) async {
+    final chat = await controller.createChat();
+    await controller.updateDraft(chat, 'Next question');
+    host.event('a', 'message.start');
+    final history = host.delays['a'] = Completer<void>();
+    host.event('a', 'message.complete', {'text': 'First answer'});
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    try {
+      final send = tester.widget<IconButton>(
+        find.descendant(
+          of: find.byType(ComposerActionButton),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(send.onPressed, isNotNull);
+      await tester.runAsync(() => controller.send(chat));
+      expect(
+        host.calls.where((call) => call.$2 == 'prompt.submit'),
+        hasLength(1),
+      );
+      expect(chat.status, ProfileTurnStatus.running);
+    } finally {
+      history.complete();
+      await tester.pump();
+    }
+    // The older history response must not remove the new prompt or finish it.
+    expect(chat.status, ProfileTurnStatus.running);
+    expect(chat.messages.last['content'], 'Next question');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  test('an older idle snapshot cannot finish a new submission', () async {
+    final chat = await controller.createChat();
+    host.running = false;
+    host.notificationActiveSessions = [
+      {
+        'id': chat.runtimeId,
+        'session_key': chat.key.sessionId,
+        'status': 'idle',
+      },
+    ];
+    host.activeListDelay = Completer<void>();
+    host.event('a', 'sessions.changed');
+    await Future<void>.delayed(Duration.zero);
+    await controller.updateDraft(chat, 'New turn');
+    await controller.send(chat);
+    host.activeListDelay!.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(chat.status, ProfileTurnStatus.running);
+    expect(host.calls.where((call) => call.$2 == 'session.resume'), isEmpty);
+  });
+
   test(
-    'unsolicited message start survives an older turn settling history refresh',
+    'completion before acknowledgement cannot submit the next draft twice',
+    () async {
+      final chat = await controller.createChat();
+      await controller.updateDraft(chat, 'First question');
+      host.promptSubmitStarted = Completer<void>();
+      host.promptSubmitDelay = Completer<void>();
+      final sending = controller.send(chat);
+      await host.promptSubmitStarted!.future;
+      host.event('a', 'message.complete', {'text': 'First answer'});
+      await controller.updateDraft(chat, 'Next question');
+      try {
+        await controller.send(chat);
+        expect(
+          host.calls.where((call) => call.$2 == 'prompt.submit'),
+          hasLength(1),
+        );
+        expect(chat.draft, 'Next question');
+      } finally {
+        host.promptSubmitDelay!.complete();
+        await sending;
+      }
+      host.promptSubmitStarted = null;
+      await controller.send(chat);
+      expect(
+        host.calls.where((call) => call.$2 == 'prompt.submit'),
+        hasLength(2),
+      );
+    },
+  );
+
+  test(
+    'queued follow-up waits for acknowledgement after early completion',
+    () async {
+      final chat = await controller.createChat();
+      chat.queuedPrompts.add(QueuedPromptDraft(text: 'Queued question'));
+      await controller.updateDraft(chat, 'First question');
+      host.promptSubmitStarted = Completer<void>();
+      host.promptSubmitDelay = Completer<void>();
+      final sending = controller.send(chat);
+      await host.promptSubmitStarted!.future;
+      host.event('a', 'message.complete', {'text': 'First answer'});
+      await Future<void>.delayed(Duration.zero);
+      try {
+        expect(chat.queuePaused, isFalse);
+        expect(chat.queuedPrompts, hasLength(1));
+      } finally {
+        host.promptSubmitStarted = null;
+        host.promptSubmitDelay!.complete();
+        await sending;
+      }
+      await Future<void>.delayed(Duration.zero);
+      expect(chat.queuePaused, isFalse);
+      expect(chat.queuedPrompts, isEmpty);
+      expect(
+        host.calls.where((call) => call.$2 == 'prompt.submit'),
+        hasLength(2),
+      );
+    },
+  );
+
+  test(
+    'unsolicited message start survives an older completed history refresh',
     () async {
       final chat = await controller.createChat();
       chat.status = ProfileTurnStatus.completed;
@@ -1423,7 +1541,7 @@ void main() {
       host.event('a', 'message.start');
       host.event('a', 'message.delta', {'text': 'First reply'});
       host.event('a', 'message.complete');
-      expect(chat.status, ProfileTurnStatus.settling);
+      expect(chat.status, ProfileTurnStatus.completed);
 
       host.event('a', 'message.start');
       host.event('a', 'reasoning.delta', {'text': 'Second reasoning'});
@@ -1864,18 +1982,24 @@ void main() {
     expect(controller.error, isNull);
   });
 
-  test('restored chat socket clears warning during slow notification checks', () async {
-    host.activeListDelay = Completer<void>();
-    final recovery = controller.reconnect(controller.current!.scope);
-    await Future<void>.delayed(Duration.zero);
+  test(
+    'restored chat socket clears warning during slow notification checks',
+    () async {
+      host.activeListDelay = Completer<void>();
+      final recovery = controller.reconnect(controller.current!.scope);
+      await Future<void>.delayed(Duration.zero);
 
-    expect(await controller.current!.gateway.call('tools.list'), isEmpty);
-    expect(controller.connectionStatus.liveAvailable('a'), isTrue);
-    expect(controller.connectionStatus.phase, ServerConnectionPhase.connected);
+      expect(await controller.current!.gateway.call('tools.list'), isEmpty);
+      expect(controller.connectionStatus.liveAvailable('a'), isTrue);
+      expect(
+        controller.connectionStatus.phase,
+        ServerConnectionPhase.connected,
+      );
 
-    host.activeListDelay!.complete();
-    await recovery;
-  });
+      host.activeListDelay!.complete();
+      await recovery;
+    },
+  );
 
   test('retry recovers an interrupted activity-only profile', () async {
     final owner = controller.current!;
@@ -1974,6 +2098,35 @@ void main() {
       expect(controller.current!.retry, isNull);
     },
   );
+
+  testWidgets('exhausted session recovery cannot show a green connection', (
+    tester,
+  ) async {
+    final chat = await controller.createChat();
+    await controller.updateDraft(chat, 'Keep this draft');
+    host.running = false;
+    host.resumeFailures = 5;
+    host.gateways['a']!.onConnectionChanged!(false);
+    for (final seconds in [1, 2, 4, 8, 16]) {
+      await tester.pump(Duration(seconds: seconds));
+    }
+    // An independent activity read can restore the transport without restoring
+    // this conversation. That must not clear its failed recovery indicator.
+    await tester.runAsync(() => controller.current!.gateway.connect());
+    expect(controller.connectionStatus.liveAvailable('a'), isTrue);
+    expect(controller.recovering, isTrue);
+    expect(controller.current!.retry, isNull);
+    expect(
+      controller.connectionStatus.phase,
+      ServerConnectionPhase.disconnected,
+    );
+    expect(controller.connectionStatus.recoveryProblem, isNotNull);
+    await tester.runAsync(controller.connectionStatus.retry!);
+    expect(controller.recovering, isFalse);
+    expect(controller.connectionStatus.phase, ServerConnectionPhase.connected);
+    expect(chat.draft, 'Keep this draft');
+    expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+  });
 
   testWidgets('sign-in rejection stops automatic live recovery', (
     tester,

@@ -88,7 +88,6 @@ enum ProfileTurnStatus {
   running,
   attention,
   reconnecting,
-  settling,
   completed,
   cancelled,
   failed,
@@ -238,7 +237,6 @@ class ProfileChat {
     ProfileTurnStatus.running,
     ProfileTurnStatus.attention,
     ProfileTurnStatus.reconnecting,
-    ProfileTurnStatus.settling,
   }.contains(status);
 
   /// Background work can outlive the parent turn without blocking its composer.
@@ -4457,6 +4455,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
             ? <AttachmentDraft>[]
             : List<AttachmentDraft>.of(chat.attachments));
     if (chat.busy ||
+        chat.sendingPrompt ||
         chat.queueMutating ||
         chat._attachmentPreparations != 0 ||
         chat.changingAnswer ||
@@ -4466,6 +4465,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     final text = prompt ?? chat.draft.trim();
     final draftAtSubmit = chat.draft;
+    // A new submission owns the transcript before its first live event arrives.
+    chat._turnGeneration++;
+    chat.historyGeneration++;
+    chat.historyLoading = false;
     chat._submissionInFlight = true;
     chat.lastActive = DateTime.now().millisecondsSinceEpoch / 1000;
     chat.status = ProfileTurnStatus.submitting;
@@ -4594,6 +4597,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     await _journal();
     _changed();
+    if (acknowledged && !chat.busy) unawaited(_drainQueuedPrompts(chat));
     return acknowledged;
   }
 
@@ -4971,6 +4975,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   Future<void> _drainQueuedPrompts(ProfileChat chat) async {
     if (_closed ||
+        chat.sendingPrompt ||
         chat.editingQueuedPrompt != null ||
         chat.queuePaused ||
         chat.queueMutating ||
@@ -5509,7 +5514,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           _updateContext(chat, event.data['usage'] as Map);
         }
       case 'message.start':
-        if (!chat.busy || chat.status == ProfileTurnStatus.settling) {
+        if (!chat.busy) {
           chat.mainActivity = ProfileMainActivity.working;
           chat.mainToolActivity = null;
           chat._turnGeneration++;
@@ -5738,7 +5743,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
       case 'message.complete':
       case 'turn.end':
-        if (chat.busy && chat.status != ProfileTurnStatus.settling) {
+        if (chat.busy) {
           unawaited(
             _settle(resource, chat, event.data).catchError((Object e) {
               chat.error = e.toString();
@@ -5781,9 +5786,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
   ) async {
     final turnGeneration = chat._turnGeneration;
     bool isCurrentTurn() => chat._turnGeneration == turnGeneration;
-    chat.status = ProfileTurnStatus.settling;
     final failed = completion['status'] == 'error';
     final cancelled = completion['status'] == 'interrupted';
+    // Completion releases the composer immediately; refreshing saved views
+    // does not keep the server turn running.
+    chat.status = failed
+        ? ProfileTurnStatus.failed
+        : cancelled
+        ? ProfileTurnStatus.cancelled
+        : ProfileTurnStatus.completed;
+    if ((failed || cancelled) && chat.queuedPrompts.isNotEmpty) {
+      chat.queuePaused = true;
+    }
     final failure = failed
         ? (completion['error'] ?? completion['text'] ?? 'Turn failed')
               .toString()
@@ -5853,13 +5867,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           failure ??
           'Turn finished. History refresh failed; reconnect to reload.';
     }
-    chat.status = failed
-        ? ProfileTurnStatus.failed
-        : cancelled
-        ? ProfileTurnStatus.cancelled
-        : ProfileTurnStatus.completed;
     if ((failed || cancelled) && chat.queuedPrompts.isNotEmpty) {
-      chat.queuePaused = true;
       await _persistDraft(chat);
     }
     await _journal();
@@ -6015,6 +6023,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
   ) async {
     if (_closed || onAttention == null) return;
     final cachedActivity = _liveActivity;
+    final turnGenerations = {
+      for (final resource in _resources.values)
+        for (final chat in resource.chats.values) chat: chat._turnGeneration,
+    };
     try {
       final profiles = await source.gateway.discover();
       final response = await source.gateway.call('session.active_list');
@@ -6058,8 +6070,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
           final inputStateChanged =
               loaded.status == ProfileTurnStatus.attention &&
               (status == 'idle' || remoteWorking);
+          final missedCompletion =
+              loaded.status == ProfileTurnStatus.running && status == 'idle';
           if (!loaded.commandRunning &&
-              ((!loaded.busy && remoteWorking) || inputStateChanged)) {
+              !loaded.sendingPrompt &&
+              loaded._turnGeneration == turnGenerations[loaded] &&
+              ((!loaded.busy && remoteWorking) ||
+                  inputStateChanged ||
+                  missedCompletion)) {
             final generation = loaded._turnGeneration;
             final previousStatus = loaded.status;
             final owner = _resources[loaded.key.workspace]!;
@@ -6070,6 +6088,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
                 loaded._turnGeneration == generation &&
                 loaded.status == previousStatus &&
                 !loaded.commandRunning &&
+                !loaded.sendingPrompt &&
                 localInputs ==
                     jsonEncode(
                       _notificationInputs(
@@ -6079,6 +6098,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
               _hydrate(loaded, resumed);
               loaded.offlineSnapshot = false;
               await _journal();
+              if (missedCompletion && !loaded.busy) {
+                await refreshHistory(loaded);
+                if (loaded._turnGeneration != generation) continue;
+                if (loaded.historyError == null) loaded.streaming = '';
+                _notifyRecoveredResult(loaded);
+                await _drainQueuedPrompts(loaded);
+              }
             }
           }
           continue;
@@ -6367,10 +6393,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
       return;
     }
     if (resource.reconnectAttempt >= _maxRecoveryRetries) {
-      // Still awaiting reconciliation: keep sending disabled while waiting
-      // for the next focus/network event, without an active retry indicator.
+      // A restored transport is not proof the conversation was restored.
       resource.recovering = true;
-      connectionStatus.endRecovery(resource.scope.profileName);
+      connectionStatus.failRecovery(
+        resource.scope.profileName,
+        'Could not restore the conversation. Retry to continue.',
+      );
       _changed();
       return;
     }
@@ -6464,7 +6492,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
       resource.recovering = retry;
       resource.reconnectError = retry ? null : workspaceFailureMessage(failure);
       if (!retry) {
-        connectionStatus.endRecovery(resource.scope.profileName);
+        connectionStatus.failRecovery(
+          resource.scope.profileName,
+          resource.reconnectError!,
+        );
       }
     } finally {
       resource.reconnecting = false;

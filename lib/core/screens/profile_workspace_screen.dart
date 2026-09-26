@@ -2026,7 +2026,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     final hasDraft = text.isNotEmpty || chat.attachments.isNotEmpty;
     final slash = text.startsWith('/');
     return {
-      ComposerAction.send: !blocked && hasDraft && (!chat.busy || slash)
+      ComposerAction.send:
+          !blocked && !chat.sendingPrompt && hasDraft && (!chat.busy || slash)
           ? null
           : 'Wait for the current turn',
       ComposerAction.steer: blocked || chat.steering

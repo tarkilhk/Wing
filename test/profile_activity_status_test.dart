@@ -52,7 +52,6 @@ void main() {
       expect(label(), 'Waiting for 1 subagent…');
       for (final entry in {
         ProfileTurnStatus.submitting: 'Sending message…',
-        ProfileTurnStatus.settling: 'Updating history…',
         ProfileTurnStatus.failed: 'Something went wrong',
       }.entries) {
         chat.status = entry.key;

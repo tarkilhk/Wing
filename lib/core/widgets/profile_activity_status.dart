@@ -27,8 +27,6 @@ class ProfileActivityStatus extends StatelessWidget {
             : 'Waiting for your reply';
       case ProfileTurnStatus.submitting:
         return 'Sending message…';
-      case ProfileTurnStatus.settling:
-        return 'Updating history…';
       case ProfileTurnStatus.failed:
         return 'Something went wrong';
       default:

@@ -25,9 +25,7 @@ class ProfileChatIndicator extends StatelessWidget {
         Icons.help_rounded,
         false,
       ),
-      ProfileTurnStatus.submitting ||
-      ProfileTurnStatus.running ||
-      ProfileTurnStatus.settling => (
+      ProfileTurnStatus.submitting || ProfileTurnStatus.running => (
         'Working',
         tokens.running,
         Icons.pending_outlined,

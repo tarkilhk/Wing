@@ -410,6 +410,34 @@ void main() {
     expect(alerts, [(profile: 'a', session: 'loaded', input: true)]);
   });
 
+  // Stock session.active_list/session.resume checked at upstream Hermes
+  // 9fc7f17906eab1dd81ddfdf8a1edeecac1e79940 (2026-09-26).
+  test(
+    'idle snapshot recovers a loaded chat after a missed completion',
+    () async {
+      final chat = await controller.createChat();
+      await controller.updateDraft(chat, 'Next question');
+      host.gateways['a']!.onEvent!(
+        StreamEvent(
+          type: 'message.start',
+          sessionId: chat.runtimeId,
+          data: const {},
+        ),
+      );
+      expect(chat.busy, isTrue);
+      host.history = [
+        {'id': 1, 'role': 'assistant', 'content': 'Recovered answer'},
+      ];
+      host.active = [row(chat.runtimeId, chat.key.sessionId, 'idle')];
+      host.changed();
+      await waitForReads(host, 1);
+      expect(chat.busy, isFalse);
+      expect(chat.draft, 'Next question');
+      expect(host.resumeCalls, hasLength(1));
+      expect(chat.messages.single['content'], 'Recovered answer');
+    },
+  );
+
   test(
     'desktop resolution clears loaded question state from the chat list',
     () async {

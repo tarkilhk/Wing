@@ -29,7 +29,6 @@ ChatListStatus chatListStatus(
       {
         ProfileTurnStatus.submitting,
         ProfileTurnStatus.running,
-        ProfileTurnStatus.settling,
       }.contains(chat?.status)) {
     return ChatListStatus.working;
   }
