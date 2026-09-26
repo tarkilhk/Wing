@@ -1,11 +1,64 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wing/core/models/connection_icon.dart';
+import 'package:wing/core/models/connection.dart';
 import 'package:wing/core/services/server_connection_status.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
 
 void main() {
+  testWidgets('screen header matches the drawer connection identity gap', (
+    tester,
+  ) async {
+    final status = ServerConnectionStatus('Claw');
+    addTearDown(status.dispose);
+    final connection = SavedConnection(
+      id: 'claw',
+      label: 'Claw',
+      host: 'localhost',
+      port: 8642,
+      apiKey: '',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        home: Scaffold(
+          body: Column(
+            children: [
+              ServerConnectionLabel(label: 'Claw', status: status),
+              DrawerConnectionLabel(connection: connection, status: status),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final header = find.byType(ServerConnectionLabel);
+    final drawer = find.byType(DrawerConnectionLabel);
+    final headerLed = tester.getRect(
+      find.descendant(
+        of: header,
+        matching: find.byKey(const ValueKey('server-connection-led')),
+      ),
+    );
+    final headerName = tester.getRect(
+      find.descendant(of: header, matching: find.text('Claw')),
+    );
+    final drawerLed = tester.getRect(
+      find.descendant(
+        of: drawer,
+        matching: find.byKey(const ValueKey('server-connection-led')),
+      ),
+    );
+    final drawerName = tester.getRect(
+      find.descendant(of: drawer, matching: find.text('Claw')),
+    );
+    final headerGap = headerName.left - headerLed.right;
+    final drawerGap = drawerLed.left - drawerName.right;
+
+    expect(headerGap, 6);
+    expect(headerGap, drawerGap);
+  });
+
   testWidgets('connection details retain live status and retry behavior', (
     tester,
   ) async {
@@ -107,7 +160,7 @@ void main() {
         final icon = tester.getRect(find.byIcon(Icons.rocket_launch_outlined));
         expect(led.size, const Size(8, 8));
         expect(led.left - icon.right, 8);
-        expect(name.left - led.right, 16);
+        expect(name.left - led.right, 6);
         expect(
           tester.getSize(find.byType(InkWell).first).height,
           greaterThanOrEqualTo(48),

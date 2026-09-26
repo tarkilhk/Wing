@@ -10,6 +10,8 @@ import 'workspace_picker.dart';
 typedef WorkspacePickerCallback =
     void Function(BuildContext context, {required WorkspacePickerMode mode});
 
+const _connectionIdentityGap = 6.0;
+
 class ServerConnectionScope extends InheritedWidget {
   final ServerConnectionStatus status;
   final WorkspacePickerCallback? onPickWorkspace;
@@ -96,7 +98,7 @@ class ServerConnectionLabel extends StatelessWidget {
                 width: 48,
                 height: 48,
                 child: Align(
-                  alignment: alignment,
+                  alignment: Alignment.centerRight,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -118,6 +120,7 @@ class ServerConnectionLabel extends StatelessWidget {
             ),
           ),
         ),
+        const SizedBox(width: _connectionIdentityGap),
         Flexible(
           child: Builder(
             builder: (anchor) => Semantics(
@@ -218,7 +221,7 @@ class DrawerConnectionLabel extends StatelessWidget {
                         size: 18,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: _connectionIdentityGap),
                       Flexible(
                         child: Text(
                           label,
@@ -229,7 +232,7 @@ class DrawerConnectionLabel extends StatelessWidget {
                           ).textTheme.bodySmall?.copyWith(fontSize: 13),
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: _connectionIdentityGap),
                       _ConnectionLed(
                         phase: status?.phase ?? ServerConnectionPhase.unchecked,
                       ),
