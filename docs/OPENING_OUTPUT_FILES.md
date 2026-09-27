@@ -1,11 +1,21 @@
 # Output viewers and downloads
 
-Assistant deliverables (`MEDIA:` references and explicit file links) appear as
+Assistant deliverables (`MEDIA:` references, explicit file links and complete
+file paths in inline code) appear as
 file cards with separate **Download** and **Open preview** actions. Download opens
 Android's save destination picker; cancelling does not save a file. Open preview
 opens the existing full-screen reader, and Back returns to the conversation.
 Markdown starts in **Rendered** mode with a **Source** control. Copy message
 retains the original authored text, including the server path.
+
+Inline code paths such as `/home/tarkil/projects/reports/report.md` use the same
+reader. Detection requires a rooted path or `./` / `../` prefix and a filename
+extension; commands, directories and fenced code remain code. Spaces and literal
+percent, question-mark and hash characters in these filenames are preserved.
+This client rendering change was verified against stock Hermes main
+[`fb2dded3d191d15c614a80d15e1c95002956867c`](https://github.com/NousResearch/hermes-agent/blob/fb2dded3d191d15c614a80d15e1c95002956867c/hermes_cli/web_routers/files.py)
+on 27 September 2026: `fs/read-text` accepts the path; `fs/download` accepts
+path, profile and session identity. No server changes are required.
 
 A chat's Outputs list provides another way to find and open references, including
 older history. Files are fetched through their original authenticated connection

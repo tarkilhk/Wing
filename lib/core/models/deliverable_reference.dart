@@ -29,6 +29,32 @@ class DeliverableLinkSyntax extends md.LinkSyntax {
   }
 }
 
+/// A complete file path in inline code is a deliverable, just like a file link.
+/// Let the Markdown code parser own delimiters and ordinary code semantics.
+class DeliverableCodeSyntax extends md.CodeSyntax {
+  static final _path = RegExp(
+    r'^(?:/|~[\\/]|\.\.?[\\/]|[A-Za-z]:[\\/]|\\\\)'
+    r'[^\r\n<>|]*[^\\/\s]\.\w+$',
+  );
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    var code = match[2]!;
+    if (code.length > 1 && code.startsWith(' ') && code.endsWith(' ')) {
+      code = code.substring(1, code.length - 1);
+    }
+    if (_path.hasMatch(code)) {
+      // Code spans contain literal filenames, not URL-encoded destinations.
+      final output = mediaRemoteFileOutput(code);
+      if (output != null) {
+        parser.addNode(_fileElement(output));
+        return true;
+      }
+    }
+    return super.onMatch(parser, match);
+  }
+}
+
 class MediaReferenceSyntax extends md.InlineSyntax {
   MediaReferenceSyntax() : super(mediaReferencePattern, caseSensitive: false);
 

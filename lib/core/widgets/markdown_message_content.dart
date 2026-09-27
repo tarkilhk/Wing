@@ -138,7 +138,11 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
                       StudioTaskMarker(completed: checked),
                   data: segment as String,
                   inlineSyntaxes: widget.deliverables
-                      ? [MediaReferenceSyntax(), DeliverableLinkSyntax()]
+                      ? [
+                          MediaReferenceSyntax(),
+                          DeliverableLinkSyntax(),
+                          DeliverableCodeSyntax(),
+                        ]
                       : null,
                   builders: {
                     if (widget.deliverables)

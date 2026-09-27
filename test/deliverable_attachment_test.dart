@@ -98,7 +98,60 @@ void main() {
     },
   );
 
+  testWidgets('screenshot report paths open independently and copy verbatim', (
+    tester,
+  ) async {
+    const report =
+        '/home/tarkil/projects/memory-maintenance/reports/monthly-pilot-20260927/report.md';
+    const questions =
+        '/home/tarkil/projects/memory-maintenance/evaluation/private/monthly-pilot-20260927-151620/case-review.md';
+    const source =
+        '**Report**\n\nThe dashboard is here:\n\n`$report`\n\n'
+        'The private question sheet is here:\n\n`$questions`';
+    final opened = <String>[];
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'];
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await tester.pumpWidget(
+      message(source, open: (output) async => opened.add(output.path!)),
+    );
+    expect(find.byType(DeliverableAttachment), findsNWidgets(2));
+    expect(find.text('report.md'), findsOneWidget);
+    expect(find.text('case-review.md'), findsOneWidget);
+    for (var index = 0; index < 2; index++) {
+      final action = find.text('Open preview').at(index);
+      await tester.ensureVisible(action);
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+    }
+    expect(opened, [report, questions]);
+    await tester.ensureVisible(find.byTooltip('Copy message'));
+    await tester.tap(find.byTooltip('Copy message'));
+    await tester.pump();
+    expect(copied, source);
+  });
+
   final references = {
+    '`$reportPath`': reportPath,
+    '`` /srv/My report.md ``': '/srv/My report.md',
+    '`/srv/report%23final.md`': '/srv/report%23final.md',
+    '`/srv/report#final?.md`': '/srv/report#final?.md',
+    '`~/reports/report.md`': '~/reports/report.md',
+    '`../reports/report.md`': '../reports/report.md',
+    r'`C:\Users\a\report.md`': r'C:\Users\a\report.md',
     'MEDIA:/srv/My report.pdf': '/srv/My report.pdf',
     'MEDIA: "/srv/final report.custom"': '/srv/final report.custom',
     '`MEDIA:/srv/report.md`': '/srv/report.md',
@@ -132,7 +185,7 @@ void main() {
           'Before [report](/srv/report.md) after.\n\n'
           '- First\n- [Second](/srv/second.md)\n\n'
           '```text\nMEDIA:/srv/example.md\n```\n\n'
-          '`/srv/plain.md`\n\n'
+          '`cat /srv/plain.md` and `/srv/reports/` and ` `\n\n'
           '[Website](https://example.com) and ![Image](https://example.com/image.png)\n\n'
           'MEDIA:unsupported:value',
           open: (_) async {},
@@ -278,7 +331,7 @@ void main() {
                     message: const {
                       'role': 'assistant',
                       'content':
-                          'The analysis is ready.\n\n**Deliverable**\n\nMEDIA:$reportPath\n\nReview the report before the next step.',
+                          'The analysis is ready.\n\n**Report**\n\n`$reportPath`\n\nReview the report before the next step.',
                     },
                     onOpenRemoteFile: (_) async {},
                     onDownloadRemoteFile: (_) async => true,
