@@ -1,6 +1,7 @@
 import 'studio_task_marker.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 
@@ -20,6 +21,8 @@ class MarkdownMessageContent extends StatefulWidget {
   final Future<void> Function(ChatOutput output)? onOpenRemoteFile;
   final Future<bool> Function(ChatOutput output)? onDownloadRemoteFile;
   final bool deliverables;
+  final String? documentPath;
+  final String? initialFragment;
 
   const MarkdownMessageContent({
     super.key,
@@ -28,6 +31,8 @@ class MarkdownMessageContent extends StatefulWidget {
     this.onOpenRemoteFile,
     this.onDownloadRemoteFile,
     this.deliverables = false,
+    this.documentPath,
+    this.initialFragment,
   });
 
   @override
@@ -38,6 +43,40 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
   // Retain only this mounted message's rendering. Unrelated stream/activity
   // updates must not split code fences, recreate styles and reparse its prose.
   Widget? _content;
+  final _headingKeys = <String, GlobalKey>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleFragment();
+  }
+
+  void _scheduleFragment() {
+    if (widget.initialFragment == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scrollToFragment(widget.initialFragment!);
+    });
+  }
+
+  Future<void> _scrollToFragment(String fragment) async {
+    final target = fragment.isEmpty
+        ? context
+        : _headingKeys[fragment]?.currentContext;
+    if (target != null) {
+      // The marker is inline; align the complete heading, not its midpoint.
+      final heading = target.findAncestorRenderObjectOfType<RenderWrap>();
+      await Scrollable.of(target).position.ensureVisible(
+        heading ?? target.findRenderObject()!,
+        alignment: 0,
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: StudioError('This heading is not in the available preview.'),
+        ),
+      );
+    }
+  }
 
   @override
   void didUpdateWidget(covariant MarkdownMessageContent oldWidget) {
@@ -45,11 +84,16 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     if (widget.data != oldWidget.data ||
         widget.streaming != oldWidget.streaming ||
         widget.deliverables != oldWidget.deliverables ||
+        widget.documentPath != oldWidget.documentPath ||
+        widget.initialFragment != oldWidget.initialFragment ||
         (widget.onOpenRemoteFile == null) !=
             (oldWidget.onOpenRemoteFile == null) ||
         (widget.onDownloadRemoteFile == null) !=
             (oldWidget.onDownloadRemoteFile == null)) {
       _content = null;
+    }
+    if (widget.initialFragment != oldWidget.initialFragment) {
+      _scheduleFragment();
     }
   }
 
@@ -66,7 +110,15 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     if (uri != null) {
       opened = await openWebPreview(uri);
     } else {
-      final output = explicitRemoteFileOutput(href);
+      final output = widget.documentPath == null
+          ? explicitRemoteFileOutput(href)
+          : resolveDocumentFileLink(href, widget.documentPath!);
+      if (output != null &&
+          output.path == widget.documentPath &&
+          output.fragment != null) {
+        await _scrollToFragment(output.fragment!);
+        return;
+      }
       if (output != null && widget.onOpenRemoteFile != null) {
         try {
           await widget.onOpenRemoteFile!(output);
@@ -116,6 +168,8 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
 
   Widget _buildContent(BuildContext context) {
     final theme = Theme.of(context);
+    _headingKeys.clear();
+    final headings = _HeadingBuilder(_headingKeys);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -144,7 +198,15 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
                           DeliverableCodeSyntax(),
                         ]
                       : null,
+                  paddingBuilders: {
+                    if (widget.documentPath != null)
+                      for (var level = 1; level <= 6; level++)
+                        'h$level': headings,
+                  },
                   builders: {
+                    if (widget.documentPath != null) ...{
+                      _headingAnchorTag: _HeadingAnchorBuilder(_headingKeys),
+                    },
                     if (widget.deliverables)
                       deliverableElementTag: _DeliverableBuilder(
                         widget.onOpenRemoteFile == null
@@ -207,10 +269,54 @@ class _DeliverableBuilder extends MarkdownElementBuilder {
           path: path,
           url: null,
           label: element.attributes['name']!,
+          fragment: element.attributes['fragment']?.isEmpty == false
+              ? element.attributes['fragment']
+              : null,
         ),
         onOpen: onOpen,
         onDownload: onDownload,
       ),
     );
   }
+}
+
+const _headingAnchorTag = 'wing-heading-anchor';
+
+/// Insert an invisible scroll target while retaining the renderer's heading
+/// typography, emphasis, links and selection behavior.
+class _HeadingBuilder extends MarkdownPaddingBuilder {
+  _HeadingBuilder(this.keys);
+  final Map<String, GlobalKey> keys;
+
+  @override
+  void visitElementBefore(md.Element element) {
+    final slug = element.textContent
+        .toLowerCase()
+        .trim()
+        .replaceAll(RegExp(r'[^\p{L}\p{N}_\-\s]', unicode: true), '')
+        .replaceAll(RegExp(r'\s'), '-');
+    var id = slug;
+    var suffix = 0;
+    while (keys.containsKey(id)) {
+      id = '$slug-${++suffix}';
+    }
+    keys[id] = GlobalKey();
+    element.children!.insert(
+      0,
+      md.Element.empty(_headingAnchorTag)..attributes['id'] = id,
+    );
+  }
+}
+
+class _HeadingAnchorBuilder extends MarkdownElementBuilder {
+  _HeadingAnchorBuilder(this.keys);
+  final Map<String, GlobalKey> keys;
+
+  @override
+  Widget visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) => SizedBox(key: keys[element.attributes['id']], width: 0, height: 1);
 }

@@ -84,6 +84,62 @@ RemoteTextPreview _textPreview(String path) => RemoteTextPreview(
 );
 
 void main() {
+  testWidgets('report appendix resolves beside the document', (tester) async {
+    const folder =
+        '/home/tarkil/projects/memory-maintenance/reports/monthly-pilot-20260927';
+    final reads = <String>[];
+    await tester.pumpWidget(
+      _screen(
+        loadHistory: () async => [
+          {'role': 'assistant', 'content': 'Saved $folder/report.md'},
+        ],
+        readText: (path) async {
+          reads.add(path);
+          if (path != '$folder/report.md' && path != '$folder/details.md') {
+            throw const DashboardHttpException(404, 'fs/read-text');
+          }
+          final filler = List.filled(30, 'Earlier evidence.\n\n').join();
+          final source = path.endsWith('/report.md')
+              ? '[appendix](details.md#the-six-health-checks)'
+              : '# Monthly pilot\n\n$filler## The six health checks\n\nAppendix contents\n\n'
+                    '[Corrections](#exact-correction-targets)\n\n$filler'
+                    '## Exact correction targets\n\nCorrection contents\n\n$filler';
+          return RemoteTextPreview(
+            path: path,
+            text: source,
+            language: 'markdown',
+            mimeType: 'text/markdown',
+            byteSize: source.length,
+            binary: false,
+            truncated: false,
+          );
+        },
+        download: (_) async => throw StateError('Unexpected download'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('report.md'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('appendix', findRichText: true));
+    await tester.pumpAndSettle();
+    expect(reads, ['$folder/report.md', '$folder/details.md']);
+    expect(find.text('Appendix contents'), findsOneWidget);
+    expect(
+      tester.getRect(find.text('The six health checks')).top,
+      inInclusiveRange(100, 200),
+    );
+    await tester.tap(find.text('Corrections', findRichText: true));
+    await tester.pumpAndSettle();
+    expect(reads, ['$folder/report.md', '$folder/details.md']);
+    expect(
+      tester.getRect(find.text('Exact correction targets')).top,
+      inInclusiveRange(100, 200),
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('appendix', findRichText: true), findsOneWidget);
+  });
+
   testWidgets('initial output opens directly without loading other history', (
     tester,
   ) async {

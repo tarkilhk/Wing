@@ -463,6 +463,8 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                     if (isMarkdown && !showMarkdownSource)
                       MarkdownMessageContent(
                         data: preview.text,
+                        documentPath: preview.path,
+                        initialFragment: output.fragment,
                         onOpenRemoteFile: _preview,
                       )
                     else

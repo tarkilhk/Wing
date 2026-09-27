@@ -9,12 +9,14 @@ class ChatOutput {
   final String? path;
   final String? url;
   final String label;
+  final String? fragment;
 
   const ChatOutput({
     required this.kind,
     required this.path,
     required this.url,
     required this.label,
+    this.fragment,
   });
 
   String get target => path ?? url!;
@@ -37,6 +39,46 @@ ChatOutput? explicitRemoteFileOutput(String target) {
     path: normalized,
     url: null,
     label: _decodedPathLabel(normalized),
+    fragment: target.contains('#')
+        ? _decodeExplicitPath(target.substring(target.indexOf('#') + 1))
+        : null,
+  );
+}
+
+/// Links in a document are relative to that document, not the chat's cwd.
+ChatOutput? resolveDocumentFileLink(String target, String documentPath) {
+  final output = explicitRemoteFileOutput(
+    target.startsWith('#')
+        ? Uri(pathSegments: documentPath.split('/')).toString() + target
+        : target,
+  );
+  if (output == null) return null;
+  var path = output.path!;
+  if (!RegExp(r'^(?:/|~[\\/]|[A-Za-z]:[\\/]|\\\\)').hasMatch(path)) {
+    final windows = RegExp(r'^(?:[A-Za-z]:[\\/]|\\\\)').hasMatch(documentPath);
+    path = Uri.decodeComponent(
+      Uri(
+            pathSegments:
+                (windows ? documentPath.replaceAll('\\', '/') : documentPath)
+                    .split('/'),
+          )
+          .resolveUri(
+            Uri(
+              pathSegments: (windows ? path.replaceAll('\\', '/') : path).split(
+                '/',
+              ),
+            ),
+          )
+          .path,
+    );
+    if (windows) path = path.replaceAll('/', '\\');
+  }
+  return ChatOutput(
+    kind: output.kind,
+    path: path,
+    url: null,
+    label: output.label,
+    fragment: output.fragment,
   );
 }
 

@@ -9,6 +9,7 @@ md.Element _fileElement(ChatOutput output) =>
     md.Element.empty(deliverableElementTag)
       ..attributes['path'] = output.path!
       ..attributes['name'] = output.label
+      ..attributes['fragment'] = output.fragment ?? ''
       ..attributes['kind'] = output.kind.name;
 
 /// Uses the Markdown parser for links, so labels, escaped destinations,

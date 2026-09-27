@@ -5,6 +5,35 @@ import 'package:wing/core/widgets/deliverable_attachment.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 
 void main() {
+  testWidgets(
+    'missing document heading reports locally without reading a file',
+    (tester) async {
+      var reads = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: MarkdownMessageContent(
+                data: '[Missing](#absent)\n\n# Available',
+                documentPath: '/srv/report.md',
+                onOpenRemoteFile: (_) async {
+                  reads++;
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Missing', findRichText: true));
+      await tester.pumpAndSettle();
+      expect(reads, 0);
+      expect(
+        find.text('This heading is not in the available preview.'),
+        findsOneWidget,
+      );
+    },
+  );
+
   for (final deliverables in [false, true]) {
     testWidgets('retained Markdown uses current callbacks: $deliverables', (
       tester,

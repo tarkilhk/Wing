@@ -4,6 +4,43 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/chat_output.dart';
 
 void main() {
+  test('document links resolve relative paths and keep decoded anchors', () {
+    const document = '/srv/reports/pilot/report.md';
+    final cases = {
+      'details.md#the-six-health-checks': '/srv/reports/pilot/details.md',
+      '../evidence/data.csv': '/srv/reports/evidence/data.csv',
+      './chart.png': '/srv/reports/pilot/chart.png',
+      '/srv/other.md#part': '/srv/other.md',
+      'file:///srv/other.md#part': '/srv/other.md',
+      'my%20report%23final%25.md#part':
+          '/srv/reports/pilot/my report#final%.md',
+      '#the-six-health-checks': document,
+    };
+    for (final entry in cases.entries) {
+      expect(resolveDocumentFileLink(entry.key, document)?.path, entry.value);
+    }
+    expect(
+      resolveDocumentFileLink('details.md#six%20checks', document)?.fragment,
+      'six checks',
+    );
+    expect(
+      resolveDocumentFileLink('#part', '/srv/a%23b.md')?.path,
+      '/srv/a%23b.md',
+    );
+    expect(
+      resolveDocumentFileLink(
+        r'..\details.md#part',
+        r'C:\reports\pilot\report.md',
+      )?.path,
+      r'C:\reports\details.md',
+    );
+    expect(
+      resolveDocumentFileLink('https://example.com/a.md#part', document),
+      isNull,
+    );
+    expect(resolveDocumentFileLink('javascript:alert(1)', document), isNull);
+  });
+
   test('classifies only explicit remote file link targets', () {
     for (final target in [
       'report.pdf',
