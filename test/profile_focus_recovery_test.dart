@@ -31,14 +31,21 @@ void main() {
   });
   tearDown(() => controller.dispose());
 
-  Future<void> render(WidgetTester tester) async {
+  Future<void> render(
+    WidgetTester tester, {
+    AppDestination destination = AppDestination.chats,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         navigatorKey: navigator,
-        home: ProfileWorkspaceScreen(controller: controller),
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          initialDestination: destination,
+        ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump();
   }
 
   Future<void> settleRecovery(WidgetTester tester) async {
@@ -67,6 +74,84 @@ void main() {
     expect(host.connectCalls, calls + 1);
     expect(controller.recovering, isFalse);
     expect(chat.draft, 'Keep my draft');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final destination in [
+    AppDestination.activity,
+    AppDestination.settings,
+  ]) {
+    testWidgets('app resume reconnects from ${destination.label}', (
+      tester,
+    ) async {
+      await render(tester);
+      select(tester, destination);
+      await settleRecovery(tester);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      host.connectError = TimeoutException('Network asleep');
+      host.gateways['a']!.onConnectionChanged!(false);
+      for (final seconds in [1, 2, 4, 8, 16]) {
+        await tester.pump(Duration(seconds: seconds));
+      }
+      expect(controller.current!.retry, isNull);
+      expect(controller.connectionStatus.liveAvailable('a'), isFalse);
+      final calls = host.connectCalls;
+      host.connectError = null;
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await settleRecovery(tester);
+
+      expect(host.connectCalls, calls + 1);
+      expect(controller.connectionStatus.liveAvailable('a'), isTrue);
+      expect(controller.recovering, isFalse);
+      expect(controller.visible, isFalse);
+      expect(chat.draft, 'Keep my draft');
+      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets('opening Activity retries a retained disconnected workspace', (
+    tester,
+  ) async {
+    host.connectError = TimeoutException('Network asleep');
+    await controller.resumeConnection();
+    final resumes = host.calls
+        .where((call) => call.$2 == 'session.resume')
+        .length;
+    host.connectError = null;
+
+    await render(tester, destination: AppDestination.activity);
+    await settleRecovery(tester);
+
+    expect(
+      host.calls.where((call) => call.$2 == 'session.resume'),
+      hasLength(resumes + 1),
+    );
+    expect(controller.recovering, isFalse);
+    expect(controller.visible, isFalse);
+    expect(chat.draft, 'Keep my draft');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('opening App settings retries before the scheduled timer', (
+    tester,
+  ) async {
+    await render(tester);
+    host.connectError = TimeoutException('Network asleep');
+    await controller.resumeConnection();
+    final calls = host.connectCalls;
+    host.connectError = null;
+
+    select(tester, AppDestination.settings);
+    await settleRecovery(tester);
+
+    expect(host.connectCalls, calls + 1);
+    expect(controller.recovering, isFalse);
+    expect(controller.visible, isFalse);
+    expect(chat.draft, 'Keep my draft');
+    expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

@@ -348,8 +348,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   bool _appIsActive = true;
   bool _focusRecoveryScheduled = false;
 
+  bool get _hasWorkspaceFocus => _routeIsCurrent && _appIsActive;
+
   bool get _hasChatFocus =>
-      _routeIsCurrent && _appIsActive && _destination == AppDestination.chats;
+      _hasWorkspaceFocus && _destination == AppDestination.chats;
 
   bool get _needsRecovery =>
       !controller.initialized ||
@@ -362,13 +364,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           ));
 
   void _recoverOnFocus() {
-    if (!_hasChatFocus || _focusRecoveryScheduled) return;
+    if (!_hasWorkspaceFocus || _focusRecoveryScheduled) return;
     _focusRecoveryScheduled = true;
     // Route changes notify dependents during build. Publish recovery after the
     // frame, coalescing route and app-focus events into one attempt.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusRecoveryScheduled = false;
-      if (mounted && _hasChatFocus) {
+      if (mounted && _hasWorkspaceFocus) {
         unawaited(controller.resumeConnection());
       }
     });
@@ -405,7 +407,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Future<void> _enter() async {
     if (!controller.initialized && controller.notificationChat == null) {
       await controller.initialize();
-    } else if (_hasChatFocus && _needsRecovery) {
+    } else if (_hasWorkspaceFocus && _needsRecovery) {
       await controller.resumeConnection();
     }
     if (!mounted || controller.current == null) return;
@@ -2424,12 +2426,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       }
       return;
     }
-    final returningToChats =
-        _destination != AppDestination.chats &&
-        destination == AppDestination.chats;
+    final changedDestination = _destination != destination;
     setState(() => _destination = destination);
     controller.setRouteVisibility(this, _hasChatFocus);
-    if (returningToChats && _needsRecovery) _recoverOnFocus();
+    if (changedDestination && _needsRecovery) _recoverOnFocus();
     if (destination == AppDestination.activity) {
       unawaited(_run(controller.refreshActivity));
     }

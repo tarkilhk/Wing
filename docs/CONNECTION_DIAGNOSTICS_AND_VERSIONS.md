@@ -2,6 +2,20 @@
 
 Use [Getting started](GETTING_STARTED.md) for the first connection and [self-hosted setup](SELF_HOSTING.md) for dashboard authentication and proxy details. Wing requires the modern dashboard and Desktop Gateway. Connection identity includes the configured endpoint and credentials; changing it invalidates the old transport and its pending results.
 
+## Returning to Wing
+
+When Wing returns to the foreground, the visible workspace immediately attempts
+to restore its connection, including from Activity, App settings and administration
+destinations. Opening a disconnected workspace or returning to it also retries
+without waiting for the background retry timer. Failed temporary connections use
+a bounded retry burst; **Retry connection** remains available if recovery fails.
+Recovery retains drafts and does not submit them or mark a hidden chat as read.
+
+This uses the existing stock `session.resume` and `session.active_list` methods;
+no backend customization is required. Verified against upstream main on
+2026-09-27 at
+[`b384cdde052104cde8edd1d60fcd9a543ac4da05`](https://github.com/NousResearch/hermes-agent/blob/b384cdde052104cde8edd1d60fcd9a543ac4da05/tui_gateway/methods_session.py).
+
 ## Access headers
 
 Access headers support authenticated proxies through **Sign in → Custom setup → Access headers** in the connection journey. Most connections only need the dashboard URL and dashboard login. Keep a saved value by leaving its replacement blank, replace it explicitly, or remove it. Names are unique ignoring case; names and values must be single-line. Managed authentication headers cannot be overridden.
