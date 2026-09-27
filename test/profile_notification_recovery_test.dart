@@ -22,6 +22,7 @@ import 'profile_workspace_controller_test.dart' show Host;
 
 class _ResumeHost extends Host {
   Object? resumeError;
+  Map<String, dynamic>? resumeInfo;
   bool failResumeOnce = false;
   int resumeCalls = 0;
   Completer<void>? resumeDelay;
@@ -43,7 +44,10 @@ class _ResumeHost extends Host {
             throw failure;
           }
         }
-        return base.call(method, params);
+        final result = await base.call(method, params);
+        return method == 'session.resume' && resumeInfo != null
+            ? {...result, 'info': resumeInfo}
+            : result;
       },
     );
   }
@@ -84,6 +88,61 @@ void main() {
     await controller.updateDraft(chat, 'My unsent follow-up');
   });
   tearDown(() => controller.dispose());
+
+  testWidgets(
+    'notification opens a stock lazy runtime without a profile echo',
+    (tester) async {
+      // Stock _fallback_session_info before the resumed agent is initialized.
+      host.resumeInfo = {
+        'cwd': '/workspace',
+        'branch': '',
+        'project': null,
+        'lazy': true,
+        'model': 'test-model',
+        'skills': <String, dynamic>{},
+        'tools': <String, dynamic>{},
+      'desktop_contract': 8,
+      };
+      await controller.openNotification(chat.key);
+      await tester.pumpWidget(
+        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      );
+      await tester.pump();
+
+      expect(chat.openingError, isNull);
+      expect(chat.opening, isFalse);
+      expect(controller.notificationChat, isNull);
+      expect(controller.current!.chat, same(chat));
+      expect(chat.draft, 'My unsent follow-up');
+      expect(find.text('Retry connection'), findsNothing);
+      expect(
+        host.calls
+            .where((call) => call.$2 == 'session.resume')
+            .single
+            .$3['profile'],
+        chat.key.workspace.profileName,
+      );
+      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  for (final info in [
+    {'lazy': true, 'profile_name': 'another-profile'},
+    {'lazy': true, 'profile_name': null},
+    {'lazy': false},
+  ]) {
+    test(
+      'rejects invalid or conflicting session owner metadata: $info',
+      () async {
+        host.resumeInfo = info;
+        await expectLater(
+          controller.current!.gateway.resume(chat.key.sessionId),
+          throwsFormatException,
+        );
+      },
+    );
+  }
 
   test(
     'successful notification recovery publishes the ready composer state',

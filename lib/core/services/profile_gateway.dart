@@ -593,8 +593,14 @@ class ProfileGateway {
       );
 
   Map<String, dynamic> _ownedSession(Map<String, dynamic> result) {
-    if (result['info'] is! Map ||
-        result['info']['profile_name'] != scope.profileName) {
+    final info = result['info'];
+    // Stock Hermes omits profile_name from a live session's lazy info while
+    // its agent is uninitialized. The request is already profile-scoped.
+    // Reject any explicit conflicting owner, including in a lazy response.
+    if (info is! Map ||
+        (info.containsKey('profile_name')
+            ? info['profile_name'] != scope.profileName
+            : info['lazy'] != true)) {
       throw const FormatException(
         'Session response has a different profile owner',
       );

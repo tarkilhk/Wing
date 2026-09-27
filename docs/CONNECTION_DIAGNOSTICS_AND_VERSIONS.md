@@ -15,10 +15,17 @@ and `ReadRecovery`; already connected screens do not reconnect on entry. If a
 notification opening is still in flight, recovery waits for it and makes a fresh
 attempt if it fails, instead of leaving the screen on Retry.
 
+Stock Hermes can return `info.lazy: true` without `info.profile_name` when
+reattaching to a session whose agent is not initialized yet. Wing accepts this
+response to its explicitly profile-scoped request. An explicit conflicting
+profile, malformed owner metadata, or missing runtime identity is still rejected.
+This prevents a successful reattachment from appearing as a connection failure.
+
 This uses the existing stock `session.resume` and `session.active_list` methods;
 no backend customization is required. Verified against upstream main on
 2026-09-27 at
-[`28e6496a5e3adfea57bebfc9571b981bff378523`](https://github.com/NousResearch/hermes-agent/blob/28e6496a5e3adfea57bebfc9571b981bff378523/tui_gateway/methods_session.py).
+[`b4410b4baddbc83732241c655ff39ac72ffba865`](https://github.com/NousResearch/hermes-agent/blob/b4410b4baddbc83732241c655ff39ac72ffba865/tui_gateway/methods_session.py),
+including the [lazy live-session info](https://github.com/NousResearch/hermes-agent/blob/b4410b4baddbc83732241c655ff39ac72ffba865/tui_gateway/server.py#L2937).
 
 ## Access headers
 
