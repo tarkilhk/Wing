@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Hide background-process heartbeat messages from chat and search.
 - Process large offline reading snapshots away from the UI thread and avoid
   repeatedly encoding history while trimming the cache.
 - Keep draft typing and queued-message edits from rebuilding unchanged chat
