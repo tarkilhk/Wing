@@ -2,7 +2,21 @@
 
 ## Unreleased
 
+## [1.1.2] - 2026-09-27
+
+- Open inline file paths directly from chat. Resolve Markdown document links
+  and linked images from the open file's directory, and follow heading anchors
+  within the current document or a linked file.
+- Recover connections when returning to Wing or entering workspace screens,
+  retry failed notification opens, and reopen chats whose stock Hermes session
+  has not yet initialized its agent.
+- Release the composer promptly when a reply finishes and reconcile stale working
+  state so finished chats do not remain busy.
+- Show watched chat titles in the background monitoring notification when
+  notification titles are enabled.
 - Hide background-process heartbeat messages from chat and search.
+- Keep the Chats list order and scroll position steady during live updates,
+  updating affected rows without repeatedly rebuilding or sorting the list.
 - Process large offline reading snapshots away from the UI thread and avoid
   repeatedly encoding history while trimming the cache.
 - Keep draft typing and queued-message edits from rebuilding unchanged chat
@@ -11,6 +25,8 @@
   parsing of earlier answers without delaying live updates.
 - Show a home icon for the backend's default profile in Chats. Limit the
   profile strip to five visible squares, with horizontal scrolling for more.
+- Simplify the add-instance button and align connection status spacing in
+  screen headers.
 
 ## [1.1.1] - 2026-09-25
 
