@@ -4,7 +4,13 @@ enum SessionVisibility {
   chats,
   all;
 
-  static const automatedSources = {'cron', 'tool', 'subagent', 'kanban'};
+  static const automatedSources = {
+    'cron',
+    'tool',
+    'subagent',
+    'kanban',
+    'oneshot',
+  };
 
   Map<String, String> get queryParameters => switch (this) {
     chats => {'exclude_sources': automatedSources.join(',')},

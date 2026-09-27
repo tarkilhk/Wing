@@ -19,6 +19,7 @@ class FilterHost extends Host {
     {'id': 'tool', 'title': 'Integration run', 'source': 'tool'},
     {'id': 'subagent', 'title': 'Delegate run', 'source': 'subagent'},
     {'id': 'kanban', 'title': 'Worker run', 'source': 'kanban'},
+    {'id': 'oneshot', 'title': 'Technical run', 'source': 'oneshot'},
     {'id': 'chat', 'title': 'My conversation', 'source': 'desktop'},
     {'id': 'unknown', 'title': 'Old conversation', 'source': 'unknown'},
     {'id': 'missing', 'title': 'Unlabelled conversation'},
@@ -143,7 +144,7 @@ void main() {
       ]);
       expect(
         host.listRequests.single.$2['exclude_sources'],
-        'cron,tool,subagent,kanban',
+        'cron,tool,subagent,kanban,oneshot',
       );
       expect(controller.current!.nextSessionOffset, isNull);
     },
@@ -155,7 +156,7 @@ void main() {
     while (controller.current!.nextSessionOffset != null) {
       await controller.loadMoreSessions();
     }
-    expect(controller.current!.sessions, hasLength(158));
+    expect(controller.current!.sessions, hasLength(159));
     expect(host.listRequests.last.$2.containsKey('exclude_sources'), isFalse);
     expect(host.listRequests.last.$2['offset'], '150');
     await controller.setSessionVisibility(SessionVisibility.all);
@@ -170,13 +171,14 @@ void main() {
       expect(controller.current!.searchResults, isEmpty);
       expect(
         host.listRequests.last.$2['exclude_sources'],
-        'cron,tool,subagent,kanban',
+        'cron,tool,subagent,kanban,oneshot',
       );
       await controller.setSessionVisibility(SessionVisibility.all);
       expect(controller.current!.searchResults.map((r) => r['id']), [
         'tool',
         'subagent',
         'kanban',
+        'oneshot',
       ]);
       expect(host.listRequests.last.$2.containsKey('exclude_sources'), isFalse);
       expect(host.listRequests.last.$2['profile'], 'a');

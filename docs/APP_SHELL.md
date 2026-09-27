@@ -42,11 +42,15 @@ totals are not displayed as final. Message search runs across profiles and retai
 archived matches, with the stock limit of 100 results per profile; title matching
 also covers the loaded index. Search, filter and archive scope intersect.
 
-Show automated chats starts off and hides exactly `cron`, `tool`, `subagent` and
-`kanban` before grouping, counts and project recency. Unknown/custom sources stay
-visible; parentage alone does not imply automation. This connection preference
-does not affect Activity. Project membership comes from stock `projects.tree`
-`sessionIds`; the scan covers the loaded active set. Archived and excluded source
+Show automated chats starts off and hides exactly `cron`, `tool`, `subagent`,
+`kanban` and `oneshot` before grouping, counts and project recency. Unknown/custom
+sources stay visible; parentage alone does not imply automation. This connection preference
+does not affect Recents: Recents always excludes these sources from saved,
+loaded and ongoing entries, while retaining user chats with background work.
+The stock source metadata and exclusion API were verified against upstream
+Hermes `6f7a7991bb069db07ae74a479823ce8310f8c7e0` (2026-09-28).
+
+Project membership comes from stock `projects.tree` `sessionIds`; the scan covers the loaded active set. Archived and excluded source
 rows absent from that tree remain under Home. New filters and display choices
 persist per connection on this device.
 

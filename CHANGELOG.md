@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Hide internal technical runs from Recents, including saved, loaded and ongoing
+  sessions. Keep ordinary chats with background work and the existing filters.
+
 - Use the profile icon as the leading icon for Ongoing chats, with profile name
   and status below the title. Recent history keeps its icon beside the profile name.
 

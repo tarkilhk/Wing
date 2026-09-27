@@ -304,12 +304,14 @@ class _NotificationSession {
 class ProfileRecentChat {
   final ProfileSessionKey key;
   final String title;
+  final String? source;
   final double lastActive;
   final ProfileLiveActivity? activity;
 
   const ProfileRecentChat({
     required this.key,
     required this.title,
+    required this.source,
     required this.lastActive,
     this.activity,
   });
@@ -605,6 +607,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           runtimeId: chat.runtimeId,
           sessionId: chat.key.sessionId,
           title: chat.title,
+          source: chat.source,
           lastActive: chat.lastActive,
           state: state,
           sideTasksRunning: reported?.sideTasksRunning ?? 0,
@@ -642,6 +645,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   /// Recency is independent of live status: completed and idle chats stay here.
+  /// Technical sessions stay hidden regardless of the chat browser preference.
   List<ProfileRecentChat> recentChats({DateTime? now}) {
     final cutoff =
         (now ?? DateTime.now()).millisecondsSinceEpoch / 1000 - 86400;
@@ -654,10 +658,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
             ProfileRecentChat(
               key: chat.key,
               title: chat.title,
+              source: chat.source,
               lastActive: time,
             ),
     ]) {
-      if (item.lastActive < cutoff ||
+      if (!SessionVisibility.chats.includes(item.source) ||
+          item.lastActive < cutoff ||
           (_resources[item.key.workspace]?.deletedSessions.contains(
                 item.key.sessionId,
               ) ??
@@ -670,11 +676,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
     }
     for (final live in liveActivity) {
+      if (!SessionVisibility.chats.includes(live.source)) continue;
       final key = ProfileSessionKey(live.workspace, live.sessionId);
       final previous = items[key];
       items[key] = ProfileRecentChat(
         key: key,
         title: live.title,
+        source: live.source,
         lastActive: previous != null && previous.lastActive > live.lastActive
             ? previous.lastActive
             : live.lastActive,
@@ -690,6 +698,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
                   ?.chats[item.key.sessionId]
                   ?.title ??
               item.title,
+          source: item.source,
           lastActive: item.lastActive,
           activity: item.activity,
         ),
@@ -726,6 +735,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
                 final time = row['last_active'];
                 if (time is! num || !time.isFinite || time < cutoff) continue;
                 hasRecent = true;
+                if (!SessionVisibility.chats.includes(
+                  row['source'] as String?,
+                )) {
+                  continue;
+                }
                 if (checkedSessions.add(row['id'] as String)) {
                   candidates.add(row);
                 }
@@ -765,6 +779,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
                     title: title == null || title.trim().isEmpty
                         ? 'Chat'
                         : title.trim(),
+                    source: row['source'] as String?,
                     lastActive: time,
                   );
                 }
@@ -1584,12 +1599,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
             ];
         ProfileWorkspaceData? owner;
         String? title;
+        String? source;
         if (localOwners.length == 1) {
           owner = localOwners.single.resource;
-          final metadataTitle = ownership
+          final metadata = ownership
               .where((result) => result.resource == owner)
               .firstOrNull
-              ?.matches[sessionId]?['title'];
+              ?.matches[sessionId];
+          final metadataTitle = metadata?['title'];
+          final metadataSource = metadata?['source'];
+          if (metadataSource is String) {
+            localOwners.single.chat.source = metadataSource;
+          }
+          source = localOwners.single.chat.source;
           if (metadataTitle is String && metadataTitle.trim().isNotEmpty) {
             localOwners.single.chat.title = metadataTitle.trim();
           }
@@ -1600,6 +1622,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
               .toList();
           if (savedOwners.length == 1) {
             owner = savedOwners.single.resource;
+            source =
+                savedOwners.single.matches[sessionId]?['source'] as String?;
             final metadataTitle =
                 savedOwners.single.matches[sessionId]?['title'];
             if (metadataTitle is String) title = metadataTitle.trim();
@@ -1617,6 +1641,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
             workspace: owner.scope,
             runtimeId: runtimeId,
             sessionId: sessionId,
+            source: source,
             title: title == null || title.isEmpty
                 ? 'Hermes session · $shortId'
                 : title,
@@ -6623,6 +6648,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       runtimeId: item.runtimeId,
       sessionId: item.sessionId,
       title: item.title,
+      source: item.source,
       lastActive: (row['last_active'] as num?)?.toDouble() ?? item.lastActive,
       state: row['status'] == 'waiting'
           ? ProfileLiveActivityState.needsInput
