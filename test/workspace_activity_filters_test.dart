@@ -1,4 +1,9 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/workspace_overview_content.dart';
@@ -7,10 +12,14 @@ import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profiles_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+
+const _capture = bool.fromEnvironment('CAPTURE_RECENTS');
 
 class _ActivityHost {
   final live = <String, List<Map<String, dynamic>>>{};
   final failed = <String>{};
+  bool includeHistory = false;
 
   Future<ProfileDiscovery> discover() async => ProfileDiscovery(
     profiles: [const HermesProfile(name: 'main')],
@@ -50,6 +59,14 @@ class _ActivityHost {
         : path == 'sessions'
         ? {
             'sessions': [
+              if (includeHistory)
+                {
+                  'id': 'recent',
+                  'title': 'Draft the setup guide',
+                  'profile': 'main',
+                  'last_active':
+                      DateTime.now().millisecondsSinceEpoch / 1000 - 7200,
+                },
               {'id': 'running', 'title': 'Running job', 'profile': 'main'},
               {'id': 'needs-input', 'title': 'Question', 'profile': 'main'},
               {'id': 'side-work', 'title': 'Deploy checks', 'profile': 'main'},
@@ -57,15 +74,26 @@ class _ActivityHost {
             ],
             'offset': int.parse(query['offset']!),
             'limit': int.parse(query['limit']!),
-            'total': 2,
+            'total': includeHistory ? 5 : 4,
           }
         : {
             'session_id': path.split('/')[1],
-            'messages': <Map<String, dynamic>>[],
+            'messages': <Map<String, dynamic>>[
+              if (includeHistory && path == 'sessions/recent/messages')
+                {
+                  'id': 1,
+                  'role': 'assistant',
+                  'content': 'Guide ready',
+                  'timestamp':
+                      DateTime.now().millisecondsSinceEpoch / 1000 - 7200,
+                },
+            ],
             'pagination': {
               'offset': 0,
-              'limit': 50,
-              'returned': 0,
+              'limit': int.parse(query['limit'] ?? '50'),
+              'returned': includeHistory && path == 'sessions/recent/messages'
+                  ? 1
+                  : 0,
               'order': 'latest',
             },
           },
@@ -81,6 +109,18 @@ class _ActivityHost {
 }
 
 void main() {
+  setUpAll(() async {
+    if (!_capture) return;
+    for (final entry in {
+      'Roboto': 'build/studio-roboto.ttf',
+      'MaterialIcons': 'build/studio-icons.otf',
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            File(entry.value).readAsBytes().then(ByteData.sublistView),
+          ))
+          .load();
+    }
+  });
   late _ActivityHost host;
   late ProfileWorkspaceController controller;
 
@@ -132,6 +172,88 @@ void main() {
   });
 
   tearDown(() => controller.dispose());
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('work and history at $scale in ${brightness.name}', (
+        tester,
+      ) async {
+        host.includeHistory = true;
+        final now = DateTime.now().millisecondsSinceEpoch / 1000;
+        for (final (index, row) in host.live['main']!.indexed) {
+          row['last_active'] = now - (index + 1) * 180;
+        }
+        await controller.refreshRecents();
+        expect(controller.recentChats(), hasLength(4));
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final frame = GlobalKey();
+        await tester.pumpWidget(
+          MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: RepaintBoundary(key: frame, child: child),
+            ),
+            home: Scaffold(
+              appBar: AppBar(title: const Text('Recents')),
+              body: WorkspaceActivityContent(
+                controller: controller,
+                onOpen: (_) {},
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final ongoing = find.byKey(const ValueKey('recents-ongoing'));
+        expect(
+          find.descendant(of: ongoing, matching: find.text('Deploy checks')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: ongoing,
+            matching: find.text('Draft the setup guide'),
+          ),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+        Future<void> capture(String suffix) async {
+          if (!_capture) return;
+          final boundary =
+              frame.currentContext!.findRenderObject()!
+                  as RenderRepaintBoundary;
+          await tester.runAsync(() async {
+            final image = await boundary.toImage();
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            final file = File(
+              'build/recents-review/${brightness.name}-$scale-$suffix.png',
+            );
+            await file.parent.create(recursive: true);
+            await file.writeAsBytes(bytes!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
+
+        await capture('top');
+        await tester.scrollUntilVisible(
+          find.text('Draft the setup guide'),
+          200,
+        );
+        expect(find.text('Draft the setup guide'), findsOneWidget);
+        expect(find.text('Last 24 hours'), findsOneWidget);
+        expect(find.text('Recent'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await capture('history');
+      });
+    }
+  }
 
   testWidgets('filters activity, opens an owner item, and fits large text', (
     tester,

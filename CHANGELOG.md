@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refine Recents with a compact Ongoing panel above recent chat history, quieter rows, filter counts and aligned activity ages. Preserve the filters and return navigation.
+
 - Replace Activity with Recents: show chats with messages in the last 24 hours
   alongside ongoing work, retaining All, Running and Needs input filters.
 - Return to Recents with the selected filter when leaving a chat opened there,

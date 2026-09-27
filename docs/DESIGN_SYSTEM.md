@@ -77,10 +77,20 @@ the client uses its existing activity projection with no protocol changes.
 
 The former Activity destination is now Recents, including its drawer and launcher
 labels. Preserve the existing top All / Running / Needs input filters and compact
-row layout. All includes chats with messages in the last 24 hours plus ongoing work.
+row density. All includes chats with messages in the last 24 hours plus ongoing work.
 Read-only opens and unsent drafts do not affect recency. Completed chats stay visible in All; do not label them Running.
 Back from a chat opened here returns to Recents with the selected filter retained.
 This rename concerns the destination, not the conversation's Activity presentation.
+
+On 28 September, the owner selected **Work & history**, option C from the Studio
+prototypes preserved on `prototype/recents-studio` at `7eae605`. Place ongoing
+work in one compact bordered panel, followed by unboxed Last 24 hours rows with
+thin separators. Each chat appears in one section only. Keep newest-first order
+within each section, the three top filters with counts, and a quiet scope line.
+Use one status icon on ongoing rows, profile and status beneath the title, and
+aligned relative ages. Idle history needs no repeated Recent label or chevron.
+At enlarged text, wrap titles and metadata and move ages below titles. Continue
+showing background-task details, partial-profile failures and loading feedback.
 
 ## App and notification identity
 

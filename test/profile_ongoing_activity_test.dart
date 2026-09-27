@@ -116,7 +116,8 @@ void main() {
       });
       await tester.pump();
       expect(find.text('Delegated research'), findsOneWidget);
-      expect(find.textContaining('Recent'), findsOneWidget);
+      expect(find.text('Last 24 hours'), findsOneWidget);
+      expect(find.text('Ongoing'), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(chat.status, ProfileTurnStatus.completed);
     });
