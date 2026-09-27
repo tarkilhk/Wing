@@ -298,6 +298,24 @@ class _RecentChatRow extends StatelessWidget {
     final largeText = MediaQuery.textScalerOf(context).scale(16) >= 24;
     final profileName = item.key.workspace.profileName;
     final profileColor = desktopProfileColor(profileName) ?? tokens.muted;
+    final profileIcon = ExcludeSemantics(
+      child: Container(
+        width: 16,
+        height: 16,
+        decoration: BoxDecoration(
+          color: profileColor.withValues(alpha: .12),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        alignment: Alignment.center,
+        child: isDefault
+            ? Icon(Icons.home_outlined, size: 12, color: profileColor)
+            : Text(
+                profileName.characters.first.toUpperCase(),
+                textScaler: TextScaler.noScaling,
+                style: TextStyle(fontSize: 10, color: profileColor),
+              ),
+      ),
+    );
     final title = Text(
       item.title,
       style: theme.textTheme.bodyMedium,
@@ -328,16 +346,10 @@ class _RecentChatRow extends StatelessWidget {
           children: [
             if (ongoing) ...[
               Padding(
-                padding: const EdgeInsets.only(top: 3),
-                child: Icon(
-                  needsInput
-                      ? Icons.front_hand_outlined
-                      : Icons.pending_outlined,
-                  size: 18,
-                  color: statusColor,
-                ),
+                padding: const EdgeInsets.only(top: 4),
+                child: profileIcon,
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
             ],
             Expanded(
               child: Column(
@@ -364,33 +376,10 @@ class _RecentChatRow extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          ExcludeSemantics(
-                            child: Container(
-                              width: 16,
-                              height: 16,
-                              decoration: BoxDecoration(
-                                color: profileColor.withValues(alpha: .12),
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                              alignment: Alignment.center,
-                              child: isDefault
-                                  ? Icon(
-                                      Icons.home_outlined,
-                                      size: 12,
-                                      color: profileColor,
-                                    )
-                                  : Text(
-                                      profileName.characters.first
-                                          .toUpperCase(),
-                                      textScaler: TextScaler.noScaling,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: profileColor,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
+                          if (!ongoing) ...[
+                            profileIcon,
+                            const SizedBox(width: 6),
+                          ],
                           Flexible(
                             child: Text(
                               profileName,

@@ -87,8 +87,10 @@ prototypes preserved on `prototype/recents-studio` at `7eae605`. Place ongoing
 work in one compact bordered panel, followed by unboxed Last 24 hours rows with
 thin separators. Each chat appears in one section only. Keep newest-first order
 within each section, the three top filters with counts, and a quiet scope line.
-Use one status icon on ongoing rows, profile and status beneath the title, and
-aligned relative ages. Show the profile icon beside its name in both sections.
+Use the profile icon as the leading icon on ongoing rows, with profile name and
+status beneath the title and aligned relative ages. Do not repeat the profile
+icon beside that subtitle or add a separate status icon. History rows keep the
+profile icon beside their profile name.
 Idle history needs no repeated Recent label or chevron.
 At enlarged text, wrap titles and metadata and move ages below titles. Continue
 showing background-task details, partial-profile failures and loading feedback.

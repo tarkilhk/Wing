@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Show profile icons beside profile names in both Ongoing and recent history.
+- Use the profile icon as the leading icon for Ongoing chats, with profile name
+  and status below the title. Recent history keeps its icon beside the profile name.
 
 - Refine Recents with a compact Ongoing panel above recent chat history, quieter rows, filter counts and aligned activity ages. Preserve the filters and return navigation.
 
