@@ -114,10 +114,23 @@ bool isHiddenAnswerMessage(Map<String, dynamic> message) =>
             answerMessageText(message).trimLeft().startsWith('[System:') ||
             _isTaskSnapshot(answerMessageDisplayText(message)) ||
             _isContinuationReminder(answerMessageDisplayText(message)) ||
+            _processHeartbeat.hasMatch(
+              answerMessageDisplayText(message).trim(),
+            ) ||
             (message['display_kind'] == null &&
                 _asyncDelegationBatch.hasMatch(
                   answerMessageDisplayText(message).trimLeft(),
                 ))));
+
+// Stock Hermes format_process_notification, inspected at upstream commit
+// e33fd7e09b42c50e347cd32564a4a83ad5c4a97b. Match the heartbeat header and
+// payload boundaries; timing prose and optional subagent attribution can vary.
+final _processHeartbeat = RegExp(
+  r'^\[Background process [^\s\]]+ heartbeat #(?:\d+|\?) — '
+  r'still running after [^\r\n]+\.\r?\n'
+  r'(?:[^\r\n]*\r?\n)*?Command: [\s\S]*?\r?\n'
+  r'Output since last heartbeat:\r?\n[\s\S]*\]$',
+);
 
 // Stock Hermes _format_batch_delegation, inspected at upstream commit
 // c712f06dcdd24053a4118f38d2090ac53137ecfc. Match the producer header and

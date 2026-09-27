@@ -26,6 +26,19 @@ Find in chat shares delivery and skill projection, preserving useful output whil
 
 Regression fixtures in `test/internal_message_visibility_test.dart` cover the reported process envelope, current/legacy agent formats, single/bundled skills, Desktop negative cases, phone/tablet widths, expanded output, search, saved history refresh, hidden rows and assistant reply boundaries. `test/answer_versions_test.dart` verifies that edit/regeneration cannot submit an internal delivery. Existing steering, review, activity, search and saved-answer tests cover the retained branches. This is a client projection fix; the backend is unchanged.
 
+## Background process heartbeats
+
+Standalone user-role process heartbeats are hidden from the transcript and chat
+search, and cannot become editable prompts. The client recognizes the complete
+`[Background process … heartbeat #… — still running after …]` envelope, including
+its command and output boundaries. Quoted examples, partial envelopes, assistant
+text and clean server display projections stay visible. Raw history and rewind
+ordinals remain intact.
+
+Verified against stock Hermes
+[`format_process_notification`](https://github.com/NousResearch/hermes-agent/blob/e33fd7e09b42c50e347cd32564a4a83ad5c4a97b/tools/process_registry_notifications.py)
+at upstream commit `e33fd7e09b42c50e347cd32564a4a83ad5c4a97b`.
+
 ## Task snapshots after compression
 
 The producer at Hermes revision `498abb677ec39ea3ae9f8f5ed60e7def6bc47e70` can append task context in standalone user rows or inside a real user message. The standalone rows are not new human prompts.

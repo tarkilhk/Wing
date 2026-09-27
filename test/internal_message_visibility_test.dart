@@ -36,6 +36,11 @@ Map<String, dynamic> _notice() => {
 
 const _processEnvelope =
     '[IMPORTANT: Background process proc_0c3ef9a5dfb0 completed normally (exit code 0).\nCommand: env -u ANTHROPIC_API_KEY claude --print\nOutput:\n]';
+const _processHeartbeat =
+    '[Background process proc_7d2ae4ca6501 heartbeat #9 — still running after '
+    '18m (next in 120s; you will also be told when it exits).\n'
+    'Command: python monthly_pilot.py audit\n'
+    'Output since last heartbeat:\n{"batch_id": 64, "status": "parsed"}]';
 const _agentEnvelope =
     'Message from 🤖 Hermes (@hermes): Private agent instructions';
 const _skillEnvelope =
@@ -71,10 +76,98 @@ class _NoticeHistory extends ProfileHistoryFixture {
     {'id': 10, 'role': 'user', 'content': snapshot},
     {'id': 11, 'role': 'user', 'content': _continuationEnvelope},
     {'id': 12, 'role': 'user', 'content': _rawDelegationEnvelope},
+    {'id': 13, 'role': 'user', 'content': _processHeartbeat},
   ];
 }
 
 void main() {
+  test('process heartbeats are hidden without changing stored history', () {
+    for (final fields in <Map<String, dynamic>>[
+      {'content': _processHeartbeat},
+      {'text': _processHeartbeat},
+      {'content': _processHeartbeat.replaceAll('\n', '\r\n')},
+      {'content': '  $_processHeartbeat\n'},
+      {'content': 'wire payload', 'display_content': _processHeartbeat},
+      {
+        'content': [
+          {'type': 'text', 'text': _processHeartbeat},
+        ],
+      },
+      {
+        'content': _processHeartbeat.replaceFirst(
+          '120s;',
+          '120s when there is new output;',
+        ),
+      },
+      {
+        'content': _processHeartbeat.replaceFirst(
+          'Command:',
+          'Handed off to you by a subagent before it finished. Purpose: audit\n'
+              'Command:',
+        ),
+      },
+    ]) {
+      final row = {'id': 13, 'role': 'user', ...fields};
+      expect(isHiddenAnswerMessage(row), isTrue, reason: '$fields');
+      expect(isHumanAnswerPrompt(row), isFalse);
+      final stored = answerHistoryRows([row]).single;
+      expect(isHiddenAnswerMessage(stored), isTrue);
+      expect(stored['id'], 13);
+      expect(isAnswerPrompt(row), isTrue);
+      expect(answerMessageText(stored), answerMessageText(row));
+    }
+  });
+
+  test('process heartbeat quotes and ordinary discussion stay visible', () {
+    for (final text in [
+      'Explain this:\n$_processHeartbeat',
+      '```\n$_processHeartbeat\n```',
+      '> $_processHeartbeat',
+      '[Background process monitoring is useful]',
+      '[Background process proc_example heartbeat #1]',
+      _processHeartbeat.substring(0, _processHeartbeat.length - 1),
+    ]) {
+      expect(
+        isHiddenAnswerMessage({'role': 'user', 'content': text}),
+        isFalse,
+        reason: text,
+      );
+    }
+    expect(
+      isHiddenAnswerMessage({
+        'role': 'assistant',
+        'content': _processHeartbeat,
+      }),
+      isFalse,
+    );
+    expect(
+      isHiddenAnswerMessage({
+        'role': 'user',
+        'content': _processHeartbeat,
+        'display_content': 'User-facing server projection',
+      }),
+      isFalse,
+    );
+  });
+
+  testWidgets('process heartbeat never renders a chat bubble', (tester) async {
+    const row = {'role': 'user', 'content': _processHeartbeat};
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: ProfileMessage(message: row)),
+      ),
+    );
+    expect(find.textContaining('heartbeat #9'), findsNothing);
+    expect(find.byTooltip('Copy message'), findsNothing);
+    final sections = groupTranscriptSections([
+      {'id': 1, 'role': 'tool', 'content': 'first'},
+      row,
+      {'id': 2, 'role': 'tool', 'content': 'second'},
+    ]);
+    expect(sections, hasLength(1));
+    expect(sections.single.messages.map((row) => row['id']), [1, 2]);
+  });
+
   test('technical envelopes are hidden across message encodings', () {
     for (final fields in <Map<String, dynamic>>[
       {'content': _continuationEnvelope},
@@ -286,6 +379,8 @@ void main() {
         expect(find.byKey(const ValueKey('edit-message-11')), findsNothing);
         expect(find.textContaining('deleg_22411d56'), findsNothing);
         expect(find.byKey(const ValueKey('edit-message-12')), findsNothing);
+        expect(find.textContaining('heartbeat #9'), findsNothing);
+        expect(find.byKey(const ValueKey('edit-message-13')), findsNothing);
         // Retain server history and IDs for paging/rewind; filter only the view.
         expect(chat.messages.map((row) => row['id']), [
           1,
@@ -300,6 +395,7 @@ void main() {
           10,
           11,
           12,
+          13,
         ]);
         await controller.refreshHistory(chat);
         await tester.pumpAndSettle();
@@ -521,6 +617,8 @@ void main() {
       'Runtime note',
       '(@hermes)',
       'Treat these results as one batch',
+      'heartbeat #9',
+      'monthly_pilot.py',
     ]) {
       await tester.enterText(find.byType(TextField), query);
       await tester.pump();
