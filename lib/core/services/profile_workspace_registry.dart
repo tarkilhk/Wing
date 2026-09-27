@@ -24,29 +24,12 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
   String _monitoringFingerprint = '';
 
   Map<String, String> get monitoringSummary {
-    final counts = <String, int>{};
-    for (final owner in _controllers.values) {
-      for (final entry in owner.notificationMonitoringCounts.entries) {
-        counts.update(
-          entry.key,
-          (v) => v + entry.value,
-          ifAbsent: () => entry.value,
-        );
-      }
-    }
-    final watched = counts.values.fold<int>(0, (a, b) => a + b);
-    final detail = counts.entries
-        .where((e) => e.value > 0)
-        .map((e) {
-          final label = e.value == 1
-              ? e.key.replaceFirst('need ', 'needs ')
-              : e.key;
-          return '${e.value} $label';
-        })
-        .join(' · ');
+    final chats = _controllers.values.expand(
+      (owner) => owner.notificationMonitoringChats,
+    );
     return {
-      'title': 'Watching $watched chat${watched == 1 ? '' : 's'}',
-      'text': detail,
+      'title': 'Watching chats',
+      'text': chats.map((chat) => '${chat.title} · ${chat.state}').join('\n'),
     };
   }
 

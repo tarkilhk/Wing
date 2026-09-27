@@ -34,7 +34,9 @@ void main() {
       expect(owner.hasActiveChats, isTrue);
       if (scenario == 'disconnect' || scenario == 'network-resume') {
         owner.networkUnavailable();
-        expect(owner.notificationMonitoringCounts, {'reconnecting': 1});
+        expect(owner.notificationMonitoringChats.toList(), [
+          (title: 'Outside task', state: 'reconnecting'),
+        ]);
         expect(
           owner.hasActiveChats,
           isTrue,
@@ -131,7 +133,9 @@ void main() {
         await observe();
         expect(notices, isEmpty);
         expect(owner.hasActiveChats, isTrue);
-        expect(owner.notificationMonitoringCounts, {'reconnecting': 1});
+        expect(owner.notificationMonitoringChats.toList(), [
+          (title: 'Outside task', state: 'reconnecting'),
+        ]);
         host.saved['b'] = [];
         host.historyFails = false;
         host.active = [row('outside-runtime', 'outside', 'idle')];

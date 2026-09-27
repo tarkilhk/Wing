@@ -20,6 +20,7 @@ class BackgroundMonitoringService : Service() {
         val notification = builder ?: return
         notification.setContentTitle(MonitoringRuntime.summary["title"])
             .setContentText(MonitoringRuntime.summary["text"])
+            .setStyle(NotificationCompat.BigTextStyle().bigText(MonitoringRuntime.summary["text"]))
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(notificationId, notification.build())
     }
@@ -59,6 +60,7 @@ class BackgroundMonitoringService : Service() {
                 .setSmallIcon(R.drawable.ic_stat_monitoring)
                 .setContentTitle(MonitoringRuntime.summary["title"])
                 .setContentText(MonitoringRuntime.summary["text"])
+                .setStyle(NotificationCompat.BigTextStyle().bigText(MonitoringRuntime.summary["text"]))
                 .setContentIntent(open)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)

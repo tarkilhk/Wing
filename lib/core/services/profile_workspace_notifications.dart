@@ -16,16 +16,16 @@ class ProfileInputNotification {
 }
 
 extension ProfileNotificationState on ProfileWorkspaceController {
-  Map<String, int> get notificationMonitoringCounts {
-    final counts = <String, int>{};
+  Iterable<({String title, String state})>
+  get notificationMonitoringChats sync* {
     for (final chat in notificationChats) {
       final String? state;
       if (chat.status == ProfileTurnStatus.reconnecting && chat.busy) {
         state = 'reconnecting';
       } else if (chat.approval != null) {
-        state = 'need approval';
+        state = 'needs approval';
       } else if (chat.pendingQuestion != null || chat.sensitivePrompt != null) {
-        state = 'need input';
+        state = 'needs input';
       } else if (chat.busy ||
           chat.commandRunning ||
           chat.queueDraining ||
@@ -34,7 +34,7 @@ extension ProfileNotificationState on ProfileWorkspaceController {
       } else {
         state = null;
       }
-      if (state != null) counts.update(state, (v) => v + 1, ifAbsent: () => 1);
+      if (state != null) yield (title: chat.title, state: state);
     }
     for (final entry in _backgroundChats.entries) {
       if (_hasLoadedNotificationChat(entry.key, entry.value.sessionId)) {
@@ -43,9 +43,9 @@ extension ProfileNotificationState on ProfileWorkspaceController {
       final state = _uncertainNotificationRuntimes.contains(entry.key)
           ? 'reconnecting'
           : 'working';
-      counts.update(state, (v) => v + 1, ifAbsent: () => 1);
+      final chat = _notificationSnapshot![entry.key]!.chat;
+      yield (title: chat.title, state: state);
     }
-    return counts;
   }
 
   Iterable<ProfileChat> get notificationChats =>

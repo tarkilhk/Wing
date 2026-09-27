@@ -76,12 +76,17 @@ void main() {
       final two = await second.createChat();
       expect(registry.hasActiveChats, isFalse);
       expect(transitions, isEmpty);
+      expect(registry.monitoringSummary['text'], isEmpty);
 
       one.draft = 'First task';
       await first.send(one);
       two.draft = 'Second task';
       await second.send(two);
       expect(transitions, [true]);
+      expect(
+        registry.monitoringSummary['text'],
+        'First task · working\nSecond task · working',
+      );
 
       hosts[first.connectionIdentity]!.event('a', 'clarify', {
         'request_id': 'question',
@@ -89,6 +94,10 @@ void main() {
       });
       await until(() => delivered.length == 1);
       expect(registry.hasActiveChats, isTrue);
+      expect(
+        registry.monitoringSummary['text'],
+        'First task · needs input\nSecond task · working',
+      );
 
       hosts[second.connectionIdentity]!.event('a', 'message.complete', {
         'text': 'Done',
@@ -96,6 +105,7 @@ void main() {
       await until(() => !registry.hasActiveChats);
       expect(one.status, ProfileTurnStatus.attention);
       expect(transitions, [true, false]);
+      expect(registry.monitoringSummary['text'], 'First task · needs input');
 
       await first.clarify(one, 'Yes');
       expect(registry.hasActiveChats, isTrue);
