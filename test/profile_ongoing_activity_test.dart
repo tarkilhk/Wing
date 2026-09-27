@@ -27,6 +27,11 @@ void main() {
     await controller.initialize();
     chat = await controller.createChat();
     chat.title = 'Delegated research';
+    chat.messages.add({
+      'role': 'user',
+      'content': 'Research this',
+      'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
+    });
   });
 
   tearDown(() => controller.dispose());
@@ -36,7 +41,7 @@ void main() {
     'goal': 'Research',
   });
 
-  testWidgets('idle parent with active child appears in Activities', (
+  testWidgets('idle parent with active child appears in Recents', (
     tester,
   ) async {
     startChild();
@@ -110,7 +115,8 @@ void main() {
         'status': terminalStatus,
       });
       await tester.pump();
-      expect(find.text('Delegated research'), findsNothing);
+      expect(find.text('Delegated research'), findsOneWidget);
+      expect(find.textContaining('Recent'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(chat.status, ProfileTurnStatus.completed);
     });

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
-import 'package:wing/core/models/profile_live_activity.dart';
 import 'package:wing/core/screens/workspace_overview_content.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
@@ -129,7 +128,7 @@ void main() {
         'last_active': 4,
       },
     ];
-    await controller.refreshActivity();
+    await controller.refreshRecents();
   });
 
   tearDown(() => controller.dispose());
@@ -137,7 +136,7 @@ void main() {
   testWidgets('filters activity, opens an owner item, and fits large text', (
     tester,
   ) async {
-    ProfileLiveActivity? opened;
+    ProfileRecentChat? opened;
     await tester.pumpWidget(
       MediaQuery(
         data: const MediaQueryData(textScaler: TextScaler.linear(2)),
@@ -166,7 +165,7 @@ void main() {
     expect(find.text('Running job'), findsNothing);
     expect(find.text('Question'), findsOneWidget);
     await tester.tap(find.text('Question'));
-    expect(opened?.sessionId, 'needs-input');
+    expect(opened?.key.sessionId, 'needs-input');
 
     await tester.tap(find.widgetWithText(FilterChip, 'Running'));
     await tester.pump();
@@ -181,7 +180,7 @@ void main() {
 
   testWidgets('retains activity-unavailable error', (tester) async {
     host.failed.add('main');
-    await controller.refreshActivity();
+    await controller.refreshRecents();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -193,7 +192,7 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('Activity unavailable.'), findsOneWidget);
-    expect(find.text('No ongoing sessions'), findsNothing);
+    expect(find.text('Live status could not be loaded.'), findsOneWidget);
+    expect(find.text('No recent chats'), findsNothing);
   });
 }

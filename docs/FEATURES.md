@@ -9,7 +9,7 @@
   <img src="screenshots/conversation-dark.png" alt="Wing conversation with streamed reply and tool activity" width="285">
 </p>
 
-- **Find the right chat.** Search, pin and group conversations; filter by profile, project or status. Activity shows work that is running or needs you.
+- **Find the right chat.** Search, pin and group conversations; filter by profile, project or status. Recents shows chats with messages from the last 24 hours alongside ongoing work, with All, Running and Needs input filters.
 - **Read the whole story.** Follow streamed replies, code, tables, tool activity and available reasoning. Find a message in a chat, open a result, or return to the latest reply.
 - **Stay oriented.** See the selected model, context usage and current work. Switch models with a clear confirmation when Hermes warns about the change.
 
@@ -36,6 +36,6 @@ Switch between connections and profiles. Manage supported model settings, provid
 
 ## Make it yours
 
-Choose a light or dark theme, accent color and text size with a live preview. Back up your connections and app preferences, with an optional passphrase. Quick Chat, Activity and Search chats are also available from Wing's Android launcher shortcut menu.
+Choose a light or dark theme, accent color and text size with a live preview. Back up your connections and app preferences, with an optional passphrase. Quick Chat, Recents and Search chats are also available from Wing's Android launcher shortcut menu.
 
 [Get started](GETTING_STARTED.md) · [Good to know](KNOWN_LIMITATIONS.md) · [All guides](README.md)

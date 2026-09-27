@@ -434,6 +434,7 @@ class ProfileGateway {
     int offset = 0,
     int limit = sessionPageSize,
     bool archivedOnly = false,
+    bool includeArchived = false,
   }) async {
     if (offset < 0 || limit < 1 || limit > 100) {
       throw ArgumentError('Invalid session page');
@@ -443,7 +444,10 @@ class ProfileGateway {
       'offset': '$offset',
       'order': 'recent',
       ...visibility.queryParameters,
-      if (archivedOnly) 'archived': 'only',
+      if (archivedOnly)
+        'archived': 'only'
+      else if (includeArchived)
+        'archived': 'include',
     });
     if (result['offset'] != offset ||
         result['limit'] != limit ||

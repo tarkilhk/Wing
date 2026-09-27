@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -8,7 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
-import 'package:wing/core/screens/administration/administration_content.dart';
 import 'package:wing/core/screens/workspace_overview_content.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -19,6 +19,19 @@ import 'package:wing/main.dart';
 
 import 'support/profile_browser_fixture.dart';
 import 'home_config_restore_test.dart' show buildManager;
+
+class _ShellFixture extends ProfileBrowserFixture {
+  @override
+  List<Map<String, dynamic>> historyRows(String profile, String id) => [
+    for (final row in sessions(profile).where((row) => row['id'] == id))
+      {
+        'id': 1,
+        'role': 'assistant',
+        'content': 'Saved reply',
+        'timestamp': row['last_active'],
+      },
+  ];
+}
 
 void main() {
   const capture = bool.fromEnvironment('CAPTURE_MENU');
@@ -50,7 +63,7 @@ void main() {
       buildSignature: '',
     );
     SharedPreferences.setMockInitialValues({});
-    fixture = ProfileBrowserFixture();
+    fixture = _ShellFixture();
     controller = ProfileWorkspaceController(
       connection: SavedConnection(
         id: 'host',
@@ -134,8 +147,76 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  for (final systemBack in [false, true]) {
+    testWidgets(
+      'chat opened from activity returns there on ${systemBack ? 'system' : 'toolbar'} Back',
+      (tester) async {
+        final chat = await controller.createChat();
+        chat.title = 'Recent conversation';
+        chat.status = ProfileTurnStatus.attention;
+        await show(tester);
+        await navigate(tester, AppDestination.activity);
+        await tester.tap(find.widgetWithText(FilterChip, 'Needs input'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Recent conversation'));
+        await tester.pumpAndSettle();
+        expect(find.byType(WorkspaceActivityContent), findsNothing);
+        if (systemBack) {
+          await tester.binding.handlePopRoute();
+        } else {
+          await tester.tap(find.byIcon(Icons.arrow_back).first);
+        }
+        await tester.pumpAndSettle();
+        expect(find.byType(WorkspaceActivityContent), findsOneWidget);
+        expect(
+          tester
+              .widget<FilterChip>(
+                find.widgetWithText(FilterChip, 'Needs input'),
+              )
+              .selected,
+          isTrue,
+        );
+      },
+    );
+  }
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets('recents ${brightness.name} at $scale', (tester) async {
+        final chat = await controller.createChat();
+        chat.title = 'Choose deployment region';
+        chat.status = ProfileTurnStatus.attention;
+        await show(tester, scale: scale, brightness: brightness);
+        await navigate(tester, AppDestination.activity);
+        expect(find.text('Recents'), findsOneWidget);
+        expect(find.widgetWithText(FilterChip, 'All'), findsOneWidget);
+        expect(find.widgetWithText(FilterChip, 'Running'), findsOneWidget);
+        expect(find.widgetWithText(FilterChip, 'Needs input'), findsOneWidget);
+        await snapshot(tester, 'recents-${brightness.name}-$scale');
+        await tester.tap(find.widgetWithText(FilterChip, 'Running'));
+        await tester.pumpAndSettle();
+        expect(find.text('No running sessions'), findsOneWidget);
+        await snapshot(tester, 'recents-empty-${brightness.name}-$scale');
+        await tester.tap(find.widgetWithText(FilterChip, 'All'));
+        final pending = Completer<void>();
+        fixture.pageDelays[('personal', 0)] = pending;
+        final refresh = controller.refreshRecents();
+        await tester.pump();
+        await snapshot(tester, 'recents-loading-${brightness.name}-$scale');
+        pending.complete();
+        await refresh;
+        fixture.pageFailures.addAll([('personal', 0), ('work', 0)]);
+        await controller.refreshRecents();
+        await tester.pumpAndSettle();
+        expect(find.text('Recents unavailable.'), findsNothing);
+        expect(
+          find.text('Recent chats unavailable for personal.'),
+          findsOneWidget,
+        );
+        await snapshot(tester, 'recents-errors-${brightness.name}-$scale');
+        expect(tester.takeException(), isNull);
+      });
+
       testWidgets('instances ${brightness.name} at $scale', (tester) async {
         final manager = await buildManager();
         await manager.saveConnection('Homelab', 'hermes.local', 8642, '');

@@ -165,6 +165,7 @@ class ProfileBrowserFixture {
           sessions(scope.profileName)
               .where(
                 (row) =>
+                    query['archived'] == 'include' ||
                     (row['archived'] == true) == (query['archived'] == 'only'),
               )
               .toList()

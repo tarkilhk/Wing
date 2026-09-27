@@ -1,4 +1,4 @@
-# Queues, Activity and pending input
+# Queues, Recents and pending input
 
 ## Follow-up queue
 
@@ -10,11 +10,40 @@ Drain one entry at a time after a completed turn, while the app is connected. Re
 
 Staged files belong to the composer or one queue entry. Queueing transfers their references without copying the files. Clean up only after successful durable removal following acknowledged send or explicit Remove. Failed local writes preserve queued work and newer composer edits. Pending steering remains durably paused until its acknowledgement.
 
-## Activity ownership
+## Recents and live activity ownership
 
-Activity discovers running and input-required work across profiles on the selected connection. A global runtime snapshot does not establish profile ownership. Join durable IDs against profile-scoped metadata or a previously verified exact runtime/durable pair. Unknown or ambiguous owners stay unavailable; report failed-profile coverage instead of presenting stale rows as current.
+Recents includes chats with messages within the last 24 hours and ongoing work
+across profiles. Reading a chat, creating an empty chat or editing an unsent draft
+does not make it recent. Finished chats remain visible until they age
+out. All, Running and Needs input stay at the top; only the latter two restrict
+rows by live status. Opening a chat and using toolbar or Android Back returns to
+Recents with the selected filter retained. Chats opened from Chats still return
+to Chats.
 
-Enumeration must not resume every saved chat. Resume can attach or adopt a runtime and is appropriate only when opening verified work. Selecting an Activity row retains its original connection/profile/chat. Missing titles use a short session ID.
+Verified against stock upstream main `fb2dded3d191d15c614a80d15e1c95002956867c`
+on 27 September 2026: [`GET /api/sessions`](https://github.com/NousResearch/hermes-agent/blob/fb2dded3d191d15c614a80d15e1c95002956867c/hermes_cli/web_routers/sessions.py)
+supports profile scope, `order=recent`, `archived=include` and offset/limit pages
+(up to 100 rows), with pinned rows potentially added outside each page. Recents
+pages through recent history, deduplicates by profile/session and excludes
+scheduled/internal sources using the existing Chats source rules. Saved
+`last_active` includes heartbeats and chat creation, so it only identifies
+candidates. Wing reads each candidate's latest saved message with the stock
+`GET /api/sessions/{id}/messages?limit=1&offset=0&order=latest&include_compacted=true`
+endpoint and applies the rolling cutoff to its numeric `timestamp`. Reads are
+batched four at a time per profile and pinned duplicates are checked once.
+Already loaded message timestamps provide immediate local updates. Recents does
+not track or persist chat-opening times.
+No backend changes or new endpoints are required.
+
+Validation: `profile_recents_test.dart` covers pagination, pinned duplicates,
+archived chats, profile collisions, the rolling cutoff, partial failures and
+read-only opens, drafts, empty chats and heartbeat-only activity. `app_shell_navigation_test.dart` covers both Back paths and
+filter retention. Rendered Recents in light/dark at 360 dp with 100% and 200%
+text; captures are under ignored `build/menu-review/recents-*.png`.
+
+Recents discovers running and input-required work across profiles on the selected connection. A global runtime snapshot does not establish profile ownership. Join durable IDs against profile-scoped metadata or a previously verified exact runtime/durable pair. Unknown or ambiguous owners stay unavailable; report failed-profile coverage instead of presenting stale rows as current.
+
+Enumeration must not resume every saved chat. Resume can attach or adopt a runtime and is appropriate only when opening verified work. Selecting a Recents row retains its original connection/profile/chat. Missing titles use a short session ID.
 
 Child-only work can be absent when a parent is idle and the server supplies no child count. The open parent's roster may still see it. This limitation is tracked in [upstream bug HUP-003](UPSTREAM_HERMES_BUGS.md#hup-003-global-activity-omits-child-only-work). [Subagent supervision](SUBAGENT_SUPERVISION.md) describes loaded child controls.
 

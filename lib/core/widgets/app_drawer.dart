@@ -9,7 +9,7 @@ import 'wing_wordmark.dart';
 
 enum AppDestination {
   chats('Chats', Icons.chat_bubble_outline),
-  activity('Activity', Icons.pending_actions_outlined),
+  activity('Recents', Icons.history),
   connections('Hermes instances', Icons.dns_outlined),
   settings('App settings', Icons.tune_outlined),
   administration('Hermes administration', Icons.manage_accounts_outlined),

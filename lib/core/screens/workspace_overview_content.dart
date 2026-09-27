@@ -1,3 +1,4 @@
+import 'dart:async';
 import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
 
@@ -5,14 +6,14 @@ import '../models/profile_live_activity.dart';
 import '../services/profile_workspace_controller.dart';
 export 'administration/administration_content.dart';
 
-enum _ActivityFilter { all, running, needsInput }
+enum WorkspaceActivityFilter { all, running, needsInput }
 
-List<ProfileLiveActivity> _filterWorkspaceActivity(
-  List<ProfileLiveActivity> activity,
-  _ActivityFilter filter,
+List<ProfileRecentChat> _filterWorkspaceActivity(
+  List<ProfileRecentChat> activity,
+  WorkspaceActivityFilter filter,
 ) => switch (filter) {
-  _ActivityFilter.all => activity,
-  _ActivityFilter.running =>
+  WorkspaceActivityFilter.all => activity,
+  WorkspaceActivityFilter.running =>
     activity
         .where(
           (item) =>
@@ -20,7 +21,7 @@ List<ProfileLiveActivity> _filterWorkspaceActivity(
               item.sideTasksRunning > 0,
         )
         .toList(growable: false),
-  _ActivityFilter.needsInput =>
+  WorkspaceActivityFilter.needsInput =>
     activity
         .where((item) => item.state == ProfileLiveActivityState.needsInput)
         .toList(growable: false),
@@ -31,10 +32,14 @@ class WorkspaceActivityContent extends StatefulWidget {
     super.key,
     required this.controller,
     required this.onOpen,
+    this.filter = WorkspaceActivityFilter.all,
+    this.onFilterChanged,
   });
 
   final ProfileWorkspaceController controller;
-  final ValueChanged<ProfileLiveActivity> onOpen;
+  final WorkspaceActivityFilter filter;
+  final ValueChanged<WorkspaceActivityFilter>? onFilterChanged;
+  final ValueChanged<ProfileRecentChat> onOpen;
 
   @override
   State<WorkspaceActivityContent> createState() =>
@@ -42,20 +47,36 @@ class WorkspaceActivityContent extends StatefulWidget {
 }
 
 class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
-  _ActivityFilter _filter = _ActivityFilter.all;
+  late WorkspaceActivityFilter _filter = widget.filter;
+  Timer? _expiryTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _expiryTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => setState(() {}),
+    );
+  }
+
+  @override
+  void dispose() {
+    _expiryTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
-    final activity = _filterWorkspaceActivity(controller.liveActivity, _filter);
-    final allActivity = controller.liveActivity;
-    final filtered = _filter != _ActivityFilter.all;
+    final allActivity = controller.recentChats();
+    final activity = _filterWorkspaceActivity(allActivity, _filter);
+    final filtered = _filter != WorkspaceActivityFilter.all;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         const Padding(
           padding: EdgeInsets.fromLTRB(4, 0, 4, 16),
-          child: Text('Sessions running across this Hermes connection.'),
+          child: Text('Chats from the last 24 hours and ongoing work.'),
         ),
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -63,28 +84,29 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _filterChip(_ActivityFilter.all, 'All'),
-              _filterChip(_ActivityFilter.running, 'Running'),
-              _filterChip(_ActivityFilter.needsInput, 'Needs input'),
+              _filterChip(WorkspaceActivityFilter.all, 'All'),
+              _filterChip(WorkspaceActivityFilter.running, 'Running'),
+              _filterChip(WorkspaceActivityFilter.needsInput, 'Needs input'),
             ],
           ),
         ),
-        if (controller.activityLoading) const LinearProgressIndicator(),
-        if (controller.activityLoaded &&
-            controller.activityAvailableProfiles == 0 &&
-            controller.activityProfileErrors.isNotEmpty)
+        if (controller.recentsLoading) const LinearProgressIndicator(),
+        if (controller.recentsLoaded &&
+            allActivity.isEmpty &&
+            controller.recentsAvailableProfiles == 0 &&
+            controller.recentsProfileErrors.isNotEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 32),
-            child: StudioError('Activity unavailable.'),
+            child: StudioError('Recents unavailable.'),
           )
         else
-          for (final message in controller.activityProfileErrors.values)
+          for (final message in controller.recentsProfileErrors.values)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: StudioError(message),
             ),
-        if (activity.isEmpty && controller.activityLoaded)
-          if (controller.activityAvailableProfiles > 0)
+        if (activity.isEmpty && controller.recentsLoaded)
+          if (controller.recentsAvailableProfiles > 0)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 48),
               child: Column(
@@ -93,14 +115,14 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
                   const SizedBox(height: 16),
                   Text(
                     filtered
-                        ? (controller.activityProfileErrors.isNotEmpty
+                        ? (controller.recentsProfileErrors.isNotEmpty
                               ? 'No ${_filterLabel(_filter).toLowerCase()} sessions found in available profiles'
                               : allActivity.isEmpty
-                              ? 'No ongoing sessions'
+                              ? 'No recent chats'
                               : _filterEmptyLabel(_filter))
-                        : (controller.activityProfileErrors.isEmpty
-                              ? 'No ongoing sessions'
-                              : 'No ongoing sessions found in available profiles'),
+                        : (controller.recentsProfileErrors.isEmpty
+                              ? 'No recent chats'
+                              : 'No recent chats found in available profiles'),
                   ),
                 ],
               ),
@@ -109,7 +131,7 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
           Card(
             child: ListTile(
               key: ValueKey(
-                'activity-${item.workspace.profileName}-${item.sessionId}',
+                'activity-${item.key.workspace.profileName}-${item.key.sessionId}',
               ),
               leading: Icon(
                 item.state == ProfileLiveActivityState.needsInput
@@ -118,18 +140,24 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
               ),
               title: Text(
                 item.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+                maxLines: MediaQuery.textScalerOf(context).scale(16) > 24
+                    ? null
+                    : 2,
+                overflow: MediaQuery.textScalerOf(context).scale(16) > 24
+                    ? TextOverflow.visible
+                    : TextOverflow.ellipsis,
               ),
               subtitle: Text(
-                '${item.workspace.profileName} · '
+                '${item.key.workspace.profileName} · '
                 '${item.state == ProfileLiveActivityState.needsInput
                     ? 'Needs input'
                     : item.sideTasksRunning > 0
                     ? item.sideTasksRunning == 1
                           ? 'Background work running'
                           : '${item.sideTasksRunning} background tasks running'
-                    : 'Running'}',
+                    : item.state == ProfileLiveActivityState.running
+                    ? 'Running'
+                    : 'Recent'}',
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: controller.switching ? null : () => widget.onOpen(item),
@@ -139,24 +167,28 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
     );
   }
 
-  FilterChip _filterChip(_ActivityFilter filter, String label) => FilterChip(
-    showCheckmark: false,
-    label: Text(label),
-    selected: _filter == filter,
-    onSelected: (selected) {
-      if (selected) setState(() => _filter = filter);
-    },
-  );
+  FilterChip _filterChip(WorkspaceActivityFilter filter, String label) =>
+      FilterChip(
+        showCheckmark: false,
+        label: Text(label),
+        selected: _filter == filter,
+        onSelected: (selected) {
+          if (selected) {
+            setState(() => _filter = filter);
+            widget.onFilterChanged?.call(filter);
+          }
+        },
+      );
 
-  String _filterLabel(_ActivityFilter filter) => switch (filter) {
-    _ActivityFilter.all => 'All',
-    _ActivityFilter.running => 'Running',
-    _ActivityFilter.needsInput => 'Needs input',
+  String _filterLabel(WorkspaceActivityFilter filter) => switch (filter) {
+    WorkspaceActivityFilter.all => 'All',
+    WorkspaceActivityFilter.running => 'Running',
+    WorkspaceActivityFilter.needsInput => 'Needs input',
   };
 
-  String _filterEmptyLabel(_ActivityFilter filter) => switch (filter) {
-    _ActivityFilter.all => 'No ongoing sessions',
-    _ActivityFilter.running => 'No running sessions',
-    _ActivityFilter.needsInput => 'No sessions need input',
+  String _filterEmptyLabel(WorkspaceActivityFilter filter) => switch (filter) {
+    WorkspaceActivityFilter.all => 'No recent chats',
+    WorkspaceActivityFilter.running => 'No running sessions',
+    WorkspaceActivityFilter.needsInput => 'No sessions need input',
   };
 }

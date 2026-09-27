@@ -344,6 +344,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       !controller.switching &&
       !_launchingCamera;
   late AppDestination _destination;
+  AppDestination? _chatOrigin;
+  WorkspaceActivityFilter _recentFilter = WorkspaceActivityFilter.all;
   bool _routeIsCurrent = true;
   bool _appIsActive = true;
 
@@ -383,7 +385,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
     if (!mounted || controller.current == null) return;
     if (_destination == AppDestination.activity) {
-      await controller.refreshActivity();
+      await controller.refreshRecents();
     }
     if (widget.initialSearchChats) {
       await controller.navigateProfile(controller.current!.scope.profileName);
@@ -616,7 +618,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             } else if (chat.editingQueuedPrompt != null) {
               unawaited(_run(() => controller.cancelQueuedPromptEdit(chat)));
             } else {
-              controller.showList();
+              _leaveChat();
             }
           }
         },
@@ -630,8 +632,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 (stackChatScope ? 48 : 0),
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
-              tooltip: 'Back to sessions',
-              onPressed: controller.showList,
+              tooltip: _chatOrigin == AppDestination.activity
+                  ? 'Back to Recents'
+                  : 'Back to sessions',
+              onPressed: _leaveChat,
             ),
             // Share the project action across title and scope so the title
             // doesn't need another empty 48 dp row above the scope controls.
@@ -2384,7 +2388,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     onSelected: _selectDestination,
   );
 
+  void _leaveChat() {
+    final origin = _chatOrigin;
+    controller.showList();
+    if (origin != null) _selectDestination(origin);
+  }
+
   void _selectDestination(AppDestination destination) {
+    _chatOrigin = null;
     _cancelVoice();
     FocusManager.instance.primaryFocus?.unfocus();
     if (destination == AppDestination.connections) {
@@ -2398,7 +2409,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     setState(() => _destination = destination);
     controller.setRouteVisibility(this, _hasChatFocus);
     if (destination == AppDestination.activity) {
-      unawaited(_run(controller.refreshActivity));
+      unawaited(_run(controller.refreshRecents));
     }
   }
 
@@ -2440,12 +2451,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   }),
                 if (_destination == AppDestination.activity)
                   IconButton(
-                    tooltip: 'Refresh activity',
+                    tooltip: 'Refresh recents',
                     icon: const Icon(Icons.refresh),
-                    onPressed:
-                        controller.switching || controller.activityLoading
+                    onPressed: controller.switching || controller.recentsLoading
                         ? null
-                        : () => _run(controller.refreshActivity),
+                        : () => _run(controller.refreshRecents),
                   ),
               ],
             ),
@@ -2512,11 +2522,16 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               ),
               AppDestination.activity => WorkspaceActivityContent(
                 controller: controller,
+                filter: _recentFilter,
+                onFilterChanged: (filter) => _recentFilter = filter,
                 onOpen: (item) => _run(() async {
-                  await controller.openSession(
-                    ProfileSessionKey(item.workspace, item.sessionId),
-                  );
-                  if (mounted) _selectDestination(AppDestination.chats);
+                  final opened = await controller.openSession(item.key);
+                  if (mounted &&
+                      opened != null &&
+                      _destination == AppDestination.activity) {
+                    _selectDestination(AppDestination.chats);
+                    _chatOrigin = AppDestination.activity;
+                  }
                 }),
               ),
               AppDestination.health => HermesHealthContent(

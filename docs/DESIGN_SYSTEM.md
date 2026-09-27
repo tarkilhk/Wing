@@ -73,6 +73,15 @@ on 20 September 2026: desktop `src/app/chat/sidebar/session-row.tsx`,
 Stock `tui_gateway/methods_session.py` still exposes `session.active_list`;
 the client uses its existing activity projection with no protocol changes.
 
+## Recents, 27 September 2026
+
+The former Activity destination is now Recents, including its drawer and launcher
+labels. Preserve the existing top All / Running / Needs input filters and compact
+row layout. All includes chats with messages in the last 24 hours plus ongoing work.
+Read-only opens and unsent drafts do not affect recency. Completed chats stay visible in All; do not label them Running.
+Back from a chat opened here returns to Recents with the selected filter retained.
+This rename concerns the destination, not the conversation's Activity presentation.
+
 ## App and notification identity
 
 The official app name and wordmark are **Wing**, with a capital **W** and

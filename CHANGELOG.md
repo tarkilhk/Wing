@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Replace Activity with Recents: show chats with messages in the last 24 hours
+  alongside ongoing work, retaining All, Running and Needs input filters.
+- Return to Recents with the selected filter when leaving a chat opened there,
+  using either the toolbar or Android Back button.
+
 ## [1.1.2] - 2026-09-27
 
 - Open inline file paths directly from chat. Resolve Markdown document links

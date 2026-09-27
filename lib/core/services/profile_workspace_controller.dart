@@ -300,6 +300,24 @@ class _NotificationSession {
   const _NotificationSession(this.chat, this.activity);
 }
 
+/// A chat with recent messages, optionally enriched with current live work.
+class ProfileRecentChat {
+  final ProfileSessionKey key;
+  final String title;
+  final double lastActive;
+  final ProfileLiveActivity? activity;
+
+  const ProfileRecentChat({
+    required this.key,
+    required this.title,
+    required this.lastActive,
+    this.activity,
+  });
+
+  ProfileLiveActivityState? get state => activity?.state;
+  int get sideTasksRunning => activity?.sideTasksRunning ?? 0;
+}
+
 typedef ProfileGatewayFactory = ProfileGateway Function(WorkspaceScope scope);
 
 class ProfileNotification {
@@ -597,6 +615,193 @@ class ProfileWorkspaceController extends ChangeNotifier {
       items.values.toList()
         ..sort((a, b) => b.lastActive.compareTo(a.lastActive)),
     );
+  }
+
+  List<ProfileRecentChat> _savedRecents = const [];
+  final _recentSessionRows = <ProfileSessionKey, Map<String, dynamic>>{};
+  bool recentsLoading = false;
+  bool recentsLoaded = false;
+  int recentsAvailableProfiles = 0;
+  int _recentsGeneration = 0;
+  Map<String, String> _recentsProfileErrors = const {};
+
+  Map<String, String> get recentsProfileErrors => {
+    ..._recentsProfileErrors,
+    ...activityProfileErrors,
+  };
+
+  static double? _latestMessageTime(List<Map<String, dynamic>> messages) {
+    double? latest;
+    for (final message in messages) {
+      final time = message['timestamp'];
+      if (time is num && time.isFinite && (latest == null || time > latest)) {
+        latest = time.toDouble();
+      }
+    }
+    return latest;
+  }
+
+  /// Recency is independent of live status: completed and idle chats stay here.
+  List<ProfileRecentChat> recentChats({DateTime? now}) {
+    final cutoff =
+        (now ?? DateTime.now()).millisecondsSinceEpoch / 1000 - 86400;
+    final items = <ProfileSessionKey, ProfileRecentChat>{};
+    for (final item in [
+      ..._savedRecents,
+      for (final resource in _resources.values)
+        for (final chat in resource.chats.values)
+          if (_latestMessageTime(chat.messages) case final time?)
+            ProfileRecentChat(
+              key: chat.key,
+              title: chat.title,
+              lastActive: time,
+            ),
+    ]) {
+      if (item.lastActive < cutoff ||
+          (_resources[item.key.workspace]?.deletedSessions.contains(
+                item.key.sessionId,
+              ) ??
+              false)) {
+        continue;
+      }
+      final previous = items[item.key];
+      if (previous == null || item.lastActive > previous.lastActive) {
+        items[item.key] = item;
+      }
+    }
+    for (final live in liveActivity) {
+      final key = ProfileSessionKey(live.workspace, live.sessionId);
+      final previous = items[key];
+      items[key] = ProfileRecentChat(
+        key: key,
+        title: live.title,
+        lastActive: previous != null && previous.lastActive > live.lastActive
+            ? previous.lastActive
+            : live.lastActive,
+        activity: live,
+      );
+    }
+    return [
+      for (final item in items.values)
+        ProfileRecentChat(
+          key: item.key,
+          title:
+              _resources[item.key.workspace]
+                  ?.chats[item.key.sessionId]
+                  ?.title ??
+              item.title,
+          lastActive: item.lastActive,
+          activity: item.activity,
+        ),
+    ]..sort((a, b) => b.lastActive.compareTo(a.lastActive));
+  }
+
+  Future<void> refreshRecents() async {
+    final generation = ++_recentsGeneration;
+    recentsLoading = true;
+    _recentSessionRows.clear();
+    _changed();
+    final liveRefresh = refreshActivity();
+    try {
+      final profiles = await _resource('default').gateway.discover();
+      final cutoff = DateTime.now().millisecondsSinceEpoch / 1000 - 86400;
+      final results = await Future.wait(
+        profiles.profiles.map((profile) async {
+          final resource = _resource(profile.name);
+          final items = <ProfileSessionKey, ProfileRecentChat>{};
+          final checkedSessions = <String>{};
+          String? error;
+          try {
+            int? offset = 0;
+            while (offset != null) {
+              final page = await resource.gateway.sessions(
+                offset: offset,
+                limit: 100,
+                includeArchived: true,
+              );
+              if (_closed || generation != _recentsGeneration) break;
+              var hasRecent = false;
+              final candidates = <Map<String, dynamic>>[];
+              for (final row in page.rows) {
+                final time = row['last_active'];
+                if (time is! num || !time.isFinite || time < cutoff) continue;
+                hasRecent = true;
+                if (checkedSessions.add(row['id'] as String)) {
+                  candidates.add(row);
+                }
+              }
+              // Session activity includes heartbeats and creation. Check actual
+              // message timestamps with bounded, read-only history requests.
+              for (var start = 0; start < candidates.length; start += 4) {
+                final batch = candidates.skip(start).take(4);
+                final messages = await Future.wait(
+                  batch.map((row) async {
+                    final history = await resource.gateway.history(
+                      row['id'] as String,
+                      limit: 1,
+                    );
+                    return (row: row, time: _latestMessageTime(history.rows));
+                  }),
+                );
+                if (_closed || generation != _recentsGeneration) {
+                  return (
+                    profile: profile.name,
+                    items: <ProfileRecentChat>[],
+                    error: null as String?,
+                  );
+                }
+                for (final result in messages) {
+                  final time = result.time;
+                  if (time == null || time < cutoff) continue;
+                  final row = result.row;
+                  final key = ProfileSessionKey(
+                    resource.scope,
+                    row['id'] as String,
+                  );
+                  _recentSessionRows[key] = row;
+                  final title = row['title'] as String?;
+                  items[key] = ProfileRecentChat(
+                    key: key,
+                    title: title == null || title.trim().isEmpty
+                        ? 'Chat'
+                        : title.trim(),
+                    lastActive: time,
+                  );
+                }
+              }
+              offset = hasRecent ? page.nextOffset : null;
+            }
+          } catch (_) {
+            error = 'Recent chats unavailable for ${profile.label}.';
+          }
+          return (
+            profile: profile.name,
+            items: items.values.toList(),
+            error: error,
+          );
+        }),
+      );
+      if (_closed || generation != _recentsGeneration) return;
+      _savedRecents = [for (final result in results) ...result.items];
+      _recentsProfileErrors = {
+        for (final result in results)
+          if (result.error != null) result.profile: result.error!,
+      };
+      recentsAvailableProfiles = results
+          .where((result) => result.error == null)
+          .length;
+    } catch (_) {
+      if (_closed || generation != _recentsGeneration) return;
+      _recentsProfileErrors = {'recents': 'Recent chats could not be loaded.'};
+      recentsAvailableProfiles = 0;
+    } finally {
+      await liveRefresh;
+      if (!_closed && generation == _recentsGeneration) {
+        recentsLoaded = true;
+        recentsLoading = false;
+        _changed();
+      }
+    }
   }
 
   Map<String, String> get activityProfileErrors => _activityProfileErrors;
@@ -1353,7 +1558,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
               profile: profile.name,
               resource: resource,
               matches: <String, Map<String, dynamic>>{},
-              error: 'Activity unavailable for ${profile.label}.',
+              error: 'Live status unavailable for ${profile.label}.',
             );
           }
         }),
@@ -1440,7 +1645,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (_closed || generation != _activityGeneration) return;
       _liveActivity = const [];
       _activityProfileErrors = const {
-        'server': 'Activity could not be loaded.',
+        'server': 'Live status could not be loaded.',
       };
       activityAvailableProfiles = 0;
       activityLoaded = true;
@@ -2438,6 +2643,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     final openedSessionGeneration = resource.sessionGeneration;
     final openedRows = <Map<String, dynamic>>[
+      ?_recentSessionRows[key],
       ...resource.searchResults,
       ...resource.visibleSessions,
       ...resource.sessions,
@@ -2451,6 +2657,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (chat == null) {
       final response = await resource.gateway.resume(key.sessionId);
       final sessionRow = <Map<String, dynamic>>[
+        ?_recentSessionRows[key],
         ...resource.searchResults,
         ...resource.visibleSessions,
         ...resource.sessions,
@@ -2476,6 +2683,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       );
       resource.chats[key.sessionId] = chat;
       chat.archived =
+          sessionRow?['archived'] == true ||
           resource.archivedOnly ||
           resource.searchResults.any(
             (row) => row['id'] == key.sessionId && row['archived'] == true,
