@@ -139,16 +139,20 @@ void main() {
   testWidgets(
     'missing change details do not block updating or trigger requests',
     (tester) async {
-      final host = _UpdateHost();
+      final host = _UpdateHost()..checkResponse = {..._available, 'behind': -1};
       await showCard(tester, host);
       await tester.pumpAndSettle();
+      expect(
+        find.text('Update available · commit count unknown'),
+        findsOneWidget,
+      );
       final reads = host.reads.length;
       await tester.tap(find.text('Changes in this update'));
       await tester.pumpAndSettle();
       expect(find.text('Production host'), findsOneWidget);
       expect(
         find.text(
-          'Change details are unavailable. Go back and check for updates to try again.',
+          'Hermes did not provide change details for this update. Check for updates again later.',
         ),
         findsOneWidget,
       );

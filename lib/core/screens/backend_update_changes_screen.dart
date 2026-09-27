@@ -48,7 +48,7 @@ class _BackendUpdateChangesScreenState
             ],
             if (commits.isEmpty)
               const Text(
-                'Change details are unavailable. Go back and check for updates to try again.',
+                'Hermes did not provide change details for this update. Check for updates again later.',
               )
             else ...[
               Text(

@@ -268,7 +268,7 @@ String _checkStatus(BackendUpdateCheck? check, BackendUpdatePhase phase) {
     final behind = check.behind;
     return behind != null && behind > 0
         ? 'Update available · $behind commits behind'
-        : 'Update available';
+        : 'Update available · commit count unknown';
   }
   return check.updateAvailable == false && check.behind == 0
       ? 'Up to date'
