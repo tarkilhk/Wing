@@ -364,35 +364,33 @@ class _RecentChatRow extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (!ongoing) ...[
-                            ExcludeSemantics(
-                              child: Container(
-                                width: 16,
-                                height: 16,
-                                decoration: BoxDecoration(
-                                  color: profileColor.withValues(alpha: .12),
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                                alignment: Alignment.center,
-                                child: isDefault
-                                    ? Icon(
-                                        Icons.home_outlined,
-                                        size: 12,
-                                        color: profileColor,
-                                      )
-                                    : Text(
-                                        profileName.characters.first
-                                            .toUpperCase(),
-                                        textScaler: TextScaler.noScaling,
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: profileColor,
-                                        ),
-                                      ),
+                          ExcludeSemantics(
+                            child: Container(
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: profileColor.withValues(alpha: .12),
+                                borderRadius: BorderRadius.circular(3),
                               ),
+                              alignment: Alignment.center,
+                              child: isDefault
+                                  ? Icon(
+                                      Icons.home_outlined,
+                                      size: 12,
+                                      color: profileColor,
+                                    )
+                                  : Text(
+                                      profileName.characters.first
+                                          .toUpperCase(),
+                                      textScaler: TextScaler.noScaling,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: profileColor,
+                                      ),
+                                    ),
                             ),
-                            const SizedBox(width: 6),
-                          ],
+                          ),
+                          const SizedBox(width: 6),
                           Flexible(
                             child: Text(
                               profileName,

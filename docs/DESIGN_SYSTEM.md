@@ -88,7 +88,8 @@ work in one compact bordered panel, followed by unboxed Last 24 hours rows with
 thin separators. Each chat appears in one section only. Keep newest-first order
 within each section, the three top filters with counts, and a quiet scope line.
 Use one status icon on ongoing rows, profile and status beneath the title, and
-aligned relative ages. Idle history needs no repeated Recent label or chevron.
+aligned relative ages. Show the profile icon beside its name in both sections.
+Idle history needs no repeated Recent label or chevron.
 At enlarged text, wrap titles and metadata and move ages below titles. Continue
 showing background-task details, partial-profile failures and loading feedback.
 

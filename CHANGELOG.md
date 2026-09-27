@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Show profile icons beside profile names in both Ongoing and recent history.
+
 - Refine Recents with a compact Ongoing panel above recent chat history, quieter rows, filter counts and aligned activity ages. Preserve the filters and return navigation.
 
 - Replace Activity with Recents: show chats with messages in the last 24 hours
