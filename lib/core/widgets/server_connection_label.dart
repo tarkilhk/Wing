@@ -6,6 +6,7 @@ import 'connection_icon_picker.dart';
 import 'studio_error.dart';
 import 'workspace_profile_navigation.dart';
 import 'workspace_picker.dart';
+import 'read_recovery.dart';
 
 typedef WorkspacePickerCallback =
     void Function(BuildContext context, {required WorkspacePickerMode mode});
@@ -17,14 +18,21 @@ class ServerConnectionScope extends InheritedWidget {
   final WorkspacePickerCallback? onPickWorkspace;
   final WorkspaceProfileNavigation? profileNavigation;
   final ConnectionIcon? icon;
-  const ServerConnectionScope({
+  ServerConnectionScope({
     super.key,
     required this.status,
     this.onPickWorkspace,
     this.profileNavigation,
     this.icon,
-    required super.child,
-  });
+    required Widget child,
+  }) : super(
+         child: ReadRecovery(
+           recoverOnEntry: true,
+           shouldRetry: () => status.phase != ServerConnectionPhase.connected,
+           retry: () async => status.retry?.call(),
+           child: child,
+         ),
+       );
   static ServerConnectionScope? scopeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<ServerConnectionScope>();
   static ServerConnectionStatus? of(BuildContext context) =>

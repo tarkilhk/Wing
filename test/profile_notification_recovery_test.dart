@@ -22,6 +22,7 @@ import 'profile_workspace_controller_test.dart' show Host;
 
 class _ResumeHost extends Host {
   Object? resumeError;
+  bool failResumeOnce = false;
   int resumeCalls = 0;
   Completer<void>? resumeDelay;
 
@@ -37,7 +38,10 @@ class _ResumeHost extends Host {
         if (method == 'session.resume') {
           resumeCalls++;
           await resumeDelay?.future;
-          if (resumeError case final failure?) throw failure;
+          if (resumeError case final failure?) {
+            if (failResumeOnce) resumeError = null;
+            throw failure;
+          }
         }
         return base.call(method, params);
       },
@@ -320,4 +324,71 @@ void main() {
     expect(controller.connectionStatus.phase, ServerConnectionPhase.connected);
     expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
   });
+
+  testWidgets('reopening a cached chat retries its exhausted recovery', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    host.resumeError = TimeoutException('Network asleep');
+    await controller.openNotification(chat.key);
+    for (final seconds in [1, 2, 4, 8, 16]) {
+      await tester.pump(Duration(seconds: seconds));
+    }
+    expect(chat.openingError, 'Couldn’t reopen this chat. Retry to continue.');
+    final calls = host.resumeCalls;
+    host.resumeError = null;
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump();
+
+    expect(host.resumeCalls, calls + 1);
+    expect(chat.openingError, isNull);
+    expect(chat.opening, isFalse);
+    expect(controller.notificationChat, isNull);
+    expect(chat.draft, 'My unsent follow-up');
+    expect(find.text('Retry connection'), findsNothing);
+    expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'visible notification retries a failed opening already in flight',
+    (tester) async {
+      host.resumeError = JsonRpcError('session.resume', 'Session unavailable');
+      host.failResumeOnce = true;
+      host.resumeDelay = Completer<void>();
+      final opening = controller.openNotification(chat.key);
+      await tester.pump();
+      expect(host.resumeCalls, 1);
+
+      await tester.pumpWidget(
+        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      );
+      await tester.pump();
+      host.resumeDelay!.complete();
+      await opening;
+      await tester.pump();
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
+
+      expect(host.resumeCalls, 2);
+      expect(chat.openingError, isNull);
+      expect(chat.opening, isFalse);
+      expect(controller.notificationChat, isNull);
+      expect(chat.draft, 'My unsent follow-up');
+      expect(find.text('Retry connection'), findsNothing);
+      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 }

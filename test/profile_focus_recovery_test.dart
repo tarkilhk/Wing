@@ -192,6 +192,7 @@ void main() {
     await render(tester);
     final history = Completer<void>();
     host.delays['a'] = history;
+    host.gateways['a']!.onConnectionChanged!(false);
     final before = host.connectCalls;
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -205,6 +206,18 @@ void main() {
     await settleRecovery(tester);
     expect(controller.recovering, isFalse);
     expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('returning to a connected screen leaves its connection alone', (
+    tester,
+  ) async {
+    await render(tester);
+    final calls = host.connectCalls;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await settleRecovery(tester);
+    expect(host.connectCalls, calls);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

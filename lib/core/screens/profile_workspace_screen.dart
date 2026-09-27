@@ -346,45 +346,18 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   late AppDestination _destination;
   bool _routeIsCurrent = true;
   bool _appIsActive = true;
-  bool _focusRecoveryScheduled = false;
 
   bool get _hasWorkspaceFocus => _routeIsCurrent && _appIsActive;
 
   bool get _hasChatFocus =>
       _hasWorkspaceFocus && _destination == AppDestination.chats;
 
-  bool get _needsRecovery =>
-      !controller.initialized ||
-      controller.recovering ||
-      controller.notificationChat != null ||
-      controller.current?.reconnectError != null ||
-      (controller.current != null &&
-          !controller.connectionStatus.liveAvailable(
-            controller.current!.scope.profileName,
-          ));
-
-  void _recoverOnFocus() {
-    if (!_hasWorkspaceFocus || _focusRecoveryScheduled) return;
-    _focusRecoveryScheduled = true;
-    // Route changes notify dependents during build. Publish recovery after the
-    // frame, coalescing route and app-focus events into one attempt.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusRecoveryScheduled = false;
-      if (mounted && _hasWorkspaceFocus) {
-        unawaited(controller.resumeConnection());
-      }
-    });
-    WidgetsBinding.instance.ensureVisualUpdate();
-  }
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final isCurrent = ModalRoute.isCurrentOf(context) ?? true;
-    final returned = !_routeIsCurrent && isCurrent;
     _routeIsCurrent = isCurrent;
     controller.setRouteVisibility(this, _hasChatFocus);
-    if (returned && _needsRecovery) _recoverOnFocus();
   }
 
   @override
@@ -407,8 +380,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Future<void> _enter() async {
     if (!controller.initialized && controller.notificationChat == null) {
       await controller.initialize();
-    } else if (_hasWorkspaceFocus && _needsRecovery) {
-      await controller.resumeConnection();
     }
     if (!mounted || controller.current == null) return;
     if (_destination == AppDestination.activity) {
@@ -440,9 +411,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
     _appIsActive = state == AppLifecycleState.resumed;
     controller.setRouteVisibility(this, _hasChatFocus);
-    if (state == AppLifecycleState.resumed) {
-      _recoverOnFocus();
-    }
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -489,6 +457,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       ),
     ),
     child: ServerConnectionScope(
+      key: ValueKey(_destination),
       status: controller.connectionStatus,
       icon: controller.connection.icon,
       profileNavigation: _profileNavigation,
@@ -2426,10 +2395,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       }
       return;
     }
-    final changedDestination = _destination != destination;
     setState(() => _destination = destination);
     controller.setRouteVisibility(this, _hasChatFocus);
-    if (changedDestination && _needsRecovery) _recoverOnFocus();
     if (destination == AppDestination.activity) {
       unawaited(_run(controller.refreshActivity));
     }

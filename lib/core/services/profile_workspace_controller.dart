@@ -1143,6 +1143,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
     }
     if (_notificationTarget != null) {
+      final target = _notificationTarget;
+      // Screen entry must get a fresh attempt if the opening it joined fails.
+      // A successful opening already clears the target; navigation may replace it.
+      await _notificationOpening;
+      if (_closed || _notificationTarget != target) return;
       _notificationAttempts = 0;
       notificationChat?.openingError = null;
       await _retryNotification();

@@ -10,11 +10,15 @@ destinations. Opening a disconnected workspace or returning to it also retries
 without waiting for the background retry timer. Failed temporary connections use
 a bounded retry burst; **Retry connection** remains available if recovery fails.
 Recovery retains drafts and does not submit them or mark a hidden chat as read.
+Connection-owned screens share this behavior through `ServerConnectionScope`
+and `ReadRecovery`; already connected screens do not reconnect on entry. If a
+notification opening is still in flight, recovery waits for it and makes a fresh
+attempt if it fails, instead of leaving the screen on Retry.
 
 This uses the existing stock `session.resume` and `session.active_list` methods;
 no backend customization is required. Verified against upstream main on
 2026-09-27 at
-[`b384cdde052104cde8edd1d60fcd9a543ac4da05`](https://github.com/NousResearch/hermes-agent/blob/b384cdde052104cde8edd1d60fcd9a543ac4da05/tui_gateway/methods_session.py).
+[`28e6496a5e3adfea57bebfc9571b981bff378523`](https://github.com/NousResearch/hermes-agent/blob/28e6496a5e3adfea57bebfc9571b981bff378523/tui_gateway/methods_session.py).
 
 ## Access headers
 

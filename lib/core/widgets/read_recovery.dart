@@ -9,12 +9,14 @@ class ReadRecovery extends StatefulWidget {
   final bool Function() shouldRetry;
   final Future<void> Function() retry;
   final Widget child;
+  final bool recoverOnEntry;
 
   const ReadRecovery({
     super.key,
     required this.shouldRetry,
     required this.retry,
     required this.child,
+    this.recoverOnEntry = false,
   });
 
   @override
@@ -44,8 +46,10 @@ class _ReadRecoveryState extends State<ReadRecovery>
     super.didChangeDependencies();
     final wasCurrent = _current;
     _current = ModalRoute.isCurrentOf(context) ?? true;
-    // Initial loading belongs to the screen; only recover on a return.
-    if (wasCurrent == false && _current!) _recover();
+    if (_current! &&
+        (wasCurrent == false || wasCurrent == null && widget.recoverOnEntry)) {
+      _recover();
+    }
   }
 
   @override
