@@ -2,23 +2,28 @@
 
 ## Unreleased
 
-- Fix a black screen when returning to Wing after another launcher or shortcut
-  task takes its shared rendering engine. Route launches to a single Android
-  task and activity, and clean up native handlers at engine detachment rather
-  than during a previous activity's delayed destruction.
+## [1.1.3] - 2026-09-28
 
-- Hide internal technical runs from Recents, including saved, loaded and ongoing
-  sessions. Keep ordinary chats with background work and the existing filters.
-
-- Use the profile icon as the leading icon for Ongoing chats, with profile name
-  and status below the title. Recent history keeps its icon beside the profile name.
-
-- Refine Recents with a compact Ongoing panel above recent chat history, quieter rows, filter counts and aligned activity ages. Preserve the filters and return navigation.
-
+- Fix the black screen caused by competing Android activities sharing one
+  rendering engine. Launcher, shortcut and notification opens reuse the existing
+  Wing activity, with native resources cleaned up by their owning lifecycle.
 - Replace Activity with Recents: show chats with messages in the last 24 hours
   alongside ongoing work, retaining All, Running and Needs input filters.
+- Give Recents a compact Ongoing panel, quieter history rows, filter counts and
+  aligned activity ages. Show profile icons beside ongoing chats, with profile
+  name and status below the title.
+- Hide internal technical sessions from saved, loaded and ongoing Recents results
+  while keeping ordinary chats with background work visible.
 - Return to Recents with the selected filter when leaving a chat opened there,
   using either the toolbar or Android Back button.
+- Clearly label unknown backend update commit counts and explain when Hermes
+  has not provided change details.
+
+Validation: local analysis and 2,835 host tests passed; 12 opt-in tests were
+skipped. The Android task-reentry regression passed on a Samsung SM-S918B.
+Release-tool tests passed. Dependency updates were reviewed; this patch retains
+the tested lockfile. Broader live-server and multi-device smoke tests were not
+repeated. Release CI verifies the signed APKs and uploaded asset checksums.
 
 ## [1.1.2] - 2026-09-27
 
