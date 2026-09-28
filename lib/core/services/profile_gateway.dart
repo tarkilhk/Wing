@@ -383,6 +383,13 @@ class ProfileGateway {
   Future<Map<String, dynamic>> reloadMcp({bool confirm = false}) =>
       _rpc('reload.mcp', {if (confirm) 'confirm': true});
 
+  /// Completion derives profile/workspace from the session. Its stock schema
+  /// forbids the explicit profile parameter added by [call].
+  Future<Map<String, dynamic>> completeSlash({
+    required String sessionId,
+    required String text,
+  }) => _rpc('complete.slash', {'session_id': sessionId, 'text': text});
+
   Future<Map<String, dynamic>> post(
     String endpoint, [
     Map<String, dynamic> body = const {},

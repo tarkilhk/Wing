@@ -32,6 +32,7 @@ class CommandHost extends Host {
     'pairs': [
       ['/$profile-skill', 'Profile $profile skill'],
       ['/model', 'Choose model'],
+      ['/approvals', 'Manage approval mode'],
       ['/undo', 'Edit last prompt'],
       ['/clear', 'Clear the terminal'],
     ],
@@ -87,9 +88,28 @@ class CommandHost extends Host {
           return await backgroundRespond?.call(params) ??
               {'task_id': backgroundTaskIds.removeAt(0)};
         }
-        if (method == 'command.dispatch' ||
-            method == 'slash.exec' ||
-            method == 'complete.slash') {
+        // Stock CompleteSlashParams forbids profile; session_id owns the scope.
+        // Verified at upstream 5458de948379badc5b84ba624dc029367a28ece4:
+        // tui_gateway/contracts/profiles_vault_complete_foreign_subagents.py.
+        if (method == 'complete.slash') {
+          if (params.keys.any((key) => !{'text', 'session_id'}.contains(key))) {
+            throw JsonRpcError(
+              method,
+              'Extra inputs are not permitted',
+              code: 4000,
+            );
+          }
+          return await respond?.call(method, params) ??
+              {
+                'items': [
+                  if (params['text'] == '/approvals ')
+                    for (final mode in ['manual', 'smart', 'off'])
+                      {'text': mode, 'meta': ''},
+                ],
+                'replace_from': (params['text'] as String).runes.length,
+              };
+        }
+        if (method == 'command.dispatch' || method == 'slash.exec') {
           return await respond?.call(method, params) ??
               {'type': 'exec', 'output': 'Done'};
         }
@@ -145,7 +165,7 @@ void main() {
       ),
     ];
     final catalog = SlashCatalog.fromJson(value);
-    expect(catalog.search('/').length, 304);
+    expect(catalog.search('/').length, 305);
     expect(catalog.search('/short').single.text, '/a-skill');
     expect(catalog.unavailable('clear'), contains('terminal'));
     expect(
@@ -963,6 +983,62 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+
+  test('completion keeps the owning session after a profile switch', () async {
+    await controller.switchProfile('b');
+    final other = await controller.createChat();
+
+    expect(other.runtimeId, isNot(chat.runtimeId));
+    await controller.completeCommand(chat, '/approvals ');
+    await controller.completeCommand(other, '/model ');
+
+    expect(
+      host.commandCalls
+          .where((call) => call.$1 == 'complete.slash')
+          .map((call) => call.$2),
+      [
+        {'session_id': chat.runtimeId, 'text': '/approvals '},
+        {'session_id': other.runtimeId, 'text': '/model '},
+      ],
+    );
+  });
+
+  testWidgets('selecting /approvals does not show a command loading error', (
+    tester,
+  ) async {
+    host.warning =
+        'slash command /handoff unavailable — name taken by built-in; use /skill handoff; '
+        'slash command /plan unavailable — name taken by built-in; use /skill plan';
+    final input = TextEditingController(text: '/app');
+    addTearDown(input.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SlashCommandSuggestions(
+            controller: controller,
+            chat: chat,
+            composer: input,
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('/approvals'));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+
+    expect(input.text, '/approvals ');
+    expect(chat.draft, '/approvals ');
+    expect(find.text('Could not load commands. Tap to retry.'), findsNothing);
+    expect(find.text('manual'), findsOneWidget);
+    expect(host.commandCalls.singleWhere((c) => c.$1 == 'complete.slash').$2, {
+      'session_id': 'a-runtime',
+      'text': '/approvals ',
+    });
+    expect(host.commandCalls.where((c) => c.$1 == 'prompt.submit'), isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets(
     'argument completion replaces only the server range and keeps suffix',

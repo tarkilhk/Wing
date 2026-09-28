@@ -4,6 +4,8 @@
 
 - Show command confirmations in the conversation so later messages push them up;
   use a temporary YOLO notification in empty new chats.
+- Fix the command-loading error after selecting a slash command such as
+  `/approvals`; load argument suggestions using the owning chat session.
 - Make plain `.html` and `.htm` file paths in chat clickable, with preview and
   download actions.
 - Open HTML files directly in the HTML viewer using the complete downloaded

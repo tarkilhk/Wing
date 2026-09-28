@@ -48,10 +48,10 @@ void main() {
           contains(profile),
           reason: 'Catalog must use $profile',
         );
-        final completions = await gateway.call('complete.slash', {
-          'session_id': id,
-          'text': '/android-mobile-slash',
-        });
+        final completions = await gateway.completeSlash(
+          sessionId: id,
+          text: '/android-mobile-slash',
+        );
         final completion = (completions['items'] as List)
             .where(
               (row) =>

@@ -4294,10 +4294,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> completeCommand(ProfileChat chat, String text) =>
-      _owned(chat).gateway.call('complete.slash', {
-        'session_id': chat.runtimeId,
-        'text': text,
-      });
+      _owned(chat).gateway.completeSlash(sessionId: chat.runtimeId, text: text);
 
   Future<String?> send(ProfileChat chat) async {
     if (chat.opening || chat.offlineSnapshot || _owned(chat).recovering) {
