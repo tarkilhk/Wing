@@ -742,7 +742,7 @@ void main() {
   );
 
   testWidgets(
-    'HTML preview downloads the full original into the shared viewer',
+    'HTML preview opens rendered full original directly, even when text is truncated',
     (tester) async {
       tester.view.physicalSize = const Size(320, 760);
       tester.view.devicePixelRatio = 1;
@@ -797,12 +797,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         find.text('Preview shortened by Hermes. Save the file to read it all.'),
-        findsOneWidget,
+        findsNothing,
       );
-      expect(find.text('Open HTML'), findsOneWidget);
-
-      await tester.tap(find.text('Open HTML'));
-      await tester.pumpAndSettle();
       expect(downloadedPath, '/srv/current/page.txt');
       expect(find.byType(WebOutputPreview), findsOneWidget);
       final create = nativeCalls.singleWhere((call) => call.method == 'create');
@@ -836,7 +832,7 @@ void main() {
       expect(find.byTooltip('Show HTML'), findsOneWidget);
       await tester.pageBack();
       await tester.pumpAndSettle();
-      expect(find.text('Open HTML'), findsOneWidget);
+      expect(find.text('Outputs · Only this chat'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -882,20 +878,13 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('page.html'));
-    await tester.pumpAndSettle();
-    final open = tester
-        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Open HTML'))
-        .onPressed!;
-    open();
-    open();
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(downloads, 1);
-    expect(
-      tester
-          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Open HTML'))
-          .onPressed,
-      isNull,
-    );
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Open HTML'), findsNothing);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(downloads, 1);
     await tester.pageBack();
     await tester.pumpAndSettle();
     pending.complete(
@@ -934,8 +923,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('page.htm'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Open HTML'));
     await tester.pumpAndSettle();
 
     expect(

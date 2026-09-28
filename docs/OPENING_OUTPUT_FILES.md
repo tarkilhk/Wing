@@ -27,7 +27,8 @@ Verified on 28 September 2026 against stock Hermes main
 [`bfda74c71acd884f170345064d537bc0d3a30d20`](https://github.com/NousResearch/hermes-agent/blob/bfda74c71acd884f170345064d537bc0d3a30d20/hermes_cli/web_routers/files.py):
 `fs/read-text` still returns text, MIME type, language and truncation state, and
 `fs/download` accepts path, profile and session identity. HTML uses the existing
-client preview and download flow.
+client preview and download flow. Rechecked the unchanged read/download APIs at
+stock main `27062c347426f2c3ad2b828064e033d81fa9bcc3` on 28 September 2026.
 
 A chat's Outputs list provides another way to find and open references, including
 older history. Files are fetched through their original authenticated connection
@@ -61,7 +62,7 @@ desktop side pane. The integration uses stock `/api/fs/read-text`,
 | PDF | Read PDF, Previous/Next page and pinch zoom | Viewing only; no editing, forms, text search or selection. Password-protected/unsupported files can use another app. |
 | Audio and video | Play media, timeline, pause and seek through Android controls | Explicit Play; device codecs determine support. No background playback or authenticated-URL streaming. |
 | Web links | Browser preview with close/Back, usually Custom Tabs | Browser uses its own login state. No Hermes headers are passed. |
-| Self-contained HTML | Open HTML, source view and inline interaction | Full UTF-8 download up to 1 MiB, in the sandbox described below. CDN-dependent pages need an external app. |
+| Self-contained HTML | Opens directly in the HTML viewer, with Show source and inline interaction | Full UTF-8 download up to 1 MiB, in the sandbox described below. CDN-dependent pages need an external app. |
 
 PDF/audio/video also offer Open in app. Save or share remains available when a compatible viewer is absent or an in-app format fails. A successful viewer launch does not prove successful playback or rendering.
 
@@ -82,6 +83,11 @@ Media uses a private Android activity with `VideoView` and `MediaController`. Le
 ## HTML and diagram sandbox
 
 Interactive HTML uses the complete downloaded bytes, never a truncated text preview. Reject invalid UTF-8 or files over 1 MiB with a Save or share alternative. Inline scripts/CSS and embedded images run in a fresh opaque-origin iframe without storage, parent access, native bridge or Hermes credentials.
+
+Opening HTML from chat or Outputs goes directly to the rendered viewer after
+loading the complete file. Show source is optional and displays that same full
+document. Download failures offer retry; leaving while loading prevents a late
+viewer from opening. Back returns to the original chat or Outputs list.
 
 Content policies and native interception block external resources, navigation, forms, workers and nested frames. This is not complete network isolation: WebRTC ICE/data-channel networking is not reliably covered by those controls. Remove temporary frames on replacement and close.
 

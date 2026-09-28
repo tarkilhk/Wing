@@ -4,6 +4,8 @@
 
 - Make plain `.html` and `.htm` file paths in chat clickable, with preview and
   download actions.
+- Open HTML files directly in the HTML viewer using the complete downloaded
+  document. Keep source behind Show source instead of opening truncated code.
 
 ## [1.1.3] - 2026-09-28
 

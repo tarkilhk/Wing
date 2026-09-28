@@ -22,8 +22,9 @@ import '../widgets/markdown_code_block.dart';
 import '../widgets/markdown_message_content.dart';
 import '../widgets/web_output_preview.dart';
 import 'pdf_preview_screen.dart';
+import 'html_preview_screen.dart';
 
-enum _FileAction { share, save, open, play, previewHtml }
+enum _FileAction { share, save, open, play }
 
 class ChatOutputsScreen extends StatefulWidget {
   final String chatTitle;
@@ -264,6 +265,18 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
     if (path == null) return _openLink(output.url!);
     final preview = await widget.readText(path);
     if (!mounted) return;
+    if (_isHtmlPreview(output, preview)) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => HtmlPreviewScreen(
+            title: output.label,
+            download: () => widget.download(path),
+            share: _share,
+          ),
+        ),
+      );
+      return;
+    }
     final canOpen = widget.fileDelivery.supportsType(
       output.label,
       mimeType: preview.mimeType,
@@ -272,7 +285,6 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
       output.label,
       mimeType: preview.mimeType,
     );
-    final canPreviewHtml = _isHtmlPreview(output, preview);
     final isPdf =
         preview.mimeType.split(';').first.trim().toLowerCase() ==
             'application/pdf' ||
@@ -338,50 +350,6 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                         ),
                       );
                     }
-                  case _FileAction.previewHtml:
-                    if (file.bytes.length >
-                        WebOutputPreview.maxHtmlSourceLength) {
-                      ScaffoldMessenger.of(previewContext).showSnackBar(
-                        const SnackBar(
-                          content: StudioError(
-                            'HTML preview is limited to 1 MiB. Use Save or share instead.',
-                          ),
-                        ),
-                      );
-                      break;
-                    }
-                    String source;
-                    try {
-                      source = utf8.decode(file.bytes);
-                    } on FormatException {
-                      ScaffoldMessenger.of(previewContext).showSnackBar(
-                        const SnackBar(
-                          content: StudioError(
-                            "This HTML file can't be read here. Use Save or share to open it in another app.",
-                          ),
-                        ),
-                      );
-                      break;
-                    }
-                    await Navigator.of(previewContext).push(
-                      MaterialPageRoute<void>(
-                        builder: (webContext) => WebOutputPreview(
-                          source: source,
-                          format: WebOutputFormat.html,
-                          title: output.label,
-                          actionLabel: 'Save or share',
-                          onAction: () async {
-                            try {
-                              await _share(file);
-                            } catch (error) {
-                              if (webContext.mounted) {
-                                _error(webContext, error);
-                              }
-                            }
-                          },
-                        ),
-                      ),
-                    );
                 }
               } catch (error) {
                 if (previewContext.mounted) {
@@ -497,14 +465,6 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                                 }
                               }
                             },
-                    ),
-                  if (canPreviewHtml)
-                    FilledButton.icon(
-                      icon: const Icon(Icons.web_asset_outlined),
-                      label: const Text('Open HTML'),
-                      onPressed: delivering
-                          ? null
-                          : () => deliverFile(_FileAction.previewHtml),
                     ),
                   if (canPlay)
                     FilledButton.icon(
