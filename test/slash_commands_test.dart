@@ -58,7 +58,9 @@ class CommandHost extends Host {
       discover: discover,
       get: (endpoint, query) async {
         final result = await base.read(endpoint, query);
-        if (!endpoint.endsWith('/messages')) return result;
+        if (!endpoint.endsWith('/messages') || historyMessages != null) {
+          return result;
+        }
         // Command tests start with the same empty history over REST and RPC.
         return {
           ...result,
@@ -201,7 +203,12 @@ void main() {
       expect(controller.current!.chat, same(other));
       expect(other.draft, 'Keep this draft');
       expect(other.messages, isEmpty);
-      expect(chat.commandOutput, ['Loading bundle']);
+      expect(
+        chat.messages
+            .where((row) => row['_command_notice'] == true)
+            .map((row) => row['content']),
+        ['Loading bundle'],
+      );
       expect(
         host.commandCalls
             .singleWhere((c) => c.$1 == 'prompt.submit')
@@ -494,7 +501,12 @@ void main() {
     await controller.send(chat);
     expect(chat.busy, isFalse);
     expect(chat.commandRunning, isFalse);
-    expect(chat.commandOutput, ['Done']);
+    expect(
+      chat.messages
+          .where((row) => row['_command_notice'] == true)
+          .map((row) => row['content']),
+      ['Done'],
+    );
     expect(host.commandCalls.where((c) => c.$1 == 'prompt.submit'), isEmpty);
   });
 
@@ -509,7 +521,12 @@ void main() {
       chat.draft = '/undo';
       await controller.send(chat);
       expect(chat.draft, 'Edit this question');
-      expect(chat.commandOutput, ['Rewound']);
+      expect(
+        chat.messages
+            .where((row) => row['_command_notice'] == true)
+            .map((row) => row['content']),
+        ['Rewound'],
+      );
       expect(host.commandCalls.where((c) => c.$1 == 'prompt.submit'), isEmpty);
     },
   );
@@ -531,7 +548,12 @@ void main() {
       host.commandCalls.singleWhere((c) => c.$1 == 'slash.exec').$2['command'],
       '/model provider/model',
     );
-    expect(chat.commandOutput, ['Session only', 'Model changed']);
+    expect(
+      chat.messages
+          .where((row) => row['_command_notice'] == true)
+          .map((row) => row['content']),
+      ['Session only', 'Model changed'],
+    );
   });
 
   test('timeout never retries via slash.exec or prompt.submit', () async {
@@ -617,8 +639,18 @@ void main() {
       final delivery = chat.sideQuestionDeliveries.single;
       expect(delivery.state, SideQuestionDeliveryState.completed);
       expect(delivery.result, 'Side answer');
-      expect(chat.commandOutput, ['Started /btw on the Hermes host.']);
-      expect(other.commandOutput, isEmpty);
+      expect(
+        chat.messages
+            .where((row) => row['_command_notice'] == true)
+            .map((row) => row['content']),
+        ['Started /btw on the Hermes host.'],
+      );
+      expect(
+        other.messages
+            .where((row) => row['_command_notice'] == true)
+            .map((row) => row['content']),
+        isEmpty,
+      );
       expect(other.sideQuestionDeliveries, isEmpty);
       expect(host.commandCalls.singleWhere((c) => c.$1 == 'prompt.btw').$2, {
         'session_id': 'a-runtime',
@@ -790,7 +822,12 @@ void main() {
       host.commandCalls.where((call) => call.$1 == 'config.set').single.$2,
       {'session_id': 'a-runtime', 'key': 'yolo', 'value': '0', 'profile': 'a'},
     );
-    expect(chat.commandOutput, ['YOLO disabled for this session.']);
+    expect(
+      chat.messages
+          .where((row) => row['_command_notice'] == true)
+          .map((row) => row['content']),
+      ['YOLO disabled for this session.'],
+    );
     expect(chat.yolo, isFalse);
     expect(chat.draft, isEmpty);
     expect(chat.status, ProfileTurnStatus.running);
@@ -810,7 +847,7 @@ void main() {
       host.yoloSetResult = '1';
       chat.draft = '/yolo';
 
-      await controller.send(chat);
+      final notification = await controller.send(chat);
 
       expect(
         host.commandCalls.where((call) => call.$1 == 'config.set').single.$2,
@@ -823,7 +860,8 @@ void main() {
             .$2,
         {'session_id': 'same', 'omit_messages': true, 'profile': 'a'},
       );
-      expect(chat.commandOutput, ['YOLO enabled for this session.']);
+      expect(notification, isNull);
+      expect(chat.messages.last['content'], 'YOLO enabled for this session.');
       expect(chat.yolo, isTrue);
     },
   );

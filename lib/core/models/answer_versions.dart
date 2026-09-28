@@ -183,8 +183,10 @@ bool isHumanAnswerPrompt(Map<String, dynamic> message) =>
     !isHiddenAnswerMessage(message) &&
     userMessageDelivery(answerMessageDisplayText(message)) == null;
 
-int? answerMessageId(Map<String, dynamic> message) =>
-    (message['row_id'] ?? message['id']) as int?;
+int? answerMessageId(Map<String, dynamic> message) {
+  final id = message['row_id'] ?? message['id'];
+  return id is int ? id : null;
+}
 
 List<Map<String, dynamic>> answerHistoryRows(
   List<Map<String, dynamic>> messages,

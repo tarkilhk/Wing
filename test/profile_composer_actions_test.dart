@@ -319,24 +319,15 @@ void main() {
     await controller.send(chat);
     await pumpFrames(tester);
     expect(chat.error, isNull);
-    expect(chat.commandOutput, isEmpty);
+    expect(
+      chat.messages
+          .where((row) => row['_command_notice'] == true)
+          .map((row) => row['content']),
+      isEmpty,
+    );
     expect(find.text('steered'), findsOneWidget);
     expect(find.text('Keep the data clean'), findsOneWidget);
     expect(find.text('Steering message queued.'), findsNothing);
-  });
-
-  testWidgets('stale steering command output is hidden', (tester) async {
-    final chat = await show(tester, status: ProfileTurnStatus.running);
-    chat.commandOutput.addAll([
-      'Steering message queued.',
-      'Keep this command result',
-    ]);
-    await controller.steer(chat, 'Keep the data clean');
-    await pumpFrames(tester);
-    expect(find.text('Steering message queued.'), findsNothing);
-    expect(find.text('Keep this command result'), findsOneWidget);
-    expect(find.text('steered'), findsOneWidget);
-    expect(find.text('Keep the data clean'), findsOneWidget);
   });
 
   testWidgets('Held slide queues an attachment-only draft by filename', (

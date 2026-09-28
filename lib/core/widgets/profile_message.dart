@@ -180,14 +180,18 @@ class ProfileMessage extends StatelessWidget {
     }
     if (role == 'system') {
       final slash = RegExp(r'^slash:(/[^\n]+)\n([\s\S]*)$').firstMatch(content);
-      final text = slash == null
-          ? content
-          : '${slash.group(1)!.trim()} · ${slash.group(2)!.trim()}';
+      final command = message['_command'] as String? ?? slash?.group(1)?.trim();
+      final output = slash == null ? content : slash.group(2)!.trim();
+      final multiline = output.contains('\n');
+      final text = command == null
+          ? output
+          : '$command${multiline ? '\n' : ' · '}$output';
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
         child: Center(
           child: SelectableText(
             text,
+            textAlign: multiline ? TextAlign.left : TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

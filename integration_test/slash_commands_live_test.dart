@@ -86,7 +86,13 @@ void main() {
       await tester.tap(find.byTooltip('Send'));
       await until(() => !chat.commandRunning);
       expect(chat.error, isNull, reason: '/model execution');
-      expect(chat.commandOutput.join('\n'), contains('Current model:'));
+      expect(
+        chat.messages
+            .where((row) => row['_command_notice'] == true)
+            .map((row) => row['content'])
+            .join('\n'),
+        contains('Current model:'),
+      );
       expect(chat.busy, isFalse);
       await screenshot('slash-command-result');
       debugPrint('slash-qa: /model result screenshot saved');
@@ -103,7 +109,10 @@ void main() {
       );
       await tester.pump();
       expect(chat.draft, '/status', reason: 'Second command survives rebuild');
-      final outputCount = chat.commandOutput.length;
+      final outputCount = chat.messages
+          .where((row) => row['_command_notice'] == true)
+          .map((row) => row['content'])
+          .length;
       await tester.tap(find.byTooltip('Send'));
       expect(
         chat.commandRunning,
@@ -111,10 +120,22 @@ void main() {
         reason: 'Second Send starts dispatch',
       );
       await until(
-        () => !chat.commandRunning && chat.commandOutput.length > outputCount,
+        () =>
+            !chat.commandRunning &&
+            chat.messages
+                    .where((row) => row['_command_notice'] == true)
+                    .map((row) => row['content'])
+                    .length >
+                outputCount,
       );
       expect(chat.error, isNull, reason: '/status execution');
-      expect(chat.commandOutput.last, isNot('Status unavailable.'));
+      expect(
+        chat.messages
+            .where((row) => row['_command_notice'] == true)
+            .map((row) => row['content'])
+            .last,
+        isNot('Status unavailable.'),
+      );
 
       // Expansion is a read-only RPC; verify the actual installed skill body is
       // returned without submitting it to a model or executing its instructions.

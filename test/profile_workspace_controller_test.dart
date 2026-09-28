@@ -756,7 +756,12 @@ void main() {
 
       expect(opened, same(chat));
       expect(chat.draft, 'camera draft');
-      expect(chat.commandOutput, isEmpty);
+      expect(
+        chat.messages
+            .where((row) => row['_command_notice'] == true)
+            .map((row) => row['content']),
+        isEmpty,
+      );
       expect(host.sessionCreates, 2);
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
     },

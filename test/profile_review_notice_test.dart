@@ -1,3 +1,4 @@
+import 'package:wing/core/models/local_transcript_message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
@@ -258,7 +259,7 @@ void main() {
         'content': 'review:Second',
         '_review_notice': 'second',
       };
-      final merged = retainReviewMessages(
+      final merged = retainLocalTranscriptMessages(
         [before, first, second],
         [
           before,

@@ -1446,15 +1446,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     );
                   },
                 ),
-              for (final output in chat.commandOutput.where(
-                (output) => output.trim() != 'Steering message queued.',
-              ))
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child:
-                      output == ProfileWorkspaceController.markReadFailureNotice
-                      ? SelectionArea(child: StudioError(output))
-                      : SelectableText(output),
+              if (chat.markReadFailed)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: SelectionArea(
+                    child: StudioError(
+                      ProfileWorkspaceController.markReadFailureNotice,
+                    ),
+                  ),
                 ),
               for (final delivery in chat.sideQuestionDeliveries)
                 _notificationAnchor(
@@ -2070,7 +2069,20 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     final text = chat.draft.trim();
     switch (action) {
       case ComposerAction.send:
-        await _run(() => controller.send(chat));
+        final notification = await _runValue(() => controller.send(chat));
+        if (notification != null &&
+            mounted &&
+            controller.current?.chat == chat &&
+            _destination == AppDestination.chats) {
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              SnackBar(
+                content: Text(notification),
+                duration: const Duration(seconds: 5),
+              ),
+            );
+        }
       case ComposerAction.stop:
         await _run(() => controller.stop(chat));
       case ComposerAction.queue:

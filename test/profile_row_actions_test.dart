@@ -213,17 +213,11 @@ void main() {
       );
       expect(controller.current!.mutatingSessions, isEmpty);
       expect(chat.error, isNull);
-      expect(
-        chat.commandOutput,
-        contains(
-          'This chat opened, but it could not be marked as read. '
-          'Return to Chats and choose Mark as read.',
-        ),
-      );
+      expect(chat.markReadFailed, isTrue);
 
       host.failMutation = false;
       await controller.mutateSession(key(), changes: {'unread': false});
-      expect(chat.commandOutput, isEmpty);
+      expect(chat.markReadFailed, isFalse);
       expect(
         controller.current!.sessions.firstWhere(
           (row) => row['id'] == 'newest',

@@ -21,6 +21,7 @@ import '../models/gateway_todo.dart';
 import '../models/profile_live_activity.dart';
 import '../models/queued_prompt_draft.dart';
 import '../models/review_notice.dart';
+import '../models/local_transcript_message.dart';
 import '../models/session_control.dart';
 import '../models/side_question_delivery.dart';
 import '../models/slash_command.dart';
@@ -154,7 +155,22 @@ class ProfileChat {
   bool _commandDispatchPending = false;
   GatewaySensitivePromptRequest? _commandPreflightSensitivePrompt;
   ProfileTurnStatus? _commandPreflightReturnStatus;
-  final List<String> commandOutput = [];
+  bool markReadFailed = false;
+  String? _commandNotification;
+  int _commandNoticeSequence = 0;
+
+  void addCommandMessage(String text, {String? command}) {
+    messages.add({
+      'id':
+          'command-${DateTime.now().microsecondsSinceEpoch}-${++_commandNoticeSequence}',
+      'role': 'system',
+      'content': text,
+      '_command': ?command,
+      '_command_notice': true,
+      'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
+    });
+  }
+
   final List<SideQuestionDelivery> sideQuestionDeliveries = [];
   final approvals = GatewayApprovalQueue();
   Map<String, dynamic>? get approval => approvals.first;
@@ -1778,11 +1794,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
           ? chat.messages.take(anchor).toList()
           : <Map<String, dynamic>>[];
       final refreshed = [
-        ...prefix.where((row) => !isLocalReviewMessage(row)),
+        ...prefix.where((row) => !isLocalTranscriptMessage(row)),
         ...page.rows,
       ];
       chat.messages = chat.historySessionId == page.sessionId
-          ? retainReviewMessages(chat.messages, refreshed)
+          ? retainLocalTranscriptMessages(chat.messages, refreshed)
           : refreshed;
       chat.toolActivities.removeWhere((activity) => activity.isTerminal);
       chat.historySessionId = page.sessionId;
@@ -2799,9 +2815,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           if (!_closed &&
               current == resource &&
               identical(resource.chats[chat.key.sessionId], chat)) {
-            if (!chat.commandOutput.contains(markReadFailureNotice)) {
-              chat.commandOutput.add(markReadFailureNotice);
-            }
+            chat.markReadFailed = true;
             _changed();
           }
         }
@@ -3156,7 +3170,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           chat.archived = updated['archived'] as bool;
         }
         if (updated['unread'] == false) {
-          chat.commandOutput.remove(markReadFailureNotice);
+          chat.markReadFailed = false;
         }
       }
       if (resource.selectedSession == id &&
@@ -4285,19 +4299,24 @@ class ProfileWorkspaceController extends ChangeNotifier {
         'text': text,
       });
 
-  Future<void> send(ProfileChat chat) async {
-    if (chat.opening || chat.offlineSnapshot || _owned(chat).recovering) return;
+  Future<String?> send(ProfileChat chat) async {
+    if (chat.opening || chat.offlineSnapshot || _owned(chat).recovering) {
+      return null;
+    }
     if (chat._replacingExpiredRuntime ||
         chat.commandRunning ||
         chat.changingIntelligence ||
         switching) {
-      return;
+      return null;
     }
     if (chat.draft.trimLeft().startsWith('/')) {
       await _sendCommand(chat);
-      return;
+      final notification = chat._commandNotification;
+      chat._commandNotification = null;
+      return notification;
     }
     await _sendPrompt(chat);
+    return null;
   }
 
   Future<void> _sendCommand(ProfileChat chat) async {
@@ -4310,6 +4329,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     final resource = _owned(chat);
     final original = chat.draft;
+    chat._commandNotification = null;
     chat.commandRunning = true;
     chat.error = null;
     _changed();
@@ -4381,7 +4401,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
         for (final key in ['notice', 'warning', 'output']) {
           final line = result[key];
-          if (line is String && line.isNotEmpty) chat.commandOutput.add(line);
+          if (line is String && line.isNotEmpty) {
+            chat.addCommandMessage(line, command: '/$name');
+          }
         }
         if (type == 'skill' || type == 'send' || type == 'prefill') {
           final message = result['message'];
@@ -4402,7 +4424,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         } else if ((type == null || type == 'exec' || type == 'plugin') &&
             result['output'] is String) {
           if (chat.attachments.isNotEmpty) {
-            chat.commandOutput.add(
+            chat.addCommandMessage(
               'Attachments remain in the composer for your next message.',
             );
           }
@@ -4411,7 +4433,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
             await refreshHistory(chat);
             await _refreshSessions(resource);
           } catch (_) {
-            chat.commandOutput.add(
+            chat.addCommandMessage(
               'Command finished. Refresh to reload history.',
             );
           }
@@ -4450,7 +4472,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         await createChat();
       case 'profile':
         if (argument.isEmpty) {
-          chat.commandOutput.add('Profile: ${resource.scope.profileName}');
+          chat.addCommandMessage('Profile: ${resource.scope.profileName}');
         } else if (current == resource && current?.chat == chat && !switching) {
           if (!await switchProfile(argument)) {
             throw StateError(error ?? 'Profile switch failed');
@@ -4481,7 +4503,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
       case 'title':
         if (argument.isEmpty) {
-          chat.commandOutput.add(chat.title);
+          chat.addCommandMessage(chat.title);
           break;
         }
         final result = await resource.gateway.call('session.title', {
@@ -4489,7 +4511,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           'title': argument,
         });
         chat.title = result['title'] as String? ?? argument;
-        chat.commandOutput.add('Session title: ${chat.title}');
+        chat.addCommandMessage('Session title: ${chat.title}');
       case 'branch':
       case 'fork':
         if (chat.busy || switching) {
@@ -4520,12 +4542,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
             'The server did not return the saved file path.',
           );
         }
-        chat.commandOutput.add('Saved on the Hermes host: $file');
+        chat.addCommandMessage('Saved on the Hermes host: $file');
       case 'status':
         final result = await resource.gateway.call('session.status', {
           'session_id': chat.runtimeId,
         });
-        chat.commandOutput.add(
+        chat.addCommandMessage(
           result['output'] as String? ?? 'Status unavailable.',
         );
       case 'yolo':
@@ -4556,14 +4578,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
           );
         }
         chat.yolo = effectiveValue == '1';
-        chat.commandOutput.add(
-          chat.yolo!
-              ? 'YOLO enabled for this session.'
-              : 'YOLO disabled for this session.',
-        );
+        final feedback = chat.yolo!
+            ? 'YOLO enabled for this session.'
+            : 'YOLO disabled for this session.';
+        if (chat._replaceableUnsubmittedRuntime &&
+            chat.messages.isEmpty &&
+            !chat.busy) {
+          chat._commandNotification = feedback;
+        } else {
+          chat.addCommandMessage(feedback);
+        }
       case 'history':
         await refreshHistory(chat);
-        chat.commandOutput.add('Conversation history refreshed.');
+        chat.addCommandMessage('Conversation history refreshed.');
       case 'bg':
       case 'background':
         if (argument.isEmpty) throw StateError('Usage: /$name <message>');
@@ -4574,7 +4601,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           method: 'prompt.background',
           prompt: argument,
         );
-        chat.commandOutput.add('Started /$name on the Hermes host.');
+        chat.addCommandMessage('Started /$name on the Hermes host.');
       case 'btw':
         if (argument.isEmpty) throw StateError('Usage: /btw <message>');
         await _startTaskDelivery(
@@ -4584,34 +4611,34 @@ class ProfileWorkspaceController extends ChangeNotifier {
           method: 'prompt.btw',
           prompt: argument,
         );
-        chat.commandOutput.add('Started /btw on the Hermes host.');
+        chat.addCommandMessage('Started /btw on the Hermes host.');
       case 'stop':
       case 'interrupt':
         await stop(chat);
-        chat.commandOutput.add('Interrupt requested.');
+        chat.addCommandMessage('Interrupt requested.');
         if (name == 'stop') {
           final result = await resource.gateway.call('process.stop');
-          chat.commandOutput.add(
+          chat.addCommandMessage(
             'Background processes stopped: ${result['killed']}',
           );
         }
       case 'skills':
         if (argument.isNotEmpty && argument != 'list') return false;
         final catalog = await commandCatalog(chat);
-        chat.commandOutput.add(
+        chat.addCommandMessage(
           catalog.commands
               .where((c) => c.category.toLowerCase().contains('skill'))
               .map((c) => '${c.text}  ${c.description}')
               .join('\n'),
         );
-        if (catalog.warning.isNotEmpty) chat.commandOutput.add(catalog.warning);
+        if (catalog.warning.isNotEmpty) chat.addCommandMessage(catalog.warning);
       case 'help':
       case 'commands':
         final catalog = await commandCatalog(chat);
-        chat.commandOutput.add(
+        chat.addCommandMessage(
           catalog.commands.map((c) => '${c.text}  ${c.description}').join('\n'),
         );
-        if (catalog.warning.isNotEmpty) chat.commandOutput.add(catalog.warning);
+        if (catalog.warning.isNotEmpty) chat.addCommandMessage(catalog.warning);
       case 'steer':
         if (argument.isEmpty) throw StateError('Usage: /steer <message>');
         if (!await steer(chat, argument)) {
