@@ -14,6 +14,8 @@ import 'package:wing/core/widgets/profile_message.dart';
 
 const reportPath =
     '/home/tarkil/projects/memory-maintenance/evaluation/FULL_BANK_ANALYSIS.md';
+const htmlReportPath =
+    '/home/tarkil/projects/memory-maintenance/reports/whole-bank-visual-20260928/index.html';
 
 Widget message(
   String text, {
@@ -145,6 +147,19 @@ void main() {
   });
 
   final references = {
+    htmlReportPath: htmlReportPath,
+    'Open ($htmlReportPath).': htmlReportPath,
+    'Saved $htmlReportPath. Open it.': htmlReportPath,
+    '**$htmlReportPath**': htmlReportPath,
+    '/srv/index.htm': '/srv/index.htm',
+    '~/reports/index.HTML': '~/reports/index.HTML',
+    './reports/index.html': './reports/index.html',
+    '../reports/index.html': '../reports/index.html',
+    r'C:\reports\index.html': r'C:\reports\index.html',
+    '/srv/report%23final.html': '/srv/report%23final.html',
+    '`$htmlReportPath`': htmlReportPath,
+    '[HTML report]($htmlReportPath)': htmlReportPath,
+    'MEDIA:$htmlReportPath': htmlReportPath,
     '`$reportPath`': reportPath,
     '`` /srv/My report.md ``': '/srv/My report.md',
     '`/srv/report%23final.md`': '/srv/report%23final.md',
@@ -176,6 +191,25 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('plain HTML paths do not capture URLs, code or other filenames', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      message(
+        'https://example.com/index.html\n\n'
+        '[Website](https://example.com/index.html)\n\n'
+        '`cat /srv/index.html`\n\n'
+        '```text\n/srv/index.html\n```\n\n'
+        'index.html and /srv/index.html.bak and /srv/index.html/assets\n\n'
+        'project/reports/index.html and /srv/reports/',
+        open: (_) async {},
+      ),
+    );
+    expect(find.byType(DeliverableAttachment), findsNothing);
+    expect(find.textContaining('Website', findRichText: true), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'prose, lists, code, web links, and images retain their semantics',
@@ -331,7 +365,7 @@ void main() {
                     message: const {
                       'role': 'assistant',
                       'content':
-                          'The analysis is ready.\n\n**Report**\n\n`$reportPath`\n\nReview the report before the next step.',
+                          'The visual report is ready:\n\n$htmlReportPath\n\nOpen it to explore the charts and tables.',
                     },
                     onOpenRemoteFile: (_) async {},
                     onDownloadRemoteFile: (_) async => true,

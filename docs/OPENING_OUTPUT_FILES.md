@@ -1,7 +1,7 @@
 # Output viewers and downloads
 
 Assistant deliverables (`MEDIA:` references, explicit file links and complete
-file paths in inline code) appear as
+file paths in inline code, plus plain `.html` / `.htm` paths) appear as
 file cards with separate **Download** and **Open preview** actions. Download opens
 Android's save destination picker; cancelling does not save a file. Open preview
 opens the existing full-screen reader, and Back returns to the conversation.
@@ -16,6 +16,18 @@ This client rendering change was verified against stock Hermes main
 [`fb2dded3d191d15c614a80d15e1c95002956867c`](https://github.com/NousResearch/hermes-agent/blob/fb2dded3d191d15c614a80d15e1c95002956867c/hermes_cli/web_routers/files.py)
 on 27 September 2026: `fs/read-text` accepts the path; `fs/download` accepts
 path, profile and session identity. No server changes are required.
+
+Plain HTML paths such as
+`/home/tarkil/projects/memory-maintenance/reports/whole-bank-visual-20260928/index.html`
+also offer these actions without requiring backticks or a Markdown link. Detection
+requires a rooted path or `./` / `../` prefix; web URLs, commands in code spans,
+fenced examples and filenames with a different final extension remain unchanged.
+Paths containing spaces can use inline code or an explicit Markdown link.
+Verified on 28 September 2026 against stock Hermes main
+[`bfda74c71acd884f170345064d537bc0d3a30d20`](https://github.com/NousResearch/hermes-agent/blob/bfda74c71acd884f170345064d537bc0d3a30d20/hermes_cli/web_routers/files.py):
+`fs/read-text` still returns text, MIME type, language and truncation state, and
+`fs/download` accepts path, profile and session identity. HTML uses the existing
+client preview and download flow.
 
 A chat's Outputs list provides another way to find and open references, including
 older history. Files are fetched through their original authenticated connection

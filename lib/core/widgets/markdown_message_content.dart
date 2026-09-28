@@ -196,6 +196,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
                           MediaReferenceSyntax(),
                           DeliverableLinkSyntax(),
                           DeliverableCodeSyntax(),
+                          HtmlFilePathSyntax(),
                         ]
                       : null,
                   paddingBuilders: {

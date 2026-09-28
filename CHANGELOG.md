@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Make plain `.html` and `.htm` file paths in chat clickable, with preview and
+  download actions.
+
 ## [1.1.3] - 2026-09-28
 
 - Fix the black screen caused by competing Android activities sharing one

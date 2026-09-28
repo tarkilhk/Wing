@@ -56,6 +56,25 @@ class DeliverableCodeSyntax extends md.CodeSyntax {
   }
 }
 
+/// HTML reports are often returned as plain paths rather than Markdown links.
+/// Require a path prefix and token boundaries so URLs and filename mentions
+/// keep their Markdown meaning. Code spans and fences own their own contents.
+class HtmlFilePathSyntax extends md.InlineSyntax {
+  HtmlFilePathSyntax()
+    : super(
+        r'''(?<![^\s("'*])(?:/|~[\\/]|\.\.?[\\/]|[A-Za-z]:[\\/]|\\\\)'''
+        r'''[^\s<>"'`*|]*\.html?(?=$|[\s<>"'`*,;:)\]}]|[.!?](?=\s|$))''',
+        caseSensitive: false,
+      );
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final output = mediaRemoteFileOutput(match[0]!);
+    parser.addNode(output == null ? md.Text(match[0]!) : _fileElement(output));
+    return true;
+  }
+}
+
 class MediaReferenceSyntax extends md.InlineSyntax {
   MediaReferenceSyntax() : super(mediaReferencePattern, caseSensitive: false);
 
