@@ -114,6 +114,20 @@ Markdown report. Check Rendered/Source, Back, save/cancel and the saved bytes;
 restore the normal debug APK afterward. This establishes native UI and file
 delivery behavior, not access to a live server's files.
 
+Large HTML checks use `scripts/test-diagram-preview.mjs` (Node 22 or newer,
+`PLAYWRIGHT_CORE_PATH` and `CHROME_PATH`) to render and interact with 2, 8 and
+32 MiB documents and verify isolation. The offline Android debug entry point
+`integration_test/large_html_native_preview.dart` opens a complete 32 MiB fixture
+through the production HTML screen. Build it for a disposable emulator, install
+with `adb install -r`, and launch `com.tarkilhk.wing.dev`.
+Forward a local port to that app process's `webview_devtools_remote_<pid>` socket,
+then run `scripts/check-large-html-native.mjs` with `PLAYWRIGHT_CORE_PATH` and
+`WING_CDP_ENDPOINT=http://127.0.0.1:<forwarded-port>`. It verifies content at the end
+of the full document, clicks a report control, checks the sandbox and captures
+the actual WebView under `build/large-html-review/`. This proves native rendering
+of the fixture, not access to the user's real report. Restore the normal debug
+APK after using the fixture on a persistent development device.
+
 ## Voice acceptance
 
 Voice host tests cover all four Local/Hermes input/output combinations, preference

@@ -131,7 +131,9 @@ private class MermaidDiagramView(
             override fun shouldOverrideUrlLoading(
                 view: WebView,
                 request: WebResourceRequest,
-            ): Boolean = true
+            ): Boolean = request.isForMainFrame ||
+                format != HTML_FORMAT ||
+                request.url.buildUpon().fragment(null).build().toString() != HTML_URL
 
             override fun onPageFinished(view: WebView, url: String) {
                 if (deliveredSource || url != ENTRY_URL) return
@@ -141,7 +143,13 @@ private class MermaidDiagramView(
                         "window.showDiagramError(${javascriptString(it)});" +
                         "} else { ${viewerUnavailableScript()} }"
                 } ?: "if (typeof window.${renderFunction()} === 'function') {" +
-                    "window.${renderFunction()}(${javascriptString(source)}, $dark);" +
+                    (if (format == HTML_FORMAT) {
+                        // The iframe reads a local response; never embed a large
+                        // report in an evaluateJavascript command.
+                        "window.renderHtml($dark);"
+                    } else {
+                        "window.${renderFunction()}(${javascriptString(source)}, $dark);"
+                    }) +
                     "} else { ${viewerUnavailableScript()} }"
                 val themeScript = "if (typeof window.setStudioTheme === 'function') {" +
                     "window.setStudioTheme($dark, $themeJson); }"
@@ -202,6 +210,20 @@ private class MermaidDiagramView(
 
     private fun assetResponse(request: WebResourceRequest): WebResourceResponse {
         if (request.method != "GET") return deniedResponse()
+        if (request.url.toString() == HTML_URL && format == HTML_FORMAT && sourceError == null) {
+            return WebResourceResponse(
+                "text/html",
+                "UTF-8",
+                200,
+                "OK",
+                mapOf(
+                    "Cache-Control" to "no-store",
+                    "X-Content-Type-Options" to "nosniff",
+                    "Content-Security-Policy" to HTML_POLICY,
+                ),
+                ByteArrayInputStream(requireNotNull(source).toByteArray(Charsets.UTF_8)),
+            )
+        }
         val asset = ASSETS[request.url.toString()] ?: return deniedResponse()
         return try {
             WebResourceResponse(
@@ -269,12 +291,17 @@ private class MermaidDiagramView(
     companion object {
         private const val MAX_SOURCE_CHARS = 50_000
         private const val MAX_SVG_SOURCE_CHARS = 256 * 1024
-        private const val MAX_HTML_SOURCE_CHARS = 1024 * 1024
+        private const val MAX_HTML_SOURCE_CHARS = 32 * 1024 * 1024
         private const val MERMAID_FORMAT = "mermaid"
         private const val SVG_FORMAT = "svg"
         private const val HTML_FORMAT = "html"
         private const val ORIGIN = "https://wing-diagrams.invalid"
         private const val ENTRY_URL = "$ORIGIN/index.html"
+        private const val HTML_URL = "$ORIGIN/report.html"
+        private const val HTML_POLICY = "default-src 'none'; script-src 'unsafe-inline'; " +
+            "style-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none'; " +
+            "media-src 'none'; form-action 'none'; base-uri 'none'; frame-src 'none'; " +
+            "object-src 'none'; worker-src 'none'; sandbox allow-scripts"
         private val ASSETS = mapOf(
             ENTRY_URL to Asset("index.html", "text/html"),
             "$ORIGIN/app.js" to Asset("app.js", "application/javascript"),

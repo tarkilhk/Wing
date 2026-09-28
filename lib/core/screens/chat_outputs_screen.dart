@@ -263,19 +263,15 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
       return;
     }
     if (path == null) return _openLink(output.url!);
+    // Known HTML files need the full download, not a text-preview request with
+    // its own truncation and source-size restrictions.
+    if (_hasHtmlExtension(path) || _hasHtmlExtension(output.label)) {
+      return _previewHtml(output, path);
+    }
     final preview = await widget.readText(path);
     if (!mounted) return;
     if (_isHtmlPreview(output, preview)) {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => HtmlPreviewScreen(
-            title: output.label,
-            download: () => widget.download(path),
-            share: _share,
-          ),
-        ),
-      );
-      return;
+      return _previewHtml(output, path);
     }
     final canOpen = widget.fileDelivery.supportsType(
       output.label,
@@ -498,6 +494,18 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
     );
   }
 
+  Future<void> _previewHtml(ChatOutput output, String path) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => HtmlPreviewScreen(
+          title: output.label,
+          download: () => widget.download(path),
+          share: _share,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => ReadRecovery(
     shouldRetry: () =>
@@ -693,6 +701,11 @@ bool _isHtmlPreview(ChatOutput output, RemoteTextPreview preview) {
       label.endsWith('.htm') ||
       path.endsWith('.html') ||
       path.endsWith('.htm');
+}
+
+bool _hasHtmlExtension(String name) {
+  final lower = name.toLowerCase();
+  return lower.endsWith('.html') || lower.endsWith('.htm');
 }
 
 bool _isSvgName(String filename, String target) =>

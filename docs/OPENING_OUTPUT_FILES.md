@@ -29,6 +29,8 @@ Verified on 28 September 2026 against stock Hermes main
 `fs/download` accepts path, profile and session identity. HTML uses the existing
 client preview and download flow. Rechecked the unchanged read/download APIs at
 stock main `27062c347426f2c3ad2b828064e033d81fa9bcc3` on 28 September 2026.
+The unchanged full-download contract was also verified at stock main
+`9a0a1625367242596d338ae2da541c4a1fc785a2` for large HTML rendering that day.
 
 A chat's Outputs list provides another way to find and open references, including
 older history. Files are fetched through their original authenticated connection
@@ -62,7 +64,7 @@ desktop side pane. The integration uses stock `/api/fs/read-text`,
 | PDF | Read PDF, Previous/Next page and pinch zoom | Viewing only; no editing, forms, text search or selection. Password-protected/unsupported files can use another app. |
 | Audio and video | Play media, timeline, pause and seek through Android controls | Explicit Play; device codecs determine support. No background playback or authenticated-URL streaming. |
 | Web links | Browser preview with close/Back, usually Custom Tabs | Browser uses its own login state. No Hermes headers are passed. |
-| Self-contained HTML | Opens directly in the HTML viewer, with Show source and inline interaction | Full UTF-8 download up to 1 MiB, in the sandbox described below. CDN-dependent pages need an external app. |
+| Self-contained HTML | Opens directly in the HTML viewer, with Show source and inline interaction | Full UTF-8 download up to the standard 32 MiB file limit, in the sandbox described below. CDN-dependent pages need an external app. |
 
 PDF/audio/video also offer Open in app. Save or share remains available when a compatible viewer is absent or an in-app format fails. A successful viewer launch does not prove successful playback or rendering.
 
@@ -82,7 +84,14 @@ Media uses a private Android activity with `VideoView` and `MediaController`. Le
 
 ## HTML and diagram sandbox
 
-Interactive HTML uses the complete downloaded bytes, never a truncated text preview. Reject invalid UTF-8 or files over 1 MiB with a Save or share alternative. Inline scripts/CSS and embedded images run in a fresh opaque-origin iframe without storage, parent access, native bridge or Hermes credentials.
+Interactive HTML uses the complete downloaded bytes, never a truncated text
+preview. HTML filenames bypass the text-preview API entirely. The viewer supports
+the standard 32 MiB file-download limit, with no separate smaller HTML limit.
+Invalid UTF-8 retains a Save or share action for the original bytes.
+Android serves the document directly to the viewer from a private intercepted
+response, without embedding it in JavaScript or copying it into an iframe's
+`srcdoc`. Inline scripts/CSS and embedded images run in a fresh opaque-origin
+iframe without storage, parent access, native bridge or Hermes credentials.
 
 Opening HTML from chat or Outputs goes directly to the rendered viewer after
 loading the complete file. Show source is optional and displays that same full

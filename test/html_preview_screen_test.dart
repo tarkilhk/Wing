@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/chat_output.dart';
 import 'package:wing/core/screens/chat_outputs_screen.dart';
@@ -10,6 +11,57 @@ import 'package:wing/core/services/remote_files_client.dart';
 import 'package:wing/core/widgets/web_output_preview.dart';
 
 void main() {
+  testWidgets(
+    'large HTML reports open in the native viewer without a 1 MiB barrier',
+    (tester) async {
+      final source =
+          '<!doctype html><!--${'x' * (2 * 1024 * 1024)}--><h1>Complete large report</h1>';
+      Map<Object?, Object?>? creation;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform_views,
+        (call) async {
+          if (call.method == 'create') {
+            final args = call.arguments as Map;
+            creation =
+                const StandardMessageCodec().decodeMessage(
+                      ByteData.sublistView(args['params'] as Uint8List),
+                    )
+                    as Map<Object?, Object?>;
+            return 1;
+          }
+          if (call.method == 'resize') {
+            final args = call.arguments as Map;
+            return {'width': args['width'], 'height': args['height']};
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform_views,
+          null,
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HtmlPreviewScreen(
+            title: 'index.html',
+            download: () async => RemoteFileDownload(
+              filename: 'index.html',
+              bytes: utf8.encode(source),
+            ),
+            share: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(AndroidView), findsOneWidget);
+      expect(creation?['source'], source);
+      expect(creation?['format'], 'html');
+      expect(find.textContaining('1 MiB'), findsNothing);
+    },
+  );
+
   testWidgets('chat HTML opens full viewer and Back returns directly to chat', (
     tester,
   ) async {
@@ -33,14 +85,8 @@ void main() {
                       label: 'index.html',
                     ),
                     loadHistory: (_) => throw StateError('Unneeded history'),
-                    readText: (path) async => RemoteTextPreview(
-                      path: path,
-                      text: '<!doctype html><h1>Full',
-                      language: 'text',
-                      mimeType: 'text/plain',
-                      byteSize: source.length,
-                      binary: false,
-                      truncated: true,
+                    readText: (_) => throw StateError(
+                      'HTML must bypass the text-preview limit',
                     ),
                     download: (path) async {
                       downloads.add(path);

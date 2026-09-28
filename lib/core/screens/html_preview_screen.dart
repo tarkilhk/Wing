@@ -44,7 +44,7 @@ class _HtmlPreviewScreenState extends State<HtmlPreviewScreen> {
       if (!mounted) return;
       _file = file;
       if (file.bytes.length > WebOutputPreview.maxHtmlSourceLength) {
-        _error = 'HTML preview is limited to 1 MiB. Use Save or share instead.';
+        _error = 'This file exceeds the 32 MiB download limit.';
       } else {
         try {
           _source = utf8.decode(file.bytes);

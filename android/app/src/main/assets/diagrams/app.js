@@ -4,11 +4,6 @@
   const MAX_SOURCE_LENGTH = 50_000;
   const MAX_SVG_SOURCE_LENGTH = 256 * 1024;
   const MAX_SVG_DIMENSION = 8_192;
-  const MAX_HTML_SOURCE_LENGTH = 1024 * 1024;
-  const HTML_PREVIEW_POLICY = "default-src 'none'; script-src 'unsafe-inline'; " +
-    "style-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none'; " +
-    "media-src 'none'; form-action 'none'; base-uri 'none'; frame-src 'none'; " +
-    "object-src 'none'; worker-src 'none'";
   const diagram = document.getElementById('diagram');
   const status = document.getElementById('status');
   let renderSequence = 0;
@@ -108,26 +103,6 @@
         return 'This SVG is too large to preview.';
       default:
         return 'This SVG could not be previewed.';
-    }
-  }
-
-  function validateHtmlSource(value) {
-    if (typeof value !== 'string' || value.trim().length === 0) {
-      throw new Error('EMPTY_HTML');
-    }
-    if (value.length > MAX_HTML_SOURCE_LENGTH) {
-      throw new Error('HTML_TOO_LARGE');
-    }
-  }
-
-  function publicHtmlError(error) {
-    switch (error instanceof Error ? error.message : '') {
-      case 'EMPTY_HTML':
-        return 'There is no HTML to preview.';
-      case 'HTML_TOO_LARGE':
-        return 'This HTML file is too large to preview.';
-      default:
-        return 'This HTML file could not be previewed.';
     }
   }
 
@@ -270,7 +245,7 @@
     }
   }
 
-  function renderHtml(source, dark, sequence) {
+  function renderHtml(dark, sequence) {
     document.title = 'HTML preview';
     diagram.setAttribute('aria-label', document.title);
     setTheme(dark);
@@ -278,20 +253,20 @@
     clearPreview();
 
     try {
-      validateHtmlSource(source);
       if (sequence !== renderSequence) return false;
       const frame = document.createElement('iframe');
       frame.title = 'HTML preview';
       frame.referrerPolicy = 'no-referrer';
       frame.setAttribute('sandbox', 'allow-scripts');
-      frame.srcdoc = `<!doctype html><meta http-equiv="Content-Security-Policy" ` +
-        `content="${HTML_PREVIEW_POLICY}">${source}`;
+      // Android serves the complete downloaded report with a restrictive CSP.
+      // No HTML source is copied through evaluateJavascript or srcdoc.
+      frame.src = 'report.html';
       diagram.replaceChildren(frame);
       diagram.hidden = false;
       return true;
     } catch (error) {
       if (sequence !== renderSequence) return false;
-      showStatus(publicHtmlError(error));
+      showStatus('This HTML file could not be previewed.');
       return false;
     }
   }
@@ -306,9 +281,9 @@
     return renderSvg(source, Boolean(dark), renderSequence);
   };
 
-  window.renderHtml = (source, dark = false) => {
+  window.renderHtml = (dark = false) => {
     renderSequence += 1;
-    return renderHtml(source, Boolean(dark), renderSequence);
+    return renderHtml(Boolean(dark), renderSequence);
   };
 
   window.showDiagramError = (message) => {

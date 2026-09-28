@@ -926,7 +926,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('HTML preview is limited to 1 MiB. Use Save or share instead.'),
+      find.text('This file exceeds the 32 MiB download limit.'),
       findsOneWidget,
     );
     expect(find.byType(WebOutputPreview), findsNothing);

@@ -11,12 +11,26 @@ const playwrightPath = process.env.PLAYWRIGHT_CORE_PATH
 const { chromium } = createRequire(import.meta.url)(playwrightPath);
 const chromePath = process.env.CHROME_PATH
   ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const allowedFiles = new Set(['index.html', 'app.js', 'mermaid.min.js']);
+const allowedFiles = new Set(['index.html', 'app.js', 'mermaid.min.js', 'report.html']);
+let reportSource = '';
+// Exercise the same response policy that Android applies to the local document.
+const nativeViewer = await readFile(join(root, 'android/app/src/main/kotlin/com/tarkilhk/wing/MermaidDiagramView.kt'), 'utf8');
+const htmlPolicy = nativeViewer.match(/private const val HTML_POLICY = ([\s\S]*?)\n        private val ASSETS/)[1]
+  .match(/"[^"]*"/g).map(value => JSON.parse(value)).join('');
 
 const server = createServer(async (request, response) => {
   const name = new URL(request.url, 'http://localhost').pathname.slice(1) || 'index.html';
   if (!allowedFiles.has(name)) {
     response.writeHead(404).end();
+    return;
+  }
+  if (name === 'report.html') {
+    response.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Content-Security-Policy': htmlPolicy,
+    });
+    response.end(reportSource);
     return;
   }
   const body = await readFile(join(assets, name));
@@ -179,7 +193,8 @@ try {
       fetch('${origin}/forbidden-html-fetch').catch(() => {});
       document.getElementById('increment').onclick = () => { document.getElementById('count').textContent++; };
     </script></body></html>`;
-  assert.equal(await page.evaluate((source) => window.renderHtml(source), htmlSource), true);
+  reportSource = htmlSource;
+  assert.equal(await page.evaluate(() => window.renderHtml()), true);
   const htmlFrame = page.frameLocator('#diagram iframe');
   await htmlFrame.locator('#increment').click();
   assert.equal(await htmlFrame.locator('#count').textContent(), '1');
@@ -195,9 +210,25 @@ try {
   assert.equal(await htmlFrame.locator('html').evaluate(() => document.compatMode), 'CSS1Compat');
   assert.deepEqual(unexpectedRequests, [], 'HTML preview attempted an HTTP asset or fetch request');
   await page.screenshot({ path: join(root, 'build', 'html-preview.png'), fullPage: true });
-  assert.equal(await page.evaluate(() => window.renderHtml('x'.repeat(1024 * 1024 + 1))), false);
-  assert.equal(await page.locator('#diagram iframe').count(), 0);
-  assert.equal(await page.evaluate(() => window.renderHtml('<button>Replacement</button>')), true);
+  for (const mib of [2, 8, 32]) {
+    const heading = `Complete ${mib} MiB report`;
+    const tail = `<h1 id=large-title>${heading}</h1><button id=large-increment>Increment</button><output id=large-count>0</output><script>document.getElementById('large-increment').onclick=()=>document.getElementById('large-count').textContent++;</script>`;
+    const prefix = '<!doctype html><!--';
+    reportSource = prefix + 'x'.repeat(mib * 1024 * 1024 - prefix.length - tail.length - 3) + '-->' + tail;
+    assert.equal(Buffer.byteLength(reportSource), mib * 1024 * 1024);
+    assert.equal(await page.evaluate(() => window.renderHtml()), true);
+    const largeFrame = page.frameLocator('#diagram iframe');
+    await largeFrame.locator('#large-title').waitFor();
+    assert.equal(await largeFrame.locator('#large-title').textContent(), heading);
+    await largeFrame.locator('#large-increment').click();
+    assert.equal(await largeFrame.locator('#large-count').textContent(), '1');
+    assert.equal(await largeFrame.locator('html').evaluate(() => document.compatMode), 'CSS1Compat');
+    await page.screenshot({ path: join(root, 'build', `html-large-${mib}mib.png`), fullPage: true });
+    console.log(`Rendered and interacted with complete ${mib} MiB HTML document.`);
+  }
+  reportSource = '<!doctype html><button>Replacement</button>';
+  assert.equal(await page.evaluate(() => window.renderHtml()), true);
+  await page.frameLocator('#diagram iframe').getByRole('button', { name: 'Replacement' }).waitFor();
   await page.evaluate(() => window.showDiagramError('Closed'));
   assert.equal(await page.locator('#diagram iframe').count(), 0);
   assert.equal(page.url(), `${origin}/index.html`);

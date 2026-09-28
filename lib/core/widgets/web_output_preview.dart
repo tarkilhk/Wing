@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/remote_files_client.dart';
 import 'markdown_code_block.dart';
 
 enum WebOutputFormat { mermaid, svg, html }
@@ -10,7 +11,7 @@ enum WebOutputFormat { mermaid, svg, html }
 class WebOutputPreview extends StatefulWidget {
   static const maxMermaidSourceLength = 50000;
   static const maxSvgSourceLength = 256 * 1024;
-  static const maxHtmlSourceLength = 1024 * 1024;
+  static const maxHtmlSourceLength = RemoteFilesClient.defaultMaxDownloadBytes;
   static const viewType = 'com.tarkilhk.wing/mermaid_diagram';
 
   final String source;

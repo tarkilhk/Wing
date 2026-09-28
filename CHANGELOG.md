@@ -6,6 +6,8 @@
   download actions.
 - Open HTML files directly in the HTML viewer using the complete downloaded
   document. Keep source behind Show source instead of opening truncated code.
+- Render HTML reports throughout the supported 32 MiB download range. Load the
+  document directly in the isolated viewer and skip text-preview limits for HTML.
 
 ## [1.1.3] - 2026-09-28
 
