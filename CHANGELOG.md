@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fix a black screen when returning to Wing after another launcher or shortcut
+  task takes its shared rendering engine. Route launches to a single Android
+  task and activity, and clean up native handlers at engine detachment rather
+  than during a previous activity's delayed destruction.
+
 - Hide internal technical runs from Recents, including saved, loaded and ongoing
   sessions. Keep ordinary chats with background work and the existing filters.
 

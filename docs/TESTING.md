@@ -13,6 +13,15 @@ the [performance procedure](PERFORMANCE.md) and its repeatable phone recorder.
 
 ## Useful test entry points
 
+For Android task reentry, run
+`python3 tools/qa/check_activity_reentry.py --serial <device-id> --package <installed-package>`
+on an unlocked device. It restarts Wing without clearing data, opens the Recents
+shortcut with a competing-task launch flag, and resumes the original task three
+times. It checks that the app content renders, the same activity and task are reused, and
+Android Recents contains exactly one Wing card, including after a restart. This
+native check covers engine eviction, which host widget tests cannot reproduce.
+It navigates the real app but does not send messages or modify settings.
+
 | Boundary | Entry points |
 | --- | --- |
 | Ownership and administration | `test/administration_*_test.dart`, `test/profile_live_contract_test.dart`, `integration_test/administration_existing_server_live_test.dart` |

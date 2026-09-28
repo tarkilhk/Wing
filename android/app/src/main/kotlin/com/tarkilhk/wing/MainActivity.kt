@@ -49,6 +49,7 @@ class MainActivity : FlutterActivity() {
     private var initialShareIntent: Intent? = null
     private var initialLaunchAction: String? = null
     @Volatile private var activityResumed = false
+    private var engineAttached = false
 
     override fun provideFlutterEngine(context: Context): FlutterEngine? = MonitoringRuntime.engine
 
@@ -69,6 +70,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        engineAttached = true
         MonitoringRuntime.attach(this, flutterEngine)
         hermesCloud?.close()
         hermesCloud = HermesCloudChannel(this, flutterEngine.dartExecutor.binaryMessenger)
@@ -250,7 +252,11 @@ class MainActivity : FlutterActivity() {
             }
     }
 
-    override fun onDestroy() {
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        // Clean up at engine detachment, before a replacement host installs its
+        // handlers. The old host's later onDestroy must not clear those handlers.
+        engineAttached = false
+        activityResumed = false
         hermesCloud?.close()
         hermesCloud = null
         voiceChannel?.close()
@@ -269,8 +275,8 @@ class MainActivity : FlutterActivity() {
         mediaPreviewChannel = null
         pdfPreviewChannel?.closeAll()
         pdfPreviewChannel = null
-        super.onDestroy()
         MonitoringRuntime.detach(isChangingConfigurations)
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -287,6 +293,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (!engineAttached) return
         activityResumed = true
         if (!getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked) {
             ChatNotifications.handleMainIntent(this, intent)
@@ -304,7 +311,7 @@ class MainActivity : FlutterActivity() {
     override fun onPause() {
         voiceChannel?.pause()
         activityResumed = false
-        MonitoringRuntime.activityVisible = false
+        if (engineAttached) MonitoringRuntime.activityVisible = false
         super.onPause()
     }
 
