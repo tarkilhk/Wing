@@ -72,6 +72,11 @@ PDF/audio/video also offer Open in app. Save or share remains available when a c
 
 Downloads are capped at 32 MiB, checking both declared length and streamed bytes. Disable duplicate delivery while pending. Closing a preview must prevent a late download from launching a viewer. The native bridge rechecks activity lifetime before launch.
 
+Authenticated reads have a 45-second deadline for response headers and body,
+including the password/session-token reads that precede them. Expiry aborts the
+HTTP request and exposes a retryable error; disposing the connection owner aborts
+its pending reads immediately. A rejected credential can still renew once.
+
 Android viewers receive downloaded bytes, safe display filenames and supported MIME types. Sanitize the decoded basename; use UUID cache filenames. Never pass backend credentials, headers, cookies or authenticated URLs to another app.
 
 FileProvider grants temporary read access only to the `delivered_outputs/` cache area. Age/count pruning removes abandoned delivery files. This is temporary viewing storage, not an offline library. Explicitly saved/shared copies have their own destination lifetime.

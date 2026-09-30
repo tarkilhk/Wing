@@ -5,6 +5,8 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.ClipData
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Process
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
@@ -580,6 +582,8 @@ class MainActivity : FlutterActivity() {
         if (uris.size > maxSharedItems) {
             throw ShareImportException(tooManyFilesError)
         }
+        // Check the whole batch before querying or opening any selected URI.
+        uris.forEach(::validateExternalShareUri)
         if (text == null && uris.isEmpty()) {
             throw ShareImportException(genericImportError)
         }
@@ -652,6 +656,7 @@ class MainActivity : FlutterActivity() {
         byteLimit: Long,
         queueIsLimiting: Boolean,
     ): JSONObject {
+        validateExternalShareUri(uri)
         val mediaType = contentResolver.getType(uri)?.trim().orEmpty()
             .ifEmpty { fallbackType?.trim().orEmpty() }
             .ifEmpty { "application/octet-stream" }
@@ -900,6 +905,21 @@ class MainActivity : FlutterActivity() {
         return MessageDigest.getInstance("SHA-256")
             .digest(source.toByteArray(Charsets.UTF_8))
             .joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
+    }
+
+    private fun validateExternalShareUri(uri: Uri) {
+        // Never let externally supplied shares use Wing's own file/provider privileges.
+        val authority = uri.authority
+        if (uri.scheme != "content" || authority.isNullOrBlank() || authority.contains('@')) {
+            throw ShareImportException(genericImportError)
+        }
+        val provider = packageManager.resolveContentProvider(authority, 0)
+        val granted = checkUriPermission(
+            uri, Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!ExternalShareUriPolicy.allows(uri.scheme, authority, provider?.packageName, packageName, granted)) {
+            throw ShareImportException(genericImportError)
+        }
     }
 
     private fun queryDisplayName(uri: Uri): String? = try {

@@ -6,17 +6,18 @@ import 'package:wing/core/theme/wing_theme.dart';
 
 void main() {
   testWidgets(
-    'day tooltips replace each other and distinguish zero from unknown',
+    'server date placeholders differ from verified zero and retained period dates remain reachable',
     (tester) async {
-      final daily = UsageDaily.fromJson(
-        {
-          'daily': [
-            {'day': '2026-09-18', 'input_tokens': 10, 'output_tokens': 20},
-          ],
-        },
-        period: 365,
-        loadedAt: DateTime.utc(2026, 9, 18),
-      );
+      final daily = UsageDaily.fromJson({
+        'daily': [
+          {
+            'day': '2027-01-01',
+            'input_tokens': 0,
+            'cache_read_tokens': 0,
+            'output_tokens': 0,
+          },
+        ],
+      }, period: 365);
       final selected = <String>[];
       await tester.pumpWidget(
         MaterialApp(
@@ -24,8 +25,53 @@ void main() {
           home: Scaffold(
             body: UsageCalendar(
               daily: daily,
-              rangeStart: daily.days.first.date,
-              rangeEnd: daily.days.last.date,
+              periodDates: const {'2027-01-02'},
+              selected: null,
+              onSelected: (day) => selected.add(day.id),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('usage-day-2027-01-02')));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('No returned year data', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.textContaining('UTC'), findsNothing);
+      expect(selected, isEmpty);
+      await tester.tap(find.byKey(const ValueKey('usage-day-2027-01-01')));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('0 tokens', findRichText: true),
+        findsOneWidget,
+      );
+      expect(selected, ['2027-01-01']);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'day tooltips replace each other and distinguish zero from unknown',
+    (tester) async {
+      final daily = UsageDaily.fromJson({
+        'daily': [
+          {
+            'day': '2026-09-16',
+            'input_tokens': 0,
+            'cache_read_tokens': 0,
+            'output_tokens': 0,
+          },
+          {'day': '2026-09-18', 'input_tokens': 10, 'output_tokens': 20},
+        ],
+      }, period: 365);
+      final selected = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: UsageCalendar(
+              daily: daily,
+              periodDates: daily.reportedDates,
               selected: null,
               onSelected: (day) => selected.add(day.id),
             ),
@@ -56,7 +102,7 @@ void main() {
     },
   );
 
-  // Every UTC boundary remains reachable through the single band.
+  // Every server date remains reachable through the single browsing band.
   for (var weekday = 0; weekday < 7; weekday++) {
     testWidgets(
       'single band scrolls through year and keeps range geometry, weekday $weekday',
@@ -64,11 +110,18 @@ void main() {
         tester.view.physicalSize = const Size(1000, 844);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
-        final daily = UsageDaily.fromJson(
-          {'daily': <dynamic>[]},
-          period: 365,
-          loadedAt: DateTime.utc(2026, 9, 13 + weekday),
-        );
+        final last = DateTime.utc(2026, 9, 13 + weekday);
+        final daily = UsageDaily.fromJson({
+          'daily': [
+            for (final date in [last.subtract(const Duration(days: 365)), last])
+              {
+                'day': date.toIso8601String().substring(0, 10),
+                'input_tokens': 0,
+                'cache_read_tokens': 0,
+                'output_tokens': 0,
+              },
+          ],
+        }, period: 365);
         var width = 358.0, period = 7;
         UsageDay? selected;
         Future<void> show() async {
@@ -82,10 +135,12 @@ void main() {
                     width: width,
                     child: UsageCalendar(
                       daily: daily,
-                      rangeStart: daily.days.last.date.subtract(
-                        Duration(days: period),
-                      ),
-                      rangeEnd: daily.days.last.date,
+                      periodDates: {
+                        for (final day in daily.days.skip(
+                          daily.days.length - period - 1,
+                        ))
+                          day.id,
+                      },
                       selected: selected?.id,
                       onSelected: (day) => selected = day,
                     ),

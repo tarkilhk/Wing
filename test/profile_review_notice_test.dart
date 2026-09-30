@@ -21,10 +21,14 @@ class _ReviewFixture extends ProfileHistoryFixture {
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
-    final gateway = ProfileGateway(
+    late final ProfileGateway gateway;
+    gateway = ProfileGateway(
       scope: scope,
       discover: base.discover,
-      connect: base.connect,
+      connect: () async {
+        if (gateway.onEvent != null) gateways[scope.profileName] = gateway;
+        await base.connect();
+      },
       close: base.close,
       get: base.read,
       rpc: (method, params) async {
@@ -40,7 +44,6 @@ class _ReviewFixture extends ProfileHistoryFixture {
         return base.call(method, params);
       },
     );
-    gateways[scope.profileName] = gateway;
     return gateway;
   }
 

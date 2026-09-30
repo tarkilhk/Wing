@@ -124,6 +124,8 @@ void main() {
           )
           .first,
     );
+    await tester.ensureVisible(find.text('Your morning briefing'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Your morning briefing'));
     await tester.pumpAndSettle();
     expect(opened!.workspace.profileName, 'personal');
@@ -273,7 +275,7 @@ void main() {
           )
           .first,
     );
-    expect(find.text('No run conversations yet.'), findsNothing);
+    expect(find.text('No recorded runs yet.'), findsNothing);
     expect(find.text('Refresh runs'), findsOneWidget);
   });
   testWidgets(
@@ -303,6 +305,99 @@ void main() {
     },
   );
   for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'mixed history ${brightness.name} at $scale text opens only conversations',
+        (tester) async {
+          fixture.runRows.addAll([
+            {
+              'id': 'cron_output:morning:20260918_090000',
+              'source': 'cron_output',
+              'title': 'COMPLETED · Script-only run',
+              'preview': 'The report was saved on the server.',
+              'started_at': 1789700000,
+            },
+            {
+              'id': 'cron_output:morning:exec:0',
+              'source': 'cron_output',
+              'title': 'FAILED · Script exited with code 1',
+              'preview': 'Script exited with code 1',
+              'started_at': 1789600000,
+            },
+            {
+              'id': 'cron_output:morning:latest',
+              'source': 'cron_output',
+              'title': 'COMPLETED',
+              'preview': null,
+              'started_at': 1789500000,
+            },
+          ]);
+          final opened = <ProfileSessionKey>[];
+          final c = await controller();
+          await show(
+            tester,
+            AdminScheduledTaskDetailPage(
+              controller: c,
+              initial: c.task('morning')!,
+              onOpenSession: (key) async => opened.add(key),
+            ),
+            brightness: brightness,
+            width: scale == 1 ? 390 : 320,
+            scale: scale,
+          );
+          Future<void> reveal(String title) async {
+            await tester.scrollUntilVisible(
+              find.text(title),
+              200,
+              scrollable: find
+                  .descendant(
+                    of: find.byKey(const ValueKey('task-detail-scroll')),
+                    matching: find.byType(Scrollable),
+                  )
+                  .first,
+            );
+            await tester.ensureVisible(find.text(title));
+            await tester.pumpAndSettle();
+          }
+
+          await reveal('COMPLETED · Script-only run');
+          expect(
+            find.text('The report was saved on the server.'),
+            findsOneWidget,
+          );
+          await tester.tap(find.text('COMPLETED · Script-only run'));
+          await tester.pumpAndSettle();
+          expect(opened, isEmpty);
+          await screenshot(tester, 'mixed-runs-${brightness.name}-$scale');
+          for (final title in [
+            'FAILED · Script exited with code 1',
+            'COMPLETED',
+          ]) {
+            await reveal(title);
+            await tester.tap(find.text(title));
+            await tester.pumpAndSettle();
+            expect(opened, isEmpty);
+          }
+          await tester.scrollUntilVisible(
+            find.text('Your morning briefing'),
+            -200,
+            scrollable: find
+                .descendant(
+                  of: find.byKey(const ValueKey('task-detail-scroll')),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          );
+          await tester.ensureVisible(find.text('Your morning briefing'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Your morning briefing'));
+          await tester.pumpAndSettle();
+          expect(opened.single.workspace.profileName, 'personal');
+          expect(opened.single.sessionId, 'cron_morning_123');
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
     for (final accent in WorkspaceAccent.values) {
       testWidgets('Studio list ${brightness.name} ${accent.name}', (
         tester,

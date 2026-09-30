@@ -7,10 +7,9 @@ import { extname, join, resolve } from 'node:path';
 const root = resolve(import.meta.dirname, '..');
 const assets = join(root, 'android', 'app', 'src', 'main', 'assets', 'diagrams');
 const playwrightPath = process.env.PLAYWRIGHT_CORE_PATH
-  ?? join(root, 'build', 'diagram-vendor', 'node_modules', 'playwright-core');
+  ?? join(root, 'scripts', 'diagram-preview', 'node_modules', 'playwright-core');
 const { chromium } = createRequire(import.meta.url)(playwrightPath);
-const chromePath = process.env.CHROME_PATH
-  ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const chromePath = process.env.CHROME_PATH;
 const allowedFiles = new Set(['index.html', 'app.js', 'mermaid.min.js', 'report.html']);
 let reportSource = '';
 // Exercise the same response policy that Android applies to the local document.
@@ -116,7 +115,7 @@ try {
   assert.match(results[6].status, /could not parse/i);
   assert.equal(results[6].body.includes('SECRET_PARSE_TEXT_7f13'), false);
 
-  console.log('Rendered flowchart, sequence, and pie cases in headless Chrome.');
+  console.log('Rendered flowchart, sequence, and pie cases in headless Chromium.');
   console.log('Rejected links and config overrides, and kept errors free of source text.');
 
   const svgResults = await page.evaluate(async (origin) => {

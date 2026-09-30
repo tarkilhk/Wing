@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
@@ -63,6 +64,7 @@ void main() {
       buildSignature: '',
     );
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     fixture = _ShellFixture();
     controller = ProfileWorkspaceController(
       connection: SavedConnection(
@@ -138,13 +140,18 @@ void main() {
   }
 
   Future<void> navigate(WidgetTester tester, AppDestination destination) async {
-    await tester.tap(find.byTooltip('Open navigation menu'));
-    await tester.pumpAndSettle();
+    if (find.byType(AppDrawer).evaluate().isEmpty) {
+      await tester.tap(find.byTooltip('Open navigation menu'));
+      await tester.pumpAndSettle();
+    }
+    expect(find.byType(AppDrawer), findsOneWidget);
     final item = find.byKey(ValueKey('nav-${destination.name}'));
     await tester.ensureVisible(item);
     await tester.pumpAndSettle();
+    expect(item.hitTestable(), findsOneWidget);
     await tester.tap(item);
     await tester.pumpAndSettle();
+    expect(find.byType(AppDrawer), findsNothing);
   }
 
   for (final systemBack in [false, true]) {
@@ -478,7 +485,9 @@ void main() {
       expect(controller.current!.chat, same(chat));
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
+      expect(find.byType(AppDrawer), findsOneWidget);
       await navigate(tester, AppDestination.chats);
+      expect(controller.visible, isTrue);
       expect(find.text('Keep this unsent'), findsOneWidget);
       expect(
         fixture.calls.skip(callsBefore).map((call) => (call.$1, call.$2)),

@@ -2,9 +2,9 @@
 """Verify an unread QA reply is restored silently after Android force-stop.
 
 Install integration_test/notification_revamp_device.dart built with
-notificationQa=true on an emulator, grant notifications and launch it first.
-The fixture, not a real Hermes server, generates the test reply. Never targets
-Wing's production package or a personal device.
+notificationQa=true on an emulator. The driver resets only that isolated QA
+package, grants notifications and launches the fixture before generating the
+test reply. Never targets Wing's production package or a personal device.
 """
 
 import argparse
@@ -32,6 +32,9 @@ def main():
         return subprocess.check_output(adb + list(parts), text=True, timeout=20)
 
     command('forward', f'tcp:{args.port}', 'tcp:18766')
+    command('shell', 'pm', 'clear', PACKAGE)
+    command('shell', 'pm', 'grant', PACKAGE, 'android.permission.POST_NOTIFICATIONS')
+    command('shell', 'am', 'start', '-n', ACTIVITY)
 
     def request(path, body):
         req = urllib.request.Request(
@@ -113,7 +116,7 @@ def main():
             command('shell', 'uiautomator', 'dump', '/sdcard/wing-qa-restore.xml')
             xml = command('shell', 'cat', '/sdcard/wing-qa-restore.xml')
             target = next((node for node in ET.fromstring(xml).iter('node')
-                           if node.get('text') == 'Website refresh'), None)
+                           if node.get('text') == answer), None)
             if target is not None:
                 return list(map(int, re.findall(r'\d+', target.get('bounds'))))
             time.sleep(.5)

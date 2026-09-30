@@ -75,7 +75,7 @@ void main() {
     await tester.pumpAndSettle();
     final list = find.byKey(const ValueKey('chat-list-false'));
     final more = find.byKey(
-      const ValueKey('chat-show-more-project/personal/home'),
+      const ValueKey('chat-show-more-project/personal/shared-project'),
     );
     Future<void> reachMore() async {
       await tester.scrollUntilVisible(

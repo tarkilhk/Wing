@@ -476,7 +476,77 @@ void main() {
           await tester.pumpAndSettle();
           await _tap(tester, 'Use a separate chat address');
           await tester.pumpAndSettle();
+          final chatAddress = find.byKey(const Key('connection-chat-address'));
+          await tester.scrollUntilVisible(
+            chatAddress,
+            160,
+            scrollable: find
+                .byWidgetPredicate(
+                  (widget) =>
+                      widget is Scrollable &&
+                      widget.axisDirection == AxisDirection.down,
+                )
+                .last,
+          );
+          await Scrollable.ensureVisible(
+            tester.element(chatAddress),
+            alignment: .5,
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Chat gateway base address'), findsOneWidget);
+          if (scale == 2) {
+            expect(
+              tester
+                  .widget<TextField>(
+                    find.descendant(
+                      of: chatAddress,
+                      matching: find.byType(TextField),
+                    ),
+                  )
+                  .decoration!
+                  .labelText,
+              isNull,
+            );
+            final label = tester.getRect(
+              find.text('Chat gateway base address'),
+            );
+            expect(label.left, greaterThanOrEqualTo(16));
+            expect(label.right, lessThanOrEqualTo(304));
+          }
           await _capture(tester, '${brightness.name}-custom-${scale}x');
+          await tester.tap(chatAddress);
+          await tester.pumpAndSettle();
+          await _capture(tester, '${brightness.name}-custom-focused-${scale}x');
+          await tester.enterText(chatAddress, 'https://chat.example.com');
+          await tester.pumpAndSettle();
+          expect(find.text('Chat gateway base address'), findsOneWidget);
+          await _capture(tester, '${brightness.name}-custom-filled-${scale}x');
+          await tester.enterText(chatAddress, 'ws://chat.example.com');
+          await _tap(tester, 'Use these settings');
+          // The submit button is below this lazy field. A large default test
+          // font can scroll the field out of the tree while reaching it.
+          await tester.scrollUntilVisible(
+            chatAddress,
+            -160,
+            scrollable: find
+                .byWidgetPredicate(
+                  (widget) =>
+                      widget is Scrollable &&
+                      widget.axisDirection == AxisDirection.down,
+                )
+                .last,
+          );
+          await Scrollable.ensureVisible(
+            tester.element(chatAddress),
+            alignment: .5,
+          );
+          await tester.pumpAndSettle();
+          expect(
+            tester.state<FormFieldState<String>>(chatAddress).hasError,
+            isTrue,
+          );
+          expect(find.text('Chat gateway base address'), findsOneWidget);
+          await _capture(tester, '${brightness.name}-custom-invalid-${scale}x');
           expect(tester.takeException(), isNull);
 
           await tester.pumpWidget(const SizedBox());

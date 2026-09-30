@@ -459,8 +459,10 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
               _filterControl('Profile', _profiles),
               _filterControl('Project', _projects),
               SizedBox(
-                width: 28,
+                width: 48,
+                height: 48,
                 child: IconButton(
+                  key: const ValueKey('workspace-clear-filters'),
                   padding: EdgeInsets.zero,
                   tooltip: 'Clear all filters',
                   color: WingTokens.of(context).onSurface,

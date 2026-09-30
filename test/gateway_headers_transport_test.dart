@@ -178,39 +178,51 @@ void main() {
     expect(request.headers.value('x-access-secret'), 'secret');
   });
 
-  test('websocket does not forward headers across a redirect', () async {
-    var redirectedRequests = 0;
-    final destination = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final destinationSub = destination.listen((request) async {
-      redirectedRequests++;
-      await request.response.close();
-    });
-    final source = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final sourceSub = source.listen((request) async {
-      request.response
-        ..statusCode = HttpStatus.found
-        ..headers.set(
-          HttpHeaders.locationHeader,
-          'http://127.0.0.1:${destination.port}/api/ws',
+  for (final customHeaders in [false, true]) {
+    test(
+      'websocket rejects redirects with ${customHeaders ? 'headers and a ticket' : 'a token'}',
+      () async {
+        var redirectedRequests = 0;
+        final destination = await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          0,
         );
-      await request.response.close();
-    });
-    addTearDown(() async {
-      await source.close(force: true);
-      await destination.close(force: true);
-      await sourceSub.cancel();
-      await destinationSub.cancel();
-    });
-    final client = WsClient(
-      'http://127.0.0.1:${source.port}',
-      gatewayHeaders: const {'X-Access-Secret': 'secret'},
-    );
-    addTearDown(client.close);
+        final destinationSub = destination.listen((request) async {
+          redirectedRequests++;
+          await request.response.close();
+        });
+        final source = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final sourceSub = source.listen((request) async {
+          request.response
+            ..statusCode = HttpStatus.found
+            ..headers.set(
+              HttpHeaders.locationHeader,
+              'http://127.0.0.1:${destination.port}/api/ws',
+            );
+          await request.response.close();
+        });
+        addTearDown(() async {
+          await source.close(force: true);
+          await destination.close(force: true);
+          await sourceSub.cancel();
+          await destinationSub.cancel();
+        });
+        final client = WsClient(
+          'http://127.0.0.1:${source.port}',
+          token: customHeaders ? null : 'synthetic-token',
+          ticket: customHeaders ? 'synthetic-ticket' : null,
+          gatewayHeaders: customHeaders
+              ? const {'X-Access-Secret': 'secret'}
+              : const {},
+        );
+        addTearDown(client.close);
 
-    await expectLater(client.connect(), throwsA(anything));
-    await Future<void>.delayed(Duration.zero);
-    expect(redirectedRequests, 0);
-  });
+        await expectLater(client.connect(), throwsA(anything));
+        await Future<void>.delayed(Duration.zero);
+        expect(redirectedRequests, 0);
+      },
+    );
+  }
 }
 
 http.Response _response(

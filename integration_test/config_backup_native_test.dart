@@ -42,6 +42,12 @@ void main() {
     aOptions: AndroidOptions(storageNamespace: 'wing_backup_qa'),
   );
 
+  File? stageFile;
+  tearDownAll(() async {
+    final stage = stageFile;
+    if (stage != null && await stage.exists()) await stage.delete();
+  });
+
   Future<void> waitFor(WidgetTester tester, bool Function() done) async {
     final deadline = DateTime.now().add(const Duration(seconds: 90));
     while (!done() && DateTime.now().isBefore(deadline)) {
@@ -63,6 +69,29 @@ void main() {
       'native ${encrypted ? 'encrypted replace' : 'plain merge'} backup round trip',
       (tester) async {
         final prefs = await SharedPreferences.getInstance();
+        File? ownedExport;
+        Directory? exportDirectory;
+        Set<String>? exportBaseline;
+        addTearDown(() async {
+          await prefs.clear();
+          await storage.deleteAll();
+          expect(prefs.getKeys(), isEmpty);
+          expect(await storage.readAll(), isEmpty);
+          final exported = ownedExport;
+          if (exported != null && await exported.exists()) {
+            await exported.delete();
+          }
+          final directory = exportDirectory;
+          final baseline = exportBaseline;
+          if (directory != null && baseline != null) {
+            for (final file in directory.listSync().whereType<File>()) {
+              if (file.uri.pathSegments.last.startsWith('wing-config-') &&
+                  !baseline.contains(file.path)) {
+                await file.delete();
+              }
+            }
+          }
+        });
         await prefs.clear();
         await storage.deleteAll();
         final manager = await ConnectionManager.create(
@@ -93,6 +122,7 @@ void main() {
         final stage = File(
           '${(await getExternalStorageDirectory())!.path}/backup-qa-stage',
         );
+        stageFile = stage;
         final label = encrypted ? 'encrypted' : 'plain';
         final passphrase = encrypted ? 'emulator-backup-passphrase' : '';
         final home = GlobalKey<HomeScreenState>();
@@ -154,24 +184,39 @@ void main() {
         }
         FocusManager.instance.primaryFocus?.unfocus();
         await tester.pumpAndSettle();
+        final cache = await getTemporaryDirectory();
+        final previousExports = cache
+            .listSync()
+            .whereType<File>()
+            .where(
+              (file) => file.uri.pathSegments.last.startsWith('wing-config-'),
+            )
+            .map((file) => file.path)
+            .toSet();
+        exportDirectory = cache;
+        exportBaseline = previousExports;
         await stage.writeAsString('share-$label', flush: true);
         await tester.tap(find.byKey(const Key('export_confirm_button')));
         await waitFor(
           tester,
           () => find.textContaining('Backup exported').evaluate().isNotEmpty,
         );
-        final cache = await getTemporaryDirectory();
-        final exported =
-            cache
-                .listSync()
-                .whereType<File>()
-                .where(
-                  (file) =>
-                      file.uri.pathSegments.last.startsWith('wing-config-'),
-                )
-                .toList()
-              ..sort((a, b) => a.path.compareTo(b.path));
-        final contents = await exported.last.readAsString();
+        final exported = cache
+            .listSync()
+            .whereType<File>()
+            .where(
+              (file) =>
+                  file.uri.pathSegments.last.startsWith('wing-config-') &&
+                  !previousExports.contains(file.path),
+            )
+            .toList();
+        expect(
+          exported,
+          hasLength(1),
+          reason: 'One owned backup was exported.',
+        );
+        ownedExport = exported.single;
+        final contents = await ownedExport.readAsString();
         final decoded = await ConfigBackupCodec.decode(
           contents,
           passphrase: passphrase,

@@ -35,28 +35,48 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Run Doctor'));
+    await tester.ensureVisible(find.text('Doctor'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Run Doctor'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Run'));
+    await tester.tap(find.text('Doctor'));
+    // Beginning the operation animates the underlying Server refresh spinner
+    // while confirmation is open. Settle the dialog transition without waiting
+    // for that spinner to stop before we can confirm the operation.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(
+      find.descendant(of: find.byType(AlertDialog), matching: find.text('Run')),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Failed'), findsOneWidget);
-    await tester.tap(find.text('Diagnostic output'));
+    // Unstructured diagnostic failures expose their output immediately.
+    await tester.ensureVisible(find.textContaining('A required dependency'));
     await tester.pumpAndSettle();
     expect(find.textContaining('A required dependency'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('Failed'), findsOneWidget);
-    await tester.ensureVisible(find.text('Review output'));
+    await tester.ensureVisible(find.text('Doctor'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Review output'));
+    final statusReads = fixture.requests
+        .where((r) => r.$2 == 'actions/doctor/status')
+        .length;
+    expect(statusReads, greaterThanOrEqualTo(1));
+    await tester.tap(find.text('Doctor'));
     await tester.pumpAndSettle();
+    expect(find.text('Failed'), findsOneWidget);
+    expect(find.textContaining('A required dependency'), findsOneWidget);
     expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(1));
     expect(
-      fixture.requests.where((r) => r.$2 == 'actions/doctor/status'),
-      hasLength(2),
+      fixture.requests.singleWhere((r) => r.$1 == 'POST').$2,
+      'ops/doctor',
     );
+    // Reviewing a completed retained observation neither reruns Doctor nor
+    // starts a new status poll. These operations belong to the server.
+    expect(
+      fixture.requests.where((r) => r.$2 == 'actions/doctor/status'),
+      hasLength(statusReads),
+    );
+    expect(fixture.requests.every((r) => !r.$3.containsKey('profile')), isTrue);
     expect(tester.takeException(), isNull);
   });
 
@@ -214,18 +234,28 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.text('Manage shared account'), 200);
+      expect(find.text('Home server / personal'), findsOneWidget);
+      expect(find.text('Manage shared account'), findsNothing);
+      await tester.scrollUntilVisible(find.text('Sign in again'), 200);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Manage shared account'));
+      await tester.tap(find.text('Sign in again'));
       await tester.pumpAndSettle();
-      expect(find.text('Home server / default'), findsOneWidget);
+      expect(find.text('Sign in to Research provider'), findsOneWidget);
+      expect(find.text('Home server / personal'), findsOneWidget);
+      expect(
+        find.text('Save this sign-in for personal on Home server.'),
+        findsOneWidget,
+      );
+      expect(find.text('Start sign-in'), findsOneWidget);
+      // Credential provenance does not redirect a profile-owned account to
+      // default. Opening its sign-in options must not start OAuth implicitly.
       expect(
         fixture.requests
             .where((r) => r.$2 == 'providers/oauth')
-            .last
-            .$3['profile'],
-        'default',
+            .every((r) => r.$3['profile'] == 'personal'),
+        isTrue,
       );
+      expect(fixture.requests.where((r) => r.$1 != 'GET'), isEmpty);
       await tester.pageBack();
       await tester.pumpAndSettle();
       await tester.pumpWidget(

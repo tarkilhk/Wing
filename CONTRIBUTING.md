@@ -42,6 +42,12 @@ Run tests and Android builds sequentially. Do not remove another process's locks
 | `lib/core/services/attachment_draft_service.dart` | Attachment preparation and upload |
 | `android/app/src/main/kotlin/` | Android sharing, clipboard and native viewers |
 
+Conversation search, project membership, Recents and drafts belong to
+`ProfileWorkspaceController` and its scoped `ProfileGateway`. Test-only saved
+message inspection lives under `integration_test/support/`; it does not define
+the production renderer. Check `lib/main.dart` and supported integration or
+performance entry points before adding another implementation of an existing flow.
+
 ## Changes and checks
 
 Read [AGENTS.md](AGENTS.md) before UI changes. Use [the design system](docs/DESIGN_SYSTEM.md) and its shared light/dark tokens. Administration changes also require [the ownership handoff](docs/design/2026-09-14-administration-handoff.md).

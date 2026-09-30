@@ -20,10 +20,14 @@ class SensitivePromptHost extends Host {
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
-    final wrapped = ProfileGateway(
+    late final ProfileGateway wrapped;
+    wrapped = ProfileGateway(
       scope: scope,
       discover: discover,
-      connect: base.connect,
+      connect: () async {
+        if (wrapped.onEvent != null) gateways[scope.profileName] = wrapped;
+        await base.connect();
+      },
       close: base.close,
       get: base.read,
       rpc: (method, params) async {
@@ -50,7 +54,6 @@ class SensitivePromptHost extends Host {
         return result;
       },
     );
-    gateways[scope.profileName] = wrapped;
     return wrapped;
   }
 }

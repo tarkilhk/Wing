@@ -62,6 +62,24 @@ bundle with a CDN URL.
 
 ## Verification after an update
 
-Run `node scripts/test-diagram-preview.mjs` against the actual bundled renderer. Set `CHROME_PATH` for a nonstandard Chrome location. The harness uses development-only Playwright Core; install it with `npm install --prefix build/diagram-vendor --no-save --ignore-scripts playwright-core@1.58.2` or set `PLAYWRIGHT_CORE_PATH` to an existing installation.
+From the checkout root, use Node 22.23.3, matching CI:
+
+```sh
+npm ci --prefix scripts/diagram-preview --ignore-scripts --no-audit --no-fund
+node scripts/diagram-preview/node_modules/playwright-core/cli.js install chromium
+npm test --prefix scripts/diagram-preview
+```
+
+The isolated development manifest and lockfile pin Playwright Core 1.58.2 and
+therefore its Chromium revision. On Linux, add `--with-deps` to the browser
+installation command to install missing system dependencies. To keep browser
+downloads inside the checkout, set `PLAYWRIGHT_BROWSERS_PATH` to an absolute path
+under `build/` for both installation and execution. `CHROME_PATH` selects an
+explicit alternative browser, and `PLAYWRIGHT_CORE_PATH` selects an explicit
+alternative Playwright Core installation; CI uses the pinned defaults.
+
+PR and release workflows run this same harness through the shared
+`test-diagram-preview` action. Assertion failures block the check and release
+publication. Screenshots are written under ignored `build/`.
 
 Check Mermaid labels/layout in light and dark, rejected links/configuration, parse errors and source fallback. Check SVG script/external-resource blocking, dimensions and object-URL cleanup after success, failure and replacement. Run the affected Flutter tests and native build, then inspect on-device zoom and Back. Host browser fixtures do not establish Android WebView behavior. See [Testing](TESTING.md).

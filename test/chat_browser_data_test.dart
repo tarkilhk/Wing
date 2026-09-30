@@ -89,6 +89,41 @@ void main() {
     data.dispose();
     controller.dispose();
   });
+  test('removed rows retire after listeners detach and reappearing keys reuse them', () async {
+    await data.refresh(archivedOnly: false);
+    final key = data.entries.first.sessionKey;
+    final row = data.row(key);
+    void listener() {}
+    row.addListener(listener);
+    controller.browserResource(key.workspace.profileName).deletedSessions.add(key.sessionId);
+    await data.refresh(archivedOnly: false);
+    expect(data.entries.any((entry) => entry.sessionKey == key), isFalse);
+    expect(data.retainedRowCount, data.entries.length + 1);
+    controller.browserResource(key.workspace.profileName).deletedSessions.remove(key.sessionId);
+    await data.refresh(archivedOnly: false);
+    expect(data.row(key), same(row));
+    row.removeListener(listener);
+    controller.browserResource(key.workspace.profileName).deletedSessions.add(key.sessionId);
+    await data.refresh(archivedOnly: false);
+    expect(data.retainedRowCount, data.entries.length);
+  });
+
+  test('increasing replacement datasets retain only current rows', () async {
+    for (var cycle = 0; cycle < 12; cycle++) {
+      fixture.count = 125 + cycle * 25;
+      await data.refresh(archivedOnly: false);
+      final keys = data.entries.map((entry) => entry.sessionKey).toList();
+      for (final key in keys) {
+        controller.browserResource(key.workspace.profileName).deletedSessions.add(key.sessionId);
+      }
+      await data.refresh(archivedOnly: false);
+      expect(data.entries, isEmpty);
+      expect(data.retainedRowCount, 0);
+      for (final profile in controller.discovery!.profiles) {
+        controller.browserResource(profile.name).deletedSessions.clear();
+      }
+    }
+  });
   test(
     'recovery reads only failed profiles and retains healthy search results',
     () async {

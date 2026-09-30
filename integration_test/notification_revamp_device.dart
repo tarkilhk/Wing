@@ -126,9 +126,7 @@ Future<void> main() async {
           });
         case '/disconnect':
           host.connectFailures = data['fail'] == true ? 20 : 0;
-          chatGateway.onConnectionChanged!(
-            false,
-          );
+          chatGateway.onConnectionChanged!(false);
         case '/delay-decision':
           host.approvalDelay = Completer<void>();
         case '/release-decision':
@@ -195,6 +193,26 @@ Future<void> main() async {
           'chat_visible': controller.visible,
           'selected_chat': controller.current?.chat?.key.sessionId,
           'read_target': chat.notificationReadTarget?.toJson(),
+          'read_guards': {
+            'opening': chat.opening,
+            'offline_snapshot': chat.offlineSnapshot,
+            'history_loading': chat.historyLoading,
+            'history_error': chat.historyError,
+            'history_session': chat.historySessionId,
+            'selected_is_target': identical(controller.current?.chat, chat),
+          },
+          'notification_focus': chat.notificationFocus?.toJson(),
+          'notification_focus_generation': chat.notificationFocusGeneration,
+          'message_rows': [
+            for (final row in chat.messages)
+              {
+                'id': row['id'],
+                'role': row['role'],
+                'content_type': row['content'].runtimeType.toString(),
+                'content_empty': row['content']?.toString().trim().isEmpty,
+                'hidden': row['display_kind'] == 'hidden',
+              },
+          ],
         }),
       );
     } catch (error, stack) {

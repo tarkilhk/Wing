@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/answer_versions.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/administration/administration_content.dart';
+import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -81,15 +82,27 @@ void main() {
       await captureJourney(tester, 'settings-large-text');
 
       await _navigate(tester, AppDestination.chats);
-      await tester.tap(find.byKey(const ValueKey('profile-work')));
+      await tester.tap(find.byKey(const ValueKey('chat-profile-work')));
+      await _settle(tester);
+      expect(find.text('personal chat 0'), findsNothing);
+      expect(find.text('work project'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('chat-work-chat-0')));
       await _pumpUntil(
         tester,
         () => harness.controller.current?.scope.profileName == 'work',
       );
+      await _settle(tester);
+      await tester.tap(find.byTooltip('Back to sessions'));
+      await _settle(tester);
       expect(find.text('work project'), findsOneWidget);
       expect(find.text('work chat 0'), findsOneWidget);
 
-      await tester.tap(find.byKey(const ValueKey('project-shared-project')));
+      await tester.tap(find.byKey(const ValueKey('chat-filter-project')));
+      await _settle(tester);
+      await tester.tap(
+        find.byKey(const ValueKey('chat-menu-work/shared-project')),
+      );
+      await tester.binding.handlePopRoute();
       await _settle(tester);
       expect(find.text('work project'), findsWidgets);
       expect(find.text('work chat 0'), findsOneWidget);
@@ -101,7 +114,7 @@ void main() {
     'draft model slash find outputs and context use the production chat',
     (tester) async {
       await harness.launch(tester);
-      await tester.tap(find.byKey(const ValueKey('chat-chat-0')));
+      await tester.tap(find.byKey(const ValueKey('chat-personal-chat-0')));
       await _pumpUntil(
         tester,
         () => find
@@ -124,7 +137,7 @@ void main() {
       await tester.pump();
       await tester.tap(find.byTooltip('Back to sessions'));
       await _settle(tester);
-      await tester.tap(find.byKey(const ValueKey('chat-chat-0')));
+      await tester.tap(find.byKey(const ValueKey('chat-personal-chat-0')));
       await _settle(tester);
       expect(find.text('Draft survives chat navigation'), findsOneWidget);
 
@@ -156,8 +169,10 @@ void main() {
       await tester.tap(find.byTooltip('Send'));
       await _pumpUntil(
         tester,
-        () =>
-            find.text('Roadmap fixture command complete').evaluate().isNotEmpty,
+        () => find
+            .textContaining('Roadmap fixture command complete')
+            .evaluate()
+            .isNotEmpty,
       );
       expect(harness.fixture.commandDispatches.single['name'], 'roadmap-check');
 
@@ -197,7 +212,7 @@ void main() {
     tester,
   ) async {
     await harness.launch(tester);
-    await tester.tap(find.byKey(const ValueKey('chat-chat-0')));
+    await tester.tap(find.byKey(const ValueKey('chat-personal-chat-0')));
     await _settle(tester);
     final original = harness.controller.current!.chat!;
     const draftText = 'Keep this draft when its staged file disappears';
@@ -280,14 +295,14 @@ void main() {
     tester,
   ) async {
     await harness.launch(tester);
-    await tester.tap(find.byKey(const ValueKey('chat-chat-0')));
+    await tester.tap(find.byKey(const ValueKey('chat-personal-chat-0')));
     await _settle(tester);
     final runningChat = harness.controller.current!.chat!;
     // The base fixture reuses a runtime placeholder; live gateway IDs are unique.
     runningChat.runtimeId = 'runtime-running';
     await tester.tap(find.byTooltip('Back to sessions'));
     await _settle(tester);
-    await tester.tap(find.byKey(const ValueKey('chat-chat-1')));
+    await tester.tap(find.byKey(const ValueKey('chat-personal-chat-1')));
     await _settle(tester);
     final chat = harness.controller.current!.chat!;
 
@@ -365,9 +380,11 @@ void main() {
   ) async {
     await harness.launch(tester);
 
-    await tester.tap(find.byTooltip('Workspace options'));
+    await tester.tap(find.byTooltip('Chat list options'));
     await _settle(tester);
-    await tester.tap(find.text('New project'));
+    await tester.tap(find.byKey(const ValueKey('chat-menu-new-project')));
+    await _settle(tester);
+    await tester.tap(find.byKey(const ValueKey('chat-menu-personal')));
     await _settle(tester);
     await tester.enterText(
       find.descendant(
@@ -405,7 +422,7 @@ void main() {
     await captureJourney(tester, 'project-created');
 
     final createdProjectActions = find.descendant(
-      of: find.byKey(const ValueKey('project-roadmap-created')),
+      of: find.byKey(const ValueKey('project-personal-roadmap-created')),
       matching: find.byTooltip('Project actions'),
     );
     await tester.tap(createdProjectActions);
@@ -451,7 +468,7 @@ void main() {
     });
     expect(find.text('Roadmap renamed'), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('chat-chat-0')));
+    await tester.tap(find.byKey(const ValueKey('chat-personal-chat-0')));
     await _settle(tester);
     final chat = harness.controller.current!.chat!;
     harness.fixture.deliverReview('personal', chat.runtimeId);
@@ -525,7 +542,7 @@ void main() {
   ) async {
     harness.fixture.supervisionEnabled = true;
     await harness.launch(tester);
-    await tester.tap(find.byKey(const ValueKey('chat-chat-0')));
+    await tester.tap(find.byKey(const ValueKey('chat-personal-chat-0')));
     await _settle(tester);
     final chat = harness.controller.current!.chat!;
     await tester.enterText(
@@ -757,35 +774,69 @@ void main() {
     await _settle(tester);
     await tester.binding.handlePopRoute();
     await _settle(tester);
-    await tester.tap(find.byKey(const ValueKey('administration-health')));
-    await _settle(tester);
+    await _navigate(tester, AppDestination.health);
+    await _pumpUntil(
+      tester,
+      () => find.text('No known vulnerabilities found').evaluate().isNotEmpty,
+    );
+    expect(find.text('No issues found'), findsOneWidget);
+    expect(find.text('No known vulnerabilities found'), findsOneWidget);
+    expect(
+      harness.fixture.diagnosticPosts.map((request) => request.$1),
+      unorderedEquals(['ops/doctor', 'ops/security-audit']),
+    );
     await captureJourney(tester, 'health');
+    await _navigate(tester, AppDestination.analytics);
+    await tester.tap(find.text('7D'));
+    await _settle(tester);
+    await tester.tap(find.text('30D'));
+    await _settle(tester);
+    expect(find.byKey(const ValueKey('usage-year-band')), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Usage'),
-      250,
+      find.text('openai/gpt-6-astra'),
+      200,
       scrollable: find.byType(Scrollable).last,
     );
-    await tester.tap(find.text('Usage'));
-    await _settle(tester);
-    await tester.tap(find.text('Last 7 days'));
-    await _settle(tester);
-    await tester.tap(find.text('Last 30 days'));
-    await _settle(tester);
-    await tester.tap(find.text('openai-codex/gpt-6-astra'));
     await _settle(tester);
     expect(find.text('Roadmap fixture / personal'), findsOneWidget);
-    expect(find.text('12'), findsOneWidget);
-    expect(find.text('5,600'), findsOneWidget);
-    expect(find.text('USD 1.25'), findsOneWidget);
+    expect(_usageChartRow('openai/gpt-6-astra: 6,380 tokens'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: _usageChartRow('openai/gpt-6-astra: 6,380 tokens'),
+        matching: find.text('6.4K'),
+      ),
+      findsOneWidget,
+    );
+    final costChoice = find.text('Cost').first;
+    await tester.ensureVisible(costChoice);
+    await tester.tap(costChoice);
+    await _settle(tester);
+    expect(_usageChartRow('openai/gpt-6-astra: USD 1.25'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: _usageChartRow('openai/gpt-6-astra: USD 1.25'),
+        matching: find.text('USD 1.25'),
+      ),
+      findsOneWidget,
+    );
     await captureJourney(tester, 'usage');
     await tester.scrollUntilVisible(
       find.text('local/missing-cost'),
       200,
       scrollable: find.byType(Scrollable).last,
     );
-    await tester.tap(find.text('local/missing-cost'));
     await _settle(tester);
-    expect(find.text('Unavailable'), findsWidgets);
+    expect(
+      _usageChartRow('local/missing-cost: Unavailable, partial'),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: _usageChartRow('local/missing-cost: Unavailable, partial'),
+        matching: find.text('Unavailable · partial'),
+      ),
+      findsOneWidget,
+    );
     expect(
       harness.fixture.administrationReads
           .singleWhere(
@@ -796,13 +847,15 @@ void main() {
       {'days': '30', 'profile': 'personal'},
     );
 
-    await tester.pageBack();
-    await _settle(tester);
+    await _navigate(tester, AppDestination.health);
     await tester.scrollUntilVisible(
       find.byTooltip('Refresh profile status'),
       -250,
       scrollable: find.byType(Scrollable).last,
     );
+    final checksBeforeRetry = harness.fixture.administrationRequests
+        .where((request) => request.$1 == 'setup.runtime_check')
+        .length;
     await tester.tap(find.byTooltip('Refresh profile status'));
     await _settle(tester);
     await tester.ensureVisible(find.text('Model access'));
@@ -822,12 +875,11 @@ void main() {
       ),
       isFalse,
     );
-    expect(
-      harness.fixture.administrationRequests
-          .singleWhere((request) => request.$1 == 'setup.runtime_check')
-          .$2,
-      {'profile': 'personal'},
-    );
+    final runtimeChecks = harness.fixture.administrationRequests
+        .where((request) => request.$1 == 'setup.runtime_check')
+        .toList();
+    expect(runtimeChecks, hasLength(checksBeforeRetry + 1));
+    expect(runtimeChecks.last.$2, {'profile': 'personal'});
     expect(tester.takeException(), isNull);
   });
 
@@ -836,7 +888,7 @@ void main() {
   ) async {
     await harness.launch(tester);
     harness.fixture.enableAnswerActions();
-    await tester.tap(find.byKey(const ValueKey('chat-chat-0')));
+    await tester.tap(find.byKey(const ValueKey('chat-personal-chat-0')));
     await _settle(tester);
     final source = harness.controller.current!.chat!;
     await tester.enterText(
@@ -1145,8 +1197,27 @@ class _RoadmapHarness {
       connectionIdentity: controller.connectionIdentity,
       connectionLabel: controller.connection.label,
       request: (method, path, query, body) async {
-        if (method == 'GET' && path == 'analytics/models') {
-          return fixture.gateway(controller.current!.scope).read(path, query);
+        if (method == 'GET' &&
+            const {'analytics/models', 'analytics/usage'}.contains(path)) {
+          final reader = fixture.gateway(controller.current!.scope);
+          try {
+            return await reader.read(path, query);
+          } finally {
+            reader.close();
+          }
+        }
+        if (method == 'GET' &&
+            const {
+              'actions/doctor/status',
+              'actions/security-audit/status',
+            }.contains(path)) {
+          expectSync(query, {'lines': '2000'});
+          return fixture.readDiagnosticStatus(path, query);
+        }
+        if (method == 'POST' &&
+            const {'ops/doctor', 'ops/security-audit'}.contains(path)) {
+          expectSync(query, isEmpty);
+          return fixture.startDiagnostic(path, body ?? const {});
         }
         return base.send(method, path, query, body);
       },
@@ -1159,6 +1230,8 @@ class _RoadmapHarness {
       ),
     );
     final scaffold = GlobalKey<ScaffoldState>();
+    var destination = AppDestination.administration;
+    addTearDown(server.close);
     await tester.pumpWidget(
       journeyCaptureBoundary(
         MaterialApp(
@@ -1166,23 +1239,68 @@ class _RoadmapHarness {
           theme: wingTheme(
             journeyTheme == 'dark' ? Brightness.dark : Brightness.light,
           ),
-          home: Scaffold(
-            key: scaffold,
-            drawer: AppDrawer(
-              selected: AppDestination.administration,
-              onSelected: (_) => scaffold.currentState!.closeDrawer(),
-              connection: controller.connection,
-              connectionStatus: controller.connectionStatus,
-              versionsControllerFactory: (_) =>
-                  VersionsController(gateway: server.gateway('default')),
-            ),
-            body: HermesAdministrationContent(
-              controller: controller,
-              repository: server,
-              onOpenMenu: () => scaffold.currentState!.openDrawer(),
-              onConnections: () {},
-              onOpenSession: (key) async {
-                await controller.openSession(key);
+          home: StatefulBuilder(
+            builder: (context, update) => Scaffold(
+              key: scaffold,
+              appBar: destination == AppDestination.administration
+                  ? null
+                  : AppBar(
+                      leading: IconButton(
+                        tooltip: 'Open navigation menu',
+                        icon: const Icon(Icons.menu),
+                        onPressed: () => scaffold.currentState!.openDrawer(),
+                      ),
+                      title: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(destination.label),
+                          Text(
+                            server
+                                .profile(controller.current!.scope.profileName)
+                                .label,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+              drawer: AppDrawer(
+                selected: destination,
+                onSelected: (selected) {
+                  expectSync(const {
+                    AppDestination.administration,
+                    AppDestination.health,
+                    AppDestination.analytics,
+                  }, contains(selected));
+                  update(() => destination = selected);
+                },
+                connection: controller.connection,
+                connectionStatus: controller.connectionStatus,
+                versionsControllerFactory: (_) =>
+                    VersionsController(gateway: server.gateway('default')),
+              ),
+              body: switch (destination) {
+                AppDestination.health => HermesHealthContent(
+                  controller: controller,
+                  repository: server,
+                  onOpenMenu: () => scaffold.currentState!.openDrawer(),
+                  onConnections: () {},
+                  onOpenSession: (key) async {
+                    await controller.openSession(key);
+                  },
+                ),
+                AppDestination.analytics => HermesAnalyticsContent(
+                  controller: controller,
+                  repository: server,
+                ),
+                _ => HermesAdministrationContent(
+                  controller: controller,
+                  repository: server,
+                  onOpenMenu: () => scaffold.currentState!.openDrawer(),
+                  onConnections: () {},
+                  onOpenSession: (key) async {
+                    await controller.openSession(key);
+                  },
+                ),
               },
             ),
           ),
@@ -1198,6 +1316,13 @@ class _RoadmapHarness {
     expect(unexpectedRequests, isEmpty);
   }
 }
+
+// Android merges passive chart rows into one semantics node. Check each row's
+// exact annotation and visible descendant value independently of that merge.
+Finder _usageChartRow(String label) => find.byWidgetPredicate(
+  (widget) => widget is Semantics && widget.properties.label == label,
+  description: 'usage chart row labeled "$label"',
+);
 
 Future<void> _navigate(WidgetTester tester, AppDestination destination) async {
   await tester.tap(find.byTooltip('Open navigation menu'));

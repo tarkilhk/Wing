@@ -8,14 +8,18 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 import time
 import urllib.request
+from pathlib import Path
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial', default='emulator-5554')
     parser.add_argument('--port', type=int, default=18765)
+    parser.add_argument('--resource-dir', type=Path,
+                        help='Optional CPU/PSS diagnostics during the two 35s polling windows; no battery verdict.')
     args = parser.parse_args()
     if not args.serial.startswith('emulator-'):
         raise SystemExit('This test changes device power settings; use an emulator.')
@@ -53,18 +57,30 @@ def main():
         return bool(re.search(
             rf'NotificationRecord\([^\n]*pkg={re.escape(package)}[^\n]*id={number}\b', dump))
 
-    def notification_identity(number):
+    def notification_record(number):
         dump = shell('dumpsys', 'notification', '--noredact')
         for record in re.split(r'(?=^[ \t]*NotificationRecord\()', dump, flags=re.MULTILINE):
             if not re.search(
                     rf'NotificationRecord\([^\n]*pkg={re.escape(package)}[^\n]*id={number}\b',
                     record):
                 continue
-            icon = re.search(r'icon=Icon\([^\n]*id=([^\s)]+)', record)
-            group = re.search(r'^\s*groupKey=(.+)$', record, re.MULTILINE)
-            if icon and group:
-                return icon.group(1), group.group(1).strip()
+            return record
         return None
+
+    def notification_icon(number):
+        record = notification_record(number)
+        icon = re.search(r'icon=Icon\([^\n]*id=([^\s)]+)', record or '')
+        return icon.group(1) if icon else None
+
+    def monitoring_started():
+        until(foreground, 'Working chat did not start monitoring')
+        icon = until(lambda: notification_icon(214601), 'Monitoring card missing')
+        assert not notification_present(214602), 'Obsolete monitoring summary was posted'
+        record = notification_record(214601)
+        assert record and 'hermes_monitoring' in record, 'Monitoring card used the wrong channel'
+        locks = shell('dumpsys', 'power').split('Wake Locks:', 1)[1].split('Suspend Blockers:', 1)[0]
+        assert 'hermes-monitoring' in locks, 'Working chat has no monitoring wake lock'
+        return icon
 
     def launch():
         shell('am', 'start', '-n', f'{package}/com.tarkilhk.wing.MainActivity')
@@ -83,6 +99,66 @@ def main():
         locks = shell('dumpsys', 'power').split('Wake Locks:', 1)[1].split('Suspend Blockers:', 1)[0]
         assert 'hermes-monitoring' not in locks, 'Wake lock leaked after work ended'
 
+    def polling_status():
+        status = request()
+        assert status.get('fixture') == 'background-monitoring-native', 'Wrong native fixture'
+        assert status.get('buildMode') in {'debug', 'profile'}, 'Use a diagnostic debug/profile build'
+        probe = status.get('notificationPoll')
+        assert isinstance(probe, dict), 'Polling instrumentation missing'
+        assert probe.get('schema') == 1 and probe.get('periodSeconds') == 30, 'Wrong polling probe'
+        assert all(type(probe.get(field)) is int and probe[field] >= 0
+                   for field in ('created', 'active', 'ticks')), 'Invalid polling instrumentation'
+        assert probe['active'] <= probe['created'], 'Invalid active polling timer count'
+        return status
+
+    def observe_polling(active):
+        baseline = polling_status()
+        expected = 1 if active else 0
+        assert baseline['notificationPoll']['active'] == expected, 'Wrong initial polling timer count'
+        label = 'active background' if active else 'settled background'
+        print(f'Observing {label} polling for 35s ({baseline["buildMode"]} emulator diagnostics)', flush=True)
+        recorder = None
+        output = None
+        if args.resource_dir is not None:
+            output = args.resource_dir / ('active-background.json' if active else 'settled-background.json')
+            recorder = subprocess.Popen([
+                sys.executable, str(Path(__file__).with_name('record_phone_resources.py')),
+                '--serial', args.serial, '--package', package,
+                '--label', f'emulator-{baseline["buildMode"]}-{label.replace(" ", "-")}',
+                '--samples', '6', '--interval', '5', '--output', str(output),
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        try:
+            deadline = time.monotonic() + 35
+            while True:
+                status = polling_status()
+                probe = status['notificationPoll']
+                assert status['generation'] == baseline['generation'], 'Fixture engine restarted during polling capture'
+                assert status['lifecycle'] != 'resumed', 'Polling scenario returned to foreground'
+                assert probe['active'] == expected, 'Polling timer did not match background work'
+                assert probe['created'] == baseline['notificationPoll']['created'], 'Polling timer restarted during stable capture'
+                if not active:
+                    assert probe['ticks'] == baseline['notificationPoll']['ticks'], 'Settled background polling continued'
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                time.sleep(min(1, remaining))
+            if active:
+                assert probe['ticks'] > baseline['notificationPoll']['ticks'], 'Production notification poll never fired'
+            if recorder is not None:
+                _, error = recorder.communicate(timeout=20)
+                assert recorder.returncode == 0, f'Resource capture failed: {error}'
+                report = json.loads(output.read_text())
+                assert report['app_present_every_sample'], 'Resource capture lost the fixture process'
+                assert report['start']['app_pids'] == report['end']['app_pids'], 'Fixture process changed during resource capture'
+                print(f'DIAGNOSTIC: {label} mean CPU={report["app_mean_cpu_percent"]}% '
+                      f'end memory KiB={report["end"]["app_memory_kb"]}; {output}', flush=True)
+        finally:
+            if recorder is not None and recorder.poll() is None:
+                recorder.terminate()
+                recorder.communicate(timeout=5)
+        print(f'PASS: {label} polling active={probe["active"]} '
+              f'ticks={probe["ticks"] - baseline["notificationPoll"]["ticks"]}', flush=True)
+
     prior_exempt = package in shell('dumpsys', 'deviceidle', 'whitelist')
     adb('forward', f'tcp:{args.port}', 'tcp:18765')
     try:
@@ -95,29 +171,27 @@ def main():
         until(lambda: request()['ready'], 'Fixture did not establish its gateway')
         generation = request()['generation']
         stopped()
-        print('PASS: idle startup has no monitoring icon or wake lock', flush=True)
+        assert polling_status()['notificationPoll']['active'] == 0, 'Idle startup scheduled notification polling'
+        print('PASS: idle startup has no monitoring icon, wake lock or polling timer', flush=True)
 
         event('a', 'working')
-        until(foreground, 'First chat did not start monitoring')
-        connection_identity = until(
-            lambda: notification_identity(214601), 'Monitoring has no group identity')
-        until(lambda: notification_identity(214602) == connection_identity,
-              'Monitoring summary/child differ')
+        monitoring_icon = monitoring_started()
         event('b', 'working')
+        assert monitoring_started() == monitoring_icon, 'Second chat changed the monitoring icon'
         shell('input', 'keyevent', 'KEYCODE_HOME')
         until(lambda: request()['lifecycle'] != 'resumed', 'App stayed in foreground')
+        until(lambda: polling_status()['notificationPoll']['active'] == 1, 'Working chats did not schedule polling')
+        observe_polling(active=True)
         event('a', 'waiting')
         alert(1)
-        assert foreground(), 'Waiting chat stopped another working chat'
-        assert connection_identity[1].endswith('g:wing_connection')
-        dump = shell('dumpsys', 'notification', '--noredact')
-        posted = re.search(
-            rf'NotificationRecord\([^\n]*pkg={re.escape(package)}[^\n]*id=240001\b'
-            r'.*?icon=Icon\([^\n]*id=([^\s)]+)', dump, re.DOTALL)
-        assert posted and posted.group(1) != connection_identity[0], 'Connection/chat icons match'
+        assert monitoring_started() == monitoring_icon, 'Waiting chat changed monitoring'
+        question_icon = until(lambda: notification_icon(240001), 'Question icon missing')
+        assert question_icon != monitoring_icon, 'Connection/chat icons match'
         event('b', 'idle')
         alert(2)
         stopped()
+        until(lambda: polling_status()['notificationPoll']['active'] == 0, 'Last finish did not cancel polling')
+        observe_polling(active=False)
         assert notification_present(240001), 'Question disappeared when monitoring stopped'
         assert notification_present(240002), 'Reply disappeared when monitoring stopped'
         print('PASS: multiple chats share monitoring; last finish stops it and retains alerts', flush=True)
@@ -125,7 +199,7 @@ def main():
         launch()
         assert not foreground(), 'Opening a waiting chat restarted monitoring'
         event('a', 'working')
-        until(foreground, 'Answering the question did not restart monitoring')
+        monitoring_started()
         shell('input', 'keyevent', 'KEYCODE_HOME')
         event('a', 'idle')
         alert(3)
@@ -134,7 +208,7 @@ def main():
 
         launch()
         event('a', 'working')
-        until(foreground, 'Monitoring did not restart')
+        monitoring_started()
         request('/close-activity', '')
         until(lambda: request()['lifecycle'] == 'detached', 'Activity was not destroyed')
         launch()
@@ -158,7 +232,7 @@ def main():
         shell('dumpsys', 'deviceidle', 'whitelist', f'+{package}')
         event('a', 'working')
         event('b', 'working')
-        until(foreground, 'Monitoring did not start for Doze test')
+        monitoring_started()
         shell('input', 'keyevent', 'KEYCODE_HOME')
         shell('input', 'keyevent', 'KEYCODE_SLEEP')
         shell('dumpsys', 'battery', 'unplug')
@@ -166,7 +240,7 @@ def main():
         assert 'mState=IDLE' in shell('dumpsys', 'deviceidle')
         event('a', 'waiting')
         until(lambda: request()['alerts'] == 1, 'Question lost in Doze')
-        assert foreground(), 'Second chat lost monitoring in Doze'
+        monitoring_started()
         event('b', 'idle')
         until(lambda: request()['alerts'] == 2, 'Reply lost in Doze')
         stopped()
@@ -179,11 +253,11 @@ def main():
         shell('wm', 'dismiss-keyguard')
         launch()
         event('a', 'working')
-        until(foreground, 'Answering did not restart monitoring')
+        monitoring_started()
         request('/alerts', 'false')
         stopped()
         request('/alerts', 'true')
-        until(foreground, 'Enabling alerts for working chat did not restart monitoring')
+        monitoring_started()
         shell('input', 'keyevent', 'KEYCODE_HOME')
         event('a', 'idle')
         until(lambda: request()['alerts'] == 3, 'Final reply did not post')

@@ -180,4 +180,7 @@ android.applicationVariants.configureEach {
 
 dependencies {
    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+   testImplementation("junit:junit:4.13.2")
+   // JVM tests exercise the actual native JSON boundary, outside Android's stub jar.
+   testImplementation("org.json:json:20240303")
 }

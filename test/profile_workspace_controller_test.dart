@@ -76,6 +76,8 @@ class Host {
   int resumeFailures = 0;
   bool expireUnsubmittedResume = false;
   int sessionCreates = 0;
+  String? createdCwdOverride;
+  bool omitCreatedCwd = false;
   Completer<void>? replacementCreateStarted;
   Completer<void>? replacementCreateDelay;
   Completer<void>? expiredResumeStarted;
@@ -100,11 +102,15 @@ class Host {
 
   ProfileGateway gateway(WorkspaceScope scope) {
     final name = scope.profileName;
-    return gateways[name] = ProfileGateway(
+    late final ProfileGateway gateway;
+    gateway = ProfileGateway(
       scope: scope,
       discover: discover,
       connect: () async {
-        connectCalls++;
+        if (gateway.onEvent != null) {
+          gateways[name] = gateway;
+          connectCalls++;
+        }
         await connectDelay?.future;
         if (connectError != null) throw connectError!;
         if (connectFailures > 0) {
@@ -112,7 +118,9 @@ class Host {
           throw TimeoutException('Network is waking up');
         }
       },
-      close: () => closed.add(name),
+      close: () {
+        if (gateway.onEvent != null) closed.add(name);
+      },
       disconnect: () => disconnectCalls++,
       get: (path, query) async {
         reads.add((path, query));
@@ -266,7 +274,15 @@ class Host {
             'inflight': inflight,
             'open_requests': approvalOpenRequests,
             'todo_state': todoState,
-            'info': {'profile_name': name},
+            'info': {
+              'profile_name': name,
+              if (!omitCreatedCwd)
+                'cwd':
+                    createdCwdOverride ??
+                    (params['cwd_explicit'] == true
+                        ? params['cwd']
+                        : '/$name/profile-default'),
+            },
           };
         }
         if (method == 'projects.create') {
@@ -277,6 +293,7 @@ class Host {
         return {};
       },
     );
+    return gateway;
   }
 
   void event(
@@ -624,6 +641,12 @@ void main() {
         host.calls.lastWhere((call) => call.$2 == 'session.create').$3['cwd'],
         project['primary_path'],
       );
+      expect(
+        host.calls
+            .lastWhere((call) => call.$2 == 'session.create')
+            .$3['cwd_explicit'],
+        isTrue,
+      );
       expect(await store.read(profileName: 'a', sessionId: 'same'), isNull);
       final migrated = await store.read(
         profileName: 'a',
@@ -646,6 +669,129 @@ void main() {
       );
     },
   );
+
+  // Stock contract inspected at f42f579cf8bac4918ac9599bece71618afadd846:
+  // session_workdir._completion_cwd and methods_session._create_session.
+  test(
+    'profile chat inherits its directory without explicit provenance',
+    () async {
+      final chat = await controller.createChat();
+      final params = host.calls
+          .lastWhere((call) => call.$2 == 'session.create')
+          .$3;
+      expect(params['cwd_explicit'], isFalse);
+      expect(params.containsKey('cwd'), isFalse);
+      expect(chat.projectId, isNull);
+    },
+  );
+
+  test(
+    'inherited cwd keeps provenance even when it names a project path',
+    () async {
+      final response = await controller.current!.gateway.createSession(
+        cwd: '/a',
+        cwdExplicit: false,
+      );
+      final params = host.calls
+          .lastWhere((call) => call.$2 == 'session.create')
+          .$3;
+      expect(params['cwd'], '/a');
+      expect(params['cwd_explicit'], isFalse);
+      expect(response['info']['cwd'], '/a/profile-default');
+    },
+  );
+
+  test('project chat chooses its directory over the profile default', () async {
+    final project = controller.current!.projects.single;
+    final chat = await controller.createChat(inProject: project);
+    final params = host.calls
+        .lastWhere((call) => call.$2 == 'session.create')
+        .$3;
+    expect(params['cwd'], '/a');
+    expect(params['cwd_explicit'], isTrue);
+    expect(chat.projectId, project['id']);
+  });
+
+  test('project directory permits stock lexical normalization', () async {
+    final project = controller.current!.projects.single;
+    project['primary_path'] = '/a/./';
+    host.createdCwdOverride = '/a';
+    final chat = await controller.createChat(inProject: project);
+    expect(chat.projectId, project['id']);
+  });
+
+  for (final missingAcknowledgement in [false, true]) {
+    test(
+      'project chat refuses ${missingAcknowledgement ? 'missing' : 'different'} acknowledged directory',
+      () async {
+        final project = controller.current!.projects.single;
+        host.createdCwdOverride = '/a/profile-default';
+        host.omitCreatedCwd = missingAcknowledgement;
+        await expectLater(
+          controller.createChat(inProject: project),
+          throwsStateError,
+        );
+        expect(controller.current!.chats, isEmpty);
+        expect(controller.current!.selectedSession, isNull);
+        expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      },
+    );
+  }
+
+  test('project without a directory refuses creation before RPC', () async {
+    final project = controller.current!.projects.single;
+    project['primary_path'] = null;
+    await expectLater(
+      controller.createChat(inProject: project),
+      throwsStateError,
+    );
+    expect(host.sessionCreates, 0);
+    expect(controller.current!.chats, isEmpty);
+  });
+
+  for (final unavailablePath in [false, true]) {
+    test(
+      'expired project draft stays put when destination ${unavailablePath ? 'is unavailable' : 'disagrees'}',
+      () async {
+        final project = controller.current!.projects.single;
+        final chat = await controller.createChat(inProject: project);
+        final oldKey = chat.key;
+        await controller.updateDraft(chat, 'Keep this project draft');
+        host.expireUnsubmittedResume = true;
+        if (!unavailablePath) {
+          host.createdCwdOverride = '/a/profile-default';
+        }
+        await controller.navigateProfile('a');
+        if (unavailablePath) {
+          // Navigation reloads project metadata; change the current snapshot.
+          controller.current!.projects.single['primary_path'] = null;
+        }
+        await expectLater(
+          controller.openSession(oldKey, recoverExpiredDraft: true),
+          throwsStateError,
+        );
+        expect(chat.key, oldKey);
+        expect(chat.runtimeId, 'a-runtime');
+        expect(chat.projectId, project['id']);
+        expect(chat.draft, 'Keep this project draft');
+        expect(controller.current!.chats.keys, ['same']);
+        final store = ComposerDraftStore(
+          preferences,
+          connectionIdentity: 'original-settings',
+        );
+        expect(
+          (await store.read(profileName: 'a', sessionId: 'same'))?.text,
+          'Keep this project draft',
+        );
+        expect(
+          await store.read(profileName: 'a', sessionId: 'replacement'),
+          isNull,
+        );
+        expect(host.sessionCreates, unavailablePath ? 1 : 2);
+        expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      },
+    );
+  }
 
   test(
     'unknown resume failure does not replace an unsubmitted runtime',

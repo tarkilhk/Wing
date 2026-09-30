@@ -9,7 +9,7 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_connection_identity.dart';
 import 'package:wing/core/services/profile_selection_store.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
-import 'package:wing/core/utils/message_content.dart';
+import 'support/message_content.dart';
 
 const _port = int.fromEnvironment('HERMES_TEST_PORT');
 

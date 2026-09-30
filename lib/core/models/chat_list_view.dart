@@ -87,6 +87,23 @@ String compactTokens(num value) => value >= 1000000
     ? '${(value / 1000).toStringAsFixed(1)}k'
     : '$value';
 
+/// Dates are already interpreted in the phone's timezone. Compare their
+/// calendar components, so a 23- or 25-hour DST day still counts as one day.
+String chatDateBucket(DateTime date, {required DateTime now}) {
+  final days = DateTime.utc(
+    now.year,
+    now.month,
+    now.day,
+  ).difference(DateTime.utc(date.year, date.month, date.day)).inDays;
+  return days <= 0
+      ? 'Today'
+      : days == 1
+      ? 'Yesterday'
+      : days < 7
+      ? 'Previous 7 days'
+      : 'Older';
+}
+
 class ChatListEntry {
   const ChatListEntry({
     required this.owner,
@@ -212,18 +229,7 @@ ChatListGroup _chatGroup(
     final date = DateTime.fromMillisecondsSinceEpoch(
       (chatUpdated(entry.row) * 1000).round(),
     );
-    final days = DateTime(
-      today.year,
-      today.month,
-      today.day,
-    ).difference(DateTime(date.year, date.month, date.day)).inDays;
-    return days <= 0
-        ? 'Today'
-        : days == 1
-        ? 'Yesterday'
-        : days < 7
-        ? 'Previous 7 days'
-        : 'Older';
+    return chatDateBucket(date, now: today);
   }
 
   final (key, label) = switch (grouping) {

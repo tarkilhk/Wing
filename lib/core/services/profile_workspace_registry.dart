@@ -1,6 +1,8 @@
 // Keep the factory's named argument public without exposing mutable state.
 // ignore_for_file: prefer_initializing_formals
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'connection_manager.dart';
@@ -22,6 +24,9 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
   bool _closed = false;
   bool _hasActiveChats = false;
   String _monitoringFingerprint = '';
+  Set<String>? _configuredIdentities;
+  int _configurationGeneration = 0;
+  Timer? _retirement;
 
   Map<String, String> get monitoringSummary {
     final chats = _controllers.values.expand(
@@ -38,6 +43,7 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
 
   void _activityChanged() {
     if (_closed) return;
+    _scheduleRetirement();
     final active = _controllers.values.any((owner) => owner.hasActiveChats);
     final fingerprint = '$active:$monitoringSummary';
     if (_monitoringFingerprint == fingerprint) return;
@@ -51,6 +57,47 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
     required ProfileControllerFactory create,
   }) : _create = create;
 
+  /// Reconcile the exact saved configuration, independently of notification
+  /// lookups. A request for an old chat never makes its owner current again.
+  Future<void> reconcileConnections(
+    Iterable<SavedConnection> connections,
+  ) async {
+    final generation = ++_configurationGeneration;
+    final identities = await Future.wait(
+      connections.map(this.identities.resolve),
+    );
+    if (_closed || generation != _configurationGeneration) return;
+    _configuredIdentities = identities.toSet();
+    _retireSettledOwners();
+  }
+
+  void _scheduleRetirement() {
+    if (_configuredIdentities == null || _retirement != null) return;
+    // Leave the caller's await continuation time to initialize or mount a new
+    // owner. Never dispose inside an owner's notification callback.
+    _retirement = Timer(Duration.zero, () {
+      _retirement = null;
+      _retireSettledOwners();
+    });
+  }
+
+  void _retireSettledOwners() {
+    if (_closed || _configuredIdentities == null) return;
+    var removed = false;
+    for (final entry in _controllers.entries.toList()) {
+      if (_configuredIdentities!.contains(entry.key) ||
+          entry.value.hasRetentionObligations) {
+        continue;
+      }
+      _controllers.remove(entry.key);
+      entry.value.removeListener(_activityChanged);
+      entry.value.retentionChanges.removeListener(_activityChanged);
+      entry.value.dispose();
+      removed = true;
+    }
+    if (removed) _activityChanged();
+  }
+
   Future<ProfileWorkspaceController> forConnection(
     SavedConnection connection,
   ) async {
@@ -59,6 +106,7 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
     final controller = _controllers.putIfAbsent(identity, () {
       final owner = _create(connection, identity);
       owner.addListener(_activityChanged);
+      owner.retentionChanges.addListener(_activityChanged);
       return owner;
     });
     _activityChanged();
@@ -85,6 +133,7 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
 
   void recoverConnections() {
     if (_closed) return;
+    _retireSettledOwners();
     for (final owner in _controllers.values) {
       if (owner.initialized ||
           owner.recovering ||
@@ -98,8 +147,10 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
   void dispose() {
     if (_closed) return;
     _closed = true;
+    _retirement?.cancel();
     for (final controller in _controllers.values) {
       controller.removeListener(_activityChanged);
+      controller.retentionChanges.removeListener(_activityChanged);
       controller.dispose();
     }
     _controllers.clear();

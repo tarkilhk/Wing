@@ -53,10 +53,14 @@ class _BackgroundHost extends Host {
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
-    return gateways[scope.profileName] = ProfileGateway(
+    late final ProfileGateway gateway;
+    gateway = ProfileGateway(
       scope: scope,
       discover: base.discover,
-      connect: base.connect,
+      connect: () async {
+        if (gateway.onEvent != null) gateways[scope.profileName] = gateway;
+        await base.connect();
+      },
       close: base.close,
       get: base.read,
       rpc: (method, params) async {
@@ -83,6 +87,7 @@ class _BackgroundHost extends Host {
         return result;
       },
     );
+    return gateway;
   }
 }
 

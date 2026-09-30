@@ -54,9 +54,14 @@ class CommandHost extends Host {
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
-    final gateway = ProfileGateway(
+    late final ProfileGateway gateway;
+    gateway = ProfileGateway(
       scope: scope,
       discover: discover,
+      connect: () async {
+        if (gateway.onEvent != null) gateways[scope.profileName] = gateway;
+        await base.connect();
+      },
       get: (endpoint, query) async {
         final result = await base.read(endpoint, query);
         if (!endpoint.endsWith('/messages') || historyMessages != null) {
@@ -88,11 +93,14 @@ class CommandHost extends Host {
           return await backgroundRespond?.call(params) ??
               {'task_id': backgroundTaskIds.removeAt(0)};
         }
-        // Stock CompleteSlashParams forbids profile; session_id owns the scope.
-        // Verified at upstream 5458de948379badc5b84ba624dc029367a28ece4:
+        // Stock accepts text plus session_id/profile; an owned runtime supplies
+        // the profile/workspace, so no additional profile is needed here.
+        // Verified at upstream f42f579cf8bac4918ac9599bece71618afadd846:
         // tui_gateway/contracts/profiles_vault_complete_foreign_subagents.py.
         if (method == 'complete.slash') {
-          if (params.keys.any((key) => !{'text', 'session_id'}.contains(key))) {
+          if (params.keys.any(
+            (key) => !{'text', 'session_id', 'profile'}.contains(key),
+          )) {
             throw JsonRpcError(
               method,
               'Extra inputs are not permitted',
@@ -126,7 +134,6 @@ class CommandHost extends Host {
         return result;
       },
     );
-    gateways[scope.profileName] = gateway;
     return gateway;
   }
 }

@@ -29,7 +29,9 @@ class ProfileBrowserFixture {
   List<Map<String, dynamic>> projectSessions(String profile, String id) =>
       sessions(profile)
           .where(
-            (r) => r['id'] == (profile == 'work' ? 'newest' : 'project-only'),
+            (r) =>
+                id == (profile == 'work' ? 'work-project' : 'p2') &&
+                r['id'] == (profile == 'work' ? 'newest' : 'project-only'),
           )
           .toList();
   List<Map<String, dynamic>> projects(String profile) => profile == 'work'
@@ -202,19 +204,32 @@ class ProfileBrowserFixture {
       }
       if (method == 'projects.tree') {
         if (failProjects) throw StateError('Projects unavailable');
+        final projectRows = projects(scope.profileName);
+        final assignedIds = {
+          for (final project in projectRows)
+            if (project['isNoProject'] != true)
+              ...project.containsKey('sessionIds')
+                  ? project['sessionIds'] as List
+                  : projectSessions(
+                      scope.profileName,
+                      project['id'] as String,
+                    ).map((row) => row['id']),
+        };
         return {
           'projects': [
-            for (final project in projects(scope.profileName))
+            for (final project in projectRows)
               {
                 ...project,
                 if (!project.containsKey('sessionIds'))
-                  'sessionIds':
-                      project['id'] == 'p2' || project['id'] == 'work-project'
-                      ? projectSessions(
+                  'sessionIds': project['isNoProject'] == true
+                      ? sessions(scope.profileName)
+                            .where((row) => !assignedIds.contains(row['id']))
+                            .map((row) => row['id'])
+                            .toList()
+                      : projectSessions(
                           scope.profileName,
                           project['id'] as String,
-                        ).map((r) => r['id']).toList()
-                      : <String>[],
+                        ).map((row) => row['id']).toList(),
               },
           ],
         };
@@ -243,7 +258,10 @@ class ProfileBrowserFixture {
           'session_id': 'runtime',
           'stored_session_id': 'new-chat',
           'messages': [],
-          'info': {'profile_name': scope.profileName},
+          'info': {
+            'profile_name': scope.profileName,
+            if (method == 'session.create') 'cwd': params['cwd'] ?? '/default',
+          },
         };
       }
       return {};

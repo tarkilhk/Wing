@@ -189,122 +189,125 @@ class _ProjectDialogState extends State<_ProjectDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    scrollable: true,
-    title: Text(switch (widget.action) {
-      _ProjectAction.rename => 'Rename project',
-      _ProjectAction.appearance => 'Project appearance',
-      _ProjectAction.delete => 'Delete project?',
-    }),
-    content: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (widget.action == _ProjectAction.rename)
-          TextField(
-            key: const ValueKey('project-name-field'),
-            controller: _name,
-            autofocus: true,
-            enabled: !_submitting,
-            maxLength: 200,
-            onSubmitted: (_) => _save(),
-            decoration: const InputDecoration(labelText: 'Project name'),
-          )
-        else if (widget.action == _ProjectAction.appearance) ...[
-          const Text('Color'),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _ChoiceButton(
-                key: const ValueKey('project-color-none'),
-                selected: _color.isEmpty,
-                label: 'Default color',
-                onPressed: _submitting
-                    ? null
-                    : () => setState(() => _color = ''),
-                child: const Icon(Icons.block, size: 20),
-              ),
-              for (var index = 0; index < _projectColors.length; index++)
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_submitting,
+    child: AlertDialog(
+      scrollable: true,
+      title: Text(switch (widget.action) {
+        _ProjectAction.rename => 'Rename project',
+        _ProjectAction.appearance => 'Project appearance',
+        _ProjectAction.delete => 'Delete project?',
+      }),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.action == _ProjectAction.rename)
+            TextField(
+              key: const ValueKey('project-name-field'),
+              controller: _name,
+              autofocus: true,
+              enabled: !_submitting,
+              maxLength: 200,
+              onSubmitted: (_) => _save(),
+              decoration: const InputDecoration(labelText: 'Project name'),
+            )
+          else if (widget.action == _ProjectAction.appearance) ...[
+            const Text('Color'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
                 _ChoiceButton(
-                  key: ValueKey('project-color-$index'),
-                  selected: _color == _projectColors[index],
-                  label: 'Color ${index + 1}',
+                  key: const ValueKey('project-color-none'),
+                  selected: _color.isEmpty,
+                  label: 'Default color',
                   onPressed: _submitting
                       ? null
-                      : () => setState(() => _color = _projectColors[index]),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: _parseProjectColor(_projectColors[index]),
-                      shape: BoxShape.circle,
+                      : () => setState(() => _color = ''),
+                  child: const Icon(Icons.block, size: 20),
+                ),
+                for (var index = 0; index < _projectColors.length; index++)
+                  _ChoiceButton(
+                    key: ValueKey('project-color-$index'),
+                    selected: _color == _projectColors[index],
+                    label: 'Color ${index + 1}',
+                    onPressed: _submitting
+                        ? null
+                        : () => setState(() => _color = _projectColors[index]),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: _parseProjectColor(_projectColors[index]),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const SizedBox.square(dimension: 20),
                     ),
-                    child: const SizedBox.square(dimension: 20),
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          const Text('Icon'),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _ChoiceButton(
-                key: const ValueKey('project-icon-none'),
-                selected: _icon.isEmpty,
-                label: 'Default icon',
-                onPressed: _submitting
-                    ? null
-                    : () => setState(() => _icon = ''),
-                child: const Icon(Icons.folder_outlined, size: 20),
-              ),
-              for (final entry in _projectIcons.entries)
+              ],
+            ),
+            const SizedBox(height: 20),
+            const Text('Icon'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
                 _ChoiceButton(
-                  key: ValueKey('project-icon-${entry.key}'),
-                  selected: _icon == entry.key,
-                  label: entry.key,
+                  key: const ValueKey('project-icon-none'),
+                  selected: _icon.isEmpty,
+                  label: 'Default icon',
                   onPressed: _submitting
                       ? null
-                      : () => setState(() => _icon = entry.key),
-                  child: Icon(entry.value, size: 20),
+                      : () => setState(() => _icon = ''),
+                  child: const Icon(Icons.folder_outlined, size: 20),
                 ),
-            ],
-          ),
-        ] else
-          Text(
-            'Remove "${widget.initialName}" from Hermes? Its chats will remain in Recents and All chats. Files on the host will not be deleted.',
-          ),
-        if (_error != null) ...[
-          const SizedBox(height: 12),
-          StudioError(_error!),
+                for (final entry in _projectIcons.entries)
+                  _ChoiceButton(
+                    key: ValueKey('project-icon-${entry.key}'),
+                    selected: _icon == entry.key,
+                    label: entry.key,
+                    onPressed: _submitting
+                        ? null
+                        : () => setState(() => _icon = entry.key),
+                    child: Icon(entry.value, size: 20),
+                  ),
+              ],
+            ),
+          ] else
+            Text(
+              'Remove "${widget.initialName}" from Hermes? Its chats will remain in Recents and All chats. Files on the host will not be deleted.',
+            ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            StudioError(_error!),
+          ],
         ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: ValueKey(switch (widget.action) {
+            _ProjectAction.rename => 'project-rename-save',
+            _ProjectAction.appearance => 'project-appearance-save',
+            _ProjectAction.delete => 'project-delete-confirm',
+          }),
+          style: widget.action == _ProjectAction.delete
+              ? FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                )
+              : null,
+          onPressed: _submitting ? null : _save,
+          child: StudioActionLabel(
+            widget.action == _ProjectAction.delete ? 'Delete' : 'Save',
+            busy: _submitting,
+          ),
+        ),
       ],
     ),
-    actions: [
-      TextButton(
-        onPressed: _submitting ? null : () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        key: ValueKey(switch (widget.action) {
-          _ProjectAction.rename => 'project-rename-save',
-          _ProjectAction.appearance => 'project-appearance-save',
-          _ProjectAction.delete => 'project-delete-confirm',
-        }),
-        style: widget.action == _ProjectAction.delete
-            ? FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-              )
-            : null,
-        onPressed: _submitting ? null : _save,
-        child: StudioActionLabel(
-          widget.action == _ProjectAction.delete ? 'Delete' : 'Save',
-          busy: _submitting,
-        ),
-      ),
-    ],
   );
 }
 

@@ -4,6 +4,12 @@ enum SessionVisibility {
   chats,
   all;
 
+  /// This display preference follows the saved connection across sign-ins.
+  /// Authenticated workspace ownership continues to use its separate identity.
+  static const preferencePrefix = 'session_visibility_v2_';
+  static String preferenceKey(String connectionId) =>
+      '$preferencePrefix$connectionId';
+
   static const automatedSources = {
     'cron',
     'tool',

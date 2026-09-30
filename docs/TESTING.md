@@ -11,7 +11,51 @@ Keep logs and generated captures under ignored `build/`. Record source revision,
 For CPU attribution, input latency, thermal load and battery investigations, use
 the [performance procedure](PERFORMANCE.md) and its repeatable phone recorder.
 
+## Continuous checks
+
+PRs and pushes to `main` run Dart analysis, host Flutter tests, a debug Android
+APK build, and native JVM boundary tests. Android checks use Flutter 3.44.0,
+Temurin Java 17, SDK platform 36, build-tools 36.0.0 and the project's pinned
+Gradle distribution. The debug build uses the development application ID and
+Android's generated debug key; it requires no production signing secrets.
+Native JVM tests exercise the actual notification identity and shared-content
+URI boundary code, but do not emulate Android intents, permissions or WebView.
+
+After `flutter pub get` and `flutter build apk --debug --no-pub`, run the JVM
+tests from the checkout root:
+
+```sh
+./android/gradlew -p android :app:testDebugUnitTest --no-daemon
+```
+
+The Flutter build prepares the local Android wrapper and SDK properties for a
+fresh checkout. Run Android builds and tests sequentially.
+
+After native integration runs, use `flutter build apk --release` with its
+normal pub step. Using `--no-pub` across that mode change can retain the
+integration-only generated plugin registrant while the release dependency graph
+excludes that plugin. The release script and workflow already omit `--no-pub`;
+regenerate through the supported build command rather than adding a test plugin
+to the production dependency graph.
+
+A separate PR job runs the actual Mermaid/SVG/HTML isolation harness using
+Node 22.23.3, locked Playwright Core 1.58.2 and its pinned Chromium. The release
+workflow reuses the same renderer action and runs native JVM tests before APK
+publication. Both fail on test errors. Follow the reproducible commands in
+[Diagram previews](DIAGRAM_PREVIEWS.md#verification-after-an-update); browser
+checks establish desktop Chromium enforcement and require separate Android
+WebView acceptance on a disposable emulator.
+
 ## Useful test entry points
+
+For ordinary-app startup acceptance, install the normal debug APK on a fresh
+disposable emulator, then deny Notifications and Microphone in Android's actual
+permission dialogs. Confirm the welcome screen and connection setup remain
+usable. Force-stop only `com.tarkilhk.wing.dev`, launch it again, and verify both
+permissions remain denied without repeated prompts. Capture the rendered welcome
+and setup screens. This uses the production entry point, without a fixture APK;
+a previous integration target's settings are not a fresh-install test. Never
+clear a personal installation to obtain this state.
 
 For Android task reentry, run
 `python3 tools/qa/check_activity_reentry.py --serial <device-id> --package <installed-package>`
@@ -43,10 +87,56 @@ It navigates the real app but does not send messages or modify settings.
 
 Read a driver's environment flags, mutations and cleanup before running it. Use disposable profiles/chats and owned fixtures on an authorized server. Live tests may invoke models, modify profile settings or start host tools. Restore changed values and independently verify cleanup; a green assertion that records `backend_limited` is not successful feature acceptance.
 
+For an existing password-protected dashboard, the read-only host checks use
+normal sign-in, profile discovery, scoped administration catalogs and a
+single-use WebSocket ticket with liveness/capability RPCs. Put `username` and
+`password` in a temporary JSON file outside the repository with mode `0600`,
+then provide its path at runtime:
+
+```bash
+WING_HERMES_URL='https://<dashboard-host>' WING_HERMES_LOGIN_FILE=/path/to/private-login.json flutter test --no-pub test/existing_backend_readonly_live_test.dart
+```
+
+The corresponding installed Android journey reads its credential file from
+the disposable emulator's private app cache. Install the development package
+first, copy the file into its cache using `adb shell run-as com.tarkilhk.wing.dev`,
+and run:
+
+```bash
+flutter test --no-pub integration_test/administration_existing_server_live_test.dart -d '<emulator-id>' --no-uninstall --dart-define='WING_HERMES_URL=https://<dashboard-host>' --dart-define=WING_HERMES_LOGIN_FILE=/data/user/0/com.tarkilhk.wing.dev/cache/wing-hermes-login.json
+```
+
+Only the URL and file path enter Dart defines; credentials remain runtime data.
+Remove both temporary credential files after the run, including on failure.
+The journey opens Administration and Versions & updates, verifies the reachable
+Hermes health drawer entry, then closes the drawer without entering Health.
+Health entry automatically starts missing/expired Doctor and security-audit
+operations and profile checks, so its interactive coverage belongs to the
+isolated native fixtures. These existing-server checks create no chats, invoke
+no models and change no profile settings or server operations.
+
+`integration_test/existing_server_chat_probe_test.dart` is a separate optional
+model test, disabled unless `--dart-define=RUN_MODEL=true` is supplied. Obtain
+explicit approval for its model/backend side effects before enabling it. It uses
+the same runtime URL/credential-file defines, creates one owned QA chat, sends
+one prompt, and deletes only that exact chat after confirmed idleness. It does
+not change shared profile settings or accept pending approvals. Current stock
+has no per-chat toolset override, so the test inherits the profile's tools,
+context and memory; the prompt's instruction cannot guarantee zero tool calls.
+Read its cleanup guards and limits before execution.
+
 After installing an APK on an emulator, run `python3 tools/qa/check_launcher_shortcut.py --serial <emulator-id> --package com.tarkilhk.wing.dev` (use `com.tarkilhk.wing` for release or signed development builds). This read-only check verifies Android's registered Quick Chat, Activity and Search chats intents and resolves their activity. Gradle generates `xml/shortcuts.xml` from `android/app/src/main/shortcuts.xml.template` using each variant's application ID; intent targets must be literal package names because Android parses them with system resources. Flutter tests cover the subsequent cold/warm launch handoff, destination routing, search focus and draft preservation.
 
 Configuration backup's native test runs with
 `flutter test integration_test/config_backup_native_test.dart -d <emulator-id> --no-uninstall --dart-define=CONFIG_BACKUP_NATIVE=true`.
+For an automated emulator run, use
+`python3 scripts/test_native_config_backup.py --device <emulator-id>`.
+The driver builds a disposable SDK-only share receiver, starts the Flutter test,
+selects that receiver in the actual Android share sheet, saves to Downloads through
+DocumentsUI, and selects the saved document for every restore attempt. It compares
+saved bytes with the real exported cache file and removes its helper and owned
+files afterward. XML, screenshots, Flutter logs and acceptance results go under
+`build/native-backup-review/`; SDK 36/JDK 17 paths can be passed explicitly.
 Use a disposable emulator with a local file-saving share target. At each share
 sheet, save the file to Downloads; at each document picker, select the file just
 exported. Flutter drives the app's dialogs, including the wrong-passphrase
@@ -55,6 +145,17 @@ identifies each native step for a host UI driver. It uses isolated real Android
 preferences and Keystore namespaces, synthetic connection credentials and no
 backend. Coverage includes plain Merge, encrypted Replace, restored settings in
 the current screen, and persisted credentials read through a new storage client.
+
+For native file/photo selection and cancellation plus outgoing share-sheet
+cancellation, run
+`python3 scripts/test_native_file_transfer.py --device <emulator-id> --output build/native-file-transfer-review`.
+The driver uses synthetic owned files, runs seven Flutter tests while handling
+six native picker/share steps, and verifies owned file/cache cleanup. For the
+separate inbound URI boundary, build/install the isolated notification QA target
+above, launch it with empty native intake, then run
+`python3 tools/qa/check_external_share.py --serial <emulator-id>`.
+Its SDK-only foreign-UID helper tests file/self-provider origins, missing read
+grants, mixed batches and exact granted bytes without opening rejected providers.
 
 For a compatible local backend/emulator, the basic connection pattern is:
 
@@ -65,13 +166,50 @@ flutter test integration_test/backend_acceptance_live_test.dart -d <emulator-id>
 
 That driver requires the disposable profile/skill/provider setup documented in its source. `remaining_product_live_test.dart` additionally uses an owned empty repository through `QA_APPROVAL_REPO` and the dummy vault page in `integration_test/fixtures/vault/`. Do not point destructive approval fixtures at a real project. Serve the dummy page on loopback only. The stock secret-expiry case takes five minutes; a shorter fixture is not equivalent evidence.
 
+`integration_test/profile_expansion_scroll_test.dart` runs transcript expansion,
+search, pagination/retry, reading anchors and streaming follow/reading regressions
+on Android with local gateways. Run it on the disposable emulator with ordinary
+`flutter test --no-pub ... -d <emulator-id> --no-uninstall` flags. It writes PNG captures to the development package's external files directory;
+pull and inspect normal/enlarged text in both themes. Native interaction tests and their captures do not measure frame/input
+latency or model streaming from a live server.
+
+For broad installed-app journeys through chats/projects, input and approvals,
+context usage, administration/Identity, versions, health, provider access and
+answer branches, run:
+
+```sh
+flutter test --no-pub integration_test/roadmap_emulator_test.dart -d <emulator-id> --no-uninstall --dart-define=JOURNEY_THEME=light --dart-define=CAPTURE_JOURNEYS=true
+```
+
+`--no-uninstall` is required to retain the captures after the test ends. Copy
+all paths printed as `Journey frame` from the development package's code cache
+before any next install, then repeat with `JOURNEY_THEME=dark` and copy that set.
+A new install can also clear code cache. The suite uses local gateways, populated
+usage data with unknown/partial annotations, stock-shaped Doctor/Audit fixtures
+and intentional incomplete profile checks. It sends no live backend operations;
+fixture success does not establish actual provider/health operation access.
+
 For Studio captures, use `--dart-define=STUDIO_REVIEW=true` and the font setup described in the render test. Administration captures use `CAPTURE_ADMINISTRATION` and `CAPTURE_FONT_DIR`. Generated widgets and reserved keyboard insets are not screenshots of an installed app or its actual keyboard.
+
+The Studio renderer sets actual view metrics at DPR 1 and checks the inherited
+viewport width. Its conversation fixture loads saved history and model metadata
+through the controller's normal reads, then sends a context-usage event. Before
+exporting, it asserts the title, assistant content, absent empty greeting and
+the appropriate inline or stacked scope header. The Teal phone captures cover
+360×800 dp at normal text and 320×800 dp at 200% in both themes:
+
+```sh
+flutter test --no-pub --dart-define=STUDIO_REVIEW=true test/studio_layout_test.dart --name '(light|dark) mint at width (360.0|320.0)'
+```
 
 Connection journey renders use `test/connection_setup_screen_test.dart` with
 `--dart-define=CAPTURE_CONNECTION_SETUP=true` and
 `--dart-define=CAPTURE_FONT_DIR=<Flutter SDK>/bin/cache/artifacts/material_fonts`.
 Captures go under `build/connection-review/`. The transport test uses a disposable
 local HTTP/WebSocket server and sends no model message.
+The 320×640 dp journey includes the Custom setup chat address in empty, focused,
+filled and invalid states at 100% and 200% text in both themes. Run that capture
+matrix with `--name 'journey fits 320dp'`.
 
 Scheduled-task renders use `test/scheduled_tasks_screens_test.dart` with
 `--dart-define=CAPTURE_SCHEDULED_TASKS=true` and
@@ -114,18 +252,27 @@ Markdown report. Check Rendered/Source, Back, save/cancel and the saved bytes;
 restore the normal debug APK afterward. This establishes native UI and file
 delivery behavior, not access to a live server's files.
 
-Large HTML checks use `scripts/test-diagram-preview.mjs` (Node 22 or newer,
-`PLAYWRIGHT_CORE_PATH` and `CHROME_PATH`) to render and interact with 2, 8 and
-32 MiB documents and verify isolation. The offline Android debug entry point
+Large HTML checks use `scripts/test-diagram-preview.mjs` with the
+[pinned browser test setup](DIAGRAM_PREVIEWS.md#verification-after-an-update)
+to render and interact with 2, 8 and 32 MiB documents and verify isolation.
+The offline Android debug entry point
 `integration_test/large_html_native_preview.dart` opens a complete 32 MiB fixture
 through the production HTML screen. Build it for a disposable emulator, install
 with `adb install -r`, and launch `com.tarkilhk.wing.dev`.
 Forward a local port to that app process's `webview_devtools_remote_<pid>` socket,
-then run `scripts/check-large-html-native.mjs` with `PLAYWRIGHT_CORE_PATH` and
-`WING_CDP_ENDPOINT=http://127.0.0.1:<forwarded-port>`. It verifies content at the end
-of the full document, clicks a report control, checks the sandbox and captures
-the actual WebView under `build/large-html-review/`. This proves native rendering
-of the fixture, not access to the user's real report. Restore the normal debug
+then run `WING_ADB_SERIAL=<emulator-id> WING_CDP_ENDPOINT=http://127.0.0.1:<forwarded-port> node scripts/check-large-html-native.mjs`
+with Node 22. The harness connects directly to that WebView page's debug socket;
+it uses the parent and report's existing default execution contexts, without
+creating browser contexts or granting cross-origin access. It verifies content
+at the end of the full document, sends a real input click to a report control,
+checks the sandbox and parent/storage isolation, and captures the actual WebView
+under `build/large-html-review/`. Network checks create an owned bounded ADB
+reverse to a loopback HTTP probe: the same emulator must receive a complete
+HTTP 200 control response, while the sandbox's fetch/image probes must fail with
+enforced connect-src/img-src violations and zero probe-server hits. A successful
+run writes `native-http-isolation.json` alongside the screenshot. It rejects
+physical-device serials and removes its owned reverse; remove the CDP forward
+afterward. This proves fixture behavior, not access to the user's real report. Restore the normal debug
 APK after using the fixture on a persistent development device.
 
 ## Voice acceptance
@@ -133,6 +280,15 @@ APK after using the fixture on a persistent development device.
 Voice host tests cover all four Local/Hermes input/output combinations, preference
 persistence and failed saves, profile-scoped authentication, stale callbacks,
 permissions, draft insertion without sending, read-aloud prose, and cancellation.
+For automated offline emulator acceptance, run
+`python3 scripts/test_native_voice.py --device <emulator-id> --output build/native-voice-review`.
+Install the development package first. The driver rejects physical devices,
+resets only that package's microphone permission flags, handles the actual
+Android deny/grant dialogs and Home cancellation, then runs native recording,
+playback and installed offline TTS tests sequentially. It records capabilities,
+callback timings, screenshots and cache cleanup; it does not establish speech
+quality or exercise Hermes voice providers.
+
 Run settings/composer renders with `--dart-define=VOICE_REVIEW=true` and
 `--dart-define=CAPTURE_FONT_DIR=<Flutter SDK>/bin/cache/artifacts/material_fonts`.
 Inspect `build/voice-review/` in both themes at 320 dp and 200% text.
@@ -198,9 +354,9 @@ states. Runtime captures include retained results and supported next steps. Pend
 applied Identity writes use explicit fixture responses.
 
 Native tests exercise a semantics tap, the actual Android keyboard, deliberate
-remote-conflict resolution, discard protection, long Identity drafts, a canonical
-shared-account link, independent capability disclosure/toggle actions, 48 dp target
-edges and keyboard focus. A fourth journey runs a fixture Doctor, returns to the
+remote-conflict resolution, discard protection, long Identity drafts,
+profile-owned provider defaults, independent capability disclosure/toggle actions,
+48 dp target edges and keyboard focus. A fourth journey runs a fixture Doctor, returns to the
 retained failed observation, and reviews the same operation without another POST. `CAPTURE_NATIVE_ADMINISTRATION=true` adds a ten-second
 capture point after the capability checks for external `adb` screenshot/tree
 collection. This is fixture-based Android interaction evidence, not certification
@@ -216,10 +372,30 @@ adb -s emulator-5556 install --no-incremental -r -g build/app/outputs/flutter-ap
 python3 tools/qa/check_notification_revamp.py --serial emulator-5556
 ```
 
-The driver resets only `com.tarkilhk.wing.notificationqa`, rejects non-emulators,
+After the main notification journey, run
+`python3 scripts/test_native_notification_restore.py --serial <emulator-id>`
+against the same QA APK to check force-stop restoration, actual reply tap/read,
+and persisted read/dismiss state. The script resets only the QA package and
+creates a local forward on port 18767 by default; remove that owned forward
+afterward, including on failure. For collapsed/expanded counts and hidden-preview
+privacy, launch the QA fixture, forward a local port to `tcp:18766`, then run
+`python3 scripts/test_native_notification_counts.py --serial <emulator-id> --port <forwarded-port>`.
+Remove that owned forward afterward.
+
+The main driver resets only `com.tarkilhk.wing.notificationqa`, rejects non-emulators,
 uses fake Hermes transport data, and restores normal font size/light theme. It
-checks FIFO approval identity, failed submission retention, Always confirmation,
+checks rejection of forged/raw/wrong-type exported-activity inputs, FIFO approval
+identity, failed submission retention, Always confirmation,
 privacy Review, watcher-only remote resolution, latest-reply reading, and native
 100%/200% layouts in both themes. Screenshots are in `build/notification-review/`.
+
+For the first pending-input notification from a cached chat that has never been
+opened, build `integration_test/notification_cold_input_device.dart` with the same
+`ORG_GRADLE_PROJECT_notificationQa=true` QA variant, install on the disposable
+emulator, and launch the QA activity. Run
+`python3 scripts/test_native_cold_notification.py --serial <emulator-id>`.
+It verifies the full question count/text/options, Review, fresh-alert flag and
+monitoring shutdown using synthetic data. Remove its owned ADB forward and stop
+the QA fixture after the run, including on failure.
 
 For manual checks against stock Hermes, generate supported notification events one scenario at a time. Record backend outcomes separately from observations on the phone.

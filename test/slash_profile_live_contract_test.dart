@@ -27,6 +27,7 @@ void main() {
         addTearDown(gateway.close);
         await gateway.connect();
         final session = await gateway.createSession(
+          cwdExplicit: false,
           title: 'Android slash contract check',
         );
         final id = session['session_id'] as String;

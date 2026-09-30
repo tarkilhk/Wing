@@ -266,6 +266,12 @@ explicit empty/error states.
 
 ## MCP connection failures
 
+Add MCP connector keeps its draft, including credentials, only in the open form.
+Back and instance changes require discard confirmation when the form has edits;
+profile selection offers the same confirmation before replacing the editor with
+the selected profile. Cancel retains the draft and its owner. Pending setup blocks
+navigation until the request settles. No draft credentials are saved on the device.
+
 Verified the stock API against upstream main commit
 `a566d20d226a8e2ef0747639dc8a3fc1c43f9dba` on 18 September 2026.
 The profile-scoped [test route](https://github.com/NousResearch/hermes-agent/blob/a566d20d226a8e2ef0747639dc8a3fc1c43f9dba/hermes_cli/web_routers/mcp.py)
@@ -299,7 +305,7 @@ Open Profile / Scheduled tasks to manage the selected profile's routines. Each
 task shows its next run and state. The overview chooses the earliest eligible
 server timestamp separately from running/attention ordering. Its latest-run summary
 covers only tasks still listed; an ended conversation does not establish success. Tap it for instructions, delivery, model,
-last-run details and recent conversations. Search and All / Active / Paused /
+last-run details and recent runs. Search and All / Active / Paused /
 Needs attention filters affect only this list. Opening a run works independently
 of the Chats “Include automated chats” filter.
 
@@ -326,7 +332,12 @@ explicit review. Only task IDs, operation names and prior run timestamps are
 journaled locally, not instructions. Partial scheduler registration failures
 retain the saved task identity and prevent duplicate creation.
 
-Recent runs starts with 20 conversations and can expand to the latest 100.
+Recent runs starts with 20 records and can expand to the latest 100. Agent
+conversation records open the scoped chat. Script-output records show the
+returned status title, timestamp and output/error preview inline; they do not
+open a conversation. This includes output documents, terminal execution-ledger
+records and latest-run metadata. The mixed-history contract was checked against
+stock upstream `8d30c4eaabd85edb77a02fef6c5388d9344ef80c` on 30 September 2026.
 Failures remain distinct from an empty history. No task-specific Stop command,
 script upload, workflow builder or unlimited history is provided.
 
@@ -379,7 +390,7 @@ Refresh failure retains the previous observation with its last-checked time. Mal
 
 Track background actions by returned name and PID. A same-name replacement is not the original action's success. Authenticated DELETE retries must preserve the request body and report the backend's real outcome.
 
-Usage supports **1D, 7D, 30D, 90D and 365D** using profile-scoped model and daily analytics reads plus a separately cached year-wide daily read. A single band of week columns browses that year with earlier/later controls. Previously loaded periods are cached while the page remains open, and Refresh reloads year and period data. Day/grouping/measure selection makes no network requests. Daily model history and daily API-equivalent costs are explicitly unavailable; the daily token-type chart is supported. Daily records use UTC session-start dates and exclude auxiliary usage included in the model totals. A rolling N-day period can span N+1 UTC dates. The stock API and these limits were checked at `c62bd9f2078a946108f1c9d9b24bf118963277ef` on 18 September 2026.
+Usage supports **1D, 7D, 30D, 90D and 365D** using profile-scoped model and daily analytics reads plus a separately cached year-wide daily read. A single scrollable band of week columns browses a year ending at the latest returned server date. Previously loaded periods are cached while the page remains open, and Refresh reloads year and period data. Day/grouping/measure selection makes no network requests. Daily model history and daily API-equivalent costs are explicitly unavailable; the daily token-type chart is supported. Stock Hermes filters a rolling N × 24 hours, then groups session starts by server-local calendar date with per-row DST handling. It supplies no timezone or calendar cutoff dates. Wing preserves all returned date keys, including adjacent-year dates; trend counts span those keys and gaps between them have zero returned usage. Calendar padding outside the year response's recorded date span is unknown, with no invented zero counts. A separately loaded period can extend the grid without replacing year counts with period counts. The outline identifies exact dates returned for the selected period, not its calendar boundaries. First and last dates may be partial; daily records exclude auxiliary usage included in model totals. This contract was checked against stock upstream `8d30c4eaabd85edb77a02fef6c5388d9344ef80c` on 30 September 2026.
 
 For `openai-codex` only, Wing multiplies the already-uncached input, cached input and output counters by published standard OpenAI API rates. Output includes reasoning; it is not charged again. Other providers, including paid OpenAI API routes, retain Hermes's estimate. This rule uses provider identity, never a zero cost or model-name prefix.
 

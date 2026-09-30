@@ -238,17 +238,16 @@ class _UsageDashboardState extends State<UsageDashboard> {
         ),
         const SizedBox(height: 8),
         if (_yearError != null) AdminNotice.error(_yearError!),
-        if (_year != null)
+        if (_year?.days.isNotEmpty == true)
           UsageCalendar(
             daily: _year!,
-            rangeStart:
-                daily?.days.first.date ??
-                _year!.days.last.date.subtract(Duration(days: _days)),
-            rangeEnd: daily?.days.last.date ?? _year!.days.last.date,
+            periodDates: daily?.reportedDates ?? const {},
             selected: _selected,
             onSelected: (day) =>
                 setState(() => _selected = _selected == day.id ? null : day.id),
           )
+        else if (_year?.days.isEmpty == true)
+          _quiet('No recorded daily usage in the past year.')
         else
           _quiet(
             _yearLoading
@@ -494,11 +493,11 @@ class _UsageDashboardState extends State<UsageDashboard> {
     expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       _quiet(
-        'Daily charts group accumulated session tokens by UTC session-start date, not the date of each request. The first and last date can be partial days.',
+        'Daily charts use Hermes’ server-local session-start dates, not the date of each request. Hermes does not report its timezone or the calendar boundaries of the rolling period. The first and last returned date can be partial days.',
       ),
       const SizedBox(height: 8),
       _quiet(
-        'The arrows browse the past year. The outline marks UTC dates touched by the selected rolling period, including its partial first date. Day tooltips and breakdowns use the year-wide daily counts; the trend and period totals use the selected window.',
+        'Scroll to browse a year ending at the latest returned date. Blank cells outside the year’s recorded date span have no returned year data. The outline marks dates returned for the selected period, not its calendar boundaries. Day tooltips and breakdowns use the year-wide daily counts; the trend and period totals use the selected rolling window.',
       ),
       const SizedBox(height: 8),
       _quiet(

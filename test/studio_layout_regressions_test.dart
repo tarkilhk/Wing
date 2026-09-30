@@ -123,8 +123,13 @@ void main() {
             .first,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('example/long-production-model'));
+      final model = find.text('example/long-production-model');
+      await Scrollable.ensureVisible(tester.element(model), alignment: .5);
       await tester.pumpAndSettle();
+      expect(model.hitTestable(), findsOneWidget);
+      await tester.tap(model);
+      await tester.pumpAndSettle();
+      expect(find.byType(AnalyticsPage), findsOneWidget);
       expect(find.byType(BottomSheet), findsNothing);
       expect(
         find.byWidgetPredicate(

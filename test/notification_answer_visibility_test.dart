@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/notification_focus.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
@@ -110,4 +111,39 @@ void main() {
     await mount(tester);
     expect(reads, isEmpty);
   });
+
+  testWidgets(
+    'resuming a mounted chat acknowledges its visible unread answer',
+    (tester) async {
+      controller.setRouteVisibility(controller, false);
+      // A notification handoff can render the chat while the app is inactive.
+      // Flutter already enables frames in that state, so resumed alone does not
+      // request another frame to acknowledge the newly foregrounded answer.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      addTearDown(
+        () => tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        ),
+      );
+      chat.messages = [
+        {
+          'id': 1,
+          'role': 'assistant',
+          'content': 'The unread result is ready.',
+        },
+      ];
+      await tester.pumpWidget(
+        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+      expect(reads, isEmpty);
+      expect(controller.visible, isFalse);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.idle();
+      await tester.pumpAndSettle();
+      expect(controller.visible, isTrue);
+      expect(reads, ['answer:latest']);
+    },
+  );
 }

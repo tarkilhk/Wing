@@ -99,7 +99,10 @@ void main() {
       expect(backup.preferences['notification_message_previews'], true);
       expect(backup.preferences['app_text_size_preference'], 'large');
       expect(backup.preferences['voice.android_voice'], 'fr-CH-x-fra');
-      expect(backup.preferences['session_search.abc.mode'], 'ai');
+      expect(
+        backup.preferences.containsKey('session_search.abc.mode'),
+        isFalse,
+      );
     });
 
     test('never exports the raw connection list or transient state', () async {

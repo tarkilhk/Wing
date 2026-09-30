@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/models/queued_prompt_draft.dart';
 import 'package:wing/core/services/profile_connection_identity.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_workspace_registry.dart';
@@ -16,6 +18,7 @@ void main() {
   late MemoryIdentityStore secrets;
   late ProfileWorkspaceRegistry registry;
   late Map<String, Host> hosts;
+  Future<void> Function(ProfileInputNotification)? onInputs;
   ProfileWorkspaceRegistry newRegistry() => ProfileWorkspaceRegistry(
     identities: ProfileConnectionIdentity(credentialStore: secrets),
     create: (connection, identity) => ProfileWorkspaceController(
@@ -23,6 +26,7 @@ void main() {
       connectionIdentity: identity,
       preferences: prefs,
       gatewayFactory: (hosts[identity] = Host()).gateway,
+      onNotificationInputs: onInputs,
     ),
   );
   setUp(() async {
@@ -30,9 +34,156 @@ void main() {
     prefs = await SharedPreferences.getInstance();
     secrets = MemoryIdentityStore();
     hosts = {};
+    onInputs = null;
     registry = newRegistry();
   });
   tearDown(() => registry.dispose());
+
+  test(
+    'connection edit soak closes settled obsolete sockets and reconnects live owners only',
+    () async {
+      final base = identityTestConnection();
+      final observations = <int>[];
+      for (var i = 0; i < 25; i++) {
+        final connection = base.copyWith(host: 'host-$i');
+        await registry.reconcileConnections([connection]);
+        final owner = await registry.forConnection(connection);
+        await owner.initialize();
+        observations.add(registry.controllers.length);
+      }
+      expect(observations.toSet(), {1});
+      final current = registry.controllers.single;
+      final retired = hosts.entries.where(
+        (entry) => entry.key != current.connectionIdentity,
+      );
+      expect(retired.every((entry) => entry.value.closed.isNotEmpty), isTrue);
+      final reconnects = {
+        for (final entry in retired) entry.key: entry.value.connectCalls,
+      };
+      registry.recoverConnections();
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        retired.every(
+          (entry) => entry.value.connectCalls == reconnects[entry.key],
+        ),
+        isTrue,
+      );
+      await registry.reconcileConnections([]);
+      expect(registry.controllers, isEmpty);
+      expect(hosts[current.connectionIdentity]!.closed, isNotEmpty);
+    },
+  );
+
+  test(
+    'superseded and deleted owners wait for route, draft and queue leases',
+    () async {
+      final connection = identityTestConnection();
+      await registry.reconcileConnections([connection]);
+      final original = await registry.forConnection(connection);
+      await original.initialize();
+      final chat = await original.createChat();
+      final route = Object();
+      original.setRouteMounted(route, true);
+      original.setRouteVisibility(route, true);
+      await original.updateDraft(chat, 'Keep this draft');
+      original.setRouteVisibility(route, false);
+      final replacement = connection.copyWith(host: 'replacement');
+      await registry.reconcileConnections([replacement]);
+      expect(registry.controllers, contains(original));
+      expect(hosts[original.connectionIdentity]!.closed, isEmpty);
+      original.setRouteMounted(route, false);
+      await registry.reconcileConnections([]);
+      expect(registry.controllers, contains(original));
+      await original.updateDraft(chat, '');
+      chat.queuedPrompts.add(QueuedPromptDraft(text: 'Queued work'));
+      await registry.reconcileConnections([]);
+      expect(registry.controllers, contains(original));
+      chat.queuedPrompts.clear();
+      await Future<void>.delayed(Duration.zero);
+      await registry.reconcileConnections([]);
+      expect(registry.controllers, isEmpty);
+      expect(hosts[original.connectionIdentity]!.closed, isNotEmpty);
+    },
+  );
+
+  test(
+    'deleted owner waits for pending notification delivery after input resolves',
+    () async {
+      final delivery = Completer<void>();
+      onInputs = (_) => delivery.future;
+      final connection = identityTestConnection();
+      await registry.reconcileConnections([connection]);
+      final owner = await registry.forConnection(connection);
+      await owner.initialize();
+      final chat = await owner.createChat();
+      chat.approvals.add({'request_id': 'pending', 'command': 'Review'});
+      owner.showList();
+      chat.approvals.clear();
+      owner.showList();
+      await registry.reconcileConnections([]);
+      expect(registry.controllers, contains(owner));
+      expect(hosts[owner.connectionIdentity]!.closed, isEmpty);
+      delivery.complete();
+      await Future<void>.delayed(Duration.zero);
+      await registry.reconcileConnections([]);
+      expect(registry.controllers, isEmpty);
+      expect(hosts[owner.connectionIdentity]!.closed, isNotEmpty);
+    },
+  );
+
+  test(
+    'deleted owner waits for cold approval hydration and retires after failure',
+    () async {
+      final connection = identityTestConnection();
+      await registry.reconcileConnections([connection]);
+      final owner = await registry.forConnection(connection);
+      await owner.initialize();
+      final host = hosts[owner.connectionIdentity]!;
+      final connectionRead = Completer<void>();
+      host.connectDelay = connectionRead;
+      host.connectError = StateError('Approval connection failed');
+      final key = ProfileSessionKey(owner.current!.scope, 'same');
+      final hydration = owner.loadNotificationApproval(key);
+      final failed = expectLater(hydration, throwsStateError);
+      await Future<void>.delayed(Duration.zero);
+      expect(owner.findNotificationChat(key), isNull);
+      await registry.reconcileConnections([]);
+      expect(registry.controllers, contains(owner));
+      expect(host.closed, isEmpty);
+      connectionRead.complete();
+      await failed;
+      for (var i = 0; i < 20 && registry.controllers.isNotEmpty; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(registry.controllers, isEmpty);
+      expect(host.closed, isNotEmpty);
+    },
+  );
+
+  test(
+    'idle obsolete recovery timers retire while recovery owning work stays leased',
+    () async {
+      final connection = identityTestConnection();
+      await registry.reconcileConnections([connection]);
+      final idle = await registry.forConnection(connection);
+      await idle.initialize();
+      idle.networkUnavailable();
+      expect(idle.recovering, isTrue);
+      final replacement = connection.copyWith(host: 'replacement');
+      await registry.reconcileConnections([replacement]);
+      expect(registry.controllers, isEmpty);
+      expect(hosts[idle.connectionIdentity]!.closed, isNotEmpty);
+      final live = await registry.forConnection(replacement);
+      await live.initialize();
+      final chat = await live.createChat();
+      chat.status = ProfileTurnStatus.running;
+      live.networkUnavailable();
+      expect(chat.status, ProfileTurnStatus.reconnecting);
+      await registry.reconcileConnections([]);
+      expect(registry.controllers, contains(live));
+      expect(hosts[live.connectionIdentity]!.closed, isEmpty);
+    },
+  );
 
   test(
     'editing connection isolates clients, duplicate IDs, drafts and activity',

@@ -11,8 +11,11 @@ import 'package:wing/core/services/ws_client.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
+import 'support/loopback_http_fixtures.dart';
 
 void main() {
+  useRealHttpClientsForLoopbackFixtures();
+
   for (final action in ['save', 'cancel', 'timeout']) {
     testWidgets(
       'vault save-login server request shows a masked form: $action',

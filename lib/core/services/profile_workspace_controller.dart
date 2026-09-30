@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'administration_health_session.dart';
 import 'administration_repository.dart';
 
@@ -285,6 +286,12 @@ class ProfileWorkspaceData {
   int searchGeneration = 0;
   List<Map<String, dynamic>> projects = [];
   String? projectsError;
+  Map<String, String?>? _projectMembership;
+  Map<String, String> _projectMembershipLabels = {};
+  Future<void>? _projectMembershipRead;
+  int _projectMembershipGeneration = 0;
+  int _projectMembershipLimit = 0;
+  bool _projectMembershipCoverageChecked = false;
   final Map<String, ProfileChat> chats = {};
   String? selectedSession;
   Map<String, dynamic>? selectedProject;
@@ -368,6 +375,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
   // background monitoring. Keep keystrokes off the workspace-wide update path.
   final _composerChanges = ChangeNotifier();
   Listenable get composerChanges => _composerChanges;
+  final _retentionChanges = ChangeNotifier();
+  Listenable get retentionChanges => _retentionChanges;
 
   // Runtime events invalidate one browser row. A null chat means saved lists,
   // discovery, navigation or other workspace state may have changed.
@@ -447,13 +456,30 @@ class ProfileWorkspaceController extends ChangeNotifier {
   String? get error => _error ?? current?.reconnectError;
   set error(String? value) => _error = value;
   final Set<Object> _visibleRoutes = {};
+  final Map<Object, ProfileSessionKey?> _mountedRoutes = {};
   bool get visible => _visibleRoutes.isNotEmpty;
+
+  /// Visibility controls read acknowledgements; mounted routes own state even
+  /// while covered by another route or while the activity is backgrounded.
+  void setRouteMounted(Object route, bool mounted) {
+    if (_closed) return;
+    if (mounted) {
+      _mountedRoutes.putIfAbsent(route, () => current?.chat?.key);
+    } else {
+      _mountedRoutes.remove(route);
+      _visibleRoutes.remove(route);
+    }
+    _scheduleRetention();
+  }
 
   /// A covered or disposed route releases only its own visibility claim. The
   /// same retained controller can also be displayed by a notification route.
   void setRouteVisibility(Object route, bool isVisible) {
     if (isVisible) {
       _visibleRoutes.add(route);
+      if (_mountedRoutes.containsKey(route)) {
+        _mountedRoutes[route] = current?.chat?.key;
+      }
     } else {
       _visibleRoutes.remove(route);
     }
@@ -498,6 +524,136 @@ class ProfileWorkspaceController extends ChangeNotifier {
   final _uncertainNotificationRuntimes = <String>{};
   int _pendingNotifications = 0;
   int _pendingCompletions = 0;
+  int _pendingWorkspaceOperations = 0;
+  bool _retentionScheduled = false;
+  static const settledChatLimit = 20;
+
+  bool _chatOwnsWork(ProfileWorkspaceData resource, ProfileChat chat) =>
+      chat.busy ||
+      chat.activityState != null ||
+      chat.unconfirmedSubagentIds.isNotEmpty ||
+      chat.sideQuestionDeliveries.any(
+        (delivery) => delivery.state == SideQuestionDeliveryState.pending,
+      ) ||
+      chat.opening ||
+      (!chat.draftRestored && !chat.offlineSnapshot) ||
+      chat.historyLoading ||
+      chat.projectLoading ||
+      chat.draft.isNotEmpty ||
+      chat.draftSubmissionUncertain ||
+      chat.attachments.isNotEmpty ||
+      chat.queuedPrompts.isNotEmpty ||
+      chat.editingQueuedPrompt != null ||
+      chat.queuedEditText.isNotEmpty ||
+      chat.queueDraftChanged ||
+      chat.queueMutating ||
+      chat.queueDraining ||
+      chat.steering ||
+      chat.approval != null ||
+      chat.clarification != null ||
+      chat.sensitivePrompt != null ||
+      chat.approvalResponding ||
+      chat.sensitivePromptResponding ||
+      chat.commandRunning ||
+      chat._commandDispatchPending ||
+      chat.changingAnswer ||
+      chat.changingIntelligence ||
+      chat.sessionControlLoading ||
+      chat.sessionControlWorking ||
+      chat.subagentsLoading ||
+      chat.processesLoading ||
+      chat.processes.any((process) => process.isRunning) ||
+      chat._stoppingProcessIds.isNotEmpty ||
+      chat._attachmentPreparations > 0 ||
+      chat._submissionInFlight ||
+      chat._replacingExpiredRuntime ||
+      chat._replacementCompletion != null ||
+      chat._draftWrites != null ||
+      chat.notificationReadTarget != null ||
+      resource.mutatingSessions.contains(chat.key.sessionId) ||
+      _unrestoredPending.contains(chat.key) ||
+      reportedActivityFor(chat.key) != null;
+
+  /// Current saved owners are retained by the registry. Obsolete owners may
+  /// retire only once all mounted, async, recovery and delivery leases settle.
+  bool get hasRetentionObligations =>
+      _mountedRoutes.isNotEmpty ||
+      switching ||
+      recoveryInProgress ||
+      activityLoading ||
+      _openingSavedDraft ||
+      _notificationTarget != null ||
+      _notificationOpening != null ||
+      _notificationReconciliation != null ||
+      _pendingWorkspaceOperations > 0 ||
+      _unrestoredPending.isNotEmpty ||
+      _liveActivity.isNotEmpty ||
+      hasActiveChats ||
+      _resources.values.any(
+        (resource) =>
+            resource.mutatingSessions.isNotEmpty ||
+            resource._projectMembershipRead != null ||
+            resource.sessionsLoadingMore ||
+            resource.searchLoading ||
+            resource.projectSessionsLoading ||
+            resource.reconnecting ||
+            resource.chats.values.any((chat) => _chatOwnsWork(resource, chat)),
+      );
+
+  @visibleForTesting
+  int get retainedChatCount => _resources.values.fold(
+    0,
+    (count, resource) => count + resource.chats.length,
+  );
+
+  void _scheduleRetention() {
+    if (_closed || _retentionScheduled) return;
+    _retentionScheduled = true;
+    scheduleMicrotask(() {
+      _retentionScheduled = false;
+      if (_closed) return;
+      pruneSettledState();
+      // Route release and composer changes can settle leases without changing
+      // the monitoring fingerprint. The registry must still see that release.
+      _retentionChanges.notifyListeners();
+    });
+  }
+
+  void pruneSettledState() {
+    if (_closed || _pendingNotifications > 0 || _pendingCompletions > 0) return;
+    final settled = <(ProfileWorkspaceData, ProfileChat)>[];
+    for (final resource in _resources.values) {
+      for (final chat in resource.chats.values) {
+        if (identical(resource, current) &&
+                resource.selectedSession == chat.key.sessionId ||
+            _mountedRoutes.containsValue(chat.key) ||
+            _chatOwnsWork(resource, chat)) {
+          continue;
+        }
+        settled.add((resource, chat));
+      }
+    }
+    settled.sort((a, b) => b.$2.lastActive.compareTo(a.$2.lastActive));
+    var removed = false;
+    for (final entry in settled.skip(settledChatLimit)) {
+      entry.$1.chats.remove(entry.$2.key.sessionId);
+      _recoveredDraftTargets.removeWhere(
+        (_, chat) => identical(chat, entry.$2),
+      );
+      removed = true;
+    }
+    if (removed) _changed();
+  }
+
+  Future<T> _retainWorkspaceOperation<T>(Future<T> Function() operation) async {
+    _pendingWorkspaceOperations++;
+    try {
+      return await operation();
+    } finally {
+      _pendingWorkspaceOperations--;
+      _scheduleRetention();
+    }
+  }
 
   /// Retain live work until its final state and notification have been saved.
   /// Failed snapshot reads do not prove previously active chats have finished.
@@ -526,7 +682,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   bool _notificationReconcileAgain = false;
   SessionVisibility _sessionVisibility = SessionVisibility.chats;
   SessionVisibility get sessionVisibility => _sessionVisibility;
-  String get _visibilityKey => 'session_visibility_v1_$connectionIdentity';
+  String get _visibilityKey => SessionVisibility.preferenceKey(connection.id);
 
   ProfileWorkspaceController({
     required this.connection,
@@ -960,6 +1116,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   void _changed({ProfileSessionKey? browserChat}) {
     if (_closed) return;
+    for (final route in _visibleRoutes) {
+      if (_mountedRoutes.containsKey(route)) {
+        _mountedRoutes[route] = current?.chat?.key;
+      }
+    }
+    _scheduleRetention();
     if (_lastSnapshot == null ||
         DateTime.now().difference(_lastSnapshot!).inSeconds >= 1) {
       unawaited(_saveReadingSnapshot());
@@ -1210,6 +1372,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
     String name, {
     required int sessionLimit,
   }) async {
+    final resource = browserResource(name);
+    final generation = resource._projectMembershipGeneration;
     final reader = _factory(browserResource(name).scope);
     try {
       await reader.connect();
@@ -1220,10 +1384,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (result['projects'] is! List) {
         throw const FormatException('Missing project tree');
       }
-      return ProfileGateway.records(result['projects']).map((project) {
+      final projects = ProfileGateway.records(result['projects']).map((
+        project,
+      ) {
         if (project['id'] is! String ||
             project['label'] is! String ||
-            project['sessionIds'] is! List) {
+            project['sessionIds'] is! List ||
+            (project['sessionIds'] as List).any(
+              (id) => id is! String || id.isEmpty,
+            )) {
           throw const FormatException('Invalid project membership');
         }
         return {
@@ -1232,9 +1401,81 @@ class ProfileWorkspaceController extends ChangeNotifier {
           'primary_path': project['path'],
         };
       }).toList();
+      if (!_closed && generation == resource._projectMembershipGeneration) {
+        resource._projectMembershipCoverageChecked =
+            resource._projectMembershipCoverageChecked &&
+            sessionLimit >= resource._projectMembershipLimit;
+        resource._projectMembershipLimit = sessionLimit;
+        resource._projectMembershipLabels = {
+          for (final project in projects)
+            project['id'] as String: project['label'] as String,
+        };
+        resource._projectMembership = {
+          for (final project in projects)
+            for (final id in project['sessionIds'] as List)
+              if (id is String)
+                id: project['isNoProject'] == true
+                    ? null
+                    : project['id'] as String,
+        };
+      }
+      return projects;
     } finally {
       reader.close();
     }
+  }
+
+  void _invalidateProjectMembership(ProfileWorkspaceData resource) {
+    resource._projectMembershipGeneration++;
+    resource._projectMembership = null;
+    resource._projectMembershipLabels = {};
+    resource._projectMembershipRead = null;
+    resource._projectMembershipLimit = 0;
+    resource._projectMembershipCoverageChecked = false;
+  }
+
+  Future<void> _readProjectMembership(ProfileWorkspaceData resource) {
+    if (resource._projectMembership != null &&
+        resource._projectMembershipCoverageChecked) {
+      return Future.value();
+    }
+    if (resource._projectMembershipRead != null) {
+      return resource._projectMembershipRead!;
+    }
+    late final Future<void> pending;
+    final generation = resource._projectMembershipGeneration;
+    pending =
+        () async {
+          // The tree is capped and filters archived, child and non-chat sessions.
+          // Use the complete list's count to cover large histories. Only explicit
+          // Home membership proves unassigned; an absent key remains unknown.
+          final page = await resource.gateway.sessions(
+            visibility: SessionVisibility.all,
+            limit: 1,
+          );
+          if (_closed || generation != resource._projectMembershipGeneration) {
+            return;
+          }
+          final limit = math.max(
+            ProfileGateway.projectSessionScanLimit,
+            page.total,
+          );
+          if (resource._projectMembership == null ||
+              resource._projectMembershipLimit < limit) {
+            await browserProjects(
+              resource.scope.profileName,
+              sessionLimit: limit,
+            );
+          }
+          if (!_closed && generation == resource._projectMembershipGeneration) {
+            resource._projectMembershipCoverageChecked = true;
+          }
+        }().whenComplete(() {
+          if (identical(resource._projectMembershipRead, pending)) {
+            resource._projectMembershipRead = null;
+          }
+        });
+    return resource._projectMembershipRead = pending;
   }
 
   // Live transports may be opened for Activity or restored pending input
@@ -1257,6 +1498,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       resource.gateway.onEvent = (event) => _event(resource, event);
       resource.gateway.onConnectionChanged = (connected) {
         if (!connected && !_closed) {
+          _invalidateProjectMembership(resource);
           // Losing transport does not erase work already verified as unfinished.
           _uncertainNotificationRuntimes.addAll(_backgroundChats.keys);
           for (final chat in resource.chats.values.where((c) => c.busy)) {
@@ -1442,6 +1684,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       target.archivedOnly = archivedOnly;
       _replaceSessions(target, sessions);
       target.projects = projects;
+      _invalidateProjectMembership(target);
       target.projectsError = projectError;
       if (resetNavigation) {
         target.selectedSession = null;
@@ -2077,7 +2320,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
     await _refreshProcesses(chat);
   }
 
-  Future<bool> _refreshProcesses(ProfileChat chat) async {
+  // A destructive command needs its own accepted read. Ordinary refreshes may
+  // be superseded without an error, but cannot prove the list for /stop.
+  Future<bool> _refreshProcesses(
+    ProfileChat chat, {
+    bool requireCurrentRead = false,
+  }) async {
     final resource = _owned(chat);
     final runtime = chat.runtimeId;
     final before = chat.processes;
@@ -2090,7 +2338,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         'session_id': runtime,
       });
       if (!_processReadIsCurrent(resource, chat, runtime, before, generation)) {
-        return true;
+        return !requireCurrentRead;
       }
       final raw = response['processes'];
       if (raw is! List) throw const FormatException('Missing process list');
@@ -2119,7 +2367,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
             'Background processes could not be refreshed. Retry.';
         return false;
       }
-      return true;
+      return !requireCurrentRead;
     } finally {
       if (_processOwnerIsCurrent(resource, chat, runtime) &&
           chat._processesReadGeneration == generation) {
@@ -2554,11 +2802,30 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileWorkspaceData resource, {
     Map<String, dynamic>? project,
     String? initialDraft,
+  }) => _retainWorkspaceOperation(
+    () => _createOwnedChat(
+      resource,
+      project: project,
+      initialDraft: initialDraft,
+    ),
+  );
+
+  Future<ProfileChat> _createOwnedChat(
+    ProfileWorkspaceData resource, {
+    Map<String, dynamic>? project,
+    String? initialDraft,
   }) async {
     final navigation = ++_navigationGeneration;
+    final projectPath = project?['primary_path'];
+    if (project != null &&
+        (projectPath is! String || projectPath.trim().isEmpty)) {
+      throw StateError('The selected project directory is unavailable.');
+    }
     final response = await resource.gateway.createSession(
-      cwd: project?['primary_path'] as String?,
+      cwd: projectPath as String?,
+      cwdExplicit: project != null,
     );
+    _invalidateProjectMembership(resource);
     final id = response['stored_session_id'];
     if (id is! String || id.isEmpty) {
       throw const FormatException('Missing durable session identity');
@@ -2793,7 +3060,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _changed();
     if (current?.chat == chat) {
       unawaited(refreshSessionControl(chat));
-      if (chat.projectId == null) unawaited(_loadChatProject(resource, chat));
+      unawaited(_loadChatProject(resource, chat));
       await refreshHistory(chat, propagateFailure: propagateHistoryFailure);
       chat.offlineSnapshot = false;
       if (!chat.busy && chat.historyError == null) chat.streaming = '';
@@ -2906,7 +3173,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
         cwd = projectPath;
       }
-      final created = await resource.gateway.createSession(cwd: cwd);
+      final created = await resource.gateway.createSession(
+        cwd: cwd,
+        cwdExplicit: chat.projectId != null,
+      );
       if (!unchanged()) {
         throw StateError('The draft changed while its chat was reconnecting.');
       }
@@ -2998,7 +3268,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
   String chatProjectLabel(ProfileChat chat) {
     final resource = _owned(chat);
     if (chat.projectId != null) {
-      return resource.projects
+      return resource._projectMembershipLabels[chat.projectId] ??
+          resource.projects
                   .where((project) => project['id'] == chat.projectId)
                   .firstOrNull?['name']
               as String? ??
@@ -3014,14 +3285,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileChat chat,
   ) async {
     if (chat.projectLoading) return;
-    if (resource.selectedProject != null &&
-        resource.projectSessions.any(
-          (row) => row['id'] == chat.key.sessionId,
-        )) {
-      chat.projectId = resource.selectedProject!['id'] as String;
-      _changed();
-      return;
-    }
     chat.projectLoading = true;
     chat.projectLookupFailed = false;
     _changed();
@@ -3029,16 +3292,17 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (resource.projectsError != null) {
         throw StateError('Projects unavailable');
       }
-      // Ask the server for membership, including chats outside recent previews.
-      for (final project in resource.projects) {
-        final rows = await resource.gateway.projectSessions(
-          project['id'] as String,
-        );
-        if (_closed || chat.projectId != null) return;
-        if (rows.any((row) => row['id'] == chat.key.sessionId)) {
-          chat.projectId = project['id'] as String;
-          return;
-        }
+      if (resource._projectMembership?.containsKey(chat.key.sessionId) !=
+          true) {
+        await _readProjectMembership(resource);
+      }
+      if (_closed) return;
+      final membership = resource._projectMembership;
+      if (membership == null || !membership.containsKey(chat.key.sessionId)) {
+        chat.projectId = null;
+        chat.projectLookupFailed = true;
+      } else {
+        chat.projectId = membership[chat.key.sessionId];
       }
     } catch (_) {
       chat.projectLookupFailed = true;
@@ -3123,6 +3387,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (_closed) return;
       _invalidateSessionLoad(resource);
       if (delete || changes.containsKey('archived')) {
+        _invalidateProjectMembership(resource);
         resource.nextSessionOffset = 0;
       }
       resource.projectGeneration++;
@@ -3225,6 +3490,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           }
         }
       }
+      _invalidateProjectMembership(resource);
       resource.chats[id]?.projectId = project['id'] as String;
       // Do not leave a moved row in its old folder while the tree reloads.
       if (resource.selectedProject?['id'] != project['id']) {
@@ -3315,12 +3581,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
-  Future<void> createProject(String name, String path) async {
-    final resource = _writable();
-    await resource.gateway.createProject(name, path);
-    resource.projects = await resource.gateway.projects();
-    _changed();
-  }
+  Future<void> createProject(String name, String path) =>
+      _retainWorkspaceOperation(() async {
+        final resource = _writable();
+        await resource.gateway.createProject(name, path);
+        _invalidateProjectMembership(resource);
+        resource.projects = await resource.gateway.projects();
+        _changed();
+      });
 
   ProfileWorkspaceData _projectMutationOwner(
     WorkspaceScope owner,
@@ -3343,6 +3611,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     String? selectedSessionAtMutation,
   }) {
     resource.projects = projects;
+    _invalidateProjectMembership(resource);
     resource.projectsError = null;
     if (deletedId != null) {
       for (final chat in resource.chats.values) {
@@ -3380,7 +3649,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     String? name,
     String? color,
     String? icon,
-  }) async {
+  }) => _retainWorkspaceOperation(() async {
     final resource = _projectMutationOwner(owner, id);
     await resource.gateway.updateProject(
       id,
@@ -3393,30 +3662,31 @@ class ProfileWorkspaceController extends ChangeNotifier {
       throw StateError('Updated project is missing from Hermes.');
     }
     if (!_closed) _applyProjectRefresh(resource, projects);
-  }
+  });
 
-  Future<void> deleteProject(WorkspaceScope owner, String id) async {
-    final resource = _projectMutationOwner(owner, id);
-    final selectedSession = resource.selectedSession;
-    await resource.gateway.deleteProject(id);
-    if (_closed) return;
-    _applyProjectRefresh(
-      resource,
-      resource.projects.where((project) => project['id'] != id).toList(),
-      deletedId: id,
-      selectedSessionAtMutation: selectedSession,
-    );
-    try {
-      final projects = await resource.gateway.projects();
-      if (!_closed) _applyProjectRefresh(resource, projects);
-    } catch (_) {
-      if (!_closed) {
-        resource.projectsError =
-            'Project deleted, but Projects could not be refreshed.';
-        _changed();
-      }
-    }
-  }
+  Future<void> deleteProject(WorkspaceScope owner, String id) =>
+      _retainWorkspaceOperation(() async {
+        final resource = _projectMutationOwner(owner, id);
+        final selectedSession = resource.selectedSession;
+        await resource.gateway.deleteProject(id);
+        if (_closed) return;
+        _applyProjectRefresh(
+          resource,
+          resource.projects.where((project) => project['id'] != id).toList(),
+          deletedId: id,
+          selectedSessionAtMutation: selectedSession,
+        );
+        try {
+          final projects = await resource.gateway.projects();
+          if (!_closed) _applyProjectRefresh(resource, projects);
+        } catch (_) {
+          if (!_closed) {
+            resource.projectsError =
+                'Project deleted, but Projects could not be refreshed.';
+            _changed();
+          }
+        }
+      });
 
   Future<void> addAttachment(ProfileChat chat, String path, String name) {
     return _addPreparedAttachment(chat, () {
@@ -3713,6 +3983,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     unawaited(
       settled.then((_) {
         if (identical(chat._draftWrites, settled)) chat._draftWrites = null;
+        _scheduleRetention();
       }),
     );
     return write;
@@ -3903,6 +4174,36 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
+  bool _isDestructiveMutationRefusal(Object error) =>
+      error is JsonRpcError &&
+      error.method == 'prompt.submit' &&
+      !{'request_timeout', 'connection_closed'}.contains(error.reason) &&
+      // These stock errors precede the history cut (or report its failed write).
+      // Storage errors 5070–5072 and dispatcher failures may follow a saved cut.
+      {
+        -32600,
+        -32601,
+        -32602,
+        4000,
+        4001,
+        4004,
+        4007,
+        4009,
+        4018,
+        4028,
+        4029,
+        4030,
+        4090,
+        4091,
+        4120,
+        4121,
+        4122,
+        4124,
+        5008,
+        5035,
+        5122,
+      }.contains(error.code);
+
   Future<bool> _regenerate(ProfileChat chat, AnswerTarget target) async {
     final resource = _owned(chat);
     chat.status = ProfileTurnStatus.submitting;
@@ -3949,7 +4250,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         'confirm_empty_truncate': true,
       });
     } catch (e) {
-      if (e is JsonRpcError || !submitted) {
+      if (!submitted || _isDestructiveMutationRefusal(e)) {
         rejected = true;
         chat.messages = original;
         chat.status = ProfileTurnStatus.failed;
@@ -4043,7 +4344,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       });
       acknowledged = true;
     } catch (e) {
-      if (e is JsonRpcError || !submitted) {
+      if (!submitted || _isDestructiveMutationRefusal(e)) {
         chat.messages = originalMessages;
         chat.status = originalStatus;
         chat.error = 'Hermes did not accept the edited message.';
@@ -4611,13 +4912,31 @@ class ProfileWorkspaceController extends ChangeNotifier {
         chat.addCommandMessage('Started /btw on the Hermes host.');
       case 'stop':
       case 'interrupt':
+        final runtime = chat.runtimeId;
         await stop(chat);
         chat.addCommandMessage('Interrupt requested.');
         if (name == 'stop') {
-          final result = await resource.gateway.call('process.stop');
-          chat.addCommandMessage(
-            'Background processes stopped: ${result['killed']}',
-          );
+          // Stock process.stop kills the entire server registry. A chat-local
+          // command must use the session-owned list and individual kill RPCs.
+          if (chat.runtimeId != runtime ||
+              !await _refreshProcesses(chat, requireCurrentRead: true) ||
+              !_processOwnerIsCurrent(resource, chat, runtime)) {
+            throw StateError(
+              'Background processes could not be confirmed. Refresh before trying again.',
+            );
+          }
+          final running = chat.processes.where((p) => p.isRunning).toList();
+          var stopped = 0;
+          for (final process in running) {
+            if (chat.runtimeId != runtime ||
+                !await stopProcess(chat, process.id)) {
+              throw StateError(
+                'Background process stop could not be confirmed. Refresh before trying again.',
+              );
+            }
+            stopped++;
+          }
+          chat.addCommandMessage('Background processes stopped: $stopped');
         }
       case 'skills':
         if (argument.isNotEmpty && argument != 'list') return false;
@@ -5421,7 +5740,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   /// Load the request for review without opening a second chat route.
-  Future<ProfileChat?> loadNotificationApproval(ProfileSessionKey key) async {
+  Future<ProfileChat?> loadNotificationApproval(
+    ProfileSessionKey key,
+  ) => _retainWorkspaceOperation(() async {
     if (!owns(key) || _closed) return null;
     final owner = _resource(key.workspace.profileName);
     final existing = owner.chats[key.sessionId];
@@ -5442,7 +5763,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     await _journal();
     _changed();
     return chat;
-  }
+  });
 
   /// An explicit notification tap owns one bounded recovery attempt. The choice
   /// is never queued for replay, and approval rechecks its exact request after
@@ -5766,6 +6087,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   void _event(ProfileWorkspaceData resource, StreamEvent event) {
     if (_closed) return;
     if (event.type == 'sessions.changed') {
+      _invalidateProjectMembership(resource);
       unawaited(_scheduleNotificationReconciliation(resource));
       return;
     }
@@ -6721,6 +7043,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<void> reconnect(WorkspaceScope scope) async {
     final resource = _resources[scope];
     if (resource == null || _closed) return;
+    _invalidateProjectMembership(resource);
     // A user retry or app resume doesn't wait for the next scheduled attempt.
     resource.retry?.cancel();
     resource.retry = null;
@@ -7066,6 +7389,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   void dispose() {
     _closed = true;
     _composerChanges.dispose();
+    _retentionChanges.dispose();
     _browserChanges.dispose();
     _healthSession?.dispose();
     _notificationRetry?.cancel();

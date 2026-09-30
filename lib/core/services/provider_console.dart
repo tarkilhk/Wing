@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../models/hermes_profile.dart';
 import '../models/provider_recovery.dart';
+import 'authenticated_web_socket.dart';
 import 'connection_manager.dart';
 
 typedef ProviderConsoleCommand =
@@ -37,7 +37,7 @@ class ProviderConsole {
         if (credentials.token != null) 'token': credentials.token!,
       },
     );
-    final channel = IOWebSocketChannel.connect(
+    final channel = connectAuthenticatedWebSocket(
       uri,
       headers: headers,
       connectTimeout: const Duration(seconds: 15),

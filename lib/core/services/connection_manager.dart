@@ -3,7 +3,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart' show IOClient;
@@ -11,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../models/connection.dart';
 import '../models/session.dart';
+import 'dashboard_read_transport.dart';
 
 // Re-export for convenience
 export '../models/connection.dart';
@@ -208,6 +208,14 @@ class _ConnectionCredentials {
   }
 }
 
+/// Shared by managers using the same secure store, including short-lived UI
+/// managers. Readers see only a fully hydrated, committed connection snapshot.
+class _ConnectionPersistenceState {
+  final sessions = <String, DashboardOAuthSession>{};
+  List<SavedConnection>? snapshot;
+  bool blocked = false;
+}
+
 /// Manages non-secret connection metadata in SharedPreferences and credentials
 /// in a platform secure store.
 class ConnectionManager {
@@ -219,24 +227,44 @@ class ConnectionManager {
 
   final SharedPreferences prefs;
   final CredentialStore _credentialStore;
-  static final _credentialLocks = Expando<Map<String, Future<void>>>();
-  Future<void> _withCredentialLock(String id, Future<void> Function() action) {
-    final locks = _credentialLocks[_credentialStore] ??=
-        <String, Future<void>>{};
-    final next = (locks[id] ?? Future<void>.value()).then((_) => action());
+  static const String _journalKey = 'connection_transaction_v1';
+  static final _persistenceStates =
+      Expando<Expando<_ConnectionPersistenceState>>();
+  static final _persistenceQueues = Expando<Future<void>>();
+  _ConnectionPersistenceState get _state {
+    final states = _persistenceStates[_credentialStore] ??=
+        Expando<_ConnectionPersistenceState>();
+    return states[prefs] ??= _ConnectionPersistenceState();
+  }
+
+  Future<T> _withPersistenceLock<T>(
+    Future<T> Function() action, {
+    bool initialize = true,
+  }) {
+    final state = _state;
+    final next = (_persistenceQueues[_credentialStore] ?? Future<void>.value())
+        .then((_) async {
+          if (initialize && (state.snapshot == null || state.blocked)) {
+            await _initializeUnlocked();
+          }
+          return action();
+        });
     final settled = next.then<void>(
       (_) {},
       onError: (Object _, StackTrace _) {},
     );
-    locks[id] = settled;
+    _persistenceQueues[_credentialStore] = settled;
     return next.whenComplete(() {
-      if (identical(locks[id], settled)) locks.remove(id);
+      // Retain the tail while another operation is queued. Otherwise remove it
+      // before the caller observes completion, so a future from this execution
+      // zone cannot strand later widget-test or lifecycle operations.
+      if (identical(_persistenceQueues[_credentialStore], settled)) {
+        _persistenceQueues[_credentialStore] = null;
+      }
     });
   }
 
-  static final _sessionCaches = Expando<Map<String, DashboardOAuthSession>>();
-  Map<String, DashboardOAuthSession> get _sessions =>
-      _sessionCaches[_credentialStore] ??= <String, DashboardOAuthSession>{};
+  Map<String, DashboardOAuthSession> get _sessions => _state.sessions;
 
   DashboardOAuthSession? _bindSession(
     String id,
@@ -247,38 +275,45 @@ class ConnectionManager {
       return null;
     }
     final cached = _sessions[id];
-    final session = cached?.id == stored.id ? cached! : stored;
+    final session = cached?.id == stored.id && cached?.baseUrl == stored.baseUrl
+        ? cached!
+        : stored;
     _sessions[id] = session;
-    session.persist = () => _withCredentialLock(id, () async {
+    session.persist = () => _withPersistenceLock(() async {
       // A deleted/replaced connection must never be resurrected by an in-flight refresh.
-      final present = _connectionsFromMaps(
-        _readConnectionMaps(),
-      ).any((c) => c.id == id && c.isCloud);
-      final encoded = _credentialStore.readCached(_credentialKey(id));
-      if (!present || encoded == null) {
+      final current = getConnections();
+      final present = current.any((c) => c.id == id && c.isCloud);
+      final encoded = await _credentialStore.read(_credentialKey(id));
+      if (!present || encoded == null || !identical(_sessions[id], session)) {
         throw const CredentialStorageException(
           'This connection is no longer saved.',
         );
       }
       final credentials = _ConnectionCredentials.decode(encoded);
-      if (credentials.dashboardOAuth?.id != session.id) {
+      if (credentials.dashboardOAuth?.id != session.id ||
+          credentials.dashboardOAuth?.baseUrl != session.baseUrl) {
         throw const CredentialStorageException(
           'This sign-in has been replaced.',
         );
       }
-      await _writeAndVerifyCredentials(
-        id,
-        _ConnectionCredentials(
-          apiKey: credentials.apiKey,
-          dashboardPassword: credentials.dashboardPassword,
-          gatewayHeaders: credentials.gatewayHeaders,
-          dashboardOAuth: session,
-        ),
+      await _commitTransaction(
+        connections: current,
+        credentials: {
+          id: _ConnectionCredentials(
+            apiKey: credentials.apiKey,
+            dashboardPassword: credentials.dashboardPassword,
+            gatewayHeaders: credentials.gatewayHeaders,
+            dashboardOAuth: session,
+          ),
+        },
       );
     });
     return session;
   }
 
+  /// Synchronous readers of nonempty storage must first call [initialize],
+  /// or share a preferences/store pair that has already been initialized.
+  /// [create] and asynchronous reads/mutations establish that safe state.
   ConnectionManager(this.prefs, {CredentialStore? credentialStore})
     : _credentialStore = credentialStore ?? _sharedCredentialStore;
 
@@ -291,99 +326,105 @@ class ConnectionManager {
     return manager;
   }
 
-  /// Migrates legacy plaintext credentials before the first UI is rendered.
-  ///
-  /// Every legacy credential bundle is written and read back first. The
-  /// SharedPreferences list is sanitized only after all read-backs match, so a
-  /// partial secure-store failure leaves every legacy profile retryable.
-  Future<void> initialize() async {
-    final maps = _readConnectionMaps();
-    final connections = _connectionsFromMaps(maps);
-    final hasLegacyFields = maps.any(
-      (map) =>
-          map.containsKey('api_key') || map.containsKey('dashboard_password'),
-    );
+  /// Recovers interrupted writes before exposing any connection credentials.
+  Future<void> initialize() =>
+      _withPersistenceLock(_initializeUnlocked, initialize: false);
 
+  Future<void> _initializeUnlocked() async {
+    _state.blocked = true;
     try {
-      for (final connection in connections) {
-        final credentials = _ConnectionCredentials.fromConnection(connection);
-        if (!credentials.isEmpty) {
-          await _writeAndVerifyCredentials(connection.id, credentials);
-        }
-      }
-
-      for (final connection in connections) {
-        final encoded = await _credentialStore.read(
-          _credentialKey(connection.id),
-        );
-        if (encoded != null) {
-          _ConnectionCredentials.decode(encoded);
-        }
-      }
-
-      if (hasLegacyFields) {
-        await _saveAll(connections);
-      }
-    } on CredentialStorageException {
-      rethrow;
+      final journal = await _credentialStore.read(_journalKey);
+      if (journal != null) await _rollbackJournal(journal);
+      await _loadSnapshot();
+      _state.blocked = false;
     } catch (_) {
       throw const CredentialStorageException(
-        'Connection credentials could not be migrated safely.',
+        'Connection storage could not be recovered safely. Retry before using saved connections.',
       );
     }
   }
 
   List<SavedConnection> getConnections() {
-    return _connectionsFromMaps(
-      _readConnectionMaps(),
-    ).map(_hydrateFromCachedCredentials).toList();
+    final snapshot = _state.snapshot;
+    if (!_state.blocked && snapshot == null && _readConnectionMaps().isEmpty) {
+      return [];
+    }
+    if (_state.blocked || snapshot == null) {
+      throw const CredentialStorageException(
+        'Connection storage must be initialized safely before use.',
+      );
+    }
+    return List<SavedConnection>.of(snapshot);
   }
 
-  /// Returns every saved connection with its secrets read back from the secure
-  /// store, rather than from the in-memory cache used by [getConnections].
-  ///
-  /// Config export needs this: a freshly launched app has an empty credential
-  /// cache, so [getConnections] alone would hand back connections with blank
-  /// API keys and silently produce a useless backup.
-  Future<List<SavedConnection>> loadConnectionsWithSecrets() async {
+  /// Reads secrets from durable storage under the same lock as mutations.
+  Future<List<SavedConnection>> loadConnectionsWithSecrets() =>
+      _withPersistenceLock(() async {
+        try {
+          await _loadSnapshot();
+          return getConnections();
+        } catch (_) {
+          _state.blocked = true;
+          throw const CredentialStorageException(
+            'Stored connection credentials could not be read safely.',
+          );
+        }
+      });
+
+  Future<void> _loadSnapshot() async {
     final connections = _connectionsFromMaps(_readConnectionMaps());
     final hydrated = <SavedConnection>[];
     for (final connection in connections) {
       final encoded = await _credentialStore.read(
         _credentialKey(connection.id),
       );
-      if (encoded == null) {
-        hydrated.add(connection);
-        continue;
-      }
-      final credentials = _ConnectionCredentials.decode(encoded);
-      hydrated.add(
+      hydrated.add(_hydrate(connection, encoded));
+    }
+    _publish(hydrated);
+  }
+
+  SavedConnection _hydrate(SavedConnection connection, String? encoded) {
+    if (encoded == null) return connection;
+    final credentials = _ConnectionCredentials.decode(encoded);
+    return connection.copyWith(
+      apiKey: credentials.apiKey,
+      dashboardPassword: credentials.dashboardPassword,
+      gatewayHeaders: credentials.gatewayHeaders,
+      dashboardOAuth: credentials.dashboardOAuth,
+      clearDashboardPassword: credentials.dashboardPassword == null,
+    );
+  }
+
+  void _publish(
+    List<SavedConnection> connections, {
+    Set<String> replaced = const {},
+  }) {
+    for (final id in replaced) {
+      _sessions.remove(id);
+    }
+    final present = connections.map((connection) => connection.id).toSet();
+    _sessions.removeWhere((id, _) => !present.contains(id));
+    _state.snapshot = [
+      for (final connection in connections)
         connection.copyWith(
-          apiKey: credentials.apiKey,
-          dashboardPassword: credentials.dashboardPassword,
-          gatewayHeaders: credentials.gatewayHeaders,
           dashboardOAuth: _bindSession(
             connection.id,
-            credentials.dashboardOAuth,
+            connection.dashboardOAuth,
           ),
-          clearDashboardPassword: credentials.dashboardPassword == null,
         ),
-      );
-    }
-    return hydrated;
+    ];
   }
 
   /// Writes a whole set of connections at once, preserving their ids.
   ///
-  /// Every credential bundle is written and verified before the metadata list
-  /// is committed, matching the fail-closed contract of the single-connection
-  /// paths. When [replaceExisting] is true, connections absent from [incoming]
-  /// are removed along with their credentials.
+  /// A durable secure-store journal protects the complete import, including
+  /// overwritten IDs and removed secrets. Until the journal is deleted and its
+  /// absence verified, interruption restores the previous complete set.
   Future<void> importConnections(
     List<SavedConnection> incoming, {
     required bool replaceExisting,
-  }) async {
-    final current = _connectionsFromMaps(_readConnectionMaps());
+  }) => _withPersistenceLock(() async {
+    final current = getConnections();
 
     final ordered = List<SavedConnection>.of(incoming);
 
@@ -403,21 +444,24 @@ class ConnectionManager {
       ];
     }
 
-    for (final connection in ordered) {
-      await _writeAndVerifyCredentials(
-        connection.id,
-        _ConnectionCredentials.fromConnection(connection),
-      );
+    if (ordered.map((connection) => connection.id).toSet().length !=
+        ordered.length) {
+      throw const FormatException('Imported connection IDs must be unique.');
     }
-    for (final connection in removed) {
-      await _writeAndVerifyCredentials(
-        connection.id,
-        const _ConnectionCredentials(apiKey: '', dashboardPassword: null),
-      );
-    }
-
-    await _saveAll(next);
-  }
+    await _commitTransaction(
+      connections: next,
+      credentials: {
+        for (final connection in ordered)
+          connection.id: _ConnectionCredentials.fromConnection(connection),
+        for (final connection in removed)
+          connection.id: const _ConnectionCredentials(
+            apiKey: '',
+            dashboardPassword: null,
+          ),
+      },
+      replaced: ordered.map((connection) => connection.id).toSet(),
+    );
+  });
 
   Future<SavedConnection> saveConnection(
     String label,
@@ -436,7 +480,7 @@ class ConnectionManager {
     String? cloudOrganization,
     DashboardOAuthSession? dashboardOAuth,
     Map<String, String> gatewayHeaders = const <String, String>{},
-  }) async {
+  }) => _withPersistenceLock(() async {
     final normalized = SavedConnection.normalizeHostAndPort(host, port);
     final conn = SavedConnection(
       id: _uuid.v4(),
@@ -462,16 +506,12 @@ class ConnectionManager {
     current.insert(0, conn);
     await _commitCredentialAndMetadata(
       connectionId: conn.id,
-      previousCredentials: const _ConnectionCredentials(
-        apiKey: '',
-        dashboardPassword: null,
-      ),
       nextCredentials: _ConnectionCredentials.fromConnection(conn),
       connections: current,
     );
     _bindSession(conn.id, conn.dashboardOAuth);
     return conn;
-  }
+  });
 
   /// Updates all editable fields on an existing connection while preserving its
   /// id and list position. Empty optional strings clear their saved values.
@@ -493,14 +533,10 @@ class ConnectionManager {
     String? cloudOrganization,
     DashboardOAuthSession? dashboardOAuth,
     Map<String, String?>? gatewayHeaders,
-  }) async {
+  }) => _withPersistenceLock(() async {
     final current = getConnections();
     final idx = current.indexWhere((c) => c.id == connId);
     if (idx < 0) return;
-
-    final previousCredentials = _ConnectionCredentials.fromConnection(
-      current[idx],
-    );
 
     final normalized = SavedConnection.normalizeHostAndPort(host, port);
     final gateway = gatewayPrefix?.trim();
@@ -544,29 +580,36 @@ class ConnectionManager {
     );
     await _commitCredentialAndMetadata(
       connectionId: connId,
-      previousCredentials: previousCredentials,
       nextCredentials: _ConnectionCredentials.fromConnection(current[idx]),
       connections: current,
     );
-  }
+  });
 
   /// Changes only device-owned appearance, without touching credentials or
   /// contacting the server.
-  Future<void> updateConnectionIcon(String connId, ConnectionIcon icon) async {
+  Future<void> updateConnectionIcon(
+    String connId,
+    ConnectionIcon icon,
+  ) => _withPersistenceLock(() async {
     final current = getConnections();
     final index = current.indexWhere((connection) => connection.id == connId);
     if (index < 0) throw StateError('Connection no longer exists.');
     current[index] = current[index].copyWith(icon: icon);
     try {
       await _saveAll(current);
+      _publish(current);
     } catch (_) {
       // SharedPreferences updates its cache before the platform write finishes.
       // Restore the persisted value so reopening Appearance cannot show a
       // selection whose save failed.
-      await prefs.reload();
+      try {
+        await prefs.reload();
+      } catch (_) {
+        _state.blocked = true;
+      }
       rethrow;
     }
-  }
+  });
 
   /// Updates the dashboard port + basic-auth credentials on an existing
   /// connection. Empty strings clear the corresponding field.
@@ -578,13 +621,10 @@ class ConnectionManager {
     String? gatewayPrefix,
     String? dashboardPrefix,
     bool? dashboardProxied,
-  }) async {
+  }) => _withPersistenceLock(() async {
     final current = getConnections();
     final idx = current.indexWhere((c) => c.id == connId);
     if (idx < 0) return;
-    final previousCredentials = _ConnectionCredentials.fromConnection(
-      current[idx],
-    );
     final u = username.trim();
     final p = password.trim();
     final gateway = gatewayPrefix?.trim();
@@ -606,53 +646,60 @@ class ConnectionManager {
     );
     await _commitCredentialAndMetadata(
       connectionId: connId,
-      previousCredentials: previousCredentials,
       nextCredentials: _ConnectionCredentials.fromConnection(current[idx]),
       connections: current,
     );
-  }
+  });
 
-  Future<void> updateApiKey(String connId, String apiKey) async {
-    final current = getConnections();
-    final idx = current.indexWhere((c) => c.id == connId);
-    if (idx < 0) return;
-    final previousCredentials = _ConnectionCredentials.fromConnection(
-      current[idx],
-    );
-    current[idx] = current[idx].copyWith(apiKey: apiKey);
-    await _commitCredentialAndMetadata(
-      connectionId: connId,
-      previousCredentials: previousCredentials,
-      nextCredentials: _ConnectionCredentials.fromConnection(current[idx]),
-      connections: current,
-    );
-  }
+  Future<void> updateApiKey(String connId, String apiKey) =>
+      _withPersistenceLock(() async {
+        final current = getConnections();
+        final idx = current.indexWhere((c) => c.id == connId);
+        if (idx < 0) return;
+        current[idx] = current[idx].copyWith(apiKey: apiKey);
+        await _commitCredentialAndMetadata(
+          connectionId: connId,
+          nextCredentials: _ConnectionCredentials.fromConnection(current[idx]),
+          connections: current,
+        );
+      });
 
-  Future<void> deleteConnection(String id) async {
+  Future<void> deleteConnection(String id) => _withPersistenceLock(() async {
     final current = getConnections();
     final index = current.indexWhere((connection) => connection.id == id);
     if (index < 0) return;
-    final previousCredentials = _ConnectionCredentials.fromConnection(
-      current[index],
-    );
     current.removeWhere((c) => c.id == id);
     await _commitCredentialAndMetadata(
       connectionId: id,
-      previousCredentials: previousCredentials,
       nextCredentials: const _ConnectionCredentials(
         apiKey: '',
         dashboardPassword: null,
       ),
       connections: current,
     );
-  }
+  });
 
   List<Map<String, dynamic>> _readConnectionMaps() {
     try {
       final jsonList = prefs.getStringList(_key) ?? const <String>[];
-      return jsonList
+      final maps = jsonList
           .map((json) => jsonDecode(json) as Map<String, dynamic>)
           .toList();
+      if (maps.any(
+        (map) => const {
+          'api_key',
+          'dashboard_password',
+          'gateway_headers',
+          'dashboard_oauth',
+        }.any(map.containsKey),
+      )) {
+        throw const CredentialStorageException(
+          'Plaintext connection credentials are unsupported. Remove the saved connections and configure them again.',
+        );
+      }
+      return maps;
+    } on CredentialStorageException {
+      rethrow;
     } catch (_) {
       throw const CredentialStorageException(
         'Saved connection metadata could not be read safely.',
@@ -670,40 +717,138 @@ class ConnectionManager {
     }
   }
 
-  SavedConnection _hydrateFromCachedCredentials(SavedConnection connection) {
-    final encoded = _credentialStore.readCached(_credentialKey(connection.id));
-    if (encoded == null) return connection;
-    final credentials = _ConnectionCredentials.decode(encoded);
-    return connection.copyWith(
-      apiKey: credentials.apiKey,
-      dashboardPassword: credentials.dashboardPassword,
-      gatewayHeaders: credentials.gatewayHeaders,
-      dashboardOAuth: _bindSession(connection.id, credentials.dashboardOAuth),
-      clearDashboardPassword: credentials.dashboardPassword == null,
-    );
-  }
-
   Future<void> _commitCredentialAndMetadata({
     required String connectionId,
-    required _ConnectionCredentials previousCredentials,
     required _ConnectionCredentials nextCredentials,
     required List<SavedConnection> connections,
-  }) => _withCredentialLock(connectionId, () async {
+  }) => _commitTransaction(
+    connections: connections,
+    credentials: {connectionId: nextCredentials},
+  );
+
+  Future<void> _commitTransaction({
+    required List<SavedConnection> connections,
+    required Map<String, _ConnectionCredentials> credentials,
+    Set<String> replaced = const {},
+  }) async {
+    // Read durable originals, never the cache or mutable OAuth session objects.
+    final originals = <String, String?>{};
     try {
-      await _writeAndVerifyCredentials(connectionId, nextCredentials);
-      await _saveAll(connections);
-    } catch (_) {
-      try {
-        await _writeAndVerifyCredentials(connectionId, previousCredentials);
-      } catch (_) {
-        // The caller still receives a generic fail-closed error. Never attach
-        // platform errors because they may include sensitive storage details.
+      for (final id in credentials.keys) {
+        final encoded = await _credentialStore.read(_credentialKey(id));
+        if (encoded != null) _ConnectionCredentials.decode(encoded);
+        originals[id] = encoded;
       }
+    } catch (_) {
       throw const CredentialStorageException(
-        'Connection credentials could not be saved safely.',
+        'Original connection credentials could not be read safely.',
       );
     }
-  });
+    final journal = jsonEncode({
+      'metadata': prefs.getStringList(_key),
+      'credentials': originals,
+    });
+    try {
+      await _writeJournal(journal);
+      for (final entry in credentials.entries) {
+        await _writeAndVerifyCredentials(entry.key, entry.value);
+      }
+      await _saveAll(connections);
+      await _deleteJournal();
+    } catch (_) {
+      _state.blocked = true;
+      try {
+        // Deletion can succeed before throwing or before a failed verification.
+        // Re-establish the journal before beginning any rollback writes.
+        await _writeJournal(journal);
+        await _rollbackJournal(journal);
+        await _loadSnapshot();
+        _state.blocked = false;
+      } catch (_) {
+        // Keep the journal and block every reader until recovery succeeds.
+      }
+      throw const CredentialStorageException(
+        'Connection changes could not be saved safely. Retry recovery before using saved connections.',
+      );
+    }
+    // No asynchronous work after the verified journal deletion (commit point).
+    _publish([
+      for (final connection in connections)
+        if (credentials[connection.id] case final bundle?)
+          connection.copyWith(
+            apiKey: bundle.apiKey,
+            dashboardPassword: bundle.dashboardPassword,
+            clearDashboardPassword: bundle.dashboardPassword == null,
+            gatewayHeaders: bundle.gatewayHeaders,
+            dashboardOAuth: bundle.dashboardOAuth,
+          )
+        else
+          connection,
+    ], replaced: replaced);
+  }
+
+  Future<void> _writeJournal(String journal) async {
+    await _credentialStore.write(_journalKey, journal);
+    if (await _credentialStore.read(_journalKey) != journal) {
+      throw const CredentialStorageException(
+        'Connection journal could not be verified safely.',
+      );
+    }
+  }
+
+  Future<void> _deleteJournal() async {
+    await _credentialStore.delete(_journalKey);
+    if (await _credentialStore.read(_journalKey) != null) {
+      throw const CredentialStorageException(
+        'Connection journal could not be cleared safely.',
+      );
+    }
+  }
+
+  Future<void> _rollbackJournal(String journal) async {
+    final data = jsonDecode(journal) as Map<String, dynamic>;
+    final metadata = (data['metadata'] as List<dynamic>?)?.cast<String>();
+    final originals = data['credentials'] as Map<String, dynamic>;
+    for (final entry in originals.entries) {
+      final encoded = entry.value as String?;
+      if (encoded != null) _ConnectionCredentials.decode(encoded);
+    }
+    // Preserve recovery intent even if journal deletion previously completed.
+    await _writeJournal(journal);
+    for (final entry in originals.entries) {
+      final key = _credentialKey(entry.key);
+      final encoded = entry.value as String?;
+      if (encoded == null) {
+        await _credentialStore.delete(key);
+      } else {
+        await _credentialStore.write(key, encoded);
+      }
+      if (await _credentialStore.read(key) != encoded) {
+        throw const CredentialStorageException(
+          'Original connection credentials could not be restored safely.',
+        );
+      }
+    }
+    final restored = metadata == null
+        ? await prefs.remove(_key)
+        : await prefs.setStringList(_key, metadata);
+    if (!restored) {
+      await prefs.reload();
+      // A platform may report failure after persisting the write. Only durable
+      // equality proves that recovery completed.
+      if (jsonEncode(prefs.getStringList(_key)) != jsonEncode(metadata)) {
+        throw const CredentialStorageException(
+          'Original connection metadata could not be restored safely.',
+        );
+      }
+    }
+    try {
+      await _deleteJournal();
+    } catch (_) {
+      await _writeJournal(journal);
+      rethrow;
+    }
+  }
 
   Future<void> _writeAndVerifyCredentials(
     String connectionId,
@@ -1283,6 +1428,8 @@ class DashboardClient {
   final Map<String, String> _gatewayHeaders;
   final DashboardOAuthSession? _oauth;
   final bool _requiresOAuth;
+  final Duration readTimeout;
+  late final _reads = DashboardReadTransport(_http, timeout: readTimeout);
   String? _token;
   String? _cookie;
   // In-flight auth requests, shared so concurrent /api calls trigger a single
@@ -1308,6 +1455,7 @@ class DashboardClient {
     bool requiresOAuth = false,
     Map<String, String> gatewayHeaders = const <String, String>{},
     http.Client? httpClient,
+    this.readTimeout = const Duration(seconds: 45),
   }) : _oauth = dashboardOAuth,
        _requiresOAuth = requiresOAuth || dashboardOAuth != null,
        _proxied = proxied,
@@ -1320,7 +1468,9 @@ class DashboardClient {
        ),
        // The app's session-token header is a credential even when the user
        // has not configured custom proxy headers. Never redirect either.
-       _http = _NoRedirectClient(httpClient ?? http.Client());
+       _http = _NoRedirectClient(
+         httpClient ?? IOClient(HttpClient()..connectionTimeout = readTimeout),
+       );
 
   Map<String, String> get _jsonHeaders => {
     ..._gatewayHeaders,
@@ -1358,7 +1508,8 @@ class DashboardClient {
   /// cookie. Throws on failure (bad credentials → 401, etc.).
   Future<String> _login() async {
     try {
-      final res = await _http.post(
+      final res = await _reads.request(
+        'POST',
         Uri.parse('$_baseUrl/auth/password-login'),
         headers: _jsonHeaders,
         body: jsonEncode({
@@ -1403,7 +1554,8 @@ class DashboardClient {
 
   Future<String> _fetchToken() async {
     try {
-      final res = await _http.get(
+      final res = await _reads.request(
+        'GET',
         Uri.parse('$_baseUrl/'),
         headers: _gatewayHeaders,
       );
@@ -1447,14 +1599,6 @@ class DashboardClient {
       'Content-Type': 'application/json',
     };
   }
-
-  /// Resolves the dashboard auth headers for a caller that issues its own
-  /// requests against [baseUrl].
-  ///
-  /// Exposed so collaborators such as the session search client can reuse this
-  /// client's cached cookie/token and its single-flight login, instead of
-  /// re-implementing the auth ladder and triggering a second password login.
-  Future<Map<String, String>> authHeaders() => _authHeaders();
 
   /// Select authentication by configured mode, never by retrying a rejected
   /// ticket as a different auth mechanism. Local Desktop uses its session token.
@@ -1502,11 +1646,11 @@ class DashboardClient {
     Map<String, String>? queryParameters,
     bool retried = false,
   }) async {
-    final headers = await _authHeaders();
+    final headers = await _authHeaders().timeout(readTimeout);
     final uri = Uri.parse(
       '$_baseUrl/api/$endpoint',
     ).replace(queryParameters: queryParameters);
-    final res = await _http.get(uri, headers: headers);
+    final res = await _reads.request('GET', uri, headers: headers);
     if (res.statusCode == 401 && !retried) {
       _resetAuth(headers);
       return apiGet(endpoint, queryParameters: queryParameters, retried: true);
@@ -1523,14 +1667,22 @@ class DashboardClient {
     int? maxBytes,
     bool retried = false,
   }) async {
-    final headers = await _authHeaders();
+    final headers = await _authHeaders().timeout(readTimeout);
     final uri = Uri.parse(
       '$_baseUrl/api/$endpoint',
     ).replace(queryParameters: queryParameters);
-    final request = http.Request('GET', uri)..headers.addAll(headers);
-    final res = await _http.send(request);
+    final http.Response res;
+    try {
+      res = await _reads.request(
+        'GET',
+        uri,
+        headers: headers,
+        maxBytes: maxBytes,
+      );
+    } on DashboardReadTooLarge {
+      throw DashboardResponseTooLargeException(maxBytes!);
+    }
     if (res.statusCode == 401 && !retried) {
-      await res.stream.drain<void>();
       _resetAuth(headers);
       return apiGetBytes(
         endpoint,
@@ -1540,31 +1692,9 @@ class DashboardClient {
       );
     }
     if (res.statusCode != 200) {
-      await res.stream.drain<void>();
       throw DashboardHttpException(res.statusCode, endpoint);
     }
-    if (maxBytes != null &&
-        res.contentLength != null &&
-        res.contentLength! > maxBytes) {
-      await res.stream.listen(null).cancel();
-      throw DashboardResponseTooLargeException(maxBytes);
-    }
-    final body = BytesBuilder(copy: false);
-    var received = 0;
-    await for (final chunk in res.stream) {
-      received += chunk.length;
-      if (maxBytes != null && received > maxBytes) {
-        throw DashboardResponseTooLargeException(maxBytes);
-      }
-      body.add(chunk);
-    }
-    return http.Response.bytes(
-      body.takeBytes(),
-      res.statusCode,
-      headers: res.headers,
-      request: request,
-      reasonPhrase: res.reasonPhrase,
-    );
+    return res;
   }
 
   Future<List<dynamic>> apiGetList(
@@ -1751,5 +1881,8 @@ class DashboardClient {
     return _decodeMapResponse(response);
   }
 
-  void close() => _http.close();
+  void close() {
+    _reads.close();
+    _http.close();
+  }
 }

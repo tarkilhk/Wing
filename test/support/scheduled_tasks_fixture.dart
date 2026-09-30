@@ -39,6 +39,15 @@ class ScheduledTasksFixture {
   }
   final AdministrationFixture admin;
   final jobs = <String, Map<String, dynamic>>{};
+  final runRows = <Map<String, dynamic>>[
+    {
+      'id': 'cron_morning_123',
+      'source': 'cron',
+      'title': 'Your morning briefing',
+      'started_at': 1789606800,
+      'is_active': false,
+    },
+  ];
   bool failList = false,
       failRuns = false,
       missingProfile = false,
@@ -129,17 +138,7 @@ class ScheduledTasksFixture {
     }
     if (path.endsWith('/runs')) {
       if (failRuns) throw StateError('offline');
-      return {
-        'runs': [
-          {
-            'id': 'cron_morning_123',
-            'title': 'Your morning briefing',
-            'started_at': 1789606800,
-            'is_active': false,
-          },
-        ],
-        'limit': int.parse(query['limit']!),
-      };
+      return {'runs': runRows, 'limit': int.parse(query['limit']!)};
     }
     if (method != 'GET') {
       mutations++;

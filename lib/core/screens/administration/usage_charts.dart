@@ -101,15 +101,13 @@ class UsageComposition extends StatelessWidget {
 
 class UsageCalendar extends StatefulWidget {
   final UsageDaily daily;
-  final DateTime rangeStart;
-  final DateTime rangeEnd;
+  final Set<String> periodDates;
   final String? selected;
   final ValueChanged<UsageDay> onSelected;
   const UsageCalendar({
     super.key,
     required this.daily,
-    required this.rangeStart,
-    required this.rangeEnd,
+    required this.periodDates,
     required this.selected,
     required this.onSelected,
   });
@@ -125,15 +123,16 @@ class _UsageCalendarState extends State<UsageCalendar> {
   @override
   void didUpdateWidget(UsageCalendar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.daily.days.first.date != widget.daily.days.first.date ||
-        oldWidget.daily.days.last.date != widget.daily.days.last.date) {
+    if (oldWidget.daily.days.firstOrNull?.date !=
+            widget.daily.days.firstOrNull?.date ||
+        oldWidget.daily.days.lastOrNull?.date !=
+            widget.daily.days.lastOrNull?.date) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _scroll.hasClients) _scroll.jumpTo(0);
       });
       Tooltip.dismissAllToolTips();
     }
-    if (oldWidget.rangeStart != widget.rangeStart ||
-        oldWidget.rangeEnd != widget.rangeEnd) {
+    if (!setEquals(oldWidget.periodDates, widget.periodDates)) {
       Tooltip.dismissAllToolTips();
     }
   }
@@ -160,7 +159,32 @@ class _UsageCalendarState extends State<UsageCalendar> {
   }
 
   Widget _calendar(BuildContext context, double width) {
-    final days = widget.daily.days;
+    final year = widget.daily.calendarDays;
+    if (year.isEmpty) {
+      return const Text('No recorded daily usage in the past year.');
+    }
+    // A newer/retained period can extend past the separately loaded year's
+    // dates. Keep those dates reachable without presenting period counts as
+    // year-wide counts or clipping them to the year snapshot.
+    final bounds = [
+      year.first.date,
+      year.last.date,
+      for (final id in widget.periodDates) DateTime.parse('${id}T00:00:00Z'),
+    ]..sort();
+    final yearById = {for (final day in year) day.id: day};
+    final days = [
+      for (
+        var date = bounds.first;
+        !date.isAfter(bounds.last);
+        date = date.add(const Duration(days: 1))
+      )
+        yearById[date.toIso8601String().substring(0, 10)] ??
+            UsageDay(
+              date,
+              const UsageTokens.unavailable(),
+              isPlaceholder: true,
+            ),
+    ];
     const gap = 3.0, inset = 3.0;
     final offset = days.first.date.weekday % 7;
     final weeks = ((days.length + offset) / 7).ceil();
@@ -177,14 +201,14 @@ class _UsageCalendarState extends State<UsageCalendar> {
     );
     final tokens = WingTokens.of(context);
     final locale = MaterialLocalizations.of(context);
-    bool inRange(UsageDay day) =>
-        !day.date.isBefore(widget.rangeStart) &&
-        !day.date.isAfter(widget.rangeEnd);
+    bool inRange(UsageDay day) => widget.periodDates.contains(day.id);
 
     Widget cell(UsageDay day) {
       final count = day.tokens.total;
       final selected = day.id == widget.selected;
-      final color = count == null
+      final color = day.isPlaceholder
+          ? tokens.border.withValues(alpha: .15)
+          : count == null
           ? tokens.raised
           : count == 0
           ? tokens.border.withValues(alpha: .45)
@@ -196,12 +220,20 @@ class _UsageCalendarState extends State<UsageCalendar> {
       return Semantics(
         key: ValueKey(day.id),
         label:
-            '${locale.formatFullDate(day.date)}: ${count == null ? 'tokens unavailable' : '${locale.formatDecimal(count)} tokens'}${inRange(day) ? ', in selected period' : ''}',
-        button: true,
+            '${locale.formatFullDate(day.date)}, server date: ${day.isPlaceholder
+                ? 'no returned year data'
+                : count == null
+                ? 'tokens unavailable'
+                : '${locale.formatDecimal(count)} tokens'}${inRange(day) ? ', returned for selected period' : ''}',
+        button: !day.isPlaceholder,
         selected: selected,
         child: Tooltip(
           message:
-              '${locale.formatShortDate(day.date)} · UTC\n${count == null ? 'Tokens unavailable' : '${locale.formatDecimal(count)} tokens'}',
+              '${locale.formatShortDate(day.date)} · Server date\n${day.isPlaceholder
+                  ? 'No returned year data'
+                  : count == null
+                  ? 'Tokens unavailable'
+                  : '${locale.formatDecimal(count)} tokens'}',
           excludeFromSemantics: true,
           triggerMode: TooltipTriggerMode.manual,
           preferBelow: false,
@@ -218,7 +250,7 @@ class _UsageCalendarState extends State<UsageCalendar> {
                   tooltipContext
                       .findAncestorStateOfType<TooltipState>()!
                       .ensureTooltipVisible();
-                  widget.onSelected(day);
+                  if (!day.isPlaceholder) widget.onSelected(day);
                 },
                 child: Align(
                   alignment: Alignment.topLeft,
@@ -233,7 +265,7 @@ class _UsageCalendarState extends State<UsageCalendar> {
                           ? Border.all(color: tokens.onSurface, width: 1.5)
                           : null,
                     ),
-                    child: count == null
+                    child: count == null && !day.isPlaceholder
                         ? Icon(
                             Icons.question_mark,
                             size: math.min(square, 9),
@@ -335,7 +367,7 @@ class _UsageCalendarState extends State<UsageCalendar> {
                             duration: _motion(context),
                             child: CustomPaint(
                               key: ValueKey(
-                                '${widget.rangeStart}/${widget.rangeEnd}',
+                                (widget.periodDates.toList()..sort()).join('/'),
                               ),
                               size: Size.infinite,
                               painter: _UsageRangePainter(
@@ -372,7 +404,7 @@ class _UsageCalendarState extends State<UsageCalendar> {
           runSpacing: 4,
           children: [
             Text(
-              'Past year · UTC',
+              'Year view · Server dates',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             Row(
@@ -514,10 +546,11 @@ class UsageAreaChart extends StatelessWidget {
               locale.formatShortMonthDay(days.first.date),
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            Text(
-              locale.formatShortMonthDay(days.last.date),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            if (days.length > 1)
+              Text(
+                locale.formatShortMonthDay(days.last.date),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
           ],
         ),
         const SizedBox(height: 12),
@@ -581,6 +614,13 @@ class _AreaPainter extends CustomPainter {
                     .fold<int>(0, (sum, n) => sum + n!) /
                 maximum);
     for (var type = 0; type < 3; type++) {
+      if (days.length == 1) {
+        canvas.drawRect(
+          Rect.fromLTRB(0, y(0, type + 1), size.width, y(0, type)),
+          Paint()..color = colors[type].withValues(alpha: .82),
+        );
+        continue;
+      }
       final path = Path()..moveTo(x(0), y(0, type));
       for (var i = 0; i < days.length; i++) {
         path.lineTo(x(i), y(i, type + 1));

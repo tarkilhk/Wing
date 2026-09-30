@@ -58,11 +58,9 @@ class UsageAnalyticsReader {
   }
 
   Future<UsageDaily> _readDaily(int days) async {
-    final loadedAt = now().toUtc();
     return UsageDaily.fromJson(
       await profile.read('analytics/usage', {'days': '$days'}),
       period: days,
-      loadedAt: loadedAt,
     );
   }
 

@@ -37,6 +37,9 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
     with WidgetsBindingObserver {
   final _anchorKey = GlobalKey();
   final _iconAction = ValueNotifier(ComposerAction.send);
+  final _keyboardFocus = FocusNode(debugLabel: 'Composer actions');
+  bool _keyboardFocused = false;
+  int _menuRevision = 0;
   OverlayEntry? _overlay;
   Rect _anchor = Rect.zero;
   Rect _choices = Rect.zero;
@@ -80,15 +83,74 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
     WidgetsBinding.instance.removeObserver(this);
     _close();
     _iconAction.dispose();
+    _keyboardFocus.dispose();
     super.dispose();
   }
 
   void _close() {
+    _menuRevision++;
     _overlay?.remove();
     _overlay?.dispose();
     _overlay = null;
     _selected = null;
     _iconAction.value = ComposerAction.send;
+  }
+
+  Future<void> _openKeyboardMenu() async {
+    if (_overlay != null) _close();
+    final revision = ++_menuRevision;
+    final overlayBox =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final anchorBox =
+        _anchorKey.currentContext!.findRenderObject()! as RenderBox;
+    final anchor =
+        anchorBox.localToGlobal(Offset.zero, ancestor: overlayBox) &
+        anchorBox.size;
+    final selected = await showMenu<ComposerAction>(
+      context: context,
+      requestFocus: true,
+      semanticLabel: 'Composer actions',
+      position: RelativeRect.fromRect(anchor, Offset.zero & overlayBox.size),
+      items: [
+        for (final action in widget.unavailable.keys)
+          PopupMenuItem<ComposerAction>(
+            key: ValueKey('composer-keyboard-${action.name}'),
+            value: action,
+            enabled: _enabled(action),
+            child: Text(
+              widget.unavailable[action] == null
+                  ? action.label
+                  : '${action.label}: ${widget.unavailable[action]}',
+            ),
+          ),
+      ],
+    );
+    if (!mounted) return;
+    _keyboardFocus.requestFocus();
+    if (revision == _menuRevision && selected != null && _enabled(selected)) {
+      widget.onSelected(selected);
+    }
+  }
+
+  KeyEventResult _keyboardEvent(FocusNode _, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.contextMenu ||
+        key == LogicalKeyboardKey.arrowDown ||
+        (key == LogicalKeyboardKey.f10 &&
+            HardwareKeyboard.instance.isShiftPressed)) {
+      _openKeyboardMenu();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.space) {
+      if (_enabled(widget.primary)) {
+        widget.onSelected(widget.primary);
+      } else {
+        _openKeyboardMenu();
+      }
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _open(LongPressStartDetails details) {
@@ -270,59 +332,84 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
       (reason) => reason == null,
     );
     return Semantics(
-      hint: 'Hold, slide to an action, then release. Slide away to cancel.',
+      hint:
+          'Hold, slide to an action, then release. Slide away to cancel. '
+          'Keyboard: Down arrow opens actions.',
       customSemanticsActions: {
         for (final action in widget.unavailable.keys)
           if (_enabled(action))
             CustomSemanticsAction(label: action.label): () =>
                 widget.onSelected(action),
       },
-      child: GestureDetector(
-        onLongPressStart: hasActions ? _open : null,
-        onLongPressMoveUpdate: _move,
-        onLongPressEnd: _release,
-        onLongPressCancel: _close,
-        child: TooltipTheme(
-          data: const TooltipThemeData(triggerMode: TooltipTriggerMode.manual),
-          child: IconButton.filled(
-            key: _anchorKey,
-            style: IconButton.styleFrom(
-              minimumSize: const Size(48, 48),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+      child: Focus(
+        key: const ValueKey('composer-action-focus'),
+        focusNode: _keyboardFocus,
+        canRequestFocus: hasActions,
+        skipTraversal: !hasActions,
+        onFocusChange: (focused) => setState(() => _keyboardFocused = focused),
+        onKeyEvent: hasActions ? _keyboardEvent : null,
+        child: ExcludeFocus(
+          child: GestureDetector(
+            onLongPressStart: hasActions ? _open : null,
+            onLongPressMoveUpdate: _move,
+            onLongPressEnd: _release,
+            onLongPressCancel: _close,
+            child: TooltipTheme(
+              data: const TooltipThemeData(
+                triggerMode: TooltipTriggerMode.manual,
               ),
-            ),
-            tooltip: widget.primary.label,
-            icon: ValueListenableBuilder<ComposerAction>(
-              valueListenable: _iconAction,
-              builder: (context, action, _) => AnimatedSwitcher(
-                duration: MediaQuery.disableAnimationsOf(context)
-                    ? Duration.zero
-                    : const Duration(milliseconds: 220),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                transitionBuilder: (child, animation) => FadeTransition(
-                  opacity: animation,
-                  child: ScaleTransition(
-                    scale: Tween<double>(begin: .65, end: 1).animate(animation),
-                    child: RotationTransition(
-                      turns: Tween<double>(
-                        begin: -.08,
-                        end: 0,
-                      ).animate(animation),
-                      child: child,
+              child: IconButton.filled(
+                key: _anchorKey,
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                  side: _keyboardFocused
+                      ? BorderSide(
+                          color: _enabled(widget.primary)
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : Theme.of(context).colorScheme.primary,
+                          width: 2,
+                        )
+                      : null,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                tooltip: widget.primary.label,
+                icon: ValueListenableBuilder<ComposerAction>(
+                  valueListenable: _iconAction,
+                  builder: (context, action, _) => AnimatedSwitcher(
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 220),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: ScaleTransition(
+                        scale: Tween<double>(
+                          begin: .65,
+                          end: 1,
+                        ).animate(animation),
+                        child: RotationTransition(
+                          turns: Tween<double>(
+                            begin: -.08,
+                            end: 0,
+                          ).animate(animation),
+                          child: child,
+                        ),
+                      ),
+                    ),
+                    child: Icon(
+                      composerActionIcon(action),
+                      key: ValueKey('composer-button-icon-${action.name}'),
                     ),
                   ),
                 ),
-                child: Icon(
-                  composerActionIcon(action),
-                  key: ValueKey('composer-button-icon-${action.name}'),
-                ),
+                onPressed: _enabled(widget.primary)
+                    ? () => widget.onSelected(widget.primary)
+                    : null,
               ),
             ),
-            onPressed: _enabled(widget.primary)
-                ? () => widget.onSelected(widget.primary)
-                : null,
           ),
         ),
       ),

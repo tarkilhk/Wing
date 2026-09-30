@@ -56,8 +56,8 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install pinned Android verification tools
-        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;36.0.0"'
+      - name: Install pinned Android SDK and verification tools
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"'
 
       - name: Cache Gradle dependencies and task outputs
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
@@ -115,6 +115,11 @@ jobs:
       - name: Run tests
         run: flutter test --no-pub
 
+      - name: Test diagram preview isolation
+        uses: ./release-tools/.github/actions/test-diagram-preview
+        with:
+          source-directory: source
+
       - name: Build signed release APKs
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -138,6 +143,9 @@ jobs:
       - name: Clean up signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/wing-release.keystore"
+
+      - name: Test native Android boundaries on the JVM
+        run: ./android/gradlew -p android :app:testDebugUnitTest --no-daemon
 
       - name: Verify release APKs
         run: python3 "$RELEASE_TOOLS/verify_release_apks.py"

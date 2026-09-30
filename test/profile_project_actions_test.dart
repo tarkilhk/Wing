@@ -82,6 +82,16 @@ void main() {
         host.calls.where((call) => call.$2 == 'projects.update'),
         hasLength(1),
       );
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('project-name-field')))
+            .enabled,
+        isFalse,
+      );
+      await tester.tapAt(const Offset(8, 8));
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.text('Rename project'), findsOneWidget);
       host.failMutation = true;
       host.delay!.complete();
       await tester.pumpAndSettle();
@@ -95,6 +105,23 @@ void main() {
       expect(host.personalProject['label'], 'Renamed project');
     },
   );
+
+  testWidgets('pending delete stays open until acknowledgement', (
+    tester,
+  ) async {
+    await showHarness(tester);
+    await openAction(tester, 'delete');
+    host.delay = Completer<void>();
+    await tester.tap(find.byKey(const ValueKey('project-delete-confirm')));
+    await tester.pump();
+    await tester.tapAt(const Offset(8, 8));
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.text('Delete project?'), findsOneWidget);
+    host.delay!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Delete project?'), findsNothing);
+  });
 
   testWidgets('appearance sends Desktop color and icon values', (tester) async {
     await showHarness(tester);

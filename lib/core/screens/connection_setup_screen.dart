@@ -1329,27 +1329,42 @@ class _CustomSetupScreenState extends State<_CustomSetupScreen> {
                 ),
                 if (_separate) ...[
                   const SizedBox(height: 16),
-                  TextFormField(
-                    key: const Key('connection-chat-address'),
-                    controller: _chat,
-                    keyboardType: TextInputType.url,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    decoration: const InputDecoration(
-                      labelText: 'Chat gateway base address',
-                      helperText:
-                          'Use an http(s) base address. Wing adds /api/ws.',
-                      helperMaxLines: 4,
-                      errorMaxLines: 5,
+                  if (MediaQuery.textScalerOf(context).scale(16) >= 24) ...[
+                    Text(
+                      'Chat gateway base address',
+                      style: Theme.of(context).textTheme.bodyLarge,
                     ),
-                    validator: (value) {
-                      try {
-                        ConnectionAddress.parse(value ?? '');
-                        return null;
-                      } on FormatException catch (error) {
-                        return error.message;
-                      }
-                    },
+                    const SizedBox(height: 8),
+                  ],
+                  Semantics(
+                    label: MediaQuery.textScalerOf(context).scale(16) >= 24
+                        ? 'Chat gateway base address'
+                        : null,
+                    child: TextFormField(
+                      key: const Key('connection-chat-address'),
+                      controller: _chat,
+                      keyboardType: TextInputType.url,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      decoration: InputDecoration(
+                        labelText:
+                            MediaQuery.textScalerOf(context).scale(16) >= 24
+                            ? null
+                            : 'Chat gateway base address',
+                        helperText:
+                            'Use an http(s) base address. Wing adds /api/ws.',
+                        helperMaxLines: 4,
+                        errorMaxLines: 5,
+                      ),
+                      validator: (value) {
+                        try {
+                          ConnectionAddress.parse(value ?? '');
+                          return null;
+                        } on FormatException catch (error) {
+                          return error.message;
+                        }
+                      },
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Text(

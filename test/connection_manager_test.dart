@@ -3,13 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'support/gateway_application_requests.dart';
+import 'support/loopback_http_fixtures.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
-import 'package:wing/core/services/desktop_gateway_client.dart';
 import 'package:wing/core/services/ws_client.dart';
 
 /// Case-insensitive request header lookup — package:http normalises header
@@ -708,81 +708,6 @@ void main() {
     );
   });
 
-  group('Desktop gateway URL derivation', () {
-    test('derives the Desktop gateway from dashboard details by default', () {
-      final connection = SavedConnection(
-        id: 'miniserver',
-        label: 'Miniserver',
-        host: 'carlos-miniserver.taild544f6.ts.net',
-        port: 8642,
-        apiKey: 'test-key',
-        dashboardPortOverride: 9119,
-        dashboardUsername: 'carlos',
-        dashboardPassword: 'secret',
-      );
-
-      expect(
-        DesktopGatewayClient.normalizedGatewayBaseUrl(connection),
-        'http://carlos-miniserver.taild544f6.ts.net:9119',
-      );
-    });
-
-    test(
-      'ignores a redundant same-host override and derives dashboard port',
-      () {
-        final connection = SavedConnection(
-          id: 'miniserver',
-          label: 'Miniserver',
-          host: 'carlos-miniserver.taild544f6.ts.net',
-          port: 8642,
-          apiKey: 'test-key',
-          dashboardPortOverride: 9119,
-          desktopGatewayUrl: 'https://carlos-miniserver.taild544f6.ts.net',
-        );
-
-        expect(
-          DesktopGatewayClient.normalizedGatewayBaseUrl(connection),
-          'http://carlos-miniserver.taild544f6.ts.net:9119',
-        );
-      },
-    );
-
-    test('preserves an explicit Desktop gateway override', () {
-      final connection = SavedConnection(
-        id: 'remote',
-        label: 'Remote',
-        host: 'api.example.test',
-        port: 8642,
-        apiKey: 'test-key',
-        useHttps: true,
-        dashboardPortOverride: 9119,
-        desktopGatewayUrl: 'https://desktop.example.test/gateway',
-      );
-
-      expect(
-        DesktopGatewayClient.normalizedGatewayBaseUrl(connection),
-        'https://desktop.example.test:443/gateway',
-      );
-    });
-
-    test('includes the dashboard path prefix in the derived URL', () {
-      final connection = SavedConnection(
-        id: 'proxied',
-        label: 'Proxied',
-        host: 'hermes.example.test',
-        port: 443,
-        apiKey: 'test-key',
-        useHttps: true,
-        dashboardPrefix: 'dashboard',
-      );
-
-      expect(
-        DesktopGatewayClient.normalizedGatewayBaseUrl(connection),
-        'https://hermes.example.test:443/dashboard',
-      );
-    });
-  });
-
   group('DashboardClient', () {
     test(
       'logs in and authenticates /api calls with the session cookie',
@@ -1259,6 +1184,8 @@ void main() {
   });
 
   group('Desktop gateway WebSocket URL', () {
+    useRealHttpClientsForLoopbackFixtures();
+
     test('uses a ticket for a secured Desktop gateway', () {
       expect(
         WsClient.buildWebSocketUrl(

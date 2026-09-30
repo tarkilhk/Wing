@@ -510,8 +510,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
       }
       final owner = await _profileControllers.forSession(connection, key);
       var chat = owner.findNotificationChat(key);
-      final mustReview =
-          data['review'] == true || choice == 'always' || chat == null;
+      final loadedForReview = chat == null;
       try {
         chat ??= await owner.loadNotificationApproval(key);
       } catch (_) {
@@ -532,6 +531,12 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
       if (current != null && current.focus.identity != focus.identity) return;
       final request = chat.approval;
       if (request == null || request['request_id'] != focus.id) return;
+      final mustReview =
+          data['review'] == true ||
+          !(widget.connManager.prefs.getBool(notificationPreviewsKey) ??
+              true) ||
+          choice == 'always' ||
+          loadedForReview;
       if (mustReview) {
         final context = _navigatorKey.currentContext;
         if (context == null || !context.mounted) return;
@@ -693,7 +698,14 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         enableProfileNotifications: enableProfileNotifications,
         connManager: widget.connManager,
         onPreferencesChanged: refreshPreferences,
-        onConfigurationChanged: () => unawaited(_syncBackgroundMonitoring()),
+        onConfigurationChanged: () {
+          unawaited(
+            _profileControllers.reconcileConnections(
+              widget.connManager.getConnections(),
+            ),
+          );
+          unawaited(_syncBackgroundMonitoring());
+        },
         backgroundMonitoringState: _backgroundMonitoring.state,
         openMonitoringBatterySettings:
             _backgroundMonitoring.openBatterySettings,
@@ -781,7 +793,11 @@ class HomeScreenState extends State<HomeScreen> {
   static const String _lastConnectionKey = 'last_connection_id';
 
   void _refresh() {
-    setState(() => _connections = widget.connManager.getConnections());
+    final connections = widget.connManager.getConnections();
+    _connectionOwners.removeWhere(
+      (connection, _) => !connections.contains(connection),
+    );
+    setState(() => _connections = connections);
     widget.onConfigurationChanged?.call();
   }
 

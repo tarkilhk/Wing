@@ -4,6 +4,39 @@ Measure the phone and Wing separately. A hot device can make Wing slow even
 when another process supplies most of the sustained load. CPU use identifies
 work; it does not measure an app's share of battery discharge.
 
+## Emulator-first monitoring check
+
+Use a disposable API 36 phone AVD before the physical-phone phase. Build and
+install the isolated diagnostic fixture, then run its native checker:
+
+```sh
+flutter build apk --debug --no-pub --target-platform android-x64 -t integration_test/background_monitoring_device.dart
+adb -s <emulator-id> install -r build/app/outputs/flutter-apk/app-debug.apk
+python3 tools/qa/check_background_monitoring.py --serial <emulator-id> --resource-dir build/emulator-acceptance/performance
+```
+
+The checker rejects physical devices. It tests idle startup, one shared active
+30-second polling timer, timer cancellation after settling, native monitoring
+notification and wake-lock release, engine retention/release, notification
+privacy/preferences, and forced Doze delivery **with battery exemption**. It
+restores its power settings. Stop other QA fixtures and host builds during the
+two 35-second resource windows; retain the exact fixture/build and emulator
+configuration with the output.
+
+In the 30 September 2026 Android 16 x86_64 debug AVD run, active work produced
+one timer and one tick; settled work had zero timers and zero new ticks. Mean
+app CPU was 0.6% active and 0.9% settled (one core = 100%); end PSS was 357,079
+and 350,874 KiB respectively. These single short debug measurements verify
+instrumentation and resource attribution. They are not comparative savings,
+release budgets or physical-device battery measurements. The lower settled PSS
+does not establish a leak-free navigation soak, and the CPU difference does not
+show that idle work uses more energy.
+
+Use the phone matrix below for matched energy, thermal, frame/input latency and
+long-duration retention measurements. Repeat background delivery with the
+phone's normal and restricted battery/network policy; exempt-emulator Doze
+success does not cover OEM restrictions.
+
 ## Repeatable phone capture
 
 Run from the checkout with an authorized ADB device:
@@ -38,7 +71,7 @@ drop or a different typing workload to a code change.
 | Chats and idle conversation | 60 seconds each, keyboard closed/open | CPU and scheduled frames settle; inspect continuous animations, timers and controller updates if they do not. |
 | Typing | 200 edits at a fixed cadence, short and long histories | Measure Flutter build/raster p50/p95/p99 plus input-to-present latency. Draft edits must cause zero unchanged transcript builds and zero workspace monitoring notifications. |
 | Streaming | Replay the same token/tool-event fixture and Markdown answer | CPU, allocation/GC, frame deadlines, response-to-input latency; compare event frequency with UI update frequency. No missing terminal events or approvals. |
-| Navigation soak | Repeat open/close of the same 20 chats for 20 minutes | Compare retained heap, PSS, controllers, sockets and timers after settling/GC. Memory should plateau for a fixed dataset; distinguish caches from retained owners. |
+| Navigation soak | Repeat open/close of the same 20 chats, then an increasing set, for 20 minutes each | Compare retained heap, PSS, controllers, sockets and timers after settling/GC. Settled transcript counts should plateau; distinguish configured owners and active leases from caches. |
 | Background, no work | Home, then screen off, 10 minutes | Check CPU wakeups, polling, sockets and wake locks; distinguish expected retained state from recurring work. |
 | Background, active work | Same known work, then completion | Monitoring continues while needed and releases when finished; delivery and recovery still work. |
 | Battery | Matched 20–30 minute unplugged runs after cooling | Charge-counter slope, thermal status and available power rails; keep screen/network/other apps constant. Short battery-percent samples cannot establish savings. |
@@ -164,3 +197,42 @@ trace did not expose Wing rows in the FrameTimeline table, so native `gfxinfo`
 and other apps' jank classifications must not be substituted for Wing's frames.
 See [Perfetto FrameTimeline documentation](https://perfetto.dev/docs/data-sources/frametimeline)
 for the distinction between frame scheduling, submission and presentation.
+
+## Workspace retention and membership regression boundary
+
+```sh
+flutter test test/project_membership_index_test.dart test/workspace_retention_test.dart test/profile_workspace_registry_test.dart test/profile_workspace_route_lease_test.dart test/chat_browser_data_test.dart
+```
+
+One connection/profile membership index uses stock `projects.tree`, inspected
+at upstream commit `8d30c4e`. Its scan limit covers the complete session count
+and is at least 5,000. The tree filters archived, child and some source sessions;
+only an explicit Home membership proves that a chat is unassigned. An absent
+key remains unavailable, including when coverage is incomplete. Browser tree
+reads populate the same index. Profile refresh, connection loss, global session
+changes and local project/session mutations invalidate it. The 100-project
+regression requires one membership tree read across repeated assigned/Home opens
+and no per-project membership scans; larger histories check the requested limit.
+
+Each controller retains at most 20 unselected, unleased settled chat runtimes.
+Selected and mounted-route chats remain owned, including routes covered by other
+screens. Running turns, child/side work, input requests, drafts, attachments,
+queues, mutations, recovery and notification delivery are exempt until they
+settle. Separate retention notifications keep composer edits off workspace
+monitoring updates. Cached disk reading snapshots retain their existing limits.
+Evicted settled chats reload their server history on reopening.
+
+The registry reconciles exact saved connection identities. Configured owners
+remain available for connection status; deleted or superseded owners close only
+after their leases settle. Network recovery first retires settled obsolete
+owners, cancelling their idle recovery timers; recovery with pending work keeps
+its owner. Network changes reconnect only remaining owners. Home removes obsolete cached
+owner futures when saved connections refresh. Removed browser rows dispose their
+notifiers after their last mounted listener detaches; a key that reappears while
+still observed reuses its notifier.
+
+The synthetic increasing-chat soak observes retained controller chat counts
+and message-content code units; the connection-edit soak observes registry counts,
+socket-close callbacks and reconnect request counts. These are executable
+retention checks, not measured Dart heap bytes, phone PSS, frame latency or
+battery results. Repeat the device matrix above before making those claims.

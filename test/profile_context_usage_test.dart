@@ -27,9 +27,16 @@ void main() {
       preferences: await SharedPreferences.getInstance(),
       gatewayFactory: (scope) {
         final base = host.gateway(scope);
-        return host.gateways[scope.profileName] = ProfileGateway(
+        late final ProfileGateway gateway;
+        gateway = ProfileGateway(
           scope: scope,
           discover: base.discover,
+          connect: () async {
+            if (gateway.onEvent != null) {
+              host.gateways[scope.profileName] = gateway;
+            }
+            await base.connect();
+          },
           get: base.read,
           rpc: (method, params) {
             if (method == 'session.context_breakdown') {
@@ -39,6 +46,7 @@ void main() {
             return base.call(method, params);
           },
         );
+        return gateway;
       },
     );
     await controller.initialize();

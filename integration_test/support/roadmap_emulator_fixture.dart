@@ -11,7 +11,7 @@ import '../../test/support/profile_history_fixture.dart';
 /// are the production implementations, but this fixture cannot reach a Hermes
 /// host or submit work to a model.
 class RoadmapEmulatorFixture extends ProfileHistoryFixture {
-  final gateways = <String, ProfileGateway>{};
+  final gateways = <String, Set<ProfileGateway>>{};
   final configWrites = <Map<String, dynamic>>[];
   final approvalResponses = <Map<String, dynamic>>[];
   final commandDispatches = <Map<String, dynamic>>[];
@@ -24,6 +24,8 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
   final administrationRequests = <(String, Map<String, dynamic>)>[];
   final profileConfigureRequests = <Map<String, dynamic>>[];
   final backendUpdatePosts = <(String, Map<String, dynamic>)>[];
+  final diagnosticPosts = <(String, Map<String, dynamic>)>[];
+  final diagnosticPids = <String, int>{};
   final answerActionRequests = <(String, Map<String, dynamic>)>[];
   final createdProjects = <String, List<Map<String, dynamic>>>{};
   final answerHistories = <String, List<Map<String, dynamic>>>{};
@@ -40,6 +42,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
   bool supervisionEnabled = false;
   int _nextAnswerChild = 0;
   int _nextAnswerRow = 1000;
+  int _nextDiagnosticPid = 5000;
 
   @override
   List<Map<String, dynamic>> projects(String profile) => [
@@ -77,18 +80,40 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
       scope: scope,
       discover: base.discover,
       connect: base.connect,
-      close: base.close,
+      close: () {
+        gateways[scope.profileName]?.remove(fixtureGateway);
+        base.close();
+      },
       get: (path, query) async {
+        if (path == 'analytics/usage') {
+          administrationReads.add((path, Map<String, String>.from(query)));
+          final today = DateTime.now().toUtc();
+          return {
+            'daily': [
+              for (var i = 0; i < 6; i++)
+                {
+                  'day': today
+                      .subtract(Duration(days: i))
+                      .toIso8601String()
+                      .substring(0, 10),
+                  'input_tokens': 5600 + i * 100,
+                  'cache_read_tokens': 0,
+                  'output_tokens': 780 + i * 10,
+                },
+            ],
+          };
+        }
         if (path == 'analytics/models') {
           administrationReads.add((path, Map<String, String>.from(query)));
           return {
             'models': const [
               {
-                'model': 'openai-codex/gpt-6-astra',
-                'provider': 'openai-codex',
+                'model': 'openai/gpt-6-astra',
+                'provider': 'openai',
                 'sessions': 12,
                 'api_calls': 34,
                 'input_tokens': 5600,
+                'cache_read_tokens': 0,
                 'output_tokens': 780,
                 'estimated_cost': 1.25,
               },
@@ -216,7 +241,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
             };
           case 'approval.respond':
             approvalResponses.add(Map<String, dynamic>.from(params));
-            return {'status': 'ok'};
+            return {'resolved': 1};
           case 'projects.discover_repos':
             return {
               'repos': const [
@@ -437,7 +462,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
         }
       },
     );
-    gateways[scope.profileName] = fixtureGateway;
+    (gateways[scope.profileName] ??= {}).add(fixtureGateway);
     return fixtureGateway;
   }
 
@@ -485,7 +510,8 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
       }).toList();
 
   void completeAnswerAction(String profile, String runtimeId) {
-    gateways[profile]!.onEvent!(
+    _emit(
+      profile,
       StreamEvent(
         type: 'message.complete',
         sessionId: runtimeId,
@@ -547,7 +573,8 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
         };
 
   void requestApproval(String profile, String runtimeId) {
-    gateways[profile]!.onEvent!(
+    _emit(
+      profile,
       StreamEvent(
         type: 'approval',
         sessionId: runtimeId,
@@ -561,7 +588,8 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
   }
 
   void deliverReview(String profile, String runtimeId) {
-    gateways[profile]!.onEvent!(
+    _emit(
+      profile,
       StreamEvent(
         type: 'review.summary',
         sessionId: runtimeId,
@@ -571,7 +599,8 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
   }
 
   void requestVaultUnlock(String profile, String runtimeId) {
-    gateways[profile]!.onEvent!(
+    _emit(
+      profile,
       StreamEvent(
         type: 'vault.unlock_prompt',
         sessionId: runtimeId,
@@ -582,6 +611,60 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
         },
       ),
     );
+  }
+
+  Map<String, dynamic> startDiagnostic(String path, Map<String, dynamic> body) {
+    if (!const {'ops/doctor', 'ops/security-audit'}.contains(path)) {
+      throw StateError('Unexpected diagnostic: $path');
+    }
+    diagnosticPosts.add((path, Map<String, dynamic>.from(body)));
+    final name = path.substring(4);
+    final pid = diagnosticPids[name] = ++_nextDiagnosticPid;
+    return {'name': name, 'pid': pid};
+  }
+
+  Map<String, dynamic> readDiagnosticStatus(
+    String path,
+    Map<String, String> query,
+  ) {
+    if (!const {
+      'actions/doctor/status',
+      'actions/security-audit/status',
+    }.contains(path)) {
+      throw StateError('Unexpected diagnostic status: $path');
+    }
+    administrationReads.add((path, Map<String, String>.from(query)));
+    final name = path.split('/')[1];
+    final pid = diagnosticPids[name];
+    if (pid == null) throw StateError('Diagnostic was not started');
+    return {
+      'pid': pid,
+      'running': false,
+      'exit_code': 0,
+      'lines': name == 'doctor'
+          ? [
+              '=== doctor started roadmap-fixture ===',
+              '─' * 60,
+              'All checks passed! 🎉',
+            ]
+          : [
+              '=== security-audit started roadmap-fixture ===',
+              'No known vulnerabilities found across 2 component(s).',
+            ],
+    };
+  }
+
+  void _emit(String profile, StreamEvent event) {
+    final listeners = [
+      for (final gateway in gateways[profile] ?? const <ProfileGateway>{})
+        ?gateway.onEvent,
+    ];
+    if (listeners.isEmpty) {
+      throw StateError('No live fixture listener for $profile');
+    }
+    for (final listener in listeners) {
+      listener(event);
+    }
   }
 }
 

@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/native_notification_sink.dart';
+import 'package:wing/core/services/turn_notification_service.dart'
+    show notificationPreviewsKey;
 import 'package:wing/main.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 
@@ -24,13 +26,17 @@ void main() {
 Future<void> checkDisconnectedNotification(
   WidgetTester tester, {
   required bool review,
+  bool hidePreviews = false,
+  bool hidePreviewsAfterPosting = false,
 }) async {
+  final expectsReview = review || hidePreviews || hidePreviewsAfterPosting;
   tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
   await tester.pump();
   FlutterSecureStorage.setMockInitialValues({});
   SharedPreferences.setMockInitialValues({
     'notification_permission_requested': true,
     'microphone_permission_requested': true,
+    notificationPreviewsKey: !hidePreviews,
   });
   final preferences = await SharedPreferences.getInstance();
   final manager = await ConnectionManager.create(preferences);
@@ -84,6 +90,9 @@ Future<void> checkDisconnectedNotification(
   host.event('a', 'approval', request);
   await tester.pumpAndSettle();
   final notice = shown.last;
+  if (hidePreviewsAfterPosting) {
+    await preferences.setBool(notificationPreviewsKey, false);
+  }
   expect(chat.approval?['request_id'], 'background-once');
   tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
   host.connectFailures = 20;
@@ -104,7 +113,7 @@ Future<void> checkDisconnectedNotification(
         )
         .then((_) => handled = true),
   );
-  if (review) {
+  if (expectsReview) {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(
@@ -129,10 +138,10 @@ Future<void> checkDisconnectedNotification(
       .toList();
   expect(decisions, isEmpty);
   expect(chat.approval?['request_id'], 'background-once');
-  if (!review) {
+  if (!expectsReview) {
     expect(chat.notificationActionErrorRequestId, 'background-once');
   }
-  final reported = review || chat.notificationActionError != null;
+  final reported = expectsReview || chat.notificationActionError != null;
   tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
   await tester.pumpWidget(const SizedBox.shrink());
   expect(

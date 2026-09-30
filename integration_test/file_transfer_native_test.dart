@@ -18,6 +18,35 @@ void main() {
   const contents = '{"probe":"Wing native file transfer — ✓"}';
   late ConfigBackupIo backupIo;
 
+  Future<Set<String>> fixtureCacheFiles() async {
+    final cache = await getTemporaryDirectory();
+    final files = <String>{};
+    for (final file in cache.listSync().whereType<File>()) {
+      if (file.uri.pathSegments.last.startsWith('wing-config-')) {
+        files.add(file.path);
+      }
+    }
+    for (final name in ['file_picker', 'share_plus']) {
+      final directory = Directory('${cache.path}/$name');
+      if (!await directory.exists()) continue;
+      for (final file
+          in directory
+              .listSync(recursive: true, followLinks: false)
+              .whereType<File>()) {
+        final filename = file.uri.pathSegments.last;
+        if ((name == 'share_plus' && filename.startsWith('wing-config-')) ||
+            (name == 'file_picker' &&
+                [
+                  'wing-native-probe.json',
+                  'wing-native-probe.png',
+                ].contains(filename))) {
+          files.add(file.path);
+        }
+      }
+    }
+    return files;
+  }
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     backupIo = ConfigBackupIo(
@@ -25,6 +54,18 @@ void main() {
         await SharedPreferences.getInstance(),
       ),
     );
+    final previousFiles = await fixtureCacheFiles();
+    addTearDown(() async {
+      final ownedFiles = (await fixtureCacheFiles()).difference(previousFiles);
+      for (final path in ownedFiles) {
+        await File(path).delete();
+      }
+      expect(
+        (await fixtureCacheFiles()).difference(previousFiles),
+        isEmpty,
+        reason: 'Owned export and picker copies must be removed.',
+      );
+    });
   });
 
   testWidgets('native metadata identifies the installed debug app', (_) async {
@@ -80,16 +121,24 @@ void main() {
   testWidgets('backup export opens Android sharing and handles dismissal', (
     _,
   ) async {
+    final directory = await getTemporaryDirectory();
+    final previousExports = directory
+        .listSync()
+        .whereType<File>()
+        .map((file) => file.path)
+        .toSet();
     debugPrint('FILE_TRANSFER:share-cancel');
     expect(await backupIo.deliverExport(contents), isNull);
-    final directory = await getTemporaryDirectory();
-    final exports = directory.listSync().whereType<File>().where(
-      (file) => file.uri.pathSegments.last.startsWith('wing-config-'),
-    );
-    expect(exports, isNotEmpty);
-    expect(await exports.last.readAsString(), contents);
-    for (final file in exports) {
-      await file.delete();
-    }
+    final exports = directory
+        .listSync()
+        .whereType<File>()
+        .where(
+          (file) =>
+              file.uri.pathSegments.last.startsWith('wing-config-') &&
+              !previousExports.contains(file.path),
+        )
+        .toList();
+    expect(exports, hasLength(1));
+    expect(await exports.single.readAsString(), contents);
   });
 }

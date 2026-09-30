@@ -30,6 +30,11 @@ Stop as the busy composer's primary action and opened a sheet on long press.
   changed action availability dismiss the selector without acting.
 - Screen readers have named actions on the button, so dragging is optional.
   Queued-message rows still open queue management and support editing.
+- Hardware keyboards can Tab to the action button whenever any action is
+  available. Enter or Space runs an available primary action; when the primary
+  is unavailable, either key opens the action menu. Down arrow, the Menu key and
+  Shift+F10 open the menu directly. Arrow keys select an available action, Enter
+  runs it, and Escape closes the menu and returns focus to the button.
 
 Tests cover held movement and release, cancellation, disabled choices, default
 preference persistence, keyboard and large text layouts, screen reader actions,

@@ -90,7 +90,9 @@ class TaskDeliveryTarget {
 class TaskRun {
   TaskRun.fromJson(Map<String, dynamic> json)
     : id = json['id'] as String,
+      source = json['source'] as String,
       title = json['title'] as String? ?? '',
+      preview = json['preview'] as String? ?? '',
       active = json['is_active'] == true,
       started = json['started_at'] is num
           ? DateTime.fromMillisecondsSinceEpoch(
@@ -98,9 +100,11 @@ class TaskRun {
               isUtc: true,
             )
           : null;
-  final String id, title;
+  final String id, source, title, preview;
   final bool active;
   final DateTime? started;
+  bool get isConversation => source == 'cron';
+  bool get isScriptOutput => source == 'cron_output';
 }
 
 class TaskTemplate {

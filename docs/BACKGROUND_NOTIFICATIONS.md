@@ -35,7 +35,9 @@ App settings has independent completion/attention switches, **Show message previ
 
 Reply previews omit reasoning, code blocks, tool output and URLs. Approval previews show the command being authorized. Secure-input requests and failures use fixed text. Alerts use private lock-screen visibility; Android settings control exposure or generic system text. See [Privacy](../PRIVACY.md). Each scoped chat has one notification slot. Unresolved input takes priority over the latest unread result. Mixed input requests preserve first-seen FIFO order and show counts; accepted or remotely resolved requests advance to the next request. The same dismissed state stays dismissed across refreshes and restarts.
 
-All approval actions require unlocking. Sending keeps the alert visible with disabled choices until Hermes confirms acceptance; failure retains the request. Permanent approval always opens a matching-pattern confirmation in the chat. A command too long to review in the notification also opens the chat before confirmation. Hidden previews provide Review only.
+All approval actions require unlocking. Sending keeps the alert visible with disabled choices until Hermes confirms acceptance; failure retains the request. Permanent approval opens a matching-pattern confirmation for the owning request in Wing. A command too long to review in the notification also requires confirmation in Wing. Hidden previews provide Review only.
+
+Notification actions enter through an unexported activity. Immutable intents carry opaque handles whose private records bind the chat, request, revision, choice and rendering-derived review policy. Each handle is consumed once; replacement revokes earlier notification actions, and cancellation revokes all related handles. A private main-activity review handoff waiting for unlock survives a rerender only when its exact target and revision are unchanged. The exported main activity accepts only a separate five-minute handoff created by that private activity, and always opens review for approval handoffs. It ignores raw interaction JSON and malformed or forged handles. Notification handles survive process restart for up to seven days; expired actions require reopening Wing. Stored inputs are bounded and schema checked. Current preview settings and the live request are checked again before a decision, so disabling previews after posting also requires review.
 
 While the existing watcher runs, a single 30-second timer reconciles pending notices against corroborated runtime/open-request snapshots and the approval queue. Resume also reconciles once. Pending requests never extend the watcher's lifetime. Stock desktop read watermarks do not prove the latest answer was visible, so desktop opening does not clear result notifications; completed desktop decisions can clear pending-input notices.
 
@@ -72,6 +74,15 @@ Refresh server state when opening the chat. Notifications supplement that state 
 Production-controller live-event tests, native permission/posting/tap tests and fixture reconciliation tests cover different boundaries. The emulator lifecycle fixture checks posting after Home, activity destruction/recreation, and forced Doze with the battery exemption, plus idle startup, multiple simultaneous chats, notification retention after the last chat asks for input, reply/resume, and wake-lock release when work ends. These checks do not guarantee every manufacturer policy or every server event. Use the relevant drivers listed in [Testing](TESTING.md) when notification behavior changes.
 
 ### Native lifecycle regression
+
+Native boundary unit tests exercise malformed JSON, wrong types, exact target/choice binding, purpose separation, restart, replay, expiry, revocation, storage failure and external share URI policy. Run these sequentially with Flutter checks from the documented toolchain:
+
+```sh
+cd android
+./gradlew :app:testDebugUnitTest
+```
+
+These JVM tests do not exercise Android's actual lock screen, URI grants or provider lookup. Disposable-emulator acceptance must also cover locked/unlocked actions, a process restart, hidden previews, expired server requests, and a second app sending valid granted content, revoked grants, private file URIs and Wing-owned provider URIs. Internal camera capture must continue to recover through its saved descriptor.
 
 Build and install the isolated fixture (never over a production app):
 

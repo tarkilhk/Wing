@@ -6,32 +6,11 @@
 // a JSON-RPC response with the same id.
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:web_socket_channel/io.dart';
 
 import '../models/connection.dart';
 import '../models/gateway_sensitive_prompt.dart';
-
-final HttpClient _noRedirectWebSocketClient = _NoRedirectWebSocketHttpClient();
-
-/// `WebSocket.connect` only calls `openUrl` on its custom client. The SDK
-/// otherwise follows redirects and forwards arbitrary headers to the new
-/// origin, so header-authenticated gateways use this narrow fail-closed seam.
-class _NoRedirectWebSocketHttpClient implements HttpClient {
-  final HttpClient _inner = HttpClient();
-
-  @override
-  Future<HttpClientRequest> openUrl(String method, Uri url) async {
-    final request = await _inner.openUrl(method, url);
-    request.followRedirects = false;
-    return request;
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => throw UnsupportedError(
-    'WebSocket transport used an unsupported HttpClient operation.',
-  );
-}
+import 'authenticated_web_socket.dart';
 
 Object? _deepFreezeJson(Object? value) {
   if (value is Map) {
@@ -238,10 +217,9 @@ class WsClient {
     // Observe that error future immediately; the waiter still receives it.
     readyCompleter.future.ignore();
     final wsUrl = buildWebSocketUrl(baseUrl, token: _token, ticket: _ticket);
-    final channel = IOWebSocketChannel.connect(
+    final channel = connectAuthenticatedWebSocket(
       Uri.parse(wsUrl),
       headers: _gatewayHeaders,
-      customClient: _gatewayHeaders.isEmpty ? null : _noRedirectWebSocketClient,
     );
     _channel = channel;
     channel.stream.listen(

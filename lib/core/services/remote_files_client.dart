@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'connection_manager.dart';
-import 'desktop_gateway_client.dart';
+import 'gateway_endpoint.dart';
 
 class RemoteDirectory {
   final String path;
@@ -120,9 +120,7 @@ class RemoteFilesClient implements RemoteFilesDataSource {
   });
 
   factory RemoteFilesClient.fromConnection(SavedConnection connection) {
-    final baseUri = Uri.parse(
-      DesktopGatewayClient.normalizedGatewayBaseUrl(connection),
-    );
+    final baseUri = Uri.parse(normalizedGatewayBaseUrl(connection));
     return RemoteFilesClient(
       dashboard: DashboardClient(
         host: baseUri.host,

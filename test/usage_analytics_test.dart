@@ -48,44 +48,85 @@ void main() {
   );
 
   test(
-    'rolling day includes both partial UTC dates, fills only absent days',
+    'returned server dates and unknown counts survive without inferred boundaries',
     () {
-      final data = UsageDaily.fromJson(
-        {
-          'daily': [
-            {'day': '2026-09-17', ...row},
-            {'day': '2026-09-18', 'input_tokens': 3, 'output_tokens': 2},
-          ],
-        },
-        period: 1,
-        loadedAt: now,
-      );
+      final data = UsageDaily.fromJson({
+        'daily': [
+          {'day': '2026-09-17', ...row},
+          {'day': '2026-09-18', 'input_tokens': 3, 'output_tokens': 2},
+        ],
+      }, period: 1);
       expect(data.days.map((d) => d.id), ['2026-09-17', '2026-09-18']);
       expect(data.days.first.tokens.total, 1280000);
       expect(data.days.last.tokens.total, isNull);
-      final empty = UsageDaily.fromJson(
-        {'daily': []},
-        period: 365,
-        loadedAt: now,
-      );
-      expect(empty.days.length, 366);
-      expect(empty.days.every((d) => d.tokens.total == 0), isTrue);
+      final empty = UsageDaily.fromJson({'daily': []}, period: 365);
+      expect(empty.days, isEmpty);
+      expect(empty.calendarDays, isEmpty);
+      expect(() => UsageDaily.fromJson({}, period: 7), throwsFormatException);
       expect(
-        () => UsageDaily.fromJson({}, period: 7, loadedAt: now),
+        () => UsageDaily.fromJson({
+          'daily': [
+            {'day': '2026-02-30'},
+          ],
+        }, period: 7),
         throwsFormatException,
       );
-      expect(
-        () => UsageDaily.fromJson(
+    },
+  );
+  for (final (name, dates) in [
+    ('positive offset at UTC year end', ['2026-12-31', '2027-01-01']),
+    ('negative offset partial first date', ['2025-12-30', '2025-12-31']),
+    ('spring DST', ['2026-03-08', '2026-03-09']),
+    ('fall DST', ['2026-11-01', '2026-11-02']),
+    ('month rollover', ['2026-09-30', '2026-10-01']),
+  ]) {
+    test('$name preserves every returned date and its tokens', () {
+      final daily = UsageDaily.fromJson({
+        'daily': [
+          for (final date in dates.reversed)
+            {
+              'day': date,
+              'input_tokens': 100,
+              'cache_read_tokens': 0,
+              'output_tokens': 50,
+            },
+        ],
+      }, period: 1);
+      expect(daily.days.map((d) => d.id), dates);
+      expect(daily.reportedDates, dates.toSet());
+      expect(UsageTokens.sum(daily.days.map((d) => d.tokens)).total, 300);
+      expect(daily.days.every((d) => d.date.isUtc && !d.isPlaceholder), isTrue);
+      expect(daily.calendarDays.last.id, dates.last);
+      expect(daily.calendarDays.first.isPlaceholder, isTrue);
+      expect(daily.calendarDays.first.tokens.total, isNull);
+    });
+  }
+  test(
+    'year view preserves adjacent-year rows and marks only padding unknown',
+    () {
+      final daily = UsageDaily.fromJson({
+        'daily': [
           {
-            'daily': [
-              {'day': '2026-02-30'},
-            ],
+            'day': '2025-12-31',
+            'input_tokens': 0,
+            'cache_read_tokens': 0,
+            'output_tokens': 0,
           },
-          period: 7,
-          loadedAt: now,
-        ),
-        throwsFormatException,
-      );
+          {
+            'day': '2027-01-01',
+            'input_tokens': 100,
+            'cache_read_tokens': 0,
+            'output_tokens': 50,
+          },
+        ],
+      }, period: 365);
+      expect(daily.calendarDays.first.id, '2025-12-31');
+      expect(daily.calendarDays.last.id, '2027-01-01');
+      expect(daily.calendarDays.where((d) => d.isPlaceholder), isEmpty);
+      expect(daily.days.first.tokens.total, 0);
+      expect(daily.days[1].tokens.total, 0);
+      expect(daily.reportedDates, {'2025-12-31', '2027-01-01'});
+      expect(UsageTokens.sum(daily.days.map((d) => d.tokens)).total, 150);
     },
   );
   test(

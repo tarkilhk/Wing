@@ -38,10 +38,14 @@ class FilterHost extends Host {
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
-    final gateway = ProfileGateway(
+    late final ProfileGateway gateway;
+    gateway = ProfileGateway(
       scope: scope,
       discover: discover,
-      connect: base.connect,
+      connect: () async {
+        if (gateway.onEvent != null) gateways[scope.profileName] = gateway;
+        await base.connect();
+      },
       close: base.close,
       rpc: (method, params) async {
         final result = await base.call(method, params);
@@ -94,7 +98,6 @@ class FilterHost extends Host {
         };
       },
     );
-    gateways[scope.profileName] = gateway;
     return gateway;
   }
 }
@@ -105,9 +108,10 @@ void main() {
   late ProfileWorkspaceController controller;
   ProfileWorkspaceController makeController([
     String identity = 'host-identity',
+    String connectionId = 'host',
   ]) => ProfileWorkspaceController(
     connection: SavedConnection(
-      id: 'host',
+      id: connectionId,
       label: 'Host',
       host: 'localhost',
       port: 1,
@@ -186,7 +190,7 @@ void main() {
   );
 
   test(
-    'selection persists per verified connection and across profiles and archives',
+    'selection follows saved connection across authentication, profiles and archives',
     () async {
       await controller.setSessionVisibility(SessionVisibility.all);
       await controller.navigateProfile('b');
@@ -196,10 +200,13 @@ void main() {
       expect(host.listRequests.last.$2['archived'], 'only');
       expect(host.listRequests.last.$2.containsKey('exclude_sources'), isFalse);
       final restored = makeController();
-      final other = makeController('another-server');
+      final reauthenticated = makeController('new-grant');
+      final other = makeController('another-server', 'other-connection');
       addTearDown(restored.dispose);
+      addTearDown(reauthenticated.dispose);
       addTearDown(other.dispose);
       expect(restored.sessionVisibility, SessionVisibility.all);
+      expect(reauthenticated.sessionVisibility, SessionVisibility.all);
       expect(other.sessionVisibility, SessionVisibility.chats);
     },
   );

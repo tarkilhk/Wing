@@ -35,6 +35,7 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
       if (row['cwd'] ==
               projects(profile).firstWhere((p) => p['id'] == id)['path'] ||
           (row['cwd'] == '/not-the-project-path' &&
+              id == 'p2' &&
               row['id'] == 'project-only'))
         row,
   ];

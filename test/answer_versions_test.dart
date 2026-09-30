@@ -24,7 +24,9 @@ class AnswerHost {
   void Function(List<Map<String, dynamic>>)? alterBranch;
   List<Map<String, dynamic>>? branchReplyMessages;
   Completer<void>? submitDelay;
+  Completer<void>? resumeDelay;
   Object? submitError;
+  bool submitErrorAfterAcceptance = false;
   bool omitRowIds = false;
   bool omitSessionParent = false;
   bool clearSessionParent = false;
@@ -71,8 +73,15 @@ class AnswerHost {
 
   ProfileGateway gateway(
     WorkspaceScope scope,
-  ) => gateways[scope.profileName] = ProfileGateway(
+  ) {
+    late final ProfileGateway gateway;
+    gateway = ProfileGateway(
     scope: scope,
+    connect: () async {
+      // Short-lived project readers have no event subscription. Keep emitted
+      // turn events addressed to the controller's live transport.
+      if (gateway.onEvent != null) gateways[scope.profileName] = gateway;
+    },
     discover: () async => const ProfileDiscovery(
       profiles: [
         HermesProfile(name: 'a'),
@@ -127,6 +136,7 @@ class AnswerHost {
         case 'projects.tree':
           return {'projects': <Map<String, dynamic>>[]};
         case 'session.resume':
+          await resumeDelay?.future;
           return session(id);
         case 'session.history':
           return {
@@ -161,7 +171,9 @@ class AnswerHost {
           };
         case 'prompt.submit':
           await submitDelay?.future;
-          if (submitError != null) throw submitError!;
+          if (submitError != null && !submitErrorAfterAcceptance) {
+            throw submitError!;
+          }
           final rows = history(profile, id);
           final cut = params['truncate_before_row_id'];
           if (cut != null) {
@@ -178,11 +190,14 @@ class AnswerHost {
             'text': 'New answer $next',
             'row_id': nextRow++,
           });
+          if (submitError != null) throw submitError!;
           return {'status': 'streaming'};
       }
       return {};
     },
-  );
+    );
+    return gateway;
+  }
 
   Future<void> complete(ProfileChat chat) async {
     gateways[chat.key.workspace.profileName]!.onEvent!(
@@ -901,7 +916,11 @@ fixture-value-amber-729
       regenerate: true,
     ))!;
     await host.complete(regenerated);
-    host.submitError = JsonRpcError('prompt.submit', 'Session busy');
+    host.submitError = JsonRpcError(
+      'prompt.submit',
+      'Session busy',
+      code: 4009,
+    );
     await expectLater(
       controller.branchAnswer(original, 1, regenerate: true),
       throwsStateError,
@@ -981,6 +1000,62 @@ fixture-value-amber-729
       ]);
     },
   );
+
+  for (final failure in [
+    JsonRpcError('prompt.submit', 'Timeout', reason: 'request_timeout'),
+    JsonRpcError(
+      'prompt.submit',
+      'Connection closed',
+      reason: 'connection_closed',
+    ),
+    JsonRpcError('prompt.submit', 'Internal error', code: -32603),
+    JsonRpcError(
+      'prompt.submit',
+      'Session storage could not be written',
+      code: 5071,
+    ),
+  ]) {
+    test(
+      'regeneration reconciles accepted history after ${failure.reason ?? failure.code}',
+      () async {
+        // Hermes has already rewound the durable history before the reply fails.
+        host.submitError = failure;
+        host.submitErrorAfterAcceptance = true;
+        final regenerated = await controller.branchAnswer(
+          original,
+          2,
+          regenerate: true,
+        );
+
+        expect(regenerated, same(original));
+        expect(original.status, ProfileTurnStatus.reconnecting);
+        expect(original.error, contains('uncertain'));
+        expect(original.error, isNot(contains('unchanged')));
+        expect(original.messages.map(answerMessageText), ['Original prompt']);
+
+        host.resumeDelay = Completer<void>();
+        final recovery = controller.reconnect(original.key.workspace);
+        await controller.updateDraft(original, 'New draft during recovery');
+        host.resumeDelay!.complete();
+        await recovery;
+
+        expect(original.messages.map(answerMessageText), [
+          'Original prompt',
+          'New answer 0',
+        ]);
+        expect(original.draft, 'New draft during recovery');
+        expect(original.status, ProfileTurnStatus.completed);
+        expect(
+          host.calls.where((call) => call.$1 == 'prompt.submit'),
+          hasLength(1),
+        );
+        expect(
+          host.calls.where((call) => call.$1 == 'session.branch'),
+          isEmpty,
+        );
+      },
+    );
+  }
 
   testWidgets(
     'regenerate updates the same chat without parent navigation or carousel',

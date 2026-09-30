@@ -33,7 +33,9 @@ Loops expose Pause, Resume and Stop; heartbeats expose Pause, Resume and confirm
 
 The installed gateway reads `process.list {session_id:<parent runtime>}` through a live session. It filters the process registry by that session's server-owned `session_key`. Rows use `session_id` as the process ID and include command, working directory, PID, owner task, server-reported uptime, `running` or `exited` status, and a 4,000-character output tail. Exit code, detached state and completion notification are optional. There is no separate process-output RPC.
 
-A targeted stop uses `process.kill {session_id:<parent runtime>,process_id:<row session_id>}`. The handler rejects a process outside the resolved session before attempting the kill. A `killed` or `already_exited` result is an acknowledgement; a resolved `{status:"error"}` payload is not. The gateway has no `process.dismiss` method. Desktop dismissal is transient client state that hides a finished row while the registry still reports it. Broad `/stop` calls the separate global `process.stop` operation and is not a per-row substitute.
+A targeted stop uses `process.kill {session_id:<parent runtime>,process_id:<row session_id>}`. The handler rejects a process outside the resolved session before attempting the kill. A `killed` or `already_exited` result is an acknowledgement; a resolved `{status:"error"}` payload is not. The gateway has no `process.dismiss` method. Desktop dismissal is transient client state that hides a finished row while the registry still reports it.
+
+Wing's chat-local `/stop` interrupts the selected chat, refreshes its session-owned process list, and kills only verified running rows through `process.kill`. It stops on an unconfirmed read or kill and asks the user to refresh before retrying; `/interrupt` only interrupts the chat. Stock `process.stop` is registry-wide and is not called by Wing's chat-local command or used as a per-row substitute.
 
 ## Mobile boundaries
 

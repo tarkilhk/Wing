@@ -11,6 +11,21 @@ typedef _BrowserSources = ({
   Set<ProfileSessionKey> chats,
 });
 
+/// Removed rows remain valid until their last mounted listener detaches.
+class _BrowserRow extends ValueNotifier<ChatListEntry> {
+  _BrowserRow(super.value, this.onUnused);
+  final VoidCallback onUnused;
+  bool retired = false;
+
+  bool get unused => !hasListeners;
+
+  @override
+  void removeListener(VoidCallback listener) {
+    super.removeListener(listener);
+    if (retired && unused) onUnused();
+  }
+}
+
 /// A read-only connection-wide index. Four profiles at a time, 100 rows per
 /// request. Publication is generation guarded and never changes chat ownership.
 class ChatBrowserData extends ChangeNotifier {
@@ -19,7 +34,7 @@ class ChatBrowserData extends ChangeNotifier {
     controller.browserChanges.addListener(_controllerChanged);
   }
   final ProfileWorkspaceController controller;
-  final _values = <ProfileSessionKey, ValueNotifier<ChatListEntry>>{};
+  final _values = <ProfileSessionKey, _BrowserRow>{};
   final _positions = <ProfileSessionKey, int>{};
   final _localEntries = <ProfileSessionKey>{};
   _BrowserSources _sources = (snapshots: [], chats: {});
@@ -28,7 +43,20 @@ class ChatBrowserData extends ChangeNotifier {
   final rowsChanged = ValueNotifier<Set<ProfileSessionKey>>({});
 
   List<ChatListEntry> get entries => _entries;
+  @visibleForTesting
+  int get retainedRowCount => _values.length;
   ValueListenable<ChatListEntry> row(ProfileSessionKey key) => _values[key]!;
+
+  void _retireRow(ProfileSessionKey key, _BrowserRow row) {
+    if (_disposed ||
+        !row.retired ||
+        !row.unused ||
+        !identical(_values[key], row)) {
+      return;
+    }
+    _values.remove(key);
+    row.dispose();
+  }
 
   String? _runtimeLabel(ProfileChat? chat) => switch (chat?.status) {
     ProfileTurnStatus.failed => 'Failed',
@@ -148,11 +176,21 @@ class ChatBrowserData extends ChangeNotifier {
     }
     for (final entry in next) {
       final key = entry.sessionKey;
+      _values[key]?.retired = false;
       if (!_values.containsKey(key)) {
-        _values[key] = ValueNotifier(entry);
+        late final _BrowserRow row;
+        row = _BrowserRow(entry, () => _retireRow(key, row));
+        _values[key] = row;
       } else if (changed.contains(key)) {
         _entries[_positions[key]!] = entry;
         _values[key]!.value = entry;
+      }
+      _values[key]!.retired = false;
+    }
+    for (final item in _values.entries.toList()) {
+      if (!_positions.containsKey(item.key)) {
+        item.value.retired = true;
+        _retireRow(item.key, item.value);
       }
     }
     if (changed.isNotEmpty) rowsChanged.value = changed;

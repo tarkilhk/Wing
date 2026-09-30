@@ -74,7 +74,11 @@ void main() {
     );
     final before = List<Map<String, dynamic>>.of(original.messages);
     final statusBefore = original.status;
-    host.submitError = JsonRpcError('prompt.submit', 'Session busy');
+    host.submitError = JsonRpcError(
+      'prompt.submit',
+      'Session busy',
+      code: 4009,
+    );
 
     final accepted = await controller.editSavedPrompt(
       original,
@@ -106,6 +110,66 @@ void main() {
     expect(original.error, contains('uncertain'));
   });
 
+  for (final failure in [
+    JsonRpcError('prompt.submit', 'Timeout', reason: 'request_timeout'),
+    JsonRpcError(
+      'prompt.submit',
+      'Connection closed',
+      reason: 'connection_closed',
+    ),
+    JsonRpcError('prompt.submit', 'Internal error', code: -32603),
+    JsonRpcError(
+      'prompt.submit',
+      'Session storage could not be written',
+      code: 5071,
+    ),
+  ]) {
+    test(
+      'edit reconciles accepted history after ${failure.reason ?? failure.code}',
+      () async {
+        await controller.updateDraft(original, 'Unrelated draft');
+        original.queuedPrompts.add(
+          QueuedPromptDraft(text: 'Keep queued followup'),
+        );
+        host.submitError = failure;
+        host.submitErrorAfterAcceptance = true;
+
+        final accepted = await controller.editSavedPrompt(
+          original,
+          original.messages.first,
+          'Delivered correction',
+        );
+
+        expect(accepted, isFalse);
+        expect(original.status, ProfileTurnStatus.reconnecting);
+        expect(original.error, contains('uncertain'));
+        expect(original.messages.map(answerMessageText), [
+          'Delivered correction',
+        ]);
+        expect(original.queuePaused, isTrue);
+
+        host.resumeDelay = Completer<void>();
+        final recovery = controller.reconnect(original.key.workspace);
+        await controller.updateDraft(original, 'New draft during recovery');
+        host.resumeDelay!.complete();
+        await recovery;
+
+        expect(original.messages.map(answerMessageText), [
+          'Delivered correction',
+          'New answer 0',
+        ]);
+        expect(original.draft, 'New draft during recovery');
+        expect(original.queuedPrompts.single.text, 'Keep queued followup');
+        expect(original.queuePaused, isTrue);
+        expect(original.status, ProfileTurnStatus.completed);
+        expect(
+          host.calls.where((call) => call.$1 == 'prompt.submit'),
+          hasLength(1),
+        );
+      },
+    );
+  }
+
   test('fork sends once after the latest saved answer', () async {
     await controller.updateDraft(original, 'Continue in a fork');
 
@@ -129,7 +193,11 @@ void main() {
 
   test('failed fork send leaves the source draft intact', () async {
     await controller.updateDraft(original, 'Do not lose this');
-    host.submitError = JsonRpcError('prompt.submit', 'Session busy');
+    host.submitError = JsonRpcError(
+      'prompt.submit',
+      'Session busy',
+      code: 4009,
+    );
 
     final child = await controller.forkPrompt(original, original.draft);
 
@@ -154,7 +222,10 @@ void main() {
 
     final edit = find.byKey(const ValueKey('edit-message-4'));
     await tester.ensureVisible(edit);
-    await tester.tap(edit);
+    final target = tester.getRect(edit);
+    expect(target.width, greaterThanOrEqualTo(48));
+    expect(target.height, greaterThanOrEqualTo(48));
+    await tester.tapAt(Offset(target.right - 2, target.center.dy));
     await tester.pumpAndSettle();
 
     expect(find.text('Edit and resend?'), findsOneWidget);
@@ -174,7 +245,11 @@ void main() {
   testWidgets('rejected edit keeps the correction in the dialog', (
     tester,
   ) async {
-    host.submitError = JsonRpcError('prompt.submit', 'Session busy');
+    host.submitError = JsonRpcError(
+      'prompt.submit',
+      'Session busy',
+      code: 4009,
+    );
     await tester.pumpWidget(
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );
@@ -202,6 +277,95 @@ void main() {
       findsOneWidget,
     );
   });
+
+  for (final rejected in [false, true]) {
+    testWidgets(
+      'pending saved edit blocks dismissal and input until ${rejected ? 'refusal' : 'acceptance'}',
+      (tester) async {
+        host.submitDelay = Completer<void>();
+        if (rejected) {
+          host.submitError = JsonRpcError(
+            'prompt.submit',
+            'Session busy',
+            code: 4009,
+          );
+        }
+        await tester.pumpWidget(
+          MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        );
+        await tester.pumpAndSettle();
+        final edit = find.byKey(const ValueKey('edit-message-4'));
+        await tester.ensureVisible(edit);
+        await tester.tap(edit);
+        await tester.pumpAndSettle();
+        final field = find.byKey(const ValueKey('saved-message-edit-input'));
+        await tester.enterText(field, 'Retained correction');
+        await tester.tap(find.text('Replace and resend'));
+        await tester.pump();
+        for (
+          var i = 0;
+          i < 100 && !host.calls.any((call) => call.$1 == 'prompt.submit');
+          i++
+        ) {
+          await tester.pump(const Duration(milliseconds: 1));
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 1)),
+          );
+        }
+        expect(
+          host.calls.where((call) => call.$1 == 'prompt.submit'),
+          hasLength(1),
+        );
+        expect(original.changingAnswer, isTrue);
+        expect(tester.widget<TextFormField>(field).enabled, isFalse);
+        await tester.tapAt(const Offset(8, 8));
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        expect(find.text('Edit and resend?'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: field,
+            matching: find.text('Retained correction'),
+          ),
+          findsOneWidget,
+        );
+        host.submitDelay!.complete();
+        for (var i = 0; i < 100 && original.changingAnswer; i++) {
+          await tester.pump(const Duration(milliseconds: 1));
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 1)),
+          );
+        }
+        // Accepted work keeps its live progress animation running. Render the
+        // completed editor transition without waiting for that turn to finish.
+        expect(original.changingAnswer, isFalse);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(
+          host.calls
+              .singleWhere((call) => call.$1 == 'prompt.submit')
+              .$2['text'],
+          'Retained correction',
+        );
+        if (rejected) {
+          expect(
+            find.descendant(
+              of: field,
+              matching: find.text('Retained correction'),
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('edit-message-error')),
+            findsOneWidget,
+          );
+          expect(tester.widget<TextFormField>(field).enabled, isTrue);
+        } else {
+          expect(find.text('Edit and resend?'), findsNothing);
+        }
+      },
+    );
+  }
 
   testWidgets('idle composer offers one-shot fork at the saved boundary', (
     tester,

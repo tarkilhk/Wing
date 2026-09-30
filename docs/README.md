@@ -18,6 +18,7 @@ Wing puts your Hermes Agent within reach on Android. Start with the short guides
 - **Voice:** [dictate and read replies aloud](VOICE.md).
 - **Notifications:** [set up reply and attention alerts](NOTIFICATIONS.md).
 - **Your Hermes setup:** [manage profiles, scheduled tasks, health and usage](MANAGE_HERMES.md).
+- **Configuration backups:** [export and restore connections and supported device settings](CONFIGURATION_BACKUPS.md).
 - **Privacy and help:** [privacy policy](../PRIVACY.md), [report a problem safely](../SECURITY.md).
 
 ## Build or contribute

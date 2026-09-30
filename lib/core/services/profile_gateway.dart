@@ -383,8 +383,8 @@ class ProfileGateway {
   Future<Map<String, dynamic>> reloadMcp({bool confirm = false}) =>
       _rpc('reload.mcp', {if (confirm) 'confirm': true});
 
-  /// Completion derives profile/workspace from the session. Its stock schema
-  /// forbids the explicit profile parameter added by [call].
+  /// Stock completion derives profile and workspace from the owning session.
+  /// An additional profile is unnecessary for an existing owned runtime.
   Future<Map<String, dynamic>> completeSlash({
     required String sessionId,
     required String text,
@@ -526,18 +526,49 @@ class ProfileGateway {
   }
 
   Future<Map<String, dynamic>> createSession({
+    required bool cwdExplicit,
     String? cwd,
     String? title,
   }) async {
+    if (cwdExplicit && (cwd == null || cwd.trim().isEmpty)) {
+      throw ArgumentError('An explicit working directory is required');
+    }
     await requireProfile();
-    return _ownedSession(
+    final session = _ownedSession(
       await call('session.create', {
         'source': 'desktop',
         'close_on_disconnect': false,
         'cwd': ?cwd,
+        'cwd_explicit': cwdExplicit,
         'title': ?title,
       }),
     );
+    // Stock Hermes resolves the destination and acknowledges it in info.cwd.
+    // An unavailable directory can resolve elsewhere even with cwd_explicit.
+    final info = session['info'];
+    if (cwdExplicit &&
+        (info is! Map ||
+            info['cwd'] is! String ||
+            _workingDirectoryKey(info['cwd'] as String) !=
+                _workingDirectoryKey(cwd!))) {
+      throw StateError(
+        'Hermes could not open the selected project directory. The draft was not moved.',
+      );
+    }
+    return session;
+  }
+
+  String _workingDirectoryKey(String path) {
+    // Normalize server paths lexically; never resolve them on the Android host.
+    // Hermes uses abspath, not realpath, so symbolic links retain their spelling.
+    final windows =
+        RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(path) || path.startsWith(r'\\');
+    final normalized = Uri(
+      path: windows ? path.replaceAll(r'\', '/') : path,
+    ).normalizePath().path;
+    return normalized.length > 1 && normalized.endsWith('/')
+        ? normalized.substring(0, normalized.length - 1)
+        : normalized;
   }
 
   Future<Map<String, dynamic>> resume(String durableId) async {

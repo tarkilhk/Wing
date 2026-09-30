@@ -3,9 +3,11 @@
 /// engine; only Hermes transport responses are fixtures. No model calls.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,7 +23,52 @@ import '../test/profile_connection_identity_test.dart' show MemoryIdentityStore;
 import '../test/profile_notification_coverage_test.dart'
     show NotificationCoverageHost;
 
-void main() async {
+// This fixture never opens administration, the other screen that uses a
+// 30-second periodic timer. Observe the production WingApp polling timer without
+// changing its callback, cadence or cancellation behavior.
+class _NotificationPollProbe {
+  final timers = <Timer>[];
+  int ticks = 0;
+
+  Timer createPeriodicTimer(
+    Zone self,
+    ZoneDelegate parent,
+    Zone zone,
+    Duration duration,
+    void Function(Timer) callback,
+  ) {
+    if (duration != const Duration(seconds: 30)) {
+      return parent.createPeriodicTimer(zone, duration, callback);
+    }
+    final timer = parent.createPeriodicTimer(zone, duration, (timer) {
+      ticks++;
+      callback(timer);
+    });
+    timers.add(timer);
+    return timer;
+  }
+
+  Map<String, Object> get snapshot => {
+    'schema': 1,
+    'periodSeconds': 30,
+    'created': timers.length,
+    'active': timers.where((timer) => timer.isActive).length,
+    'ticks': ticks,
+  };
+}
+
+Future<void> main() {
+  final probe = _NotificationPollProbe();
+  // Binding initialization and runApp must share the instrumented zone.
+  return runZoned(
+    () => _runFixture(probe),
+    zoneSpecification: ZoneSpecification(
+      createPeriodicTimer: probe.createPeriodicTimer,
+    ),
+  );
+}
+
+Future<void> _runFixture(_NotificationPollProbe probe) async {
   WidgetsFlutterBinding.ensureInitialized();
   final preferences = await SharedPreferences.getInstance();
   final secrets = MemoryIdentityStore();
@@ -132,6 +179,13 @@ void main() async {
       request.response.headers.contentType = ContentType.json;
       request.response.write(
         jsonEncode({
+          'fixture': 'background-monitoring-native',
+          'buildMode': kDebugMode
+              ? 'debug'
+              : kProfileMode
+              ? 'profile'
+              : 'release',
+          'notificationPoll': probe.snapshot,
           'generation': generation,
           'ready': host.gateways.containsKey('a'),
           'alerts': alerts,

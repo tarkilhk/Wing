@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import time
 import urllib.request
@@ -78,6 +79,44 @@ def screenshot(path):
     path.write_bytes(subprocess.check_output(['adb', '-s', SERIAL, 'exec-out', 'screencap', '-p']))
 
 
+def check_untrusted_main_intents():
+    before = state()
+    notices = json.loads(before['notices'])
+    notice = next(value for value in notices.values()
+                  if value['inputs'] and value['inputs'][0]['focus']['kind'] == 'approval')
+    rendered = json.loads(notice['rendered'])
+    # Use the exact live target and revision: rejection must come from the
+    # exported entry point's authorization boundary, not a stale chat lookup.
+    interaction = json.dumps({
+        'payload': rendered['payload'], 'choice': 'once', 'review': False,
+        'chat': rendered['chat'], 'revision': rendered['revision'],
+        'notification_id': rendered['id'],
+    })
+    pid = adb('shell', 'pidof', PACKAGE).strip()
+    attempts = [
+        ('--es', 'wing_notification_interaction', interaction),
+        ('--es', 'wing_notification_interaction', '{'),
+        ('--es', 'wing_notification_handle', '00000000-0000-0000-0000-000000000000'),
+        ('--es', 'wing_notification_handle', interaction),
+        ('--ei', 'wing_notification_handle', '7'),
+    ]
+    for kind, extra, value in attempts:
+        command = ['am', 'start', '-W', '-n', PACKAGE + '/com.tarkilhk.wing.MainActivity',
+                   '-f', '0x30000000', kind, extra, value]
+        # adb shell joins arguments before remote shell parsing. Quote the JSON
+        # there so Android receives one complete extra with its actual spaces.
+        adb('shell', shlex.join(command))
+        for _ in range(3):
+            time.sleep(.4)
+            after = state()
+            assert after['decisions'] == before['decisions'], 'Forged main intent submitted a decision'
+            assert after['pending'] == before['pending'], 'Forged main intent changed pending approvals'
+            assert after['selected_chat'] == before['selected_chat'], 'Forged main intent navigated to a chat'
+        assert adb('shell', 'pidof', PACKAGE).strip() == pid, 'Untrusted main intent crashed/restarted Wing'
+    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+    print('PASS: exported MainActivity rejects raw, forged and wrong-type notification inputs without decisions or crashes', flush=True)
+
+
 def run(output):
     assert SERIAL.startswith('emulator-'), 'Use a disposable emulator, never a phone'
     adb('forward', 'tcp:18766', 'tcp:18766')
@@ -91,6 +130,7 @@ def run(output):
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     state('/approval', {})
     state('/approval', {'command': 'npm run release'})
+    check_untrusted_main_intents()
     shade()
     screenshot(output / 'light-normal.png')
     tap(resource=PACKAGE + ':id/once')
@@ -109,12 +149,12 @@ def run(output):
     print('PASS: failed submission retains notification and request', flush=True)
     state('/fail', {'enabled': False})
     tap(resource=PACKAGE + ':id/always')
-    until(lambda: any('Always allow this command pattern?' in (n.get('text'), n.get('content-desc')) for n in nodes()), 'Missing permanent-pattern confirmation')
+    until(lambda: any('Always allow?' in (n.get('text'), n.get('content-desc')) for n in nodes()), 'Missing permanent-pattern confirmation')
     assert len(state()['decisions']) == 2
     screenshot(output / 'always-confirmation.png')
     tap(text='Cancel')
     assert len(state()['decisions']) == 2
-    print('PASS: Always opens the owning chat and requires confirmation', flush=True)
+    print('PASS: Always requires confirmation for the owning request', flush=True)
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     state('/preview', {'enabled': False})
     shade()

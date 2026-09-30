@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/composer_action.dart';
 import 'package:wing/core/widgets/composer_action_button.dart';
@@ -74,6 +75,68 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('keyboard primary activation and action menu restore focus', (
+    tester,
+  ) async {
+    await show(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    final focus = tester
+        .widget<Focus>(find.byKey(const ValueKey('composer-action-focus')))
+        .focusNode!;
+    expect(focus.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    expect(selected, [ComposerAction.steer, ComposerAction.steer]);
+    await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('composer-keyboard-stop')),
+      findsOneWidget,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('composer-keyboard-stop')), findsNothing);
+    expect(focus.hasFocus, isTrue);
+    final button = tester.widget<IconButton>(find.byType(IconButton));
+    expect(button.style!.side!.resolve({}), isNotNull);
+  });
+
+  for (final key in [LogicalKeyboardKey.enter, LogicalKeyboardKey.space]) {
+    testWidgets(
+      'alternative-only button is reachable with Tab and ${key.keyLabel}',
+      (tester) async {
+        await show(tester, steerReason: 'Type a message');
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(
+          tester
+              .widget<Focus>(
+                find.byKey(const ValueKey('composer-action-focus')),
+              )
+              .focusNode!
+              .hasFocus,
+          isTrue,
+        );
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('composer-keyboard-stop')),
+          findsOneWidget,
+        );
+        expect(selected, isEmpty);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(selected, [ComposerAction.stop]);
+        expect(
+          find.byKey(const ValueKey('composer-keyboard-stop')),
+          findsNothing,
+        );
+      },
+    );
+  }
 
   for (final action in [
     ComposerAction.steer,

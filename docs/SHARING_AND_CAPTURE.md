@@ -10,6 +10,8 @@ The exact pending share is acknowledged only after staging succeeds. Cancelling 
 
 Native intake keeps unsent text and attachment copies in private app storage before destination selection. A small persisted queue owns pending shares; Flutter displays the oldest and acknowledges its ID only after draft staging or explicit Discard. Copies are removed after that acknowledgement is saved. The queue survives app restart and holds at most ten shares and 128 MiB of files; each share allows ten files, 64 MiB of files and 256 Ki characters of text. Imports are serialized, and unreadable or oversized input fails as a whole with a visible error. It does not silently import only some selected files.
 
+External file shares must use an external app's `content:` provider with an explicit Android read grant. Wing checks every selected URI before reading metadata or content, rejects `file:` URIs and its own providers, and rechecks the grant before copying each file. A share whose grant has been revoked fails as a whole. Camera output uses its internally saved capture descriptor instead of the external-share URI path. These checks follow Android's [ContentResolver security guidance](https://developer.android.com/privacy-and-security/risks/content-resolver).
+
 If clearing an incoming share fails after its conversation draft was saved, the app opens the saved draft and explains that the pending share can be discarded from Home. A failed Discard leaves the review controls available. These are unsent drafts only; no conversation history or execution state is stored in the intake queue.
 
 Photos and Files feed the same attachment path. Images receive the existing sanitization and file limits.

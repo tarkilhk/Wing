@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -63,7 +64,27 @@ class ConfigBackupIo {
     final picked = await FilePicker.pickFile(type: FileType.any);
     if (picked == null) return null;
 
-    return utf8.decode(await picked.readAsBytes(), allowMalformed: true);
+    return readBackupStream(picked.readAsByteStream());
+  }
+
+  /// Counts actual streamed bytes; provider-reported lengths are not trusted.
+  static Future<String> readBackupStream(Stream<List<int>> stream) async {
+    final bytes = BytesBuilder(copy: false);
+    var count = 0;
+    await for (final chunk in stream) {
+      count += chunk.length;
+      if (count > ConfigBackupLimits.maxBytes) {
+        throw const ConfigBackupException(
+          'This backup exceeds the 2 MiB limit.',
+        );
+      }
+      bytes.add(chunk);
+    }
+    try {
+      return utf8.decode(bytes.takeBytes());
+    } on FormatException {
+      throw const ConfigBackupException('This file is not a UTF-8 backup.');
+    }
   }
 
   Future<ConfigImportResult> importBackup(

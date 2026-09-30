@@ -121,6 +121,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   final _composerFocus = FocusNode();
   final _chatSearchFocus = FocusNode();
   final _queuedEditErrors = <ProfileSessionKey, String>{};
+  final _fileReads = <RemoteFilesClient>{};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   int _settingsRevision = 0;
   ProfileSessionKey? _composerKey;
@@ -371,6 +372,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     controller.addListener(_voiceWorkspaceChanged);
     WidgetsBinding.instance.addObserver(this);
+    controller.setRouteMounted(this, true);
     controller.setRouteVisibility(this, _hasChatFocus);
     // Shortcut navigation can reuse an owner still observed by the outgoing
     // route. Start its notifications after both routes finish building.
@@ -411,7 +413,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }.contains(state)) {
       _cancelVoice();
     }
-    _appIsActive = state == AppLifecycleState.resumed;
+    final active = state == AppLifecycleState.resumed;
+    if (_appIsActive != active) {
+      // A notification handoff can render the answer while inactive. Rebuild
+      // on resume so the transcript checks its visibility again.
+      setState(() => _appIsActive = active);
+    }
     controller.setRouteVisibility(this, _hasChatFocus);
   }
 
@@ -438,10 +445,15 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   @override
   void dispose() {
+    for (final files in _fileReads) {
+      files.close();
+    }
+    _fileReads.clear();
     controller.removeListener(_voiceWorkspaceChanged);
     _voiceInput.dispose();
     _voiceOutput.dispose();
     controller.setRouteVisibility(this, false);
+    controller.setRouteMounted(this, false);
     WidgetsBinding.instance.removeObserver(this);
     _profileNavigation.dispose();
     _composer.dispose();
@@ -492,7 +504,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       return;
     }
     if (!choice.isConnection) {
-      if (!_profileNavigation.canSwitch) {
+      if (!_profileNavigation.canRequestSwitch) {
         ScaffoldMessenger.of(anchor).showSnackBar(
           const SnackBar(
             content: Text(
@@ -502,18 +514,23 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         );
         return;
       }
-      _cancelVoice();
-      FocusManager.instance.primaryFocus?.unfocus();
-      controller.cancelNotificationOpen();
       await _run(() async {
-        final changed = await _profileNavigation.switchTo(
-          choice.id,
-          () => controller.switchProfile(
+        var attempted = false;
+        final changed = await _profileNavigation.switchTo(choice.id, () {
+          attempted = true;
+          _cancelVoice();
+          FocusManager.instance.primaryFocus?.unfocus();
+          controller.cancelNotificationOpen();
+          return controller.switchProfile(
             choice.id,
             resetNavigation: _destination == AppDestination.chats,
-          ),
-        );
-        if (!changed && mounted && anchor.mounted && controller.error != null) {
+          );
+        });
+        if (!changed &&
+            attempted &&
+            mounted &&
+            anchor.mounted &&
+            controller.error != null) {
           ScaffoldMessenger.of(
             anchor,
           ).showSnackBar(SnackBar(content: StudioError(controller.error!)));
@@ -711,12 +728,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                         );
                         if (stackChatScope) {
                           return Column(
+                            key: const ValueKey('chat-scope-stacked'),
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [server, project],
                           );
                         }
                         return Row(
+                          key: const ValueKey('chat-scope-inline'),
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             ConstrainedBox(
@@ -920,7 +939,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   }
 
   Future<void> _openOutputs(ProfileChat chat) async {
-    final files = controller.outputFiles(chat);
+    final files = _retainOutputFiles(chat);
     final owner = chat.key;
     final ownedFiles = OwnedRemoteFiles(
       source: files,
@@ -940,13 +959,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         ),
       );
     } finally {
-      files.close();
+      _releaseOutputFiles(files);
     }
   }
 
   Future<void> _openAnswerOutput(ProfileChat chat, ChatOutput output) async {
     final owner = chat.key;
-    final files = controller.outputFiles(chat);
+    final files = _retainOutputFiles(chat);
     final ownedFiles = OwnedRemoteFiles(
       source: files,
       profileName: owner.workspace.profileName,
@@ -966,7 +985,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         ),
       );
     } finally {
-      files.close();
+      _releaseOutputFiles(files);
     }
   }
 
@@ -975,7 +994,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     ChatOutput output,
   ) async {
     final owner = chat.key;
-    final files = controller.outputFiles(chat);
+    final files = _retainOutputFiles(chat);
     try {
       final file = await OwnedRemoteFiles(
         source: files,
@@ -990,13 +1009,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       }
       return await saveRemoteFile(file);
     } finally {
-      files.close();
+      _releaseOutputFiles(files);
     }
   }
 
   Future<Uint8List> _loadAttachmentImage(ProfileChat chat, String path) async {
     final owner = chat.key;
-    final files = controller.outputFiles(chat);
+    final files = _retainOutputFiles(chat);
     try {
       return (await files.download(
         path,
@@ -1004,8 +1023,18 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         storedSessionId: owner.sessionId,
       )).bytes;
     } finally {
-      files.close();
+      _releaseOutputFiles(files);
     }
+  }
+
+  RemoteFilesClient _retainOutputFiles(ProfileChat chat) {
+    final files = controller.outputFiles(chat);
+    _fileReads.add(files);
+    return files;
+  }
+
+  void _releaseOutputFiles(RemoteFilesClient files) {
+    if (_fileReads.remove(files)) files.close();
   }
 
   Widget _questionPanel(ProfileChat chat) {
@@ -1102,7 +1131,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           Stack(
             children: [
               Padding(
-                padding: const EdgeInsets.only(right: 40),
+                padding: const EdgeInsets.only(right: 48),
                 child: ProfileMessage(
                   message: message,
                   loadAttachmentImage: (path) =>
@@ -1119,8 +1148,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   key: ValueKey('edit-message-${answerMessageId(message)}'),
                   tooltip: 'Edit message',
                   constraints: const BoxConstraints.tightFor(
-                    width: 40,
-                    height: 40,
+                    width: 48,
+                    height: 48,
                   ),
                   onPressed: enabled
                       ? () => _editSavedMessage(chat, message)
@@ -1203,79 +1232,84 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         builder: (context, setDialogState) {
           final canSubmit =
               !submitting && !chat.busy && input.trim().isNotEmpty;
-          return AlertDialog(
-            scrollable: true,
-            title: const Text('Edit and resend?'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "This replaces this message's turn and all later history in this chat.",
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  initialValue: input,
-                  autofocus: true,
-                  minLines: 2,
-                  maxLines: 6,
-                  onChanged: (value) => setDialogState(() {
-                    input = value;
-                    inlineError = null;
-                  }),
-                ),
-                if (inlineError != null) ...[
-                  const SizedBox(height: 12),
-                  StudioError(
-                    inlineError!,
-                    key: const ValueKey('edit-message-error'),
+          return PopScope(
+            canPop: !submitting,
+            child: AlertDialog(
+              scrollable: true,
+              title: const Text('Edit and resend?'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "This replaces this message's turn and all later history in this chat.",
                   ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    key: const ValueKey('saved-message-edit-input'),
+                    initialValue: input,
+                    enabled: !submitting,
+                    autofocus: true,
+                    minLines: 2,
+                    maxLines: 6,
+                    onChanged: (value) => setDialogState(() {
+                      input = value;
+                      inlineError = null;
+                    }),
+                  ),
+                  if (inlineError != null) ...[
+                    const SizedBox(height: 12),
+                    StudioError(
+                      inlineError!,
+                      key: const ValueKey('edit-message-error'),
+                    ),
+                  ],
                 ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: submitting
+                      ? null
+                      : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: canSubmit
+                      ? () async {
+                          setDialogState(() {
+                            submitting = true;
+                            inlineError = null;
+                          });
+                          var accepted = false;
+                          try {
+                            accepted = await controller.editSavedPrompt(
+                              chat,
+                              message,
+                              input,
+                            );
+                          } catch (_) {
+                            // Keep the correction in place for a deliberate retry.
+                          }
+                          if (!dialogContext.mounted) return;
+                          if (accepted) {
+                            Navigator.pop(dialogContext);
+                            return;
+                          }
+                          setDialogState(() {
+                            submitting = false;
+                            inlineError =
+                                chat.error ??
+                                'Hermes did not accept the edited message.';
+                          });
+                        }
+                      : null,
+                  child: StudioActionLabel(
+                    'Replace and resend',
+                    busy: submitting,
+                  ),
+                ),
               ],
             ),
-            actions: [
-              TextButton(
-                onPressed: submitting
-                    ? null
-                    : () => Navigator.pop(dialogContext),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: canSubmit
-                    ? () async {
-                        setDialogState(() {
-                          submitting = true;
-                          inlineError = null;
-                        });
-                        var accepted = false;
-                        try {
-                          accepted = await controller.editSavedPrompt(
-                            chat,
-                            message,
-                            input,
-                          );
-                        } catch (_) {
-                          // Keep the correction in place for a deliberate retry.
-                        }
-                        if (!dialogContext.mounted) return;
-                        if (accepted) {
-                          Navigator.pop(dialogContext);
-                          return;
-                        }
-                        setDialogState(() {
-                          submitting = false;
-                          inlineError =
-                              chat.error ??
-                              'Hermes did not accept the edited message.';
-                        });
-                      }
-                    : null,
-                child: StudioActionLabel(
-                  'Replace and resend',
-                  busy: submitting,
-                ),
-              ),
-            ],
           );
         },
       ),

@@ -451,6 +451,45 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'server date rollover ${brightness.name} at $scale text retains independent year data',
+        (tester) async {
+          fixture.override = (_, path, query, _) async {
+            if (path == 'analytics/models') {
+              return {
+                'models': [_astra()],
+              };
+            }
+            return {
+              'daily': [
+                {
+                  'day': query['days'] == '365' ? '2026-12-31' : '2027-01-01',
+                  'input_tokens': query['days'] == '365' ? 123 : 100,
+                  'cache_read_tokens': 0,
+                  'output_tokens': 50,
+                },
+              ],
+            };
+          };
+          await show(tester, brightness: brightness, scale: scale);
+          await tap(tester, find.byKey(const ValueKey('usage-day-2027-01-01')));
+          expect(
+            find.textContaining('No returned year data', findRichText: true),
+            findsOneWidget,
+          );
+          expect(find.text('Selected period'), findsNothing);
+          await snapshot(tester, '${brightness.name}-$scale-server-date');
+          await tap(tester, find.byKey(const ValueKey('usage-day-2026-12-31')));
+          await tap(tester, find.text('Show daily tokens'));
+          expect(find.text('123'), findsOneWidget);
+          expect(fixture.requests.length, 3);
+          await tap(tester, find.text('Selected period'));
+          await reveal(tester, find.byType(UsageAreaChart));
+          expect(find.text('150 tokens / day'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await snapshot(tester, '${brightness.name}-$scale-single-date-trend');
+        },
+      );
       testWidgets('usage renders ${brightness.name} at $scale text', (
         tester,
       ) async {

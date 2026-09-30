@@ -4,6 +4,7 @@ import '../../services/administration_repository.dart';
 import '../../services/mcp_setup.dart';
 import '../../widgets/studio_action_label.dart';
 import '../../widgets/studio_select.dart';
+import '../../widgets/dirty_editor_guard.dart';
 import 'admin_widgets.dart';
 
 class AdminMcpSetupPage extends StatefulWidget {
@@ -43,6 +44,29 @@ class _AdminMcpSetupPageState extends State<AdminMcpSetupPage> {
   McpAuthentication _auth = McpAuthentication.browser;
   String? _error;
   String _clientAuth = '';
+
+  List<TextEditingController> get _inputs => [
+    _name,
+    _address,
+    _args,
+    _token,
+    _clientId,
+    _clientSecret,
+    _scope,
+    _redirect,
+    _cert,
+    _key,
+    _ca,
+  ];
+
+  bool get _dirty =>
+      _subprocess ||
+      _auth != McpAuthentication.browser ||
+      _clientAuth.isNotEmpty ||
+      _inputs.any((input) => input.text.isNotEmpty) ||
+      _credentials.any(
+        (row) => row.name.text.isNotEmpty || row.value.text.isNotEmpty,
+      );
 
   @override
   void dispose() {
@@ -90,6 +114,7 @@ class _AdminMcpSetupPageState extends State<AdminMcpSetupPage> {
             child: TextField(
               key: ValueKey('mcp-field-$label'),
               controller: controller,
+              onChanged: (_) => setState(() {}),
               enabled: !_busy && !_uncertain,
               obscureText: secret,
               autocorrect: false,
@@ -218,8 +243,15 @@ class _AdminMcpSetupPageState extends State<AdminMcpSetupPage> {
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_busy,
+  Widget build(BuildContext context) => DirtyEditorGuard(
+    dirty: _dirty,
+    busy: _busy,
+    confirmDiscard: () => adminConfirm(
+      context,
+      'Discard edits?',
+      'Your unsaved connector settings for ${_profile.label} will be discarded.',
+      action: 'Discard',
+    ),
     child: AdminPage(
       title: 'Add MCP connector',
       scope: _profile.label,

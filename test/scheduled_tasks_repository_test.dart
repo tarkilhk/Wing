@@ -6,6 +6,52 @@ import 'support/scheduled_tasks_fixture.dart';
 
 void main() {
   test(
+    'current mixed run records preserve source, preview and status title',
+    () async {
+      final fixture = ScheduledTasksFixture();
+      fixture.runRows.addAll([
+        {
+          'id': 'cron_output:morning:20260918_090000',
+          'source': 'cron_output',
+          'title': 'COMPLETED · Script-only run',
+          'preview': 'The report was saved.',
+          'started_at': 1789700000,
+          'is_active': false,
+        },
+        {
+          'id': 'cron_output:morning:exec:0',
+          'source': 'cron_output',
+          'title': 'FAILED · Script exited with code 1',
+          'preview': 'Script exited with code 1',
+          'started_at': 1789600000,
+          'is_active': false,
+        },
+        {
+          'id': 'cron_output:morning:latest',
+          'source': 'cron_output',
+          'title': 'COMPLETED',
+          'preview': null,
+          'started_at': 1789500000,
+          'is_active': false,
+        },
+      ]);
+      final runs = await ScheduledTasksRepository(
+        fixture.profile,
+      ).runs('morning');
+      expect(runs.first.source, 'cron');
+      expect(runs.first.isConversation, isTrue);
+      expect(
+        runs.skip(1).every((r) => r.isScriptOutput && !r.isConversation),
+        isTrue,
+      );
+      expect(runs[1].title, 'COMPLETED · Script-only run');
+      expect(runs[1].preview, 'The report was saved.');
+      expect(runs[2].preview, 'Script exited with code 1');
+      expect(runs[3].preview, isEmpty);
+      expect(runs.every((r) => r.started?.isUtc == true), isTrue);
+    },
+  );
+  test(
     'current schedules serialize without re-anchoring unchanged schedules',
     () {
       final task = ScheduledTask.fromJson(

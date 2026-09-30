@@ -11,6 +11,7 @@ import 'package:wing/core/services/ws_client.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
+import 'support/loopback_http_fixtures.dart';
 
 // Reported tool arguments. The gateway, rather than the tool caller, supplies
 // the JSON-RPC request ID and qid. This fixture tests that client boundary;
@@ -62,6 +63,8 @@ const questions = <Map<String, dynamic>>[
 ];
 
 void main() {
+  useRealHttpClientsForLoopbackFixtures();
+
   for (final count in [1, 5]) {
     testWidgets('submits the reported $count-question purifier form', (
       tester,

@@ -3,7 +3,10 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/composer_action.dart';
+import '../models/session_visibility.dart';
 import '../theme/profile_workspace_theme.dart';
+import 'device_preference.dart';
+import 'text_size_preference.dart';
 import 'turn_notification_service.dart';
 import 'config_backup.dart';
 import 'connection_manager.dart';
@@ -42,7 +45,8 @@ class ConfigImportResult {
     final connections = parts.isEmpty
         ? 'No connection changes'
         : 'Connections: ${parts.join(', ')}';
-    return '$connections · $preferencesApplied settings restored';
+    return '$connections · $preferencesApplied settings restored'
+        '${preferencesSkipped > 0 ? ' · $preferencesSkipped settings skipped' : ''}';
   }
 }
 
@@ -66,15 +70,8 @@ class ConfigBackupService {
     notificationPreviewsKey,
   };
 
-  /// Prefixes for per-connection and per-chat preferences, which are keyed by
-  /// ids that the backup restores alongside them.
-  static const List<String> preferenceKeyPrefixes = <String>[
-    'session_search.',
-    'chat_model_override.',
-    'excluded_session_sources_',
-    'session_visibility_v1_',
-    'chat_spaces_v1_',
-  ];
+  /// Portable backup ownership uses logical connection IDs, never device HMACs.
+  static const visibilityBackupPrefix = 'connection_visibility.';
 
   final ConnectionManager _connectionManager;
   final SharedPreferences _preferences;
@@ -87,7 +84,35 @@ class ConfigBackupService {
 
   static bool isBackedUpKey(String key) {
     if (exactPreferenceKeys.contains(key)) return true;
-    return preferenceKeyPrefixes.any(key.startsWith);
+    return key.startsWith(visibilityBackupPrefix) &&
+        key.length > visibilityBackupPrefix.length;
+  }
+
+  static bool _accepts(String key, Object value) {
+    if (VoicePreferences.keys.contains(key)) {
+      return VoicePreferences.accepts(key, value);
+    }
+    return switch (key) {
+      'theme_mode' => {'system', 'light', 'dark'}.contains(value),
+      'verbose_mode' ||
+      completionNotificationsKey ||
+      attentionNotificationsKey ||
+      notificationPreviewsKey => value is bool,
+      TextSizePreference.preferenceKey => TextSizePreference.values.any(
+        (size) => size.storageValue == value,
+      ),
+      WorkspaceAccent.preferenceKey => WorkspaceAccent.values.any(
+        (accent) => accent.name == value,
+      ),
+      ComposerAction.preferenceKey => ComposerAction.runningDefaults.any(
+        (action) => action.name == value,
+      ),
+      _ =>
+        key.startsWith(visibilityBackupPrefix) &&
+            SessionVisibility.values.any(
+              (visibility) => visibility.name == value,
+            ),
+    };
   }
 
   Future<ConfigBackup> export({required String appVersion}) async {
@@ -95,16 +120,18 @@ class ConfigBackupService {
 
     final preferences = <String, Object>{};
     for (final key in _preferences.getKeys()) {
-      if (!isBackedUpKey(key)) continue;
+      if (!exactPreferenceKeys.contains(key)) continue;
       final value = _preferences.get(key);
-      if (value == null) continue;
-      if (value is bool || value is int || value is double || value is String) {
+      if (value != null && _accepts(key, value)) {
         preferences[key] = value;
-      } else if (value is List<String>) {
-        preferences[key] = List<String>.of(value);
-      } else if (value is List) {
-        preferences[key] = value.map((item) => item.toString()).toList();
       }
+    }
+    for (final connection in connections) {
+      final value = _preferences.get(
+        SessionVisibility.preferenceKey(connection.id),
+      );
+      final key = '$visibilityBackupPrefix${connection.id}';
+      if (value != null && _accepts(key, value)) preferences[key] = value;
     }
 
     return ConfigBackup(
@@ -119,6 +146,27 @@ class ConfigBackupService {
     ConfigBackup backup, {
     required ConfigImportMode mode,
   }) async {
+    // Validate and detach caller-owned data before any storage mutation.
+    backup = ConfigBackup.fromJson(backup.toJson());
+    final connectionIds = backup.connections.map((c) => c.id).toSet();
+    final accepted = <String, Object>{};
+    var skipped = 0;
+    for (final entry in backup.preferences.entries) {
+      if (!isBackedUpKey(entry.key) || !_accepts(entry.key, entry.value)) {
+        skipped++;
+        continue;
+      }
+      if (entry.key.startsWith(visibilityBackupPrefix)) {
+        final id = entry.key.substring(visibilityBackupPrefix.length);
+        if (!connectionIds.contains(id)) {
+          skipped++;
+          continue;
+        }
+        accepted[SessionVisibility.preferenceKey(id)] = entry.value;
+      } else {
+        accepted[entry.key] = entry.value;
+      }
+    }
     final existingIds = _connectionManager
         .getConnections()
         .map((connection) => connection.id)
@@ -151,28 +199,13 @@ class ConfigBackupService {
     }
 
     var applied = 0;
-    var skipped = 0;
-    for (final entry in backup.preferences.entries) {
-      if (!isBackedUpKey(entry.key) ||
-          (VoicePreferences.keys.contains(entry.key) &&
-              !VoicePreferences.accepts(entry.key, entry.value))) {
-        skipped++;
-        continue;
-      }
-      final value = entry.value;
-      if (value is bool) {
-        await _preferences.setBool(entry.key, value);
-      } else if (value is int) {
-        await _preferences.setInt(entry.key, value);
-      } else if (value is double) {
-        await _preferences.setDouble(entry.key, value);
-      } else if (value is String) {
-        await _preferences.setString(entry.key, value);
-      } else if (value is List<String>) {
-        await _preferences.setStringList(entry.key, value);
-      } else {
-        skipped++;
-        continue;
+    for (final entry in accepted.entries) {
+      try {
+        await saveDevicePreference(_preferences, entry.key, entry.value);
+      } catch (_) {
+        throw const ConfigBackupException(
+          'A restored setting could not be saved.',
+        );
       }
       applied++;
     }

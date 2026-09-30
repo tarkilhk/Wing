@@ -180,7 +180,7 @@ class _AdminScheduledTaskDetailPageState
               const SizedBox(height: 24),
               if (missing)
                 const TaskMessage(
-                  'This task is no longer in the schedule. One-time tasks may be removed after their final run. Recent conversations remain below.',
+                  'This task is no longer in the schedule. One-time tasks may be removed after their final run. Recent runs remain below.',
                 ),
               if (controller.error != null)
                 TaskMessage(controller.error!, error: true),
@@ -308,7 +308,8 @@ class _AdminScheduledTaskDetailPageState
               ),
               TaskSection(
                 'Recent runs',
-                description: 'Open a run to read its conversation.',
+                description:
+                    'Open conversation runs to read the chat. Script runs show their recorded status and output preview here.',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -324,9 +325,7 @@ class _AdminScheduledTaskDetailPageState
                       ),
                     if (runs?.isEmpty == true)
                       Text(
-                        task.scriptOnly
-                            ? 'No run conversations. Script-only tasks may not create a conversation.'
-                            : 'No run conversations yet.',
+                        'No recorded runs yet.',
                         style: theme.textTheme.bodySmall,
                       ),
                     if (runs?.isNotEmpty == true)
@@ -335,31 +334,7 @@ class _AdminScheduledTaskDetailPageState
                           children: [
                             for (var i = 0; i < runs!.length; i++) ...[
                               if (i > 0) const Divider(height: 1),
-                              ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 4,
-                                ),
-                                leading: Icon(
-                                  runs![i].active
-                                      ? Icons.play_arrow_rounded
-                                      : Icons.chat_bubble_outline,
-                                  size: 20,
-                                ),
-                                title: Text(
-                                  runs![i].title.isEmpty
-                                      ? 'Task conversation'
-                                      : runs![i].title,
-                                ),
-                                subtitle: Text(
-                                  '${taskTime(context, runs![i].started)}${runs![i].active ? ' · Active' : ''}',
-                                ),
-                                trailing: const Icon(
-                                  Icons.chevron_right,
-                                  size: 18,
-                                ),
-                                onTap: opening ? null : () => open(runs![i]),
-                              ),
+                              _runTile(runs![i]),
                             ],
                           ],
                         ),
@@ -385,6 +360,47 @@ class _AdminScheduledTaskDetailPageState
       );
     },
   );
+  Widget _runTile(TaskRun run) => ListTile(
+    key: ValueKey('task-run-${run.id}'),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+    leading: Icon(
+      run.isConversation
+          ? run.active
+                ? Icons.play_arrow_rounded
+                : Icons.chat_bubble_outline
+          : Icons.description_outlined,
+      size: 20,
+    ),
+    title: Text(
+      run.title.isNotEmpty
+          ? run.title
+          : run.isConversation
+          ? 'Task conversation'
+          : run.isScriptOutput
+          ? 'Script run'
+          : 'Run record',
+    ),
+    subtitle: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${run.isConversation
+              ? 'Conversation'
+              : run.isScriptOutput
+              ? 'Script output'
+              : 'Run record'} · ${taskTime(context, run.started)}${run.active ? ' · Active' : ''}',
+        ),
+        if (run.preview.isNotEmpty && !run.title.contains(run.preview)) ...[
+          const SizedBox(height: 4),
+          SelectableText(run.preview),
+        ],
+      ],
+    ),
+    trailing: run.isConversation
+        ? const Icon(Icons.chevron_right, size: 18)
+        : null,
+    onTap: run.isConversation && !opening ? () => open(run) : null,
+  );
   Widget _fact(String label, String value) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
     child: Column(
@@ -397,6 +413,7 @@ class _AdminScheduledTaskDetailPageState
     ),
   );
   Future<void> open(TaskRun run) async {
+    if (!run.isConversation) return;
     setState(() => opening = true);
     try {
       await widget.onOpenSession(

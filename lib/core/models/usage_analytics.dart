@@ -10,6 +10,7 @@ class UsageTokens {
   UsageTokens.fromJson(Map<String, dynamic> row)
     : values = [for (final key in usageTokenKeys) usageTokenCount(row[key])];
   const UsageTokens.zero() : values = const [0, 0, 0];
+  const UsageTokens.unavailable() : values = const [null, null, null];
   UsageTokens.sum(Iterable<UsageTokens> rows)
     : values = [
         for (var i = 0; i < 3; i++)
@@ -31,18 +32,38 @@ class UsageTokens {
 class UsageDay {
   final DateTime date;
   final UsageTokens tokens;
-  const UsageDay(this.date, this.tokens);
+  final bool isPlaceholder;
+  const UsageDay(this.date, this.tokens, {this.isPlaceholder = false});
   String get id => date.toIso8601String().substring(0, 10);
 }
 
 class UsageDaily {
   final List<UsageDay> days;
-  UsageDaily._(this.days);
+  final Set<String> reportedDates;
+  UsageDaily._(this.days, this.reportedDates);
+
+  /// A browsing year ending at the latest returned server date. Earlier
+  /// padding is unknown, rather than pretending to know the server's cutoff.
+  List<UsageDay> get calendarDays {
+    if (days.isEmpty) return const [];
+    final yearStart = days.last.date.subtract(const Duration(days: 365));
+    final first = days.first.date.isBefore(yearStart)
+        ? days.first.date
+        : yearStart;
+    return [
+      for (
+        var date = first;
+        date.isBefore(days.first.date);
+        date = date.add(const Duration(days: 1))
+      )
+        UsageDay(date, const UsageTokens.unavailable(), isPlaceholder: true),
+      ...days,
+    ];
+  }
 
   factory UsageDaily.fromJson(
     Map<String, dynamic> data, {
     required int period,
-    required DateTime loadedAt,
   }) {
     if (!usagePeriods.contains(period) || data['daily'] is! List) {
       throw const FormatException('Daily usage is unavailable.');
@@ -61,13 +82,15 @@ class UsageDaily {
       }
       byDate[id as String] = UsageTokens.fromJson(raw);
     }
-    final now = loadedAt.toUtc();
-    final today = DateTime.utc(now.year, now.month, now.day);
-    // Hermes filters a rolling N*24 hours then groups by UTC session-start date.
-    // Include the partial first date; a 1D query can therefore have two cells.
-    final first = today.subtract(Duration(days: period));
+    // Stock Hermes filters a rolling N*24 hours, then groups session starts by
+    // server-local date (per-row DST). It supplies no timezone or date bounds.
+    // UTC DateTimes here encode date ordinals only; never convert to phone time.
+    final ids = byDate.keys.toList()..sort();
+    if (ids.isEmpty) return UsageDaily._(const [], const {});
+    final first = DateTime.parse('${ids.first}T00:00:00Z');
+    final last = DateTime.parse('${ids.last}T00:00:00Z');
     return UsageDaily._([
-      for (var i = 0; i <= period; i++)
+      for (var i = 0; i <= last.difference(first).inDays; i++)
         UsageDay(
           first.add(Duration(days: i)),
           byDate[first
@@ -76,7 +99,7 @@ class UsageDaily {
                   .substring(0, 10)] ??
               const UsageTokens.zero(),
         ),
-    ]);
+    ], Set.unmodifiable(ids));
   }
 }
 
