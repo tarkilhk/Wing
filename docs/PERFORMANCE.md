@@ -125,6 +125,37 @@ establish Flutter build/raster performance.
 data depends on hardware support. Do not assume a Galaxy exposes Pixel ODPM
 rails or infer per-app energy from whole-device battery counters.
 
+For a bounded ordinary-release scheduler trace or sparse screen-off battery
+capture, use the separate runner:
+
+```sh
+python3 tools/qa/phone_performance_capture.py trace --serial <device> --seconds 45 --label stream-typing --output build/performance/stream-typing
+python3 tools/qa/phone_performance_capture.py battery --serial <device> --seconds 1200 --expected-wing-state running --label background-settled --output build/performance/background-settled --abort-file build/performance/abort
+```
+
+The caller stages the workload and app state. The runner does not send prompts,
+change settings, stop apps or reset battery statistics. Trace mode is bounded
+to 60 seconds and retains its owned remote trace if pulling fails. Battery mode
+reads charge, power and process state at 0/10/20 minutes; use a separate output
+directory for every attempt. Charging, an observed lit screen or an unexpected
+process state makes the arm inconclusive. Sparse checkpoints do not establish
+continuous sleep, process retention or deep Doze. Keep phone interactions,
+traces and continuous sampling outside quiet battery intervals. Compare both
+ten-minute halves and record cooling/order effects in sequential comparisons.
+
+`test/phone_luna_live_performance_test.dart` is opt-in. `PREPARE_WARMUP` creates
+one owned chat and one tiny turn through an explicitly verified advertised Luna
+route; `OBSERVE` attaches to that chat while the phone sends the measured turn.
+The test documents its required environment settings and retains an attempt
+manifest under ignored `build/`. Never retry an uncertain creation/submission
+with the same nonce or use an inherited non-Luna default. It changes no profile
+defaults. Observer timeout retains the chat without interrupting or deleting it.
+
+Flutter frame-log batch timestamps are callback receipt times, not exact frame
+times; bounds may straddle scenario transitions. Native presentation API calls
+are submissions, not presented FPS. Missing Wing SurfaceView FrameTimeline rows
+must be reported as missing coverage, not replaced with another app's jank data.
+
 ## Typing regression boundary
 
 ```sh
@@ -156,6 +187,25 @@ streaming mode, deliverable mode, action availability or inherited environment
 changes. This also avoids regenerating a stylesheet that would cause
 `flutter_markdown` to parse unchanged text again. The retained tree lives only
 with its message widget; there is no application-wide message cache.
+
+Text and reasoning deltas are accumulated immediately, with presentation bursts
+coalesced at 100 ms. The first delta and phase/control/error/completion changes
+publish immediately. `test/streaming_presentation_test.dart` checks those flush
+boundaries, multiple-chat invalidation and disposal. The growing-text workload
+also bounds live Markdown rebuild count and preserves exact final text and fresh
+composer input. This reduces publication frequency; it does not bound the cost
+of parsing, layout or semantics for an increasingly large live message.
+
+Live prose also retains unchanged top-level Markdown blocks after parsing the
+complete current document. Comparing resolved ASTs preserves reference/link
+changes; replaced blocks release their recognizers. The message owns this cache
+and rendering dependencies invalidate it. Fenced code keeps its existing
+controls; documents with heading anchors use the stock renderer. The 1,200-word,
+100-update regression retains 950 block widget/element identities and builds
+100 new blocks. Selection survives growth from one paragraph to several.
+`test/block_reusing_markdown_body_test.dart` covers stock layout parity,
+reference changes, callbacks, theme/scale changes and disposal. Full-document
+parsing and rebuilding a changing large single block remain costs to measure.
 
 Reused link and file actions dispatch through the current widget callbacks.
 Tests cover changing those callbacks, removing actions, changing content and
