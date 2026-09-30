@@ -71,7 +71,7 @@ void main() {
       '# Result\n\n**Ready** and `inline`.\n\n- First\n- Second\n\n'
       '| Name | Status |\n| --- | --- |\n| A long project name | Ready |',
     );
-    expect(find.byType(MarkdownBody), findsOneWidget);
+    expect(find.bySubtype<MarkdownBody>(), findsOneWidget);
     expect(find.text('Result'), findsOneWidget);
     expect(find.byType(Table), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -115,7 +115,7 @@ void main() {
     (tester) async {
       await message(tester, '**Literal** `draft`', role: 'user');
       expect(find.text('**Literal** `draft`'), findsOneWidget);
-      expect(find.byType(MarkdownBody), findsNothing);
+      expect(find.bySubtype<MarkdownBody>(), findsNothing);
       await message(tester, 'Working\n```dart\nfinal value =', streaming: true);
       expect(find.byTooltip('Copy message'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -144,7 +144,9 @@ void main() {
       findsNothing,
     );
     expect(find.text('Remote image'), findsOneWidget);
-    final markdown = tester.widget<MarkdownBody>(find.byType(MarkdownBody));
+    final markdown = tester.widget<MarkdownBody>(
+      find.bySubtype<MarkdownBody>(),
+    );
     markdown.onTapLink!('Host file', 'file:///private/file', '');
     await tester.pump();
     expect(
@@ -170,7 +172,9 @@ void main() {
         ),
       ),
     );
-    final markdown = tester.widget<MarkdownBody>(find.byType(MarkdownBody));
+    final markdown = tester.widget<MarkdownBody>(
+      find.bySubtype<MarkdownBody>(),
+    );
     markdown.onTapLink!('Open report', '../exports/final-report.pdf', '');
     await tester.pump();
 
@@ -194,7 +198,9 @@ void main() {
         ),
       ),
     );
-    final markdown = tester.widget<MarkdownBody>(find.byType(MarkdownBody));
+    final markdown = tester.widget<MarkdownBody>(
+      find.bySubtype<MarkdownBody>(),
+    );
     markdown.onTapLink!('Missing report', '/srv/removed/report.pdf', '');
     await tester.pump();
 
@@ -215,7 +221,7 @@ void main() {
     await tester.tap(find.text('terminal'));
     await tester.pumpAndSettle();
     expect(find.text('**raw output**\nexit code 0'), findsOneWidget);
-    expect(find.byType(MarkdownBody), findsNothing);
+    expect(find.bySubtype<MarkdownBody>(), findsNothing);
   });
 
   group('conversation controls', () {

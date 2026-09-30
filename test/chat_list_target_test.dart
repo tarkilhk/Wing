@@ -494,6 +494,9 @@ void main() {
         event('reasoning.delta');
         await tester.pump(const Duration(milliseconds: 16));
       }
+      // Include deferred stream presentation in the work budget, and finish
+      // its timer before this test disposes the widget tree.
+      await tester.pump(const Duration(milliseconds: 200));
       expect(builds, isEmpty, reason: 'Answer text is not displayed in Chats');
       expect(
         controller.browserReads,

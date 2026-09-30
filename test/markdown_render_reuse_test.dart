@@ -63,11 +63,13 @@ void main() {
           ),
         ),
       );
-      final original = tester.widget<MarkdownBody>(find.byType(MarkdownBody));
+      final original = tester.widget<MarkdownBody>(
+        find.bySubtype<MarkdownBody>(),
+      );
       value.value = content('new');
       await tester.pump();
       expect(
-        tester.widget<MarkdownBody>(find.byType(MarkdownBody)),
+        tester.widget<MarkdownBody>(find.bySubtype<MarkdownBody>()),
         same(original),
       );
       if (deliverables) {
@@ -84,7 +86,7 @@ void main() {
       value.value = content('disabled', enabled: false);
       await tester.pump();
       expect(
-        tester.widget<MarkdownBody>(find.byType(MarkdownBody)),
+        tester.widget<MarkdownBody>(find.bySubtype<MarkdownBody>()),
         isNot(same(original)),
       );
       if (deliverables) {
@@ -121,7 +123,7 @@ void main() {
         ),
       );
       MarkdownBody body() =>
-          tester.widget<MarkdownBody>(find.byType(MarkdownBody));
+          tester.widget<MarkdownBody>(find.bySubtype<MarkdownBody>());
       final first = body();
       change(() => text = 'Second **answer**');
       await tester.pump();

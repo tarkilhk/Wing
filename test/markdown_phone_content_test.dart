@@ -92,7 +92,7 @@ void main() {
         horizontal.where((state) => state.position.maxScrollExtent > 0),
         hasLength(2),
       );
-      final markdown = find.byType(MarkdownBody);
+      final markdown = find.bySubtype<MarkdownBody>();
       final table = find.descendant(of: markdown, matching: find.byType(Table));
       final tableScrollbar = find.descendant(
         of: markdown,

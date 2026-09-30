@@ -12,6 +12,7 @@ import '../services/web_preview.dart';
 import '../theme/profile_markdown_style.dart';
 import 'chat_image_preview.dart';
 import 'markdown_code_block.dart';
+import 'block_reusing_markdown_body.dart';
 import 'deliverable_attachment.dart';
 
 /// Renders Markdown message content without conversation chrome.
@@ -43,6 +44,15 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
   // Retain only this mounted message's rendering. Unrelated stream/activity
   // updates must not split code fences, recreate styles and reparse its prose.
   Widget? _content;
+  MarkdownStyleSheet? _styleSheet;
+  ThemeData? _markdownTheme;
+  Map<String, MarkdownElementBuilder>? _markdownBuilders;
+  final _deliverableSyntaxes = <md.InlineSyntax>[
+    MediaReferenceSyntax(),
+    DeliverableLinkSyntax(),
+    DeliverableCodeSyntax(),
+    HtmlFilePathSyntax(),
+  ];
   final _headingKeys = <String, GlobalKey>{};
 
   @override
@@ -92,6 +102,14 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
             (oldWidget.onDownloadRemoteFile == null)) {
       _content = null;
     }
+    if (widget.deliverables != oldWidget.deliverables ||
+        widget.documentPath != oldWidget.documentPath ||
+        (widget.onOpenRemoteFile == null) !=
+            (oldWidget.onOpenRemoteFile == null) ||
+        (widget.onDownloadRemoteFile == null) !=
+            (oldWidget.onDownloadRemoteFile == null)) {
+      _markdownBuilders = null;
+    }
     if (widget.initialFragment != oldWidget.initialFragment) {
       _scheduleFragment();
     }
@@ -102,6 +120,9 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     super.didChangeDependencies();
     // Theme, text scale and viewport changes still refresh the rendered content.
     _content = null;
+    _styleSheet = null;
+    _markdownTheme = null;
+    _markdownBuilders = null;
   }
 
   Future<void> _open(BuildContext context, String href) async {
@@ -163,13 +184,49 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     );
   }
 
+  void _tapLink(String text, String? href, String title) {
+    if (href != null) _open(context, href);
+  }
+
+  Widget _buildImage(MarkdownImageConfig config) => OutlinedButton.icon(
+    onPressed: () =>
+        _previewImage(context, config.uri.toString(), config.alt ?? 'Image'),
+    icon: const Icon(Icons.image_outlined),
+    label: Text(
+      config.alt ?? 'Open image link',
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => _content ??= _buildContent(context);
 
   Widget _buildContent(BuildContext context) {
+    MediaQuery.sizeOf(context);
+    MediaQuery.textScalerOf(context);
     final theme = Theme.of(context);
+    final styleSheet = _styleSheet ??= profileMarkdownStyle(theme);
+    final markdownTheme = _markdownTheme ??= profileMarkdownTheme(theme);
+    final builders = _markdownBuilders ??= {
+      if (widget.documentPath != null)
+        _headingAnchorTag: _HeadingAnchorBuilder(_headingKeys),
+      if (widget.deliverables)
+        deliverableElementTag: _DeliverableBuilder(
+          widget.onOpenRemoteFile == null
+              ? null
+              : (output) => widget.onOpenRemoteFile!(output),
+          widget.onDownloadRemoteFile == null
+              ? null
+              : (output) => widget.onDownloadRemoteFile!(output),
+          maxWidth: MediaQuery.sizeOf(context).width,
+        ),
+    };
     _headingKeys.clear();
     final headings = _HeadingBuilder(_headingKeys);
+    final body = widget.documentPath == null
+        ? BlockReusingMarkdownBody.new
+        : MarkdownBody.new;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -186,57 +243,24 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
               context: context,
               removeBottom: true,
               child: Theme(
-                data: profileMarkdownTheme(theme),
-                child: MarkdownBody(
-                  checkboxBuilder: (checked) =>
-                      StudioTaskMarker(completed: checked),
+                data: markdownTheme,
+                child: body(
+                  checkboxBuilder: _buildTaskMarker,
                   data: segment as String,
                   inlineSyntaxes: widget.deliverables
-                      ? [
-                          MediaReferenceSyntax(),
-                          DeliverableLinkSyntax(),
-                          DeliverableCodeSyntax(),
-                          HtmlFilePathSyntax(),
-                        ]
+                      ? _deliverableSyntaxes
                       : null,
-                  paddingBuilders: {
-                    if (widget.documentPath != null)
-                      for (var level = 1; level <= 6; level++)
-                        'h$level': headings,
-                  },
-                  builders: {
-                    if (widget.documentPath != null) ...{
-                      _headingAnchorTag: _HeadingAnchorBuilder(_headingKeys),
-                    },
-                    if (widget.deliverables)
-                      deliverableElementTag: _DeliverableBuilder(
-                        widget.onOpenRemoteFile == null
-                            ? null
-                            : (output) => widget.onOpenRemoteFile!(output),
-                        widget.onDownloadRemoteFile == null
-                            ? null
-                            : (output) => widget.onDownloadRemoteFile!(output),
-                        maxWidth: MediaQuery.sizeOf(context).width,
-                      ),
-                  },
+                  paddingBuilders: widget.documentPath == null
+                      ? const {}
+                      : {
+                          for (var level = 1; level <= 6; level++)
+                            'h$level': headings,
+                        },
+                  builders: builders,
                   selectable: true,
-                  onTapLink: (_, href, _) {
-                    if (href != null) _open(context, href);
-                  },
-                  sizedImageBuilder: (config) => OutlinedButton.icon(
-                    onPressed: () => _previewImage(
-                      context,
-                      config.uri.toString(),
-                      config.alt ?? 'Image',
-                    ),
-                    icon: const Icon(Icons.image_outlined),
-                    label: Text(
-                      config.alt ?? 'Open image link',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  styleSheet: profileMarkdownStyle(theme),
+                  onTapLink: _tapLink,
+                  sizedImageBuilder: _buildImage,
+                  styleSheet: styleSheet,
                 ),
               ),
             ),
@@ -321,3 +345,5 @@ class _HeadingAnchorBuilder extends MarkdownElementBuilder {
     TextStyle? parentStyle,
   ) => SizedBox(key: keys[element.attributes['id']], width: 0, height: 1);
 }
+
+Widget _buildTaskMarker(bool checked) => StudioTaskMarker(completed: checked);

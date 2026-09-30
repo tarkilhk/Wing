@@ -122,6 +122,7 @@ class ProfileChat {
   String? intelligenceRuntime;
   String draft = '';
   bool draftSubmissionUncertain = false;
+  QueuedPromptDraft? _outgoingPrompt;
   String streaming = '';
   String? tool;
   final List<GatewayToolActivity> toolActivities = [];
@@ -375,6 +376,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
   // background monitoring. Keep keystrokes off the workspace-wide update path.
   final _composerChanges = ChangeNotifier();
   Listenable get composerChanges => _composerChanges;
+  Timer? _streamPresentationTimer;
+  final _pendingStreamChats = <ProfileSessionKey>{};
   final _retentionChanges = ChangeNotifier();
   Listenable get retentionChanges => _retentionChanges;
 
@@ -541,6 +544,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat.projectLoading ||
       chat.draft.isNotEmpty ||
       chat.draftSubmissionUncertain ||
+      chat._outgoingPrompt != null ||
       chat.attachments.isNotEmpty ||
       chat.queuedPrompts.isNotEmpty ||
       chat.editingQueuedPrompt != null ||
@@ -1116,6 +1120,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   void _changed({ProfileSessionKey? browserChat}) {
     if (_closed) return;
+    // Every general update already exposes the latest ingested text. Cancel
+    // deferred presentation, including other chats' browser row invalidations.
+    if (_pendingStreamChats.any((key) => key != browserChat)) {
+      browserChat = null;
+    }
+    _streamPresentationTimer?.cancel();
+    _streamPresentationTimer = null;
+    _pendingStreamChats.clear();
     for (final route in _visibleRoutes) {
       if (_mountedRoutes.containsKey(route)) {
         _mountedRoutes[route] = current?.chat?.key;
@@ -1138,6 +1150,30 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat: browserChat,
     );
     notifyListeners();
+  }
+
+  void _streamChanged(ProfileChat chat, {required bool immediate}) {
+    if (immediate || _streamPresentationTimer == null) {
+      _changed(browserChat: chat.key);
+      _startStreamPresentationWindow();
+    } else {
+      _pendingStreamChats.add(chat.key);
+    }
+  }
+
+  void _startStreamPresentationWindow() {
+    if (_closed) return;
+    // Growing Markdown reparses and lays out its entire live body. Ingest every
+    // chunk immediately, but bound those presentation updates to ten per second.
+    _streamPresentationTimer = Timer(const Duration(milliseconds: 100), () {
+      _streamPresentationTimer = null;
+      if (_closed || _pendingStreamChats.isEmpty) return;
+      final chat = _pendingStreamChats.length == 1
+          ? _pendingStreamChats.single
+          : null;
+      _changed(browserChat: chat);
+      _startStreamPresentationWindow();
+    });
   }
 
   List<Map<String, dynamic>> _snapshotRecords(Object? value) => value is List
@@ -3954,16 +3990,34 @@ class ProfileWorkspaceController extends ChangeNotifier {
     } else if (restored.submissionUncertain) {
       chat.error =
           'Delivery is uncertain. Check the server history before sending this draft again.';
+    } else if (restored.queuedPrompts.any(
+      (prompt) => prompt.submissionUncertain,
+    )) {
+      chat.error =
+          'Delivery of a queued message is uncertain. Check history, then edit or remove it before resuming.';
     }
   }
 
   Future<void> _persistDraft(ProfileChat chat) {
     final key = chat.key;
     final text = chat.draft;
-    final attachments = List<AttachmentDraft>.of(chat.attachments);
-    final queue = List<QueuedPromptDraft>.of(chat.queuedPrompts);
+    final outgoing = chat._outgoingPrompt;
+    final attachments = [
+      for (final attachment in chat.attachments)
+        if (outgoing == null || !outgoing.attachments.contains(attachment))
+          attachment,
+    ];
+    final queue = [
+      for (final prompt in [?outgoing, ...chat.queuedPrompts])
+        QueuedPromptDraft(
+          text: prompt.text,
+          attachments: prompt.attachments,
+          submissionUncertain: prompt.submissionUncertain,
+        ),
+    ];
     final submissionUncertain = chat.draftSubmissionUncertain;
     final queuePaused =
+        outgoing != null ||
         chat.queuePaused ||
         chat.queueDraining ||
         chat.editingQueuedPrompt != null;
@@ -4405,12 +4459,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
   void _hydrateIntelligence(ProfileChat chat, Map<String, dynamic> response) {
     final info = response['info'];
     if (info is Map) {
+      if (!info.containsKey('stored_session_id') ||
+          info['stored_session_id'] == chat.key.sessionId) {
+        _hydrateTitle(chat, info['title']);
+      }
       chat.model = info['model']?.toString() ?? chat.model;
       chat.provider = info['provider']?.toString() ?? chat.provider;
       chat.reasoningEffort =
           info['reasoning_effort']?.toString() ?? chat.reasoningEffort;
       if (info['yolo'] is bool) chat.yolo = info['yolo'] as bool;
     }
+  }
+
+  void _hydrateTitle(ProfileChat chat, Object? title) {
+    if (title is String && title.trim().isNotEmpty) chat.title = title.trim();
   }
 
   /// Reads and writes always use this chat's immutable profile owner and live ID.
@@ -5069,6 +5131,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     String? display,
     bool preserveComposer = false,
     List<AttachmentDraft>? attachmentOverride,
+    QueuedPromptDraft? queuedPrompt,
   }) async {
     final resource = _owned(chat);
     if (chat._replacingExpiredRuntime) return false;
@@ -5102,11 +5165,22 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat.reasoning = '';
     chat.reasoningVerbose = false;
     chat.toolActivities.clear();
+    // Own the outgoing text and files separately before any preparation await.
+    // Every progress save keeps them alongside the fresh composer.
+    if (!preserveComposer) {
+      chat._outgoingPrompt = QueuedPromptDraft(
+        text: prompt ?? draftAtSubmit,
+        attachments: files,
+      );
+      chat.draft = '';
+      chat.draftSubmissionUncertain = false;
+    }
+    final draftWrite = _persistDraft(chat);
     _changed();
     var submitted = false;
     var acknowledged = false;
     try {
-      await _persistDraft(chat);
+      await draftWrite;
       await resource.gateway.requireProfile();
       // Persist only ownership and status. No prompt text, paths or credentials.
       await _journal();
@@ -5156,13 +5230,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
           _changed();
           return _persistDraft(chat);
         },
-        removeCachedFileAfterUpload: attachmentOverride == null,
+        removeCachedFileAfterUpload: false,
         submitPrompt: (refs) async {
           await resource.gateway.requireProfile();
           final promptText = [
             refs.join('\n'),
             text,
           ].where((part) => part.isNotEmpty).join('\n\n');
+          // Persist possible dispatch before the RPC. A lost acknowledgement
+          // must belong to this outgoing message, never to newly typed text.
+          final outgoing = chat._outgoingPrompt ?? queuedPrompt;
+          if (outgoing != null) {
+            outgoing.submissionUncertain = true;
+            await _persistDraft(chat);
+          }
           chat._replaceableUnsubmittedRuntime = false;
           chat.messages.add({
             'role': 'user',
@@ -5194,8 +5275,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
           });
           acknowledged = true;
           if (!preserveComposer) {
+            chat._outgoingPrompt = null;
             chat.draftSubmissionUncertain = false;
-            if (chat.draft == draftAtSubmit) chat.draft = '';
             chat.attachments.removeWhere(files.contains);
           }
           await _persistDraft(chat);
@@ -5203,16 +5284,28 @@ class ProfileWorkspaceController extends ChangeNotifier {
       );
       if (attachmentOverride == null) await attachments.removeAll(files);
     } catch (e) {
-      if (submitted && !preserveComposer) {
-        chat.draftSubmissionUncertain = true;
-        await _persistDraft(chat);
-      }
       chat.error = submitted
           ? 'Delivery or completion is uncertain. Reconnect to check history. The prompt will not be resent.'
           : e.toString();
       chat.status = submitted
           ? ProfileTurnStatus.reconnecting
           : ProfileTurnStatus.failed;
+      final outgoing = chat._outgoingPrompt;
+      if (outgoing != null) {
+        outgoing.submissionUncertain = submitted;
+        if (chat.draft.isEmpty) {
+          chat.draft = outgoing.text;
+          chat.draftSubmissionUncertain = submitted;
+        } else {
+          chat.attachments.removeWhere(outgoing.attachments.contains);
+          chat.queuedPrompts.insert(0, outgoing);
+          chat.queuePaused = true;
+        }
+        chat._outgoingPrompt = null;
+      } else if (!submitted && queuedPrompt != null) {
+        queuedPrompt.submissionUncertain = false;
+      }
+      if (!preserveComposer || queuedPrompt != null) await _persistDraft(chat);
       if (submitted) _scheduleReconnect(resource);
     } finally {
       chat._submissionInFlight = false;
@@ -5298,6 +5391,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       throw StateError('Queue a message or attachment, not a slash command.');
     }
     final originalText = chat.draft;
+    final originalUncertain = chat.draftSubmissionUncertain;
     final movedText = chat.draft.trim() == text;
     final movedAttachments = movedText
         ? List<AttachmentDraft>.of(chat.attachments)
@@ -5305,26 +5399,40 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (text.isEmpty && movedAttachments.isEmpty) {
       throw StateError('Queue a message or attachment, not a slash command.');
     }
-    final queued = QueuedPromptDraft(text: text, attachments: movedAttachments);
+    final queued = QueuedPromptDraft(
+      text: text,
+      attachments: movedAttachments,
+      submissionUncertain: movedText && originalUncertain,
+    );
     chat.queueMutating = true;
     chat.queuedPrompts.add(queued);
-    if (movedText) chat.draft = '';
+    if (movedText) {
+      chat.draft = '';
+      chat.draftSubmissionUncertain = false;
+    }
     if (movedAttachments.isNotEmpty) chat.attachments.clear();
     _changed();
     try {
       await _persistQueueMutation(chat);
     } catch (_) {
-      chat.queuedPrompts.remove(queued);
-      if (movedText) {
-        chat.draft = chat.draft.isEmpty
-            ? originalText
-            : _appendSharedText(originalText, chat.draft);
-      }
-      for (final attachment in movedAttachments.reversed) {
-        if (!chat.attachments.any(
-          (current) => identical(current, attachment),
-        )) {
-          chat.attachments.insert(0, attachment);
+      if (queued.submissionUncertain && chat.draft.isNotEmpty) {
+        // Fresh text has its own composer. Keep the uncertain original owned
+        // by the queue, even if the first mutation save failed.
+        chat.queuePaused = true;
+      } else {
+        chat.queuedPrompts.remove(queued);
+        if (movedText) {
+          chat.draft = chat.draft.isEmpty
+              ? originalText
+              : _appendSharedText(originalText, chat.draft);
+          chat.draftSubmissionUncertain = originalUncertain;
+        }
+        for (final attachment in movedAttachments.reversed) {
+          if (!chat.attachments.any(
+            (current) => identical(current, attachment),
+          )) {
+            chat.attachments.insert(0, attachment);
+          }
         }
       }
       chat.queueMutating = false;
@@ -5405,6 +5513,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final prompt = chat.editingQueuedPrompt;
     final text = chat.queuedEditText.trim();
     if (prompt == null ||
+        (prompt.submissionUncertain && text == prompt.text.trim()) ||
         chat.queueMutating ||
         chat.queueDraining ||
         chat.steering ||
@@ -5480,6 +5589,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat.queuedPrompts[index] = QueuedPromptDraft(
       text: text,
       attachments: expectedPrompt.attachments,
+      submissionUncertain:
+          expectedPrompt.submissionUncertain &&
+          text == expectedPrompt.text.trim(),
     );
     _changed();
     try {
@@ -5577,6 +5689,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
         chat.queueMutating) {
       return;
     }
+    if (chat.queuedPrompts.any((prompt) => prompt.submissionUncertain)) {
+      throw StateError(
+        'Delivery of a queued message is uncertain. Check history, then edit or remove it before resuming.',
+      );
+    }
     final gateway = _owned(chat).gateway;
     chat.queueDraining = true;
     _changed();
@@ -5609,6 +5726,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       return;
     }
     if (chat.historyError != null ||
+        chat.queuedPrompts.any((prompt) => prompt.submissionUncertain) ||
         chat.draftSubmissionUncertain ||
         chat.status == ProfileTurnStatus.failed ||
         chat.status == ProfileTurnStatus.cancelled) {
@@ -5630,6 +5748,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           prompt: queued.text,
           preserveComposer: true,
           attachmentOverride: queued.attachments,
+          queuedPrompt: queued,
         );
         if (!accepted) {
           chat.queuePaused = true;
@@ -6095,7 +6214,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
         .where((c) => c.runtimeId == event.sessionId)
         .firstOrNull;
     if (chat == null) return;
+    final activityBefore = chat.mainActivity;
+    final statusBefore = chat.status;
     switch (event.type) {
+      case 'session.title':
+        if (event.data['session_id'] == chat.key.sessionId) {
+          _hydrateTitle(chat, event.data['title']);
+        }
       case 'session.info':
         _hydrateIntelligence(chat, {'info': event.data});
         if (event.data.containsKey('side_tasks')) {
@@ -6388,7 +6513,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
         );
         unawaited(_journal().catchError((Object _) {}));
     }
-    _changed(browserChat: chat.key);
+    if (event.type == 'message.delta' || event.type == 'reasoning.delta') {
+      _streamChanged(
+        chat,
+        immediate:
+            chat.mainActivity != activityBefore || chat.status != statusBefore,
+      );
+    } else {
+      _changed(browserChat: chat.key);
+    }
   }
 
   Future<void> _settle(
@@ -7254,6 +7387,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (chat.draftSubmissionUncertain) {
       chat.error =
           'Delivery is uncertain. Check the server history before sending this draft again.';
+    } else if (chat.queuedPrompts.any((prompt) => prompt.submissionUncertain)) {
+      chat.error =
+          'Delivery of a queued message is uncertain. Check history, then edit or remove it before resuming.';
     }
   }
 
@@ -7388,6 +7524,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   @override
   void dispose() {
     _closed = true;
+    _streamPresentationTimer?.cancel();
     _composerChanges.dispose();
     _retentionChanges.dispose();
     _browserChanges.dispose();

@@ -208,6 +208,73 @@ void main() {
     expect(restored.queuedPrompts.single.attachments.single.id, 'queued.txt');
   });
 
+  test(
+    'round trips queue dispatch uncertainty independently of composer',
+    () async {
+      final store = ComposerDraftStore(
+        preferences,
+        connectionIdentity: 'host-auth',
+      );
+      await store.write(
+        profileName: 'work',
+        sessionId: 'chat',
+        text: 'Fresh composer',
+        attachments: const [],
+        queuedPrompts: [
+          QueuedPromptDraft(
+            text: 'Dispatched outgoing',
+            submissionUncertain: true,
+          ),
+          QueuedPromptDraft(text: 'Ordinary queued work'),
+        ],
+        queuePaused: true,
+      );
+      final restored = await store.read(profileName: 'work', sessionId: 'chat');
+      expect(restored!.text, 'Fresh composer');
+      expect(restored.submissionUncertain, isFalse);
+      expect(
+        restored.queuedPrompts.map((prompt) => prompt.submissionUncertain),
+        [true, false],
+      );
+      final moved = await store.move(
+        profileName: 'work',
+        fromSessionId: 'chat',
+        toSessionId: 'replacement',
+        forNewSession: true,
+      );
+      expect(moved!.queuedPrompts.first.submissionUncertain, isTrue);
+    },
+  );
+
+  test(
+    'approved unchanged map queue format keeps unrelated unsent work',
+    () async {
+      await preferences.setString(
+        'composer_drafts_v1_host-auth',
+        jsonEncode([
+          {
+            'profile': 'work',
+            'session': 'chat',
+            'text': 'Existing composer',
+            'attachments': <Object?>[],
+            'queue': [
+              {'text': 'Existing queued work', 'attachments': <Object?>[]},
+            ],
+            'queue_paused': true,
+          },
+        ]),
+      );
+      final store = ComposerDraftStore(
+        preferences,
+        connectionIdentity: 'host-auth',
+      );
+      final restored = await store.read(profileName: 'work', sessionId: 'chat');
+      expect(restored!.text, 'Existing composer');
+      expect(restored.queuedPrompts.single.text, 'Existing queued work');
+      expect(restored.queuedPrompts.single.submissionUncertain, isFalse);
+    },
+  );
+
   test('restores existing string queue entries as text-only work', () async {
     await preferences.setString(
       'composer_drafts_v1_host-auth',

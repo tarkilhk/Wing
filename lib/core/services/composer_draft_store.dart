@@ -249,6 +249,7 @@ class ComposerDraftStore {
   Map<String, dynamic> _encodeQueuedPrompt(QueuedPromptDraft prompt) => {
     'text': prompt.text,
     'attachments': prompt.attachments.map(_encodeAttachment).toList(),
+    if (prompt.submissionUncertain) 'submission_uncertain': true,
   };
 
   Future<List<QueuedPromptDraft>> _decodeQueue(
@@ -266,7 +267,10 @@ class ComposerDraftStore {
         final record = Map<String, dynamic>.from(entry as Map);
         final text = record['text'];
         final rawAttachments = record['attachments'];
-        if (text is! String || rawAttachments is! List) {
+        final submissionUncertain = record['submission_uncertain'];
+        if (text is! String ||
+            rawAttachments is! List ||
+            (submissionUncertain != null && submissionUncertain is! bool)) {
           throw const FormatException('Invalid queued prompt');
         }
         final attachments = await _decodeAttachments(
@@ -274,7 +278,13 @@ class ComposerDraftStore {
           forNewSession: forNewSession,
         );
         if (text.trim().isNotEmpty || attachments.isNotEmpty) {
-          queued.add(QueuedPromptDraft(text: text, attachments: attachments));
+          queued.add(
+            QueuedPromptDraft(
+              text: text,
+              attachments: attachments,
+              submissionUncertain: submissionUncertain == true,
+            ),
+          );
         }
       } catch (_) {
         // One damaged queue entry must not discard the other unsent work.

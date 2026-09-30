@@ -962,7 +962,7 @@ void main() {
 
     expect(readPath, '/srv/current/notes.md');
     expect(find.byType(MarkdownMessageContent), findsOneWidget);
-    expect(find.byType(MarkdownBody), findsOneWidget);
+    expect(find.bySubtype<MarkdownBody>(), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -1013,7 +1013,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(MarkdownMessageContent), findsOneWidget);
-      expect(find.byType(MarkdownBody), findsOneWidget);
+      expect(find.bySubtype<MarkdownBody>(), findsOneWidget);
       expect(find.text('Release notes'), findsOneWidget);
       expect(find.text('Hermes'), findsNothing);
       expect(find.byType(Image), findsNothing);

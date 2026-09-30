@@ -133,7 +133,7 @@ void main() {
         }
         expect(
           (tester
-                      .widget<MarkdownBody>(find.byType(MarkdownBody))
+                      .widget<MarkdownBody>(find.bySubtype<MarkdownBody>())
                       .styleSheet!
                       .blockquoteDecoration!
                   as BoxDecoration)

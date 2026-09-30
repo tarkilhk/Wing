@@ -53,6 +53,9 @@ class Host {
   bool running = true;
   bool promptSubmitFails = false;
   bool fileAttachFails = false;
+  Object? sessionTitle;
+  Completer<void>? fileAttachStarted;
+  Completer<void>? fileAttachDelay;
   Map<String, dynamic> imageAttachResult = {
     'attached': true,
     'path': '/profile/images/upload.png',
@@ -89,9 +92,15 @@ class Host {
   Completer<void>? projectDelay;
   bool wrongProjectOwner = false;
   Object? discoveryFailure;
+  Completer<void>? discoveryDelay;
+  Completer<void>? discoveryStarted;
   Map<String, dynamic> clarifyResult = {'status': 'ok'};
   Map<String, dynamic> steerResult = {'status': 'queued'};
   Future<ProfileDiscovery> discover() async {
+    if (discoveryStarted case final started? when !started.isCompleted) {
+      started.complete();
+    }
+    await discoveryDelay?.future;
     if (discoveryFailure case final failure?) throw failure;
     return ProfileDiscovery(
       profiles: profiles.map((p) => HermesProfile(name: p)).toList(),
@@ -162,6 +171,10 @@ class Host {
         }
         if (method == 'session.events.since') return notificationReplay ?? {};
         if (method == 'file.attach') {
+          if (fileAttachStarted case final started? when !started.isCompleted) {
+            started.complete();
+          }
+          await fileAttachDelay?.future;
           if (fileAttachFails) throw StateError('Synthetic upload failure');
           return {'attached': true, 'ref_text': 'attached:${params['name']}'};
         }
@@ -276,6 +289,7 @@ class Host {
             'todo_state': todoState,
             'info': {
               'profile_name': name,
+              if (sessionTitle != null) 'title': sessionTitle,
               if (!omitCreatedCwd)
                 'cwd':
                     createdCwdOverride ??
@@ -333,6 +347,62 @@ void main() {
     await controller.initialize();
   });
   tearDown(() => controller.dispose());
+
+  for (final hasCachedRow in [false, true]) {
+    test(
+      'server title overrides cached or absent row: cached=$hasCachedRow',
+      () async {
+        final resource = controller.current!;
+        if (hasCachedRow) {
+          resource.sessions.single['title'] = 'Outdated cached title';
+        } else {
+          resource.sessions.clear();
+        }
+        host.sessionTitle = 'Current server title';
+        await controller.openSession(ProfileSessionKey(resource.scope, 'same'));
+        expect(controller.current!.chat!.title, 'Current server title');
+      },
+    );
+  }
+
+  test(
+    'session title events update only their runtime and durable owner',
+    () async {
+      final first = await controller.createChat();
+      await controller.navigateProfile('b');
+      final second = await controller.createChat();
+      host.event('a', 'session.title', {
+        'session_id': 'same',
+        'title': 'Explicit rename',
+      });
+      expect(first.title, 'Explicit rename');
+      expect(second.title, 'New chat');
+      host.event('a', 'session.title', {
+        'session_id': 'another',
+        'title': 'Wrong owner',
+      });
+      host.event('a', 'session.title', {'session_id': 'same', 'title': '  '});
+      host.event('a', 'session.info', {
+        'stored_session_id': 'another',
+        'title': 'Wrong info owner',
+      });
+      expect(first.title, 'Explicit rename');
+      host.event('a', 'session.info', {
+        'stored_session_id': 'same',
+        'title': 'Current info title',
+      });
+      expect(first.title, 'Current info title');
+    },
+  );
+
+  test('unknown session title info keeps an existing title', () async {
+    final chat = await controller.createChat();
+    chat.title = 'Known title';
+    for (final title in [null, '', '  ', 123]) {
+      host.event('a', 'session.info', {'title': title});
+      expect(chat.title, 'Known title');
+    }
+  });
 
   test(
     'reconnect notification uses recovered answer instead of generic status',
@@ -1030,6 +1100,66 @@ void main() {
     await Future.wait([first, second]);
   });
 
+  test('send consumes the composer before asynchronous preparation', () async {
+    final chat = await controller.createChat();
+    await controller.updateDraft(chat, 'outgoing prompt');
+    host.discoveryStarted = Completer<void>();
+    host.discoveryDelay = Completer<void>();
+    final sending = controller.send(chat);
+    try {
+      expect(chat.draft, isEmpty);
+      await host.discoveryStarted!.future;
+      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      expect(
+        preferences.getString('composer_drafts_v1_original-settings'),
+        contains('outgoing prompt'),
+      );
+      await controller.updateDraft(chat, 'immediate follow-up');
+    } finally {
+      host.discoveryDelay!.complete();
+      await sending;
+    }
+    expect(chat.draft, 'immediate follow-up');
+    expect(
+      host.calls.singleWhere((call) => call.$2 == 'prompt.submit').$3['text'],
+      'outgoing prompt',
+    );
+    expect(chat.messages.last['content'], 'outgoing prompt');
+  });
+
+  for (final freshDraft in ['', 'immediate follow-up']) {
+    test(
+      'preparation failure ${freshDraft.isEmpty ? 'restores outgoing' : 'preserves fresh'} draft',
+      () async {
+        final chat = await controller.createChat();
+        await controller.updateDraft(chat, 'outgoing prompt');
+        host.discoveryStarted = Completer<void>();
+        host.discoveryDelay = Completer<void>();
+        host.discoveryFailure = StateError('Profile unavailable');
+        final sending = controller.send(chat);
+        try {
+          expect(chat.draft, isEmpty);
+          await host.discoveryStarted!.future;
+          if (freshDraft.isNotEmpty) {
+            await controller.updateDraft(chat, freshDraft);
+          }
+        } finally {
+          host.discoveryDelay!.complete();
+          await sending;
+        }
+        final expected = freshDraft.isEmpty ? 'outgoing prompt' : freshDraft;
+        expect(chat.draft, expected);
+        expect(chat.draftSubmissionUncertain, isFalse);
+        expect(chat.status, ProfileTurnStatus.failed);
+        expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+        expect(
+          preferences.getString('composer_drafts_v1_original-settings'),
+          contains(expected),
+        );
+      },
+    );
+  }
+
   test(
     'accepted prompt does not clear follow-up text typed while waiting',
     () async {
@@ -1040,6 +1170,8 @@ void main() {
 
       final sending = controller.send(chat);
       await host.promptSubmitStarted!.future;
+      expect(chat.messages.last['content'], 'first prompt');
+      expect(chat.draft, isEmpty);
       await controller.updateDraft(chat, 'follow-up draft');
       host.promptSubmitDelay!.complete();
       await sending;
@@ -1047,6 +1179,71 @@ void main() {
       expect(chat.draft, 'follow-up draft');
     },
   );
+
+  test(
+    'acknowledgement keeps a new draft identical to the sent prompt',
+    () async {
+      final chat = await controller.createChat();
+      await controller.updateDraft(chat, 'same text');
+      host.promptSubmitStarted = Completer<void>();
+      host.promptSubmitDelay = Completer<void>();
+
+      final sending = controller.send(chat);
+      await host.promptSubmitStarted!.future;
+      expect(chat.draft, isEmpty);
+      await controller.updateDraft(chat, 'same text');
+      host.promptSubmitDelay!.complete();
+      await sending;
+
+      expect(chat.draft, 'same text');
+      expect(
+        host.calls.where((call) => call.$2 == 'prompt.submit'),
+        hasLength(1),
+      );
+    },
+  );
+
+  test('lost acknowledgement recovers an untouched sent draft', () async {
+    final chat = await controller.createChat();
+    await controller.updateDraft(chat, 'recover this prompt');
+    host.promptSubmitStarted = Completer<void>();
+    host.promptSubmitDelay = Completer<void>();
+    host.promptSubmitFails = true;
+
+    final sending = controller.send(chat);
+    await host.promptSubmitStarted!.future;
+    expect(chat.draft, isEmpty);
+    host.promptSubmitDelay!.complete();
+    await sending;
+
+    expect(chat.draft, 'recover this prompt');
+    expect(chat.draftSubmissionUncertain, isTrue);
+    expect(
+      host.calls.where((call) => call.$2 == 'prompt.submit'),
+      hasLength(1),
+    );
+  });
+
+  test('lost acknowledgement preserves a fresh follow-up draft', () async {
+    final chat = await controller.createChat();
+    await controller.updateDraft(chat, 'first prompt');
+    host.promptSubmitStarted = Completer<void>();
+    host.promptSubmitDelay = Completer<void>();
+    host.promptSubmitFails = true;
+
+    final sending = controller.send(chat);
+    await host.promptSubmitStarted!.future;
+    expect(chat.draft, isEmpty);
+    await controller.updateDraft(chat, 'follow-up draft');
+    host.promptSubmitDelay!.complete();
+    await sending;
+
+    expect(chat.draft, 'follow-up draft');
+    expect(
+      host.calls.where((call) => call.$2 == 'prompt.submit'),
+      hasLength(1),
+    );
+  });
 
   test('adds and removes the next attachment while a response runs', () async {
     final sandbox = await Directory.systemTemp.createTemp(
