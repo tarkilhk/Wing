@@ -76,12 +76,14 @@ def sanitize_cpu(value, start, end):
     clean = []
     for sample in samples:
         timestamp, stack = integer(sample["timestamp"]), sample["stack"]
-        require(start <= timestamp <= end and isinstance(stack, list) and stack)
+        require(start <= timestamp <= end and isinstance(stack, list))
         require(all(type(index) is int and 0 <= index < len(rows) for index in stack))
         require(type(sample.get("truncated", False)) is bool)
         clean.append({"timestamp": timestamp, "tid": integer(sample["tid"]),
                       "stack": stack[:], "truncated": sample.get("truncated", False)})
-    return {"sample_count": len(clean), "sample_period_us": integer(value["samplePeriod"], 1),
+    require(any(sample["stack"] for sample in clean))
+    return {"sample_count": len(clean), "unattributed_sample_count": sum(not s["stack"] for s in clean),
+            "sample_period_us": integer(value["samplePeriod"], 1),
             "max_stack_depth": integer(value["maxStackDepth"], 1),
             "start_us": start, "end_us": end, "stack_order": "leaf_first",
             "functions": rows, "samples": clean}

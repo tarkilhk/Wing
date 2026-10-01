@@ -351,6 +351,78 @@ these recordings identify likely costs rather than measure an unprofiled speedup
 Dart sampling does not provide complete native scheduling/GPU attribution. If
 those remain unexplained, report that limit before proposing an additional trace.
 
+## Phone CPU attribution (2026-10-01)
+
+The prepared ARM64 replay APK was installed into QA without clearing data. Two
+prose replays and one mixed-fence replay passed all capture checks. They recorded
+600 deltas, 60 publications and 120 programmatic draft edits each, with 2,835,
+2,797 and 2,495 CPU samples respectively. Frame/CPU/timeline clocks overlap in the
+replay bounds. Twelve focused recorder tests now pass.
+
+The first attempted export was rejected because one sample had an empty stack.
+The phone legitimately returns occasional samples without an attributable stack;
+the recorder now retains and explicitly counts these, requiring at least one
+usable stack. The successful captures have 2, 4 and 5 unattributed samples. The
+initial attempt is excluded from the following results. The correction affects
+host diagnostics only, not production rendering.
+
+| Profiled workload | Build p95 / maximum (ms) | Raster p95 / maximum (ms) | Builds >16.667 / >25 ms |
+| --- | --- | --- | --- |
+| Prose 1 | 22.817 / 32.650 | 2.353 / 3.722 | 50 / 13 of 512 |
+| Prose 2 | 21.656 / 29.435 | 2.444 / 2.896 | 45 / 10 of 521 |
+| Mixed fences | 8.087 / 16.497 | 2.601 / 4.039 | 0 / 0 of 581 |
+
+The worst prose frames spent 28.414 and 26.523 ms inside the Flutter BUILD
+stage, versus 1.826 and 0.820 ms in LAYOUT, and 1.508 and 1.284 ms in PAINT.
+BUILD therefore accounts for roughly 87% and 90% of their UI-frame wall time.
+These stage durations include possible scheduling delays and are not function
+CPU time. Repeated recognizable stacks run through `parseLines`, `parseLineList`,
+`_parseInlineContent`, `parseInline`, `parse`, `tryMatch` and `matchAsPrefix`.
+In frames above 25 ms, those parser chains occur in 106/346 and 77/260 observed
+samples. Separate native regex-interpreter leaves occur in another 91/346 and
+70/260 samples. These disjoint raw-stack observations are not exact elapsed CPU
+percentages, and native singleton stacks do not identify a particular syntax.
+
+The native offsets were symbolized offline using the unstripped profile engine.
+The captured replay APK's `libflutter.so` and the local engine have the same ELF
+Build ID `123f4485b6d2b0ffa3fcee77fdd1639e1bae52cc`. The recurring native leaves
+resolve to Dart's `RawMatch` regex interpreter in `regexp-interpreter.cc`.
+This supports regex execution as a substantial hotspot, without attributing it
+to a specific custom syntax or Markdown feature.
+
+No primary UI `CollectNewGeneration` or `CollectOldGeneration` pause overlapped
+a slow build interval in either prose replay. Background GC and idle notification
+events are distinct from UI pauses. AST signatures and text layout have much
+fewer recognizable samples than the parser. This does not rule out their cost
+in other workloads. Strict per-thread timeline B/E pairing had no mismatched
+ends or negative durations; spans crossing the capture boundary are excluded
+from complete-span claims. Source URIs are absent and names unqualified in this
+AOT profile; attribution uses call chains and verified native offsets. VM function
+ticks differ from recomputed raw-stack counts, so conclusions use the latter.
+
+`BlockReusingMarkdownBody` still parses the entire growing prose document before
+reusing unchanged resolved widgets. Code fences divide prose into smaller retained
+segments, consistent with the mixed workload's lower parser cost. This comparison
+uses different inputs and is not a causal optimization experiment. The next target
+is full-prose inline parsing and repeated regex matching, preserving links, late
+reference definitions, tables and Markdown formatting. Naively freezing an earlier
+AST can produce stale content when later text changes its meaning.
+
+CPU/timeline profiling adds overhead. This window measures UI stages and sampled
+functions; it does not measure native presented-frame gaps, real IME latency,
+a battery baseline or an unprofiled improvement. The prior 41.668 ms presentation
+interval is not a measured 41.668 ms function call. These traces explain the leading
+workload cost but do not establish all costs behind every display gap.
+
+Phone control lasted about seven minutes from preflight to verified restoration.
+The original QA APK was restored with its exact SHA-256, QA stopped and its unique
+empty Recents root removed. Production's SHA-256 was unchanged, one production
+task remained, and production was focused. The temporary screen timeout was
+restored to 30 seconds; no app data was cleared. Battery readings were unplugged
+at both endpoints and temperature rose from 33.4 to 34.9°C. The phone was released
+before offline analysis. Numeric captures, independent analysis, root validation
+and restoration evidence are retained in ignored `build/cpu-trace-20261001/phone/`.
+
 ## Evidence
 
 Ignored reports under `build/phone-performance/run-20260930/`:

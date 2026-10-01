@@ -123,6 +123,17 @@ class ProtocolTests(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 sanitize_cpu(value, 100, 200)
 
+    def test_partial_empty_stacks_are_retained_as_unattributed(self):
+        value = cpu()
+        value["samples"][0]["stack"] = []
+        clean = sanitize_cpu(value, 100, 200)
+        self.assertEqual(clean["sample_count"], 2)
+        self.assertEqual(clean["unattributed_sample_count"], 1)
+        self.assertEqual(clean["samples"][0]["stack"], [])
+        value["samples"][1]["stack"] = []
+        with self.assertRaises(ValueError):
+            sanitize_cpu(value, 100, 200)
+
     def test_timeline_requires_both_markers_and_in_bounds_events(self):
         for change in (lambda v: v.update(traceEvents=[]),
                        lambda v: v["traceEvents"].pop(),
