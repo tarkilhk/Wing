@@ -101,7 +101,7 @@ void main() {
         'model': 'test-model',
         'skills': <String, dynamic>{},
         'tools': <String, dynamic>{},
-      'desktop_contract': 8,
+        'desktop_contract': 8,
       };
       await controller.openNotification(chat.key);
       await tester.pumpWidget(
@@ -230,7 +230,7 @@ void main() {
   }
 
   testWidgets(
-    'cached notification failure exposes retry and preserves the draft',
+    'cached notification failure stores Send and preserves a fresh draft on retry',
     (tester) async {
       host.resumeError = JsonRpcError(
         'session.resume',
@@ -259,9 +259,11 @@ void main() {
         tester
             .widget<ComposerActionButton>(find.byType(ComposerActionButton))
             .unavailable[ComposerAction.send],
-        isNotNull,
+        isNull,
       );
       await controller.send(chat);
+      expect(chat.draft, isEmpty);
+      expect(chat.queuedPrompts.single.text, 'My unsent follow-up');
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
 
       host.resumeError = null;
@@ -278,6 +280,17 @@ void main() {
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
+      for (
+        var attempt = 0;
+        attempt < 20 &&
+            (chat.opening ||
+                chat.sendingPrompt ||
+                chat.queuedPrompts.isNotEmpty);
+        attempt++
+      ) {
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pump(const Duration(milliseconds: 10));
+      }
       expect(controller.notificationChat, isNull);
       expect(controller.current!.chat, same(chat));
       expect(chat.opening, isFalse);
@@ -292,7 +305,12 @@ void main() {
             .unavailable[ComposerAction.send],
         isNull,
       );
-      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      final submitted = host.calls
+          .where((call) => call.$2 == 'prompt.submit')
+          .single;
+      expect(submitted.$3['text'], 'My unsent follow-up');
+      expect(submitted.$3['queued'], isTrue);
+      expect(chat.queuedPrompts, isEmpty);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );

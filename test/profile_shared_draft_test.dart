@@ -5,6 +5,7 @@ import 'package:wing/core/models/attachment_draft.dart';
 import 'package:wing/core/services/android_share_intent_service.dart';
 import 'package:wing/core/services/attachment_draft_service.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/composer_draft_store.dart';
 import 'package:wing/core/models/queued_prompt_draft.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -82,12 +83,17 @@ void main() {
       expect(chat.draftSubmissionUncertain, isTrue);
 
       final saved = await SharedPreferences.getInstance();
+      final snapshot =
+          (await ComposerDraftStore(
+            saved,
+            connectionIdentity: 'shared-draft',
+          ).read(
+            profileName: chat.key.workspace.profileName,
+            sessionId: chat.key.sessionId,
+          ))!;
+      expect(snapshot.text, contains('Shared title'));
       expect(
-        saved.getString('composer_drafts_v1_shared-draft'),
-        contains('Shared title'),
-      );
-      expect(
-        saved.getString('composer_drafts_v1_shared-draft'),
+        snapshot.attachments.map((draft) => draft.name),
         contains('Quarterly report.pdf'),
       );
     },

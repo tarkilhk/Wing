@@ -10,7 +10,7 @@ import 'profile_workspace_controller_test.dart' show Host;
 
 void main() {
   testWidgets(
-    'cold notification retains cached reading and draft while offline',
+    'cold notification retains cached reading, offline outbox and fresh draft',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
@@ -60,7 +60,20 @@ void main() {
         controller.connectionStatus.phase,
         ServerConnectionPhase.reconnecting,
       );
-      await controller.send(controller.notificationChat!);
+      final offlineChat = controller.notificationChat!;
+      await controller.send(offlineChat);
+      expect(offlineChat.draft, isEmpty);
+      expect(offlineChat.queuedPrompts.single.text, 'My unsent thought');
+      expect(offlineChat.queuedPrompts.single.submissionUncertain, isFalse);
+      expect(offlineChat.messages.single['content'], 'a completed');
+      final waiting = (await controller.savedDraft(key))!;
+      expect(waiting.text, isEmpty);
+      expect(waiting.queuedPrompts.single.text, 'My unsent thought');
+      expect(waiting.queuedPrompts.single.submissionUncertain, isFalse);
+      await controller.updateDraft(offlineChat, 'Fresh thought while offline');
+      final fresh = (await controller.savedDraft(key))!;
+      expect(fresh.text, 'Fresh thought while offline');
+      expect(fresh.queuedPrompts.single.text, 'My unsent thought');
       expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
       for (final seconds in [1, 2, 4, 8, 16]) {
         await tester.pump(Duration(seconds: seconds));
@@ -70,6 +83,16 @@ void main() {
         ServerConnectionPhase.disconnected,
       );
       expect(controller.notificationChat!.key, key);
+      expect(controller.notificationChat!.draft, 'Fresh thought while offline');
+      expect(
+        controller.notificationChat!.queuedPrompts.single.text,
+        'My unsent thought',
+      );
+      expect(
+        controller.notificationChat!.messages.single['content'],
+        'a completed',
+      );
+      expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
       final changedCredentials = owner('other-credentials');
       expect(changedCredentials.current, isNull);
       changedCredentials.dispose();
@@ -79,13 +102,40 @@ void main() {
       await resuming;
       expect(controller.notificationChat, isNull);
       expect(controller.current!.chat!.key, key);
-      expect(controller.current!.chat!.draft, 'My unsent thought');
-      expect(controller.current!.chat!.offlineSnapshot, isFalse);
+      for (
+        var attempt = 0;
+        attempt < 20 &&
+            (controller.current!.chat!.sendingPrompt ||
+                controller.current!.chat!.queuedPrompts.isNotEmpty);
+        attempt++
+      ) {
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      final resumedChat = controller.current!.chat!;
+      expect(resumedChat.draft, 'Fresh thought while offline');
+      expect(resumedChat.offlineSnapshot, isFalse);
+      expect(resumedChat.sendingPrompt, isFalse);
+      expect(resumedChat.queuedPrompts, isEmpty);
+      expect(
+        resumedChat.messages.any(
+          (message) => message['content'] == 'a completed',
+        ),
+        isTrue,
+      );
+      final remaining = (await controller.savedDraft(key))!;
+      expect(remaining.text, 'Fresh thought while offline');
+      expect(remaining.queuedPrompts, isEmpty);
       expect(
         controller.connectionStatus.phase,
         ServerConnectionPhase.connected,
       );
-      expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
+      expect(
+        host.calls
+            .where((c) => c.$2 == 'prompt.submit')
+            .map((call) => call.$3['text']),
+        ['My unsent thought'],
+      );
       controller.dispose();
     },
   );

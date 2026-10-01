@@ -10,6 +10,7 @@ import 'package:wing/core/services/administration_health.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/doctor_diagnostic.dart';
+import 'package:wing/core/services/composer_draft_store.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -192,12 +193,15 @@ void main() {
         isEmpty,
       );
       expect(fixture.admin.requests.first.$3['lines'], '2000');
-      expect(
-        controller.preferences.getString(
-          'composer_drafts_v1_${controller.connectionIdentity}',
-        ),
-        contains('web workspace'),
-      );
+      final savedDraft =
+          await ComposerDraftStore(
+            controller.preferences,
+            connectionIdentity: controller.connectionIdentity,
+          ).read(
+            profileName: controller.current!.chat!.key.workspace.profileName,
+            sessionId: controller.current!.chat!.key.sessionId,
+          );
+      expect(savedDraft!.text, contains('web workspace'));
 
       await tester.pumpWidget(
         MaterialApp(

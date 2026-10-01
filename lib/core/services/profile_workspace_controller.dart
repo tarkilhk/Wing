@@ -214,6 +214,7 @@ class ProfileChat {
   bool _replaceableUnsubmittedRuntime = false;
   bool _replacingExpiredRuntime = false;
   int _attachmentPreparations = 0;
+  bool get preparingAttachments => _attachmentPreparations != 0;
   bool _submissionInFlight = false;
   bool get sendingPrompt => _submissionInFlight;
   int _turnGeneration = 0;
@@ -1014,6 +1015,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
     );
   }
 
+  int get savedDraftRevision => _drafts.revision;
+
   List<ComposerDraftSummary> savedDrafts(WorkspaceScope owner) {
     if (!owns(ProfileSessionKey(owner, 'draft'))) {
       throw ArgumentError('Wrong connection settings or host');
@@ -1367,6 +1370,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       // Clearing the target makes valid() false, so the finally block cannot
       // publish this transition. Notify now to release the composer immediately.
       _changed();
+      await _drainQueuedPrompts(chat);
     } catch (failure) {
       if (!valid()) return;
       if (isTemporaryWorkspaceFailure(failure) &&
@@ -1530,7 +1534,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
   // to the connection label must remain eligible for recovery.
   bool _needsLiveRecovery(ProfileWorkspaceData resource) =>
       resource.loaded ||
-      resource.chats.values.any((chat) => chat.busy) ||
+      resource.chats.values.any(
+        (chat) => chat.busy || chat.queuedPrompts.isNotEmpty,
+      ) ||
       connectionStatus.hasLiveObservation(resource.scope.profileName);
 
   ProfileWorkspaceData _resource(String name) {
@@ -1608,6 +1614,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _recoveringInitialization = false;
       _initializationAttempt = 0;
       await _restorePending();
+      await _restoreWaitingOutboxes();
       if (onAttention != null && current != null) {
         await _scheduleNotificationReconciliation(current!);
       }
@@ -3787,7 +3794,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _owned(chat);
       if (chat._replacingExpiredRuntime ||
           chat.queueMutating ||
-          chat.queueDraining) {
+          chat._outgoingPrompt != null) {
         throw StateError(
           'The composer changed while preparing the attachment.',
         );
@@ -3853,17 +3860,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   bool canAddAttachment(ProfileChat chat) {
-    if (chat.opening ||
-        chat.offlineSnapshot ||
-        (_resources[chat.key.workspace]?.recovering ?? false)) {
-      return false;
-    }
     final resource = _resources[chat.key.workspace];
-    return identical(resource?.chats[chat.key.sessionId], chat) &&
+    return !_closed &&
+        identical(resource?.chats[chat.key.sessionId], chat) &&
         !chat._replacingExpiredRuntime &&
-        !chat._submissionInFlight &&
+        chat._outgoingPrompt == null &&
         !chat.queueMutating &&
-        !chat.queueDraining &&
         chat._attachmentPreparations == 0;
   }
 
@@ -3984,9 +3986,34 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _applyDraftSnapshot(chat, restored);
   }
 
+  Future<void> _restoreWaitingOutboxes() async {
+    for (final profile in discovery!.profiles) {
+      final waiting = _drafts
+          .summaries(profileName: profile.name)
+          .where((draft) => draft.queuedCount > 0)
+          .toList();
+      if (waiting.isEmpty || _closed) continue;
+      final resource = _resource(profile.name);
+      for (final draft in waiting) {
+        final chat = resource.chats.putIfAbsent(
+          draft.sessionId,
+          () => ProfileChat(
+            key: ProfileSessionKey(resource.scope, draft.sessionId),
+            runtimeId: draft.sessionId,
+            title: 'Chat',
+          )..offlineSnapshot = true,
+        );
+        await _restoreDraft(chat);
+      }
+      if (!_closed) await _reconnect(resource);
+    }
+  }
+
   void _applyDraftSnapshot(ProfileChat chat, ComposerDraftSnapshot restored) {
     chat.queuedPrompts.addAll(restored.queuedPrompts);
-    chat.queuePaused = restored.queuePaused;
+    chat.queuePaused =
+        restored.queuePaused ||
+        restored.queuedPrompts.any((prompt) => prompt.submissionUncertain);
     if (chat.draft.isNotEmpty || chat.attachments.isNotEmpty) {
       return;
     }
@@ -4028,10 +4055,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ];
     final submissionUncertain = chat.draftSubmissionUncertain;
     final queuePaused =
-        outgoing != null ||
         chat.queuePaused ||
-        chat.queueDraining ||
-        chat.editingQueuedPrompt != null;
+        chat.editingQueuedPrompt != null ||
+        queue.any((prompt) => prompt.submissionUncertain);
     Future<void> save() => _drafts.write(
       profileName: key.workspace.profileName,
       sessionId: key.sessionId,
@@ -4671,22 +4697,25 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _owned(chat).gateway.completeSlash(sessionId: chat.runtimeId, text: text);
 
   Future<String?> send(ProfileChat chat) async {
-    if (chat.opening || chat.offlineSnapshot || _owned(chat).recovering) {
-      return null;
-    }
+    final resource = _owned(chat);
     if (chat._replacingExpiredRuntime ||
+        chat.preparingAttachments ||
         chat.commandRunning ||
         chat.changingIntelligence ||
         switching) {
       return null;
     }
     if (chat.draft.trimLeft().startsWith('/')) {
+      if (chat.opening || chat.offlineSnapshot || resource.recovering) {
+        return null;
+      }
       await _sendCommand(chat);
       final notification = chat._commandNotification;
       chat._commandNotification = null;
       return notification;
     }
-    await _sendPrompt(chat);
+    if (chat.draft.trim().isEmpty && chat.attachments.isEmpty) return null;
+    await _enqueuePrompt(chat, chat.draft, fromSend: true);
     return null;
   }
 
@@ -5160,7 +5189,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         ((prompt ?? chat.draft).trim().isEmpty && files.isEmpty)) {
       return false;
     }
-    final text = prompt ?? chat.draft.trim();
+    final text = (prompt ?? chat.draft).trim();
     final draftAtSubmit = chat.draft;
     // A new submission owns the transcript before its first live event arrives.
     chat._turnGeneration++;
@@ -5280,11 +5309,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
           _changed();
           await resource.gateway.call('prompt.submit', {
             'session_id': chat.runtimeId,
+            if (queuedPrompt != null) 'queued': true,
             'text': promptText.isEmpty && files.any((draft) => draft.isImage)
                 ? 'What do you see in this image?'
                 : promptText,
           });
           acknowledged = true;
+          if (queuedPrompt != null) {
+            chat.queuedPrompts.remove(queuedPrompt);
+          }
           if (!preserveComposer) {
             chat._outgoingPrompt = null;
             chat.draftSubmissionUncertain = false;
@@ -5295,29 +5328,29 @@ class ProfileWorkspaceController extends ChangeNotifier {
       );
       if (attachmentOverride == null) await attachments.removeAll(files);
     } catch (e) {
-      chat.error = submitted
+      chat.error = acknowledged
+          ? 'The message was accepted. Remaining unsent work could not be saved.'
+          : submitted
           ? 'Delivery or completion is uncertain. Reconnect to check history. The prompt will not be resent.'
           : e.toString();
-      chat.status = submitted
-          ? ProfileTurnStatus.reconnecting
-          : ProfileTurnStatus.failed;
+      if (!acknowledged) {
+        chat.status = submitted
+            ? ProfileTurnStatus.reconnecting
+            : ProfileTurnStatus.failed;
+      }
       final outgoing = chat._outgoingPrompt;
       if (outgoing != null) {
         outgoing.submissionUncertain = submitted;
-        if (chat.draft.isEmpty) {
-          chat.draft = outgoing.text;
-          chat.draftSubmissionUncertain = submitted;
-        } else {
-          chat.attachments.removeWhere(outgoing.attachments.contains);
-          chat.queuedPrompts.insert(0, outgoing);
-          chat.queuePaused = true;
-        }
+        chat.attachments.removeWhere(outgoing.attachments.contains);
+        chat.queuedPrompts.insert(0, outgoing);
+        chat.queuePaused = true;
         chat._outgoingPrompt = null;
       } else if (!submitted && queuedPrompt != null) {
         queuedPrompt.submissionUncertain = false;
       }
       if (!preserveComposer || queuedPrompt != null) await _persistDraft(chat);
-      if (submitted) _scheduleReconnect(resource);
+      if (acknowledged) chat.queuePaused = true;
+      if (submitted && !acknowledged) _scheduleReconnect(resource);
     } finally {
       chat._submissionInFlight = false;
       _changed();
@@ -5386,15 +5419,26 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   Future<void> queuePrompt(ProfileChat chat, String rawText) async {
+    await _enqueuePrompt(chat, rawText);
+  }
+
+  Future<void> _enqueuePrompt(
+    ProfileChat chat,
+    String rawText, {
+    bool fromSend = false,
+  }) async {
     _owned(chat);
-    if (chat.sendingPrompt) {
+    if (chat.preparingAttachments) {
+      throw StateError('Wait for the attachment to finish preparing.');
+    }
+    if (!fromSend && chat.sendingPrompt) {
       throw StateError(
         'Wait for the current message to finish sending before queueing a follow-up.',
       );
     }
     if (chat._replacingExpiredRuntime ||
         chat.queueMutating ||
-        chat.queueDraining) {
+        (!fromSend && chat.queueDraining)) {
       throw StateError('Another queued message is still being saved.');
     }
     final text = rawText.trim();
@@ -5405,13 +5449,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final originalUncertain = chat.draftSubmissionUncertain;
     final movedText = chat.draft.trim() == text;
     final movedAttachments = movedText
-        ? List<AttachmentDraft>.of(chat.attachments)
+        ? chat.attachments
+              .where(
+                (file) =>
+                    chat._outgoingPrompt?.attachments.contains(file) != true,
+              )
+              .toList()
         : <AttachmentDraft>[];
     if (text.isEmpty && movedAttachments.isEmpty) {
       throw StateError('Queue a message or attachment, not a slash command.');
     }
     final queued = QueuedPromptDraft(
-      text: text,
+      text: fromSend ? rawText : text,
       attachments: movedAttachments,
       submissionUncertain: movedText && originalUncertain,
     );
@@ -5421,7 +5470,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat.draft = '';
       chat.draftSubmissionUncertain = false;
     }
-    if (movedAttachments.isNotEmpty) chat.attachments.clear();
+    if (movedAttachments.isNotEmpty) {
+      chat.attachments.removeWhere(movedAttachments.contains);
+    }
     _changed();
     try {
       await _persistQueueMutation(chat);
@@ -5725,7 +5776,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   Future<void> _drainQueuedPrompts(ProfileChat chat) async {
+    final resource = _owned(chat);
     if (_closed ||
+        chat.opening ||
+        chat.offlineSnapshot ||
+        resource.recovering ||
+        resource.offlineSnapshot ||
+        !connectionStatus.liveAvailable(resource.scope.profileName) ||
+        connectionStatus.access != ConnectionAvailability.available ||
         chat.sendingPrompt ||
         chat.editingQueuedPrompt != null ||
         chat.queuePaused ||
@@ -5749,6 +5807,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     try {
       while (!_closed &&
           !chat.queuePaused &&
+          !chat.queueMutating &&
           !chat.busy &&
           chat.queuedPrompts.isNotEmpty) {
         final queued = chat.queuedPrompts.first;
@@ -5764,16 +5823,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
         if (!accepted) {
           chat.queuePaused = true;
           break;
-        }
-        if (!identical(chat.queuedPrompts.first, queued)) {
-          throw StateError('Queue changed while sending.');
-        }
-        chat.queuedPrompts.removeAt(0);
-        try {
-          await _persistDraft(chat);
-        } catch (_) {
-          chat.queuedPrompts.insert(0, queued);
-          rethrow;
         }
         await attachments.removeAll(queued.attachments);
       }
@@ -7210,18 +7259,33 @@ class ProfileWorkspaceController extends ChangeNotifier {
     connectionStatus.beginRecovery(resource.scope.profileName);
     _changed();
     var retry = false;
+    final resumedChats = <ProfileChat>[];
     try {
       await resource.gateway.connect();
       if (_closed) return;
       for (final chat in resource.chats.values.toList()) {
-        if (!chat.busy && chat != resource.chat) continue;
+        if (!chat.busy && chat != resource.chat && chat.queuedPrompts.isEmpty) {
+          continue;
+        }
         final wasBusy = chat.busy;
         Map<String, dynamic>? result;
         try {
           result = await resource.gateway.resume(chat.key.sessionId);
         } on JsonRpcError catch (error) {
-          if (!_isDefinitivelyExpiredDraft(chat, error)) rethrow;
-          await _replaceExpiredDraftRuntime(resource, chat);
+          if (_isDefinitivelyExpiredDraft(chat, error)) {
+            await _replaceExpiredDraftRuntime(resource, chat);
+          } else if (_isMissingSessionResume(error) &&
+              chat.queuedPrompts.isNotEmpty) {
+            chat.offlineSnapshot = true;
+            chat.queuePaused = true;
+            chat.status = ProfileTurnStatus.failed;
+            chat.error =
+                'This conversation is no longer available. Your unsent messages are kept.';
+            await _persistDraft(chat);
+            continue;
+          } else {
+            rethrow;
+          }
         }
         final partial = chat.streaming;
         if (result != null) _hydrate(chat, result);
@@ -7234,7 +7298,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         if (wasBusy && !chat.busy) {
           _notifyRecoveredResult(chat);
         }
-        if (result != null) await _drainQueuedPrompts(chat);
+        if (result != null) resumedChats.add(chat);
       }
       await _journal();
       await _refreshSessions(resource);
@@ -7243,6 +7307,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
       resource.recovering = false;
       resource.offlineSnapshot = false;
       connectionStatus.endRecovery(resource.scope.profileName);
+      for (final chat in resumedChats) {
+        await _drainQueuedPrompts(chat);
+      }
       if (_failedSwitchProfile == resource.scope.profileName) {
         if (_error == _failedSwitchError) error = null;
         _failedSwitchProfile = null;

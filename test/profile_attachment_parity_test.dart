@@ -124,30 +124,66 @@ void main() {
       host.fileAttachFails = true;
       await controller.send(chat);
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
-      host.fileAttachFails = false;
-      await controller.send(chat);
+      expect(chat.attachments, isEmpty);
+      expect(chat.queuedPrompts, hasLength(1));
+      expect(chat.queuePaused, isTrue);
+      host
+        ..fileAttachFails = false
+        ..running = false;
+      await controller.resumeQueue(chat);
       expect(
         host.calls.where((call) => call.$2 == 'image.attach_bytes').length,
         1,
       );
       expect(host.calls.where((call) => call.$2 == 'prompt.submit').length, 1);
+      expect(host.calls.where((call) => call.$2 == 'file.attach').length, 2);
+      expect(chat.queuedPrompts, isEmpty);
+      expect(await File('${cache.path}/picture.png').exists(), isFalse);
+      expect(await File('${cache.path}/notes.txt').exists(), isFalse);
     },
   );
 
   test(
-    'removing an accepted image detaches it from the next server turn',
+    'discarding a failed outbox message detaches its accepted image',
     () async {
       final image = await attach('picture.png', image: true);
-      await attach('notes.txt');
+      final notes = await attach('notes.txt');
       host.fileAttachFails = true;
       await controller.send(chat);
-      await controller.removeAttachment(chat, image);
+      expect(chat.attachments, isEmpty);
+      final outgoing = chat.queuedPrompts.single;
+      expect(outgoing.attachments, [same(image), same(notes)]);
+      expect(outgoing.submissionUncertain, isFalse);
+      await controller.updateDraft(chat, 'Fresh composer');
+      await controller.removeQueuedPrompt(chat, 0, expectedPrompt: outgoing);
       expect(host.calls.singleWhere((call) => call.$2 == 'image.detach').$3, {
         'profile': 'a',
         'session_id': chat.runtimeId,
         'path': '/profile/images/upload.png',
       });
-      expect(chat.attachments, isNot(contains(image)));
+      expect(chat.attachments, isEmpty);
+      expect(chat.queuedPrompts, isEmpty);
+      expect(chat.draft, 'Fresh composer');
+      expect(await File(image.cachedPath).exists(), isFalse);
+      expect(await File(notes.cachedPath).exists(), isFalse);
+      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      host
+        ..fileAttachFails = false
+        ..running = false;
+      await controller.resumeQueue(chat);
+      await controller.send(chat);
+      expect(
+        host.calls.where((call) => call.$2 == 'prompt.submit'),
+        hasLength(1),
+      );
+      expect(
+        host.calls.where((call) => call.$2 == 'image.attach_bytes'),
+        hasLength(1),
+      );
+      expect(
+        host.calls.singleWhere((call) => call.$2 == 'prompt.submit').$3['text'],
+        'Fresh composer',
+      );
     },
   );
 
@@ -157,13 +193,21 @@ void main() {
     host.fileAttachFails = true;
     await controller.send(chat);
     expect(await File(image.cachedPath).exists(), isTrue);
-    chat.runtimeId = 'replacement-runtime';
-    host.fileAttachFails = false;
-    await controller.send(chat);
+    expect(chat.attachments, isEmpty);
+    expect(chat.queuedPrompts.single.attachments.first, same(image));
+    expect(chat.queuedPrompts.single.submissionUncertain, isFalse);
+    host
+      ..sessionCreates = 2
+      ..fileAttachFails = false
+      ..running = false;
+    await controller.resumeQueue(chat);
     final uploads = host.calls.where((call) => call.$2 == 'image.attach_bytes');
     expect(uploads.length, 2);
-    expect(uploads.last.$3['session_id'], 'replacement-runtime');
+    expect(chat.runtimeId, 'a-replacement-runtime');
+    expect(uploads.last.$3['session_id'], chat.runtimeId);
+    expect(uploads.last.$3['content_base64'], base64Encode([1, 2, 3, 4]));
     expect(host.calls.where((call) => call.$2 == 'prompt.submit').length, 1);
+    expect(chat.queuedPrompts, isEmpty);
     expect(await File(image.cachedPath).exists(), isFalse);
   });
 }

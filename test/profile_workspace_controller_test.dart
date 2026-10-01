@@ -624,28 +624,41 @@ void main() {
     );
   });
 
-  test('lost prompt acknowledgement preserves the draft', () async {
-    final store = ComposerDraftStore(
-      preferences,
-      connectionIdentity: 'original-settings',
-    );
-    final chat = await controller.createChat();
-    await controller.updateDraft(chat, 'send once');
-    host.promptSubmitFails = true;
+  test(
+    'lost prompt acknowledgement preserves its uncertain outbox head',
+    () async {
+      final store = ComposerDraftStore(
+        preferences,
+        connectionIdentity: 'original-settings',
+      );
+      final chat = await controller.createChat();
+      await controller.updateDraft(chat, 'send once');
+      host.promptSubmitFails = true;
 
-    await controller.send(chat);
+      await controller.send(chat);
 
-    expect(chat.draft, 'send once');
-    expect(
-      (await store.read(profileName: 'a', sessionId: 'same'))!.text,
-      'send once',
-    );
+      expect(chat.draft, isEmpty);
+      expect(chat.queuedPrompts.single.text, 'send once');
+      expect(chat.queuedPrompts.single.submissionUncertain, isTrue);
+      expect(chat.queuePaused, isTrue);
+      final saved = (await store.read(profileName: 'a', sessionId: 'same'))!;
+      expect(saved.text, isEmpty);
+      expect(saved.queuedPrompts.single.text, 'send once');
+      expect(saved.queuedPrompts.single.submissionUncertain, isTrue);
 
-    await controller.reconnect(chat.key.workspace);
+      await controller.reconnect(chat.key.workspace);
 
-    expect(chat.draft, 'send once');
-    expect(chat.error, contains('Check the server history'));
-  });
+      expect(chat.draft, isEmpty);
+      expect(chat.queuedPrompts.single.text, 'send once');
+      expect(chat.queuedPrompts.single.submissionUncertain, isTrue);
+      await expectLater(controller.resumeQueue(chat), throwsStateError);
+      expect(chat.error, contains('uncertain'));
+      expect(
+        host.calls.where((call) => call.$2 == 'prompt.submit'),
+        hasLength(1),
+      );
+    },
+  );
 
   test('accepted prompt clears the durable draft', () async {
     final store = ComposerDraftStore(
@@ -1110,10 +1123,15 @@ void main() {
       expect(chat.draft, isEmpty);
       await host.discoveryStarted!.future;
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
-      expect(
-        preferences.getString('composer_drafts_v1_original-settings'),
-        contains('outgoing prompt'),
-      );
+      final savedDraft =
+          (await ComposerDraftStore(
+            preferences,
+            connectionIdentity: 'original-settings',
+          ).read(
+            profileName: chat.key.workspace.profileName,
+            sessionId: chat.key.sessionId,
+          ))!;
+      expect(savedDraft.queuedPrompts.single.text, 'outgoing prompt');
       await controller.updateDraft(chat, 'immediate follow-up');
     } finally {
       host.discoveryDelay!.complete();
@@ -1129,7 +1147,7 @@ void main() {
 
   for (final freshDraft in ['', 'immediate follow-up']) {
     test(
-      'preparation failure ${freshDraft.isEmpty ? 'restores outgoing' : 'preserves fresh'} draft',
+      'preparation failure keeps unsent outbox with ${freshDraft.isEmpty ? 'empty' : 'fresh'} composer',
       () async {
         final chat = await controller.createChat();
         await controller.updateDraft(chat, 'outgoing prompt');
@@ -1147,15 +1165,25 @@ void main() {
           host.discoveryDelay!.complete();
           await sending;
         }
-        final expected = freshDraft.isEmpty ? 'outgoing prompt' : freshDraft;
-        expect(chat.draft, expected);
+        expect(chat.draft, freshDraft);
         expect(chat.draftSubmissionUncertain, isFalse);
+        expect(chat.queuedPrompts.single.text, 'outgoing prompt');
+        expect(chat.queuedPrompts.single.submissionUncertain, isFalse);
+        expect(chat.queuePaused, isTrue);
         expect(chat.status, ProfileTurnStatus.failed);
         expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
-        expect(
-          preferences.getString('composer_drafts_v1_original-settings'),
-          contains(expected),
-        );
+        final savedDraft =
+            (await ComposerDraftStore(
+              preferences,
+              connectionIdentity: 'original-settings',
+            ).read(
+              profileName: chat.key.workspace.profileName,
+              sessionId: chat.key.sessionId,
+            ))!;
+        expect(savedDraft.text, freshDraft);
+        expect(savedDraft.queuedPrompts.single.text, 'outgoing prompt');
+        expect(savedDraft.queuedPrompts.single.submissionUncertain, isFalse);
+        expect(savedDraft.queuePaused, isTrue);
       },
     );
   }
@@ -1203,26 +1231,36 @@ void main() {
     },
   );
 
-  test('lost acknowledgement recovers an untouched sent draft', () async {
-    final chat = await controller.createChat();
-    await controller.updateDraft(chat, 'recover this prompt');
-    host.promptSubmitStarted = Completer<void>();
-    host.promptSubmitDelay = Completer<void>();
-    host.promptSubmitFails = true;
+  test(
+    'lost acknowledgement keeps untouched sent content in the outbox',
+    () async {
+      final chat = await controller.createChat();
+      await controller.updateDraft(chat, 'recover this prompt');
+      host.promptSubmitStarted = Completer<void>();
+      host.promptSubmitDelay = Completer<void>();
+      host.promptSubmitFails = true;
 
-    final sending = controller.send(chat);
-    await host.promptSubmitStarted!.future;
-    expect(chat.draft, isEmpty);
-    host.promptSubmitDelay!.complete();
-    await sending;
+      final sending = controller.send(chat);
+      await host.promptSubmitStarted!.future;
+      expect(chat.draft, isEmpty);
+      host.promptSubmitDelay!.complete();
+      await sending;
 
-    expect(chat.draft, 'recover this prompt');
-    expect(chat.draftSubmissionUncertain, isTrue);
-    expect(
-      host.calls.where((call) => call.$2 == 'prompt.submit'),
-      hasLength(1),
-    );
-  });
+      expect(chat.draft, isEmpty);
+      expect(chat.draftSubmissionUncertain, isFalse);
+      expect(chat.queuedPrompts.single.text, 'recover this prompt');
+      expect(chat.queuedPrompts.single.submissionUncertain, isTrue);
+      expect(chat.queuePaused, isTrue);
+      final saved = (await controller.savedDraft(chat.key))!;
+      expect(saved.text, isEmpty);
+      expect(saved.queuedPrompts.single.text, 'recover this prompt');
+      expect(saved.queuedPrompts.single.submissionUncertain, isTrue);
+      expect(
+        host.calls.where((call) => call.$2 == 'prompt.submit'),
+        hasLength(1),
+      );
+    },
+  );
 
   test('lost acknowledgement preserves a fresh follow-up draft', () async {
     final chat = await controller.createChat();
@@ -1372,15 +1410,31 @@ void main() {
       final sending = controller.send(chat);
       await host.promptSubmitStarted!.future;
 
-      expect(controller.canAddAttachment(chat), isFalse);
+      expect(controller.canAddAttachment(chat), isTrue);
       expect(controller.canRemoveAttachment(chat, captured), isFalse);
       await controller.removeAttachment(chat, captured);
-      expect(chat.attachments, contains(same(captured)));
+      expect(chat.attachments, isEmpty);
+      expect(chat.queuedPrompts.single.attachments, contains(same(captured)));
+      expect(await File(captured.cachedPath).exists(), isTrue);
+      final nextSource = File('${sandbox.path}/next.txt');
+      await nextSource.writeAsString('Next composer file');
+      await controller.addAttachment(chat, nextSource.path, 'next.txt');
+      final next = chat.attachments.single;
+      expect(controller.canRemoveAttachment(chat, next), isTrue);
+      expect(
+        host.calls.where((call) => call.$2 == 'prompt.submit'),
+        hasLength(1),
+      );
 
       host.promptSubmitDelay!.complete();
       await sending;
-      expect(chat.attachments, isEmpty);
+      expect(chat.attachments, [same(next)]);
+      expect(chat.queuedPrompts, isEmpty);
+      expect(await File(captured.cachedPath).exists(), isFalse);
+      expect(await File(next.cachedPath).exists(), isTrue);
       expect(controller.canAddAttachment(chat), isTrue);
+      await controller.removeAttachment(chat, next);
+      expect(await File(next.cachedPath).exists(), isFalse);
     } finally {
       if (await sandbox.exists()) await sandbox.delete(recursive: true);
     }
@@ -1832,16 +1886,36 @@ void main() {
           host.calls.where((call) => call.$2 == 'prompt.submit'),
           hasLength(1),
         );
-        expect(chat.draft, 'Next question');
+        expect(chat.draft, isEmpty);
+        expect(chat.queuedPrompts.map((prompt) => prompt.text), [
+          'First question',
+          'Next question',
+        ]);
+        expect(chat.queuedPrompts.map((prompt) => prompt.submissionUncertain), [
+          true,
+          false,
+        ]);
+        final saved = (await controller.savedDraft(chat.key))!;
+        expect(saved.text, isEmpty);
+        expect(saved.queuedPrompts.map((prompt) => prompt.text), [
+          'First question',
+          'Next question',
+        ]);
+        // Another tap on the empty composer adds nothing.
+        await controller.send(chat);
+        expect(chat.queuedPrompts, hasLength(2));
       } finally {
+        host.promptSubmitStarted = null;
         host.promptSubmitDelay!.complete();
         await sending;
       }
-      host.promptSubmitStarted = null;
-      await controller.send(chat);
+      await Future<void>.delayed(Duration.zero);
+      expect(chat.queuedPrompts, isEmpty);
       expect(
-        host.calls.where((call) => call.$2 == 'prompt.submit'),
-        hasLength(2),
+        host.calls
+            .where((call) => call.$2 == 'prompt.submit')
+            .map((call) => call.$3['text']),
+        ['First question', 'Next question'],
       );
     },
   );
@@ -1850,17 +1924,29 @@ void main() {
     'queued follow-up waits for acknowledgement after early completion',
     () async {
       final chat = await controller.createChat();
-      chat.queuedPrompts.add(QueuedPromptDraft(text: 'Queued question'));
       await controller.updateDraft(chat, 'First question');
       host.promptSubmitStarted = Completer<void>();
       host.promptSubmitDelay = Completer<void>();
       final sending = controller.send(chat);
       await host.promptSubmitStarted!.future;
+      chat.queuedPrompts.add(QueuedPromptDraft(text: 'Queued question'));
+      await controller.updateDraft(chat, '');
       host.event('a', 'message.complete', {'text': 'First answer'});
       await Future<void>.delayed(Duration.zero);
       try {
         expect(chat.queuePaused, isFalse);
-        expect(chat.queuedPrompts, hasLength(1));
+        expect(chat.queuedPrompts.map((prompt) => prompt.text), [
+          'First question',
+          'Queued question',
+        ]);
+        expect(chat.queuedPrompts.map((prompt) => prompt.submissionUncertain), [
+          true,
+          false,
+        ]);
+        expect(
+          host.calls.where((call) => call.$2 == 'prompt.submit'),
+          hasLength(1),
+        );
       } finally {
         host.promptSubmitStarted = null;
         host.promptSubmitDelay!.complete();
@@ -1870,8 +1956,10 @@ void main() {
       expect(chat.queuePaused, isFalse);
       expect(chat.queuedPrompts, isEmpty);
       expect(
-        host.calls.where((call) => call.$2 == 'prompt.submit'),
-        hasLength(2),
+        host.calls
+            .where((call) => call.$2 == 'prompt.submit')
+            .map((call) => call.$3['text']),
+        ['First question', 'Queued question'],
       );
     },
   );
@@ -2278,6 +2366,12 @@ void main() {
     expect(controller.connectionStatus.liveAvailable('a'), isFalse);
     expect(chat.draft, 'Keep this draft');
     await controller.send(chat);
+    expect(chat.draft, isEmpty);
+    expect(chat.queuedPrompts.single.text, 'Keep this draft');
+    expect(chat.queuedPrompts.single.submissionUncertain, isFalse);
+    final saved = (await controller.savedDraft(chat.key))!;
+    expect(saved.text, isEmpty);
+    expect(saved.queuedPrompts.single.text, 'Keep this draft');
     expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
     // No perpetual polling after the initial burst. Returning to Wing is
     // enough to retry immediately, without a tap on Retry.
@@ -2288,12 +2382,25 @@ void main() {
     await tester.pump();
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pump();
+    for (
+      var attempt = 0;
+      attempt < 20 && (chat.sendingPrompt || chat.queuedPrompts.isNotEmpty);
+      attempt++
+    ) {
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 10));
+    }
     expect(controller.recovering, isFalse);
-    await tester.pumpAndSettle();
+    expect(chat.sendingPrompt, isFalse);
+    expect(chat.queuedPrompts, isEmpty);
     expect(find.text('Live updates interrupted'), findsNothing);
-    expect(chat.draft, 'Keep this draft');
-    expect(chat.status, ProfileTurnStatus.idle);
-    expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
+    expect(chat.draft, isEmpty);
+    expect(chat.status, ProfileTurnStatus.running);
+    expect(host.calls.where((c) => c.$2 == 'prompt.submit'), hasLength(1));
+    host.event('a', 'message.complete', {'text': 'Accepted queued question'});
+    await tester.pumpAndSettle();
+    expect(host.connectCalls - before, 6);
+    expect(find.byType(MaterialBanner), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

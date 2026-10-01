@@ -57,29 +57,34 @@ void main() {
       host.promptSubmitStarted = Completer<void>();
       host.promptSubmitDelay = Completer<void>();
       final sending = controller.send(chat);
-      await host.promptSubmitStarted!.future;
+      await host.promptSubmitStarted!.future.timeout(
+        const Duration(seconds: 3),
+      );
       expect(chat.sendingPrompt, isTrue);
       final followUp = await image('follow-up');
       chat.attachments.add(followUp);
       await controller.updateDraft(chat, 'follow-up question');
       try {
-        await expectLater(
-          controller.queuePrompt(chat, chat.draft),
-          throwsStateError,
-        );
-        expect(chat.queuedPrompts, isEmpty);
-        expect(chat.draft, 'follow-up question');
-        expect(chat.attachments, [original, followUp]);
+        await controller.send(chat);
+        expect(chat.queuedPrompts, hasLength(2));
+        expect(chat.queuedPrompts.first.text, 'first image question');
+        expect(chat.queuedPrompts.first.attachments, [same(original)]);
+        expect(chat.queuedPrompts.first.submissionUncertain, isTrue);
+        expect(chat.queuedPrompts.last.text, 'follow-up question');
+        expect(chat.queuedPrompts.last.attachments, [same(followUp)]);
+        expect(chat.queuedPrompts.last.submissionUncertain, isFalse);
+        expect(chat.draft, isEmpty);
+        expect(chat.attachments, isEmpty);
       } finally {
         host.promptSubmitDelay!.complete();
         await sending;
       }
       expect(chat.sendingPrompt, isFalse);
-      expect(chat.attachments, [followUp]);
+      expect(chat.attachments, isEmpty);
+      expect(chat.queuedPrompts.single.attachments, [same(followUp)]);
       expect(await File(followUp.cachedPath).exists(), isTrue);
       host.promptSubmitStarted = null;
       host.promptSubmitDelay = null;
-      await controller.queuePrompt(chat, chat.draft);
       await controller.resumeQueue(chat);
       expect(
         host.calls.where((call) => call.$2 == 'prompt.submit'),

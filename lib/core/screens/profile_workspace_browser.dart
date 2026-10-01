@@ -123,9 +123,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       controller.recovering,
       controller.current?.offlineSnapshot,
       controller.sessionVisibility,
-      controller.preferences.getString(
-        'composer_drafts_v1_${controller.connectionIdentity}',
-      ),
+      controller.savedDraftRevision,
     );
     if (_controllerState != state) {
       _controllerState = state;

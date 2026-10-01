@@ -5,6 +5,26 @@ glossary records the domain language agreed during product design.
 
 ## Language
 
+### Unsent messages
+
+**Draft**:
+The user's editable text and attachments in one conversation's composer. A
+conversation has at most one draft.
+_Avoid_: Draft when referring to a message already placed in the outbox.
+
+**Outbox**:
+A conversation's ordered messages waiting to be sent or awaiting confirmation
+that Hermes accepted them.
+_Avoid_: Multiple drafts when referring to messages in this queue.
+
+**Accepted message**:
+A message Hermes has confirmed accepting. Acceptance does not mean the model
+has finished responding.
+
+**Uncertain delivery**:
+A submission that might have reached Hermes but whose acceptance Wing cannot
+confirm. It requires review before retrying.
+
 ### Notifications
 
 **Chat notification**:

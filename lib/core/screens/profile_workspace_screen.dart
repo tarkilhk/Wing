@@ -1,5 +1,6 @@
 import '../models/side_question_delivery.dart';
 import '../services/workspace_connection_failure.dart';
+import '../services/server_connection_status.dart';
 import '../widgets/server_connection_label.dart';
 import '../widgets/workspace_picker.dart';
 import '../widgets/workspace_profile_navigation.dart';
@@ -2012,6 +2013,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   bool _canForkDraft(ProfileChat chat) =>
       !chat.busy &&
+      !chat.preparingAttachments &&
       !chat.queueDraining &&
       chat.draft.trim().isNotEmpty &&
       !chat.draft.trimLeft().startsWith('/') &&
@@ -2030,27 +2032,39 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           action: 'Finish or cancel dictation first',
       };
     }
-    if (controller.recovering || chat.opening || chat.offlineSnapshot) {
-      return {
-        for (final action in ComposerAction.values)
-          action: 'Reconnecting · Your draft is kept',
-      };
-    }
     final text = chat.draft.trim();
     final blocked =
         controller.switching ||
         chat.changingAnswer ||
         chat.commandRunning ||
         chat.changingIntelligence ||
+        chat.queueMutating ||
         chat.editingQueuedPrompt != null;
     final hasDraft = text.isNotEmpty || chat.attachments.isNotEmpty;
     final slash = text.startsWith('/');
+    if (_waitingForConnection(chat)) {
+      return {
+        for (final action in ComposerAction.values)
+          action: 'Reconnect to use this action',
+        ComposerAction.send: blocked
+            ? 'Wait for this draft to finish saving'
+            : chat.preparingAttachments
+            ? 'Wait for the attachment to finish preparing'
+            : !hasDraft
+            ? 'Type a message or add an attachment'
+            : slash
+            ? 'Reconnect before running a command'
+            : null,
+      };
+    }
     return {
-      ComposerAction.send:
-          !blocked && !chat.sendingPrompt && hasDraft && (!chat.busy || slash)
+      ComposerAction.send: chat.preparingAttachments
+          ? 'Wait for the attachment to finish preparing'
+          : !blocked && hasDraft && (!slash || !chat.sendingPrompt)
           ? null
           : 'Wait for the current turn',
-      ComposerAction.steer: blocked || chat.steering
+      ComposerAction.steer:
+          blocked || chat.steering || chat.preparingAttachments
           ? 'Wait before steering'
           : !{
               ProfileTurnStatus.running,
@@ -2065,7 +2079,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       ComposerAction.stop: !blocked && chat.busy
           ? null
           : 'No running turn to stop',
-      ComposerAction.queue: chat.sendingPrompt
+      ComposerAction.queue: chat.preparingAttachments
+          ? 'Wait for the attachment to finish preparing'
+          : chat.sendingPrompt
           ? 'Wait for the current message to finish sending'
           : !blocked &&
                 chat.busy &&
@@ -2081,9 +2097,26 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     };
   }
 
+  bool _waitingForConnection(ProfileChat chat) =>
+      controller.recovering ||
+      chat.opening ||
+      chat.offlineSnapshot ||
+      controller.connectionStatus.access ==
+          ConnectionAvailability.unavailable ||
+      (controller.connectionStatus.hasLiveObservation(
+            chat.key.workspace.profileName,
+          ) &&
+          !controller.connectionStatus.liveAvailable(
+            chat.key.workspace.profileName,
+          ));
+
   Widget _composerActionButton(ProfileChat chat) => ComposerActionButton(
     key: ValueKey(chat.key),
-    primary: chat.busy && !chat.draft.trimLeft().startsWith('/')
+    primary:
+        chat.busy &&
+            !chat.sendingPrompt &&
+            !_waitingForConnection(chat) &&
+            !chat.draft.trimLeft().startsWith('/')
         ? ComposerAction.fromPreference(
             controller.preferences.getString(ComposerAction.preferenceKey),
           )
@@ -2347,7 +2380,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                           ? 'Keep this message for when Hermes is idle'
                           : 'Keep this message and ${chat.attachments.length} attachment${chat.attachments.length == 1 ? '' : 's'} for when Hermes is idle',
                     ),
-                    onTap: chat.queueMutating || chat.queueDraining
+                    onTap:
+                        chat.queueMutating ||
+                            chat.queueDraining ||
+                            chat.preparingAttachments
                         ? null
                         : () => Navigator.pop(sheetContext, 'queue'),
                   ),

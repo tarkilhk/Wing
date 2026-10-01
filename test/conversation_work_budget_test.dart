@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/models/queued_prompt_draft.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/composer_draft_store.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
@@ -70,12 +71,15 @@ void main() {
         if (editingQueue) {
           expect(chat.queuedPrompts.single.text, 'Original queued message');
         } else {
-          expect(
-            controller.preferences.getString(
-              'composer_drafts_v1_conversation-work-budget',
-            ),
-            contains(chat.draft),
-          );
+          final savedDraft =
+              await ComposerDraftStore(
+                controller.preferences,
+                connectionIdentity: 'conversation-work-budget',
+              ).read(
+                profileName: chat.key.workspace.profileName,
+                sessionId: chat.key.sessionId,
+              );
+          expect(savedDraft!.text, chat.draft);
         }
         // Programmatic edits still reach the field through the composer listener.
         if (editingQueue) {

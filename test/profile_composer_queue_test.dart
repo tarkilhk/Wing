@@ -19,6 +19,7 @@ Future<void> until(bool Function() ready) async {
 class _FailingDraftStore extends ComposerDraftStore {
   bool failNextWrite = false;
   bool failNextEmptyQueueWrite = false;
+  bool failEmptyQueueWrites = false;
   Completer<void>? delayNextWrite;
 
   _FailingDraftStore(super.preferences, {required super.connectionIdentity});
@@ -41,7 +42,7 @@ class _FailingDraftStore extends ComposerDraftStore {
       failNextWrite = false;
       throw StateError('Could not save unsent messages.');
     }
-    if (failNextEmptyQueueWrite && queued.isEmpty) {
+    if ((failNextEmptyQueueWrite || failEmptyQueueWrites) && queued.isEmpty) {
       failNextEmptyQueueWrite = false;
       throw StateError('Could not save unsent messages.');
     }
@@ -386,30 +387,57 @@ void main() {
     },
   );
 
-  test(
-    'failed durable removal keeps acknowledged attachment head paused',
-    () async {
-      final file = await attachment('keep.txt');
-      chat
-        ..draft = 'Send once'
-        ..attachments.add(file);
-      await controller.queuePrompt(chat, chat.draft);
-      draftStore.failNextEmptyQueueWrite = true;
+  for (final persistentFailure in [false, true]) {
+    test(
+      'failed ACK removal never replays accepted attachment: persistent=$persistentFailure',
+      () async {
+        final file = await attachment('keep.txt');
+        chat
+          ..draft = 'Send once'
+          ..attachments.add(file);
+        await controller.queuePrompt(chat, chat.draft);
+        draftStore
+          ..failNextEmptyQueueWrite = true
+          ..failEmptyQueueWrites = persistentFailure;
 
-      finish();
-      await until(() => sends() == 1 && !chat.queueDraining);
-      expect(chat.queuePaused, isTrue);
-      expect(queuedTexts(), ['Send once']);
-      expect(await File(file.cachedPath).exists(), isTrue);
-      final snapshot = (await saved())!;
-      expect(snapshot.queuePaused, isTrue);
-      expect(snapshot.queuedPrompts.single.text, 'Send once');
+        finish();
+        await until(() => sends() == 1 && !chat.queueDraining);
+        expect(chat.queuePaused, isTrue);
+        expect(queuedTexts(), isEmpty);
+        expect(await File(file.cachedPath).exists(), persistentFailure);
+        final snapshot = await saved();
+        if (persistentFailure) {
+          expect(snapshot!.queuePaused, isTrue);
+          expect(snapshot.queuedPrompts.single.text, 'Send once');
+          expect(snapshot.queuedPrompts.single.submissionUncertain, isTrue);
+        } else {
+          expect(snapshot, isNull);
+        }
 
-      finish();
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-      expect(sends(), 1);
-    },
-  );
+        finish();
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        expect(sends(), 1);
+        final key = chat.key;
+        controller.dispose();
+        draftStore.failEmptyQueueWrites = false;
+        host.running = false;
+        controller = makeController();
+        await controller.initialize();
+        await controller.openSession(key);
+        chat = controller.current!.chat!;
+        expect(sends(), 1);
+        if (persistentFailure) {
+          expect(queuedTexts(), ['Send once']);
+          expect(chat.queuedPrompts.single.submissionUncertain, isTrue);
+          expect(chat.queuePaused, isTrue);
+          await expectLater(controller.resumeQueue(chat), throwsStateError);
+        } else {
+          expect(chat.queuedPrompts, isEmpty);
+        }
+        expect(sends(), 1);
+      },
+    );
+  }
 
   test('editing holds the queue when the active turn finishes', () async {
     await controller.queuePrompt(chat, 'Original');

@@ -744,7 +744,7 @@ fixture-value-amber-729
   });
 
   test(
-    'duplicate taps and sending during regeneration do not submit twice',
+    'duplicate regeneration taps keep one replay while a fresh Send waits',
     () async {
       host.submitDelay = Completer<void>();
       final pending = controller.branchAnswer(original, 2, regenerate: true);
@@ -753,14 +753,38 @@ fixture-value-amber-729
         await controller.branchAnswer(original, 2, regenerate: true),
         isNull,
       );
-      original.draft = 'Do not send yet';
+      await controller.updateDraft(original, 'Queued follow-up');
       await controller.send(original);
+      await controller.send(original);
+      expect(original.draft, isEmpty);
+      expect(original.queuedPrompts.single.text, 'Queued follow-up');
+      expect(original.queuedPrompts.single.submissionUncertain, isFalse);
       expect(host.calls.where((c) => c.$1 == 'prompt.submit').length, 1);
+      await controller.updateDraft(original, 'Separate fresh draft');
       host.submitDelay!.complete();
       final regenerated = (await pending)!;
-      await host.complete(regenerated);
-      expect(host.calls.where((c) => c.$1 == 'session.branch'), isEmpty);
       expect(host.calls.where((c) => c.$1 == 'prompt.submit').length, 1);
+      expect(original.queuedPrompts.single.text, 'Queued follow-up');
+      await host.complete(regenerated);
+      await Future<void>(() async {
+        while (original.queuedPrompts.isNotEmpty || original.sendingPrompt) {
+          await Future<void>.delayed(Duration.zero);
+        }
+      }).timeout(const Duration(seconds: 10));
+      expect(host.calls.where((c) => c.$1 == 'session.branch'), isEmpty);
+      final submissions = host.calls
+          .where((call) => call.$1 == 'prompt.submit')
+          .toList();
+      expect(submissions, hasLength(2));
+      expect(submissions.first.$2['truncate_before_row_id'], 1);
+      expect(submissions.first.$2['text'], 'Original prompt');
+      expect(submissions.last.$2['text'], 'Queued follow-up');
+      expect(submissions.last.$2['queued'], isTrue);
+      expect(
+        submissions.last.$2.containsKey('truncate_before_row_id'),
+        isFalse,
+      );
+      expect(original.draft, 'Separate fresh draft');
     },
   );
 

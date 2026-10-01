@@ -163,7 +163,7 @@ void main() {
 
     expect(await store.read(profileName: 'work', sessionId: 'chat'), isNull);
     expect(
-      preferences.getKeys().where((key) => key.startsWith('composer_drafts')),
+      preferences.getKeys().where((key) => key.startsWith('composer_work_v2.')),
       isEmpty,
     );
   });
@@ -246,57 +246,72 @@ void main() {
     },
   );
 
-  test(
-    'approved unchanged map queue format keeps unrelated unsent work',
-    () async {
-      await preferences.setString(
-        'composer_drafts_v1_host-auth',
-        jsonEncode([
-          {
-            'profile': 'work',
-            'session': 'chat',
-            'text': 'Existing composer',
-            'attachments': <Object?>[],
-            'queue': [
-              {'text': 'Existing queued work', 'attachments': <Object?>[]},
-            ],
-            'queue_paused': true,
-          },
-        ]),
-      );
-      final store = ComposerDraftStore(
-        preferences,
-        connectionIdentity: 'host-auth',
-      );
-      final restored = await store.read(profileName: 'work', sessionId: 'chat');
-      expect(restored!.text, 'Existing composer');
-      expect(restored.queuedPrompts.single.text, 'Existing queued work');
-      expect(restored.queuedPrompts.single.submissionUncertain, isFalse);
-    },
-  );
-
-  test('restores existing string queue entries as text-only work', () async {
-    await preferences.setString(
-      'composer_drafts_v1_host-auth',
-      jsonEncode([
-        {
-          'profile': 'work',
-          'session': 'chat',
-          'text': '',
-          'attachments': <Object?>[],
-          'queue': ['existing unsent message'],
-          'queue_paused': true,
-        },
-      ]),
-    );
+  test('damaged queue entries do not discard valid unsent work', () async {
     final store = ComposerDraftStore(
       preferences,
       connectionIdentity: 'host-auth',
     );
+    await store.write(
+      profileName: 'work',
+      sessionId: 'chat',
+      text: 'Existing composer',
+      attachments: const [],
+      queuedPrompts: [QueuedPromptDraft(text: 'Valid queued work')],
+      queuePaused: true,
+    );
+    final key = preferences.getKeys().single;
+    final record =
+        jsonDecode(preferences.getString(key)!) as Map<String, dynamic>;
+    record['queue'] = [
+      null,
+      'not a supported queue record',
+      {'text': 42, 'attachments': []},
+      ...(record['queue'] as List),
+      {
+        'text': 'bad uncertainty',
+        'attachments': [],
+        'submission_uncertain': 42,
+      },
+    ];
+    await preferences.setString(key, jsonEncode(record));
+    final restored = (await store.read(
+      profileName: 'work',
+      sessionId: 'chat',
+    ))!;
+    expect(restored.text, 'Existing composer');
+    expect(restored.queuedPrompts.single.text, 'Valid queued work');
+    expect(restored.queuePaused, isTrue);
+  });
 
-    final restored = await store.read(profileName: 'work', sessionId: 'chat');
-    expect(restored!.queuedPrompts.single.text, 'existing unsent message');
-    expect(restored.queuedPrompts.single.attachments, isEmpty);
+  test('old combined storage is not read or converted', () async {
+    const oldKey = 'composer_drafts_v1_host-auth';
+    final oldValue = jsonEncode([
+      {
+        'profile': 'work',
+        'session': 'chat',
+        'text': 'Old draft',
+        'attachments': [],
+        'queue': ['Old queued work'],
+      },
+    ]);
+    await preferences.setString(oldKey, oldValue);
+    final store = ComposerDraftStore(
+      preferences,
+      connectionIdentity: 'host-auth',
+    );
+    expect(await store.read(profileName: 'work', sessionId: 'chat'), isNull);
+    expect(store.summaries(profileName: 'work'), isEmpty);
+    await store.write(
+      profileName: 'work',
+      sessionId: 'chat',
+      text: 'New draft',
+      attachments: const [],
+    );
+    expect(
+      (await store.read(profileName: 'work', sessionId: 'chat'))!.text,
+      'New draft',
+    );
+    expect(preferences.getString(oldKey), oldValue);
   });
 
   test(

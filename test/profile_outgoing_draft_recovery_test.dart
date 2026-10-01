@@ -105,7 +105,7 @@ void main() {
   }
 
   test(
-    'moving an uncertain recovered composer keeps uncertainty with its queue owner',
+    'lost acknowledgement stays in the outbox beside a fresh composer',
     () async {
       final controller = makeController();
       await controller.initialize();
@@ -113,9 +113,10 @@ void main() {
       await controller.updateDraft(chat, 'Original outgoing');
       host.promptSubmitFails = true;
       await controller.send(chat);
-      expect(chat.draftSubmissionUncertain, isTrue);
+      expect(chat.draft, isEmpty);
+      expect(chat.draftSubmissionUncertain, isFalse);
+      expect(chat.queuedPrompts.single.submissionUncertain, isTrue);
       host.promptSubmitFails = false;
-      await controller.queuePrompt(chat, chat.draft);
       await controller.updateDraft(chat, 'Fresh follow-up');
       final stored = await saved(chat);
       expect(stored.text, 'Fresh follow-up');
@@ -143,18 +144,23 @@ void main() {
       host.promptSubmitFails = true;
       await controller.send(chat);
       final delay = Completer<void>();
+      await controller.updateDraft(chat, 'Queued follow-up');
       store.failureDelay = delay;
-      final queueing = controller.queuePrompt(chat, chat.draft);
+      final queueing = controller.send(chat);
       final failed = expectLater(queueing, throwsStateError);
       await controller.updateDraft(chat, 'Fresh follow-up');
       delay.complete();
       await failed;
       final stored = await saved(chat);
-      expect(stored.text, 'Fresh follow-up');
+      expect(stored.text, 'Queued follow-up\n\nFresh follow-up');
       expect(stored.submissionUncertain, isFalse);
       expect(stored.queuedPrompts.single.text, 'Original outgoing');
       expect(stored.queuedPrompts.single.submissionUncertain, isTrue);
       expect(chat.queuePaused, isTrue);
+      expect(
+        host.calls.where((call) => call.$2 == 'prompt.submit'),
+        hasLength(1),
+      );
     },
   );
 
@@ -173,19 +179,21 @@ void main() {
         final delay = Completer<void>();
         store.failureDelay = delay;
         final sending = controller.send(chat);
+        final rejected = expectLater(sending, throwsStateError);
         expect(chat.draft, isEmpty);
         final editing = fresh.isEmpty
             ? Future<void>.value()
             : controller.updateDraft(chat, fresh);
         delay.complete();
-        await sending;
+        await rejected;
         await editing;
         final stored = await saved(chat);
-        expect(stored.text, fresh.isEmpty ? 'Original outgoing' : fresh);
-        expect(stored.queuedPrompts.map((prompt) => prompt.text), [
-          if (fresh.isNotEmpty) 'Original outgoing',
-        ]);
-        expect(chat.status, ProfileTurnStatus.failed);
+        expect(
+          stored.text,
+          fresh.isEmpty ? 'Original outgoing' : 'Original outgoing\n\n$fresh',
+        );
+        expect(stored.queuedPrompts, isEmpty);
+        expect(chat.status, ProfileTurnStatus.idle);
         expect(chat.sendingPrompt, isFalse);
         expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
       },
@@ -203,11 +211,13 @@ void main() {
       host.discoveryDelay = Completer<void>();
       final sending = controller.send(chat);
       expect(chat.draft, isEmpty);
-      await host.discoveryStarted!.future;
+      await host.discoveryStarted!.future.timeout(const Duration(seconds: 3));
       final stored = await saved(chat);
       expect(stored.text, isEmpty);
       expect(stored.queuedPrompts.single.text, '  Exact outgoing text  ');
-      expect(stored.queuePaused, isTrue);
+      expect(stored.queuePaused, isFalse);
+      expect(stored.queuedPrompts.single.submissionUncertain, isFalse);
+      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
       host.discoveryDelay!.complete();
       await sending;
     },
@@ -226,28 +236,28 @@ void main() {
         await controller.addAttachment(chat, file.path, 'failed.txt');
         final outgoingFile = chat.attachments.single;
         await controller.updateDraft(chat, '  Original outgoing  ');
-        chat.queuedPrompts.add(
-          QueuedPromptDraft(text: 'Existing queued message'),
-        );
-        chat.queuePaused = true;
         host.fileAttachStarted = Completer<void>();
         host.fileAttachDelay = Completer<void>();
         host.fileAttachFails = true;
         final sending = controller.send(chat);
-        await host.fileAttachStarted!.future;
+        await host.fileAttachStarted!.future.timeout(
+          const Duration(seconds: 3),
+        );
+        await controller.updateDraft(chat, 'Existing queued message');
+        await controller.send(chat);
+        chat.queuePaused = true;
         if (fresh.isNotEmpty) await controller.updateDraft(chat, fresh);
         host.fileAttachDelay!.complete();
         await sending;
         final stored = await saved(chat);
-        expect(stored.text, fresh.isEmpty ? '  Original outgoing  ' : fresh);
+        expect(stored.text, fresh);
         expect(stored.submissionUncertain, isFalse);
         expect(stored.queuedPrompts.map((prompt) => prompt.text), [
-          if (fresh.isNotEmpty) '  Original outgoing  ',
+          '  Original outgoing  ',
           'Existing queued message',
         ]);
-        final ownedFiles = fresh.isEmpty
-            ? stored.attachments
-            : stored.queuedPrompts.first.attachments;
+        expect(stored.attachments, isEmpty);
+        final ownedFiles = stored.queuedPrompts.first.attachments;
         expect(ownedFiles.single.id, outgoingFile.id);
         expect(await File(ownedFiles.single.cachedPath).exists(), isTrue);
         expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
@@ -268,14 +278,15 @@ void main() {
       await controller.addAttachment(chat, file.path, 'accepted.txt');
       final outgoingFile = chat.attachments.single;
       await controller.updateDraft(chat, 'Original outgoing');
-      chat.queuedPrompts.add(
-        QueuedPromptDraft(text: 'Existing queued message'),
-      );
-      chat.queuePaused = true;
       host.promptSubmitStarted = Completer<void>();
       host.promptSubmitDelay = Completer<void>();
       final sending = controller.send(chat);
-      await host.promptSubmitStarted!.future;
+      await host.promptSubmitStarted!.future.timeout(
+        const Duration(seconds: 3),
+      );
+      await controller.updateDraft(chat, 'Existing queued message');
+      await controller.send(chat);
+      chat.queuePaused = true;
       await controller.updateDraft(chat, 'Fresh follow-up');
       // Receipts may be reusable, but the original owned bytes survive until ack.
       expect(await File(outgoingFile.cachedPath).exists(), isTrue);
@@ -303,7 +314,9 @@ void main() {
         host.promptSubmitDelay = Completer<void>();
         host.promptSubmitFails = acknowledgementLost;
         final sending = controller.send(chat);
-        await host.promptSubmitStarted!.future;
+        await host.promptSubmitStarted!.future.timeout(
+          const Duration(seconds: 3),
+        );
         await controller.updateDraft(chat, 'Fresh follow-up');
         if (acknowledgementLost) {
           host.promptSubmitDelay!.complete();
@@ -368,7 +381,9 @@ void main() {
       host.promptSubmitStarted = Completer<void>();
       host.promptSubmitDelay = Completer<void>();
       host.event('a', 'turn.end', {'status': 'completed'});
-      await host.promptSubmitStarted!.future;
+      await host.promptSubmitStarted!.future.timeout(
+        const Duration(seconds: 3),
+      );
       final stored = await saved(chat);
       expect(stored.text, 'Fresh composer');
       expect(stored.queuedPrompts.map((prompt) => prompt.text), [
@@ -392,7 +407,7 @@ void main() {
 
   for (final fresh in ['Fresh follow-up', 'Original outgoing']) {
     test(
-      'paused upload restart keeps outgoing files and fresh draft: $fresh',
+      'interrupted upload restart keeps waiting files and fresh draft: $fresh',
       () async {
         final controller = makeController();
         await controller.initialize();
@@ -407,7 +422,9 @@ void main() {
         host.fileAttachDelay = Completer<void>();
         // Leave upload unresolved, just as a killed process cannot finish it.
         controller.send(chat).ignore();
-        await host.fileAttachStarted!.future;
+        await host.fileAttachStarted!.future.timeout(
+          const Duration(seconds: 3),
+        );
         expect(chat.draft, isEmpty);
         await controller.updateDraft(chat, fresh);
         final stored = await ComposerDraftStore(
@@ -422,10 +439,13 @@ void main() {
           attachment.id,
         );
         expect(stored.attachments, isEmpty);
-        expect(stored.queuePaused, isTrue);
+        expect(stored.queuePaused, isFalse);
+        expect(stored.queuedPrompts.single.submissionUncertain, isFalse);
         controller.dispose();
         controllers.remove(controller);
-        host.running = false;
+        // Keep the server busy while inspecting restored ownership. This message
+        // never dispatched, so it may safely resume once the server becomes idle.
+        host.running = true;
         final restarted = makeController();
         await restarted.initialize();
         await restarted.openSession(key);
@@ -443,8 +463,22 @@ void main() {
           ).exists(),
           isTrue,
         );
-        expect(restored.queuePaused, isTrue);
+        expect(restored.queuePaused, isFalse);
+        expect(restored.queuedPrompts.single.submissionUncertain, isFalse);
         expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+        host
+          ..fileAttachDelay = null
+          ..fileAttachStarted = null
+          ..running = false;
+        await restarted.resumeQueue(restored);
+        expect(restored.draft, fresh);
+        expect(restored.attachments, isEmpty);
+        expect(restored.queuedPrompts, isEmpty);
+        expect(
+          host.calls.where((call) => call.$2 == 'prompt.submit'),
+          hasLength(1),
+        );
+        expect(await File(attachment.cachedPath).exists(), isFalse);
       },
     );
   }
