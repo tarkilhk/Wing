@@ -301,6 +301,16 @@ Numeric results are retained in ignored `window2-summary.json` and
 production APK is `8d6ebe38af428b8dd9043a119b6ff333ec52559c33d13076e1831c974890ec37`;
 the deployment/restoration checkpoint is recorded separately after installation.
 
+The changes were committed and pushed as `d04ade5` before installation. The final
+release was then installed in place. Pulling only its installed base APK confirmed
+the exact signed artifact hash above. Production was running with one Wing task;
+the original QA APK was restored, QA stopped and no QA Recents entry remained.
+Application data, phone backup and system settings were preserved. The screen had
+automatically slept during installation/postflight; no final screen-on production
+UI inspection is claimed. Phone control was released immediately after these
+checks. `deployment-final.json` retains the numeric checkpoint. CI status is
+tracked separately from the successful local validation.
+
 ## Evidence
 
 Ignored reports under `build/phone-performance/run-20260930/`:
