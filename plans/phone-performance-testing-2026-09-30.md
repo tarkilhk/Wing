@@ -210,7 +210,7 @@ both endpoints within actual monotonic replay bounds trimmed 500 ms at each end.
 Returning to the baseline after the candidate restored mixed build p95 to
 12.660 ms, with native p95 24.997 ms and maximum 33.333 ms. Two earlier return
 attempts failed before capture and remain excluded, rather than counted as clean
-runs. A CPU-stack diagnostic was rejected by the VM service before replay;
+runs. A CPU-stack diagnostic failed while retrieving samples through an obsolete RPC;
 no CPU attribution is established by it. Mixed build cost improves, but native
 worst-case gaps are not consistently lower and prose-only cost remains unresolved.
 
@@ -310,6 +310,46 @@ automatically slept during installation/postflight; no final screen-on productio
 UI inspection is claimed. Phone control was released immediately after these
 checks. `deployment-final.json` retains the numeric checkpoint. CI status is
 tracked separately from the successful local validation.
+
+## CPU attribution preparation (2026-10-01)
+
+`tools/qa/trace_streaming_cpu.py` records bounded `getCpuSamples` and Dart,
+Embedder and GC timeline events from the existing synthetic profile replay. It
+requires the QA package to be focused and the replay extension to be present,
+checks replay/keyboard/geometry/frame validity, and restores the original profiler
+and timeline-stream settings with read-back. CPU samples use the exact replay
+monotonic bounds; the timeline envelope includes both replay markers. Per-frame
+build/raster durations and build-start timestamps allow slow-frame stack analysis.
+Function table indices retain leaf-first stack order. Timeline arguments,
+metadata, service URLs and private script URLs are excluded from exported reports.
+
+The earlier ad hoc diagnostic called an obsolete RPC while retrieving samples.
+The replacement uses the supported `getCpuSamples` RPC. Direct HTTP stream-list
+parameters use the VM enum-list format (`[Dart,Embedder,GC]`), verified against the
+[Dart VM implementation](https://github.com/dart-lang/sdk/blob/main/runtime/vm/service.cc).
+
+Eleven focused host tests pass, covering protocol encoding, sample/clock bounds,
+redaction, replay validity and setting restoration on both success and failure.
+An Android API 36 x86_64 emulator ran the actual AOT profile APK: both plain and
+mixed replays completed with CPU samples, frame events and restored settings.
+These runs validate capture functionality; emulator timings do not establish
+phone performance or explain the phone's residual 41.668 ms presentation gap.
+Ignored validation artifacts are in `build/cpu-trace-20261001/`.
+
+Next phone window: budget about 10 minutes with the phone unlocked, screen on,
+unplugged and idle. Install the prepared ARM64 replay APK into the existing QA
+package, enable profiling and the buffered timeline through launch extras, then
+record two prose runs and one mixed run. Stop early if a capture precondition
+fails rather than repeatedly consuming the phone window. Restore the saved QA
+APK in place, stop QA and remove only its Recents task, then release the phone.
+Production data and settings must remain intact. The replay uses synthetic text,
+so no Hermes model requests or backend tokens are needed.
+
+After releasing the phone, correlate CPU stacks with the slowest build intervals
+and inspect parsing, widget rebuilding, layout and GC. CPU sampling adds overhead;
+these recordings identify likely costs rather than measure an unprofiled speedup.
+Dart sampling does not provide complete native scheduling/GPU attribution. If
+those remain unexplained, report that limit before proposing an additional trace.
 
 ## Evidence
 
