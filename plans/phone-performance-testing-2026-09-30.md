@@ -123,6 +123,43 @@ or automatic restart was undertaken.
 
 ## Restored phone and remaining coverage
 
+### 1 October screen-off battery follow-up
+
+The requested fresh comparison completed on the same phone using the installed
+production Wing 1.1.3/code 23562, unchanged across both arms. Earlier interrupted
+attempts were excluded. The user followed progress from a laptop and was released
+only after the final counter and screen-state readings were saved.
+
+| Condition | Singapore time | Charge lost | Whole-phone mean | Ten-minute means |
+| --- | --- | --- | --- | --- |
+| Wing stopped | 15:08:49–15:28:49 | 55.44 mAh / 1,200.042 s | 166.31 mA | 221.75 / 110.88 mA |
+| Wing idle in background | 15:31:49–15:51:49 | 41.58 mAh / 1,200.034 s | 124.74 mA | 55.43 / 194.05 mA |
+
+Both arms passed all sampled validity checks: unplugged/discharging, Dozing,
+device-idle screen off; Wing absent throughout stopped checkpoints and PID 29652
+unchanged throughout running checkpoints. QA was stopped. No profiling, test
+messages or synthetic input ran during either interval. Setup briefly woke the
+screen outside both arms, followed by sleep and settling before the running arm.
+The counter midpoint setup gap was 179.519 seconds, making the pair span
+42 minutes 59.594 seconds. Running preflight/postflight last-wake and last-sleep
+markers were unchanged. No settings or application data were changed.
+
+Running-minus-stopped observed discharge was −13.86 mAh, or −41.58 mA (about
+25.0% lower). **No added idle drain was observed in this pair.** This does not
+establish a Wing battery improvement or isolate its energy use. Stopped
+temperature fell 32.3→31.3→30.6°C, running 30.7→30.3→30.2°C; deep-idle policy
+differed, and ten-minute rates varied substantially. This is one sequential
+whole-phone comparison with sparse wireless-ADB observations, not repeated,
+randomized app-energy measurement or a bound on smaller/intermittent drain.
+
+Independent host recomputation agreed with both total rates, halves and timing.
+Reports are retained under ignored `build/phone-performance/run-20261001-attempt4/`:
+`comparison.md`, `comparison.json`, both `battery-*/capture.json`, `transition.json`
+and running preflight/postflight records. The required fresh full screen-off pair
+is complete; no further phone-control interval is running.
+
+### September restoration and broader coverage
+
 `final-phone-cleanup.json` verifies original rotation settings restored exactly
 (accelerometer rotation 1, user rotation 0), Dark/Default appearance restored,
 QA force-stopped, QA zero / production one task and no cleared application data.
@@ -135,8 +172,8 @@ The phone-exported backup and user files/data were preserved.
 
 Completed current gates are host validation/review, signed in-place deployment,
 stream/fresh-draft checks, activity re-entry, physical render/selection inspection,
-owned-layer presentation analysis and restoration. Broader coverage still absent:
-controlled battery/A-B repeats,
+owned-layer presentation analysis, restoration and the 1 October full battery
+comparison. Broader coverage still absent: repeated battery comparisons,
 a 20-minute native navigation soak and measured input-to-presentation latency.
 These require a later user-arranged window; no overall readiness conclusion or
 new phone-control interval is implied.
