@@ -8,6 +8,7 @@ import '../theme/wing_theme.dart';
 import '../services/profile_workspace_controller.dart';
 import '../utils/expansion_scroll_controller.dart';
 import '../widgets/anchored_expansion_tile.dart';
+import '../widgets/background_markdown_content.dart';
 import '../widgets/profile_tool_activity.dart';
 import '../widgets/profile_activity_tabs.dart';
 import '../widgets/playful_portrait.dart';
@@ -241,6 +242,22 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                 !_scroll.position.isScrollingNotifier.value));
     final newest = widget.chat.messages.lastOrNull?['id'];
     final segmentChanged = _segment != widget.chat.historySessionId;
+    final completed = widget.chat.messages.lastOrNull;
+    TranscriptAnchorBox? completingRow;
+    if (!segmentChanged &&
+        _streaming.isNotEmpty &&
+        widget.chat.streaming.isEmpty &&
+        newest != null &&
+        newest != _newestId &&
+        completed?['role'] == 'assistant' &&
+        (completed?['display_content'] ?? completed?['content'] ?? '')
+            .toString()
+            .startsWith(_streaming)) {
+      // Follow the same answer into its saved row without reparenting the
+      // remaining activity controls. Final text may include unseen growth.
+      completingRow =
+          _tail.currentContext?.findRenderObject() as TranscriptAnchorBox?;
+    }
     if (!atBottom &&
         !segmentChanged &&
         ((_newestId != null && newest != null && newest != _newestId) ||
@@ -251,12 +268,53 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     _newestId = newest;
     _streaming = widget.chat.streaming;
     _segment = widget.chat.historySessionId;
+    _preserveReaderAnchor(
+      completingRow,
+      replacement: completingRow == null
+          ? null
+          : () =>
+                _rows[newest]?.currentContext?.findRenderObject()
+                    as TranscriptAnchorBox?,
+    );
+    final generation = ++_layoutGeneration;
+    final gesture = _gestureGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !_scroll.hasClients ||
+          generation != _layoutGeneration ||
+          gesture != _gestureGeneration) {
+        return;
+      }
+      widget.chat.historyScrollOffset = _scroll.offset;
+      _updateJump();
+    });
+  }
+
+  void _preserveReaderAnchor(
+    TranscriptAnchorBox? growingRow, {
+    TranscriptAnchorBox? Function()? replacement,
+  }) {
+    if (widget.nearbyMessages != null || !_scroll.hasClients) return;
+    final atBottom =
+        !_scroll.hasExpansionAnchor &&
+        (_jumping ||
+            (_scroll.offset <= 0.5 &&
+                !_scroll.position.isScrollingNotifier.value));
     GlobalKey? anchor;
     double? top;
     final viewport = _viewport.currentContext?.findRenderObject();
     if (!atBottom && viewport is RenderBox) {
       final start = viewport.localToGlobal(Offset.zero).dy;
       final end = start + viewport.size.height;
+      if (growingRow != null && growingRow.attached && growingRow.hasSize) {
+        final y = growingRow.localToGlobal(Offset.zero).dy;
+        if (y < end && y + growingRow.size.height > start) {
+          // An older row can leave the sliver cache while this message grows.
+          // Prefer the visible changing row so the captured anchor stays mounted.
+          _scroll.preserveReaderAnchor(growingRow, replacement: replacement);
+          return;
+        }
+      }
       for (final key in [..._rows.values, _tail]) {
         final box = key.currentContext?.findRenderObject();
         if (box is! RenderBox || !box.hasSize) continue;
@@ -272,18 +330,6 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     _scroll.preserveReaderAnchor(
       anchor?.currentContext?.findRenderObject() as TranscriptAnchorBox?,
     );
-    final generation = ++_layoutGeneration;
-    final gesture = _gestureGeneration;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          !_scroll.hasClients ||
-          generation != _layoutGeneration ||
-          gesture != _gestureGeneration) {
-        return;
-      }
-      widget.chat.historyScrollOffset = _scroll.offset;
-      _updateJump();
-    });
   }
 
   @override
@@ -578,7 +624,16 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
             key: _viewport,
             fit: StackFit.expand,
             children: [
-              transcript,
+              NotificationListener<MarkdownContentWillChange>(
+                onNotification: (event) {
+                  _preserveReaderAnchor(
+                    event.source
+                        .findAncestorRenderObjectOfType<TranscriptAnchorBox>(),
+                  );
+                  return false;
+                },
+                child: transcript,
+              ),
               if (!needsInput)
                 Positioned(bottom: 8, left: 0, right: 0, child: navigation),
             ],

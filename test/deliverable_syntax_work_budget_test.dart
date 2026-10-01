@@ -52,6 +52,12 @@ class _ObservedHtml extends HtmlFilePathSyntax {
   RegExp get pattern => probe;
 }
 
+class _ObservedCode extends DeliverableCodeSyntax {
+  late final probe = _RegexProbe(super.pattern);
+  @override
+  RegExp get pattern => probe;
+}
+
 // Preserve the original unguarded matcher as the differential oracle, while
 // retaining the production conversion grammar and onMatch behavior.
 class _UnguardedMedia extends md.InlineSyntax {
@@ -96,6 +102,26 @@ Object _ast(md.Node node) {
 }
 
 void main() {
+  test(
+    'inline code avoids regex probes where a backtick cannot start code',
+    () {
+      final code = _ObservedCode();
+      final source = 'ordinary words field_id_1 and value_2 ' * 100;
+      final actual = md.Document(
+        inlineSyntaxes: [code],
+        extensionSet: md.ExtensionSet.gitHubFlavored,
+        encodeHtml: false,
+      ).parse(source).map(_ast).toList();
+      final reference = md.Document(
+        inlineSyntaxes: [md.CodeSyntax()],
+        extensionSet: md.ExtensionSet.gitHubFlavored,
+        encodeHtml: false,
+      ).parse(source).map(_ast).toList();
+      expect(actual, reference);
+      expect(code.probe.prefixCalls, 0);
+    },
+  );
+
   for (final fixture in {
     'ordinary words': 'Ordinary prose flows through words and sentences ',
     'technical identifiers': 'value_1 = field_id_2 + other_value_3; ',

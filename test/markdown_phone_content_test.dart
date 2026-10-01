@@ -1,3 +1,4 @@
+import 'helpers/pump_markdown_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,7 +9,7 @@ void main() {
   testWidgets(
     'saved user attachments display the prompt without expanded context',
     (tester) async {
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         const MaterialApp(
           home: Scaffold(
             body: ProfileMessage(
@@ -57,7 +58,7 @@ void main() {
       tester.view.physicalSize = const Size(320, 760);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         MaterialApp(
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(

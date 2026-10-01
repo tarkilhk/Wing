@@ -37,7 +37,11 @@ class BlockReusingMarkdownBody extends MarkdownBody {
     super.shrinkWrap,
     super.fitContent,
     super.softLineBreak,
+    this.parsedNodes,
   });
+
+  /// QA background parsing supplies resolved nodes; widget work stays here.
+  final List<md.Node>? parsedNodes;
 
   @override
   State<MarkdownWidget> createState() => _BlockReusingMarkdownBodyState();
@@ -60,7 +64,11 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
   @override
   void didUpdateWidget(covariant MarkdownWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.data != oldWidget.data) _content = null;
+    if (widget.data != oldWidget.data ||
+        (widget as BlockReusingMarkdownBody).parsedNodes !=
+            (oldWidget as BlockReusingMarkdownBody).parsedNodes) {
+      _content = null;
+    }
     if (widget.selectable != oldWidget.selectable ||
         widget.styleSheet != oldWidget.styleSheet ||
         widget.styleSheetTheme != oldWidget.styleSheetTheme ||
@@ -110,12 +118,14 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
     final style = fallback
         .copyWith(textScaler: MediaQuery.textScalerOf(context))
         .merge(widget.styleSheet);
-    final nodes = md.Document(
-      blockSyntaxes: widget.blockSyntaxes,
-      inlineSyntaxes: widget.inlineSyntaxes,
-      extensionSet: widget.extensionSet ?? md.ExtensionSet.gitHubFlavored,
-      encodeHtml: false,
-    ).parseLines(const LineSplitter().convert(widget.data));
+    final nodes =
+        (widget as BlockReusingMarkdownBody).parsedNodes ??
+        md.Document(
+          blockSyntaxes: widget.blockSyntaxes,
+          inlineSyntaxes: widget.inlineSyntaxes,
+          extensionSet: widget.extensionSet ?? md.ExtensionSet.gitHubFlavored,
+          encodeHtml: false,
+        ).parseLines(const LineSplitter().convert(widget.data));
     final next = <_RenderedBlock>[];
     // Heading padding builders mutate the AST and manage document scroll keys.
     // Keep their existing full-render behavior until their anchors are assigned

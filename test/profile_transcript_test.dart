@@ -4,10 +4,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/gateway_sensitive_prompt.dart';
 import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
+import 'package:wing/core/widgets/profile_activity_tabs.dart';
+import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/widgets/playful_portrait.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
+import 'helpers/pump_markdown_widget.dart';
 import 'support/profile_history_fixture.dart';
 
 void main({Future<void> Function(WidgetTester, String)? capture}) {
@@ -95,6 +98,148 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   }
+
+  testWidgets(
+    'completion and next stream retain activity selection, draft and callbacks',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 760);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      chat.messages = [
+        {'id': 1, 'role': 'user', 'content': 'Saved prompt'},
+      ];
+      chat.streaming = List.generate(
+        20,
+        (index) =>
+            'Readable paragraph $index: '
+            'The answer stays in place while activity remains available.',
+      ).join('\n\n');
+      var callbackGeneration = 0;
+      final callbacks = <String>[];
+      final field = find.byKey(
+        const ValueKey('retained-tail-draft'),
+        skipOffstage: false,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ListenableBuilder(
+              listenable: controller,
+              builder: (_, _) {
+                final generation = callbackGeneration;
+                return ProfileTranscript(
+                  key: ValueKey(chat.key),
+                  chat: chat,
+                  controller: controller,
+                  messageBuilder: (message) => ProfileMessage(message: message),
+                  beforeActivity: [
+                    if (chat.streaming.isNotEmpty)
+                      ProfileMessage(
+                        message: {
+                          'role': 'assistant',
+                          'content': chat.streaming,
+                        },
+                        streaming: true,
+                      ),
+                  ],
+                  tail: [
+                    ProfileActivityTabs(
+                      key: const ValueKey('retained-activity-tabs'),
+                      tabs: [
+                        ProfileActivityTab(
+                          id: 'tasks',
+                          label: 'Tasks',
+                          child: const Text('Task activity'),
+                          onSelected: () => callbacks.add('g$generation:tasks'),
+                        ),
+                        ProfileActivityTab(
+                          id: 'work',
+                          label: 'Work',
+                          child: const TextField(
+                            key: ValueKey('retained-tail-draft'),
+                          ),
+                          onSelected: () => callbacks.add('g$generation:work'),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.settleMarkdown();
+      await tester.tap(find.byKey(const ValueKey(('activity-tab', 'work'))));
+      await tester.pumpAndSettle();
+      await tester.enterText(field, 'Pending response');
+      await tester.pump();
+      final inputState = tester.state(field);
+      expect(callbacks, ['g0:tasks', 'g0:work']);
+
+      final marker = find.textContaining(
+        'Readable paragraph 19:',
+        findRichText: true,
+      );
+      // Opt out of bottom following while keeping the residual activity row
+      // within the lazy list's mounted viewport/cache region.
+      final scroll = tester.widget<ListView>(list).controller!;
+      scroll.jumpTo(64);
+      await tester.pumpAndSettle();
+      expect(marker.hitTestable(), findsOneWidget);
+      final before = tester.getTopLeft(marker).dy;
+      callbackGeneration = 1;
+      chat.messages.add({
+        'id': 2,
+        'role': 'assistant',
+        'content':
+            '${chat.streaming}\n\nUnseen final paragraph one.'
+            '\n\nUnseen final paragraph two.',
+      });
+      chat.streaming = '';
+      controller.clearSearch();
+      await tester.pump();
+      expect(tester.getTopLeft(marker).dy, closeTo(before, 1));
+      await tester.settleMarkdown();
+      expect(tester.getTopLeft(marker).dy, closeTo(before, 1));
+      expect(
+        find.text('Unseen final paragraph two.', findRichText: true),
+        findsOneWidget,
+      );
+      expect(tester.state(field), same(inputState));
+      expect(
+        find.text('Pending response', skipOffstage: false),
+        findsOneWidget,
+      );
+      expect(callbacks, ['g0:tasks', 'g0:work']);
+
+      callbackGeneration = 2;
+      chat.streaming = 'A following answer begins.\n\nIts live tail grows.';
+      controller.clearSearch();
+      await tester.pump();
+      await tester.settleMarkdown();
+      expect(tester.getTopLeft(marker).dy, closeTo(before, 1));
+      expect(tester.state(field), same(inputState));
+      expect(
+        find.text('Pending response', skipOffstage: false),
+        findsOneWidget,
+      );
+      expect(callbacks, ['g0:tasks', 'g0:work']);
+
+      scroll.jumpTo(0);
+      await tester.pumpAndSettle();
+      final beforeSelection = [...callbacks];
+      final tasks = find.byKey(const ValueKey(('activity-tab', 'tasks')));
+      await tester.tap(tasks);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey(('activity-tab', 'work'))));
+      await tester.pumpAndSettle();
+      expect(callbacks, [...beforeSelection, 'g2:tasks', 'g2:work']);
+      expect(tester.state(field), same(inputState));
+      expect(find.text('Pending response'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('empty greeting yields to messages and history states', (
     tester,

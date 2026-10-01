@@ -9,14 +9,19 @@ class ExpansionScrollController extends ScrollController {
   ExpansionAnchorBox? _anchor;
   double _pendingHeight = 0;
   TranscriptAnchorBox? _readerAnchor;
+  TranscriptAnchorBox? Function()? _readerReplacement;
   double _readerTop = 0;
 
   bool get hasExpansionAnchor => _anchor?.attached == true;
 
   /// Capture the reading position before new content is laid out. Correcting
   /// during layout avoids a visible jump and leaves drag/fling activities alive.
-  void preserveReaderAnchor(TranscriptAnchorBox? anchor) {
+  void preserveReaderAnchor(
+    TranscriptAnchorBox? anchor, {
+    TranscriptAnchorBox? Function()? replacement,
+  }) {
     _readerAnchor = anchor;
+    _readerReplacement = replacement;
     if (anchor == null) return;
     _readerTop = anchor.leadingOffset;
   }
@@ -97,8 +102,10 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
 
   @override
   bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
-    final reader = controller._readerAnchor;
+    final reader =
+        controller._readerReplacement?.call() ?? controller._readerAnchor;
     controller._readerAnchor = null;
+    controller._readerReplacement = null;
     final delta = controller._pendingHeight;
     controller._pendingHeight = 0;
     if (axisDirection == AxisDirection.up && reader?.attached == true) {

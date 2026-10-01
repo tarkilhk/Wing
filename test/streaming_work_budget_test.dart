@@ -7,6 +7,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
+import 'helpers/pump_markdown_widget.dart';
 import 'profile_workspace_controller_test.dart' show Host;
 
 void main() {
@@ -32,6 +33,7 @@ void main() {
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );
     await tester.pump();
+    await tester.settleMarkdown();
     var liveBuilds = 0;
     var savedBuilds = 0;
     final previous = debugOnRebuildDirtyWidget;
@@ -55,6 +57,7 @@ void main() {
     }
     expect(chat.streaming, chunks.join());
     expect(chat.draft, 'New draft 116');
+    await tester.settleMarkdown();
     expect(savedBuilds, 0);
     expect(
       liveBuilds,
@@ -73,6 +76,7 @@ void main() {
     expect(chat.messages.last['content'], chunks.join());
     expect(chat.status, ProfileTurnStatus.completed);
     expect(chat.draft, 'New draft 116');
+    await tester.settleMarkdown();
     expect(
       tester
           .widgetList<MarkdownBody>(find.bySubtype<MarkdownBody>())
@@ -111,6 +115,7 @@ void main() {
     for (var i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
+    await tester.settleMarkdown();
     expect(
       find.byWidgetPredicate((w) => w is ProfileMessage && !w.streaming),
       findsWidgets,

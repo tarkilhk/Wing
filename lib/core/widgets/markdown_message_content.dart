@@ -8,11 +8,14 @@ import 'package:markdown/markdown.dart' as md;
 import '../models/chat_output.dart';
 import '../models/deliverable_reference.dart';
 import '../services/file_open_error_message.dart';
+import '../services/markdown_inline_parser.dart';
+import '../services/markdown_qa_variant.dart';
 import '../services/web_preview.dart';
 import '../theme/profile_markdown_style.dart';
 import 'chat_image_preview.dart';
 import 'markdown_code_block.dart';
 import 'block_reusing_markdown_body.dart';
+import 'background_markdown_content.dart';
 import 'deliverable_attachment.dart';
 
 /// Renders Markdown message content without conversation chrome.
@@ -49,10 +52,13 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
   MarkdownStyleSheet? _styleSheet;
   ThemeData? _markdownTheme;
   Map<String, MarkdownElementBuilder>? _markdownBuilders;
+  final _parsers = <int, MarkdownInlineParser>{};
   final _deliverableSyntaxes = <md.InlineSyntax>[
     MediaReferenceSyntax(),
     DeliverableLinkSyntax(),
-    DeliverableCodeSyntax(),
+    DeliverableCodeSyntax(
+      guard: markdownQaVariant != MarkdownQaVariant.baseline,
+    ),
     HtmlFilePathSyntax(),
   ];
   final _headingKeys = <String, GlobalKey>{};
@@ -112,6 +118,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
             (oldWidget.onDownloadRemoteFile == null)) {
       _markdownBuilders = null;
       _refreshSegments = true;
+      _parsers.clear();
     }
     if (widget.initialFragment != oldWidget.initialFragment) {
       _scheduleFragment();
@@ -228,14 +235,12 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     };
     _headingKeys.clear();
     final headings = _HeadingBuilder(_headingKeys);
-    final body = widget.documentPath == null
-        ? BlockReusingMarkdownBody.new
-        : MarkdownBody.new;
     final sources = splitMarkdownCodeBlocks(
       widget.data,
       streaming: widget.streaming,
     );
     final next = <({Object source, Widget child})>[];
+    final usedParsers = <int>{};
     for (var index = 0; index < sources.length; index++) {
       final source = sources[index];
       final previous = index < _segments.length ? _segments[index] : null;
@@ -247,7 +252,50 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
           previous != null &&
           _sameMarkdownSegment(previous.source, source)) {
         next.add(previous);
+        if (_parsers.containsKey(index)) usedParsers.add(index);
         continue;
+      }
+      Widget prose(String text, List<md.Node>? nodes) {
+        final options = widget.documentPath != null
+            ? MarkdownBody(
+                data: text,
+                checkboxBuilder: _buildTaskMarker,
+                inlineSyntaxes: widget.deliverables
+                    ? _deliverableSyntaxes
+                    : null,
+                paddingBuilders: {
+                  for (var level = 1; level <= 6; level++) 'h$level': headings,
+                },
+                builders: builders,
+                selectable: true,
+                onTapLink: _tapLink,
+                sizedImageBuilder: _buildImage,
+                styleSheet: styleSheet,
+              )
+            : BlockReusingMarkdownBody(
+                data: text,
+                parsedNodes: nodes,
+                checkboxBuilder: _buildTaskMarker,
+                inlineSyntaxes: widget.deliverables
+                    ? _deliverableSyntaxes
+                    : null,
+                builders: builders,
+                selectable: true,
+                onTapLink: _tapLink,
+                sizedImageBuilder: _buildImage,
+                styleSheet: styleSheet,
+              );
+        return options;
+      }
+
+      List<md.Node>? nodes;
+      if (source is String &&
+          widget.documentPath == null &&
+          markdownQaVariant == MarkdownQaVariant.cache) {
+        usedParsers.add(index);
+        nodes = (_parsers[index] ??= MarkdownInlineParser(
+          deliverables: widget.deliverables,
+        )).parse(source);
       }
       final child = source is MarkdownCodeBlock
           ? source
@@ -258,29 +306,22 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
               removeBottom: true,
               child: Theme(
                 data: markdownTheme,
-                child: body(
-                  checkboxBuilder: _buildTaskMarker,
-                  data: source as String,
-                  inlineSyntaxes: widget.deliverables
-                      ? _deliverableSyntaxes
-                      : null,
-                  paddingBuilders: widget.documentPath == null
-                      ? const {}
-                      : {
-                          for (var level = 1; level <= 6; level++)
-                            'h$level': headings,
-                        },
-                  builders: builders,
-                  selectable: true,
-                  onTapLink: _tapLink,
-                  sizedImageBuilder: _buildImage,
-                  styleSheet: styleSheet,
-                ),
+                child:
+                    widget.documentPath == null &&
+                        markdownQaVariant == MarkdownQaVariant.background
+                    ? BackgroundMarkdownContent(
+                        data: source as String,
+                        deliverables: widget.deliverables,
+                        streaming: widget.streaming,
+                        builder: (text, parsed) => prose(text, parsed),
+                      )
+                    : prose(source as String, nodes),
               ),
             );
       next.add((source: source, child: child));
     }
     _segments = next;
+    _parsers.removeWhere((index, _) => !usedParsers.contains(index));
     _refreshSegments = false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -33,10 +33,29 @@ class DeliverableLinkSyntax extends md.LinkSyntax {
 /// A complete file path in inline code is a deliverable, just like a file link.
 /// Let the Markdown code parser own delimiters and ordinary code semantics.
 class DeliverableCodeSyntax extends md.CodeSyntax {
+  DeliverableCodeSyntax({this.guard = true});
+
+  // QA compares this fast rejection with the unchanged matcher explicitly.
+  final bool guard;
+
   static final _path = RegExp(
     r'^(?:/|~[\\/]|\.\.?[\\/]|[A-Za-z]:[\\/]|\\\\)'
     r'[^\r\n<>|]*[^\\/\s]\.\w+$',
   );
+
+  @override
+  bool tryMatch(md.InlineParser parser, [int? startMatchPos]) {
+    final position = parser.pos;
+    if (guard && position >= 0 && position <= parser.source.length) {
+      if (position == parser.source.length ||
+          parser.source.codeUnitAt(position) != 0x60) {
+        return false;
+      }
+    }
+    // CodeSyntax owns delimiter-run handling and uses parser.pos, including
+    // when a caller supplies startMatchPos. Preserve that behavior exactly.
+    return super.tryMatch(parser, startMatchPos);
+  }
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {

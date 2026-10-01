@@ -1,3 +1,4 @@
+import 'helpers/pump_markdown_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,7 +10,7 @@ void main() {
     'missing document heading reports locally without reading a file',
     (tester) async {
       var reads = 0;
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         MaterialApp(
           home: Scaffold(
             body: SingleChildScrollView(
@@ -53,7 +54,7 @@ void main() {
           );
       final value = ValueNotifier(content('old'));
       addTearDown(value.dispose);
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         MaterialApp(
           home: Scaffold(
             body: ValueListenableBuilder<MarkdownMessageContent>(
@@ -68,6 +69,7 @@ void main() {
       );
       value.value = content('new');
       await tester.pump();
+      await tester.settleMarkdown();
       expect(
         tester.widget<MarkdownBody>(find.bySubtype<MarkdownBody>()),
         same(original),
@@ -81,10 +83,12 @@ void main() {
       } else {
         original.onTapLink!('Report', '/srv/report.md', '');
         await tester.pump();
+        await tester.settleMarkdown();
         expect(calls, ['new']);
       }
       value.value = content('disabled', enabled: false);
       await tester.pump();
+      await tester.settleMarkdown();
       expect(
         tester.widget<MarkdownBody>(find.bySubtype<MarkdownBody>()),
         isNot(same(original)),
@@ -106,7 +110,7 @@ void main() {
       var dark = false;
       var width = 390.0;
       late StateSetter change;
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         MaterialApp(
           home: StatefulBuilder(
             builder: (context, setState) {
@@ -127,15 +131,18 @@ void main() {
       final first = body();
       change(() => text = 'Second **answer**');
       await tester.pump();
+      await tester.settleMarkdown();
       expect(body().data, text);
       expect(body(), isNot(same(first)));
       final light = body();
       change(() => dark = true);
       await tester.pump();
+      await tester.settleMarkdown();
       expect(body().styleSheet!.p!.color, isNot(light.styleSheet!.p!.color));
       final wide = body();
       change(() => width = 320);
       await tester.pump();
+      await tester.settleMarkdown();
       expect(body(), isNot(same(wide)));
       expect(tester.takeException(), isNull);
     },

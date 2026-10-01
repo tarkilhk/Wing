@@ -1,3 +1,4 @@
+import 'helpers/pump_markdown_widget.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -61,7 +62,7 @@ void main() {
           ...paragraphs.take(p),
           paragraphs[p].split(' ').take(words).join(' '),
         ].join('\n\n');
-        await tester.pumpWidget(
+        await tester.pumpMarkdownWidget(
           _host(MarkdownMessageContent(data: text, streaming: true)),
         );
         final after = tester
@@ -94,7 +95,7 @@ void main() {
   testWidgets('nonempty selection survives growth in another paragraph', (
     tester,
   ) async {
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       _host(const MarkdownMessageContent(data: 'A completed paragraph.')),
     );
     final text = tester.widget<SelectableText>(find.byType(SelectableText));
@@ -113,7 +114,7 @@ void main() {
     await tester.pump();
     expect(editable.widget.controller.selection, selection);
     expect(selection.textInside(editable.widget.controller.text), 'completed');
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       _host(
         const MarkdownMessageContent(
           data: 'A completed paragraph.\n\nThe next paragraph starts.',
@@ -163,7 +164,7 @@ void main() {
         (tester) async {
           final key = GlobalKey();
           for (final source in fixture.value) {
-            await tester.pumpWidget(
+            await tester.pumpMarkdownWidget(
               _host(
                 MarkdownBody(data: source, selectable: true),
                 dark: dark,
@@ -171,7 +172,7 @@ void main() {
               ),
             );
             final stock = _rendered(tester);
-            await tester.pumpWidget(
+            await tester.pumpMarkdownWidget(
               _host(
                 BlockReusingMarkdownBody(
                   key: key,
@@ -193,13 +194,13 @@ void main() {
   testWidgets(
     'late reference invalidates affected prose while stable prefix survives',
     (tester) async {
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         _host(const MarkdownMessageContent(data: 'Stable\n\n[Report][r]')),
       );
       final before = tester
           .widgetList<SelectableText>(find.byType(SelectableText))
           .toList();
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         _host(
           const MarkdownMessageContent(
             data: 'Stable\n\n[Report][r]\n\n[r]: https://example.test',
@@ -220,7 +221,7 @@ void main() {
     (tester) async {
       final key = GlobalKey();
       final calls = <String>[];
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         _host(
           BlockReusingMarkdownBody(
             key: key,
@@ -241,7 +242,7 @@ void main() {
         return true;
       });
       expect(link, isNotNull);
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         _host(
           BlockReusingMarkdownBody(
             key: key,
@@ -257,14 +258,14 @@ void main() {
       );
       link!.onTap!();
       expect(calls, ['new']);
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         _host(
           BlockReusingMarkdownBody(key: key, data: 'No link', selectable: true),
         ),
       );
       // A disposed recognizer may retain its onTap field; its pointer tracker is
       // disposed. Verify teardown has no framework error rather than invoke it.
-      await tester.pumpWidget(const SizedBox());
+      await tester.pumpMarkdownWidget(const SizedBox());
       expect(tester.takeException(), isNull);
     },
   );
@@ -285,12 +286,12 @@ void main() {
             return false;
           },
         );
-    await tester.pumpWidget(_host(content('old', 'Tail')));
+    await tester.pumpMarkdownWidget(_host(content('old', 'Tail')));
     final attachment = tester.widget<DeliverableAttachment>(
       find.byType(DeliverableAttachment),
     );
     final element = tester.element(find.byType(DeliverableAttachment));
-    await tester.pumpWidget(_host(content('new', 'Longer tail')));
+    await tester.pumpMarkdownWidget(_host(content('new', 'Longer tail')));
     expect(
       tester.widget<DeliverableAttachment>(find.byType(DeliverableAttachment)),
       same(attachment),
@@ -306,11 +307,11 @@ void main() {
   testWidgets(
     'message style stays stable across data updates and refreshes with dependencies',
     (tester) async {
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         _host(const MarkdownMessageContent(data: 'Stable\n\nTail')),
       );
       var body = tester.widget<MarkdownBody>(find.bySubtype<MarkdownBody>());
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         _host(const MarkdownMessageContent(data: 'Stable\n\nLonger tail')),
       );
       var updated = tester.widget<MarkdownBody>(find.bySubtype<MarkdownBody>());
@@ -321,7 +322,7 @@ void main() {
         (true, 320.0, 1.0),
         (true, 320.0, 1.5),
       ]) {
-        await tester.pumpWidget(
+        await tester.pumpMarkdownWidget(
           _host(
             const MarkdownMessageContent(data: 'Stable\n\nLonger tail'),
             dark: configuration.$1,

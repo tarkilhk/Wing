@@ -109,9 +109,9 @@ android {
        getByName("profile") {
            // AOT performance builds must upgrade the separate Dev app, never
            // replace the user's installed release or its saved connections.
-           applicationIdSuffix = ".dev"
-           versionNameSuffix = "-dev-profile"
-           manifestPlaceholders["appLabel"] = "Wing Dev"
+           applicationIdSuffix = ".perfqa"
+           versionNameSuffix = "-perfqa"
+           manifestPlaceholders["appLabel"] = "Wing Perf QA"
            signingConfig = signingConfigs.getByName("debug")
        }
        release {

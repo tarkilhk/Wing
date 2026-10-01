@@ -1,3 +1,4 @@
+import 'helpers/pump_markdown_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/widgets/block_reusing_markdown_body.dart';
@@ -23,7 +24,7 @@ second = 2
 Growing tail''';
     final source = ValueNotifier(initial);
     addTearDown(source.dispose);
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       MaterialApp(
         home: Scaffold(
           body: SingleChildScrollView(
@@ -92,6 +93,7 @@ Growing tail''';
     for (var update = 0; update < 12; update++) {
       source.value += ' synthetic$update';
       await tester.pump(const Duration(milliseconds: 100));
+      await tester.settleMarkdown();
     }
     debugPrint(
       'Closed segments across 12 updates: '

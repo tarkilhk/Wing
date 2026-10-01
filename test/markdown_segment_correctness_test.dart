@@ -1,3 +1,4 @@
+import 'helpers/pump_markdown_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -61,7 +62,7 @@ void main() {
         '```dart\nchanged\n```\n',
       ),
     ]) {
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         _host(MarkdownMessageContent(data: fixture.$1, streaming: true)),
       );
       expect(find.byType(MarkdownCodeBlock), findsOneWidget);
@@ -81,22 +82,26 @@ void main() {
     tester,
   ) async {
     const open = 'Lead\n```mermaid\ngraph TD\nA --> B';
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       _host(const MarkdownMessageContent(data: open, streaming: true)),
     );
     expect(find.byTooltip('Open diagram'), findsNothing);
     const closed = '$open\n```\nTail';
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       _host(const MarkdownMessageContent(data: closed, streaming: true)),
     );
     expect(find.byTooltip('Open diagram'), findsNothing);
-    await tester.pumpWidget(_host(const MarkdownMessageContent(data: closed)));
+    await tester.pumpMarkdownWidget(
+      _host(const MarkdownMessageContent(data: closed)),
+    );
     expect(find.byTooltip('Open diagram'), findsOneWidget);
     expect(
       tester.widget<MarkdownCodeBlock>(find.byType(MarkdownCodeBlock)).code,
       'graph TD\nA --> B\n',
     );
-    await tester.pumpWidget(_host(const MarkdownMessageContent(data: open)));
+    await tester.pumpMarkdownWidget(
+      _host(const MarkdownMessageContent(data: open)),
+    );
     expect(find.byTooltip('Open diagram'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -105,7 +110,7 @@ void main() {
     tester,
   ) async {
     const prefix = 'Lead\n```text\nA long code line\n```\n';
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       _host(
         const MarkdownMessageContent(data: '${prefix}Tail', streaming: true),
       ),
@@ -113,7 +118,7 @@ void main() {
     await tester.tap(find.byTooltip('Wrap lines'));
     await tester.pump();
     for (final tail in ['Tail grows', 'Tail grows\n\nA second paragraph']) {
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         _host(MarkdownMessageContent(data: '$prefix$tail', streaming: true)),
       );
       expect(find.byTooltip('Scroll horizontally'), findsOneWidget);
@@ -146,20 +151,22 @@ void main() {
             }
           : null,
     );
-    await tester.pumpWidget(_host(content('old', 'Tail')));
-    await tester.pumpWidget(_host(content('new', 'Growing tail')));
+    await tester.pumpMarkdownWidget(_host(content('old', 'Tail')));
+    await tester.pumpMarkdownWidget(_host(content('new', 'Growing tail')));
     await tester.tap(find.text('Open preview'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Download'));
     await tester.pumpAndSettle();
     expect(calls, ['new open /srv/report.md', 'new download']);
-    await tester.pumpWidget(_host(content('disabled', 'Tail', enabled: false)));
+    await tester.pumpMarkdownWidget(
+      _host(content('disabled', 'Tail', enabled: false)),
+    );
     final attachment = tester.widget<DeliverableAttachment>(
       find.byType(DeliverableAttachment),
     );
     expect(attachment.onOpen, isNull);
     expect(attachment.onDownload, isNull);
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       _host(content('ordinary link', 'Tail', deliverables: false)),
     );
     expect(find.byType(DeliverableAttachment), findsNothing);
@@ -173,7 +180,7 @@ void main() {
     tester,
   ) async {
     const prefix = 'Completed paragraph.\n\n```text\ncode\n```\n';
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       _host(
         const MarkdownMessageContent(data: '${prefix}Tail', streaming: true),
       ),
@@ -189,7 +196,7 @@ void main() {
         .style!
         .color;
     final normalHeight = tester.getSize(prose).height;
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       _host(
         const MarkdownMessageContent(
           data: '${prefix}Growing tail',
@@ -226,7 +233,7 @@ void main() {
         '\n\n# Target\n\nDetails';
     var fileReads = 0;
     for (final tail in ['', '\n\nMore details']) {
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         _host(
           MarkdownMessageContent(
             data: '$source$tail',
@@ -261,7 +268,7 @@ void main() {
         opens++;
       },
     );
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       _host(
         content('[Report](/srv/report.md)\n\n```text\nold code\n```\nTail'),
       ),
@@ -269,7 +276,7 @@ void main() {
     await tester.tap(find.text('Open preview'));
     await tester.pumpAndSettle();
     expect(opens, 1);
-    await tester.pumpWidget(_host(content('Replacement paragraph.')));
+    await tester.pumpMarkdownWidget(_host(content('Replacement paragraph.')));
     expect(find.byType(DeliverableAttachment), findsNothing);
     expect(find.byType(MarkdownCodeBlock), findsNothing);
     expect(find.text('Tail', findRichText: true), findsNothing);
@@ -277,11 +284,11 @@ void main() {
       find.text('Replacement paragraph.', findRichText: true),
       findsOneWidget,
     );
-    await tester.pumpWidget(_host(content('')));
+    await tester.pumpMarkdownWidget(_host(content('')));
     expect(find.byType(SelectableText), findsNothing);
     expect(find.byType(DeliverableAttachment), findsNothing);
     expect(find.byType(MarkdownCodeBlock), findsNothing);
-    await tester.pumpWidget(const SizedBox());
+    await tester.pumpMarkdownWidget(const SizedBox());
     expect(tester.takeException(), isNull);
   });
 }

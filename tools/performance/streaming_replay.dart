@@ -11,6 +11,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/activity_shimmer.dart';
+import 'package:wing/core/widgets/background_markdown_content.dart';
+import 'package:wing/core/widgets/block_reusing_markdown_body.dart';
+import 'package:wing/core/widgets/markdown_code_block.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 
 import 'streaming_replay_fixture.dart';
@@ -35,6 +38,7 @@ class _ReplayState extends State<_Replay> with WidgetsBindingObserver {
   final _source = ValueNotifier(streamingReplayInitial());
   final _draft = TextEditingController();
   final _focus = FocusNode();
+  final _message = GlobalKey();
   final _frames = <FrameTiming>[];
   Timer? _timer;
   Completer<void>? _pending;
@@ -143,11 +147,66 @@ class _ReplayState extends State<_Replay> with WidgetsBindingObserver {
     _requireMounted();
   }
 
+  Iterable<Element> _messageElements() sync* {
+    Iterable<Element> walk(Element element) sync* {
+      yield element;
+      final children = <Element>[];
+      element.visitChildren(children.add);
+      for (final child in children) {
+        yield* walk(child);
+      }
+    }
+
+    final root = _message.currentContext;
+    if (root is Element) yield* walk(root);
+  }
+
+  bool _renderedExactly(String source) {
+    final expected = splitMarkdownCodeBlocks(source, streaming: true)
+        .map(
+          (part) =>
+              part is MarkdownCodeBlock ? ('code', part.code) : ('prose', part),
+        )
+        .toList();
+    final elements = _messageElements().toList();
+    if (elements
+        .whereType<StatefulElement>()
+        .map((e) => e.state)
+        .whereType<BackgroundMarkdownContentState>()
+        .any((state) => state.pending)) {
+      return false;
+    }
+    final actual = elements
+        .map((e) => e.widget)
+        .where(
+          (widget) =>
+              widget is BlockReusingMarkdownBody || widget is MarkdownCodeBlock,
+        )
+        .map(
+          (widget) => widget is MarkdownCodeBlock
+              ? ('code', widget.code)
+              : ('prose', (widget as BlockReusingMarkdownBody).data),
+        )
+        .toList();
+    return listEquals(expected, actual);
+  }
+
+  Future<void> _awaitRendered(String source) async {
+    // Check the mounted renderer, rather than just the input ValueNotifier.
+    for (var attempt = 0; attempt < 150; attempt++) {
+      await _endFrame();
+      if (_renderedExactly(source)) return;
+      await _wait(const Duration(milliseconds: 20));
+    }
+    throw StateError('The final message did not reach the renderer.');
+  }
+
   Future<Map<String, Object>> _replay({required bool fences}) async {
     _requireMounted();
     final run = ++_run;
     _source.value = streamingReplayInitial(fences: fences);
     _draft.clear();
+    await _awaitRendered(_source.value);
     _focus.requestFocus();
     await _wait(const Duration(seconds: 1));
     if (!mounted) throw StateError('Replay canceled.');
@@ -184,6 +243,7 @@ class _ReplayState extends State<_Replay> with WidgetsBindingObserver {
     final deltaUs = <int>[];
     final publicationUs = <int>[];
     final draftUs = <int>[];
+    final finalPublication = Stopwatch();
     developer.Timeline.instantSync(
       'WingStreamingReplayStart',
       arguments: {'run': run},
@@ -218,6 +278,9 @@ class _ReplayState extends State<_Replay> with WidgetsBindingObserver {
         draftUs.add(watch.elapsedMicroseconds);
       }
       if (delta == streamingReplayDeltasPerPresentation - 1) {
+        if (presentation == streamingReplayPresentations - 1) {
+          finalPublication.start();
+        }
         _source.value = accumulated;
         publicationUs.add(watch.elapsedMicroseconds);
       }
@@ -237,6 +300,8 @@ class _ReplayState extends State<_Replay> with WidgetsBindingObserver {
     debugPrint(
       '[WingStreamingReplay] end run=$run epochUs=$endEpochUs monotonicUs=$endMonotonicUs',
     );
+    await _awaitRendered(accumulated);
+    finalPublication.stop();
     // Timeline.now and raw build/raster timestamps use the VM's monotonic clock.
     // A vsync target timestamp is not an actual build-start boundary. Bounded
     // draining does not guarantee all callbacks arrived. ActivityShimmer supplies
@@ -246,6 +311,11 @@ class _ReplayState extends State<_Replay> with WidgetsBindingObserver {
       final start = frame.timestampInMicroseconds(FramePhase.buildStart);
       return start > startMonotonicUs && start <= endMonotonicUs;
     }).toList();
+    final parsers = _messageElements()
+        .whereType<StatefulElement>()
+        .map((element) => element.state)
+        .whereType<BackgroundMarkdownContentState>()
+        .toList();
     return {
       'run': run,
       'fences': fences ? 1 : 0,
@@ -271,6 +341,25 @@ class _ReplayState extends State<_Replay> with WidgetsBindingObserver {
           ? 1
           : 0,
       'exactFinalDraft': _draft.text == streamingReplayDraft(59, 8) ? 1 : 0,
+      'exactFinalRendered': _renderedExactly(accumulated) ? 1 : 0,
+      'finalRenderLagUs': finalPublication.elapsedMicroseconds,
+      'pendingParses': parsers.where((state) => state.pending).length,
+      'parsesCompleted': parsers.fold<int>(
+        0,
+        (sum, state) => sum + state.parsesCompleted,
+      ),
+      'updatesCoalesced': parsers.fold<int>(
+        0,
+        (sum, state) => sum + state.updatesCoalesced,
+      ),
+      'parserMicros': parsers.fold<int>(
+        0,
+        (sum, state) => sum + state.totalParserMicros,
+      ),
+      'inlineCacheHits': parsers.fold<int>(
+        0,
+        (sum, state) => sum + state.totalCacheHits,
+      ),
       'keyboardStartDp': keyboardStart,
       'keyboardEndDp': keyboardEnd,
       'geometryStable': geometryStable ? 1 : 0,
@@ -281,6 +370,7 @@ class _ReplayState extends State<_Replay> with WidgetsBindingObserver {
               keyboardEnd > 0 &&
               focusHeld &&
               animationEnabled &&
+              _renderedExactly(accumulated) &&
               frames.isNotEmpty
           ? 1
           : 0,
@@ -327,6 +417,7 @@ class _ReplayState extends State<_Replay> with WidgetsBindingObserver {
               child: ValueListenableBuilder<String>(
                 valueListenable: _source,
                 builder: (_, data, _) => ProfileMessage(
+                  key: _message,
                   streaming: true,
                   message: {'role': 'assistant', 'content': data},
                 ),
