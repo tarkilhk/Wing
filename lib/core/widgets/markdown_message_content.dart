@@ -44,6 +44,8 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
   // Retain only this mounted message's rendering. Unrelated stream/activity
   // updates must not split code fences, recreate styles and reparse its prose.
   Widget? _content;
+  List<({Object source, Widget child})> _segments = const [];
+  bool _refreshSegments = true;
   MarkdownStyleSheet? _styleSheet;
   ThemeData? _markdownTheme;
   Map<String, MarkdownElementBuilder>? _markdownBuilders;
@@ -109,6 +111,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
         (widget.onDownloadRemoteFile == null) !=
             (oldWidget.onDownloadRemoteFile == null)) {
       _markdownBuilders = null;
+      _refreshSegments = true;
     }
     if (widget.initialFragment != oldWidget.initialFragment) {
       _scheduleFragment();
@@ -123,6 +126,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     _styleSheet = null;
     _markdownTheme = null;
     _markdownBuilders = null;
+    _refreshSegments = true;
   }
 
   Future<void> _open(BuildContext context, String href) async {
@@ -227,26 +231,36 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     final body = widget.documentPath == null
         ? BlockReusingMarkdownBody.new
         : MarkdownBody.new;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final segment in splitMarkdownCodeBlocks(
-          widget.data,
-          streaming: widget.streaming,
-        ))
-          if (segment is MarkdownCodeBlock)
-            segment
-          else
-            // This is an inline viewport, not the screen edge. Otherwise the
-            // system bottom inset lifts table scrollbars into the last row.
-            MediaQuery.removePadding(
+    final sources = splitMarkdownCodeBlocks(
+      widget.data,
+      streaming: widget.streaming,
+    );
+    final next = <({Object source, Widget child})>[];
+    for (var index = 0; index < sources.length; index++) {
+      final source = sources[index];
+      final previous = index < _segments.length ? _segments[index] : null;
+      // Retain the complete subtree, including code controls and the inherited
+      // wrappers around prose. Heading previews still traverse every segment
+      // to rebuild their document-wide anchor registry.
+      if (!_refreshSegments &&
+          widget.documentPath == null &&
+          previous != null &&
+          _sameMarkdownSegment(previous.source, source)) {
+        next.add(previous);
+        continue;
+      }
+      final child = source is MarkdownCodeBlock
+          ? source
+          // This is an inline viewport, not the screen edge. Otherwise the
+          // system bottom inset lifts table scrollbars into the last row.
+          : MediaQuery.removePadding(
               context: context,
               removeBottom: true,
               child: Theme(
                 data: markdownTheme,
                 child: body(
                   checkboxBuilder: _buildTaskMarker,
-                  data: segment as String,
+                  data: source as String,
                   inlineSyntaxes: widget.deliverables
                       ? _deliverableSyntaxes
                       : null,
@@ -263,11 +277,26 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
                   styleSheet: styleSheet,
                 ),
               ),
-            ),
-      ],
+            );
+      next.add((source: source, child: child));
+    }
+    _segments = next;
+    _refreshSegments = false;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [for (final segment in next) segment.child],
     );
   }
 }
+
+bool _sameMarkdownSegment(Object previous, Object current) =>
+    previous is String && current is String
+    ? previous == current
+    : previous is MarkdownCodeBlock &&
+          current is MarkdownCodeBlock &&
+          previous.code == current.code &&
+          previous.language == current.language &&
+          previous.previewEnabled == current.previewEnabled;
 
 class _DeliverableBuilder extends MarkdownElementBuilder {
   _DeliverableBuilder(this.onOpen, this.onDownload, {required this.maxWidth});

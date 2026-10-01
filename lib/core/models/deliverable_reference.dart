@@ -68,6 +68,31 @@ class HtmlFilePathSyntax extends md.InlineSyntax {
       );
 
   @override
+  bool tryMatch(md.InlineParser parser, [int? startMatchPos]) {
+    final start = startMatchPos ?? parser.pos;
+    final source = parser.source;
+    if (start < 0 || start > source.length) {
+      return super.tryMatch(parser, startMatchPos);
+    }
+    if (start == source.length) return false;
+    final first = source.codeUnitAt(start);
+    final drive =
+        ((first >= 0x41 && first <= 0x5a) ||
+            (first >= 0x61 && first <= 0x7a)) &&
+        start + 1 < source.length &&
+        source.codeUnitAt(start + 1) == 0x3a;
+    // Only /, ~, ., \\ or a drive letter followed by : can start this grammar.
+    if (first != 0x2f &&
+        first != 0x7e &&
+        first != 0x2e &&
+        first != 0x5c &&
+        !drive) {
+      return false;
+    }
+    return super.tryMatch(parser, startMatchPos);
+  }
+
+  @override
   bool onMatch(md.InlineParser parser, Match match) {
     final output = mediaRemoteFileOutput(match[0]!);
     parser.addNode(output == null ? md.Text(match[0]!) : _fileElement(output));
@@ -77,6 +102,26 @@ class HtmlFilePathSyntax extends md.InlineSyntax {
 
 class MediaReferenceSyntax extends md.InlineSyntax {
   MediaReferenceSyntax() : super(mediaReferencePattern, caseSensitive: false);
+
+  @override
+  bool tryMatch(md.InlineParser parser, [int? startMatchPos]) {
+    final start = startMatchPos ?? parser.pos;
+    final source = parser.source;
+    if (start < 0 || start > source.length) {
+      return super.tryMatch(parser, startMatchPos);
+    }
+    if (start == source.length) return false;
+    final first = source.codeUnitAt(start);
+    // MEDIA is case insensitive and may have one opening quote/backtick.
+    if (first != 0x4d &&
+        first != 0x6d &&
+        first != 0x22 &&
+        first != 0x27 &&
+        first != 0x60) {
+      return false;
+    }
+    return super.tryMatch(parser, startMatchPos);
+  }
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {

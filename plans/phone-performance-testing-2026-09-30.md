@@ -178,6 +178,129 @@ a 20-minute native navigation soak and measured input-to-presentation latency.
 These require a later user-arranged window; no overall readiness conclusion or
 new phone-control interval is implied.
 
+## 1 October streaming follow-up: retaining unchanged segments
+
+A matched profile replay isolates the production `ProfileMessage` renderer and
+simultaneous composer updates without app storage, backend traffic or model calls.
+Both APKs use the same fixture, package, certificate and native configuration;
+their only differing archive entry is `lib/arm64-v8a/libapp.so`. The baseline
+renderer is exactly commit `1f6120c`. The candidate retains unchanged complete
+code/prose segments, including their inherited wrappers. Theme, text scale,
+viewport and renderer configuration still invalidate rendering. Document previews
+retain full traversal for heading anchors; changing prose still gets a full parse.
+
+Each replay requests 600 deltas, 60 publications and 120 programmatic draft edits
+over six seconds. Keyboard, foreground, geometry, animation and final-state checks
+must pass. An active production shimmer requests continuous frames. This is a
+technical Markdown stress fixture, including identifiers with underscores, rather
+than a representative sample of every conversation. Draft edits exercise composer
+rendering, not physical IME input-to-presentation latency.
+
+Three valid repetitions per renderer and workload had full native interior ring
+coverage with overlapping polls at a reported 120 Hz. Native intervals require
+both endpoints within actual monotonic replay bounds trimmed 500 ms at each end.
+
+| Workload / renderer | Build p95 across three runs (ms) | Native interval p95 (ms) | Native maximum interval (ms) |
+| --- | --- | --- | --- |
+| Mixed Markdown / baseline | 12.803, 13.714, 10.547 | 24.998, 16.674, 16.671 | 25.012, 25.009, 25.009 |
+| Mixed Markdown / segment reuse | 8.259, 8.167, 5.456 | 16.670, 16.671, 16.668 | 33.335, 25.006, 16.674 |
+| Prose / baseline | 23.152, 22.466, 24.387 | 33.329, 25.007, 33.335 | 41.671, 41.682, 41.673 |
+| Prose / segment reuse | 21.100, 23.465, 21.969 | 25.007, 33.334, 25.013 | 41.680, 41.675, 33.344 |
+
+Returning to the baseline after the candidate restored mixed build p95 to
+12.660 ms, with native p95 24.997 ms and maximum 33.333 ms. Two earlier return
+attempts failed before capture and remain excluded, rather than counted as clean
+runs. A CPU-stack diagnostic was rejected by the VM service before replay;
+no CPU attribution is established by it. Mixed build cost improves, but native
+worst-case gaps are not consistently lower and prose-only cost remains unresolved.
+
+SurfaceFlinger rows describe layer presentation intervals. Upstream source
+establishes compatible monotonic clocks; OEM fence accuracy, possible legacy
+presentation estimates, complete physical refresh observation and correspondence
+to individual Flutter frames remain unproven. Polling and run order can affect
+results. No comparison with September's generated Luna responses is causal.
+
+The original QA APK was restored in place, its data preserved, its process stopped,
+and no QA Recents entry remained. Production was unchanged during this comparison
+and phone control was released. Ignored artifacts are retained under
+`build/streaming-performance-20261001/`, including numeric phone captures,
+`phone-summary.json`, matched APK hashes and `timing-sources.md`.
+
+### Remaining prose work: attachment syntax prechecks
+
+`ProfileMessage` enables deliverable rendering. Its MEDIA and plain HTML-path
+syntaxes previously attempted a regular expression at every candidate inline
+position, including ordinary words and identifiers. Necessary first-character
+checks now reject impossible starts before the regex; match positions, regex
+grammar, conversion, Markdown precedence and complete-document parsing remain
+unchanged. No prefix parsing, background parser or backend change was added.
+
+The new structural regression first failed with 1,407 ordinary-text and 3,799
+technical-text MEDIA probes. Both fixtures now require zero underlying MEDIA and
+HTML-path regex probes. Seven focused tests pass, including exact deliverable
+attributes, every unfinished positive prefix, quoted/space-containing paths,
+reference links, footnotes, table/list content, Unicode/surrogate boundaries,
+explicit match positions and EOF. Independent source review found no blockers.
+
+An alternating-order host JIT diagnostic uses all four production deliverable
+syntaxes at the same 60 no-fence publication positions. All 180 resolved ASTs
+matched the original unguarded oracle. Total parse time fell by 10.3%, 12.2% and
+13.4% across three rounds. These local diagnostics do not establish phone latency;
+the earlier whole-widget host benchmark omitted deliverable syntaxes and must not
+be used to attribute this particular cost. Reports and the probe script are under
+ignored `build/streaming-performance-20261001/deliverable-*`.
+
+Final host validation for both fixes passed 2,666 tests, with 17 opt-in skips,
+and static analysis of `lib test tools/performance` reported no issues. Format
+and whitespace checks passed. Both the matched profile fixture and ordinary
+production release built successfully; signing certificates match the existing
+QA and production installations. The fixture is profile-only and is not the
+production entry point. Source hashes and APK hashes are retained with the
+ignored artifacts. A release attempt using stale generated test-plugin
+registration failed; rerunning normal Flutter release generation succeeded.
+
+### Combined-fix phone comparison
+
+A second user-arranged window collected three fresh baseline and combined-fix
+runs per workload, followed by one baseline-return run per workload. All 14 runs
+passed workload, keyboard, geometry, foreground, animation, exact-state, clock
+and full native-interior coverage checks, at a reported 120 Hz. Matched APKs again
+differ only in `libapp.so`; the fixture and native configuration are unchanged.
+
+| Workload / renderer | Build p95 across three runs (ms) | Native interval p95 (ms) | Native maximum interval (ms) |
+| --- | --- | --- | --- |
+| Mixed Markdown / baseline | 13.295, 14.245, 12.899 | 16.676, 24.999, 16.673 | 25.008, 33.344, 33.345 |
+| Mixed Markdown / both fixes | 7.378, 7.798, 7.687 | 16.672, 16.670, 16.670 | 25.010, 25.006, 25.001 |
+| Prose / baseline | 23.465, 24.671, 24.016 | 33.333, 33.337, 33.337 | 41.686, 41.678, 41.688 |
+| Prose / both fixes | 15.444, 21.528, 23.009 | 24.999, 25.005, 33.333 | 25.005, 33.341, 41.668 |
+
+Mixed build-p95 median fell 42.2% (13.295→7.687 ms), with all three fixed runs
+below all three initial baseline runs. Returning to the baseline restored mixed
+build p95 to 13.164 ms, native p95 16.673 ms and maximum 33.334 ms. This supports
+the repeated mixed rendering-cost reduction. Native p95 was usually already
+16.67 ms, so it is not evidence of a general increase to 120 presented frames/sec.
+
+Prose's median build p95 was 10.4% lower (24.016→21.528 ms), but the improvement
+shrank across runs. The returned original prose renderer measured build p95
+21.563 ms, native p95 25.007 ms and maximum 33.344 ms, similar to the middle fixed
+run. Consequently the phone result does not isolate a durable prose speedup.
+The three initial prose cores had 84 intervals ≥32 ms over 15.105 s, compared with
+40 over 15.123 s with both fixes; this is an observed series difference, subject
+to order/background/temperature variation, rather than proof of causality.
+
+All preflight charging flags were false. Temperature was 32.8–33.0°C before
+baseline runs and 33.3–34.1°C before fixed runs. Independent host review agreed
+with validity and the narrower conclusions. No interval ≥50 ms occurred in
+either arm; the original September 50 ms symptom was not reproduced by this
+fixture. One fixed prose run still reached 41.668 ms, and whole-prose parsing
+remains. These changes reduce rendering work without an all-clear performance
+or actual IME-latency verdict.
+
+Numeric results are retained in ignored `window2-summary.json` and
+`phone/window2-*/`, including per-run preflight records. The final signed
+production APK is `8d6ebe38af428b8dd9043a119b6ff333ec52559c33d13076e1831c974890ec37`;
+the deployment/restoration checkpoint is recorded separately after installation.
+
 ## Evidence
 
 Ignored reports under `build/phone-performance/run-20260930/`:
