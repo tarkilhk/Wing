@@ -1,9 +1,42 @@
+import 'dart:collection';
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
+
+class _ReadingMessage extends MapBase<String, dynamic> {
+  final _data = <String, dynamic>{
+    'id': 1,
+    'role': 'assistant',
+    'content': 'Saved answer',
+  };
+  int contentReads = 0;
+
+  @override
+  dynamic operator [](Object? key) {
+    if (key == 'content') contentReads++;
+    return _data[key];
+  }
+
+  @override
+  void operator []=(String key, dynamic value) => _data[key] = value;
+
+  @override
+  Iterable<String> get keys => _data.keys;
+
+  @override
+  bool containsKey(Object? key) => _data.containsKey(key);
+
+  @override
+  void clear() => _data.clear();
+
+  @override
+  dynamic remove(Object? key) => _data.remove(key);
+}
 
 void main() {
   Future<ProfileWorkspaceController> initialize(Host host) async {
@@ -17,6 +50,71 @@ void main() {
     await controller.initialize();
     return controller;
   }
+
+  test('streaming text does not prepare unchanged reading history', () async {
+    final host = Host();
+    final controller = await initialize(host);
+    addTearDown(controller.dispose);
+    final chat = await controller.createChat();
+    host.event('a', 'message.start');
+    // The controller uses wall time to rate-limit reading snapshots. Cross its
+    // interval so this test catches a snapshot triggered by streaming alone.
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
+    // Flush pending durable changes from initialization before observing an
+    // unchanged history. Subsequent text must not mark it dirty again.
+    host.event('a', 'message.delta', {'text': ''});
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
+    final saved = _ReadingMessage();
+    chat.messages = [saved];
+
+    host.event('a', 'message.delta', {'text': 'First'});
+    host.event('a', 'message.delta', {'text': ' second'});
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    host.event('a', 'reasoning.delta', {'text': 'Thinking'});
+    host.event('a', 'reasoning.delta', {'text': ' more'});
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+
+    expect(chat.streaming, 'First second');
+    expect(chat.reasoning, 'Thinking more');
+    expect(saved.contentReads, 0);
+
+    // An actual saved-message change must still refresh offline reading.
+    host.event('a', 'message.interim');
+    expect(saved.contentReads, greaterThan(0));
+    final preferences = await SharedPreferences.getInstance();
+    final storageKey = 'workspace_reading_v1_streaming-presentation';
+    expect(preferences.getString(storageKey), contains('First second'));
+  });
+
+  test(
+    'interim reading is saved while the next answer keeps streaming',
+    () async {
+      final host = Host();
+      final controller = await initialize(host);
+      addTearDown(controller.dispose);
+      await controller.createChat();
+      host.event('a', 'message.start');
+      host.event('a', 'message.delta', {'text': 'Saved interim answer'});
+      host.event('a', 'message.interim');
+      for (var i = 0; i < 6; i++) {
+        host.event('a', 'message.delta', {'text': 'Unfinished live answer'});
+        await Future<void>.delayed(const Duration(milliseconds: 220));
+      }
+
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.reload();
+      final encoded = preferences.getString(
+        'workspace_reading_v1_streaming-presentation',
+      )!;
+      final snapshot = jsonDecode(encoded) as Map;
+      final messages = snapshot['profiles'][0]['chats'][0]['messages'] as List;
+      expect(
+        messages.map((row) => row['content']),
+        contains('Saved interim answer'),
+      );
+      expect(encoded, isNot(contains('Unfinished live answer')));
+    },
+  );
 
   testWidgets('text ingestion is immediate and phase changes publish at once', (
     tester,

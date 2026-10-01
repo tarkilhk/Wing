@@ -496,6 +496,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   late final ServerConnectionStatus connectionStatus;
   late final WorkspaceSnapshotStore _snapshots;
   DateTime? _lastSnapshot;
+  bool _readingSnapshotDirty = false;
   ProfileSessionKey? _notificationTarget;
   ProfileChat? get notificationChat =>
       _resources[_notificationTarget?.workspace]?.chats[_notificationTarget
@@ -1118,7 +1119,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
-  void _changed({ProfileSessionKey? browserChat}) {
+  void _changed({ProfileSessionKey? browserChat, bool saveReading = true}) {
     if (_closed) return;
     // Every general update already exposes the latest ingested text. Cancel
     // deferred presentation, including other chats' browser row invalidations.
@@ -1134,8 +1135,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
     }
     _scheduleRetention();
-    if (_lastSnapshot == null ||
-        DateTime.now().difference(_lastSnapshot!).inSeconds >= 1) {
+    if (saveReading) _readingSnapshotDirty = true;
+    // Later stream presentation can flush a recent durable change, but never
+    // makes unchanged history dirty or needs its own persistence timer.
+    if (_readingSnapshotDirty &&
+        (_lastSnapshot == null ||
+            DateTime.now().difference(_lastSnapshot!).inSeconds >= 1)) {
       unawaited(_saveReadingSnapshot());
     }
     for (final chat in notificationChats) {
@@ -1154,7 +1159,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   void _streamChanged(ProfileChat chat, {required bool immediate}) {
     if (immediate || _streamPresentationTimer == null) {
-      _changed(browserChat: chat.key);
+      // Live text and reasoning are not part of the reading cache. Saving the
+      // unchanged history here repeats preparation throughout a long response.
+      _changed(browserChat: chat.key, saveReading: false);
       _startStreamPresentationWindow();
     } else {
       _pendingStreamChats.add(chat.key);
@@ -1171,7 +1178,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       final chat = _pendingStreamChats.length == 1
           ? _pendingStreamChats.single
           : null;
-      _changed(browserChat: chat);
+      _changed(browserChat: chat, saveReading: false);
       _startStreamPresentationWindow();
     });
   }
@@ -1217,6 +1224,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   Future<void> _saveReadingSnapshot() async {
+    _readingSnapshotDirty = false;
     _lastSnapshot = DateTime.now();
     try {
       await _snapshots.write({
@@ -1252,16 +1260,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
                             ? chat.messages.length - 60
                             : 0,
                       ))
-                        if (jsonEncode(row).length < 32768)
-                          {
-                            for (final key in [
-                              'id',
-                              'role',
-                              'content',
-                              'timestamp',
-                            ])
-                              if (row.containsKey(key)) key: row[key],
-                          },
+                        // Capture only reading fields. The store filters and
+                        // encodes large messages on its worker; do not encode
+                        // entire live records here just to measure their size.
+                        {
+                          for (final key in [
+                            'id',
+                            'role',
+                            'content',
+                            'timestamp',
+                          ])
+                            if (row.containsKey(key)) key: row[key],
+                        },
                     ],
                   },
               ],
@@ -1270,6 +1280,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       });
     } catch (_) {
       /* Reading snapshots must never block the live workspace. */
+      if (!_closed) _readingSnapshotDirty = true;
     }
   }
 

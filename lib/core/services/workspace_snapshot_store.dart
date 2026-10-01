@@ -68,6 +68,35 @@ bool _isSmallSnapshot(Object? value) {
 }
 
 String _encodeSnapshot(Map<String, dynamic> snapshot) {
+  // Apply the per-message limit at the encoding boundary, after large inputs
+  // have moved to the worker. Copy the containers so the small synchronous path
+  // also leaves the caller's history untouched.
+  snapshot = {
+    ...snapshot,
+    if (snapshot['profiles'] is List)
+      'profiles': [
+        for (final profile in snapshot['profiles'] as List)
+          if (profile is Map && profile['chats'] is List)
+            {
+              ...profile,
+              'chats': [
+                for (final chat in profile['chats'] as List)
+                  if (chat is Map && chat['messages'] is List)
+                    {
+                      ...chat,
+                      'messages': [
+                        for (final row in chat['messages'] as List)
+                          if (jsonEncode(row).length < 32768) row,
+                      ],
+                    }
+                  else
+                    chat,
+              ],
+            }
+          else
+            profile,
+      ],
+  };
   const byteLimit = 2 * 1024 * 1024;
   final encoded = jsonEncode(snapshot);
   var bytes = utf8.encode(encoded).length;
