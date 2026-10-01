@@ -1,6 +1,9 @@
-// Profile-only full-app observer. All mutations target chats created here.
+// Profile-only full-app observer. Mutations target explicitly named QA chats,
+// created here or manually created and adopted after selecting Luna.
 // flutter build apk --profile -t tools/performance/live_stream.dart
 // No credentials, addresses, profile names or transcript text leave this tool.
+// Stop a capture before native navigation. After reopening Wing, adopt the
+// selected QA chat again; retained slots do not own replacement controllers.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
@@ -12,8 +15,8 @@ import 'package:wing/core/models/answer_versions.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
-import 'package:wing/core/widgets/chat_intelligence_picker.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
+import 'package:wing/core/widgets/model_chooser.dart';
 import 'package:wing/main.dart' as app;
 
 const _prompts = {
@@ -49,6 +52,28 @@ ProfileWorkspaceController _controller() {
   ).map((e) => e.widget).whereType<ProfileWorkspaceScreen>().single.controller;
 }
 
+ProfileChat? _visibleChat(ProfileWorkspaceController controller) =>
+    controller.notificationChat ?? controller.current?.chat;
+
+List<double>? _composerBounds() {
+  final root = WidgetsBinding.instance.rootElement;
+  if (root == null) return null;
+  for (final element in _walk(root)) {
+    if (element.widget.key != const Key('profile-message-composer')) continue;
+    final box = element.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return null;
+    final origin = box.localToGlobal(Offset.zero);
+    final ratio = View.of(element).devicePixelRatio;
+    return [
+      origin.dx * ratio,
+      origin.dy * ratio,
+      box.size.width * ratio,
+      box.size.height * ratio,
+    ];
+  }
+  return null;
+}
+
 class _Owned {
   _Owned(this.controller, this.chat);
   final ProfileWorkspaceController controller;
@@ -73,6 +98,15 @@ class _Owned {
       mode == 'mixed' ? 'Wing mixed QA complete.' : 'Wing prose QA complete.';
 }
 
+bool _isSelected(_Owned item) {
+  try {
+    return identical(_controller(), item.controller) &&
+        identical(_visibleChat(item.controller), item.chat);
+  } catch (_) {
+    return false;
+  }
+}
+
 class _Measurement {
   _Measurement(this.owned) {
     timer = Timer.periodic(const Duration(milliseconds: 20), (_) => sample());
@@ -86,7 +120,7 @@ class _Measurement {
   int? firstTextUs, firstReadyUs, completedUs;
   int renderedCharacters = 0, pendingParses = 0;
   bool renderReady = false;
-  bool finalSentinelVisible = false, latestResponseMounted = false;
+  bool finalSentinelMounted = false, latestResponseMounted = false;
   int? latestSourceObservedUs, latestReadyLagUs, finalReadyUs;
   int? _lastReadySourceObservedUs;
   int _lastRenderSample = 0;
@@ -108,12 +142,11 @@ class _Measurement {
     renderedCharacters = 0;
     pendingParses = 0;
     renderReady = false;
-    finalSentinelVisible = false;
+    finalSentinelMounted = false;
     latestResponseMounted = false;
     final root = WidgetsBinding.instance.rootElement;
-    if (root != null &&
-        maximumLength > 0 &&
-        owned.controller.current?.chat == chat) {
+    final selected = _isSelected(owned);
+    if (root != null && maximumLength > 0 && selected) {
       final source = chat.streaming.isNotEmpty
           ? chat.streaming
           : owned.finalResponse;
@@ -141,8 +174,8 @@ class _Measurement {
               (s) => !s.pending && s.renderedSource == s.widget.data,
             );
         if (renderedCharacters > 0) firstReadyUs ??= now;
-        finalSentinelVisible =
-            finalSentinelVisible ||
+        finalSentinelMounted =
+            finalSentinelMounted ||
             _walk(body).any(
               (e) =>
                   e.widget is RichText &&
@@ -169,7 +202,7 @@ class _Measurement {
       'pendingParses': pendingParses,
       'renderReady': renderReady,
       'draftCharacters': chat.composerText.length,
-      'selected': owned.controller.current?.chat == chat,
+      'selected': selected,
       'busy': chat.busy,
       'latestResponseMounted': latestResponseMounted,
     });
@@ -205,7 +238,7 @@ class _Measurement {
     'completionToReadyObservedUs': completedUs == null || finalReadyUs == null
         ? null
         : finalReadyUs! - completedUs!,
-    'finalSentinelVisible': finalSentinelVisible,
+    'finalSentinelMounted': finalSentinelMounted,
     'samples': samples,
     'frames': frames,
   };
@@ -225,43 +258,52 @@ void main() {
     return owned[slot];
   }
 
-  Map<String, Object?> snapshot(_Owned item) => {
-    'selected': item.controller.current?.chat == item.chat,
-    'luna': RegExp(r'^gpt-\d+\.\d+-luna$').hasMatch(item.chat.model ?? ''),
-    'busy': item.chat.busy,
-    'status': item.chat.status.name,
-    'sourceCharacters': item.chat.streaming.length,
-    'savedMessages': item.chat.messages.length,
-    'draftCharacters': item.chat.composerText.length,
-    'draftPreserved': item.preservedDraft == null
-        ? null
-        : item.preservedDraft == item.chat.composerText,
-    'chatError': item.chat.error != null,
-    'controllerError': item.controller.error != null,
-    'toolActivityCount': item.chat.toolActivities.length,
-    'subagentCount': item.chat.subagents.length,
-    'dispatching': item.dispatching,
-    'dispatchFailed': item.dispatchFailed,
-    'submissions': item.submissions,
-    'finalResponseCharacters': item.finalResponse?.length ?? 0,
-    'finalResponseComplete':
-        item.mode != null &&
-        item.finalResponse?.trimRight().endsWith(item.sentinel) == true,
-    'renderReady': measurement?.owned == item ? measurement?.renderReady : null,
-    'pendingParses': measurement?.owned == item
-        ? measurement?.pendingParses
-        : null,
-    'renderedProseCharacters': measurement?.owned == item
-        ? measurement?.renderedCharacters
-        : null,
-    'finalSentinelVisible': measurement?.owned == item
-        ? measurement?.finalSentinelVisible
-        : null,
-  };
+  Map<String, Object?> snapshot(_Owned item) {
+    final selected = _isSelected(item);
+    return {
+      'selected': selected,
+      'luna': RegExp(r'^gpt-\d+\.\d+-luna$').hasMatch(item.chat.model ?? ''),
+      'busy': item.chat.busy,
+      'status': item.chat.status.name,
+      'sourceCharacters': item.chat.streaming.length,
+      'savedMessages': item.chat.messages.length,
+      'draftCharacters': item.chat.composerText.length,
+      'draftPreserved': item.preservedDraft == null
+          ? null
+          : item.preservedDraft == item.chat.composerText,
+      'chatError': item.chat.error != null,
+      'controllerError': item.controller.error != null,
+      'toolActivityCount': item.chat.toolActivities.length,
+      'subagentCount': item.chat.subagents.length,
+      'composerBoundsPx': selected ? _composerBounds() : null,
+      'dispatching': item.dispatching,
+      'dispatchFailed': item.dispatchFailed,
+      'submissions': item.submissions,
+      'finalResponseCharacters': item.finalResponse?.length ?? 0,
+      'finalResponseComplete':
+          item.mode != null &&
+          item.finalResponse?.trimRight().endsWith(item.sentinel) == true,
+      'renderReady': measurement?.owned == item
+          ? measurement?.renderReady
+          : null,
+      'pendingParses': measurement?.owned == item
+          ? measurement?.pendingParses
+          : null,
+      'renderedProseCharacters': measurement?.owned == item
+          ? measurement?.renderedCharacters
+          : null,
+      'finalSentinelMounted': measurement?.owned == item
+          ? measurement?.finalSentinelMounted
+          : null,
+    };
+  }
+
   WidgetsBinding.instance.addTimingsCallback((frames) {
     measurement?.timings(frames);
   });
   for (final action in [
+    'ready',
+    'adopt',
     'prepare',
     'open',
     'stage',
@@ -286,44 +328,111 @@ void main() {
         );
       }
       if (mutation) mutating = true;
+      var stage = 'controller';
       try {
+        if (action == 'ready' || action == 'adopt') {
+          final controller = _controller();
+          final chat = _visibleChat(controller);
+          final knownTitle =
+              chat?.title.startsWith('Wing streaming stress QA ') == true;
+          final luna = RegExp(
+            r'^gpt-\d+\.\d+-luna$',
+          ).hasMatch(chat?.model ?? '');
+          if (action == 'ready') {
+            return developer.ServiceExtensionResponse.result(
+              jsonEncode({
+                'initialized': controller.initialized,
+                'currentProfileExists': controller.current != null,
+                'currentChatExists': chat != null,
+                'knownOwnedTitle': knownTitle,
+                'luna': luna,
+                'model': chat?.model,
+                'provider': chat?.provider,
+                'composerBoundsPx': _composerBounds(),
+              }),
+            );
+          }
+          stage = 'adopt';
+          if (chat == null || !knownTitle || !luna) {
+            throw StateError('Select a named QA Luna chat');
+          }
+          var slot = owned.indexWhere((item) => identical(item.chat, chat));
+          if (slot < 0) {
+            owned.add(_Owned(controller, chat));
+            slot = owned.length - 1;
+          }
+          return developer.ServiceExtensionResponse.result(
+            jsonEncode({'slot': slot, ...snapshot(owned[slot])}),
+          );
+        }
         if (action == 'prepare') {
           final controller = _controller();
           if (!controller.initialized ||
               controller.current == null ||
-              controller.current!.chat?.busy == true) {
+              _visibleChat(controller)?.busy == true) {
             throw StateError('Wait for the current chat');
           }
-          final chat = await controller.createChat();
-          final item = _Owned(controller, chat);
-          owned.add(item);
-          final options = await controller.loadIntelligence(chat);
-          final choices = options.choices
-              .where(
-                (c) =>
-                    RegExp(r'^gpt-\d+\.\d+-luna$').hasMatch(c.model) &&
-                    (parameters['model'] == null ||
-                        c.model == parameters['model']) &&
-                    (parameters['provider'] == null ||
-                        c.provider == parameters['provider']),
-              )
-              .toList();
+          final resource = controller.current!;
+          stage = 'read_options';
+          final choices =
+              ModelChoice.fromOptions(
+                    await resource.gateway.read('model/options'),
+                  )
+                  .where(
+                    (c) =>
+                        RegExp(r'^gpt-\d+\.\d+-luna$').hasMatch(c.model) &&
+                        (parameters['model'] == null ||
+                            c.model == parameters['model']) &&
+                        (parameters['provider'] == null ||
+                            c.provider == parameters['provider']),
+                  )
+                  .toList();
           if (choices.length != 1) throw StateError('Ambiguous Luna route');
-          final applied = await controller.setIntelligence(
-            chat,
-            ChatIntelligenceSelection(
-              choice: choices.single,
-              reasoningEffort: 'low',
-            ),
-            confirmModelChange: (_) async => true,
-          );
-          if (!applied) throw StateError('Luna was not selected');
+          final choice = choices.single;
           final title =
               'Wing streaming stress QA ${DateTime.now().millisecondsSinceEpoch}';
-          await controller.current!.gateway.call('session.title', {
-            'session_id': chat.runtimeId,
+          // Explicit synthetic history persists this owned QA session before
+          // opening it; no model call or mutation of profile defaults occurs.
+          stage = 'create';
+          final created = await resource.gateway.call('session.create', {
+            'source': 'desktop',
+            'close_on_disconnect': false,
+            'cwd_explicit': false,
+            'model': choice.model,
+            'provider': choice.provider,
+            'reasoning_effort': 'low',
+            'fast': false,
             'title': title,
+            'messages': [
+              {
+                'role': 'user',
+                'content': 'Wing performance QA. No tools or delegation.',
+              },
+              {'role': 'assistant', 'content': 'Ready.'},
+            ],
           });
+          final info = created['info'];
+          final stored = created['stored_session_id'];
+          stage = 'verify_create';
+          if (stored is! String ||
+              stored.isEmpty ||
+              info is! Map ||
+              info['model'] != choice.model ||
+              info['provider'] != choice.provider) {
+            throw StateError('Creation did not confirm Luna');
+          }
+          stage = 'open';
+          final chat = await controller.openSession(
+            ProfileSessionKey(resource.scope, stored),
+          );
+          stage = 'verify_resume';
+          if (chat == null ||
+              chat.model != choice.model ||
+              chat.provider != choice.provider) {
+            throw StateError('Resume did not confirm Luna');
+          }
+          final item = _Owned(controller, chat);
+          owned.add(item);
           chat.title = title;
           return developer.ServiceExtensionResponse.result(
             jsonEncode({
@@ -335,13 +444,19 @@ void main() {
           );
         }
         final item = selected(parameters);
+        if ({'open', 'stage', 'submit', 'cancel'}.contains(action)) {
+          stage = 'mounted_controller';
+          if (!identical(_controller(), item.controller)) {
+            throw StateError('Re-adopt the QA chat after native navigation');
+          }
+        }
         if (action == 'open') await item.controller.openSession(item.chat.key);
         if (action == 'stage' || action == 'submit') {
           final prompt = _prompts[parameters['mode']];
           if (prompt == null ||
               item.chat.busy ||
               item.dispatching ||
-              item.controller.current?.chat != item.chat ||
+              _visibleChat(item.controller) != item.chat ||
               item.chat.composerText.isNotEmpty ||
               item.chat.attachments.isNotEmpty ||
               item.chat.queuedPrompts.isNotEmpty ||
@@ -349,6 +464,9 @@ void main() {
             throw StateError('Owned Luna chat must be selected and empty');
           }
           await item.controller.updateDraft(item.chat, prompt);
+          if (!_isSelected(item)) {
+            throw StateError('QA chat changed while staging the prompt');
+          }
           item.mode = parameters['mode'];
           item.responseBaseCount = item.chat.messages.length;
           item.preservedDraft = null;
@@ -371,6 +489,9 @@ void main() {
         if (action == 'cancel') await item.controller.stop(item.chat);
         if (action == 'markDraft') item.preservedDraft = item.chat.composerText;
         if (action == 'start') {
+          if (!_isSelected(item)) {
+            throw StateError('Select and adopt the mounted QA chat');
+          }
           measurement?.timer.cancel();
           measurement = _Measurement(item);
         }
@@ -391,7 +512,7 @@ void main() {
       } catch (_) {
         return developer.ServiceExtensionResponse.error(
           developer.ServiceExtensionResponse.extensionError,
-          'Live QA operation rejected; verify the owned slot and app readiness.',
+          'Live QA operation rejected at $stage.',
         );
       } finally {
         if (mutation) mutating = false;
