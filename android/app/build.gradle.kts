@@ -107,7 +107,7 @@ android {
            }
        }
        getByName("profile") {
-           // AOT performance builds must upgrade the separate Dev app, never
+           // AOT performance builds must upgrade the separate Perf QA app, never
            // replace the user's installed release or its saved connections.
            applicationIdSuffix = ".perfqa"
            versionNameSuffix = "-perfqa"

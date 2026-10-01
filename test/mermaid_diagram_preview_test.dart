@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/widgets/web_output_preview.dart';
 import 'package:wing/core/widgets/markdown_code_block.dart';
 import 'package:wing/core/widgets/profile_message.dart';
+import 'helpers/pump_markdown_widget.dart';
 
 void main() {
   test('only complete non-streaming Mermaid blocks offer rendering', () {
@@ -71,7 +72,7 @@ void main() {
           );
         });
         const source = 'graph TD\nA[Plan] --> B[Deliver]\n';
-        await tester.pumpWidget(
+        await tester.pumpMarkdownWidget(
           MaterialApp(
             theme: ThemeData.dark(),
             builder: (context, child) => MediaQuery(

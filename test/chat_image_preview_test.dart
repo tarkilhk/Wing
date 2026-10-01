@@ -3,12 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/widgets/chat_image_preview.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
+import 'helpers/pump_markdown_widget.dart';
 
 void main() {
   testWidgets('image preview opens on tap and returns to the conversation', (
     tester,
   ) async {
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       const MaterialApp(
         home: Scaffold(
           body: ProfileMessage(

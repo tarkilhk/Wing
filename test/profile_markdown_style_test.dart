@@ -7,6 +7,8 @@ import 'package:wing/core/theme/profile_markdown_style.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 
+import 'helpers/pump_markdown_widget.dart';
+
 const sample =
     '## Keep the review focused\n\n'
     'The landing page is the current review. Other routes are **future work**.\n\n'
@@ -95,7 +97,7 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         final theme = profileWorkspaceTheme(ThemeData(brightness: brightness));
-        await tester.pumpWidget(
+        await tester.pumpMarkdownWidget(
           MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: theme,

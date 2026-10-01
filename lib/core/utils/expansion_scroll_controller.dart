@@ -4,7 +4,14 @@ import '../widgets/anchored_expansion_tile.dart';
 
 /// Corrects disclosure movement during layout, before a frame is painted.
 class ExpansionScrollController extends ScrollController {
-  ExpansionScrollController({super.initialScrollOffset});
+  ExpansionScrollController({
+    super.initialScrollOffset,
+    bool restoreInitialOffset = false,
+  }) : _restoringInitialOffset = restoreInitialOffset;
+
+  bool _restoringInitialOffset;
+
+  void finishInitialOffsetRestoration() => _restoringInitialOffset = false;
 
   ExpansionAnchorBox? _anchor;
   double _pendingHeight = 0;
@@ -102,6 +109,16 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
 
   @override
   bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
+    if (controller._restoringInitialOffset) {
+      final target = controller.initialScrollOffset.clamp(
+        minScrollExtent,
+        maxScrollExtent,
+      );
+      if ((target - pixels).abs() > 0.01) {
+        correctPixels(target);
+        return false;
+      }
+    }
     final reader =
         controller._readerReplacement?.call() ?? controller._readerAnchor;
     controller._readerAnchor = null;

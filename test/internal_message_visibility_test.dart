@@ -10,6 +10,7 @@ import 'package:wing/core/widgets/chat_find_sheet.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'helpers/pump_markdown_widget.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_history_fixture.dart';
@@ -276,6 +277,7 @@ void main() {
       expect(find.textContaining('Action needed'), findsNothing);
       await tester.tap(find.text('Output'));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       expect(
         find.textContaining('Action needed: check failed'),
         findsOneWidget,
@@ -320,6 +322,7 @@ void main() {
       expect(find.text('First useful result'), findsNothing);
       await tester.tap(find.text('View result'));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       expect(find.textContaining('First useful result'), findsOneWidget);
       expect(find.textContaining('Private instructions'), findsNothing);
       expect(find.textContaining('private goal'), findsNothing);

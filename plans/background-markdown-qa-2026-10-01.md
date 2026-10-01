@@ -109,8 +109,10 @@ it restores the VM profiler flag and exports no private service URLs/chat text.
 Numeric phone summaries and cleanup evidence are under ignored
 `build/background-markdown/phone/`.
 
-Before production promotion: repeat the matched phone runs after stabilizing
-cold-start IME setup; exercise real keyboard input during a live Hermes stream
-using **Luna only**; assess mixed fenced-message overhead. No new battery result
-or worker CPU attribution is claimed. Keep the experiment in QA until those
-checks establish acceptable responsiveness and rendering latency.
+The user authorized production promotion on 2026-10-01. Background parsing,
+including the guard and inline cache, is now the default renderer; explicit
+benchmark variants remain available for matched comparisons. Follow-up phone
+testing will exercise real keyboard input during live Hermes streams using
+**Luna only**, including long existing chats and mixed fenced messages. The QA
+measurements above do not establish live-keyboard responsiveness, a new battery
+result, or worker CPU attribution.

@@ -61,16 +61,24 @@ void main() {
         ),
       );
       await tester.pumpWidget(host('A'));
+      final state = tester.state<BackgroundMarkdownContentState>(
+        find.byType(BackgroundMarkdownContent),
+      );
+      expect(state.pending, isTrue);
       jobs.first.completeError(StateError('Injected failure'));
       await tester.pump();
       await tester.pump();
       expect(find.byType(StudioError), findsOneWidget);
+      // A terminal failure must not keep restoration or test waiters pending.
+      expect(state.pending, isFalse);
       await tester.pumpWidget(host('AB'));
+      expect(state.pending, isTrue);
       jobs.last.complete(const MarkdownParseResult([], 1, 0, 1));
       await tester.pump();
       await tester.pump();
       expect(find.text('AB'), findsOneWidget);
       expect(find.byType(StudioError), findsNothing);
+      expect(state.pending, isFalse);
       await tester.pumpWidget(host('ABC'));
       await tester.pumpWidget(const SizedBox());
       jobs.last.complete(const MarkdownParseResult([], 1, 0, 1));

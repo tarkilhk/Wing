@@ -1,9 +1,10 @@
-/// Benchmark variants exist only on the isolated QA branch.
+/// Background parsing is the production default. Explicit benchmark variants
+/// allow matched performance comparisons against individual optimizations.
 enum MarkdownQaVariant { baseline, guard, cache, background }
 
 MarkdownQaVariant get markdownQaVariant => switch (const String.fromEnvironment(
   'WING_QA_MARKDOWN_VARIANT',
-  defaultValue: 'baseline',
+  defaultValue: 'background',
 )) {
   'baseline' => MarkdownQaVariant.baseline,
   'guard' => MarkdownQaVariant.guard,

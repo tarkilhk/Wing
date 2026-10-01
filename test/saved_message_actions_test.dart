@@ -273,7 +273,10 @@ void main() {
     expect(find.text('Corrected followup'), findsOneWidget);
     expect(find.byKey(const ValueKey('edit-message-error')), findsOneWidget);
     expect(
-      find.text('Hermes did not accept the edited message.'),
+      find.descendant(
+        of: find.byKey(const ValueKey('edit-message-error')),
+        matching: find.text('Hermes did not accept the edited message.'),
+      ),
       findsOneWidget,
     );
   });

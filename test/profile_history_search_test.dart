@@ -6,6 +6,7 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'support/profile_history_fixture.dart';
+import 'helpers/pump_markdown_widget.dart';
 
 void main() {
   late ProfileHistoryFixture host;
@@ -39,6 +40,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );
+    await tester.pumpAndSettle();
+    await tester.settleMarkdown();
     await tester.pumpAndSettle();
   }
 
@@ -207,6 +210,8 @@ void main() {
       final list = find.byKey(const ValueKey('profile-transcript'));
       await tester.drag(list, const Offset(0, 360));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
+      await tester.pumpAndSettle();
       final visible =
           find
                   .byType(SelectableText)
@@ -222,17 +227,76 @@ void main() {
       final before = tester.getTopLeft(find.text(text)).dy;
       await controller.loadOlderMessages(chat);
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
+      await tester.pumpAndSettle();
       expect(tester.getTopLeft(find.text(text)).dy, closeTo(before, 1));
       chat.streaming = List.filled(12, 'Streaming line\n').join();
       controller.clearSearch(); // Publishes the same chat with a growing tail.
+      await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       await tester.pumpAndSettle();
       expect(tester.getTopLeft(find.text(text)).dy, closeTo(before, 2));
       final position = chat.historyScrollOffset;
       controller.showList();
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
+      await tester.pumpAndSettle();
       await open();
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
+      await tester.pumpAndSettle();
       expect(chat.historyScrollOffset, closeTo(position, 2));
+      final restoredTop = tester.getTopLeft(find.text(text)).dy;
+      chat.streaming += List.filled(12, 'More streaming line\n').join();
+      controller.clearSearch();
+      await tester.pumpAndSettle();
+      await tester.settleMarkdown();
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(find.text(text)).dy, closeTo(restoredTop, 2));
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'a sparse long answer restores its offset after initial empty Markdown',
+    (tester) async {
+      final chat = await open();
+      chat.messages = [
+        {
+          'id': 620,
+          'role': 'assistant',
+          'content': List.generate(
+            80,
+            (index) =>
+                'Paragraph $index has **formatted text** and more words.',
+          ).join('\n\n'),
+        },
+      ];
+      await show(tester);
+      final scroll = find
+          .descendant(
+            of: find.byKey(const ValueKey('profile-transcript')),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      tester.state<ScrollableState>(scroll).position.jumpTo(1000);
+      await tester.pumpAndSettle();
+      await tester.settleMarkdown();
+      final saved = chat.historyScrollOffset;
+      expect(saved, closeTo(1000, 1));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(
+        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      );
+      // Temporary empty message bodies must not overwrite the saved target.
+      expect(chat.historyScrollOffset, closeTo(saved, 1));
+      await tester.settleMarkdown();
+      await tester.pumpAndSettle();
+      expect(
+        tester.state<ScrollableState>(scroll).position.pixels,
+        closeTo(saved, 1),
+      );
+      expect(chat.historyScrollOffset, closeTo(saved, 1));
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
@@ -246,14 +310,22 @@ void main() {
       await tester.enterText(find.byType(TextField), 'needle');
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
+      await tester.pumpAndSettle();
       expect(host.reads.where((r) => r.$1 == 'sessions/search').length, 2);
       expect(find.text('personal archive match'), findsOneWidget);
       expect(find.textContaining('Archived · needle'), findsWidgets);
       await tester.tap(find.byKey(const ValueKey('chat-filter-profile')));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('chat-menu-work')));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       await tester.pumpAndSettle();
       expect(find.text('personal archive match'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());

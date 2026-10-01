@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 
+import 'helpers/pump_markdown_widget.dart';
+
 const _capture = bool.fromEnvironment('STUDIO_REVIEW');
 const _frame = ValueKey('timestamp-frame');
 final _date = DateTime(2026, 9, 15, 14, 7);
@@ -39,7 +41,7 @@ void main() {
   }) async {
     await tester.binding.setSurfaceSize(const Size(320, 640));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       RepaintBoundary(
         key: _frame,
         child: MaterialApp(

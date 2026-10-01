@@ -5,6 +5,7 @@ import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/widgets/chat_find_sheet.dart';
+import 'helpers/pump_markdown_widget.dart';
 
 import 'support/profile_history_fixture.dart';
 
@@ -107,6 +108,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('View in chat'));
     await tester.pumpAndSettle();
+    await tester.settleMarkdown();
 
     final chat = controller.current!.chat!;
     expect(find.text('Search result'), findsOneWidget);
@@ -118,6 +120,7 @@ void main() {
 
     await tester.tap(find.text('Back to latest'));
     await tester.pumpAndSettle();
+    await tester.settleMarkdown();
     expect(find.text('Search result'), findsNothing);
     expect(find.text('Saved /srv/latest.pdf'), findsOneWidget);
     expect(chat.historyScrollOffset, 0);
@@ -141,6 +144,7 @@ void main() {
     chat.historyGeneration++;
     await tester.tap(find.text('View in chat'));
     await tester.pumpAndSettle();
+    await tester.settleMarkdown();
     expect(find.text('Search result'), findsNothing);
   });
 

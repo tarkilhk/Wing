@@ -12,6 +12,7 @@ import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'support/profile_actions_fixture.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
+import 'helpers/pump_markdown_widget.dart';
 
 void main() {
   late ProfileActionsFixture host;
@@ -51,7 +52,7 @@ void main() {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       MaterialApp(
         theme: wingTheme(Brightness.light),
         builder: (context, child) => MediaQuery(

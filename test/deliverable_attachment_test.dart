@@ -12,6 +12,8 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/deliverable_attachment.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 
+import 'helpers/pump_markdown_widget.dart';
+
 const reportPath =
     '/home/tarkil/projects/memory-maintenance/evaluation/FULL_BANK_ANALYSIS.md';
 const htmlReportPath =
@@ -73,7 +75,7 @@ void main() {
           null,
         ),
       );
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         message(
           source,
           open: (output) async => opened = output.path,
@@ -127,7 +129,7 @@ void main() {
         null,
       ),
     );
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       message(source, open: (output) async => opened.add(output.path!)),
     );
     expect(find.byType(DeliverableAttachment), findsNWidgets(2));
@@ -182,7 +184,7 @@ void main() {
   for (final entry in references.entries) {
     testWidgets('remote target ${entry.key}', (tester) async {
       String? path;
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         message(entry.key, open: (output) async => path = output.path),
       );
       await tester.tap(find.text('Open preview'));
@@ -195,7 +197,7 @@ void main() {
   testWidgets('plain HTML paths do not capture URLs, code or other filenames', (
     tester,
   ) async {
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       message(
         'https://example.com/index.html\n\n'
         '[Website](https://example.com/index.html)\n\n'
@@ -214,7 +216,7 @@ void main() {
   testWidgets(
     'prose, lists, code, web links, and images retain their semantics',
     (tester) async {
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         message(
           'Before [report](/srv/report.md) after.\n\n'
           '- First\n- [Second](/srv/second.md)\n\n'
@@ -243,7 +245,7 @@ void main() {
   testWidgets('repeated file references and table links remain usable', (
     tester,
   ) async {
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       message(
         '[First](/srv/report.md) and [Again](/srv/report.md)\n\n'
         '| Report |\n| --- |\n| [Read](/srv/report.md) |',
@@ -260,7 +262,7 @@ void main() {
       final pending = Completer<bool>();
       final previewPending = Completer<void>();
       var calls = 0;
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         message(
           'MEDIA:$reportPath',
           open: (_) => previewPending.future,
@@ -306,7 +308,7 @@ void main() {
     (tester) async {
       var calls = 0;
       final pending = Completer<bool>();
-      await tester.pumpWidget(
+      await tester.pumpMarkdownWidget(
         message(
           'MEDIA:$reportPath',
           download: (_) {
@@ -328,7 +330,7 @@ void main() {
       );
       await tester.tap(find.text('Download'));
       await tester.pump();
-      await tester.pumpWidget(message('MEDIA:/srv/another.md'));
+      await tester.pumpMarkdownWidget(message('MEDIA:/srv/another.md'));
       pending.complete(true);
       await tester.pumpAndSettle();
       expect(find.text('File saved'), findsNothing);
@@ -346,7 +348,7 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         final boundary = GlobalKey();
-        await tester.pumpWidget(
+        await tester.pumpMarkdownWidget(
           MaterialApp(
             theme: wingTheme(brightness),
             builder: (context, child) => MediaQuery(

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'helpers/pump_markdown_widget.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1086,6 +1087,7 @@ fixture-value-amber-729
       expect(regenerated.status, ProfileTurnStatus.running);
       await tester.runAsync(() => host.complete(regenerated));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       expect(regenerated.status, ProfileTurnStatus.completed);
       expect(
         regenerated.messages

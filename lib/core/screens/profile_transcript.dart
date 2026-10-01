@@ -57,6 +57,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     initialScrollOffset: widget.nearbyMessages == null
         ? widget.chat.historyScrollOffset
         : 0,
+    restoreInitialOffset:
+        widget.nearbyMessages == null && widget.chat.historyScrollOffset > 0,
   );
   final _viewport = GlobalKey();
   final _focusedRow = GlobalKey();
@@ -73,6 +75,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   Object? _newestId;
   late String _streaming;
   String? _segment;
+  late bool _restoringMarkdown =
+      widget.nearbyMessages == null && widget.chat.historyScrollOffset > 0;
   late final _jumpLabel = ValueNotifier<String?>(
     widget.nearbyMessages == null && widget.chat.historyScrollOffset > 48
         ? 'Latest'
@@ -91,13 +95,41 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       } else {
         _revealFocusedRow();
       }
+      _finishMarkdownRestoration();
     });
+  }
+
+  void _finishMarkdownRestoration() {
+    if (!mounted || !_restoringMarkdown) return;
+    var pending = false;
+    void visit(Element element) {
+      if (pending) return;
+      if (element is StatefulElement &&
+          element.state is BackgroundMarkdownContentState &&
+          (element.state as BackgroundMarkdownContentState).pending) {
+        pending = true;
+        return;
+      }
+      element.visitChildren(visit);
+    }
+
+    (context as Element).visitChildren(visit);
+    if (!pending) {
+      _cancelMarkdownRestoration();
+      if (_scroll.hasClients) widget.chat.historyScrollOffset = _scroll.offset;
+    }
+  }
+
+  void _cancelMarkdownRestoration() {
+    _restoringMarkdown = false;
+    _scroll.finishInitialOffsetRestoration();
   }
 
   void _revealFocusedRow() {
     if (!mounted) return;
     final context = _focusedRow.currentContext;
     if (context != null) {
+      _cancelMarkdownRestoration();
       Scrollable.ensureVisible(context, alignment: 0.25);
     }
   }
@@ -139,6 +171,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       final focus = chat.notificationFocus;
       if (focus != null &&
           _revealedNotificationGeneration != chat.notificationFocusGeneration) {
+        _cancelMarkdownRestoration();
         if (_noticeRevealGeneration != chat.notificationFocusGeneration) {
           _noticeRevealGeneration = chat.notificationFocusGeneration;
           _noticeRevealAttempts = 0;
@@ -215,6 +248,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   }
 
   Future<void> _latest() async {
+    _cancelMarkdownRestoration();
     _scroll.releaseExpansionAnchor();
     _jumping = true;
     if (MediaQuery.disableAnimationsOf(context)) {
@@ -285,7 +319,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           gesture != _gestureGeneration) {
         return;
       }
-      widget.chat.historyScrollOffset = _scroll.offset;
+      if (!_restoringMarkdown) {
+        widget.chat.historyScrollOffset = _scroll.offset;
+      }
       _updateJump();
     });
   }
@@ -294,7 +330,13 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     TranscriptAnchorBox? growingRow, {
     TranscriptAnchorBox? Function()? replacement,
   }) {
-    if (widget.nearbyMessages != null || !_scroll.hasClients) return;
+    // A restored pixel offset already includes the old rendered heights.
+    // Anchoring initial empty Markdown bodies would add that growth twice.
+    if (_restoringMarkdown ||
+        widget.nearbyMessages != null ||
+        !_scroll.hasClients) {
+      return;
+    }
     final atBottom =
         !_scroll.hasExpansionAnchor &&
         (_jumping ||
@@ -334,7 +376,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
 
   @override
   void dispose() {
-    if (widget.nearbyMessages == null && _scroll.hasClients) {
+    if (widget.nearbyMessages == null &&
+        !_restoringMarkdown &&
+        _scroll.hasClients) {
       widget.chat.historyScrollOffset = _scroll.offset;
     }
     _scroll.dispose();
@@ -418,6 +462,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final transcript = NotificationListener<ExpansionAnchorNotification>(
       onNotification: (event) {
         ++_layoutGeneration;
+        _cancelMarkdownRestoration();
         _jumping = false;
         _scroll.anchorExpansion(event.anchor);
         return true;
@@ -425,7 +470,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       child: NotificationListener<ScrollMetricsNotification>(
         onNotification: (event) {
           if (event.depth == 0) {
-            widget.chat.historyScrollOffset = event.metrics.pixels;
+            if (!_restoringMarkdown) {
+              widget.chat.historyScrollOffset = event.metrics.pixels;
+            }
             _updateJump();
           }
           return false;
@@ -437,12 +484,15 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                 event is ScrollUpdateNotification &&
                     event.dragDetails != null) {
               _gestureGeneration++;
+              _cancelMarkdownRestoration();
               _revealedNotificationGeneration =
                   widget.chat.notificationFocusGeneration;
               _jumping = false;
               _scroll.releaseExpansionAnchor();
             }
-            widget.chat.historyScrollOffset = event.metrics.pixels;
+            if (!_restoringMarkdown) {
+              widget.chat.historyScrollOffset = event.metrics.pixels;
+            }
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _updateJump();
             });
@@ -630,6 +680,11 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                     event.source
                         .findAncestorRenderObjectOfType<TranscriptAnchorBox>(),
                   );
+                  if (_restoringMarkdown) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _finishMarkdownRestoration();
+                    });
+                  }
                   return false;
                 },
                 child: transcript,

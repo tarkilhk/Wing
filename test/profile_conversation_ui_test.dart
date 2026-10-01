@@ -9,6 +9,7 @@ import 'package:wing/core/widgets/markdown_code_block.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'helpers/pump_markdown_widget.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_history_fixture.dart';
 
@@ -20,7 +21,7 @@ void main() {
     String role = 'assistant',
     bool streaming = false,
   }) async {
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       MaterialApp(
         home: Scaffold(
           body: SingleChildScrollView(
@@ -159,7 +160,7 @@ void main() {
     tester,
   ) async {
     String? openedPath;
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       MaterialApp(
         home: Scaffold(
           body: ProfileMessage(
@@ -184,7 +185,7 @@ void main() {
   testWidgets('assistant file links explain an authentication failure', (
     tester,
   ) async {
-    await tester.pumpWidget(
+    await tester.pumpMarkdownWidget(
       MaterialApp(
         home: Scaffold(
           body: ProfileMessage(
@@ -202,7 +203,7 @@ void main() {
       find.bySubtype<MarkdownBody>(),
     );
     markdown.onTapLink!('Missing report', '/srv/removed/report.pdf', '');
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(
       find.text(

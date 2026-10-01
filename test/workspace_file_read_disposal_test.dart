@@ -10,6 +10,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/remote_files_client.dart';
 
 import 'answer_versions_test.dart' show AnswerHost;
+import 'helpers/pump_markdown_widget.dart';
 
 /// Returns headers immediately, then stalls the response body indefinitely.
 /// Closing this fake client deliberately does not cancel its stream: the test
@@ -100,6 +101,7 @@ void main() {
           MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
         );
         await tester.pump(const Duration(milliseconds: 100));
+        await tester.settleMarkdown();
         if (!attachmentImage) {
           final download = find.text('Download');
           expect(download, findsOneWidget);

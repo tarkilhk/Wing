@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/answer_actions.dart';
 import 'package:wing/core/widgets/profile_message.dart';
+import 'helpers/pump_markdown_widget.dart';
 
 void main() {
   for (final brightness in Brightness.values) {
@@ -70,6 +71,7 @@ void main() {
         }
         await tester.tap(find.text('View result'));
         await tester.pumpAndSettle();
+        await tester.settleMarkdown();
         expectAligned();
         expect(
           find.text(

@@ -18,7 +18,7 @@ class MarkdownParseResult {
   final int inlineParses;
 }
 
-/// One lazy isolate shared by mounted QA Markdown bodies. Widgets coalesce
+/// One lazy isolate shared by mounted Markdown bodies. Widgets coalesce
 /// updates before calling parse, so each owner has at most one in-flight job.
 class MarkdownParseWorker {
   static MarkdownParseWorker? _shared;

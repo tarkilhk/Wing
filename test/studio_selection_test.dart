@@ -9,6 +9,8 @@ import 'package:wing/core/widgets/studio_select.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 import 'package:wing/core/widgets/studio_task_marker.dart';
 
+import 'helpers/pump_markdown_widget.dart';
+
 void main() {
   test('all app selection controls suppress automatic ticks', () {
     for (final file in Directory(
@@ -117,6 +119,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        await tester.settleMarkdown();
         expect(
           tester
               .widgetList<StudioTaskMarker>(find.byType(StudioTaskMarker))

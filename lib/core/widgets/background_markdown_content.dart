@@ -51,7 +51,7 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
   List<md.Node>? _nodes;
 
   String? get renderedSource => _renderedSource;
-  bool get pending => _busy || _renderedSource != widget.data;
+  bool get pending => !_failed && (_busy || _renderedSource != widget.data);
   int parsesCompleted = 0;
   int updatesCoalesced = 0;
   int totalParserMicros = 0;
@@ -158,6 +158,7 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
           },
           onError: (Object error, StackTrace stack) {
             if (mounted && epoch == _epoch && _foreground) {
+              MarkdownContentWillChange(context).dispatch(context);
               setState(() {
                 _reset();
                 _failed = true;

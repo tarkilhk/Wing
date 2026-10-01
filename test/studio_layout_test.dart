@@ -2,6 +2,7 @@ import 'support/chat_browser_interactions.dart';
 import 'package:wing/core/widgets/studio_selection_tile.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
+import 'helpers/pump_markdown_widget.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -429,6 +430,7 @@ void main() {
               ),
             );
             await tester.pumpAndSettle();
+            await tester.settleMarkdown();
             expect(chat.context?.used, 42000);
             expect(chat.markReadFailed, isFalse);
             expect(chat.projectLookupFailed, isFalse);
