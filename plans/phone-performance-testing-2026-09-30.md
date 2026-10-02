@@ -442,3 +442,429 @@ reopen and restored appearance. Production re-entry is recorded in root's
 `release-final-activity-reentry.log`. `recents-qa-cleanup.json` records the earlier
 failed flag attempt, not final cleanup success. Temporary credentials remain private;
 backup/bootstrap setup must not be repeated.
+
+## 2 October: answer renderer retention, live phone comparison
+
+The completion-retention fix was compared against the pre-fix diagnostic APK on
+the S23 Ultra. Both signed `.perfqa` APKs have identical non-signature archive
+entries except `lib/arm64-v8a/libapp.so`. Each used the same mixed-format prompt,
+one verified `gpt-5.6-luna` response, the same completion diagnostics and CPU
+sampler, and 35 seconds of native SwiftKey typing during streaming. No backend,
+profile defaults, production application or application data were changed.
+
+The comparison window begins at the controller's synchronous completion handoff
+and ends 500 ms later. Quantiles use nearest rank.
+
+| Metric | Before | Retained renderer |
+| --- | ---: | ---: |
+| UI build maximum, completion window | 69.600 ms | 9.082 ms |
+| UI build p95, completion window | 47.282 ms | 7.662 ms |
+| Completion-window UI builds >16.667 ms | 4 | 0 |
+| Message initializations / disposals | 4 / 4 | 0 / 0 |
+| Background Markdown initializations / disposals | 32 / 32 | 0 / 0 |
+| Code block initializations / disposals | 28 / 28 | 0 / 0 |
+| Streaming-only UI build p99 | 11.529 ms | 11.633 ms |
+| Whole-capture UI build maximum | 69.600 ms | 26.018 ms |
+
+Baseline slow frames contain nested widget construction during layout. In the
+matched completion window, CPU samples whose stacks include mount/inflateWidget
+fell 70→2, and flushLayout 72→22. These sampled stacks overlap and are not additive
+CPU-time attribution. The candidate records streaming-status updates with unchanged
+text/configuration, nine cached block updates, and no new background parse requests.
+This directly supports retaining the existing renderer at completion.
+
+Responses differ in length (10,552→10,858 characters) and segment count (15→17);
+this single generated pair does not establish a general streaming p99 improvement.
+The observer also costs time: these are diagnostic profile measurements, not a
+release benchmark. UI build durations are distinct from physical frame gaps.
+SurfaceFlinger reported both 120 Hz and 60 Hz periods in both captures; observation
+coverage differs, so their maximum gaps are not used as a causal comparison.
+
+The completed answer and nonempty fresh draft were retained. Five settled scroll
+gestures preserved the draft; native selection showed handles/menu, and code wrapping
+worked and was toggled back. The live draft marker was recorded after typing, so
+exact acknowledgement/completion text preservation remains covered by the regression
+tests rather than an independently marked live boundary assertion.
+
+The original regular QA APK was restored without clearing data, then stopped;
+the uniquely verified QA root task was removed from Recents. Production remained
+unchanged and the phone was released. Numeric traces, APK checks, rendered functional
+evidence and `phone-restoration.json` are under ignored
+`build/draft-outbox-phone-20261002/retention-phone-20261002/`;
+`comparison.json` records the calculation, validity limits and restoration.
+
+### Remaining streaming tail: offline trace investigation
+
+No additional phone or backend access was used. Candidate streaming has 36 UI
+frames in the 11.633–16.667 ms band and four above it (18.668–26.018 ms). Their CPU
+samples show widget update/mount work, layout and platform-message calls; no
+observer tree walk, incoming-message handler, draft-persistence path or main-isolate
+full Markdown parser appears inside those sampled slow frame bodies. Observer work
+does occur elsewhere, so this does not establish its lack of influence on the run.
+
+The four worst frames' measured Markdown block construction is only 309–400 µs.
+Platform-message stacks include `Clipboard.hasStrings`, Live Text availability and
+text-action discovery, reached through selectable-text initialization. The installed
+`flutter_markdown` 0.7.7+1 builder assigns a fresh `UniqueKey` to built prose text.
+Wing retains unchanged blocks, but each changed paragraph rebuild therefore creates
+new selectable-text state rather than updating the existing state.
+
+A host-only probe confirmed the pattern through the production Markdown component:
+five growing-paragraph snapshots retain the fixed sibling state, replace the growing
+state on every subsequent snapshot, and each replacement adds one clipboard-status,
+Live Text availability and process-text-actions call. This proves lifecycle churn,
+not a phone timing improvement. Keeping the growing paragraph's selectable-text
+state while updating its spans is the first concrete implementation target; native
+selection, link targets, equal-text distinct paragraphs and structure changes need
+explicit regressions.
+
+Other slow frames also have broader rebuild/layout costs. One retained late-stream
+16.247 ms frame has 12.469 ms of layout with a cached Markdown message and no GC
+overlap. The Timeline ring retains only the final 2.432 seconds of streaming, missing
+all four worst frames, and many CPU stacks truncate at 128 frames. Exact per-category
+time requires a shorter capture with earlier Timeline retrieval and deeper stacks;
+the sampled categories overlap and must not be summed. Evidence, probe source/output
+and limitations are in `streaming-hotspot-analysis.json` beside `comparison.json`.
+
+### Growing-paragraph implementation prepared for QA
+
+`retained_markdown_paragraph.dart` now adapts the stock paragraph builder's
+Column/Padding/Wrap output, retaining its selectable text controls while accepting
+the current spans, styles and callbacks. It preserves opaque inline widgets and
+custom paragraph ownership; Markdown parsing and grammar transitions remain intact.
+Valid append-only selections are restored after Flutter updates its private
+controller, with guards for focus loss, newer selections, superseded spans and disposal.
+Ordinary streaming updates require no selection-related widget-tree traversal.
+
+Twelve new regressions cover State/EditableText retention, elimination of repeated
+native initialization calls, active selection, current link targets, repeated text,
+grammar transitions, theme/scale, rewriting/removal, focus races and custom content.
+The full project suite passes **2,748 tests**, with **17 opt-in skips**, and analysis
+reports no issues. Two independent reviews found no remaining actionable issues.
+
+The comparison baseline is `artifacts/retained-answer-diagnostic.apk`, including
+the already measured completion fix. Prepared candidates are
+`artifacts/retained-paragraph-diagnostic.apk` and
+`artifacts/retained-paragraph-normal.apk` under
+`build/draft-outbox-phone-20261002/`. The latter uses the ordinary application entry
+point without the live observer or opt-in completion diagnostics. Both target the
+isolated QA package. No phone/backend access or deployment was performed during
+implementation. Actual streaming p99 improvement awaits the user's next test window;
+`growing-paragraph-build-plan.json` records artifact hashes and final readiness.
+
+### Growing-paragraph physical comparison, 2026-10-02
+
+With the user's phone window, compared the retained-answer diagnostic baseline
+against the retained-paragraph diagnostic candidate in place in `.perfqa`.
+Both used one stock Hermes `gpt-5.6-luna` mixed-format answer, 35 seconds of
+native SwiftKey input, identical CPU/frame observers, and sanitized Timeline
+retrieval every two seconds. The periodic retrieval preserves the slow frames
+that the earlier end-only Timeline ring had lost. Production was unchanged.
+
+| Streaming-only UI metric | Baseline | Paragraph fix |
+| --- | ---: | ---: |
+| Frames | 1,678 | 4,452 |
+| p95 | 7.079 ms | 7.213 ms |
+| p99 | 10.567 ms | 12.054 ms |
+| Maximum | 40.127 ms | 43.639 ms |
+| Frames above 16.667 ms | 4 | 5 |
+| Observed streaming duration | 16.983 s | 44.663 s |
+| Final answer characters | 11,626 | 12,376 |
+| Native typing keys | 139 | 145 |
+
+This pair does **not** demonstrate a streaming p99 improvement. Live generation
+duration, update count and content differ. The candidate diagnostics ring drops
+626 early events; cumulative counters, CPU samples and periodically retrieved
+Timeline data remain available, but retained event lists do not describe the
+entire candidate capture.
+
+Samples containing both native text queries and `initState` fall from 69 to 57
+despite 364 versus 830 observed source changes. Their sampled density falls from
+0.190 to 0.069 per source change. Native queries remain, especially `hasStrings`
+associated with `didUpdateWidget`. These overlapping samples establish neither
+call counts nor additive CPU time; host regressions independently demonstrate
+that an appending stock paragraph no longer replaces its text-control State.
+
+The baseline 40.127 ms frame spends 39.410 ms in PAINT. Candidate 40.729 and
+43.639 ms frames spend 39.916 and 42.087 ms in PAINT respectively, with little
+layout work. Each has only one or two CPU samples, no overlapping UI GC event
+and no nested native paint spans. Existing traces cannot distinguish a blocked
+thread, scheduling delay or unsampled native work. An Android system trace is
+the next useful way to identify that delay; another speculative Markdown change
+is not justified by these maxima. Completion retention still has no lifecycle
+initialization/disposal in either arm's 500 ms handoff window.
+
+Both turns finish and render their sentinel without chat errors. The candidate's
+exact 145-character draft is marked while busy and survives completion; baseline
+marking occurs after completion and does not independently prove that boundary.
+Both SurfaceFlinger observers report an 8.333 ms period (120 Hz). Their full
+35-second presentation-gap distributions are not a causal speed comparison:
+baseline includes considerable time after generation finishes, when the app
+does not need to present continuously. A refresh period is not proof that every
+frame is presented on time.
+
+Installed the ordinary fixed QA entry point afterward and verified the live
+measurement extensions are absent. After correcting an initial search-box
+navigation mistake, an owned synthetic QA conversation passes native composer
+input (32 added characters), native text selection with Copy/Select all/Share
+actions, and seven history scroll gestures. Code-wrap controls are not encountered
+in this older synthetic conversation and are not claimed as exercised in this
+ordinary-app pass. Previously measured code-wrap checks and host regressions
+remain separate evidence.
+
+The ordinary fixed QA build remains installed, force-stopped, with its one
+verified recent-app task removed. Both profiler settings are restored; no
+production app or unrelated task is changed. The phone reports no thermal
+throttling and is released to the user. Sanitized evidence, screenshots of owned
+QA content, comparison limits and cleanup verification are under ignored
+`build/draft-outbox-phone-20261002/growing-paragraph-phone-20261002/`.
+
+### Further offline analysis of the paragraph comparison
+
+No additional phone/backend access or code changes were needed. Equal initial
+17-second windows have p99 10.567 versus 10.357 ms, but do not match generated
+content: the candidate has only about 4,011 characters at that point, while the
+baseline answer is complete. The candidate's final 10 seconds instead have p99
+14.114 ms and 49 frames above 10 ms, versus 11.192 ms and 16 in the baseline's
+final 10 seconds. Source-size bins likewise do not match formatting, but show
+similar p99 at 4,000–8,000 characters (11.658 versus 11.771 ms) and a larger
+difference at 8,000–12,000 (10.334 versus 14.114 ms).
+
+The expensive candidate tail contains a more complex mixed-format answer:
+Markdown grows from 13 to 19 segments versus 4 to 13 for the baseline, ending
+with nine versus six code blocks. Of the candidate's final 49 frames above 10 ms,
+48 contain message rendering work and none contains a prose block build event.
+Its draft is constant at 145 characters for the last 9.370 seconds; continued
+typing is therefore not necessary for these expensive frames. Median message
+build duration in the final 10 seconds is 712.5 us versus 461 us. Fence splitting
+averages 838 us versus 494 us and peaks at 1.675 ms versus 1.217 ms, still far
+shorter than the overall expensive frames.
+
+Candidate 10–16.667 ms frames spend about two thirds of their traced time in
+LAYOUT, which includes nested child builds in Flutter's lazy list; nested BUILD
+must not be added again. This identifies broad widget update/layout work as the
+remaining p99 path, not repeated prose AST/block construction alone. The whole
+answer is one transcript row containing its prose/code segment Column. Cached
+segment widgets avoid reparsing unchanged blocks, but do not by themselves remove
+all ancestor rebuilding or layout as that row grows. Layout-boundary attribution
+should precede a structural optimization.
+
+The larger `hasStrings` sample count is not evidence that retaining a paragraph
+moves clipboard work into its updates. The pinned Flutter source's
+EditableText.didUpdateWidget clipboard check requires pasteEnabled, which is
+false when readOnly; SelectableText sets readOnly=true. The composer is editable
+and is reconstructed by the outer workspace listener even with its nested
+composerChanges listener. CPU function names omit instance identity, so exact
+editable-widget ownership is not proven. The source establishes a useful seam
+for measuring redundant composer rebuilds without disabling selection features.
+
+The diagnostic observer itself walks the mounted widget tree: source polling
+every 20 ms locates the controller, and readiness polling every 100 ms performs
+additional renderer/sentinel walks. These stacks occur in CPU samples and are
+absent from the ordinary entry point. Their load grows with mounted UI complexity.
+Absence within particular slow-frame bodies does not eliminate their effect on
+overall contention or frame scheduling. Future controlled comparisons should
+cache controller references and remove readiness tree walks during measurement,
+keeping the FrameTiming callback and checking readiness afterward.
+
+Raster spikes are separate from the worst UI paint frames. Recorded raster
+maxima are 58.533 versus 55.317 ms; their paired UI builds are only 0.688–1.408 ms.
+Candidate engine Encode/Submit/raster spans contain long wall-time intervals,
+sometimes overlapping long UI message/post-frame intervals. Neither this nor
+sparse samples establishes GPU/driver CPU as the cause. The baseline Timeline
+also has a 1.165-second global gap covering its 58.533 ms raster frame: FrameTiming
+is retained, but native/GC begin/end durations crossing the gap are invalid.
+
+Next measurement: replay exactly the same text, formatting and arrival cadence
+with identical typing, lighter observers and before/after order reversal. Capture
+a short Android system trace with scheduling, CPU frequency/idle, FrameTimeline
+and SurfaceFlinger/fence events around the stalls. This distinguishes running CPU,
+being runnable but unscheduled, and blocking/waiting. Existing live comparison
+does not isolate how much of the higher p99 comes from the code change itself.
+
+### 2026-10-02: emulator verification before the next phone window
+
+User authorized emulator-first preparation while away; no physical phone was
+accessed. Prepared matching profile APKs in ignored `build/render-replay-ready/`
+(`control.apk`, `fixed.apk`, `ready-manifest.json`, `source-comparison.json`).
+Both target only `com.tarkilhk.wing.perfqa`, version 2357, share the same signing
+certificate and ARM64/x64 Flutter engine. The source difference removes only the
+growing-paragraph retention adapter from the control. Production Wing and stock
+Hermes remain untouched; these synthetic runs issue zero backend/model requests.
+
+The profile-only `workspace_streaming_replay.dart` uses the actual workspace and
+controller with an injected gateway fixture: six initial mixed-format sections,
+six growing sections, 400 deltas on absolute 50 ms deadlines, stock completion
+receipt and authoritative history. Native typing supplies exactly 60 characters
+on absolute 250 ms deadlines while streaming. Measurement avoids periodic widget
+tree walks; readiness walks occur before or afterward. SharedPreferences are
+mocked in memory, intentionally excluding native draft-storage cost. This is a
+renderer comparison, not a complete live backend or persistence benchmark.
+
+Guards verify final authoritative source, rendered segment inputs/parser
+readiness/final laid-out sentinel, exact typed draft, focus and keyboard stability,
+viewport/DPR/text scale/display rate, actual chunk/input timing, host/VM clock
+calibration, ordered ABBA labels, matching trace/replay bounds and restored VM
+profiler state. Rendered readiness is not a pixel-for-pixel assertion over every
+character. Interrupted or unequal workloads are rejected.
+
+All four emulator ABBA workloads passed, with identical source/draft hashes and
+zero trace data loss. Streaming UI p99: control 22.345 and 24.226 ms; fixed 17.446
+and 17.469 ms. Streaming frames above 16.667 ms: control 32/33; fixed 11/10.
+Whole measured UI-thread Running time: control 7.656/7.816 s; fixed 6.303/6.746 s.
+See `build/render-replay-ready/emulator-abba/controlled-comparison.json` and the
+per-run numeric system summaries. These are emulator observations, not predicted
+phone performance. The emulator uses software graphics at 60 Hz and native key
+events rather than the phone's SwiftKey taps; raster timings are not comparable
+with the phone. Two replays per arm do not establish a confidence interval.
+
+Preparation exposed and resolved test-tool defects: an emulator System UI ANR
+blocked keyboard opening; Flutter's merged main/UI thread was omitted by the old
+UI-thread predicate; native perf samples initially overflowed the kernel buffer;
+and Perfetto requires flush_period_ms on TraceConfig, not FtraceConfig. Final
+traces use observed PAINT tracks to identify merged UI execution, 100 Hz native
+sampling with 256 ring-buffer pages, top-level 1 s flush and no data loss. Host
+analysis now parses each trace twice, then uses one private indexed SQLite
+connection; all window queries take about 3–5 s total rather than minutes.
+Temporary databases are deleted. Raw traces stay private in ignored local build
+storage; exported summaries omit process/thread names and user content.
+
+Separate emulator diagnostic runs successfully enabled per-RenderObject PAINT
+slices and Dart CPU samples (3,078 samples at 1 ms in the initial diagnostic),
+with flags restored afterward. Their timings do not enter the paired comparison.
+`render_object_attribution.py` attributes static Render classes without counting
+nested paint time twice; malformed/incomplete trees are explicitly excluded.
+Native sample counts, scheduler Running/waiting intervals and instrumented wall
+spans are separate evidence. Some resolved native symbols are only allocator/ART
+frames; that does not prove the expensive Flutter/Dart function is identified.
+
+Future phone run, after user go and current ADB address (budget about 8–12 minutes):
+
+1. Check unlocked, screen on, unplugged; record thermal/battery/display state.
+   Visually verify SwiftKey keyboard and native tap coordinates.
+2. Install/launch QA with trace-systrace, warm preparation outside timing; replay
+   control-1, fixed-1, fixed-2, control-2 using identical input/observers. Check all
+   workload/trace guards before interpreting differences.
+3. If native samples cannot explain the slow UI path, run one separate 20 s
+   diagnostic with per-render-object paint slices and Dart CPU sampling. Relate
+   expensive paint intervals to Running versus runnable/blocked states and
+   function samples; do not treat wall duration alone as consumed CPU.
+4. Restore `build/draft-outbox-phone-20261002/artifacts/retained-paragraph-normal.apk`,
+   stop/remove the synthetic QA task and tell the user the phone is free before
+   doing further host analysis. Production Wing stays unchanged.
+5. Choose the next optimization from that phone evidence. A live Luna/Hermes
+   confirmation remains appropriate after choosing a fix.
+
+Follow-up probe validation: per-object PAINT timelines account for 70 of 126
+leaf samples inside 20 slow paints through `_reportTaskEvent`, a substantial
+observer effect. The lighter Dart-only probe has zero such leaf samples, with
+41 samples inside 13 slow paints; observed leaves include native text paint and
+picture recording. Therefore the phone attribution sequence starts with
+Dart-only sampling and native scheduler/stacks. Per-object tracing is optional,
+separate, and used to locate classes rather than claim uninstrumented costs.
+The attribution helper also computes exclusive scheduler Running/runnable/etc.
+for each Render type's gaps, retains unobserved coverage explicitly, and rejects
+invalid state overlap. The CPU sanitizer now preserves safe static Class/Function
+owner names to distinguish otherwise generic `paint` methods. Native APK-backed
+mappings retain safe `app_apk` address/build-ID/container-offset metadata for later
+symbol resolution; libc/ART resolution alone is not Flutter leaf attribution.
+
+Final lighter diagnostic passed all workload guards, with zero trace data loss,
+2,416 Dart samples and class-qualified profiler entries successfully exported.
+It identifies, for example, ContainerLayer.detach/attach, PaintingContext.paintChild
+and Layer composition callbacks separately. These emulator observations verify
+attribution capability; they do not establish the phone hotspot. Final checks:
+17 focused Flutter tests, 62 Python host tests, clean Flutter analysis and
+`git diff --check`. Emulator verification is complete; prepared phone APKs and
+restoration artifact remain ready, pending user go/current address.
+
+### 2026-10-02: controlled phone ABBA and Dart attribution completed
+
+User supplied go at `10.30.1.2:33137`. Phone was unlocked/unplugged; SwiftKey Beta
+and its letter/space tap geometry were verified on the synthetic QA screen.
+The native-keyboard guard now targets that actually installed IME directly.
+An initial final-control preparation failed because the keyboard did not open;
+preparation succeeded on retry outside measurement. No failed preparation enters
+the comparison. No backend/model calls were made by these offline fixtures.
+
+Artifacts: ignored/private `build/render-replay-ready/phone-20261002/`, including
+`controlled-comparison.json`, each replay/system summary, and
+`diagnostic/fixed-1/{dart-cpu.json,system-summary.json}`. All four ABBA guards pass:
+identical source/draft hashes, keyboard/viewport/DPR/font/display values,
+400×50 ms deltas, 60×250 ms native inputs, timing/clock boundaries, ordered arm
+labels, restored profiler state and zero trace-data-loss counters. Native stacks
+were supported on this phone. The panel reports 120 Hz (8.333 ms period).
+
+| Streaming measurement | Control 1 | Fixed 1 | Fixed 2 | Control 2 |
+| --- | ---: | ---: | ---: | ---: |
+| UI p95, ms | 7.458 | 7.167 | 7.466 | 8.356 |
+| UI p99, ms | 10.069 | 10.035 | 10.300 | 10.404 |
+| UI max, ms | 14.507 | 16.565 | 15.749 | 15.968 |
+| UI frames >8.333 ms | 71/2033 | 69/2097 | 72/2070 | 99/1978 |
+| UI frames >16.667 ms | 0 | 0 | 0 | 0 |
+| Raster p99, ms | 3.890 | 4.232 | 4.243 | 4.061 |
+| Whole measured UI thread Running, s | 9.200 | 8.504 | 8.700 | 9.475 |
+
+The fixed p99 lies inside the control range: this phone comparison does not
+demonstrate a p99 improvement, despite the emulator improvement. Lower total
+UI-thread Running time in the fixed arms is a favorable observation, not proof
+of instruction-count or battery savings; two repetitions and varying DVFS/
+temperature do not establish confidence bounds. Completion frames are separate:
+control maxima 20.752/17.839 ms, fixed 18.030/13.958 ms. One completion transition
+per run is insufficient to prove a tail improvement.
+
+Selected first 20 streaming UI frames >10 ms spend 96.8–99.3% of their wall time
+Running on CPU, with no sleeping/blocked intervals. In slow frames, LAYOUT uses
+about 60% and PAINT about 20–22%; BUILD often nests inside LAYOUT and is not added
+again. No complete QA PAINT slice exceeds 10 ms in any arm; first-control PAINT
+max is 5.059 ms. The old 40 ms UI paint stalls were not reproduced by this
+controlled workload. This does not prove they are eliminated in every scenario.
+
+A separate Dart-only diagnostic (not substituted for paired timing) resolves
+function owners. Of 457 samples in 45 slow streaming frames, 274 lie in actual
+LAYOUT spans, 81 in PAINT, and 102 elsewhere; 134/457 stacks are truncated.
+Layout has 201 inclusive samples under `_RenderLayoutBuilder.performLayout`
+and 193 under rebuilding with constraints. This locates rebuilding during layout;
+it does not establish that LayoutBuilder should be removed.
+
+One concrete code path is fully captured in 31 of 274 slow-layout samples:
+`_RegExp._ExecuteMatch → firstMatch → splitMarkdownCodeBlocks →
+_MarkdownMessageContentState._buildContent`. Current fence splitting repeatedly
+searches copied suffix substrings. Next narrow experiment: scan line boundaries
+forward and apply the existing opening/closing regexes only at candidate fence
+lines, preserving exact fence, preview and unfinished-fence semantics. Verify
+identical outputs for every fixture prefix plus backticks/tildes, indentation and
+CRLF before benchmarking. This is roughly 11% of sampled slow-layout work; it is
+not a demonstrated solution to the entire ~10 ms p99.
+
+Repaint work is also sampled: across all diagnostic PAINT spans, 222 paragraph
+paint leaf samples include TextPainter.paint; 198 include RenderParagraph.paint
+and 24 RenderEditable.paint. Picture end-recording has 123 leaf samples. These
+identify classes and calls, not individual widget instances or exact CPU time.
+Platform queries occur in 19 slow-layout samples, but 13 stacks are truncated;
+we cannot assign them confidently to the composer rather than selectable text.
+No composer-isolation recommendation is justified by this capture alone.
+
+Per-object paint tracing was left disabled. `_reportTaskEvent` is absent from
+slow PAINT leaf samples and is 16/457 slow-frame leaves overall, unlike the heavy
+per-object emulator probe. Native installation paths embedded in VM function
+names are now stripped from exports; static Class/Function owners remain. Raw
+traces and numeric exports stay private/local.
+
+Presentation limitation: FrameTimeline has global SurfaceFlinger display rows
+but no QA surface rows. First-control global display-end gap p99 is 25.004 ms,
+max 41.683 ms, but those events cannot be attributed to Wing. Panel 120 Hz,
+Flutter callback counts and build/raster timings do not establish Wing's actual
+presentation FPS or app-specific frame gaps. No claim of smooth locked 120 fps.
+
+Android thermal status stays 0 at start/end (no reported throttling). Battery
+sensor rises about 34.1→37.2°C and AP sensor 40.3→42.0°C. Battery percentage
+66→62 during the active screen/typing/tracing/install window is not an idle
+battery comparison or a measurement of release-app battery use.
+
+Ordinary QA `retained-paragraph-normal.apk` was restored successfully, the QA
+process was stopped and the phone returned to the user before further host
+analysis. Production Wing and Hermes were unchanged. QA task records remain in
+Android recents; removal was not verified (do not report them as removed).
+Host checks after keyboard/export updates: 64 tests pass and whitespace checks
+are clean. Current ready APKs were not rebuilt for these host-only updates.

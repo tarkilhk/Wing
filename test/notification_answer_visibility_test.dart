@@ -50,7 +50,7 @@ void main() {
             chat: chat,
             controller: controller,
             tail: tail,
-            messageBuilder: (row) =>
+            messageBuilder: (row, {required bool streaming}) =>
                 SizedBox(height: 120, child: Text(row['content'] as String)),
           ),
         ),

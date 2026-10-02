@@ -8,6 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import '../services/completion_diagnostics.dart';
+import 'retained_markdown_paragraph.dart';
+
 /// Retains unchanged top-level prose blocks while a message grows.
 ///
 /// Every update still parses the complete Markdown document, so a late link
@@ -53,8 +56,19 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
   bool _refreshBlocks = true;
 
   @override
+  void initState() {
+    super.initState();
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event('markdown.blocks.init');
+    }
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event('markdown.blocks.dependencies');
+    }
     // Match the stock renderer's theme/text-scale dependencies. Viewport width
     // also matters for the message's inline attachment and image builders.
     _content = null;
@@ -68,6 +82,9 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
         (widget as BlockReusingMarkdownBody).parsedNodes !=
             (oldWidget as BlockReusingMarkdownBody).parsedNodes) {
       _content = null;
+      if (CompletionDiagnostics.enabled) {
+        CompletionDiagnostics.event('markdown.blocks.invalidate');
+      }
     }
     if (widget.selectable != oldWidget.selectable ||
         widget.styleSheet != oldWidget.styleSheet ||
@@ -98,6 +115,12 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
 
   @override
   void dispose() {
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event(
+        'markdown.blocks.dispose',
+        values: {'blocks': _blocks.length},
+      );
+    }
     for (final block in _blocks) {
       block.delegate.dispose();
     }
@@ -106,7 +129,15 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (_content != null) return _content!;
+    if (_content != null) {
+      if (CompletionDiagnostics.enabled) {
+        CompletionDiagnostics.event('markdown.blocks.cached');
+      }
+      return _content!;
+    }
+    final buildStart = CompletionDiagnostics.enabled
+        ? CompletionDiagnostics.start()
+        : 0;
     MediaQuery.sizeOf(context);
     final cupertino =
         widget.styleSheetTheme == MarkdownStyleSheetBaseTheme.cupertino ||
@@ -131,17 +162,32 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
     // Keep their existing full-render behavior until their anchors are assigned
     // independently of renderer traversal.
     final refresh = _refreshBlocks || widget.paddingBuilders.isNotEmpty;
+    var signatureUs = 0;
+    var constructionUs = 0;
+    var builderUs = 0;
+    var reused = 0;
+    var rendered = 0;
     for (var index = 0; index < nodes.length; index++) {
       final node = nodes[index];
+      final signatureStart = CompletionDiagnostics.enabled
+          ? CompletionDiagnostics.start()
+          : 0;
       final signature = jsonEncode(_astValue(node));
+      if (CompletionDiagnostics.enabled) {
+        signatureUs += CompletionDiagnostics.start() - signatureStart;
+      }
       final previous = index < _blocks.length ? _blocks[index] : null;
       if (!refresh && previous?.signature == signature) {
         next.add(previous!);
+        if (CompletionDiagnostics.enabled) reused++;
         continue;
       }
       previous?.delegate.dispose();
       final delegate = _BlockDelegate(this);
-      final children = MarkdownBuilder(
+      final constructionStart = CompletionDiagnostics.enabled
+          ? CompletionDiagnostics.start()
+          : 0;
+      final builder = MarkdownBuilder(
         delegate: delegate,
         selectable: widget.selectable,
         styleSheet: style,
@@ -156,7 +202,25 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
         onSelectionChanged: widget.onSelectionChanged,
         onTapText: widget.onTapText,
         softLineBreak: widget.softLineBreak,
-      ).build([node]);
+      );
+      if (CompletionDiagnostics.enabled) {
+        constructionUs += CompletionDiagnostics.start() - constructionStart;
+      }
+      final builderStart = CompletionDiagnostics.enabled
+          ? CompletionDiagnostics.start()
+          : 0;
+      final built = builder.build([node]);
+      final children =
+          widget.selectable &&
+              node is md.Element &&
+              node.tag == 'p' &&
+              !widget.builders.containsKey('p')
+          ? retainMarkdownParagraphText(built)
+          : built;
+      if (CompletionDiagnostics.enabled) {
+        builderUs += CompletionDiagnostics.start() - builderStart;
+        rendered++;
+      }
       next.add(_RenderedBlock(signature, children, delegate));
     }
     for (var index = next.length; index < _blocks.length; index++) {
@@ -174,7 +238,7 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
     }
     // Keep this parent even with a single block: adding a second block must
     // retain the first block's mounted selectable text and attachment state.
-    return _content = Column(
+    final result = _content = Column(
       mainAxisSize: (widget as MarkdownBody).shrinkWrap
           ? MainAxisSize.min
           : MainAxisSize.max,
@@ -183,6 +247,24 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
           : CrossAxisAlignment.stretch,
       children: children,
     );
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.finish(
+        'markdown.blocks.build',
+        buildStart,
+        values: {
+          'blocks': nodes.length,
+          'rendered': rendered,
+          'reused': reused,
+          'signatureUs': signatureUs,
+          'builderConstructionUs': constructionUs,
+          'builderBuildUs': builderUs,
+          'suppliedAst':
+              (widget as BlockReusingMarkdownBody).parsedNodes != null ? 1 : 0,
+          'refresh': refresh ? 1 : 0,
+        },
+      );
+    }
+    return result;
   }
 }
 

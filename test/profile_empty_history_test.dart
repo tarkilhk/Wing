@@ -219,7 +219,8 @@ void main() {
               builder: (_, _) => ProfileTranscript(
                 chat: chat,
                 controller: controller,
-                messageBuilder: (message) => Text(message['content'] as String),
+                messageBuilder: (message, {required bool streaming}) =>
+                    Text(message['content'] as String),
                 tail: const [],
               ),
             ),

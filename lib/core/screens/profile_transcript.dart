@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 import '../services/profile_workspace_controller.dart';
+import '../services/completion_diagnostics.dart';
 import '../utils/expansion_scroll_controller.dart';
 import '../widgets/anchored_expansion_tile.dart';
 import '../widgets/background_markdown_content.dart';
@@ -18,9 +19,9 @@ import '../widgets/playful_portrait.dart';
 class ProfileTranscript extends StatefulWidget {
   final ProfileChat chat;
   final ProfileWorkspaceController controller;
-  final Widget Function(Map<String, dynamic>) messageBuilder;
+  final Widget Function(Map<String, dynamic>, {required bool streaming})
+  messageBuilder;
   final List<Widget> tail;
-  final List<Widget> beforeActivity;
   final List<Widget> currentActivity;
   final List<ProfileActivityTab> activityTabs;
   final Widget? activityThinking;
@@ -35,7 +36,6 @@ class ProfileTranscript extends StatefulWidget {
     required this.controller,
     required this.messageBuilder,
     required this.tail,
-    this.beforeActivity = const [],
     this.currentActivity = const [],
     this.activityTabs = const [],
     this.activityThinking,
@@ -74,6 +74,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   bool _hasNewContent = false;
   Object? _newestId;
   late String _streaming;
+  Object? _streamingPresentationId;
   String? _segment;
   late bool _restoringMarkdown =
       widget.nearbyMessages == null && widget.chat.historyScrollOffset > 0;
@@ -88,6 +89,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     super.initState();
     _newestId = widget.chat.messages.lastOrNull?['id'];
     _streaming = widget.chat.streaming;
+    final live = widget.chat.streamingMessage;
+    _streamingPresentationId = live == null
+        ? null
+        : widget.chat.messagePresentationId(live);
     _segment = widget.chat.historySessionId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.nearbyMessages == null) {
@@ -150,7 +155,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                 (target.messageId == null || row['id'] == target.messageId),
           )
           .firstOrNull;
-      return answer == null ? null : _rows[answer['id']];
+      return answer == null
+          ? null
+          : _rows[widget.chat.messagePresentationId(answer)];
     }
     return widget.notificationAnchors[target.identity];
   }
@@ -276,22 +283,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                 !_scroll.position.isScrollingNotifier.value));
     final newest = widget.chat.messages.lastOrNull?['id'];
     final segmentChanged = _segment != widget.chat.historySessionId;
-    final completed = widget.chat.messages.lastOrNull;
-    TranscriptAnchorBox? completingRow;
-    if (!segmentChanged &&
-        _streaming.isNotEmpty &&
-        widget.chat.streaming.isEmpty &&
-        newest != null &&
-        newest != _newestId &&
-        completed?['role'] == 'assistant' &&
-        (completed?['display_content'] ?? completed?['content'] ?? '')
-            .toString()
-            .startsWith(_streaming)) {
-      // Follow the same answer into its saved row without reparenting the
-      // remaining activity controls. Final text may include unseen growth.
-      completingRow =
-          _tail.currentContext?.findRenderObject() as TranscriptAnchorBox?;
-    }
+    final growingRow =
+        _rows[_streamingPresentationId]?.currentContext?.findRenderObject()
+            as TranscriptAnchorBox?;
     if (!atBottom &&
         !segmentChanged &&
         ((_newestId != null && newest != null && newest != _newestId) ||
@@ -302,14 +296,11 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     _newestId = newest;
     _streaming = widget.chat.streaming;
     _segment = widget.chat.historySessionId;
-    _preserveReaderAnchor(
-      completingRow,
-      replacement: completingRow == null
-          ? null
-          : () =>
-                _rows[newest]?.currentContext?.findRenderObject()
-                    as TranscriptAnchorBox?,
-    );
+    _preserveReaderAnchor(growingRow);
+    final live = widget.chat.streamingMessage;
+    _streamingPresentationId = live == null
+        ? null
+        : widget.chat.messagePresentationId(live);
     final generation = ++_layoutGeneration;
     final gesture = _gestureGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -348,6 +339,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     if (!atBottom && viewport is RenderBox) {
       final start = viewport.localToGlobal(Offset.zero).dy;
       final end = start + viewport.size.height;
+      growingRow = _scroll.expansionRow ?? growingRow;
       if (growingRow != null && growingRow.attached && growingRow.hasSize) {
         final y = growingRow.localToGlobal(Offset.zero).dy;
         if (y < end && y + growingRow.size.height > start) {
@@ -357,7 +349,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           return;
         }
       }
-      for (final key in [..._rows.values, _tail]) {
+      for (final key in {..._rows.values, _tail}) {
         final box = key.currentContext?.findRenderObject();
         if (box is! RenderBox || !box.hasSize) continue;
         final y = box.localToGlobal(Offset.zero).dy;
@@ -389,15 +381,29 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   @override
   Widget build(BuildContext context) {
     if (widget.nearbyMessages != null) return _nearbyMessages(context);
+    final buildStarted = CompletionDiagnostics.enabled
+        ? CompletionDiagnostics.start()
+        : 0;
     final chat = widget.chat;
     _scheduleNoticeVisibility();
-    final rows = groupTranscriptSections(chat.messages).reversed.toList();
+    final groupStarted = CompletionDiagnostics.enabled
+        ? CompletionDiagnostics.start()
+        : 0;
+    final live = chat.streamingMessage;
+    final messages = [...chat.messages, ?live];
+    final rows = groupTranscriptSections(messages).reversed.toList();
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.finish(
+        'transcript.group_sync',
+        groupStarted,
+        values: {'rows': chat.messages.length, 'sections': rows.length},
+      );
+    }
     // Join adjacent saved calls and live work without crossing visible prose
     // or hiding the latest review's standalone detail button.
     final joinCurrentActivity =
-        widget.beforeActivity.isEmpty && rows.isNotEmpty && rows.first.isTool;
+        live == null && rows.isNotEmpty && rows.first.isTool;
     final tailContent = [
-      ...widget.beforeActivity,
       if ((widget.currentActivity.isNotEmpty ||
               widget.activityTabs.isNotEmpty ||
               widget.activityThinking != null) &&
@@ -432,25 +438,36 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         chat.streaming.isEmpty &&
         !chat.busy &&
         tail.isEmpty;
-    final activeIds = chat.messages
-        .where((r) => r['id'] != null)
-        .map((r) => r['id'])
-        .toSet();
+    final keysStarted = CompletionDiagnostics.enabled
+        ? CompletionDiagnostics.start()
+        : 0;
+    final activeIds = messages.map(chat.messagePresentationId).toSet();
     _rows.removeWhere((id, _) => !activeIds.contains(id));
     // A sliver needs an index lookup to retain mounted message/expansion state
     // when a new tail shifts every existing row's index.
     final keys = <Key>[];
     final usedKeys = <Key>{};
+    var newIdlessKeys = 0;
+    var newDurableKeys = 0;
     for (final section in rows) {
       final group = section.messages.toList();
       final existing = group.reversed
-          .map((row) => _rows[row['id']])
+          .map((row) => _rows[chat.messagePresentationId(row)])
           .whereType<GlobalKey>()
           .where((key) => !usedKeys.contains(key))
           .firstOrNull;
       final id = group.last['id'];
       final key = existing ?? GlobalKey();
-      if (id != null) _rows[id] = key;
+      if (CompletionDiagnostics.enabled && existing == null) {
+        if (id == null) {
+          newIdlessKeys++;
+        } else {
+          newDurableKeys++;
+        }
+      }
+      for (final row in group) {
+        _rows[chat.messagePresentationId(row)] = key;
+      }
       keys.add(key);
       usedKeys.add(key);
     }
@@ -459,6 +476,16 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       for (var i = 0; i < keys.length; i++) keys[i]: tail.length + i,
       const ValueKey('history-edge'): tail.length + rows.length,
     };
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.finish(
+        'transcript.key_map_sync',
+        keysStarted,
+        values: {
+          'newIdlessKeys': newIdlessKeys,
+          'newDurableKeys': newDurableKeys,
+        },
+      );
+    }
     final transcript = NotificationListener<ExpansionAnchorNotification>(
       onNotification: (event) {
         ++_layoutGeneration;
@@ -542,7 +569,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                                 ? widget.currentActivity
                                 : const [],
                           )
-                        : widget.messageBuilder(row),
+                        : widget.messageBuilder(
+                            row,
+                            streaming: identical(row, live),
+                          ),
                   );
                 }
                 return KeyedSubtree(
@@ -667,6 +697,19 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         chat.approval != null ||
         chat.pendingQuestion != null ||
         chat.sensitivePrompt != null;
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.finish(
+        'transcript.build_setup_sync',
+        buildStarted,
+        values: {
+          'newIdlessKeys': newIdlessKeys,
+          'newDurableKeys': newDurableKeys,
+          'sections': rows.length,
+          'streaming': chat.streaming.isNotEmpty ? 1 : 0,
+          'busy': chat.busy ? 1 : 0,
+        },
+      );
+    }
     return Column(
       children: [
         Expanded(
@@ -780,7 +823,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                               borderRadius: WingRadius.card,
                             )
                           : null,
-                      child: widget.messageBuilder(section.messages.last),
+                      child: widget.messageBuilder(
+                        section.messages.last,
+                        streaming: false,
+                      ),
                     ),
               ],
             ),

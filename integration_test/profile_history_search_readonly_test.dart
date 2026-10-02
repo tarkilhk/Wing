@@ -143,7 +143,8 @@ void main() {
                   key: ValueKey(chat.key),
                   chat: chat,
                   controller: controller,
-                  messageBuilder: (m) => ProfileMessage(message: m),
+                  messageBuilder: (m, {required bool streaming}) =>
+                      ProfileMessage(message: m, streaming: streaming),
                   tail: const [],
                 ),
               ),

@@ -10,6 +10,7 @@ import '../models/deliverable_reference.dart';
 import '../services/file_open_error_message.dart';
 import '../services/markdown_inline_parser.dart';
 import '../services/markdown_qa_variant.dart';
+import '../services/completion_diagnostics.dart';
 import '../services/web_preview.dart';
 import '../theme/profile_markdown_style.dart';
 import 'chat_image_preview.dart';
@@ -49,6 +50,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
   Widget? _content;
   List<({Object source, Widget child})> _segments = const [];
   bool _refreshSegments = true;
+  bool _segmentsStreaming = false;
   MarkdownStyleSheet? _styleSheet;
   ThemeData? _markdownTheme;
   Map<String, MarkdownElementBuilder>? _markdownBuilders;
@@ -66,6 +68,12 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
   @override
   void initState() {
     super.initState();
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event(
+        'markdown.message.init',
+        values: {'streaming': widget.streaming ? 1 : 0},
+      );
+    }
     _scheduleFragment();
   }
 
@@ -109,6 +117,15 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
         (widget.onDownloadRemoteFile == null) !=
             (oldWidget.onDownloadRemoteFile == null)) {
       _content = null;
+      if (CompletionDiagnostics.enabled) {
+        CompletionDiagnostics.event(
+          'markdown.message.invalidate',
+          values: {
+            'dataChanged': widget.data != oldWidget.data ? 1 : 0,
+            'streamingChanged': widget.streaming != oldWidget.streaming ? 1 : 0,
+          },
+        );
+      }
     }
     if (widget.deliverables != oldWidget.deliverables ||
         widget.documentPath != oldWidget.documentPath ||
@@ -128,6 +145,9 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event('markdown.message.dependencies');
+    }
     // Theme, text scale and viewport changes still refresh the rendered content.
     _content = null;
     _styleSheet = null;
@@ -211,7 +231,26 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
   );
 
   @override
-  Widget build(BuildContext context) => _content ??= _buildContent(context);
+  Widget build(BuildContext context) {
+    if (_content != null) {
+      if (CompletionDiagnostics.enabled) {
+        CompletionDiagnostics.event('markdown.message.cached');
+      }
+      return _content!;
+    }
+    final start = CompletionDiagnostics.enabled
+        ? CompletionDiagnostics.start()
+        : 0;
+    final result = _content = _buildContent(context);
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.finish(
+        'markdown.message.build',
+        start,
+        values: {'segments': _segments.length},
+      );
+    }
+    return result;
+  }
 
   Widget _buildContent(BuildContext context) {
     MediaQuery.sizeOf(context);
@@ -235,10 +274,24 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     };
     _headingKeys.clear();
     final headings = _HeadingBuilder(_headingKeys);
+    final splitStart = CompletionDiagnostics.enabled
+        ? CompletionDiagnostics.start()
+        : 0;
     final sources = splitMarkdownCodeBlocks(
       widget.data,
       streaming: widget.streaming,
     );
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.finish(
+        'markdown.fence.split',
+        splitStart,
+        values: {
+          'segments': sources.length,
+          'prose': sources.whereType<String>().length,
+          'code': sources.whereType<MarkdownCodeBlock>().length,
+        },
+      );
+    }
     final next = <({Object source, Widget child})>[];
     final usedParsers = <int>{};
     for (var index = 0; index < sources.length; index++) {
@@ -250,6 +303,8 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
       if (!_refreshSegments &&
           widget.documentPath == null &&
           previous != null &&
+          (_segmentsStreaming == widget.streaming ||
+              source is MarkdownCodeBlock) &&
           _sameMarkdownSegment(previous.source, source)) {
         next.add(previous);
         if (_parsers.containsKey(index)) usedParsers.add(index);
@@ -321,12 +376,21 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
       next.add((source: source, child: child));
     }
     _segments = next;
+    _segmentsStreaming = widget.streaming;
     _parsers.removeWhere((index, _) => !usedParsers.contains(index));
     _refreshSegments = false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [for (final segment in next) segment.child],
     );
+  }
+
+  @override
+  void dispose() {
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event('markdown.message.dispose');
+    }
+    super.dispose();
   }
 }
 

@@ -112,6 +112,48 @@ class ProtocolTests(unittest.TestCase):
         self.assertNotIn("PRIVATE", json.dumps(sanitize_timeline(timeline(), 90, 210)))
         self.assertEqual(sanitize_timeline(timeline(), 90, 210)["traceEvents"][1]["id"], "0xab")
 
+    def test_static_function_owner_preserved_without_object_ids_or_library_paths(self):
+        value = cpu()
+        value['functions'][0]['function']['owner'] = {
+            'type':'@Class', 'name':'RenderEditable', 'id':'PRIVATE'}
+        value['functions'][1]['function']['owner'] = {
+            'type':'@Library', 'name':'file:///PRIVATE', 'id':'PRIVATE'}
+        clean = sanitize_cpu(value, 100, 200)
+        self.assertEqual(clean['functions'][0]['owner'], 'RenderEditable')
+        self.assertEqual(clean['functions'][1]['owner'], '')
+        self.assertNotIn('PRIVATE', json.dumps(clean))
+
+    def test_native_image_names_keep_only_known_library_and_address(self):
+        for path in ['/data/app/PRIVATE/base.apk!/lib/arm64-v8a/libapp.so+0x714a74',
+                     '/home/PRIVATE/libapp.so+0x714a74',
+                     r'C:\PRIVATE\libapp.so+0x714a74']:
+            with self.subTest(path=path):
+                value = cpu()
+                value['functions'][0]['function'].update(
+                    name='[Native] ' + path,
+                    owner={'type':'@Class', 'name':'RenderEditable', 'id':'PRIVATE'})
+                value['functions'][1]['function']['name'] = '[Native] /home/PRIVATE/unknown.so+0x123'
+                clean = sanitize_cpu(value, 100, 200)
+                self.assertEqual(clean['functions'][0]['name'], '[Native] libapp.so+0x714a74')
+                self.assertEqual(clean['functions'][0]['owner'], 'RenderEditable')
+                self.assertEqual(clean['functions'][1]['name'], '')
+                self.assertEqual(clean['samples'][0]['stack'], [0, 1])
+                self.assertNotIn('PRIVATE', json.dumps(clean))
+
+    def test_dart_division_operator_names_are_preserved(self):
+        for name in ['/', '~/','=/', '_Double./', '_IntegerImplementation.~/']:
+            with self.subTest(name=name):
+                value = cpu()
+                value['functions'][0]['function']['name'] = name
+                self.assertEqual(sanitize_cpu(value, 100, 200)['functions'][0]['name'], name)
+
+    def test_native_installation_path_is_not_exported_as_a_function_name(self):
+        value = cpu()
+        value['functions'][0]['function']['name'] = 'native /data/app/PRIVATE/base.apk symbol'
+        clean = sanitize_cpu(value, 100, 200)
+        self.assertEqual(clean['functions'][0]['name'], '')
+        self.assertNotIn('PRIVATE', json.dumps(clean))
+
     def test_empty_bad_indices_and_outside_samples_rejected(self):
         changes = [lambda v: v.update(sampleCount=0, samples=[]),
                    lambda v: v["samples"][0].update(stack=[2]),

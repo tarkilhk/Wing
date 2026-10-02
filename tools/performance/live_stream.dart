@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:wing/core/models/answer_versions.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/completion_diagnostics.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 import 'package:wing/core/widgets/model_chooser.dart';
@@ -313,6 +314,7 @@ void main() {
     'start',
     'stop',
     'cancel',
+    'diagnostics',
   ]) {
     developer.registerExtension('ext.wingLive.$action', (_, parameters) async {
       final mutation = !{
@@ -320,6 +322,7 @@ void main() {
         'markDraft',
         'start',
         'stop',
+        'diagnostics',
       }.contains(action);
       if (mutation && mutating) {
         return developer.ServiceExtensionResponse.error(
@@ -330,6 +333,11 @@ void main() {
       if (mutation) mutating = true;
       var stage = 'controller';
       try {
+        if (action == 'diagnostics') {
+          return developer.ServiceExtensionResponse.result(
+            jsonEncode(CompletionDiagnostics.snapshot()),
+          );
+        }
         if (action == 'ready' || action == 'adopt') {
           final controller = _controller();
           final chat = _visibleChat(controller);
@@ -493,6 +501,7 @@ void main() {
             throw StateError('Select and adopt the mounted QA chat');
           }
           measurement?.timer.cancel();
+          CompletionDiagnostics.reset();
           measurement = _Measurement(item);
         }
         if (action == 'stop') {
@@ -502,7 +511,11 @@ void main() {
           }
           captured.timer.cancel();
           captured.sample();
-          final report = {...snapshot(item), ...captured.report()};
+          final report = {
+            ...snapshot(item),
+            ...captured.report(),
+            'completionDiagnostics': CompletionDiagnostics.snapshot(),
+          };
           measurement = null;
           return developer.ServiceExtensionResponse.result(jsonEncode(report));
         }

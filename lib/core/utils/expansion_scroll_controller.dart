@@ -21,6 +21,14 @@ class ExpansionScrollController extends ScrollController {
 
   bool get hasExpansionAnchor => _anchor?.attached == true;
 
+  TranscriptAnchorBox? get expansionRow {
+    RenderObject? row = _anchor;
+    while (row != null && row is! TranscriptAnchorBox) {
+      row = row.parent;
+    }
+    return row as TranscriptAnchorBox?;
+  }
+
   /// Capture the reading position before new content is laid out. Correcting
   /// during layout avoids a visible jump and leaves drag/fling activities alive.
   void preserveReaderAnchor(

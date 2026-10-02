@@ -75,9 +75,9 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
               key: ValueKey(chat.key),
               chat: chat,
               controller: controller,
-              messageBuilder: (m) => SizedBox(
+              messageBuilder: (m, {required bool streaming}) => SizedBox(
                 key: ValueKey('body-${m['id']}'),
-                height: 60 + (m['id'] as int) % 3 * 20,
+                height: 60 + ((m['id'] as int?) ?? 0) % 3 * 20,
                 child: Text(m['content'].toString()),
               ),
               currentActivity: currentActivity,
@@ -131,17 +131,9 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                   key: ValueKey(chat.key),
                   chat: chat,
                   controller: controller,
-                  messageBuilder: (message) => ProfileMessage(message: message),
-                  beforeActivity: [
-                    if (chat.streaming.isNotEmpty)
-                      ProfileMessage(
-                        message: {
-                          'role': 'assistant',
-                          'content': chat.streaming,
-                        },
-                        streaming: true,
-                      ),
-                  ],
+                  messageBuilder: (message, {required bool streaming}) =>
+                      ProfileMessage(message: message, streaming: streaming),
+
                   tail: [
                     ProfileActivityTabs(
                       key: const ValueKey('retained-activity-tabs'),
@@ -789,7 +781,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
               builder: (_, _) => ProfileTranscript(
                 chat: chat,
                 controller: controller,
-                messageBuilder: (message) =>
+                messageBuilder: (message, {required bool streaming}) =>
                     Text(message['content'].toString()),
                 tail: const [],
                 nearbyMessages: nearby,

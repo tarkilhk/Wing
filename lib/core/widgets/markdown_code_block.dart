@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 import 'package:flutter/services.dart';
 
+import '../services/completion_diagnostics.dart';
+
 import 'web_output_preview.dart';
 
 /// Splits raw markdown into text segments and fenced code blocks.
@@ -75,6 +77,46 @@ class MarkdownCodeBlock extends StatefulWidget {
 class _MarkdownCodeBlockState extends State<MarkdownCodeBlock> {
   bool _wrap = false;
 
+  @override
+  void initState() {
+    super.initState();
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event('markdown.code.init');
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event('markdown.code.dependencies');
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant MarkdownCodeBlock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event(
+        'markdown.code.update',
+        values: {
+          'codeChanged': oldWidget.code != widget.code ? 1 : 0,
+          'previewChanged': oldWidget.previewEnabled != widget.previewEnabled
+              ? 1
+              : 0,
+        },
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event('markdown.code.dispose');
+    }
+    super.dispose();
+  }
+
   Future<void> _copy() async {
     await Clipboard.setData(ClipboardData(text: widget.code));
     if (!mounted) return;
@@ -90,6 +132,9 @@ class _MarkdownCodeBlockState extends State<MarkdownCodeBlock> {
 
   @override
   Widget build(BuildContext context) {
+    final start = CompletionDiagnostics.enabled
+        ? CompletionDiagnostics.start()
+        : 0;
     final theme = Theme.of(context);
     final background = theme.colorScheme.surfaceContainerLow;
     final header = theme.colorScheme.surfaceContainerHighest;
@@ -127,7 +172,7 @@ class _MarkdownCodeBlockState extends State<MarkdownCodeBlock> {
             ),
           );
 
-    return Container(
+    final result = Container(
       key: const Key('markdown-code-block'),
       margin: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
@@ -218,5 +263,9 @@ class _MarkdownCodeBlockState extends State<MarkdownCodeBlock> {
         ],
       ),
     );
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.finish('markdown.code.build', start);
+    }
+    return result;
   }
 }

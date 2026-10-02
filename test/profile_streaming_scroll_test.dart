@@ -101,18 +101,12 @@ void main({Future<void> Function(WidgetTester, String)? captureFrame}) {
                     builder: (_, _) => ProfileTranscript(
                       chat: chat,
                       controller: controller,
-                      messageBuilder: (message) =>
-                          ProfileMessage(message: message),
-                      beforeActivity: [
-                        if (chat.streaming.isNotEmpty)
+                      messageBuilder: (message, {required bool streaming}) =>
                           ProfileMessage(
-                            message: {
-                              'role': 'assistant',
-                              'content': chat.streaming,
-                            },
-                            streaming: true,
+                            message: message,
+                            streaming: streaming,
                           ),
-                      ],
+
                       tail: const [],
                     ),
                   ),

@@ -1066,15 +1066,18 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     ProfileChat chat,
     Map<String, dynamic> message, {
     bool allowSavedActions = true,
+    bool streaming = false,
   }) {
     if (isHiddenAnswerMessage(message)) return const SizedBox.shrink();
     final reasoning = profileMessageReasoning(message);
     final displayedHistory =
         _activeFindResult(chat)?.page.rows ?? chat.messages;
-    final sender = interAgentReplySender(
-      displayedHistory,
-      displayedHistory.indexOf(message),
-    );
+    final sender = streaming
+        ? null
+        : interAgentReplySender(
+            displayedHistory,
+            displayedHistory.indexOf(message),
+          );
     if (sender != null) {
       return AnchoredExpansionTile(
         key: ValueKey(('agent-reply', answerMessageId(message))),
@@ -1087,6 +1090,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         children: [
           if (reasoning.isNotEmpty) ProfileReasoningDisclosure(text: reasoning),
           ProfileMessage(
+            key: ValueKey(chat.messagePresentationId(message)),
             message: message,
             loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
             onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
@@ -1162,7 +1166,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           )
         else
           ProfileMessage(
+            key: ValueKey(chat.messagePresentationId(message)),
             message: message,
+            streaming: streaming,
             onReadAloud: message['role'] == 'assistant'
                 ? () => _run(() => _readAloud(chat, message))
                 : null,
@@ -1329,9 +1335,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             )),
             chat: chat,
             controller: controller,
-            messageBuilder: (message) => _answer(
+            messageBuilder: (message, {required bool streaming}) => _answer(
               chat,
               message,
+              streaming: streaming,
               allowSavedActions: _activeFindResult(chat) == null,
             ),
             nearbyMessages: _activeFindResult(chat)?.page.rows,
@@ -1340,13 +1347,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             onBackToLatest: _activeFindResult(chat) == null
                 ? null
                 : _backToLatest,
-            beforeActivity: [
-              if (chat.streaming.isNotEmpty)
-                ProfileMessage(
-                  message: {'role': 'assistant', 'content': chat.streaming},
-                  streaming: true,
-                ),
-            ],
             liveToolCount: chat.toolActivities.length,
             currentActivity: [
               if (chat.tool != null &&

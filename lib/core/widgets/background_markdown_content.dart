@@ -3,6 +3,7 @@ import 'package:markdown/markdown.dart' as md;
 
 import '../services/markdown_parse_worker.dart';
 import '../services/markdown_inline_parser.dart';
+import '../services/completion_diagnostics.dart';
 import 'studio_error.dart';
 
 /// Captures a transcript's reading position immediately before async growth.
@@ -60,6 +61,12 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
   @override
   void initState() {
     super.initState();
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event(
+        'markdown.background.init',
+        values: {'streaming': widget.streaming ? 1 : 0},
+      );
+    }
     WidgetsBinding.instance.addObserver(this);
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
@@ -80,11 +87,29 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
       }
       if (previous != null) {
         _renderedSource = previous._renderedSource;
+        final copyStart = CompletionDiagnostics.enabled
+            ? CompletionDiagnostics.start()
+            : 0;
         _nodes = copyMarkdownNodes(previous._nodes!);
+        if (CompletionDiagnostics.enabled) {
+          CompletionDiagnostics.finish(
+            'markdown.ast.copy',
+            copyStart,
+            values: {'blocks': _nodes!.length},
+          );
+        }
       }
     }
     if (widget.streaming) _displayed.add(this);
     _request();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event('markdown.background.dependencies');
+    }
   }
 
   @override
@@ -98,6 +123,16 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
     final changedConfiguration =
         widget.deliverables != oldWidget.deliverables ||
         widget.parse != oldWidget.parse;
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event(
+        'markdown.background.update',
+        values: {
+          'dataChanged': widget.data != oldWidget.data ? 1 : 0,
+          'configurationChanged': changedConfiguration ? 1 : 0,
+          'streamingChanged': widget.streaming != oldWidget.streaming ? 1 : 0,
+        },
+      );
+    }
     if (changedConfiguration || !widget.data.startsWith(oldWidget.data)) {
       _reset();
       // Nodes from another grammar cannot be rendered by the new builders.
@@ -131,6 +166,9 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
     final source = widget.data;
     final epoch = _epoch;
     _busy = true;
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event('markdown.background.parse.request');
+    }
     final parse = widget.parse;
     final future = Future<MarkdownParseResult>.sync(
       () => parse != null
@@ -145,6 +183,17 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
         .then(
           (result) {
             if (!mounted || !_foreground || epoch != _epoch) return;
+            if (CompletionDiagnostics.enabled) {
+              CompletionDiagnostics.event(
+                'markdown.background.parse.result',
+                values: {
+                  'parseUs': result.parseMicros,
+                  'cacheHits': result.cacheHits,
+                  'inlineParses': result.inlineParses,
+                  'blocks': result.nodes.length,
+                },
+              );
+            }
             MarkdownContentWillChange(context).dispatch(context);
             setState(() {
               // Accept newer completed progress even if another update is pending.
@@ -205,6 +254,9 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
 
   @override
   void dispose() {
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event('markdown.background.dispose');
+    }
     _displayed.remove(this);
     WidgetsBinding.instance.removeObserver(this);
     _reset();

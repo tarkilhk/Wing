@@ -70,7 +70,22 @@ def sanitize_cpu(value, start, end):
     for row in functions:
         name, uri = row["function"]["name"], row.get("resolvedUrl", "")
         require(isinstance(name, str) and isinstance(uri, str))
+        native_image = re.fullmatch(
+            r"\[Native\] .*[\\/](lib(?:app|flutter|c|m|dl|log|android|vulkan|EGL|GLESv2|hwui|art)\.so)(\+0x[0-9a-fA-F]+)?",
+            name,
+        )
+        if native_image:
+            name = "[Native] " + native_image[1] + (native_image[2] or "")
+        elif "\\" in name or re.search(r"/[A-Za-z0-9_.]", name):
+            name = ""
+        owner = row["function"].get("owner")
+        owner_name = ""
+        if isinstance(owner, dict) and owner.get("type") in ("@Class", "@Function"):
+            candidate = owner.get("name", "")
+            if isinstance(candidate, str) and re.fullmatch(r"[A-Za-z0-9_$<>. ]{1,256}", candidate):
+                owner_name = candidate
         rows.append({"name": name, "source": uri if uri.startswith(("dart:", "package:")) else "",
+                     "owner": owner_name,
                      "inclusive_ticks": integer(row["inclusiveTicks"]),
                      "exclusive_ticks": integer(row["exclusiveTicks"])})
     clean = []

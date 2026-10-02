@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'support/profile_history_fixture.dart';
 import 'helpers/pump_markdown_widget.dart';
@@ -11,9 +12,13 @@ import 'helpers/pump_markdown_widget.dart';
 void main() {
   late ProfileHistoryFixture host;
   late ProfileWorkspaceController controller;
+  String? runningAssistant;
+  var disableAnimations = false;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     host = ProfileHistoryFixture();
+    runningAssistant = null;
+    disableAnimations = false;
     controller = ProfileWorkspaceController(
       connection: SavedConnection(
         id: 'host',
@@ -24,7 +29,31 @@ void main() {
       ),
       connectionIdentity: 'test',
       preferences: await SharedPreferences.getInstance(),
-      gatewayFactory: host.gateway,
+      gatewayFactory: (scope) {
+        final gateway = host.gateway(scope);
+        return ProfileGateway(
+          scope: scope,
+          get: gateway.read,
+          rpc: (method, params) async {
+            final result = await gateway.call(method, params);
+            if (method == 'session.resume' &&
+                scope.profileName == 'personal' &&
+                params['session_id'] == 'chat-0' &&
+                runningAssistant != null) {
+              return {
+                ...result,
+                'running': true,
+                'inflight': {'assistant': runningAssistant},
+              };
+            }
+            return result;
+          },
+          discover: gateway.discover,
+          connect: gateway.connect,
+          close: gateway.close,
+          disconnect: gateway.disconnect,
+        );
+      },
     );
     await controller.initialize();
   });
@@ -38,7 +67,15 @@ void main() {
 
   Future<void> show(WidgetTester tester) async {
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(disableAnimations: disableAnimations),
+          child: child!,
+        ),
+        home: ProfileWorkspaceScreen(controller: controller),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.settleMarkdown();
@@ -204,7 +241,12 @@ void main() {
   testWidgets(
     'latest opens at bottom; older pages and stream updates keep a visible row anchored',
     (tester) async {
+      disableAnimations = true;
+      // Keep the running viewport stable while measuring stream growth and
+      // resume; an idle-to-running chrome change is a different transition.
+      runningAssistant = '';
       final chat = await open();
+      expect(chat.busy, isTrue);
       await show(tester);
       expect(find.text('personal message 620'), findsOneWidget);
       final list = find.byKey(const ValueKey('profile-transcript'));
@@ -231,17 +273,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.getTopLeft(find.text(text)).dy, closeTo(before, 1));
       chat.streaming = List.filled(12, 'Streaming line\n').join();
+      runningAssistant = chat.streaming;
       controller.clearSearch(); // Publishes the same chat with a growing tail.
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
       await tester.pumpAndSettle();
       expect(tester.getTopLeft(find.text(text)).dy, closeTo(before, 2));
       final position = chat.historyScrollOffset;
+      final ongoingSource = chat.streaming;
+      expect(chat.busy, isTrue);
       controller.showList();
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
       await tester.pumpAndSettle();
       await open();
+      expect(chat.busy, isTrue);
+      expect(chat.streaming, ongoingSource);
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
       await tester.pumpAndSettle();

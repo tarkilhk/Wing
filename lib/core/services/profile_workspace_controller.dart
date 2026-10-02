@@ -28,6 +28,7 @@ import '../models/side_question_delivery.dart';
 import '../models/slash_command.dart';
 import 'attachment_draft_service.dart';
 import 'composer_draft_store.dart';
+import 'completion_diagnostics.dart';
 import 'remote_files_client.dart';
 import 'connection_manager.dart';
 import 'profile_gateway.dart';
@@ -123,7 +124,136 @@ class ProfileChat {
   String draft = '';
   bool draftSubmissionUncertain = false;
   QueuedPromptDraft? _outgoingPrompt;
-  String streaming = '';
+  String _streaming = '';
+  Map<String, dynamic>? _streamingMessage;
+  Map<String, dynamic>? _lastInterimMessage;
+  int _lastInterimTurn = -1;
+  final _messagePresentations = Expando<Object>();
+  final _confirmedPresentations = <int, Object>{};
+
+  String get streaming => _streaming;
+  set streaming(String value) {
+    _streaming = value;
+    if (value.isEmpty) {
+      _streamingMessage = null;
+    } else {
+      (_streamingMessage ??= {'role': 'assistant'})['content'] = value;
+    }
+  }
+
+  /// Presentation ownership is in memory only, separate from Hermes row IDs.
+  Map<String, dynamic>? get streamingMessage => _streamingMessage;
+  Object messagePresentationId(Map<String, dynamic> row) =>
+      _messagePresentations[row] ??= Object();
+
+  void _appendAssistantMessage(
+    String text, {
+    Object? persistedTurn,
+    bool interim = false,
+    bool responsePreviewed = false,
+  }) {
+    final preview = responsePreviewed ? _lastInterimMessage : null;
+    final reusePreview =
+        preview != null &&
+        _lastInterimTurn == _turnGeneration &&
+        _streaming.isEmpty &&
+        messages.contains(preview) &&
+        preview['content'] == text;
+    final row = reusePreview
+        ? preview
+        : _streamingMessage ?? {'role': 'assistant'};
+    row.addAll({
+      'content': text,
+      'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
+      if (reasoning.isNotEmpty) '_gateway_reasoning': reasoning,
+    });
+    if (!reusePreview) messages.add(row);
+    _lastInterimMessage = interim ? row : null;
+    _lastInterimTurn = interim ? _turnGeneration : -1;
+    // Upstream 44a1ce9724502b9c692faaef00af3054bf11f1a6:
+    // tui_gateway/prompt_turn.py::_persisted_turn_receipt proves this committed
+    // row contains the final answer even
+    // when the receipt cannot establish persistence of the whole turn.
+    if (persistedTurn is Map) {
+      final id = persistedTurn['final_assistant_row_id'];
+      final ids = persistedTurn['row_ids'];
+      if (id is int &&
+          id > 0 &&
+          ids is List &&
+          ids.whereType<int>().contains(id)) {
+        _confirmedPresentations
+          ..clear()
+          ..[id] = messagePresentationId(row);
+      }
+    }
+    streaming = '';
+  }
+
+  void _retainMessagePresentations(
+    List<Map<String, dynamic>> refreshed,
+    String segment,
+  ) {
+    if (historySessionId != null && historySessionId != segment) {
+      _confirmedPresentations.clear();
+      _lastInterimMessage = null;
+      return;
+    }
+    final previousById = {
+      for (final row in messages)
+        if (row['id'] != null) row['id']: row,
+    };
+    for (final row in refreshed) {
+      final previous = previousById[row['id']];
+      final previousToken = previous == null
+          ? null
+          : _messagePresentations[previous];
+      final confirmed = row['role'] == 'assistant'
+          ? _confirmedPresentations.remove(row['id'])
+          : null;
+      if (confirmed != null && row['role'] == 'assistant') {
+        _messagePresentations[row] = confirmed;
+      } else if (previousToken != null) {
+        _messagePresentations[row] = previousToken;
+      }
+    }
+    // Some current-stock completions have no persistence receipt. Only bind
+    // provisional rows when the entire visible suffix after a known durable
+    // boundary agrees in order and content. Never match repeated text globally.
+    final boundary = messages.lastIndexWhere((row) => row['id'] != null);
+    if (boundary >= 0) {
+      final nextBoundary = refreshed.indexWhere(
+        (row) => row['id'] == messages[boundary]['id'],
+      );
+      if (nextBoundary >= 0) {
+        bool visible(Map<String, dynamic> row) =>
+            isBranchMessage(row) && !isHiddenAnswerMessage(row);
+        final pending = messages.skip(boundary + 1).where(visible).toList();
+        final saved = refreshed.skip(nextBoundary + 1).where(visible).toList();
+        if (pending.isNotEmpty &&
+            pending.length == saved.length &&
+            pending.indexed.every(
+              (entry) =>
+                  entry.$2['role'] == saved[entry.$1]['role'] &&
+                  entry.$2['display_kind'] == saved[entry.$1]['display_kind'] &&
+                  answerMessageDisplayText(entry.$2) ==
+                      answerMessageDisplayText(saved[entry.$1]),
+            )) {
+          for (var i = 0; i < pending.length; i++) {
+            final token = _messagePresentations[pending[i]];
+            if (token != null) _messagePresentations[saved[i]] = token;
+          }
+        }
+      }
+    }
+    final interim = _lastInterimMessage;
+    if (interim != null) {
+      final token = messagePresentationId(interim);
+      _lastInterimMessage = refreshed
+          .where((row) => identical(_messagePresentations[row], token))
+          .firstOrNull;
+    }
+  }
+
   String? tool;
   final List<GatewayToolActivity> toolActivities = [];
   String reasoning = '';
@@ -2071,6 +2201,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileChat chat, {
     bool propagateFailure = false,
   }) async {
+    final historySetupStarted = CompletionDiagnostics.enabled
+        ? CompletionDiagnostics.start()
+        : 0;
     final resource = _owned(chat);
     final generation = ++chat.historyGeneration;
     chat.historyLoading = true;
@@ -2078,11 +2211,21 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat.historyUnavailable = false;
     _changed(browserChat: chat.key);
     try {
-      final page = await resource.gateway.history(
+      final historyRead = resource.gateway.history(
         chat.key.sessionId,
         runtimeId: chat.runtimeId,
       );
+      if (CompletionDiagnostics.enabled) {
+        CompletionDiagnostics.finish(
+          'controller.history_setup_sync',
+          historySetupStarted,
+        );
+      }
+      final page = await historyRead;
       if (_closed || chat.historyGeneration != generation) return;
+      final historyApplyStarted = CompletionDiagnostics.enabled
+          ? CompletionDiagnostics.start()
+          : 0;
       final anchor =
           page.rows.isEmpty || chat.historySessionId != page.sessionId
           ? -1
@@ -2094,6 +2237,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         ...prefix.where((row) => !isLocalTranscriptMessage(row)),
         ...page.rows,
       ];
+      chat._retainMessagePresentations(refreshed, page.sessionId);
       chat.messages = chat.historySessionId == page.sessionId
           ? retainLocalTranscriptMessages(chat.messages, refreshed)
           : refreshed;
@@ -2108,6 +2252,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
       final needsConversationContext = chat.messages.any(
         (row) => row['role'] == 'tool',
       );
+      if (CompletionDiagnostics.enabled) {
+        CompletionDiagnostics.finish(
+          'controller.history_apply_initial_sync',
+          historyApplyStarted,
+          values: {'rows': chat.messages.length},
+        );
+      }
       while (needsConversationContext &&
           chat.nextHistoryOffset != null &&
           !chat.messages.any(
@@ -6276,6 +6427,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (chat == null) return;
     final activityBefore = chat.mainActivity;
     final statusBefore = chat.status;
+    final completionEvent =
+        CompletionDiagnostics.enabled &&
+        (event.type == 'message.complete' || event.type == 'turn.end');
+    final completionWasBusy = completionEvent && chat.busy;
+    final completionStarted = CompletionDiagnostics.enabled && completionEvent
+        ? CompletionDiagnostics.start()
+        : 0;
     switch (event.type) {
       case 'session.title':
         if (event.data['session_id'] == chat.key.sessionId) {
@@ -6347,12 +6505,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       case 'message.interim':
         final text = event.data['text']?.toString() ?? chat.streaming;
         if (text.isNotEmpty) {
-          chat.messages.add({
-            'role': 'assistant',
-            'content': text,
-            'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
-            if (chat.reasoning.isNotEmpty) '_gateway_reasoning': chat.reasoning,
-          });
+          chat._appendAssistantMessage(text, interim: true);
         }
         chat.streaming = '';
         chat.reasoning = '';
@@ -6582,6 +6735,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
     } else {
       _changed(browserChat: chat.key);
     }
+    if (CompletionDiagnostics.enabled && completionEvent) {
+      CompletionDiagnostics.finish(
+        event.type == 'message.complete'
+            ? 'controller.message_complete_sync'
+            : 'controller.turn_end_sync',
+        completionStarted,
+        values: {'wasBusy': completionWasBusy ? 1 : 0},
+      );
+    }
   }
 
   Future<void> _settle(
@@ -6603,6 +6765,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileChat chat,
     Map<String, dynamic> completion,
   ) async {
+    final handoffStarted = CompletionDiagnostics.enabled
+        ? CompletionDiagnostics.start()
+        : 0;
     final turnGeneration = chat._turnGeneration;
     bool isCurrentTurn() => chat._turnGeneration == turnGeneration;
     final failed = completion['status'] == 'error';
@@ -6628,13 +6793,24 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat._commandPreflightSensitivePrompt = null;
     chat._commandPreflightReturnStatus = null;
     final finalText = completion['text']?.toString() ?? chat.streaming;
+    final excerptStarted = CompletionDiagnostics.enabled
+        ? CompletionDiagnostics.start()
+        : 0;
+    final notificationContent = failed
+        ? ChatNotificationContent.failed
+        : cancelled
+        ? ChatNotificationContent.stopped
+        : ChatNotificationContent.reply(finalText);
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.finish(
+        'controller.notification_content_sync',
+        excerptStarted,
+        values: {'reply': !failed && !cancelled ? 1 : 0},
+      );
+    }
     final notification = _notification(
       chat,
-      failed
-          ? ChatNotificationContent.failed
-          : cancelled
-          ? ChatNotificationContent.stopped
-          : ChatNotificationContent.reply(finalText),
+      notificationContent,
       eventId: _notificationEventId(completion),
       focus: NotificationFocus(
         failed || cancelled ? 'status' : 'answer',
@@ -6643,17 +6819,32 @@ class ProfileWorkspaceController extends ChangeNotifier {
       ),
     );
     if (finalText.isNotEmpty) {
-      chat.messages.add({
-        'role': 'assistant',
-        'content': finalText,
-        'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
-        if (chat.reasoning.isNotEmpty) '_gateway_reasoning': chat.reasoning,
-      });
+      chat._appendAssistantMessage(
+        finalText,
+        persistedTurn: completion['persisted_turn'],
+        responsePreviewed: completion['response_previewed'] == true,
+      );
     }
     chat.streaming = '';
     chat.error = failure;
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.finish(
+        'controller.completion_handoff_sync',
+        handoffStarted,
+        values: {'rows': chat.messages.length},
+      );
+    }
+    final historyStarted = CompletionDiagnostics.enabled
+        ? CompletionDiagnostics.start()
+        : 0;
     try {
       await refreshHistory(chat);
+      if (CompletionDiagnostics.enabled) {
+        CompletionDiagnostics.finish(
+          'controller.completion_history_wall',
+          historyStarted,
+        );
+      }
       if (!isCurrentTurn()) return;
       if (chat.historyError != null) throw StateError('History refresh failed');
       chat.toolActivities.clear();

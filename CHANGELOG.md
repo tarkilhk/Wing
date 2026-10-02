@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Retain selectable paragraph text while replies stream, avoiding repeated
+  text-control setup and preserving valid selections as paragraphs grow.
+- Keep streamed answers mounted through completion and saved-history refresh,
+  preserving text selection, code controls and the reader's position.
 - Prepare chat Markdown in a background worker and reuse unchanged inline
   parsing, keeping streaming replies from blocking typing and scrolling.
 - Restore the reading position when reopening chats while background Markdown
