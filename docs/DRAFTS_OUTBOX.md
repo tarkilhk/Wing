@@ -38,12 +38,10 @@ destination before removing the source; an interrupted transfer can leave two
 recoverable copies. Platform write failures attempt to restore the previous
 record. No storage implementation can promise durability after a failed write.
 
-A local comparison with 40 unrelated 64 KiB drafts and ten small edits measured
-the synchronous preparation of each save, excluding awaited platform completion:
-the median fell from 7.212 ms to 0.032 ms, and each platform payload fell from
-2,626,850 bytes to 138 bytes. This establishes less Dart-side serialization work,
-not phone frame-time, native disk-write or battery improvement. Android's
-preferences implementation may still rewrite its underlying file.
+Per-conversation encoding reduces Dart-side serialization work. It does not
+establish a frame-time or battery improvement, and Android preferences may still
+rewrite their underlying file. Keep measured results in the private archive
+described in [Performance investigation](PERFORMANCE.md).
 
 ## Stock Hermes contract
 

@@ -6,9 +6,24 @@
 
 **Your agent, with you**
 
-Continue a conversation, steer running work, and send the next idea from your Android phone. Wing connects to a [Hermes Agent](https://github.com/NousResearch/hermes-agent) server that you control or have access to.
+Wing is an independent, open-source Android app for [Hermes Agent](https://github.com/NousResearch/hermes-agent). Pick up a conversation, check what your agent is doing, and send the next idea when you step away from your desk. Your agent runs on your Hermes server; Wing brings its conversations and controls to your phone.
 
 [**Download Wing for Android**](https://github.com/tarkilhk/Wing/releases/latest) · [Get started](docs/GETTING_STARTED.md) · [Explore Wing](docs/FEATURES.md) · [Support Wing](#support-wing)
+
+**You need:** Android 7.0 or newer and access to a Hermes server with its dashboard, Desktop Gateway and a configured model provider. [Connection guide](docs/GETTING_STARTED.md).
+
+## Your Hermes workflow, on your phone
+
+- **Pick up where you left off.** Find conversations across connections, profiles and projects. Search, pin and group chats, or use Recents to catch up on recent and ongoing work.
+- **Keep work moving.** Follow streaming replies, available reasoning and tool activity. Steer or stop a running chat, queue the next instruction, review supported approvals, and inspect subagents and goals.
+- **Bring ideas from Android.** Attach photos and files, take a picture, or review content shared from another app. Dictate into an editable draft and read replies aloud, with separate on-device or Hermes voice choices.
+- **Use the results.** Read code and tables, search within a chat, and preview images, PDFs, Markdown, HTML reports, supported diagrams and media. Save or share output files through Android.
+- **Look after your agent.** Manage supported profiles, models, provider access, MCP connectors and scheduled tasks. Check health, run diagnostics, and explore activity and token usage in Hermes analytics.
+- **Make it yours.** Choose light or dark themes, accent colors and text size. Keep unsent drafts and staged files across navigation and restart, and back up connections and app preferences.
+
+Wing is free to use, with every feature available without a Wing subscription. It connects to your chosen Hermes server; the maintainer does not relay your conversations. Your server and model providers handle the content you send and any service charges. [Privacy policy](PRIVACY.md).
+
+[Explore the full feature guide](docs/FEATURES.md) · [Good to know before you start](docs/KNOWN_LIMITATIONS.md)
 
 ## See Wing in action
 
@@ -51,24 +66,21 @@ Continue a conversation, steer running work, and send the next idea from your An
   </tr>
 </table>
 
-## Your Hermes workflow, on your phone
-
-- **Talk naturally.** Stream replies, inspect reasoning and tool activity, read code and tables, search within a chat, and open images, PDFs, Markdown, media and supported diagrams.
-- **Stay in control.** Steer or stop work, queue a follow-up, review supported approvals, inspect subagents and goals, and return to a chat after a connection interruption. Unsent drafts and staged files survive navigation and restart.
-- **Bring ideas from Android.** Attach photos and files, review content shared from another app, dictate into an editable draft, and read replies aloud. Choose on-device or Hermes speech processing separately for input and output.
-- **Organize your workspace.** Switch connections and profiles, browse projects and pinned chats, filter active work, and use launcher shortcuts for Quick Chat, Recents and Search chats.
-- **Operate your agent.** Manage supported profile settings, model access, MCP connectors and scheduled tasks. Check server and profile health, run diagnostics, and explore usage in Hermes analytics.
-- **Keep the phone in the loop.** Get local progress, reply and approval notifications while Wing is connected. Backup or restore connection and app preferences, optionally protected with a passphrase.
-
-[Explore the full feature guide](docs/FEATURES.md) · [Good to know before you start](docs/KNOWN_LIMITATIONS.md)
-
 ## Get started
 
 1. Have a compatible Hermes dashboard and Desktop Gateway reachable from your phone. Use HTTPS or an encrypted private network for remote access.
 2. Install a signed APK from the [latest release](https://github.com/tarkilhk/Wing/releases/latest). **arm64-v8a** is right for most current phones; the release also lists other architectures and checksums.
 3. Follow the [setup guide](docs/GETTING_STARTED.md) to connect, choose a profile and send your first message.
 
-Wing requires Android 7.0 or later. It does not host a model or AI service on your phone. An API key for the older Hermes API-only transport is not enough for the dashboard and Desktop Gateway connection.
+The [self-hosting guide](docs/SELF_HOSTING.md) covers dashboard access and proxy setup. A model-provider API key alone does not establish Wing's dashboard and Desktop Gateway connection.
+
+## Connections, notifications and backups
+
+- **Your agent works on the server.** Work already accepted by Hermes can continue when your phone disconnects. Sending new messages and controlling live work need a connection; some recent chats remain available for offline reading.
+- **Alerts come from live connections.** Wing can notify you about replies and input requests while you use other apps. Android background restrictions, force-stop and network loss can interrupt delivery. [Notification setup](docs/NOTIFICATIONS.md).
+- **Backups save configuration.** Exports include connections, saved credentials and supported app preferences, with optional passphrase encryption. Conversations stay on Hermes; drafts and queues are excluded. [Backup details](docs/CONFIGURATION_BACKUPS.md).
+
+This page describes the current source. For changes available in a downloaded APK, check its [release notes](https://github.com/tarkilhk/Wing/releases/latest).
 
 ## Support Wing
 
