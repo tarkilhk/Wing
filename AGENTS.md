@@ -14,6 +14,14 @@ Verify the stock API before designing a feature. If it cannot support the reques
 behavior, state that limitation and discuss a client-only design. Never silently
 change shared profile settings to simulate an unsaved voice preview.
 
+# Performance testing
+
+For instrumentation, benchmarking or device profiling, read
+[Performance investigation](docs/PERFORMANCE.md) before building or recording
+results. It owns release gating and private evidence storage. Recorded
+measurements belong outside public Git; public docs retain procedures and
+regression contracts.
+
 # UI design
 
 For UI work, read [the Studio design charter](docs/DESIGN_SYSTEM.md) before changing screens, components, themes, or interaction layouts. It owns the selected appearance, component rules, and behavior-preservation contract. Use its shared tokens for new and existing controls, including light and dark states.

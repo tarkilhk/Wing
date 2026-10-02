@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/deliverable_reference.dart';
 import 'package:wing/core/services/markdown_inline_parser.dart';
+import 'package:wing/core/services/performance_instrumentation.dart';
 import 'package:markdown/markdown.dart' as md;
 
 List<Object> _ast(List<md.Node> nodes) => nodes.map(_nodeValue).toList();
@@ -50,6 +51,30 @@ void _mutate(List<md.Node> nodes) {
 }
 
 void main() {
+  test('measurement switch leaves output unchanged and gates every metric', () {
+    final parser = MarkdownInlineParser(deliverables: false);
+    const source =
+        'First **paragraph**.\n\nSecond [link](https://example.test).';
+    for (var repetition = 0; repetition < 2; repetition++) {
+      expect(
+        _ast(parser.parse(source)),
+        _ast(_stock(source, deliverables: false)),
+      );
+      expect(
+        parser.inlineParses,
+        PerformanceInstrumentation.enabled && repetition == 0 ? 2 : 0,
+      );
+      expect(
+        parser.cacheHits,
+        PerformanceInstrumentation.enabled && repetition == 1 ? 2 : 0,
+      );
+      expect(
+        parser.lastParseMicros,
+        PerformanceInstrumentation.enabled ? greaterThanOrEqualTo(0) : 0,
+      );
+    }
+  });
+
   test(
     'reference definitions invalidate cached expansions before inline parse',
     () {
@@ -66,7 +91,7 @@ void main() {
         final source = '$paragraph\n\n$definitions';
         expect(_ast(parser.parse(source)), _ast(_stock(source)));
         expect(parser.cacheHits, 0);
-        expect(parser.inlineParses, 1);
+        expect(parser.inlineParses, PerformanceInstrumentation.enabled ? 1 : 0);
       }
     },
   );
@@ -101,7 +126,10 @@ void main() {
     _mutate(first);
     final second = parser.parse(source);
     expect(_ast(second), expected);
-    expect(parser.cacheHits, greaterThan(0));
+    expect(
+      parser.cacheHits,
+      PerformanceInstrumentation.enabled ? greaterThan(0) : 0,
+    );
     _mutate(second);
     final third = parser.parse(source);
     expect(_ast(third), expected);
@@ -116,13 +144,13 @@ void main() {
       _ast(parser.parse(truncated)),
       _ast(_stock(truncated, deliverables: false)),
     );
-    expect(parser.cacheHits, 1);
+    expect(parser.cacheHits, PerformanceInstrumentation.enabled ? 1 : 0);
     const removed = 'Second [link](https://example.com).';
     parser.parse(removed);
     expect(parser.cacheHits, 0);
-    expect(parser.inlineParses, 1);
+    expect(parser.inlineParses, PerformanceInstrumentation.enabled ? 1 : 0);
     parser.parse(removed);
-    expect(parser.cacheHits, 1);
+    expect(parser.cacheHits, PerformanceInstrumentation.enabled ? 1 : 0);
     parser.parse('');
     parser.parse(removed);
     expect(parser.cacheHits, 0);
@@ -132,7 +160,7 @@ void main() {
     expect(parser.lastParseMicros, 0);
     parser.parse(removed);
     expect(parser.cacheHits, 0);
-    expect(parser.inlineParses, 1);
+    expect(parser.inlineParses, PerformanceInstrumentation.enabled ? 1 : 0);
   });
 
   test('unchanged paragraphs with ordinary links avoid inline reparsing', () {
@@ -150,9 +178,9 @@ void main() {
     cached.parse('$paragraphs\n\nStreaming tail');
     final source = '$paragraphs\n\nStreaming tail grows';
     expect(_ast(cached.parse(source)), _ast(uncached.parse(source)));
-    expect(cached.inlineParses, 1);
-    expect(cached.cacheHits, 80);
-    expect(uncached.inlineParses, 81);
+    expect(cached.inlineParses, PerformanceInstrumentation.enabled ? 1 : 0);
+    expect(cached.cacheHits, PerformanceInstrumentation.enabled ? 80 : 0);
+    expect(uncached.inlineParses, PerformanceInstrumentation.enabled ? 81 : 0);
     expect(uncached.cacheHits, 0);
   });
 

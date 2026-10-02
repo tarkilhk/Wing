@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../services/markdown_parse_worker.dart';
 import '../services/markdown_segments.dart';
 import '../services/completion_diagnostics.dart';
+import '../services/performance_instrumentation.dart';
 import 'studio_error.dart';
 
 /// Captures a transcript's reading position immediately before async growth.
@@ -143,11 +144,15 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
         _segments = null;
         _renderedSource = null;
       }
-    } else if (_busy && widget.data != oldWidget.data) {
+    } else if (PerformanceInstrumentation.enabled &&
+        _busy &&
+        widget.data != oldWidget.data) {
       updatesCoalesced++;
     }
-    final lag = widget.data.length - (_renderedSource?.length ?? 0);
-    if (lag > maxPendingCharacters) maxPendingCharacters = lag;
+    if (PerformanceInstrumentation.enabled) {
+      final lag = widget.data.length - (_renderedSource?.length ?? 0);
+      if (lag > maxPendingCharacters) maxPendingCharacters = lag;
+    }
     _failed = false;
     _request();
   }
@@ -170,9 +175,13 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
     }
     final source = widget.data;
     final epoch = _epoch;
-    final requestWatch = Stopwatch()..start();
-    final lag = source.length - (_renderedSource?.length ?? 0);
-    if (lag > maxPendingCharacters) maxPendingCharacters = lag;
+    final requestWatch = PerformanceInstrumentation.enabled
+        ? (Stopwatch()..start())
+        : null;
+    if (PerformanceInstrumentation.enabled) {
+      final lag = source.length - (_renderedSource?.length ?? 0);
+      if (lag > maxPendingCharacters) maxPendingCharacters = lag;
+    }
     _busy = true;
     if (CompletionDiagnostics.enabled) {
       CompletionDiagnostics.event('markdown.background.parse.request');
@@ -191,7 +200,9 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
         .then(
           (result) {
             if (!mounted || !_foreground || epoch != _epoch) return;
-            final requestMicros = requestWatch.elapsedMicroseconds;
+            final requestMicros = PerformanceInstrumentation.enabled
+                ? requestWatch!.elapsedMicroseconds
+                : 0;
             if (CompletionDiagnostics.enabled) {
               CompletionDiagnostics.event(
                 'markdown.background.parse.result',
@@ -211,13 +222,15 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
               // Otherwise a fast stream could starve rendering until it completes.
               _renderedSource = source;
               _segments = result.segments;
-              parsesCompleted++;
-              totalParserMicros += result.parseMicros;
-              totalCacheHits += result.cacheHits;
-              totalFenceMicros += result.fenceMicros;
-              totalRequestMicros += requestMicros;
-              if (requestMicros > maxRequestMicros) {
-                maxRequestMicros = requestMicros;
+              if (PerformanceInstrumentation.enabled) {
+                parsesCompleted++;
+                totalParserMicros += result.parseMicros;
+                totalCacheHits += result.cacheHits;
+                totalFenceMicros += result.fenceMicros;
+                totalRequestMicros += requestMicros;
+                if (requestMicros > maxRequestMicros) {
+                  maxRequestMicros = requestMicros;
+                }
               }
             });
           },

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wing/core/services/performance_instrumentation.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
 import 'package:wing/core/widgets/block_reusing_markdown_body.dart';
 import 'package:wing/core/widgets/markdown_code_block.dart';
@@ -29,7 +30,7 @@ void main() {
     );
     expect(state.renderedSource, source);
     expect(state.pending, isFalse);
-    expect(state.parsesCompleted, 1);
+    expect(state.parsesCompleted, PerformanceInstrumentation.enabled ? 1 : 0);
     expect(
       tester
           .widgetList<BlockReusingMarkdownBody>(
@@ -59,6 +60,12 @@ void main() {
       );
       final codeState = tester.state(find.byType(MarkdownCodeBlock));
       final parses = parser.parsesCompleted;
+      final acceptedNodes = tester
+          .widgetList<BlockReusingMarkdownBody>(
+            find.byType(BlockReusingMarkdownBody),
+          )
+          .map((body) => body.parsedNodes)
+          .toList();
       expect(
         tester
             .widget<MarkdownCodeBlock>(find.byType(MarkdownCodeBlock))
@@ -71,6 +78,15 @@ void main() {
         same(parser),
       );
       expect(parser.parsesCompleted, parses);
+      final completedBodies = tester
+          .widgetList<BlockReusingMarkdownBody>(
+            find.byType(BlockReusingMarkdownBody),
+          )
+          .toList();
+      expect(completedBodies, hasLength(acceptedNodes.length));
+      for (var index = 0; index < acceptedNodes.length; index++) {
+        expect(completedBodies[index].parsedNodes, same(acceptedNodes[index]));
+      }
       expect(parser.pending, isFalse);
       expect(tester.state(find.byType(MarkdownCodeBlock)), same(codeState));
       expect(
@@ -83,7 +99,10 @@ void main() {
       const unclosed = 'Replacement.\n\n```svg\n<svg></svg>';
       await tester.pumpMarkdownWidget(_host(unclosed, streaming: false));
       expect(parser.renderedSource, unclosed);
-      expect(parser.parsesCompleted, parses + 1);
+      expect(
+        parser.parsesCompleted,
+        PerformanceInstrumentation.enabled ? parses + 1 : 0,
+      );
       expect(find.text('Before.', findRichText: true), findsNothing);
       expect(find.text('Replacement.', findRichText: true), findsOneWidget);
       expect(

@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -21,7 +22,9 @@ class VerifyApksTest(unittest.TestCase):
         self.apks.mkdir(parents=True)
         self.abis = {"armeabi-v7a": 1, "arm64-v8a": 2, "x86_64": 3}
         for abi in self.abis:
-            (self.apks / f"app-{abi}-release.apk").touch()
+            with zipfile.ZipFile(self.apks / f"app-{abi}-release.apk", "w",
+                                 compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr(f"lib/{abi}/libapp.so", b"compiled app snapshot")
         (self.root / "android").mkdir()
         (self.root / "android/wing-release-certificate.sha256").write_text("a" * 64)
         (self.root / "sdk/build-tools/36.0.0").mkdir(parents=True)
@@ -97,6 +100,21 @@ class VerifyApksTest(unittest.TestCase):
     def test_rejects_extra_debug_artifact(self):
         (self.apks / "app-debug.apk").touch()
         with self.assertRaisesRegex(ValueError, "Expected exactly"):
+            self.verify()
+
+    def test_rejects_each_measurement_marker_in_non_arm64_snapshot(self):
+        apk = self.apks / 'app-x86_64-release.apk'
+        for marker in verify_release_apks.PERFORMANCE_MARKERS:
+            with self.subTest(marker=marker):
+                with zipfile.ZipFile(apk, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+                    archive.writestr('lib/x86_64/libapp.so', b'snapshot ' + marker)
+                with self.assertRaisesRegex(ValueError, 'performance instrumentation'):
+                    self.verify()
+
+    def test_rejects_missing_compiled_snapshot(self):
+        with zipfile.ZipFile(self.apks / 'app-x86_64-release.apk', 'w'):
+            pass
+        with self.assertRaisesRegex(ValueError, 'missing compiled app snapshot'):
             self.verify()
 
 

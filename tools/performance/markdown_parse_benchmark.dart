@@ -1,10 +1,11 @@
 // Host parser diagnostic, independent of Flutter and phone frame measurements.
-// dart run tools/performance/markdown_parse_benchmark.dart [report.json]
+// dart run -DWING_PERF_INSTRUMENTATION=true tools/performance/markdown_parse_benchmark.dart [report.json]
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:markdown/markdown.dart' as md;
 import 'package:wing/core/services/markdown_inline_parser.dart';
+import 'package:wing/core/services/performance_instrumentation.dart';
 
 import 'streaming_replay_fixture.dart';
 
@@ -69,6 +70,9 @@ Object _nodeValue(md.Node node) {
 }
 
 void main(List<String> arguments) {
+  if (!PerformanceInstrumentation.enabled) {
+    throw StateError('Run with -DWING_PERF_INSTRUMENTATION=true.');
+  }
   if (arguments.length > 1) {
     throw ArgumentError('Usage: markdown_parse_benchmark.dart [report.json]');
   }

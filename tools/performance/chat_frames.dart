@@ -1,9 +1,10 @@
 // Benchmark entry point only. Ordinary builds do not register these observers.
-// flutter build apk --profile -t tools/performance/chat_frames.dart
+// flutter build apk --profile --dart-define=WING_PERF_INSTRUMENTATION=true -t tools/performance/chat_frames.dart
 import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
+import 'package:wing/core/services/performance_instrumentation.dart';
 import 'package:flutter/material.dart';
 import 'package:wing/core/screens/profile_workspace_browser.dart';
 import 'package:wing/core/widgets/studio_error.dart';
@@ -48,6 +49,11 @@ Map<String, Object?> _snapshot() {
 }
 
 void main() {
+  if (!PerformanceInstrumentation.enabled) {
+    throw StateError(
+      'Build with --dart-define=WING_PERF_INSTRUMENTATION=true.',
+    );
+  }
   if (!kProfileMode) {
     throw StateError('Measure frame performance with an AOT profile build.');
   }

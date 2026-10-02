@@ -8,6 +8,7 @@ import 'dart:math' as math;
 import 'dart:ui' show FramePhase, FrameTiming;
 
 import 'package:flutter/foundation.dart';
+import 'package:wing/core/services/performance_instrumentation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -54,6 +55,11 @@ bool workspaceReplayMatchesSegments(
 }
 
 void main() {
+  if (!PerformanceInstrumentation.enabled) {
+    throw StateError(
+      'Build with --dart-define=WING_PERF_INSTRUMENTATION=true.',
+    );
+  }
   if (!kProfileMode) {
     throw StateError('Workspace replay requires profile mode');
   }

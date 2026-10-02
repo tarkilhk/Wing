@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:wing/core/services/markdown_parse_worker.dart';
 import 'package:wing/core/services/markdown_segments.dart';
+import 'package:wing/core/services/performance_instrumentation.dart';
 import 'package:wing/core/services/markdown_inline_parser.dart';
 
 Object ast(md.Node node) => node is md.Text
@@ -13,6 +14,12 @@ Object ast(md.Node node) => node is md.Text
         node.footnoteLabel,
         node.children?.map(ast).toList(),
       ];
+
+String proseText(MarkdownParseResult result) => result.segments
+    .whereType<MarkdownProseSegment>()
+    .expand((segment) => segment.nodes)
+    .map((node) => node.textContent)
+    .join();
 
 void main() {
   test(
@@ -47,8 +54,18 @@ void main() {
         later.nodes.map((node) => node.textContent).join(),
         contains('[label][ref]'),
       );
-      expect(result.fenceMicros, greaterThanOrEqualTo(0));
-      expect(result.parseMicros, greaterThanOrEqualTo(0));
+      expect(
+        result.fenceMicros,
+        PerformanceInstrumentation.enabled ? greaterThanOrEqualTo(0) : 0,
+      );
+      expect(
+        result.parseMicros,
+        PerformanceInstrumentation.enabled ? greaterThanOrEqualTo(0) : 0,
+      );
+      if (!PerformanceInstrumentation.enabled) {
+        expect(result.inlineParses, 0);
+        expect(result.cacheHits, 0);
+      }
     },
   );
 
@@ -70,15 +87,24 @@ void main() {
         source: '$before$fence$after grows',
         deliverables: false,
       );
-      expect(growing.cacheHits, 1);
-      expect(growing.inlineParses, 1);
+      expect(proseText(growing), contains('Second tail grows'));
+      expect(growing.cacheHits, PerformanceInstrumentation.enabled ? 1 : 0);
+      expect(growing.inlineParses, PerformanceInstrumentation.enabled ? 1 : 0);
       final changedFirst = await worker.parse(
         owner: 1,
         source: '$before grows$fence$after grows',
         deliverables: false,
       );
-      expect(changedFirst.cacheHits, 1);
-      expect(changedFirst.inlineParses, 1);
+      expect(proseText(changedFirst), contains('First tail grows'));
+      expect(proseText(changedFirst), contains('Second tail grows'));
+      expect(
+        changedFirst.cacheHits,
+        PerformanceInstrumentation.enabled ? 1 : 0,
+      );
+      expect(
+        changedFirst.inlineParses,
+        PerformanceInstrumentation.enabled ? 1 : 0,
+      );
       await worker.parse(
         owner: 1,
         source: '$before grows\n',
@@ -89,8 +115,9 @@ void main() {
         source: '$before grows$fence$after returns',
         deliverables: false,
       );
+      expect(proseText(restored), contains('Second tail returns'));
       expect(restored.cacheHits, 0);
-      expect(restored.inlineParses, 2);
+      expect(restored.inlineParses, PerformanceInstrumentation.enabled ? 2 : 0);
     },
   );
 
@@ -155,13 +182,20 @@ void main() {
         expected.map(ast),
       );
       expect(enabled.cacheHits, 0);
-      expect(enabled.inlineParses, greaterThan(0));
+      expect(
+        enabled.inlineParses,
+        PerformanceInstrumentation.enabled ? greaterThan(0) : 0,
+      );
       await worker.parse(owner: 2, source: 'Keep', deliverables: false);
       worker.release(1);
       final fresh = await worker.parse(
         owner: 1,
         source: source,
         deliverables: true,
+      );
+      expect(
+        (fresh.segments.first as MarkdownProseSegment).nodes.map(ast),
+        expected.map(ast),
       );
       expect(fresh.cacheHits, 0);
       expect(fresh.inlineParses, enabled.inlineParses);
@@ -197,8 +231,11 @@ void main() {
         stock.map(ast),
       );
       expect(first.cacheHits, 0);
-      expect(second.cacheHits, greaterThan(0));
-      expect(second.inlineParses, 1);
+      expect(
+        second.cacheHits,
+        PerformanceInstrumentation.enabled ? greaterThan(0) : 0,
+      );
+      expect(second.inlineParses, PerformanceInstrumentation.enabled ? 1 : 0);
       worker.release(1);
     },
   );
@@ -241,7 +278,8 @@ void main() {
         source: 'Keep\n\nTail grows',
         deliverables: false,
       );
-      expect(result.cacheHits, 1);
+      expect(proseText(result), 'KeepTail grows');
+      expect(result.cacheHits, PerformanceInstrumentation.enabled ? 1 : 0);
     },
   );
 }

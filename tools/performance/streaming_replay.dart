@@ -1,5 +1,5 @@
 // Profile-only synthetic fixture; no app startup, settings, storage or backend.
-// flutter build apk --profile -t tools/performance/streaming_replay.dart
+// flutter build apk --profile --dart-define=WING_PERF_INSTRUMENTATION=true -t tools/performance/streaming_replay.dart
 // ext.wingPerf.replay returns after a bounded replay and frame-batch drain.
 import 'dart:async';
 import 'dart:convert';
@@ -8,6 +8,7 @@ import 'dart:math' as math;
 import 'dart:ui' show FramePhase, FrameTiming;
 
 import 'package:flutter/foundation.dart';
+import 'package:wing/core/services/performance_instrumentation.dart';
 import 'package:flutter/material.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/activity_shimmer.dart';
@@ -19,6 +20,11 @@ import 'package:wing/core/widgets/profile_message.dart';
 import 'streaming_replay_fixture.dart';
 
 void main() {
+  if (!PerformanceInstrumentation.enabled) {
+    throw StateError(
+      'Build with --dart-define=WING_PERF_INSTRUMENTATION=true.',
+    );
+  }
   if (!kProfileMode) {
     throw StateError('Streaming replay requires profile mode.');
   }

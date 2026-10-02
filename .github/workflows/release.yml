@@ -115,6 +115,15 @@ jobs:
       - name: Run tests
         run: flutter test --no-pub
 
+      - name: Test opt-in performance measurements
+        run: flutter test --no-pub --dart-define=WING_PERF_INSTRUMENTATION=true test/performance_instrumentation_test.dart test/markdown_inline_parser_test.dart test/markdown_parse_worker_test.dart test/background_markdown_content_test.dart test/background_markdown_message_test.dart
+
+      - name: Verify release disables performance instrumentation
+        run: |
+          mkdir -p build
+          dart compile exe -DWING_PERF_INSTRUMENTATION=true -DWING_QA_MARKDOWN_VARIANT=baseline tools/qa/check_release_instrumentation.dart -o build/release-instrumentation-probe
+          build/release-instrumentation-probe
+
       - name: Test diagram preview isolation
         uses: ./release-tools/.github/actions/test-diagram-preview
         with:

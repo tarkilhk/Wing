@@ -34,14 +34,18 @@ See [Release guide](ANDROID_RELEASE_PLAN.md) for signing setup and artifact veri
 
 ## Performance builds
 
+Custom measurements are off by default. Enable them explicitly when using the
+performance tool entry points; see [Performance investigation](PERFORMANCE.md)
+for build commands and private evidence storage.
+
 Use an AOT profile build when judging scrolling or loading performance:
 
 ```sh
 flutter build apk --profile --build-number=<next-version-code>
 ```
 
-This builds the separate `com.tarkilhk.wing.dev` package, labelled Wing Dev and
-signed with the ordinary debug key. It can update an ordinary debug installation
+This builds the separate `com.tarkilhk.wing.perfqa` package, labelled Wing Perf QA
+and signed with the ordinary debug key. It can update an existing Perf QA installation
 in place with `adb install -r`, preserving that app's saved connections. It does
 not update the signed `-Development` installation that uses the release package.
 Profile mode supports performance inspection but not hot reload. Keep debug and

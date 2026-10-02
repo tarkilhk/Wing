@@ -1,17 +1,16 @@
 import 'dart:developer' as developer;
 
-import 'package:flutter/foundation.dart';
+import 'performance_instrumentation.dart';
 
-/// Opt-in measurements for the profile QA observer. Never records message data.
+/// Opt-in performance measurements. Never records message data.
 class CompletionDiagnostics {
-  static const enabled =
-      bool.fromEnvironment('WING_COMPLETION_DIAGNOSTICS') && kProfileMode;
+  static const enabled = PerformanceInstrumentation.enabled;
   static const _capacity = 4096;
   static final _events = List<Map<String, Object?>?>.filled(_capacity, null);
   static final _totals = <String, Map<String, int>>{};
   static int _written = 0;
 
-  static int start() => developer.Timeline.now;
+  static int start() => enabled ? developer.Timeline.now : 0;
 
   static void finish(
     String name,

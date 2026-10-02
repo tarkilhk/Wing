@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:markdown/markdown.dart' as md;
 
 import '../models/deliverable_reference.dart';
+import 'performance_instrumentation.dart';
 
 /// Reuses unchanged inline expansions while parsing every snapshot's blocks.
 ///
@@ -35,9 +36,13 @@ class MarkdownInlineParser {
   int get lastParseMicros => _lastParseMicros;
 
   List<md.Node> parse(String source) {
-    _inlineParses = 0;
-    _cacheHits = 0;
-    final clock = Stopwatch()..start();
+    if (PerformanceInstrumentation.enabled) {
+      _inlineParses = 0;
+      _cacheHits = 0;
+    }
+    final clock = PerformanceInstrumentation.enabled
+        ? (Stopwatch()..start())
+        : null;
     final document = _CachingDocument(this);
     try {
       final nodes = document.parse(source);
@@ -46,16 +51,20 @@ class MarkdownInlineParser {
       _cache = document.used;
       return nodes;
     } finally {
-      clock.stop();
-      _lastParseMicros = clock.elapsedMicroseconds;
+      if (PerformanceInstrumentation.enabled) {
+        clock!.stop();
+        _lastParseMicros = clock.elapsedMicroseconds;
+      }
     }
   }
 
   void clear() {
     _cache.clear();
-    _inlineParses = 0;
-    _cacheHits = 0;
-    _lastParseMicros = 0;
+    if (PerformanceInstrumentation.enabled) {
+      _inlineParses = 0;
+      _cacheHits = 0;
+      _lastParseMicros = 0;
+    }
   }
 }
 
@@ -84,7 +93,7 @@ class _CachingDocument extends md.Document {
     // markdown's four footnote reference forms all contain this opening token.
     // Even unresolved or escaped candidates are deliberately parsed afresh.
     if (!owner.cacheEnabled || text.contains('[^')) {
-      owner._inlineParses++;
+      if (PerformanceInstrumentation.enabled) owner._inlineParses++;
       return super.parseInline(text);
     }
     // Document calls parseInline only after the complete block pass, when all
@@ -92,11 +101,11 @@ class _CachingDocument extends md.Document {
     final key = (text, _references ??= _referenceContext());
     final cached = used[key] ?? owner._cache[key];
     if (cached != null) {
-      owner._cacheHits++;
+      if (PerformanceInstrumentation.enabled) owner._cacheHits++;
       used[key] = cached;
       return copyMarkdownNodes(cached);
     }
-    owner._inlineParses++;
+    if (PerformanceInstrumentation.enabled) owner._inlineParses++;
     final nodes = super.parseInline(text);
     // Renderers mutate attributes and children, so neither side of the cache
     // boundary may share mutable nodes with a returned document.

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:wing/core/services/markdown_parse_worker.dart';
 import 'package:wing/core/services/markdown_segments.dart';
+import 'package:wing/core/services/performance_instrumentation.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
 import 'package:wing/core/widgets/studio_error.dart';
 
@@ -192,7 +193,10 @@ void main() {
       await tester.pumpWidget(host(middle));
       await tester.pumpWidget(host(latest));
       expect(jobs.map((job) => job.$1), [initial]);
-      expect(state.updatesCoalesced, 2);
+      expect(
+        state.updatesCoalesced,
+        PerformanceInstrumentation.enabled ? 2 : 0,
+      );
       expect(published, isEmpty);
       jobs.first.$2.complete(
         MarkdownParseResult(
@@ -250,19 +254,33 @@ void main() {
       expect(published.keys, [initial, latest]);
       expect((published[latest]![1] as MarkdownFenceSegment).closed, isTrue);
       expect(changes, 2);
-      expect(state.parsesCompleted, 2);
-      expect(state.totalParserMicros, 24);
-      expect(state.totalFenceMicros, 8);
-      expect(state.totalCacheHits, 3);
-      expect(state.totalRequestMicros, greaterThan(0));
-      expect(state.maxRequestMicros, greaterThan(0));
+      expect(state.parsesCompleted, PerformanceInstrumentation.enabled ? 2 : 0);
+      expect(
+        state.totalParserMicros,
+        PerformanceInstrumentation.enabled ? 24 : 0,
+      );
+      expect(
+        state.totalFenceMicros,
+        PerformanceInstrumentation.enabled ? 8 : 0,
+      );
+      expect(state.totalCacheHits, PerformanceInstrumentation.enabled ? 3 : 0);
+      expect(
+        state.totalRequestMicros,
+        PerformanceInstrumentation.enabled ? greaterThan(0) : 0,
+      );
+      expect(
+        state.maxRequestMicros,
+        PerformanceInstrumentation.enabled ? greaterThan(0) : 0,
+      );
       expect(
         state.maxRequestMicros,
         lessThanOrEqualTo(state.totalRequestMicros),
       );
       expect(
         state.maxPendingCharacters,
-        greaterThanOrEqualTo(latest.length - initial.length),
+        PerformanceInstrumentation.enabled
+            ? greaterThanOrEqualTo(latest.length - initial.length)
+            : 0,
       );
     },
   );

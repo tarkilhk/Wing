@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Make performance measurements an explicit QA build option. Release builds
+  disable custom timing, counters and traces and use the production renderer.
+
 - Prepare Markdown code fences and prose together in the existing background
   worker, keeping fence scanning off the chat UI while streamed replies grow.
 

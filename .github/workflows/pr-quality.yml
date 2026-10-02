@@ -79,6 +79,15 @@ jobs:
           flutter test --no-pub --reporter=expanded 2>&1 | tee test_output.txt
           exit ${PIPESTATUS[0]}
 
+      - name: Test opt-in performance measurements
+        run: flutter test --no-pub --dart-define=WING_PERF_INSTRUMENTATION=true test/performance_instrumentation_test.dart test/markdown_inline_parser_test.dart test/markdown_parse_worker_test.dart test/background_markdown_content_test.dart test/background_markdown_message_test.dart
+
+      - name: Verify release disables performance instrumentation
+        run: |
+          mkdir -p build
+          dart compile exe -DWING_PERF_INSTRUMENTATION=true -DWING_QA_MARKDOWN_VARIANT=baseline tools/qa/check_release_instrumentation.dart -o build/release-instrumentation-probe
+          build/release-instrumentation-probe
+
       - name: Compile debug Android APK without release credentials
         id: android_build
         continue-on-error: true

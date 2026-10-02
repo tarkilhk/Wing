@@ -4,6 +4,7 @@ import 'dart:isolate';
 
 import 'markdown_inline_parser.dart';
 import 'markdown_segments.dart';
+import 'performance_instrumentation.dart';
 
 class MarkdownParseResult {
   const MarkdownParseResult(
@@ -205,14 +206,14 @@ void _parseLoop(SendPort replies) {
         existing?.clear();
       }
       owners[owner] = preparation;
-      if (_profileDiagnostics) {
+      if (PerformanceInstrumentation.enabled) {
         developer.Timeline.startSync('wing.markdown.prepare');
       }
       late final MarkdownParseResult result;
       try {
         result = preparation.prepare(values[3] as String);
       } finally {
-        if (_profileDiagnostics) {
+        if (PerformanceInstrumentation.enabled) {
           developer.Timeline.finishSync();
         }
       }
@@ -222,10 +223,6 @@ void _parseLoop(SendPort replies) {
     }
   });
 }
-
-const _profileDiagnostics =
-    bool.fromEnvironment('WING_COMPLETION_DIAGNOSTICS') &&
-    bool.fromEnvironment('dart.vm.profile');
 
 class _ParsedProse {
   _ParsedProse(this.parser);
@@ -241,16 +238,18 @@ class _OwnerPreparation {
   final _prose = <int, _ParsedProse>{};
 
   MarkdownParseResult prepare(String source) {
-    final fenceClock = Stopwatch()..start();
-    if (_profileDiagnostics) {
+    final fenceClock = PerformanceInstrumentation.enabled
+        ? (Stopwatch()..start())
+        : null;
+    if (PerformanceInstrumentation.enabled) {
       developer.Timeline.startSync('wing.markdown.fence.scan');
     }
     late final List<MarkdownSegment> scanned;
     try {
       scanned = splitMarkdownSegments(source);
     } finally {
-      fenceClock.stop();
-      if (_profileDiagnostics) {
+      if (PerformanceInstrumentation.enabled) {
+        fenceClock!.stop();
         developer.Timeline.finishSync();
       }
     }
@@ -286,9 +285,11 @@ class _OwnerPreparation {
         nodes: nodes,
       );
       prepared.add(parsed);
-      parseMicros += state.parser.lastParseMicros;
-      cacheHits += state.parser.cacheHits;
-      inlineParses += state.parser.inlineParses;
+      if (PerformanceInstrumentation.enabled) {
+        parseMicros += state.parser.lastParseMicros;
+        cacheHits += state.parser.cacheHits;
+        inlineParses += state.parser.inlineParses;
+      }
     }
     for (final index in _prose.keys.toList()) {
       if (!used.contains(index)) {
@@ -300,7 +301,9 @@ class _OwnerPreparation {
       parseMicros,
       cacheHits,
       inlineParses,
-      fenceMicros: fenceClock.elapsedMicroseconds,
+      fenceMicros: PerformanceInstrumentation.enabled
+          ? fenceClock!.elapsedMicroseconds
+          : 0,
     );
   }
 

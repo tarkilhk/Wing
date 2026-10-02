@@ -105,7 +105,7 @@ private runtime credential file. The connected SHIELD TV was not targeted.
 | Notification handoff and reading | All 8 native flow checkpoints passed: forged/raw/wrong-type inputs, exact FIFO decisions, failure retention, Always confirmation, privacy, remote reconciliation and reply reading; both themes at 100%/200% inspected | `tools/qa/check_notification_revamp.py`; `/tmp/wing-emulator-notification-fixed-check.log` |
 | Notification persistence and counts | 5 restore/read/dismiss checkpoints and 4 count/privacy checkpoints passed | `scripts/test_native_notification_restore.py`; `/tmp/wing-emulator-notification-restore-selector.log`, `/tmp/wing-emulator-notification-counts.log` |
 | Unopened cached-chat notification | 2 native checkpoints passed: first fresh notification includes all 3 questions, real text/options and Review without opening the chat; monitoring stops afterward | `integration_test/notification_cold_input_device.dart`, `scripts/test_native_cold_notification.py`; `/tmp/wing-emulator-cold-input-check.log` |
-| Background monitoring | One poll timer/one tick during 35 seconds of work; zero timers/new ticks after settling; wake-lock/service/engine release and Doze delivery passed with battery exemption | `tools/qa/check_background_monitoring.py`; `/tmp/wing-emulator-background-check.log`; CPU/PSS diagnostics in `build/emulator-acceptance/performance/` |
+| Background monitoring | Native active/settled polling, notification, wake-lock release and lifecycle behavior verified; recorded measurements are archived privately | `integration_test/background_monitoring_device.dart`; see [Performance investigation](../docs/PERFORMANCE.md) for repeatable procedures |
 | Configuration backup | 2 Flutter tests and 5 native picker/share steps passed; real Keystore, plain Merge, encrypted Replace, wrong passphrase and owned cache/helper cleanup verified | `scripts/test_native_config_backup.py`; `build/emulator-acceptance/config-backup/acceptance.json` |
 | Native file transfer | 7 Flutter tests and 6 native picker/share steps passed; owned files/cache cleaned | `scripts/test_native_file_transfer.py`; `build/emulator-acceptance/file-transfer/acceptance.json` |
 | Local voice | 2 Flutter tests passed with real permission denial/grant, Home cancellation, AAC capture/decode/playback and 5 offline TTS samples; 9 voices available | `scripts/test_native_voice.py`; `build/emulator-acceptance/voice/acceptance.json` |
@@ -194,13 +194,10 @@ for supported settings, bounds and restore behavior.
 
 Native acceptance above establishes behavior on one disposable API 36 emulator,
 including actual intents, URI grants, Android permissions, IME opening and WebView.
-The debug CPU/PSS samples are diagnostics, not energy or release performance
-benchmarks. The Doze fixture is battery-exempt; it does not establish delivery
+The Doze fixture is battery-exempt; it does not establish delivery
 under restricted OEM/network policies. Native HTML HTTP isolation is now
-verified on this emulator; other WebView/device versions remain separate. TTS
-start callbacks
-of 71–344 ms do not establish audible latency, intelligibility or transcription
-quality.
+verified on this emulator; other WebView/device versions remain separate. TTS start callbacks do not establish audible latency, intelligibility or
+transcription quality.
 
 Physical-phone energy, thermals, frame/input latency, OEM lifecycle and network
 restriction, microphone/speech quality and device-specific WebView/IME behavior

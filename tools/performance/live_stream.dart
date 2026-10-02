@@ -1,6 +1,6 @@
 // Profile-only full-app observer. Mutations target explicitly named QA chats,
 // created here or manually created and adopted after selecting Luna.
-// flutter build apk --profile -t tools/performance/live_stream.dart
+// flutter build apk --profile --dart-define=WING_PERF_INSTRUMENTATION=true -t tools/performance/live_stream.dart
 // No credentials, addresses, profile names or transcript text leave this tool.
 // Stop a capture before native navigation. After reopening Wing, adopt the
 // selected QA chat again; retained slots do not own replacement controllers.
@@ -10,6 +10,7 @@ import 'dart:developer' as developer;
 import 'dart:ui' show FramePhase, FrameTiming;
 
 import 'package:flutter/foundation.dart';
+import 'package:wing/core/services/performance_instrumentation.dart';
 import 'package:flutter/material.dart';
 import 'package:wing/core/models/answer_versions.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
@@ -246,6 +247,11 @@ class _Measurement {
 }
 
 void main() {
+  if (!PerformanceInstrumentation.enabled) {
+    throw StateError(
+      'Build with --dart-define=WING_PERF_INSTRUMENTATION=true.',
+    );
+  }
   if (!kProfileMode) throw StateError('Use an AOT profile build');
   WidgetsFlutterBinding.ensureInitialized();
   final owned = <_Owned>[];

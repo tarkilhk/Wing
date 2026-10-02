@@ -4,6 +4,72 @@ Measure the phone and Wing separately. A hot device can make Wing slow even
 when another process supplies most of the sustained load. CPU use identifies
 work; it does not measure an app's share of battery discharge.
 
+## Measurement builds
+
+Custom performance measurements are disabled by default. Explicitly enable them
+in non-release builds with `--dart-define=WING_PERF_INSTRUMENTATION=true`.
+`PerformanceInstrumentation.enabled` is a compile-time constant and is always
+false in product/release mode, even if the opt-in flag is supplied. It gates
+parser/request clocks, counters, completion event buffers and custom timeline
+spans. Functional caches, worker scheduling and normal error reporting remain
+active. Alternate Markdown benchmark renderers require the same opt-in; release
+always uses background preparation.
+
+Build the actual app with live observers using one command:
+
+```sh
+flutter build apk --profile --dart-define=WING_PERF_INSTRUMENTATION=true -t tools/performance/live_stream.dart
+```
+
+The profile package is `com.tarkilhk.wing.perfqa`. The live observer and replay
+entry points are under `tools/performance/`; ordinary `lib/main.dart` does not
+import them. Instrumented tools reject startup without the opt-in flag.
+For offline streaming and typing, use `tools/performance/workspace_streaming_replay.dart`
+as the target. Real model calls require an explicitly owned QA chat and an
+explicitly verified Luna route; preserve connection/profile defaults.
+
+Run parser, worker and rendering tests with measurements enabled:
+
+```sh
+flutter test --dart-define=WING_PERF_INSTRUMENTATION=true test/performance_instrumentation_test.dart test/markdown_inline_parser_test.dart test/markdown_parse_worker_test.dart test/background_markdown_content_test.dart test/background_markdown_message_test.dart
+```
+
+The same tests run without the flag to verify functional behavior with zero
+measurement counters. For the standalone parser benchmark:
+
+```sh
+dart run -DWING_PERF_INSTRUMENTATION=true tools/performance/markdown_parse_benchmark.dart build/performance/parser.json
+```
+
+Release checks compile and execute the actual parser/worker in product mode,
+deliberately requesting instrumentation and an alternate renderer:
+
+```sh
+mkdir -p build
+dart compile exe -DWING_PERF_INSTRUMENTATION=true -DWING_QA_MARKDOWN_VARIANT=baseline tools/qa/check_release_instrumentation.dart -o build/release-instrumentation-probe
+build/release-instrumentation-probe
+```
+
+`scripts/verify_release_apks.py` also inspects uncompressed app snapshots in every
+release ABI for custom trace and test-RPC markers. Marker absence corroborates
+the compile-time guards; it is not a universal proof about all possible overhead.
+
+## Private evidence storage
+
+Keep this document procedural. Do not commit recorded device/host measurements,
+experiment logs, CPU samples, traces, screenshots or comparison reports. Capture
+tools use ignored `build/` directories while running. Archive completed runs in
+an owner-only directory outside this checkout, grouped by date, experiment and
+**tested** commit, before removing temporary captures. Include workload, build
+hashes, device configuration and relevant manifests with each archive. Clearly
+label instrumented diagnostic results separately from ordinary-build timings.
+
+Retain reusable scripts, synthetic fixtures and regression contracts here. Large
+raw traces and APKs can use a shorter retention period than compact reports and
+manifests. A local archive needs its own backup; keeping files outside Git alone
+does not provide durability. Existing published history is unaffected by removing
+reports from the current source tree.
+
 ## Emulator-first monitoring check
 
 Use a disposable API 36 phone AVD before the physical-phone phase. Build and
@@ -22,15 +88,6 @@ privacy/preferences, and forced Doze delivery **with battery exemption**. It
 restores its power settings. Stop other QA fixtures and host builds during the
 two 35-second resource windows; retain the exact fixture/build and emulator
 configuration with the output.
-
-In the 30 September 2026 Android 16 x86_64 debug AVD run, active work produced
-one timer and one tick; settled work had zero timers and zero new ticks. Mean
-app CPU was 0.6% active and 0.9% settled (one core = 100%); end PSS was 357,079
-and 350,874 KiB respectively. These single short debug measurements verify
-instrumentation and resource attribution. They are not comparative savings,
-release budgets or physical-device battery measurements. The lower settled PSS
-does not establish a leak-free navigation soak, and the CPU difference does not
-show that idle work uses more energy.
 
 Use the phone matrix below for matched energy, thermal, frame/input latency and
 long-duration retention measurements. Repeat background delivery with the
@@ -85,11 +142,11 @@ still dominates, collect a CPU profile before choosing another optimization.
 Use an AOT **profile** build on a physical phone for Flutter timing, as described
 in [Flutter's profiling guide](https://docs.flutter.dev/perf/ui-performance).
 Debug widget-test elapsed times are useful diagnostics, not device latency.
-The profile variant installs as `com.tarkilhk.wing.dev`, separate from release
+The profile variant installs as `com.tarkilhk.wing.perfqa`, separate from release
 connections and drafts. Configure an equivalent test connection/data set there.
 
 ```sh
-flutter build apk --profile -t tools/performance/chat_frames.dart
+flutter build apk --profile --dart-define=WING_PERF_INSTRUMENTATION=true -t tools/performance/chat_frames.dart
 ```
 
 With that build running, capture a bounded CPU sample without changing the
@@ -227,24 +284,13 @@ sorting no longer serializes each candidate for every comparison. The two MiB
 UTF-8 bound and newest-message retention are covered by tests. Draft persistence
 does not use this store.
 
-The work-budget test uses 2,400 synthetic messages and checks that an event-loop
-turn runs before the large save completes. The original implementation failed
-that assertion. On the development host its synchronous call took about
-2.8–3.0 seconds; the revised call took about 5–12 ms with a total background save
-of 154–206 ms. These debug measurements diagnose the algorithm; they do not
-establish phone latency or battery improvement. Snapshot collection in the
-controller still runs on the UI isolate and should be included in future CPU
-profiles.
+The work-budget test uses 2,400 synthetic messages and requires an event-loop
+turn before the large save completes. Snapshot collection in the controller
+still runs on the UI isolate and should be included in future CPU profiles.
 
-During a phone slowdown investigation, a release system trace caught two main
-thread CPU slices of 184–189 ms immediately preceding preference writes. That
-correlation motivates this fix but does not identify the Dart call stacks.
-A separate eight-gesture scroll capture submitted 778 frames without any
-32–200 ms inter-submission gaps, and the owner subsequently reported normal
-typing. Do not describe the intermittent phone symptom as conclusively fixed
-without a matched device reproduction. Flutter uses a SurfaceView here; the
-trace did not expose Wing rows in the FrameTimeline table, so native `gfxinfo`
-and other apps' jank classifications must not be substituted for Wing's frames.
+Use matched device reproductions to validate intermittent slowdowns. Flutter
+uses a SurfaceView here; absent Wing FrameTimeline rows cannot be replaced by
+native `gfxinfo` or another app's jank classifications.
 See [Perfetto FrameTimeline documentation](https://perfetto.dev/docs/data-sources/frametimeline)
 for the distinction between frame scheduling, submission and presentation.
 
