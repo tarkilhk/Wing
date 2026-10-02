@@ -130,7 +130,7 @@ void main() {
     },
   );
 
-  testWidgets('images do not auto-fetch and unsafe links show a scoped error', (
+  testWidgets('images render inline and unsafe links show a scoped error', (
     tester,
   ) async {
     await message(
@@ -142,9 +142,15 @@ void main() {
         of: find.byType(MarkdownMessageContent),
         matching: find.byType(Image),
       ),
-      findsNothing,
+      findsOneWidget,
     );
-    expect(find.text('Remote image'), findsOneWidget);
+    final image = tester.widget<Image>(
+      find.descendant(
+        of: find.byType(MarkdownMessageContent),
+        matching: find.byType(Image),
+      ),
+    );
+    expect(image.semanticLabel, 'Open image: Remote image');
     final markdown = tester.widget<MarkdownBody>(
       find.bySubtype<MarkdownBody>(),
     );

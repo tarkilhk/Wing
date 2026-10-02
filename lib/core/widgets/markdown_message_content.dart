@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'studio_task_marker.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
@@ -14,7 +16,7 @@ import '../services/markdown_qa_variant.dart';
 import '../services/completion_diagnostics.dart';
 import '../services/web_preview.dart';
 import '../theme/profile_markdown_style.dart';
-import 'chat_image_preview.dart';
+import 'chat_inline_image.dart';
 import 'markdown_code_block.dart';
 import 'block_reusing_markdown_body.dart';
 import 'background_markdown_content.dart';
@@ -26,6 +28,7 @@ class MarkdownMessageContent extends StatefulWidget {
   final bool streaming;
   final Future<void> Function(ChatOutput output)? onOpenRemoteFile;
   final Future<bool> Function(ChatOutput output)? onDownloadRemoteFile;
+  final Future<Uint8List> Function(String path)? loadImage;
   final bool deliverables;
   final String? documentPath;
   final String? initialFragment;
@@ -36,6 +39,7 @@ class MarkdownMessageContent extends StatefulWidget {
     this.streaming = false,
     this.onOpenRemoteFile,
     this.onDownloadRemoteFile,
+    this.loadImage,
     this.deliverables = false,
     this.documentPath,
     this.initialFragment,
@@ -113,6 +117,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
         widget.deliverables != oldWidget.deliverables ||
         widget.documentPath != oldWidget.documentPath ||
         widget.initialFragment != oldWidget.initialFragment ||
+        (widget.loadImage == null) != (oldWidget.loadImage == null) ||
         (widget.onOpenRemoteFile == null) !=
             (oldWidget.onOpenRemoteFile == null) ||
         (widget.onDownloadRemoteFile == null) !=
@@ -129,6 +134,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
       }
     }
     if (widget.deliverables != oldWidget.deliverables ||
+        (widget.loadImage == null) != (oldWidget.loadImage == null) ||
         widget.documentPath != oldWidget.documentPath ||
         (widget.onOpenRemoteFile == null) !=
             (oldWidget.onOpenRemoteFile == null) ||
@@ -199,37 +205,43 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     }
   }
 
-  void _previewImage(BuildContext context, String href, String title) {
-    final uri = externalWebLink(href);
-    if (uri == null) {
-      _open(context, href);
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (previewContext) => ChatImagePreview(
-          uri: uri,
-          title: title,
-          onOpenExternal: () => _open(previewContext, href),
-        ),
-      ),
-    );
-  }
-
   void _tapLink(String text, String? href, String title) {
     if (href != null) _open(context, href);
   }
 
-  Widget _buildImage(MarkdownImageConfig config) => OutlinedButton.icon(
-    onPressed: () =>
-        _previewImage(context, config.uri.toString(), config.alt ?? 'Image'),
-    icon: const Icon(Icons.image_outlined),
-    label: Text(
-      config.alt ?? 'Open image link',
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-    ),
-  );
+  Widget _buildImage(MarkdownImageConfig config) {
+    final href = config.uri.toString();
+    final remote = widget.documentPath == null
+        ? explicitRemoteFileOutput(href)
+        : resolveDocumentFileLink(href, widget.documentPath!);
+    final title = config.alt?.isNotEmpty == true ? config.alt! : 'Image';
+    if (remote != null) {
+      return DeliverableAttachment(
+        output: ChatOutput(
+          kind: ChatOutputKind.image,
+          path: remote.path,
+          url: null,
+          label: title,
+        ),
+        onOpen: widget.onOpenRemoteFile == null
+            ? null
+            : (output) => widget.onOpenRemoteFile!(output),
+        onDownload: widget.onDownloadRemoteFile == null
+            ? null
+            : (output) => widget.onDownloadRemoteFile!(output),
+        loadImage: widget.loadImage == null
+            ? null
+            : (path) => widget.loadImage!(path),
+      );
+    }
+    return ChatInlineImage(
+      target: href,
+      title: title,
+      loadImage: widget.loadImage == null
+          ? null
+          : (path) => widget.loadImage!(path),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -296,6 +308,9 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
               ? null
               : (output) => widget.onDownloadRemoteFile!(output),
           maxWidth: MediaQuery.sizeOf(context).width,
+          loadImage: widget.loadImage == null
+              ? null
+              : (path) => widget.loadImage!(path),
         ),
     };
     _headingKeys.clear();
@@ -439,11 +454,17 @@ bool _sameMarkdownSegment(Object previous, Object current) =>
           previous.previewEnabled == current.previewEnabled;
 
 class _DeliverableBuilder extends MarkdownElementBuilder {
-  _DeliverableBuilder(this.onOpen, this.onDownload, {required this.maxWidth});
+  _DeliverableBuilder(
+    this.onOpen,
+    this.onDownload, {
+    required this.maxWidth,
+    this.loadImage,
+  });
 
   final Future<void> Function(ChatOutput)? onOpen;
   final Future<bool> Function(ChatOutput)? onDownload;
   final double maxWidth;
+  final Future<Uint8List> Function(String path)? loadImage;
 
   @override
   Widget visitElementAfterWithContext(
@@ -469,6 +490,7 @@ class _DeliverableBuilder extends MarkdownElementBuilder {
         ),
         onOpen: onOpen,
         onDownload: onDownload,
+        loadImage: loadImage,
       ),
     );
   }

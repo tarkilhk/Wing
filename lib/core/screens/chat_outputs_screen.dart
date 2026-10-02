@@ -430,6 +430,10 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                         documentPath: preview.path,
                         initialFragment: output.fragment,
                         onOpenRemoteFile: _preview,
+                        loadImage: (path) async =>
+                            (await widget.download(path)).bytes,
+                        onDownloadRemoteFile: (output) async =>
+                            saveRemoteFile(await widget.download(output.path!)),
                       )
                     else
                       MarkdownCodeBlock(

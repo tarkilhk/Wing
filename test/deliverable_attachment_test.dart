@@ -10,6 +10,7 @@ import 'package:wing/core/models/chat_output.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/deliverable_attachment.dart';
+import 'package:wing/core/widgets/chat_inline_image.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 
 import 'helpers/pump_markdown_widget.dart';
@@ -235,7 +236,11 @@ void main() {
         find.textContaining('Website', findRichText: true),
         findsOneWidget,
       );
-      expect(find.text('Image'), findsOneWidget);
+      expect(find.byType(ChatInlineImage), findsOneWidget);
+      expect(
+        tester.widget<ChatInlineImage>(find.byType(ChatInlineImage)).title,
+        'Image',
+      );
       expect(find.textContaining('MEDIA:/srv/example.md'), findsOneWidget);
       expect(find.textContaining('MEDIA:unsupported:value'), findsOneWidget);
       expect(tester.takeException(), isNull);

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../models/chat_output.dart';
@@ -5,6 +7,7 @@ import '../services/file_open_error_message.dart';
 import '../theme/wing_theme.dart';
 import 'studio_action_label.dart';
 import 'studio_error.dart';
+import 'chat_inline_image.dart';
 
 /// Desktop's Download / Open preview actions adapted to a phone's width.
 class DeliverableAttachment extends StatefulWidget {
@@ -13,11 +16,13 @@ class DeliverableAttachment extends StatefulWidget {
     required this.output,
     required this.onOpen,
     required this.onDownload,
+    this.loadImage,
   });
 
   final ChatOutput output;
   final Future<void> Function(ChatOutput)? onOpen;
   final Future<bool> Function(ChatOutput)? onDownload;
+  final Future<Uint8List> Function(String path)? loadImage;
 
   @override
   State<DeliverableAttachment> createState() => _DeliverableAttachmentState();
@@ -82,6 +87,40 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    if (widget.output.kind == ChatOutputKind.image) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: WingSpacing.xs),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ChatInlineImage(
+              target: widget.output.target,
+              title: widget.output.label,
+              loadImage: widget.loadImage,
+              downloadAction: IconButton.filledTonal(
+                tooltip: _downloading ? 'Saving image' : 'Download image',
+                style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+                onPressed: widget.onDownload == null || _downloading
+                    ? null
+                    : () => _run(download: true),
+                icon: _downloading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.download_outlined, size: 20),
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: WingSpacing.xs),
+              StudioError(_error!),
+            ],
+          ],
+        ),
+      );
+    }
     return Container(
       margin: const EdgeInsets.symmetric(vertical: WingSpacing.xs),
       padding: const EdgeInsets.all(WingSpacing.sm),

@@ -15,6 +15,7 @@ import 'package:wing/core/services/pdf_preview_service.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/widgets/markdown_code_block.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
+import 'package:wing/core/widgets/chat_inline_image.dart';
 import 'package:wing/core/widgets/web_output_preview.dart';
 
 class _FileDelivery extends AndroidFileDeliveryService {
@@ -1016,7 +1017,7 @@ void main() {
       expect(find.bySubtype<MarkdownBody>(), findsOneWidget);
       expect(find.text('Release notes'), findsOneWidget);
       expect(find.text('Hermes'), findsNothing);
-      expect(find.byType(Image), findsNothing);
+      expect(find.byType(ChatInlineImage), findsOneWidget);
       expect(
         find.text('Preview shortened by Hermes. Save the file to read it all.'),
         findsOneWidget,

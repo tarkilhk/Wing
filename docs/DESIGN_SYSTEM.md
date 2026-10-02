@@ -321,6 +321,26 @@ a failed write must not become the displayed value when the editor is reopened.
 Native preview chrome receives the active Studio palette from Flutter. Authored
 HTML, diagrams, images and video retain their content-specific appearance.
 
+Conversation images follow desktop's inline preview convention: no generic
+file card or repeated filename, tap to zoom the original, and a compact download
+action. On phones the action stays visible rather than depending on hover.
+Previews hug the image, preserve its full aspect ratio without upscaling, and
+are capped at the available chat width, 420 dp wide and 320 dp high. Loading
+uses desktop's 4:3 cold frame; failed previews expose Retry while Download
+remains reachable. Thumbnail decoding is bounded to the preview's physical
+pixels; the viewer receives the original bytes.
+Verified on 2 October 2026 against upstream Hermes
+`569fd58960b93040b333cf744c8f2adc152f71bd`:
+[`MarkdownImageContent`](https://github.com/NousResearch/hermes-agent/blob/569fd58960b93040b333cf744c8f2adc152f71bd/apps/desktop/src/components/assistant-ui/markdown-text.tsx),
+[`ZoomableImage`](https://github.com/NousResearch/hermes-agent/blob/569fd58960b93040b333cf744c8f2adc152f71bd/apps/desktop/src/components/chat/zoomable-image.tsx),
+and the stock
+[`/api/fs/download` route](https://github.com/NousResearch/hermes-agent/blob/569fd58960b93040b333cf744c8f2adc152f71bd/hermes_cli/web_routers/files.py).
+The existing authenticated loader supplies the owning profile and session;
+no backend changes are required. `test/chat_inline_image_test.dart` covers
+rendering, retries, original-image viewing, copying and phone layouts in both
+themes at normal and doubled text size. Render captures use
+`CAPTURE_INLINE_IMAGES=true` and `CAPTURE_FONT_DIR`.
+
 ## Administration refinement, 17 September 2026
 
 Administration opens on the profile overview without ownership tabs. The top-bar

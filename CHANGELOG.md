@@ -6,6 +6,9 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ### Conversations and files
 
+- Display reply images inline, following desktop's tap-to-zoom convention, with
+  bounded mobile previews and a compact download control. Keep failed previews
+  retryable and use the original image when zooming or downloading.
 - Reduce repeated Markdown work on the UI thread while replies stream, including
   code-fence scanning, so typing and scrolling have less parsing work to compete with.
 - Preserve valid text selections, code controls and reading position as streamed
