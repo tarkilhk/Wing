@@ -953,4 +953,133 @@ cover theme and enlarged-text behavior; this is not a full pixel comparison.
 Next phone window: install the prepared ordinary QA build, validate live Luna
 streaming with typing/scrolling, and run a matched baseline/new comparison with
 systrace enabled consistently and the corrected longest-window coverage. The
-ordinary production app and the physical phone remain untouched in this task.
+ordinary production app and the physical phone were untouched during this
+emulator preparation. The subsequent authorized phone window is recorded below.
+
+## October 2 phone validation: background fence preparation
+
+Compared committed baseline `3657157` against background-fence-worker commit
+`0c34639`, both already pushed to `main`. The S23 Ultra remained unplugged at
+120 Hz with SwiftKey Beta. Both APKs were launched with identical Dart-profiling
+and Android-systrace flags; Dart CPU sampling was disabled for all comparison
+runs and identical native 100 Hz sampling was enabled. The order was baseline,
+updated, updated, baseline (ABBA), restarting the app for each run. Only the
+`com.tarkilhk.wing.perfqa` package was installed; production was not installed
+or modified. Reinstalling with `-r` preserved QA's existing Hermes connections.
+Controlled replays use memory-backed preferences (`nativeDraftStorage=false`),
+excluding native draft-persistence cost; the live app uses ordinary persistence.
+
+One preliminary control was excluded: ADB delayed the native input schedule by
+1.056 seconds, failing its 500 ms timing guard despite the correct final draft.
+The repeated control and all three subsequent runs passed the existing workload,
+keyboard, geometry, cadence, source/draft hash, profiler-restoration and trace
+guards. Each sent 400 synthetic deltas over 20 seconds while 60 real SwiftKey
+characters were entered. All system traces contain PAINT events identifying the
+main thread as the UI thread, have zero reported trace loss, and use longest
+contained-window selection policy `1`. The comparison reports no issues.
+
+| Streaming timing | Baseline 1 | Updated 1 | Updated 2 | Baseline 2 |
+| --- | ---: | ---: | ---: | ---: |
+| UI p95 (ms) | 7.426 | 7.377 | 7.099 | 7.505 |
+| UI p99 (ms) | 10.299 | 9.322 | 9.175 | 10.509 |
+| UI maximum (ms) | 15.224 | 18.406 | 17.768 | 14.393 |
+| UI frames over 8.333 ms | 74/1990 | 57/1967 | 40/1969 | 65/1925 |
+| UI frames over 16.667 ms | 0 | 1 | 1 | 0 |
+| Raster p99 (ms) | 4.508 | 4.419 | 4.839 | 4.830 |
+| Completion UI maximum (ms) | 13.400 | 12.732 | 11.318 | 14.562 |
+
+Both updated streaming p99 measurements beat both controls; the mean of the two
+p99 values per arm is about 11.1% lower. This is evidence for this controlled
+workload, not a general performance guarantee. Rare UI maxima worsened, and
+raster p99 did not consistently improve. Completion tails contain only 13–20
+frames, so their maxima are more useful than calling their p99 representative.
+These are Flutter UI/raster wall durations, not measured displayed-frame gaps:
+the app FrameTimeline query returned zero rows, so this capture cannot establish
+displayed FPS or claim the previously observed presentation gaps are eliminated.
+
+Android reported LIGHT thermal status (`1`) at every recorded checkpoint;
+battery temperature rose from 38.0–38.4°C in the first two runs to 38.8–38.9°C
+in the last control.
+ABBA order counterbalances some time drift but does not remove thermal effects.
+Whole UI-thread running totals were 8.958, 9.157, 9.289 and 9.366 seconds. There
+is no demonstrated reduction in total UI CPU or battery consumption.
+
+The updated runs completed 200 worker jobs each, with one whole-message parser,
+all 25 expected segments (13 prose/12 code), and no pending/stale parser results
+at completion. Fence/parse wall totals were 103.460/176.836 ms and
+120.420/190.146 ms; maximum request turnaround was 28.641/30.194 ms. These include
+initial preparation and turnaround includes queue/delivery/acceptance; they are
+not timestamps attributing an individual slow frame. No update was coalesced
+behind a busy job in this fixture.
+
+Scheduler evidence explains part of the remaining maxima. Updated 1's 18.406 ms
+UI frame spent 14.701 ms running, 0.099 ms runnable and 3.606 ms blocked.
+Updated 2's 17.768 ms UI maximum ran entirely on CPU. The updated raster maxima
+had different causes: 11.046 ms included only 2.871 ms running and 8.175 ms
+runnable; 11.798 ms included 2.607 ms running, 0.217 ms runnable and 8.974 ms
+sleeping. No complete PAINT slice exceeded 10 ms. Native samples in the largest
+UI windows are sparse and contain unresolved APK addresses, so these records
+do not identify an exact expensive painter or widget.
+
+### Live Hermes integration and CPU attribution
+
+Installed the current profile observer build and created one explicitly owned
+QA conversation using `gpt-5.6-luna`/`openai-codex`, preserving profile defaults.
+One mixed-format prompt produced a complete 11,604-character response with
+headings, a table and Dart code fences. No tool/subagent activity or controller,
+chat or dispatch error was recorded. The full final source was renderer-ready
+with zero pending parses, and the ten-character test draft survived completion.
+The final sentinel was visually confirmed after tapping New activity; the
+observer's earlier sentinel check was false while reading a different part of
+the virtualized answer.
+
+The live script issued 40 key-coordinate taps, but its first deliberate reading
+scroll dismissed SwiftKey after ten actual typed characters. The remaining taps
+are not evidence of typing. Sustained 60-character typing is verified by the
+four controlled replays; the live run verifies shorter typing plus scrolling
+during a real response. Do not present it as 40 typed characters or a completed
+full-length live typing stress test.
+
+Main-isolate CPU sampling recorded 18,846 samples, including 1,127 truncated
+stacks and 24 empty stacks, with zero observed `splitMarkdownSegments` stacks.
+The worker recorded 186 untruncated/nonempty samples, including eight scanner
+stacks. This corroborates the move to the background worker on the real phone;
+zero observed samples alone would not prove absence of all UI scanning.
+Observer `_Measurement`/`_walk` stacks account for 2,848 main samples and must
+not be counted as application rendering. Many main `write` samples include
+timeline-reporting calls, so the tracing overhead also prevents interpreting
+all writes as app paint work. Counts are sampled attribution, not exact CPU
+milliseconds or disjoint categories.
+
+The five longest UI frames starting inside the live observed streaming window
+contain 86 main-isolate samples, 40 with truncated stacks. None identifies the
+observer, fence scanner or `MarkdownCodeBlock`. Repeated identifiable ancestors
+include `RenderEditable.performLayout` (10 samples), `TextPainter.layout` (9),
+`LayoutBuilder.rebuildWithConstraints` (9), `PipelineOwner.flushLayout` (13) and
+`flushPaint` (9). These overlap; they support investigating editable/text layout
+and layout-time rebuilding, not assigning exact durations or identifying the
+composer as the responsible widget. In particular, the misplaced post-scroll
+taps could exercise transcript selection instead of typing. One 21.737 ms frame
+ends only 6.485 ms before observed completion, so polling cannot exclude
+completion work from that frame. The four other peaks occur before the final
+full response. This is a diagnostic lead, not proof of an expensive painter.
+
+Live streaming UI p99 was 10.214 ms (maximum 22.522 ms), and raster p99 was
+4.732 ms. That run had a different response, native draft persistence, Dart CPU
+sampling and periodic observer tree walks; it is not a matched speed comparison
+with ABBA. Readiness observations use 20 ms source and 100 ms render polling;
+the reported first-text-to-ready 113.134 ms and completion-to-ready 22.574 ms
+are observation differences, not exact processing durations.
+
+Private ignored evidence is under
+`build/fence-worker-ready/phone-20261002/`: `replays/controlled-comparison.json`,
+per-run scheduler summaries and raw traces, `excluded/control-1-input-stall/`,
+and `live/` numeric reports and sanitized main/worker samples. Chat text,
+credentials, VM-service URLs and device screenshot contents are not committed.
+The phone was released after restoring the ordinary QA APK; its installed
+SHA-256 was verified as
+`15e09d7b53440359ac0f2102f21175bd48133799cbadd84a39b7f61b85888c7f`.
+No further phone input is needed to analyze these saved files.
+Full sustained live typing still needs a repeat if validating that specific
+stress case: keep the keyboard visible for the complete verified input sequence,
+then exercise scrolling, or explicitly reopen and verify it after every scroll.
