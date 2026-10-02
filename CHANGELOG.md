@@ -4,6 +4,11 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+## [1.2.0] - 2026-10-02
+
+Inline reply images, less Markdown work during streaming, and stronger handling
+of drafts, outgoing messages and connection recovery.
+
 ### Conversations and files
 
 - Display reply images inline, following desktop's tap-to-zoom convention, with
@@ -44,7 +49,7 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
   and queues are not imported; send them or copy their text and files before updating.
 - Configuration backups now use version 2, with or without passphrase protection.
   Older backups cannot be imported; export a fresh backup after updating.
-  [Current backup format and limits](docs/CONFIGURATION_BACKUPS.md).
+  [Current backup format and limits](https://github.com/tarkilhk/Wing/blob/v1.2.0/docs/CONFIGURATION_BACKUPS.md).
 
 ### Build and testing tools
 
