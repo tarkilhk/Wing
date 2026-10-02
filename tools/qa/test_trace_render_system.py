@@ -216,6 +216,34 @@ class SystemTraceTests(unittest.TestCase):
             self.assertEqual(report['build_windows_outside_replay_count'],1)
             self.assertEqual(report['raster_windows_outside_replay_count'],1)
 
+    def test_longest_late_windows_are_selected_with_stable_ties_and_bounds(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(system, 'BUILD_ROOT', Path(directory)):
+            clocks = iter([100,200,2000000])
+            def rpc(_,method,**params):
+                if method=='getIsolate':
+                    return {'extensionRPCs':[system.REPLAY_EXTENSION]}
+                return {'timestamp':next(clocks)}
+            builds = [(1000+i*30000,11000) for i in range(23)] + [(691000,60000)]
+            rasters = [(1500+i*30000,12000) for i in range(23)] + [(691500,70000)]
+            replay = {'startMonotonicUs':300,'endMonotonicUs':1000000,
+                      'frameBuildStartUs':[s for s,_ in builds]+[100,999000],
+                      'buildUs':[d for _,d in builds]+[90000,90000],
+                      'frameRasterStartUs':[s for s,_ in rasters]+[100,999000],
+                      'rasterUs':[d for _,d in rasters]+[90000,90000]}
+            with patch.object(system,'focused'), patch.object(system,'rpc',side_effect=rpc), \
+                    patch.object(system,'adb_call',return_value=SimpleNamespace(returncode=0,stdout='123')), \
+                    patch.object(system.Session,'start'),patch.object(system.Session,'finish'), \
+                    patch.object(system,'analyze',return_value={}) as analyze:
+                report=system.capture_system(SimpleNamespace(isolate='PRIVATE'),Path(directory)/'capture',
+                                             30,lambda _:replay,'processor')
+            self.assertEqual(analyze.call_args.args[-2], [builds[-1]]+builds[:19])
+            self.assertEqual(analyze.call_args.args[-1], [rasters[-1]]+rasters[:19])
+            self.assertEqual(report['slow_window_selection_policy'],1)
+            self.assertEqual(report['build_windows_outside_replay_count'],2)
+            self.assertEqual(report['raster_windows_outside_replay_count'],2)
+            self.assertEqual(report['build_windows_over_limit_count'],4)
+            self.assertEqual(report['raster_windows_over_limit_count'],4)
+
     def test_main_is_ui_only_with_observed_paint_track(self):
         db=sqlite3.connect(':memory:')
         db.executescript('''CREATE TABLE process(upid,pid);

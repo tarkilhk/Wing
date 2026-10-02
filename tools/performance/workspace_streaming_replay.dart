@@ -302,6 +302,30 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
       'parserCount': parsers.length,
       'pendingParsers': pending,
       'staleParsers': stale,
+      'workerJobsCompleted': parsers.fold<int>(
+        0,
+        (sum, state) => sum + state.parsesCompleted,
+      ),
+      'workerFenceUs': parsers.fold<int>(
+        0,
+        (sum, state) => sum + state.totalFenceMicros,
+      ),
+      'workerParseUs': parsers.fold<int>(
+        0,
+        (sum, state) => sum + state.totalParserMicros,
+      ),
+      'workerRequestMaxUs': parsers.fold<int>(
+        0,
+        (maximum, state) => math.max(maximum, state.maxRequestMicros),
+      ),
+      'workerCoalescedUpdates': parsers.fold<int>(
+        0,
+        (sum, state) => sum + state.updatesCoalesced,
+      ),
+      'workerPendingCharactersMax': parsers.fold<int>(
+        0,
+        (maximum, state) => math.max(maximum, state.maxPendingCharacters),
+      ),
       'editableMarkers': editableMarkers,
       'paragraphMarkers': paragraphMarkers,
       'rendered':
@@ -583,6 +607,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
         'draft': _chat!.composerText,
         'exactFinalSource': exactSource,
         'finalRendererReady': _rendered(finalSource),
+        'rendererMetrics': renderedReadiness(finalSource),
         'completed': !_chat!.busy,
         'geometryStable': geometryStable,
         'focusHeld': focusHeld,

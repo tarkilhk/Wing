@@ -450,15 +450,17 @@ def capture_system(client, output, seconds, scenario, trace_processor, native_st
     require(all(type(s) is int and type(b) is int and s>0 and b>=0 for s,b in zip(starts,builds)))
     slow_builds = [(s,b) for s,b in zip(starts,builds) if b>10000]
     contained_builds = [(s,b) for s,b in slow_builds if start<=s and s+b<=end]
-    selected = contained_builds[:20]
+    selected = sorted(contained_builds, key=lambda window: window[1], reverse=True)[:20]
     raster_starts, rasters = replay.get("frameRasterStartUs", []), replay.get("rasterUs", [])
     require(isinstance(raster_starts, list) and isinstance(rasters, list) and len(raster_starts) == len(rasters))
     require(all(type(s) is int and type(r) is int and s>0 and r>=0 for s,r in zip(raster_starts,rasters)))
     slow_rasters = [(s,r) for s,r in zip(raster_starts,rasters) if r>10000]
     contained_rasters = [(s,r) for s,r in slow_rasters if start<=s and s+r<=end]
-    selected_rasters = contained_rasters[:20]
+    selected_rasters = sorted(contained_rasters, key=lambda window: window[1], reverse=True)[:20]
     report = analyze(trace_processor, trace, pid, start, end, selected, selected_rasters)
     report["native_preflight"] = native
+    # Policy 1: longest contained durations first; equal durations retain input order.
+    report["slow_window_selection_policy"] = 1
     report["fence_wait_event_count"] = len(fence_events)
     report["build_windows_outside_replay_count"] = len(slow_builds)-len(contained_builds)
     report["raster_windows_outside_replay_count"] = len(slow_rasters)-len(contained_rasters)

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Prepare Markdown code fences and prose together in the existing background
+  worker, keeping fence scanning off the chat UI while streamed replies grow.
+
 - Retain selectable paragraph text while replies stream, avoiding repeated
   text-control setup and preserving valid selections as paragraphs grow.
 - Keep streamed answers mounted through completion and saved-history refresh,

@@ -3,6 +3,7 @@ import '../theme/wing_theme.dart';
 import 'package:flutter/services.dart';
 
 import '../services/completion_diagnostics.dart';
+import '../services/markdown_segments.dart';
 
 import 'web_output_preview.dart';
 
@@ -14,47 +15,17 @@ import 'web_output_preview.dart';
 /// with full fidelity, instead of relying on flutter_markdown's `pre`
 /// builder (which leaves its internal inline state unbalanced).
 List<Object> splitMarkdownCodeBlocks(String content, {bool streaming = false}) {
-  final result = <Object>[];
-  final opening = RegExp(
-    r'^ {0,3}(`{3,}|~{3,})([^\r\n]*)\r?$',
-    multiLine: true,
-  );
-  var cursor = 0;
-  while (cursor < content.length) {
-    final match = opening.firstMatch(content.substring(cursor));
-    if (match == null) break;
-    final start = cursor + match.start;
-    final fence = match.group(1)!;
-    final info = match.group(2)!.trim();
-    final bodyStart = cursor + match.end;
-    final closing = RegExp(
-      '^ {0,3}${RegExp.escape(fence[0])}{${fence.length},}[ \\t]*\\r?\$',
-      multiLine: true,
-    ).firstMatch(content.substring(bodyStart));
-    final bodyEnd = closing == null
-        ? content.length
-        : bodyStart + closing.start;
-    // An unfinished streaming fence uses the same selectable code renderer.
-    final codeStart = bodyStart < content.length && content[bodyStart] == '\n'
-        ? bodyStart + 1
-        : bodyStart;
-    if (start > cursor) {
-      result.add(content.substring(cursor, start));
-    }
-    result.add(
-      MarkdownCodeBlock(
-        code: content.substring(codeStart, bodyEnd),
-        language: info.isEmpty ? null : info.split(RegExp(r'\s+')).first,
-        previewEnabled: closing != null && !streaming,
-      ),
-    );
-    cursor = closing == null ? content.length : bodyStart + closing.end;
-  }
-
-  if (cursor < content.length) {
-    result.add(content.substring(cursor));
-  }
-  return result;
+  return [
+    for (final segment in splitMarkdownSegments(content))
+      switch (segment) {
+        MarkdownProseSegment() => segment.source,
+        MarkdownFenceSegment() => MarkdownCodeBlock(
+          code: segment.code,
+          language: segment.language,
+          previewEnabled: segment.closed && !streaming,
+        ),
+      },
+  ];
 }
 
 /// Renders a fenced code block with a language label, copy, and wrap controls.

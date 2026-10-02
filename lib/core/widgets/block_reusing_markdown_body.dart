@@ -43,7 +43,7 @@ class BlockReusingMarkdownBody extends MarkdownBody {
     this.parsedNodes,
   });
 
-  /// QA background parsing supplies resolved nodes; widget work stays here.
+  /// Background preparation supplies resolved nodes; widget work stays here.
   final List<md.Node>? parsedNodes;
 
   @override

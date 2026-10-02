@@ -9,6 +9,7 @@ import '../models/chat_output.dart';
 import '../models/deliverable_reference.dart';
 import '../services/file_open_error_message.dart';
 import '../services/markdown_inline_parser.dart';
+import '../services/markdown_segments.dart';
 import '../services/markdown_qa_variant.dart';
 import '../services/completion_diagnostics.dart';
 import '../services/web_preview.dart';
@@ -241,7 +242,29 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     final start = CompletionDiagnostics.enabled
         ? CompletionDiagnostics.start()
         : 0;
-    final result = _content = _buildContent(context);
+    final result = _content =
+        widget.documentPath == null &&
+            markdownQaVariant == MarkdownQaVariant.background
+        ? BackgroundMarkdownContent(
+            data: widget.data,
+            deliverables: widget.deliverables,
+            streaming: widget.streaming,
+            builder: (_, segments) {
+              final renderStart = CompletionDiagnostics.enabled
+                  ? CompletionDiagnostics.start()
+                  : 0;
+              final child = _buildContent(context, prepared: segments);
+              if (CompletionDiagnostics.enabled) {
+                CompletionDiagnostics.finish(
+                  'markdown.message.prepared.build',
+                  renderStart,
+                  values: {'segments': segments.length},
+                );
+              }
+              return child;
+            },
+          )
+        : _buildContent(context);
     if (CompletionDiagnostics.enabled) {
       CompletionDiagnostics.finish(
         'markdown.message.build',
@@ -252,7 +275,10 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     return result;
   }
 
-  Widget _buildContent(BuildContext context) {
+  Widget _buildContent(
+    BuildContext context, {
+    List<MarkdownSegment>? prepared,
+  }) {
     MediaQuery.sizeOf(context);
     MediaQuery.textScalerOf(context);
     final theme = Theme.of(context);
@@ -274,23 +300,37 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     };
     _headingKeys.clear();
     final headings = _HeadingBuilder(_headingKeys);
-    final splitStart = CompletionDiagnostics.enabled
-        ? CompletionDiagnostics.start()
-        : 0;
-    final sources = splitMarkdownCodeBlocks(
-      widget.data,
-      streaming: widget.streaming,
-    );
-    if (CompletionDiagnostics.enabled) {
-      CompletionDiagnostics.finish(
-        'markdown.fence.split',
-        splitStart,
-        values: {
-          'segments': sources.length,
-          'prose': sources.whereType<String>().length,
-          'code': sources.whereType<MarkdownCodeBlock>().length,
-        },
+    // The production message path receives a complete snapshot from the
+    // worker. Only the explicit synchronous QA variants and document previews
+    // run the splitter here.
+    final List<Object> sources;
+    if (prepared != null) {
+      sources = [
+        for (final segment in prepared)
+          switch (segment) {
+            MarkdownProseSegment() => segment.source,
+            MarkdownFenceSegment() => MarkdownCodeBlock(
+              code: segment.code,
+              language: segment.language,
+              previewEnabled: segment.closed && !widget.streaming,
+            ),
+          },
+      ];
+    } else {
+      final splitStart = CompletionDiagnostics.enabled
+          ? CompletionDiagnostics.start()
+          : 0;
+      sources = splitMarkdownCodeBlocks(
+        widget.data,
+        streaming: widget.streaming,
       );
+      if (CompletionDiagnostics.enabled) {
+        CompletionDiagnostics.finish(
+          'markdown.fence.split',
+          splitStart,
+          values: {'segments': sources.length},
+        );
+      }
     }
     final next = <({Object source, Widget child})>[];
     final usedParsers = <int>{};
@@ -303,7 +343,8 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
       if (!_refreshSegments &&
           widget.documentPath == null &&
           previous != null &&
-          (_segmentsStreaming == widget.streaming ||
+          (prepared != null ||
+              _segmentsStreaming == widget.streaming ||
               source is MarkdownCodeBlock) &&
           _sameMarkdownSegment(previous.source, source)) {
         next.add(previous);
@@ -343,7 +384,10 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
         return options;
       }
 
-      List<md.Node>? nodes;
+      List<md.Node>? nodes =
+          prepared != null && prepared[index] is MarkdownProseSegment
+          ? (prepared[index] as MarkdownProseSegment).nodes
+          : null;
       if (source is String &&
           widget.documentPath == null &&
           markdownQaVariant == MarkdownQaVariant.cache) {
@@ -361,16 +405,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
               removeBottom: true,
               child: Theme(
                 data: markdownTheme,
-                child:
-                    widget.documentPath == null &&
-                        markdownQaVariant == MarkdownQaVariant.background
-                    ? BackgroundMarkdownContent(
-                        data: source as String,
-                        deliverables: widget.deliverables,
-                        streaming: widget.streaming,
-                        builder: (text, parsed) => prose(text, parsed),
-                      )
-                    : prose(source as String, nodes),
+                child: prose(source as String, nodes),
               ),
             );
       next.add((source: source, child: child));

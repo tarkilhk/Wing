@@ -1,8 +1,7 @@
 import 'package:flutter/widgets.dart';
-import 'package:markdown/markdown.dart' as md;
 
 import '../services/markdown_parse_worker.dart';
-import '../services/markdown_inline_parser.dart';
+import '../services/markdown_segments.dart';
 import '../services/completion_diagnostics.dart';
 import 'studio_error.dart';
 
@@ -27,7 +26,7 @@ class BackgroundMarkdownContent extends StatefulWidget {
   final String data;
   final bool deliverables;
   final bool streaming;
-  final Widget Function(String source, List<md.Node> nodes) builder;
+  final Widget Function(String source, List<MarkdownSegment> segments) builder;
   final Future<MarkdownParseResult> Function(String source)? parse;
 
   @override
@@ -49,7 +48,7 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
   bool _failed = false;
   MarkdownParseWorker? _worker;
   String? _renderedSource;
-  List<md.Node>? _nodes;
+  List<MarkdownSegment>? _segments;
 
   String? get renderedSource => _renderedSource;
   bool get pending => !_failed && (_busy || _renderedSource != widget.data);
@@ -57,6 +56,10 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
   int updatesCoalesced = 0;
   int totalParserMicros = 0;
   int totalCacheHits = 0;
+  int totalFenceMicros = 0;
+  int totalRequestMicros = 0;
+  int maxRequestMicros = 0;
+  int maxPendingCharacters = 0;
 
   @override
   void initState() {
@@ -90,12 +93,12 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
         final copyStart = CompletionDiagnostics.enabled
             ? CompletionDiagnostics.start()
             : 0;
-        _nodes = copyMarkdownNodes(previous._nodes!);
+        _segments = copyMarkdownSegments(previous._segments!);
         if (CompletionDiagnostics.enabled) {
           CompletionDiagnostics.finish(
             'markdown.ast.copy',
             copyStart,
-            values: {'blocks': _nodes!.length},
+            values: {'segments': _segments!.length},
           );
         }
       }
@@ -137,12 +140,14 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
       _reset();
       // Nodes from another grammar cannot be rendered by the new builders.
       if (changedConfiguration || widget.data.isEmpty) {
-        _nodes = null;
+        _segments = null;
         _renderedSource = null;
       }
     } else if (_busy && widget.data != oldWidget.data) {
       updatesCoalesced++;
     }
+    final lag = widget.data.length - (_renderedSource?.length ?? 0);
+    if (lag > maxPendingCharacters) maxPendingCharacters = lag;
     _failed = false;
     _request();
   }
@@ -165,6 +170,9 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
     }
     final source = widget.data;
     final epoch = _epoch;
+    final requestWatch = Stopwatch()..start();
+    final lag = source.length - (_renderedSource?.length ?? 0);
+    if (lag > maxPendingCharacters) maxPendingCharacters = lag;
     _busy = true;
     if (CompletionDiagnostics.enabled) {
       CompletionDiagnostics.event('markdown.background.parse.request');
@@ -183,14 +191,17 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
         .then(
           (result) {
             if (!mounted || !_foreground || epoch != _epoch) return;
+            final requestMicros = requestWatch.elapsedMicroseconds;
             if (CompletionDiagnostics.enabled) {
               CompletionDiagnostics.event(
                 'markdown.background.parse.result',
                 values: {
                   'parseUs': result.parseMicros,
+                  'fenceUs': result.fenceMicros,
+                  'requestWallUs': requestMicros,
                   'cacheHits': result.cacheHits,
                   'inlineParses': result.inlineParses,
-                  'blocks': result.nodes.length,
+                  'segments': result.segments.length,
                 },
               );
             }
@@ -199,10 +210,15 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
               // Accept newer completed progress even if another update is pending.
               // Otherwise a fast stream could starve rendering until it completes.
               _renderedSource = source;
-              _nodes = result.nodes;
+              _segments = result.segments;
               parsesCompleted++;
               totalParserMicros += result.parseMicros;
               totalCacheHits += result.cacheHits;
+              totalFenceMicros += result.fenceMicros;
+              totalRequestMicros += requestMicros;
+              if (requestMicros > maxRequestMicros) {
+                maxRequestMicros = requestMicros;
+              }
             });
           },
           onError: (Object error, StackTrace stack) {
@@ -238,9 +254,9 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
 
   @override
   Widget build(BuildContext context) {
-    final child = _nodes == null
+    final child = _segments == null
         ? const SizedBox.shrink()
-        : widget.builder(_renderedSource!, _nodes!);
+        : widget.builder(_renderedSource!, _segments!);
     return _failed
         ? Column(
             mainAxisSize: MainAxisSize.min,

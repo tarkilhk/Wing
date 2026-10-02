@@ -868,3 +868,89 @@ analysis. Production Wing and Hermes were unchanged. QA task records remain in
 Android recents; removal was not verified (do not report them as removed).
 Host checks after keyboard/export updates: 64 tests pass and whitespace checks
 are clean. Current ready APKs were not rebuilt for these host-only updates.
+
+
+### 2026-10-02: fence scanning joins the existing background worker
+
+Committed and pushed all previous optimization work as `3657157` before this
+implementation. The ordinary chat renderer now sends each complete presentation
+snapshot to the existing single `wing-markdown-parser` isolate. That job splits
+fences and resolves prose into Dart-only segments; the UI constructs widgets from
+one accepted result. Fence grammar is unchanged. Parser/cache state remains per
+mounted owner and prose position, preserving the existing per-segment reference
+scope and reusing unchanged completed prose.
+
+The existing controller presentation window remains 100 ms. No second batching
+timer or worker pool was added. Each mounted message permits one in-flight job
+and retains only the newest pending source. Completed progress is displayed
+before the next job, avoiding starvation during bursts. Replacement, grammar
+changes, disposal and backgrounding invalidate late results. Resuming prepares
+the latest source. Completing unchanged source enables closed code previews
+without rescanning it. Linked document previews retain their existing synchronous
+heading-anchor path, and explicit synchronous benchmark variants remain available.
+
+Worker metrics distinguish fence/parse wall time from request turnaround, which
+also includes queuing, transport and the UI accepting results. Character-backlog
+metrics count UTF-16 code units, not elapsed delay. Profile-only preparation spans
+and aggregate counters record no message contents. The replay exports readiness
+and numeric worker counters only after measurement.
+
+Validation: 2,766 Flutter tests passed with 17 existing opt-in/platform skips;
+67 host tooling tests passed; Flutter analysis reported no issues. The four
+original-scanner prefix digests were also checked against the actual committed
+Dart implementation. A whole-message parser regression fails on that baseline
+(two prose parsers) and passes on the new path (one message parser). Tests cover
+mixed and unfinished fences, references, AST mutation/copy isolation, cache
+release, coalescing, failure/disposal/lifecycle, completion, code copy/wrap,
+selection and reader-position retention across themes and enlarged text.
+
+Emulator ABBA results are in ignored `build/fence-worker-ready/emulator-abba/`.
+All four workloads passed final-source/segment-readiness, identical typing,
+keyboard/viewport, cadence, trace-loss and profiler-restoration guards. The
+fixture sends 400 deltas over 20 seconds while native typing supplies 60
+characters. No physical phone or Hermes backend was accessed. The emulator uses
+60 Hz GBoard and software graphics; this does not predict phone performance.
+
+| Streaming UI timing | Control 1 | Fixed 1 | Fixed 2 | Control 2 |
+| --- | ---: | ---: | ---: | ---: |
+| p95 (ms) | 11.867 | 11.500 | 11.619 | 10.701 |
+| p99 (ms) | 18.427 | 17.674 | 19.496 | 17.080 |
+| Maximum (ms) | 28.583 | 26.375 | 40.132 | 25.206 |
+| Frames over 16.667 ms | 9/837 | 12/830 | 14/799 | 10/846 |
+
+There is **no demonstrated p99 improvement** in this emulator comparison. Both
+fixed runs completed all 25 segments with one owner, no pending/stale results,
+and zero updates coalesced behind a busy job. Tracked fence+parse wall totals
+were 285.078 ms across 195 jobs and 279.459 ms across 194 jobs, including initial
+preparation (about 1.46/1.44 ms per job). Maximum request turnaround was
+39.152/51.742 ms, including preparation and delivery. These aggregate maxima
+lack timestamps and cannot be tied to the 40.132 ms frame.
+
+Fixed-2 also had worse raster p99 (44.863 ms versus 39.272–39.488 ms in the other
+three runs). The saved system summaries do not identify the cause: the initial
+window cap selected the first 20 slow frames and missed the worst late frames;
+these ABBA traces also lack PAINT slices establishing the UI thread role. Do not
+attribute that maximum to parsing or software-GPU contention from these files.
+The host capture now selects the longest 20 contained build/raster windows,
+recording selection policy `1`; its regression covers late maxima, bounds and
+stable ties. Existing ABBA archives were not rewritten.
+
+Separate CPU diagnostic runs in `build/fence-worker-ready/diagnostic/` verify the
+actual move: baseline main-isolate samples include 22 scanner stacks out of
+2,115 samples; fixed main has zero observed scanner stacks out of 2,210, while
+the worker has 24 out of 171. Main traces include 154/191 truncated stacks;
+worker stacks are untruncated. Counts are sampled attribution, not milliseconds
+or exact CPU percentages. Timings from these diagnostic runs are excluded from
+ABBA; only the fixed diagnostic enabled Android systrace, so their system spans
+are not a matched performance pair.
+
+Both QA comparison APKs use the same ARM64/x64 Flutter engines and application
+version. Native JNI library artifacts also differ between source-directory
+builds; this is not a byte-identical-native-library comparison. Normal-size
+emulator screenshots retain the same table/code/composer geometry. Widget tests
+cover theme and enlarged-text behavior; this is not a full pixel comparison.
+
+Next phone window: install the prepared ordinary QA build, validate live Luna
+streaming with typing/scrolling, and run a matched baseline/new comparison with
+systrace enabled consistently and the corrected longest-window coverage. The
+ordinary production app and the physical phone remain untouched in this task.

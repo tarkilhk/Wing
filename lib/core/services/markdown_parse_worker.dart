@@ -1,25 +1,27 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:isolate';
 
-import 'package:markdown/markdown.dart' as md;
-
 import 'markdown_inline_parser.dart';
+import 'markdown_segments.dart';
 
 class MarkdownParseResult {
   const MarkdownParseResult(
-    this.nodes,
+    this.segments,
     this.parseMicros,
     this.cacheHits,
-    this.inlineParses,
-  );
-  final List<md.Node> nodes;
+    this.inlineParses, {
+    this.fenceMicros = 0,
+  });
+  final List<MarkdownSegment> segments;
   final int parseMicros;
   final int cacheHits;
   final int inlineParses;
+  final int fenceMicros;
 }
 
-/// One lazy isolate shared by mounted Markdown bodies. Widgets coalesce
-/// updates before calling parse, so each owner has at most one in-flight job.
+/// One lazy isolate prepares fences and prose for mounted messages. Widgets
+/// coalesce updates, so each owner has at most one in-flight snapshot.
 class MarkdownParseWorker {
   static MarkdownParseWorker? _shared;
   static MarkdownParseWorker get shared {
@@ -179,12 +181,12 @@ class MarkdownParseWorker {
 
 void _parseLoop(SendPort replies) {
   final inbox = ReceivePort();
-  final parsers = <int, ((bool, bool, bool), MarkdownInlineParser)>{};
+  final owners = <int, _OwnerPreparation>{};
   replies.send(inbox.sendPort);
   inbox.listen((dynamic message) {
     final values = message as List;
     if (values[0] == 'release') {
-      parsers.remove(values[1])?.$2.clear();
+      owners.remove(values[1])?.clear();
       return;
     }
     final id = values[1] as int;
@@ -195,28 +197,117 @@ void _parseLoop(SendPort replies) {
         values[5] as bool,
         values[6] as bool,
       );
-      final existing = parsers[owner];
-      final parser = existing?.$1 == configuration
-          ? existing!.$2
-          : MarkdownInlineParser(
-              deliverables: configuration.$1,
-              cacheEnabled: configuration.$2,
-              guardCode: configuration.$3,
-            );
-      parsers[owner] = (configuration, parser);
-      final nodes = parser.parse(values[3] as String);
-      replies.send([
-        'result',
-        id,
-        MarkdownParseResult(
-          nodes,
-          parser.lastParseMicros,
-          parser.cacheHits,
-          parser.inlineParses,
-        ),
-      ]);
+      final existing = owners[owner];
+      final preparation = existing?.configuration == configuration
+          ? existing!
+          : _OwnerPreparation(configuration);
+      if (!identical(existing, preparation)) {
+        existing?.clear();
+      }
+      owners[owner] = preparation;
+      if (_profileDiagnostics) {
+        developer.Timeline.startSync('wing.markdown.prepare');
+      }
+      late final MarkdownParseResult result;
+      try {
+        result = preparation.prepare(values[3] as String);
+      } finally {
+        if (_profileDiagnostics) {
+          developer.Timeline.finishSync();
+        }
+      }
+      replies.send(['result', id, result]);
     } catch (_) {
       replies.send(['failed', id]);
     }
   });
+}
+
+const _profileDiagnostics =
+    bool.fromEnvironment('WING_COMPLETION_DIAGNOSTICS') &&
+    bool.fromEnvironment('dart.vm.profile');
+
+class _ParsedProse {
+  _ParsedProse(this.parser);
+
+  final MarkdownInlineParser parser;
+  MarkdownProseSegment? accepted;
+}
+
+class _OwnerPreparation {
+  _OwnerPreparation(this.configuration);
+
+  final (bool, bool, bool) configuration;
+  final _prose = <int, _ParsedProse>{};
+
+  MarkdownParseResult prepare(String source) {
+    final fenceClock = Stopwatch()..start();
+    if (_profileDiagnostics) {
+      developer.Timeline.startSync('wing.markdown.fence.scan');
+    }
+    late final List<MarkdownSegment> scanned;
+    try {
+      scanned = splitMarkdownSegments(source);
+    } finally {
+      fenceClock.stop();
+      if (_profileDiagnostics) {
+        developer.Timeline.finishSync();
+      }
+    }
+    final prepared = <MarkdownSegment>[];
+    final used = <int>{};
+    var parseMicros = 0;
+    var cacheHits = 0;
+    var inlineParses = 0;
+    for (final (index, segment) in scanned.indexed) {
+      if (segment is MarkdownFenceSegment) {
+        prepared.add(segment);
+        continue;
+      }
+      final prose = segment as MarkdownProseSegment;
+      used.add(index);
+      final state = _prose.putIfAbsent(
+        index,
+        () => _ParsedProse(
+          MarkdownInlineParser(
+            deliverables: configuration.$1,
+            cacheEnabled: configuration.$2,
+            guardCode: configuration.$3,
+          ),
+        ),
+      );
+      if (state.accepted?.source == prose.source) {
+        prepared.add(state.accepted!);
+        continue;
+      }
+      final nodes = state.parser.parse(prose.source);
+      final parsed = state.accepted = MarkdownProseSegment(
+        source: prose.source,
+        nodes: nodes,
+      );
+      prepared.add(parsed);
+      parseMicros += state.parser.lastParseMicros;
+      cacheHits += state.parser.cacheHits;
+      inlineParses += state.parser.inlineParses;
+    }
+    for (final index in _prose.keys.toList()) {
+      if (!used.contains(index)) {
+        _prose.remove(index)!.parser.clear();
+      }
+    }
+    return MarkdownParseResult(
+      prepared,
+      parseMicros,
+      cacheHits,
+      inlineParses,
+      fenceMicros: fenceClock.elapsedMicroseconds,
+    );
+  }
+
+  void clear() {
+    for (final state in _prose.values) {
+      state.parser.clear();
+    }
+    _prose.clear();
+  }
 }
