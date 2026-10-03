@@ -509,34 +509,34 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         return;
       }
       final owner = await _profileControllers.forSession(connection, key);
-      var chat = owner.findNotificationChat(key);
-      final loadedForReview = chat == null;
+      ProfileChat? chat;
       try {
-        chat ??= await owner.loadNotificationApproval(key);
+        chat = await owner.loadNotificationApproval(key);
       } catch (_) {
-        final context = _navigatorKey.currentContext;
-        if (context != null && context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Approval could not be loaded. Reconnect and tap the notification again.',
-              ),
-            ),
-          );
-        }
+        await _notificationActionStatus(
+          'Approval could not be loaded. Reconnect and tap the notification again.',
+        );
         return;
       }
       if (chat == null) return;
       final current = _chatNotices.inputFor(jsonEncode(key.toJson()));
-      if (current != null && current.focus.identity != focus.identity) return;
+      if (current != null && current.focus.identity != focus.identity) {
+        await _notificationActionStatus('This approval is no longer pending.');
+        return;
+      }
       final request = chat.approval;
-      if (request == null || request['request_id'] != focus.id) return;
+      if (request == null || request['request_id'] != focus.id) {
+        await _notificationActionStatus('This approval is no longer pending.');
+        return;
+      }
       final mustReview =
-          data['review'] == true ||
-          !(widget.connManager.prefs.getBool(notificationPreviewsKey) ??
-              true) ||
-          choice == 'always' ||
-          loadedForReview;
+          choice != 'deny' &&
+          (data['review'] == true ||
+              !(widget.connManager.prefs.getBool(notificationPreviewsKey) ??
+                  true) ||
+              choice == 'always' ||
+              data['command'] !=
+                  GatewayApprovalRequest.fromEventData(request).command.trim());
       if (mustReview) {
         final context = _navigatorKey.currentContext;
         if (context == null || !context.mounted) return;
@@ -553,16 +553,54 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
                 target.offlineSnapshot ||
                 target.status == ProfileTurnStatus.reconnecting,
             pending: () => target.approval?['request_id'] == focus.id,
-            submit: () =>
-                owner.approveNotification(target, choice, requestId: focus.id),
+            submit: () => owner.approveNotification(
+              target,
+              choice,
+              requestId: focus.id,
+              command: approval.command.trim(),
+            ),
           ),
         );
         return;
       }
-      await owner.approveNotification(chat, choice, requestId: focus.id);
+      await owner.approveNotification(
+        chat,
+        choice,
+        requestId: focus.id,
+        command: data['command'] as String,
+      );
     } catch (_) {
       // The controller retains the exact request and exposes unconfirmed status.
       // An intent is never saved as an authorization to retry on reconnect.
+      if (data['choice'] is String && (data['choice'] as String).isNotEmpty) {
+        await _notificationActionStatus(
+          'Decision not confirmed. Review or retry the notification.',
+        );
+      }
+    } finally {
+      if (data['choice'] is String &&
+          (data['choice'] as String).isNotEmpty &&
+          data['review'] != true) {
+        try {
+          await NativeNotificationSink.channel.invokeMethod<void>(
+            'finishDirectAction',
+            data['notification_id'],
+          );
+        } catch (_) {
+          // The action may already have lost its Android host.
+        }
+      }
+    }
+  }
+
+  Future<void> _notificationActionStatus(String message) async {
+    try {
+      await NativeNotificationSink.channel.invokeMethod<void>(
+        'actionStatus',
+        message,
+      );
+    } catch (_) {
+      // The request and notification still retain their decision state.
     }
   }
 

@@ -106,6 +106,7 @@ Future<void> checkDisconnectedNotification(
             MethodCall('interaction', {
               'payload': notice['payload'],
               'choice': 'once',
+              'command': request['command'],
               'review': review,
             }),
           ),

@@ -36,6 +36,7 @@ Future<void> main() async {
   await prefs.setBool('notification_permission_requested', true);
   await prefs.setBool('microphone_permission_requested', true);
   final savedHistory = prefs.getString('notification_qa_reply_history');
+  final savedApprovals = prefs.getString('notification_qa_approvals');
   final host = Host()
     ..historyMessages = savedHistory == null
         ? null
@@ -43,7 +44,40 @@ Future<void> main() async {
               .map((row) => Map<String, dynamic>.from(row as Map))
               .toList()
     ..running = false
-    ..pendingApprovals = [];
+    ..pendingApprovals = savedApprovals == null
+        ? []
+        : (jsonDecode(savedApprovals) as List)
+              .map((row) => Map<String, dynamic>.from(row as Map))
+              .toList();
+  final savedDecisions = prefs.getString('notification_qa_decisions');
+  if (savedDecisions != null) {
+    for (final row in jsonDecode(savedDecisions) as List) {
+      host.calls.add((
+        'a',
+        row['method'] as String,
+        Map<String, dynamic>.from(row['params'] as Map),
+      ));
+    }
+  }
+  Future<void> persistApprovalState() async {
+    await prefs.setString(
+      'notification_qa_approvals',
+      jsonEncode(host.pendingApprovals),
+    );
+    await prefs.setString(
+      'notification_qa_decisions',
+      jsonEncode(
+        host.calls
+            .where(
+              (c) => c.$2 == 'approval.respond' || c.$2 == 'request.answer',
+            )
+            .map((c) => {'method': c.$2, 'params': c.$3})
+            .toList(),
+      ),
+    );
+  }
+
+  host.onApprovalResponse = persistApprovalState;
   final app = GlobalKey<WingAppState>();
   runApp(
     WingApp(
@@ -69,7 +103,7 @@ Future<void> main() async {
     );
   }
 
-  var sequence = 0;
+  var sequence = prefs.getInt('notification_qa_sequence') ?? 0;
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 18766);
   await for (final request in server) {
     try {
@@ -176,6 +210,8 @@ Future<void> main() async {
           );
       }
       await Future<void>.delayed(const Duration(milliseconds: 300));
+      await persistApprovalState();
+      await prefs.setInt('notification_qa_sequence', sequence);
       request.response.headers.contentType = ContentType.json;
       request.response.write(
         jsonEncode({

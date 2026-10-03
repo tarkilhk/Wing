@@ -27,9 +27,10 @@ internal object NotificationInteractionSchema {
                 string(value, "chat", 16 * 1024, true) && string(value, "revision", 2048, true) &&
                 (!value.has("interaction_id") || string(value, "interaction_id", 36, true))
         }
-        if (!value.keys().asSequence().all { it in setOf("payload", "choice", "review", "chat", "revision", "notification_id") } ||
+        if (!value.keys().asSequence().all { it in setOf("payload", "choice", "review", "command", "chat", "revision", "notification_id") } ||
             !string(value, "payload", 32 * 1024) || value.opt("choice") !in choices ||
             value.opt("review") !is Boolean) return false
+        if (!string(value, "command", 800)) return false
         if (value.has("notification_id") && value.opt("notification_id") !is Int) return false
         for (key in listOf("chat", "revision")) {
             if (value.has(key) && !value.isNull(key) && !string(value, key, if (key == "chat") 16 * 1024 else 2048)) return false

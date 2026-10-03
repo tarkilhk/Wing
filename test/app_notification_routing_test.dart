@@ -128,6 +128,129 @@ Future<void> _pumpNavigation(WidgetTester tester) async {
 }
 
 void main() {
+  for (final scenario in [
+    'once',
+    'cached-once',
+    'session',
+    'deny',
+    'deny-hidden',
+    'always',
+    'changed',
+    'expired',
+  ]) {
+    testWidgets(
+      'cold notification action $scenario checks the current request',
+      (tester) async {
+        final harness = await _harness();
+        harness.host.running = false;
+        ProfileChat? cachedChat;
+        if (scenario == 'cached-once') {
+          cachedChat = await harness.controller.createChat();
+          await harness.controller.updateDraft(cachedChat, 'Unsent follow-up');
+          cachedChat
+            ..runtimeId = cachedChat.key.sessionId
+            ..offlineSnapshot = true;
+        }
+        final request = <String, dynamic>{
+          'request_id': 'cold-approval',
+          'command': scenario == 'changed' ? 'echo changed' : 'echo ready',
+          'choices': ['once', 'session', 'always', 'deny'],
+        };
+        harness.host.pendingApprovals = scenario == 'expired' ? [] : [request];
+        final prefs = harness.manager.prefs;
+        await prefs.setBool('notification_permission_requested', true);
+        await prefs.setBool('microphone_permission_requested', true);
+        if (scenario == 'deny-hidden') {
+          await prefs.setBool('notification_message_previews', false);
+        }
+        final choice = {'changed', 'expired', 'cached-once'}.contains(scenario)
+            ? 'once'
+            : scenario == 'deny-hidden'
+            ? 'deny'
+            : scenario;
+        final payload = jsonEncode({
+          ...jsonDecode(_payload(harness, 'a')) as Map<String, dynamic>,
+          'focus': {'kind': 'approval', 'id': 'cold-approval'},
+        });
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        const plugin = MethodChannel(
+          'dexterous.com/flutter/local_notifications',
+        );
+        AndroidFlutterLocalNotificationsPlugin.registerWith();
+        messenger.setMockMethodCallHandler(
+          plugin,
+          (call) async => switch (call.method) {
+            'initialize' => true,
+            'getNotificationAppLaunchDetails' => {
+              'notificationLaunchedApp': false,
+            },
+            'areNotificationsEnabled' => true,
+            _ => null,
+          },
+        );
+        final finished = <dynamic>[];
+        final statuses = <dynamic>[];
+        messenger.setMockMethodCallHandler(NativeNotificationSink.channel, (
+          call,
+        ) async {
+          if (call.method == 'finishDirectAction') finished.add(call.arguments);
+          if (call.method == 'actionStatus') statuses.add(call.arguments);
+          return call.method == 'initialize'
+              ? [
+                  {
+                    'payload': payload,
+                    'choice': choice,
+                    'review': false,
+                    'command': 'echo ready',
+                    'notification_id': 42,
+                  },
+                ]
+              : null;
+        });
+        addTearDown(() {
+          messenger.setMockMethodCallHandler(plugin, null);
+          messenger.setMockMethodCallHandler(
+            NativeNotificationSink.channel,
+            null,
+          );
+        });
+        await _pumpApp(tester, harness);
+        await tester.pumpAndSettle();
+        final decisions = harness.host.calls
+            .where((c) => c.$2 == 'approval.respond')
+            .toList();
+        if (scenario == 'always' || scenario == 'changed') {
+          expect(find.byType(AlertDialog), findsOneWidget);
+          expect(find.text(request['command'] as String), findsOneWidget);
+          expect(decisions, isEmpty);
+          expect(finished, isEmpty);
+          await tester.tap(find.text('Cancel'));
+          await tester.pumpAndSettle();
+        } else {
+          expect(find.byType(AlertDialog), findsNothing);
+          if (scenario == 'expired') {
+            expect(decisions, isEmpty);
+            expect(statuses, ['This approval is no longer pending.']);
+          } else {
+            expect(decisions, hasLength(1));
+            expect(decisions.single.$3['request_id'], 'cold-approval');
+            expect(decisions.single.$3['choice'], choice);
+          }
+        }
+        expect(finished, [42]);
+        expect(find.byType(ProfileWorkspaceScreen), findsNothing);
+        expect(harness.controller.current?.chat, cachedChat);
+        if (cachedChat != null) {
+          expect(cachedChat.offlineSnapshot, isFalse);
+          expect(cachedChat.runtimeId, 'a-runtime');
+          expect(cachedChat.draft, 'Unsent follow-up');
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   for (final state in [
     'unread',
     'native-dismissed',

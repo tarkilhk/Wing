@@ -6075,31 +6075,41 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
-  /// Load the request for review without opening a second chat route.
-  Future<ProfileChat?> loadNotificationApproval(
-    ProfileSessionKey key,
-  ) => _retainWorkspaceOperation(() async {
-    if (!owns(key) || _closed) return null;
-    final owner = _resource(key.workspace.profileName);
-    final existing = owner.chats[key.sessionId];
-    if (existing != null) return existing;
-    await owner.gateway.connect();
-    final resumed = await owner.gateway.resume(key.sessionId);
-    final title = await _pendingChatTitle(owner, key.sessionId);
-    if (_closed || owner.deletedSessions.contains(key.sessionId)) return null;
-    if (owner.chats[key.sessionId] case final concurrent?) return concurrent;
-    if (resumed['session_key'] != key.sessionId) return null;
-    final chat = ProfileChat(
-      key: key,
-      runtimeId: resumed['session_id'] as String,
-      title: title,
-    );
-    owner.chats[key.sessionId] = chat;
-    _hydrate(chat, resumed);
-    await _journal();
-    _changed();
-    return chat;
-  });
+  /// Load the current request for a notification action without opening a chat.
+  Future<ProfileChat?> loadNotificationApproval(ProfileSessionKey key) =>
+      _retainWorkspaceOperation(() async {
+        if (!owns(key) || _closed) return null;
+        final owner = _resource(key.workspace.profileName);
+        final existing = owner.chats[key.sessionId];
+        if (existing != null && !existing.offlineSnapshot) return existing;
+        await owner.gateway.connect();
+        final resumed = await owner.gateway.resume(key.sessionId);
+        final title = await _pendingChatTitle(owner, key.sessionId);
+        if (_closed || owner.deletedSessions.contains(key.sessionId)) {
+          return null;
+        }
+        if (owner.chats[key.sessionId] case final concurrent?
+            when !identical(concurrent, existing)) {
+          return concurrent;
+        }
+        if (resumed['session_key'] != key.sessionId) return null;
+        final chat =
+            existing ??
+            ProfileChat(
+              key: key,
+              runtimeId: resumed['session_id'] as String,
+              title: title,
+            );
+        chat
+          ..runtimeId = resumed['session_id'] as String
+          ..offlineSnapshot = false;
+        owner.chats[key.sessionId] = chat;
+        _hydrate(chat, resumed);
+        await _refreshApprovals(chat, notifyNew: false);
+        await _journal();
+        _changed();
+        return chat;
+      });
 
   /// An explicit notification tap owns one bounded recovery attempt. The choice
   /// is never queued for replay, and approval rechecks its exact request after
@@ -6108,6 +6118,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileChat chat,
     String choice, {
     required String requestId,
+    required String command,
   }) async {
     final runtime = chat.runtimeId;
     final resource = _owned(chat);
@@ -6128,6 +6139,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
           chat.offlineSnapshot ||
           chat.status == ProfileTurnStatus.reconnecting) {
         throw StateError('Reconnect to review this approval.');
+      }
+      if (choice != 'deny' &&
+          chat.approval != null &&
+          GatewayApprovalRequest.fromEventData(chat.approval!).command.trim() !=
+              command) {
+        throw StateError('Command changed. Review the current request.');
       }
       await approve(chat, choice, requestId: requestId);
     } catch (_) {

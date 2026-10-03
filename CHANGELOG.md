@@ -4,6 +4,11 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Apply Once, Session and Deny directly from command notifications without a
+  second approval prompt. Keep Always behind review, and show Review and Deny
+  when the command is truncated. Reload cold or cached chats before deciding,
+  and require review if the command has changed.
+
 - Keep Chats interactive after chat and project changes are confirmed. Refresh
   the list in the background with fixed progress and retry feedback, preserving
   token totals, search results and scroll position. Dismissing an action menu

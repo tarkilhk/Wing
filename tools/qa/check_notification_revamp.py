@@ -58,8 +58,10 @@ def shade():
     def opened():
         # Use the real user gesture: some emulator System UI builds ignore the
         # shell expansion command. Wait for notification UI before tapping.
-        adb('shell', 'cmd', 'statusbar', 'collapse')
-        time.sleep(.3)
+        # A second pull can open Quick Settings instead of notifications.
+        # Return to Home first so retries always start with a closed panel.
+        adb('shell', 'input', 'keyevent', 'KEYCODE_BACK', 'KEYCODE_BACK', 'KEYCODE_HOME')
+        time.sleep(.5)
         adb('shell', 'input', 'swipe', str(width // 2), '1', str(width // 2), str(height * 2 // 3), '400')
         time.sleep(.7)
         shown = nodes()
@@ -183,8 +185,12 @@ def run(output):
     state('/remote', {})
     until(lambda: all(not v['inputs'] for v in json.loads(state()['notices']).values()), 'Watcher did not clear remote decision')
     print('PASS: watcher reconciles a desktop decision without another notification tap', flush=True)
-    adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
-    adb('shell', 'cmd', 'uimode', 'night', 'no')
+    check_direct_actions(output)
+    # A settled cold action may release its engine; restart this fake app for
+    # the unrelated reply/open checks that follow.
+    adb('shell', 'am', 'start', '-n', PACKAGE + '/com.tarkilhk.wing.MainActivity')
+    until(lambda: state()['ready'], 'Fixture did not restart after the cold action')
+    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     answer = 'The mobile layout is ready. Read the result before publishing.'
     state('/reply', {'text': answer})
     shade()
@@ -198,6 +204,79 @@ def run(output):
     screenshot(output / 'stopped.png')
     state('/stop', {})
 
+
+
+def check_direct_actions(output):
+    state('/fail', {'enabled': False})
+    state('/preview', {'enabled': True})
+    state('/remote', {})
+    until(lambda: all(not v['inputs'] for v in json.loads(state()['notices']).values()), 'Old requests did not clear')
+    for choice in ('session', 'deny'):
+        before = len(state()['decisions'])
+        state('/approval', {'command': 'echo ok'})
+        shade()
+        tap(resource=PACKAGE + ':id/' + choice)
+        until(lambda: len(state()['decisions']) == before + 1, f'{choice} did not submit directly')
+        assert state()['decisions'][-1]['params']['choice'] == choice
+        assert not any('Review command' in (n.get('text'), n.get('content-desc')) for n in nodes())
+    print('PASS: Session and Deny complete without another confirmation', flush=True)
+    long_command = 'echo ' + 'long-command-argument-' * 50
+    state('/approval', {'command': long_command})
+    before = len(state()['decisions'])
+    for night in ('no', 'yes'):
+        for scale in ('1.0', '2.0'):
+            adb('shell', 'settings', 'put', 'system', 'font_scale', scale)
+            adb('shell', 'cmd', 'uimode', 'night', night)
+            time.sleep(.7)
+            shade()
+            shown = nodes()
+            assert any(n.get('resource-id') == PACKAGE + ':id/review' for n in shown)
+            assert any(n.get('resource-id') == PACKAGE + ':id/review_deny' for n in shown)
+            assert not any(n.get('resource-id') == PACKAGE + ':id/' + choice for n in shown
+                           for choice in ('once', 'session', 'always'))
+            screenshot(output / f"truncated-{'dark' if night == 'yes' else 'light'}-{scale}.png")
+    tap(resource=PACKAGE + ':id/review')
+    until(lambda: any('Allow once' in (n.get('text'), n.get('content-desc')) for n in nodes()), 'Review did not open command choices')
+    assert len(state()['decisions']) == before, 'Review submitted a decision'
+    adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+    shade()
+    tap(resource=PACKAGE + ':id/review_deny')
+    until(lambda: len(state()['decisions']) == before + 1, 'Truncated command Deny did not submit')
+    assert state()['decisions'][-1]['params']['choice'] == 'deny'
+    print('PASS: truncated commands expose Review and direct Deny in both themes and text sizes', flush=True)
+    adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
+    adb('shell', 'cmd', 'uimode', 'night', 'no')
+    check_cold_action(output)
+
+
+
+
+def check_cold_action(output):
+    def saved_decisions():
+        # A settled action releases the fake HTTP server with its engine.
+        # Read the fake server's acknowledgement persisted before its RPC reply.
+        root = ET.fromstring(adb('shell', 'run-as', PACKAGE, 'cat',
+                                 'shared_prefs/FlutterSharedPreferences.xml'))
+        value = next(n.text for n in root if n.get('name') == 'flutter.notification_qa_decisions')
+        return json.loads(value)
+
+    state('/approval', {'command': 'echo ok'})
+    before = len(state()['decisions'])
+    cold_request = state()['pending'][0]['request_id']
+    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+    pid = adb('shell', 'pidof', PACKAGE).strip()
+    adb('shell', 'run-as', PACKAGE, 'kill', '-9', pid)
+    until(lambda: not adb('shell', f'pidof {PACKAGE} || true').strip(), 'Fixture did not stop')
+    shade()
+    tap(resource=PACKAGE + ':id/once')
+    until(lambda: len(saved_decisions()) == before + 1, 'Cold Once did not submit')
+    assert saved_decisions()[-1]['params']['request_id'] == cold_request
+    until(lambda: not any(PACKAGE in line for line in adb('shell', 'dumpsys', 'activity', 'activities').splitlines()
+                          if 'topResumedActivity=' in line), 'Cold action left Wing in front')
+    assert not any('Review command' in (n.get('text'), n.get('content-desc')) for n in nodes())
+    screenshot(output / 'cold-return.png')
+    print('PASS: cold Once submits the exact request and returns to the previous screen', flush=True)
 
 
 if __name__ == '__main__':

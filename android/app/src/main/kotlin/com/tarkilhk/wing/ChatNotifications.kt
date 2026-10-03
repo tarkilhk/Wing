@@ -15,12 +15,14 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import android.view.View
 import android.widget.RemoteViews
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONArray
 import org.json.JSONObject
+import java.lang.ref.WeakReference
 
 /** Render and deliver interactions on the retained app engine, including cold starts. */
 object ChatNotifications {
@@ -35,6 +37,7 @@ object ChatNotifications {
     private val displayed = mutableMapOf<Int, Map<*, *>>()
     private var observesConfiguration = false
     private var handleStore: NotificationHandleStore? = null
+    private var directActionHost: Pair<Int, WeakReference<Activity>>? = null
     private fun handles(context: Context): NotificationHandleStore = handleStore ?: run {
         val prefs = preferences(context.applicationContext)
         NotificationHandleStore(
@@ -51,7 +54,7 @@ object ChatNotifications {
     } catch (_: Exception) { null }
     fun mainHandoff(context: Context, value: JSONObject): String? =
         handles(context).issue(value.getInt("notification_id"), NotificationHandleStore.mainPurpose,
-            JSONObject(value.toString()).put("review", true))
+            JSONObject(value.toString()))
     private fun pendingDismissals(context: Context): JSONArray {
         return try {
             val raw = preferences(context).getString("pending", "[]") ?: "[]"
@@ -111,6 +114,18 @@ object ChatNotifications {
                             prefs.edit().putString("pending", remaining.toString()).commit()
                             result.success(null)
                         }
+                        "finishDirectAction" -> {
+                            val host = directActionHost
+                            if (host != null && host.first == call.arguments) {
+                                directActionHost = null
+                                result.success(null)
+                                host.second.get()?.finish()
+                            } else result.success(null)
+                        }
+                        "actionStatus" -> {
+                            Toast.makeText(context, call.arguments as String, Toast.LENGTH_LONG).show()
+                            result.success(null)
+                        }
                         "show" -> { show(context, call.arguments as Map<*, *>); result.success(null) }
                         "cancel" -> {
                             val id = (call.arguments as Number).toInt()
@@ -135,7 +150,7 @@ object ChatNotifications {
             }
         }
     }
-    fun detach() { channel?.setMethodCallHandler(null); channel = null; ready = false; pendingActions.clear() }
+    fun detach() { channel?.setMethodCallHandler(null); channel = null; ready = false; pendingActions.clear(); directActionHost = null }
 
     fun interact(context: Context, value: JSONObject, completed: (() -> Unit)? = null) {
         if (NotificationInteractionSchema.parse(value.toString()) == null) {
@@ -170,6 +185,9 @@ object ChatNotifications {
         // MainActivity is exported. Raw JSON can never authorize an interaction.
         try { intent?.removeExtra(publicRawExtra) } catch (_: Exception) { return }
         val value = consumeIntent(context, intent, NotificationHandleStore.mainPurpose) ?: return
+        if (context is Activity && value.optString("choice").isNotEmpty() && !value.optBoolean("review")) {
+            directActionHost = value.getInt("notification_id") to WeakReference(context)
+        }
         interact(context, value)
     }
     fun dismiss(context: Context, intent: Intent) {
@@ -196,6 +214,7 @@ object ChatNotifications {
     }
     private fun intent(context: Context, data: Map<*, *>, choice: String, review: Boolean): PendingIntent {
         val value = JSONObject().put("payload", data["payload"]).put("choice", choice).put("review", review)
+            .put("command", (data["expanded"] as String).take(800))
             .put("chat", data["chat"]).put("revision", data["revision"]).put("notification_id", data["id"])
         // Immutable PendingIntent identity contains only an opaque token; trusted storage binds its target and choice.
         val token = handles(context).issue((data["id"] as Number).toInt(), NotificationHandleStore.actionPurpose, value)
@@ -253,10 +272,19 @@ object ChatNotifications {
             val width = ((context.resources.configuration.screenWidthDp - 100) * metrics.density).toInt().coerceAtLeast(1)
             val layout = StaticLayout.Builder.obtain(command, 0, command.length, paint, width).setAlignment(Layout.Alignment.ALIGN_NORMAL).build()
             val needsReview = layout.lineCount > (if (large) 1 else 3)
+                || command.isBlank() || command.endsWith("…")
+            views.setViewVisibility(R.id.review_actions, if (needsReview) View.VISIBLE else View.GONE)
+            views.setViewVisibility(R.id.approval_actions, if (needsReview) View.GONE else View.VISIBLE)
+            views.setBoolean(R.id.review, "setEnabled", !busy)
+            views.setOnClickPendingIntent(R.id.review, intent(context, data, "", true))
+            views.setViewVisibility(R.id.review_deny, if (choices.contains("deny")) View.VISIBLE else View.GONE)
+            views.setBoolean(R.id.review_deny, "setEnabled", !busy)
+            views.setOnClickPendingIntent(R.id.review_deny, intent(context, data, "deny", false))
+            views.setViewVisibility(R.id.notice_scope, if (!needsReview && choices.contains("session")) View.VISIBLE else View.GONE)
             for ((choice, viewId) in listOf("once" to R.id.once, "session" to R.id.session, "always" to R.id.always, "deny" to R.id.deny)) {
-                views.setViewVisibility(viewId, if (choices.contains(choice)) View.VISIBLE else View.GONE)
+                views.setViewVisibility(viewId, if (choices.contains(choice) && (!needsReview || choice == "deny")) View.VISIBLE else View.GONE)
                 views.setBoolean(viewId, "setEnabled", !busy)
-                views.setOnClickPendingIntent(viewId, intent(context, data, choice, needsReview || choice == "always"))
+                views.setOnClickPendingIntent(viewId, intent(context, data, choice, choice == "always"))
             }
             builder.setStyle(NotificationCompat.DecoratedCustomViewStyle()).setCustomBigContentView(views)
         } else {

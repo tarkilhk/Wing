@@ -11,6 +11,7 @@ class NotificationInteractionSecurityTest {
             .put("profile", "default").put("session", "chat-one")
             .put("focus", JSONObject().put("kind", "approval").put("id", "request-one"))
         return JSONObject().put("payload", target.toString()).put("choice", choice).put("review", review)
+            .put("command", "echo ready")
             .put("chat", "scoped-chat").put("revision", "approval:request-one").put("notification_id", 42)
     }
 
@@ -18,7 +19,7 @@ class NotificationInteractionSecurityTest {
         for (raw in listOf(null, "", "{", "[]", "null", "false", "x".repeat(NotificationInteractionSchema.maxChars + 1))) {
             assertNull(NotificationInteractionSchema.parse(raw))
         }
-        for ((key, value) in listOf("payload" to 1, "choice" to true, "choice" to "grant", "review" to "false", "chat" to JSONArray(), "revision" to false)) {
+        for ((key, value) in listOf("payload" to 1, "choice" to true, "choice" to "grant", "review" to "false", "command" to false, "command" to "x".repeat(801), "chat" to JSONArray(), "revision" to false)) {
             assertNull(NotificationInteractionSchema.parse(action().put(key, value).toString()))
         }
         assertNull(NotificationInteractionSchema.parse(action().put("unexpected", true).toString()))
@@ -132,6 +133,6 @@ class NotificationInteractionSecurityTest {
         assertTrue(store.consume(token, NotificationHandleStore.dismissPurpose)!!.getBoolean("dismiss"))
         assertNull(store.consume(token, NotificationHandleStore.dismissPurpose))
         assertNull(NotificationInteractionSchema.parse(dismissal.put("choice", "once").toString()))
-        assertNotNull(NotificationInteractionSchema.parse(JSONObject().put("payload", "").put("choice", "").put("review", true).toString()))
+        assertNotNull(NotificationInteractionSchema.parse(JSONObject().put("payload", "").put("choice", "").put("review", true).put("command", "").toString()))
     }
 }

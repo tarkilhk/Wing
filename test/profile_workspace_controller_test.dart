@@ -68,6 +68,7 @@ class Host {
   List<Map<String, dynamic>> approvalOpenRequests = [];
   Completer<void>? pendingApprovalDelay;
   Completer<void>? approvalDelay;
+  Future<void> Function()? onApprovalResponse;
   Completer<void>? promptSubmitStarted;
   Completer<void>? promptSubmitDelay;
   Completer<void>? connectDelay;
@@ -199,6 +200,7 @@ class Host {
           pendingApprovals?.removeWhere(
             (r) => r['request_id'] == params['request_id'],
           );
+          await onApprovalResponse?.call();
           return {'resolved': approvalResolved};
         }
         if (method == 'session.steer') return steerResult;
@@ -469,6 +471,7 @@ void main() {
     'recovered',
     'failed',
     'replaced',
+    'changed command',
     'joined',
     'timed out',
   ]) {
@@ -489,6 +492,11 @@ void main() {
           {...request, 'request_id': 'replacement'},
         ];
       }
+      if (outcome == 'changed command') {
+        host.pendingApprovals = [
+          {...request, 'command': 'print("changed")'},
+        ];
+      }
       if (outcome == 'joined' || outcome == 'timed out') {
         host.connectDelay = Completer<void>();
       }
@@ -500,7 +508,12 @@ void main() {
       Object? failure;
       var finished = false;
       final action = controller
-          .approveNotification(chat, 'once', requestId: 'notification-original')
+          .approveNotification(
+            chat,
+            'once',
+            requestId: 'notification-original',
+            command: request['command'] as String,
+          )
           .catchError((Object error) {
             failure = error;
           })
