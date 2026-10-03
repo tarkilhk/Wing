@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/chat_list_view.dart';
+import '../models/browser_mutation.dart';
 import '../models/session_visibility.dart';
 import 'profile_workspace_controller.dart';
 import 'workspace_connection_failure.dart';
@@ -32,6 +33,7 @@ class ChatBrowserData extends ChangeNotifier {
   ChatBrowserData(this.controller) {
     _publishEntries();
     controller.browserChanges.addListener(_controllerChanged);
+    controller.browserMutations.addListener(_mutationChanged);
   }
   final ProfileWorkspaceController controller;
   final _values = <ProfileSessionKey, _BrowserRow>{};
@@ -41,6 +43,57 @@ class ChatBrowserData extends ChangeNotifier {
   Set<ProfileSessionKey> _activityKeys = {};
   List<ChatListEntry> _entries = [];
   final rowsChanged = ValueNotifier<Set<ProfileSessionKey>>({});
+  final _sessionMutations = <ProfileSessionKey, SessionBrowserMutation>{};
+  final _projectMutations = <(String, String), ProjectBrowserMutation>{};
+  int _mutationRevision = 0;
+  bool _mutationRefreshScheduled = false;
+
+  void _mutationChanged() {
+    if (_disposed) return;
+    switch (controller.browserMutations.value) {
+      case SessionBrowserMutation mutation:
+        final key = ProfileSessionKey(mutation.owner, mutation.id);
+        final previous = _sessionMutations[key];
+        _sessionMutations[key] = SessionBrowserMutation(
+          mutation.owner,
+          mutation.id,
+          changes: {...?previous?.changes, ...mutation.changes},
+          projectId: mutation.projectId ?? previous?.projectId,
+          deleted: mutation.deleted,
+        );
+      case ProjectBrowserMutation mutation:
+        _projectMutations[(mutation.owner.profileName, mutation.id)] = mutation;
+      case null:
+        return;
+    }
+    _mutationRevision++;
+    _changed();
+    if (_mutationRefreshScheduled) return;
+    _mutationRefreshScheduled = true;
+    scheduleMicrotask(() {
+      _mutationRefreshScheduled = false;
+      if (!_disposed) unawaited(refresh(archivedOnly: archived));
+    });
+  }
+
+  /// The retained tree plus changes confirmed since its last read.
+  List<Map<String, dynamic>> projectRows(String profile) {
+    final merged = {
+      for (final project
+          in projects[profile] ?? controller.browserResource(profile).projects)
+        project['id'] as String: project,
+    };
+    for (final entry in _projectMutations.entries) {
+      if (entry.key.$1 != profile) continue;
+      final project = entry.value.project;
+      if (project == null) {
+        merged.remove(entry.key.$2);
+      } else {
+        merged[entry.key.$2] = {...?merged[entry.key.$2], ...project};
+      }
+    }
+    return merged.values.toList();
+  }
 
   List<ChatListEntry> get entries => _entries;
   @visibleForTesting
@@ -209,6 +262,9 @@ class ChatBrowserData extends ChangeNotifier {
   final projects = <String, List<Map<String, dynamic>>>{};
   final errors = <String, String>{};
   final complete = <String>{};
+  final _completeSnapshots = <String>{};
+  bool hasCompleteSnapshot(String profile) =>
+      _completeSnapshots.contains(profile);
   final _retryableProfiles = <String>{};
   final _searchFailures = <String>{};
   final _retryableSearch = <String>{};
@@ -257,11 +313,37 @@ class ChatBrowserData extends ChangeNotifier {
     if (active != null && _refreshingArchived == archivedOnly) return active;
     _refreshingArchived = archivedOnly;
     late final Future<void> pending;
-    pending = _refresh(archivedOnly: archivedOnly, failedOnly: failedOnly)
+    pending = _drainRefresh(archivedOnly: archivedOnly, failedOnly: failedOnly)
         .whenComplete(() {
           if (identical(_refreshing, pending)) _refreshing = null;
         });
     return _refreshing = pending;
+  }
+
+  Future<void> _drainRefresh({
+    required bool archivedOnly,
+    required bool failedOnly,
+  }) async {
+    var recoverOnly = failedOnly;
+    while (!_disposed) {
+      final revision = _mutationRevision;
+      final generation = _generation + 1;
+      await _refresh(archivedOnly: archivedOnly, failedOnly: recoverOnly);
+      if (_disposed || archived != archivedOnly || generation != _generation) {
+        return;
+      }
+      if (!recoverOnly && revision == _mutationRevision && _query.isNotEmpty) {
+        await _search(_query);
+      }
+      if (_disposed ||
+          generation != _generation ||
+          revision == _mutationRevision) {
+        return;
+      }
+      // One more read covers every mutation confirmed during the in-flight
+      // snapshot. Readers coalesce; mutations are never replayed.
+      recoverOnly = false;
+    }
   }
 
   Future<void> _refresh({
@@ -272,9 +354,6 @@ class ChatBrowserData extends ChangeNotifier {
     if (!failedOnly) {
       _searchGeneration++;
       searching = false;
-      _query = '';
-      searchMatches.clear();
-      searchRows.clear();
       _searchFailures.clear();
       _retryableSearch.clear();
       searchError = null;
@@ -282,6 +361,9 @@ class ChatBrowserData extends ChangeNotifier {
     if (archived != archivedOnly) {
       rows.clear();
       projects.clear();
+      searchMatches.clear();
+      searchRows.clear();
+      _completeSnapshots.clear();
     }
     archived = archivedOnly;
     loading = true;
@@ -302,9 +384,11 @@ class ChatBrowserData extends ChangeNotifier {
         final resource = controller.browserResource(profile);
         final hadRows = rows.containsKey(profile);
         final fetched = <String, Map<String, dynamic>>{};
-        _baselineRows[profile] = {
+        final baseline = {
           for (final row in resource.sessions) row['id'] as String: row,
         };
+        final sessionMutations = Map.of(_sessionMutations);
+        final projectMutations = Map.of(_projectMutations);
         try {
           int? offset = 0;
           do {
@@ -342,7 +426,20 @@ class ChatBrowserData extends ChangeNotifier {
           if (!valid()) return;
           rows[profile] = fetched.values.toList();
           projects[profile] = tree;
+          _baselineRows[profile] = baseline;
+          // Only retire changes that predate this read. A later confirmed
+          // action must continue to win over this response.
+          _sessionMutations.removeWhere(
+            (key, mutation) =>
+                key.workspace.profileName == profile &&
+                identical(sessionMutations[key], mutation),
+          );
+          _projectMutations.removeWhere(
+            (key, mutation) =>
+                key.$1 == profile && identical(projectMutations[key], mutation),
+          );
           complete.add(profile);
+          _completeSnapshots.add(profile);
           errors.remove(profile);
           _retryableProfiles.remove(profile);
         } catch (error) {
@@ -350,7 +447,9 @@ class ChatBrowserData extends ChangeNotifier {
             if (!hadRows && fetched.isNotEmpty) {
               rows[profile] = fetched.values.toList();
             }
-            errors[profile] = 'Could not finish loading $profile.';
+            errors[profile] = hadRows
+                ? 'Could not refresh chats for $profile.'
+                : 'Could not finish loading $profile.';
             if (isTemporaryWorkspaceFailure(error)) {
               _retryableProfiles.add(profile);
             } else {
@@ -447,7 +546,8 @@ class ChatBrowserData extends ChangeNotifier {
     for (final profile in controller.discovery?.profiles ?? []) {
       final owner = controller.browserResource(profile.name);
       final members = <String, Map<String, dynamic>>{};
-      for (final project in projects[profile.name] ?? owner.projects) {
+      final effectiveProjects = projectRows(profile.name);
+      for (final project in effectiveProjects) {
         if (project['isNoProject'] == true) continue;
         for (final id in (project['sessionIds'] as List?) ?? []) {
           if (id is String) members[id] = project;
@@ -484,8 +584,26 @@ class ChatBrowserData extends ChangeNotifier {
         }
         if (!merged.containsKey(chat.key.sessionId)) {
           _localEntries.add(chat.key);
+          final project = effectiveProjects
+              .where((project) => project['id'] == chat.projectId)
+              .firstOrNull;
+          if (project != null) members[chat.key.sessionId] = project;
         }
         merged.putIfAbsent(chat.key.sessionId, () => _localRow(chat));
+      }
+      for (final mutation in _sessionMutations.values) {
+        if (mutation.owner != owner.scope) continue;
+        if (mutation.deleted) {
+          merged.remove(mutation.id);
+        } else if (merged.containsKey(mutation.id)) {
+          merged[mutation.id] = {...merged[mutation.id]!, ...mutation.changes};
+          if (mutation.projectId != null) {
+            final project = effectiveProjects
+                .where((p) => p['id'] == mutation.projectId)
+                .firstOrNull;
+            if (project != null) members[mutation.id] = project;
+          }
+        }
       }
       for (final row in merged.values) {
         final id = row['id'] as String;
@@ -517,6 +635,7 @@ class ChatBrowserData extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     controller.browserChanges.removeListener(_controllerChanged);
+    controller.browserMutations.removeListener(_mutationChanged);
     rowsChanged.dispose();
     for (final value in _values.values) {
       value.dispose();

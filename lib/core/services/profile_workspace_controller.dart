@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/attachment_draft.dart';
+import '../models/browser_mutation.dart';
 import '../models/user_message_content.dart';
 import '../models/context_occupancy.dart';
 import '../models/chat_notification_content.dart';
@@ -521,6 +522,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
       ));
   ValueListenable<({int revision, ProfileSessionKey? chat})>
   get browserChanges => _browserChanges;
+
+  final _browserMutations = ValueNotifier<BrowserMutation?>(null);
+  ValueListenable<BrowserMutation?> get browserMutations => _browserMutations;
+
+  void _browserMutated(BrowserMutation mutation) {
+    if (_closed) return;
+    _browserMutations.value = mutation;
+    _changed();
+  }
 
   ProfileLiveActivityState? reportedActivityFor(ProfileSessionKey key) =>
       _liveActivity
@@ -3052,7 +3062,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
         navigation == _navigationGeneration) {
       resource.selectedSession = id;
     }
-    _changed();
+    _browserMutated(
+      SessionBrowserMutation(resource.scope, id, projectId: chat.projectId),
+    );
     await refreshHistory(chat);
     return chat;
   }
@@ -3647,6 +3659,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
           (delete || changes['archived'] == true)) {
         resource.selectedSession = null;
       }
+      _browserMutated(
+        SessionBrowserMutation(
+          resource.scope,
+          id,
+          changes: updated,
+          deleted: delete,
+        ),
+      );
     } finally {
       resource.mutatingSessions.remove(id);
       _changed();
@@ -3701,40 +3721,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (resource.selectedProject?['id'] != project['id']) {
         resource.projectSessions.removeWhere((row) => row['id'] == id);
       }
-      _changed();
-      final navigation = _generation;
-      final generation = resource.projectGeneration;
-      bool valid() =>
-          !_closed &&
-          current == resource &&
-          !switching &&
-          navigation == _generation &&
-          generation == resource.projectGeneration;
-      try {
-        final projects = await resource.gateway.projects();
-        if (valid()) {
-          resource.projects = projects;
-          resource.projectsError = null;
-          final selectedId = resource.selectedProject?['id'];
-          if (selectedId != null) {
-            final selected = projects
-                .where((p) => p['id'] == selectedId)
-                .firstOrNull;
-            if (selected != null) {
-              resource.selectedProject = selected;
-              await _loadProject(resource, selected);
-            } else {
-              resource.projectSessions = [];
-              resource.projectSessionsError =
-                  'The selected project is unavailable.';
-            }
-          }
-        }
-      } catch (_) {
-        if (valid()) {
-          resource.projectsError = 'Chat moved. Refresh to reload projects.';
-        }
-      }
+      _browserMutated(
+        SessionBrowserMutation(
+          resource.scope,
+          id,
+          changes: updated,
+          projectId: project['id'] as String,
+        ),
+      );
       return true;
     } finally {
       resource.mutatingSessions.remove(id);
@@ -3789,11 +3783,30 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<void> createProject(String name, String path) =>
       _retainWorkspaceOperation(() async {
         final resource = _writable();
-        await resource.gateway.createProject(name, path);
-        _invalidateProjectMembership(resource);
-        resource.projects = await resource.gateway.projects();
-        _changed();
+        final project = _savedProject(
+          await resource.gateway.createProject(name, path),
+        );
+        if (_closed) return;
+        _applyProjects(resource, [...resource.projects, project]);
+        _browserMutated(
+          ProjectBrowserMutation(
+            resource.scope,
+            project['id'] as String,
+            project,
+          ),
+        );
       });
+
+  Map<String, dynamic> _savedProject(Map<String, dynamic> project) {
+    if (project['id'] is! String || project['name'] is! String) {
+      throw const FormatException('Invalid confirmed project');
+    }
+    return {
+      ...project,
+      'label': project['name'],
+      'path': project['primary_path'],
+    };
+  }
 
   ProfileWorkspaceData _projectMutationOwner(
     WorkspaceScope owner,
@@ -3809,7 +3822,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     return resource;
   }
 
-  void _applyProjectRefresh(
+  void _applyProjects(
     ProfileWorkspaceData resource,
     List<Map<String, dynamic>> projects, {
     String? deletedId,
@@ -3845,7 +3858,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
               .firstOrNull ??
           resource.selectedProject;
     }
-    _changed();
   }
 
   Future<void> updateProject(
@@ -3856,17 +3868,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
     String? icon,
   }) => _retainWorkspaceOperation(() async {
     final resource = _projectMutationOwner(owner, id);
-    await resource.gateway.updateProject(
-      id,
-      name: name,
-      color: color,
-      icon: icon,
+    final project = _savedProject(
+      await resource.gateway.updateProject(
+        id,
+        name: name,
+        color: color,
+        icon: icon,
+      ),
     );
-    final projects = await resource.gateway.projects();
-    if (!projects.any((project) => project['id'] == id)) {
-      throw StateError('Updated project is missing from Hermes.');
-    }
-    if (!_closed) _applyProjectRefresh(resource, projects);
+    if (_closed) return;
+    _applyProjects(resource, [
+      for (final existing in resource.projects)
+        if (existing['id'] == id) project else existing,
+    ]);
+    _browserMutated(ProjectBrowserMutation(resource.scope, id, project));
   });
 
   Future<void> deleteProject(WorkspaceScope owner, String id) =>
@@ -3875,22 +3890,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
         final selectedSession = resource.selectedSession;
         await resource.gateway.deleteProject(id);
         if (_closed) return;
-        _applyProjectRefresh(
+        _applyProjects(
           resource,
           resource.projects.where((project) => project['id'] != id).toList(),
           deletedId: id,
           selectedSessionAtMutation: selectedSession,
         );
-        try {
-          final projects = await resource.gateway.projects();
-          if (!_closed) _applyProjectRefresh(resource, projects);
-        } catch (_) {
-          if (!_closed) {
-            resource.projectsError =
-                'Project deleted, but Projects could not be refreshed.';
-            _changed();
-          }
-        }
+        _browserMutated(ProjectBrowserMutation(resource.scope, id, null));
       });
 
   Future<void> addAttachment(ProfileChat chat, String path, String name) {
@@ -7797,6 +7803,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _composerChanges.dispose();
     _retentionChanges.dispose();
     _browserChanges.dispose();
+    _browserMutations.dispose();
     _healthSession?.dispose();
     _notificationRetry?.cancel();
     unawaited(_saveReadingSnapshot());

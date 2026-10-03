@@ -92,10 +92,13 @@ class _ProjectHost {
           ];
           return {
             'project': {
-              'id': id,
-              'name': params['name'],
-              'color': params['color'],
-              'icon': params['icon'],
+              ...projects[scope.profileName]!.firstWhere((p) => p['id'] == id),
+              'name': projects[scope.profileName]!.firstWhere(
+                (p) => p['id'] == id,
+              )['label'],
+              'primary_path': projects[scope.profileName]!.firstWhere(
+                (p) => p['id'] == id,
+              )['path'],
             },
           };
         case 'projects.delete':
@@ -238,15 +241,20 @@ void main() {
     },
   );
 
-  test('acknowledged delete stays applied when its refresh fails', () async {
-    final resource = controller.current!;
-    await controller.selectProject(resource.projects.single);
-    host.failDeleteRefresh = true;
+  test(
+    'acknowledged delete finishes without a follow-up project read',
+    () async {
+      final resource = controller.current!;
+      await controller.selectProject(resource.projects.single);
+      host.failDeleteRefresh = true;
+      host.calls.clear();
 
-    await controller.deleteProject(resource.scope, 'project-a');
+      await controller.deleteProject(resource.scope, 'project-a');
 
-    expect(resource.projects, isEmpty);
-    expect(resource.selectedProject, isNull);
-    expect(resource.projectsError, contains('Project deleted'));
-  });
+      expect(resource.projects, isEmpty);
+      expect(resource.selectedProject, isNull);
+      expect(resource.projectsError, isNull);
+      expect(host.calls.where((call) => call.$2 == 'projects.tree'), isEmpty);
+    },
+  );
 }

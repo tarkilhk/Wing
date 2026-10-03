@@ -4,6 +4,11 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Keep Chats interactive after chat and project changes are confirmed. Refresh
+  the list in the background with fixed progress and retry feedback, preserving
+  token totals, search results and scroll position. Dismissing an action menu
+  no longer reloads the list.
+
 - Fix chat action menus turning the screen pale when a live chat-list update
   replaces the row while its menu is opening or repositioning.
 

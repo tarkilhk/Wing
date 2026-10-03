@@ -73,6 +73,17 @@ on 20 September 2026: desktop `src/app/chat/sidebar/session-row.tsx`,
 Stock `tui_gateway/methods_session.py` still exposes `session.active_list`;
 the client uses its existing activity projection with no protocol changes.
 
+The owner's 3 October refinement separates confirmed browser actions from
+follow-up reads. Apply acknowledged chat and project changes immediately and
+release the action controls while the list refreshes in the background. Keep
+the retained list, token totals, active search, grouping and scroll position
+available. Progress and refresh failures stay above the scrolling list; use
+the existing thin linear bar with a quiet status label. Retry only rereads data.
+At enlarged text, put Retry below the failure message. Reduced motion uses a
+static bar. Dismissing menus and copying IDs do not request a list refresh.
+See the [browser refresh contract](CHAT_BROWSER_REFRESH.md) for the verified
+stock responses and client reconciliation rules.
+
 ## Recents, 27 September 2026
 
 The former Activity destination is now Recents, including its drawer and launcher

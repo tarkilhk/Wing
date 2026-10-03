@@ -301,7 +301,11 @@ class Host {
         }
         if (method == 'projects.create') {
           return {
-            'project': {'id': 'new'},
+            'project': {
+              'id': 'new',
+              'name': params['name'],
+              'primary_path': params['primary_path'],
+            },
           };
         }
         return {};

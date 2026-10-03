@@ -20,7 +20,13 @@ class MembershipFixture extends ProfilePagingFixture {
       get: base.read,
       rpc: (method, params) async {
         if (method == 'projects.update') {
-          return {'project': {'id': params['id']}};
+          return {
+            'project': {
+              'id': params['id'],
+              'name': params['name'],
+              'primary_path': '/project/99',
+            },
+          };
         }
         return base.call(method, params);
       },

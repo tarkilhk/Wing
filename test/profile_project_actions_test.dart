@@ -262,7 +262,13 @@ class _ProjectFixture extends ProfileBrowserFixture {
                 personalProject[key == 'name' ? 'label' : key] = params[key];
               }
             }
-            return {'project': Map<String, dynamic>.from(personalProject)};
+            return {
+              'project': {
+                ...personalProject,
+                'name': personalProject['label'],
+                'primary_path': personalProject['path'],
+              },
+            };
           }
           deleted = true;
           return {'projects': <Map<String, dynamic>>[], 'active_id': null};

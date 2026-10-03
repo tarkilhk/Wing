@@ -10,6 +10,7 @@
 </p>
 
 - **Find the right chat.** Search, pin and group conversations; filter by profile, project or status. Recents shows chats with messages from the last 24 hours alongside ongoing work, with All, Running and Needs input filters.
+- **Keep browsing after changes.** Chat and project actions apply when Hermes confirms them. The list then refreshes in the background, keeping search, token counts and reading position available. Progress and Retry stay above the scrolling list; retrying a refresh does not repeat the action.
 - **Read the whole story.** Follow streamed replies, code, tables, tool activity and available reasoning. Find a message in a chat, open a result, or return to the latest reply.
 - **Stay oriented.** See the selected model, context usage and current work. Switch models with a clear confirmation when Hermes warns about the change.
 

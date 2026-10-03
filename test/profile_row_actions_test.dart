@@ -630,7 +630,7 @@ void main() {
     },
   );
   test(
-    'move refuses foreign projects and reports refresh failure after success',
+    'move refuses foreign projects and finishes without a follow-up project read',
     () async {
       final project = controller.current!.projects.first;
       await expectLater(
@@ -639,8 +639,10 @@ void main() {
       );
       expect(host.moves, isEmpty);
       host.failProjects = true;
+      host.calls.clear();
       expect(await controller.moveSessionToProject(key(), project), true);
-      expect(controller.current!.projectsError, contains('Chat moved'));
+      expect(controller.current!.projectsError, isNull);
+      expect(host.calls.where((call) => call.$2 == 'projects.tree'), isEmpty);
     },
   );
   testWidgets('move picker lists profile folders and cancel is read-only', (

@@ -67,7 +67,6 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   Timer? _debounce;
   Future<void>? _refreshing;
   bool? _refreshingArchived;
-  bool _reorderAfterRefresh = false;
   int _refreshGeneration = 0;
   final _arrangement = ChatListArrangement();
   String get _preferencesKey =>
@@ -122,6 +121,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
       controller.switching,
       controller.recovering,
       controller.current?.offlineSnapshot,
+      controller.current?.mutatingSessions.length,
       controller.sessionVisibility,
       controller.savedDraftRevision,
     );
@@ -181,15 +181,11 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
   void _notice(String message) => ScaffoldMessenger.of(
     context,
   ).showSnackBar(SnackBar(content: Text(message)));
-  Future<void> _run(
-    Future<void> Function() action, {
-    bool refresh = false,
-  }) async {
+  Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
       await action();
-      if (refresh && mounted) await _refresh(reorder: false);
     } catch (error) {
       if (mounted) {
         _notice(
@@ -203,13 +199,11 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     }
   }
 
-  Future<void> _refresh({bool reorder = true}) {
+  Future<void> _refresh() {
     final active = _refreshing;
     if (active != null && _refreshingArchived == _archived) {
-      _reorderAfterRefresh |= reorder;
       return active;
     }
-    _reorderAfterRefresh = reorder;
     if (_refreshingArchived != _archived) _arrangement.reset();
     _refreshingArchived = _archived;
     late final Future<void> pending;
@@ -223,13 +217,10 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     await _data.refresh(archivedOnly: archived);
     if (!mounted) return;
     if (_archived != archived || generation != _refreshGeneration) return;
-    if (_query.isNotEmpty) unawaited(_data.search(_query));
     // The loaded list establishes this visit's order. Activity can require
     // slower per-profile lookups; its eventual completion must not reset
     // positions after answers have arrived while the user is reading.
-    if (_reorderAfterRefresh) {
-      setState(_arrangement.reset);
-    }
+    setState(_arrangement.reset);
     unawaited(controller.refreshActivity());
   }
 
@@ -267,7 +258,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         _statuses.isEmpty) {
       for (final profile in controller.discovery?.profiles ?? []) {
         if (_profiles.isNotEmpty && !_profiles.contains(profile.name)) continue;
-        for (final project in _data.projects[profile.name] ?? []) {
+        for (final project in _data.projectRows(profile.name)) {
           final key = '${profile.name}/${project['id']}';
           if (project['isNoProject'] == true ||
               matches.any((entry) => entry.projectKey == key) ||
@@ -352,7 +343,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           <(String, String, bool)>[
             for (final profile in controller.discovery?.profiles ?? []) ...[
               ('${profile.name}/home', '< ${profile.name} >', true),
-              for (final p in _data.projects[profile.name] ?? [])
+              for (final p in _data.projectRows(profile.name))
                 if (p['isNoProject'] != true)
                   (
                     '${profile.name}/${p['id']}',
@@ -607,7 +598,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                 changes: {'unread': false},
               );
             }
-          }, refresh: true),
+          }),
         );
       case 'archived':
         setState(() {
@@ -620,7 +611,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
         unawaited(
           _run(() async {
             if (await _chooseOwner()) await widget.newProject();
-          }, refresh: true),
+          }),
         );
     }
   }
@@ -809,12 +800,12 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                 icon: const Icon(Icons.more_horiz, size: 18),
                 onPressed: _busy || controller.switching
                     ? null
-                    : () => _run(() => _chatActions(button, e), refresh: true),
+                    : () => _run(() => _chatActions(button, e)),
               ),
             ),
             onLongPress: _busy || controller.switching
                 ? null
-                : () => _run(() => _chatActions(anchor, e), refresh: true),
+                : () => _run(() => _chatActions(anchor, e)),
             onTap: _busy ? null : () => _openChat(e),
           ),
         ),
@@ -863,8 +854,8 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     final collapsed = _collapsed.contains(key);
     final tokensReady =
         (group.owner == null ||
-            _data.complete.contains(group.owner!.scope.profileName)) &&
-        group.entries.every((e) => _data.complete.contains(e.profile));
+            _data.hasCompleteSnapshot(group.owner!.scope.profileName)) &&
+        group.entries.every((e) => _data.hasCompleteSnapshot(e.profile));
     return Builder(
       builder: (headingContext) => Padding(
         key: group.project == null
@@ -880,10 +871,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                 key: ValueKey('chat-group-$key'),
                 onLongPress: group.project == null || _busy
                     ? null
-                    : () => _run(
-                        () => _projectActions(headingContext, group),
-                        refresh: true,
-                      ),
+                    : () => _run(() => _projectActions(headingContext, group)),
                 onTap: () => setState(() {
                   if (!_collapsed.remove(key)) _collapsed.add(key);
                 }),
@@ -960,10 +948,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
                   icon: const Icon(Icons.more_horiz, size: 18),
                   onPressed: _busy
                       ? null
-                      : () => _run(
-                          () => _projectActions(anchor, group),
-                          refresh: true,
-                        ),
+                      : () => _run(() => _projectActions(anchor, group)),
                 ),
               ),
           ],
@@ -976,21 +961,6 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
     final groups = _groups;
     final entries = _allEntries;
     return [
-      if (_data.loading || _data.searching)
-        const LinearProgressIndicator(minHeight: 2),
-      for (final error in _data.errors.values)
-        ListTile(
-          title: StudioError(error),
-          trailing: TextButton(onPressed: _refresh, child: const Text('Retry')),
-        ),
-      if (_data.searchError != null)
-        ListTile(
-          title: StudioError(_data.searchError!),
-          trailing: TextButton(
-            onPressed: () => _data.search(_query),
-            child: const Text('Retry'),
-          ),
-        ),
       if (_data.searchLimited)
         const Padding(
           padding: EdgeInsets.all(16),
@@ -1060,6 +1030,71 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
           ),
         ),
     ];
+  }
+
+  Widget _progress() {
+    final submitting = controller.current?.mutatingSessions.isNotEmpty == true;
+    final label = submitting
+        ? 'Updating chats…'
+        : _data.searching
+        ? 'Searching chats…'
+        : _data.loading
+        ? 'Refreshing chats…'
+        : null;
+    if (label == null) return const SizedBox.shrink();
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    return Semantics(
+      liveRegion: true,
+      label: label,
+      child: ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LinearProgressIndicator(
+              minHeight: 2,
+              value: reducedMotion ? 1 : null,
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: WingTokens.of(context).muted,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _readFailure(String message, VoidCallback retry) {
+    final largeText = MediaQuery.textScalerOf(context).scale(16) > 20;
+    final explanation = DefaultTextStyle(
+      style: Theme.of(context).textTheme.bodySmall!.copyWith(fontSize: 12),
+      child: StudioError(message),
+    );
+    final action = TextButton(onPressed: retry, child: const Text('Retry'));
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: largeText
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                explanation,
+                Align(alignment: Alignment.centerRight, child: action),
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(child: explanation),
+                const SizedBox(width: 12),
+                action,
+              ],
+            ),
+    );
   }
 
   List<Widget> _draftRows(List<ChatListEntry> entries) {
@@ -1334,6 +1369,18 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser> {
               ),
               _filters(),
               WorkspaceConnectionStatus(status: controller.connectionStatus),
+              _progress(),
+              if (_data.errors.isNotEmpty)
+                _readFailure(
+                  _data.errors.length == 1
+                      ? _data.errors.values.single
+                      : _data.errors.keys.any(_data.hasCompleteSnapshot)
+                      ? 'Could not refresh chats for ${_data.errors.keys.join(', ')}.'
+                      : 'Could not finish loading chats for ${_data.errors.keys.join(', ')}.',
+                  _refresh,
+                ),
+              if (_data.searchError != null)
+                _readFailure(_data.searchError!, () => _data.search(_query)),
               if (controller.error != null)
                 ListTile(
                   title: StudioError(controller.error!),
