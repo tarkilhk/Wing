@@ -4,6 +4,9 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Fix chat action menus turning the screen pale when a live chat-list update
+  replaces the row while its menu is opening or repositioning.
+
 ## [1.2.0] - 2026-10-02
 
 Inline reply images, less Markdown work during streaming, and stronger handling

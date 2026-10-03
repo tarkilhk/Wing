@@ -265,6 +265,30 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('chat ellipsis menu survives a live regroup during opening', (
+    tester,
+  ) async {
+    await show(tester, reducedMotion: true);
+    await tester.tap(find.byKey(const ValueKey('chat-profile-personal')));
+    await tester.pumpAndSettle();
+    final row = find.byKey(const ValueKey('chat-personal-session-0'));
+    await Scrollable.ensureVisible(tester.element(row));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(of: row, matching: find.byTooltip('Chat actions')),
+    );
+    fixture.rowUpdates['personal/session-0'] = {'pinned': true};
+    await tester.runAsync(controller.refresh);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(ErrorWidget), findsNothing);
+    expect(find.text('Copy ID'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Copy ID'), findsNothing);
+  });
+
   testWidgets('profile bar toggles the shared filter without changing owner', (
     tester,
   ) async {
