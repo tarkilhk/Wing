@@ -27,7 +27,4 @@ enum SessionVisibility {
     chats => !automatedSources.contains(source),
     all => true,
   };
-
-  static SessionVisibility fromStored(String? value) =>
-      values.where((v) => v.name == value).firstOrNull ?? chats;
 }

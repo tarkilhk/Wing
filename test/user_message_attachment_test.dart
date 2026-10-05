@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_message.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -27,6 +28,57 @@ Future<void> settleImages(WidgetTester tester) async {
 }
 
 void main() {
+  test('reading projection retains copied attachment and tool facts', () {
+    final attachments = <UserMessageAttachment>[
+      const UserMessageAttachment(
+        name: 'First.txt',
+        target: '/first.txt',
+        isImage: false,
+      ),
+    ];
+    final row = <String, dynamic>{
+      'id': 7,
+      'role': 'user',
+      'content': '@file:/first.txt\nKeep caption',
+      'timestamp': 100,
+      'submitted_attachments': attachments,
+    };
+    final message = TranscriptMessage.fromRow(row);
+    final savedTime = message.timestamp;
+    attachments.clear();
+    row.addAll({
+      'id': 8,
+      'role': 'assistant',
+      'content': 'Replacement',
+      'timestamp': 200,
+    });
+
+    expect(message.id, 7);
+    expect(message.role, 'user');
+    expect(message.text, 'Keep caption');
+    expect(message.copyText, '@file:/first.txt\nKeep caption');
+    expect(message.timestamp, savedTime);
+    expect(message.attachments.single.name, 'First.txt');
+    expect(message.attachments.single.target, '/first.txt');
+    expect(() => message.attachments.clear(), throwsUnsupportedError);
+
+    final toolRow = <String, dynamic>{
+      'id': 3,
+      'role': 'tool',
+      'tool_name': 'read',
+      'content': 'Original output',
+    };
+    final tool = TranscriptMessage.fromRow(toolRow).tool!;
+    toolRow.addAll({
+      'id': 4,
+      'tool_name': 'write',
+      'content': 'Replacement output',
+    });
+    expect(tool.id, 3);
+    expect(tool.name, 'read');
+    expect(tool.text, 'Original output');
+  });
+
   setUpAll(() async {
     if (!const bool.fromEnvironment('CAPTURE_ATTACHMENTS')) return;
     const directory = String.fromEnvironment('CAPTURE_FONT_DIR');
@@ -114,7 +166,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ProfileMessage(message: saved(text: '')),
+          body: ProfileMessage(
+            message: TranscriptMessage.fromRow(saved(text: '')),
+          ),
         ),
       ),
     );
@@ -190,7 +244,7 @@ void main() {
       await settleImages(tester);
       expect(
         tester.widget<ChatImagePreview>(find.byType(ChatImagePreview)).bytes,
-        same(original),
+        orderedEquals(original),
       );
       expect(find.byType(InteractiveViewer), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -211,7 +265,9 @@ void main() {
       Widget app() => MaterialApp(
         home: Scaffold(
           body: ProfileMessage(
-            message: saved(image: '/server/photo.png'),
+            message: TranscriptMessage.fromRow(
+              saved(image: '/server/photo.png'),
+            ),
             loadAttachmentImage: load,
           ),
         ),
@@ -236,7 +292,9 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ProfileMessage(
-            message: saved(image: 'data:image/png;base64,bm90IGFuIGltYWdl'),
+            message: TranscriptMessage.fromRow(
+              saved(image: 'data:image/png;base64,bm90IGFuIGltYWdl'),
+            ),
           ),
         ),
       ),
@@ -271,9 +329,11 @@ void main() {
                 body: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: ProfileMessage(
-                    message: saved(
-                      text:
-                          '@file:"/server/A long attachment filename.pdf"\n\nLook at this.',
+                    message: TranscriptMessage.fromRow(
+                      saved(
+                        text:
+                            '@file:"/server/A long attachment filename.pdf"\n\nLook at this.',
+                      ),
                     ),
                   ),
                 ),

@@ -1,12 +1,20 @@
+import 'package:wing/core/models/attachment_draft.dart';
+import 'package:wing/core/models/queued_prompt_draft.dart';
+import 'package:wing/core/models/chat_runtime.dart';
+import 'support/composer_fixture.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/slash_command.dart';
+import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/side_question_delivery.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/composer_draft_store.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/ws_client.dart';
@@ -20,6 +28,7 @@ class CommandHost extends Host {
   final commandCalls = <(String, Map<String, dynamic>)>[];
   Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)? respond;
   String yolo = '0';
+  bool reportYolo = true;
   String warning = '';
   String? yoloSetResult;
   final List<String> sideQuestionTaskIds = ['side-task-1'];
@@ -128,7 +137,10 @@ class CommandHost extends Host {
         if (method == 'session.create' || method == 'session.resume') {
           return {
             ...result,
-            'info': {...result['info'] as Map, 'yolo': yolo == '1'},
+            'info': {
+              ...result['info'] as Map,
+              if (reportYolo) 'yolo': yolo == '1',
+            },
           };
         }
         return result;
@@ -138,29 +150,79 @@ class CommandHost extends Host {
   }
 }
 
+class _HeldPromptDraftStore extends ComposerDraftStore {
+  _HeldPromptDraftStore(super.preferences, {required super.connectionIdentity});
+  String? holdPrompt;
+  final preparing = Completer<void>();
+  final release = Completer<void>();
+  @override
+  Future<void> write({
+    required String profileName,
+    required String sessionId,
+    required String text,
+    required Iterable<AttachmentDraft> attachments,
+    bool submissionUncertain = false,
+    Iterable<QueuedPromptDraft> queuedPrompts = const [],
+    bool queuePaused = false,
+  }) async {
+    final files = attachments.toList();
+    final queue = queuedPrompts.toList();
+    if (holdPrompt != null && queue.any((entry) => entry.text == holdPrompt)) {
+      holdPrompt = null;
+      preparing.complete();
+      await release.future;
+    }
+    await super.write(
+      profileName: profileName,
+      sessionId: sessionId,
+      text: text,
+      attachments: files,
+      submissionUncertain: submissionUncertain,
+      queuedPrompts: queue,
+      queuePaused: queuePaused,
+    );
+  }
+}
+
 void main() {
   late CommandHost host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileChat chat;
+  late _HeldPromptDraftStore draftStore;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     host = CommandHost();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
+    draftStore = _HeldPromptDraftStore(
+      preferences,
+      connectionIdentity: 'slash-test-host',
+    );
     controller = ProfileWorkspaceController(
       connectionIdentity: 'slash-test-host',
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Host',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Host',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
+      draftStore: draftStore,
     );
     await controller.initialize();
-    chat = await controller.createChat();
+    chat = await controller.createChat(canDispatch: () => true);
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   test('catalog includes custom skills, aliases and no fixed size limit', () {
     final value = host.catalog('a');
@@ -190,7 +252,7 @@ void main() {
         'message': 'Expanded skill body',
         'display': '/a-skill first\nsecond',
       };
-      chat.draft = '/short first\nsecond';
+      chat.composer.editText('/short first\nsecond');
       await controller.send(chat);
       final dispatch = host.commandCalls
           .singleWhere((c) => c.$1 == 'command.dispatch')
@@ -203,9 +265,12 @@ void main() {
       expect(prompt['text'], 'Expanded skill body');
       expect(prompt['profile'], 'a');
       expect(prompt['session_id'], 'a-runtime');
-      expect(chat.messages.single['display_content'], '/a-skill first\nsecond');
-      expect(chat.draft, isEmpty);
-      expect(chat.status, ProfileTurnStatus.running);
+      expect(
+        chat.reading.messages.single['display_content'],
+        '/a-skill first\nsecond',
+      );
+      expect(chat.composer.observation.text, isEmpty);
+      expect(chat.runtime.execution, ChatExecution.running);
     },
   );
 
@@ -214,12 +279,12 @@ void main() {
     () async {
       final reply = Completer<Map<String, dynamic>>();
       host.respond = (_, _) => reply.future;
-      chat.draft = '/a-skill task';
+      chat.composer.editText('/a-skill task');
       final send = controller.send(chat);
       await Future<void>.delayed(Duration.zero);
       await controller.switchProfile('b');
-      final other = await controller.createChat();
-      other.draft = 'Keep this draft';
+      final other = await controller.createChat(canDispatch: () => true);
+      other.composer.editText('Keep this draft');
       reply.complete({
         'type': 'send',
         'message': 'Expanded bundle',
@@ -228,10 +293,10 @@ void main() {
       });
       await send;
       expect(controller.current!.chat, same(other));
-      expect(other.draft, 'Keep this draft');
-      expect(other.messages, isEmpty);
+      expect(other.composer.observation.text, 'Keep this draft');
+      expect(other.reading.messages, isEmpty);
       expect(
-        chat.messages
+        chat.reading.messages
             .where((row) => row['_command_notice'] == true)
             .map((row) => row['content']),
         ['Loading bundle'],
@@ -254,7 +319,7 @@ void main() {
     () async {
       final reply = Completer<Map<String, dynamic>>();
       host.respond = (_, _) => reply.future;
-      chat.draft = '/a-skill needs setup';
+      chat.composer.editText('/a-skill needs setup');
 
       final sending = controller.send(chat);
       await Future<void>.delayed(Duration.zero);
@@ -263,8 +328,8 @@ void main() {
         'env_var': 'FIXTURE_TOKEN',
         'prompt': 'Optional fixture token',
       });
-      final request = chat.sensitivePrompt!;
-      expect(chat.status, ProfileTurnStatus.attention);
+      final request = chat.runtime.secureInput!;
+      expect(chat.runtime.needsInput, isTrue);
 
       await controller.respondSensitivePrompt(
         chat,
@@ -286,9 +351,12 @@ void main() {
         submissions.single.$2['text'],
         'Expanded skill prompt after skipped setup',
       );
-      expect(chat.messages.single['display_content'], '/a-skill needs setup');
-      expect(chat.draft, isEmpty);
-      expect(chat.status, ProfileTurnStatus.running);
+      expect(
+        chat.reading.messages.single['display_content'],
+        '/a-skill needs setup',
+      );
+      expect(chat.composer.observation.text, isEmpty);
+      expect(chat.runtime.execution, ChatExecution.running);
     },
   );
 
@@ -298,7 +366,7 @@ void main() {
       final dispatch = Completer<Map<String, dynamic>>();
       host.respond = (_, _) => dispatch.future;
       host.sensitiveResponseDelay = Completer<void>();
-      chat.draft = '/a-skill delayed cancel';
+      chat.composer.editText('/a-skill delayed cancel');
 
       final sending = controller.send(chat);
       await Future<void>.delayed(Duration.zero);
@@ -306,7 +374,7 @@ void main() {
         'request_id': 'delayed-secret',
         'env_var': 'FIXTURE_TOKEN',
       });
-      final request = chat.sensitivePrompt!;
+      final request = chat.runtime.secureInput!;
       final cancelling = controller.respondSensitivePrompt(
         chat,
         '',
@@ -322,14 +390,83 @@ void main() {
         host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
         hasLength(1),
       );
-      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.runtime.execution, ChatExecution.running);
       host.sensitiveResponseDelay!.complete();
       await cancelling;
       await sending;
-      expect(chat.status, ProfileTurnStatus.running);
-      expect(chat.sensitivePrompt, isNull);
+      expect(chat.runtime.execution, ChatExecution.running);
+      expect(chat.runtime.secureInput, isNull);
     },
   );
+
+  for (final crossing in ['failed answer', 'new request']) {
+    test(
+      'returned command prompt is refused after $crossing during preparation',
+      () async {
+        final dispatch = Completer<Map<String, dynamic>>();
+        host.respond = (_, _) => dispatch.future;
+        host.sensitiveResponseDelay = Completer<void>();
+        draftStore.holdPrompt = 'Captured expanded prompt';
+        addTearDown(() {
+          if (!draftStore.release.isCompleted) draftStore.release.complete();
+          if (!host.sensitiveResponseDelay!.isCompleted) {
+            host.sensitiveResponseDelay!.complete();
+          }
+        });
+        await controller.updateDraft(chat, '/a-skill captured continuation');
+        final sending = controller.send(chat);
+        await Future<void>.delayed(Duration.zero);
+        host.event('a', 'secret', {'request_id': 'preflight-a'});
+        final answering = controller.respondSensitivePrompt(
+          chat,
+          'synthetic-secret',
+          expectedRequest: chat.runtime.secureInput!,
+        );
+        Object? answerError;
+        final settledAnswer = answering.catchError((Object error) {
+          answerError = error;
+        });
+        dispatch.complete({
+          'type': 'skill',
+          'message': 'Captured expanded prompt',
+        });
+        await draftStore.preparing.future;
+        expect(
+          host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
+          isEmpty,
+        );
+        expect(chat.runtime.secureResponding, isTrue);
+        if (crossing == 'failed answer') {
+          host.sensitiveResponseError = StateError('Definite answer refusal');
+        } else {
+          host.event('a', 'secret', {'request_id': 'preflight-b'});
+        }
+        host.sensitiveResponseDelay!.complete();
+        await settledAnswer;
+        draftStore.release.complete();
+        await sending;
+        expect(
+          host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
+          isEmpty,
+        );
+        expect(
+          host.commandCalls.where((call) => call.$1 == 'command.dispatch'),
+          hasLength(1),
+        );
+        expect(
+          chat.runtime.secureInput?.requestId,
+          crossing == 'failed answer' ? 'preflight-a' : 'preflight-b',
+        );
+        expect(chat.runtime.secureResponding, isFalse);
+        expect(chat.composer.observation.submissionUncertain, isFalse);
+        if (crossing == 'failed answer') {
+          expect(answerError, isStateError);
+        } else {
+          expect(answerError, isNull);
+        }
+      },
+    );
+  }
 
   test(
     'secret request during prompt acknowledgement remains a live turn',
@@ -340,7 +477,7 @@ void main() {
       };
       host.promptSubmitStarted = Completer<void>();
       host.promptSubmitDelay = Completer<void>();
-      chat.draft = '/a-skill live prompt secret';
+      chat.composer.editText('/a-skill live prompt secret');
 
       final sending = controller.send(chat);
       await host.promptSubmitStarted!.future;
@@ -348,14 +485,14 @@ void main() {
         'request_id': 'live-turn-secret',
         'env_var': 'FIXTURE_TOKEN',
       });
-      final request = chat.sensitivePrompt!;
-      expect(chat.status, ProfileTurnStatus.attention);
+      final request = chat.runtime.secureInput!;
+      expect(chat.runtime.needsInput, isTrue);
       await controller.respondSensitivePrompt(
         chat,
         '',
         expectedRequest: request,
       );
-      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.runtime.execution, ChatExecution.running);
 
       host.promptSubmitDelay!.complete();
       await sending;
@@ -363,7 +500,7 @@ void main() {
         host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
         hasLength(1),
       );
-      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.runtime.execution, ChatExecution.running);
     },
   );
 
@@ -373,7 +510,7 @@ void main() {
       final dispatch = Completer<Map<String, dynamic>>();
       host.respond = (_, _) => dispatch.future;
       host.sensitiveResponseError = TimeoutException('retry response');
-      chat.draft = '/a-skill retry secret';
+      chat.composer.editText('/a-skill retry secret');
 
       final sending = controller.send(chat);
       await Future<void>.delayed(Duration.zero);
@@ -381,13 +518,13 @@ void main() {
         'request_id': 'retry-secret',
         'env_var': 'FIXTURE_TOKEN',
       });
-      final request = chat.sensitivePrompt!;
+      final request = chat.runtime.secureInput!;
       await expectLater(
         controller.respondSensitivePrompt(chat, '', expectedRequest: request),
         throwsA(isA<TimeoutException>()),
       );
-      expect(chat.status, ProfileTurnStatus.attention);
-      expect(chat.sensitivePrompt, same(request));
+      expect(chat.runtime.needsInput, isTrue);
+      expect(chat.runtime.secureInput, same(request));
 
       host.sensitiveResponseError = null;
       await controller.respondSensitivePrompt(
@@ -404,8 +541,9 @@ void main() {
       expect(
         host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
         hasLength(1),
+        reason: chat.runtime.error,
       );
-      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.runtime.execution, ChatExecution.running);
     },
   );
 
@@ -414,9 +552,16 @@ void main() {
     () async {
       final dispatch = Completer<Map<String, dynamic>>();
       host.respond = (_, _) => dispatch.future;
-      chat
-        ..draft = '/a-skill replacement secret'
-        ..status = ProfileTurnStatus.completed;
+      emitChatEvent(controller, chat, 'message.start');
+      emitChatEvent(controller, chat, 'session.info', {
+        'open_requests': [],
+        'running': false,
+      });
+      await restoreComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+        text: '/a-skill replacement secret',
+      );
 
       final sending = controller.send(chat);
       await Future<void>.delayed(Duration.zero);
@@ -428,13 +573,13 @@ void main() {
         'request_id': 'replacement-secret',
         'env_var': 'SECOND_TOKEN',
       });
-      final replacement = chat.sensitivePrompt!;
+      final replacement = chat.runtime.secureInput!;
       await controller.respondSensitivePrompt(
         chat,
         '',
         expectedRequest: replacement,
       );
-      expect(chat.status, ProfileTurnStatus.completed);
+      expect(chat.runtime.execution, ChatExecution.completed);
 
       dispatch.complete({
         'type': 'skill',
@@ -445,7 +590,7 @@ void main() {
         host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
         hasLength(1),
       );
-      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.runtime.execution, ChatExecution.running);
     },
   );
 
@@ -463,28 +608,35 @@ void main() {
       for (var index = 0; index < cases.length; index++) {
         final dispatch = Completer<Map<String, dynamic>>();
         host.respond = (_, _) => dispatch.future;
-        chat
-          ..draft = '/a-skill expiring request $index'
-          ..status = ProfileTurnStatus.completed;
+        emitChatEvent(controller, chat, 'message.start');
+        emitChatEvent(controller, chat, 'session.info', {
+          'open_requests': [],
+          'running': false,
+        });
+        await restoreComposerFixture(
+          chat: chat,
+          preferences: controller.preferences,
+          text: '/a-skill expiring request $index',
+        );
         final sending = controller.send(chat);
         await Future<void>.delayed(Duration.zero);
         final requestId = 'expiring-$index';
         host.event('a', cases[index], {'request_id': requestId});
-        expect(chat.status, ProfileTurnStatus.attention);
+        expect(chat.runtime.needsInput, isTrue);
 
         host.event('a', 'request.cancel', {
           'id': requestId,
           'method': cases[index],
           'reason': 'timeout',
         });
-        expect(chat.sensitivePrompt, isNull);
-        expect(chat.status, ProfileTurnStatus.completed);
+        expect(chat.runtime.secureInput, isNull);
+        expect(chat.runtime.execution, ChatExecution.completed);
         dispatch.complete({
           'type': 'skill',
           'message': 'Expanded after expiry $index',
         });
         await sending;
-        expect(chat.status, ProfileTurnStatus.running);
+        expect(chat.runtime.execution, ChatExecution.running);
       }
 
       expect(
@@ -495,9 +647,9 @@ void main() {
   );
 
   test('sensitive expiry during an active turn stays running', () async {
-    chat.status = ProfileTurnStatus.running;
+    emitChatEvent(controller, chat, 'message.start');
     host.event('a', 'secret', {'request_id': 'active-secret-expiry'});
-    expect(chat.status, ProfileTurnStatus.attention);
+    expect(chat.runtime.needsInput, isTrue);
 
     host.event('a', 'request.cancel', {
       'id': 'active-secret-expiry',
@@ -505,14 +657,14 @@ void main() {
       'reason': 'timeout',
     });
 
-    expect(chat.sensitivePrompt, isNull);
-    expect(chat.status, ProfileTurnStatus.running);
+    expect(chat.runtime.secureInput, isNull);
+    expect(chat.runtime.execution, ChatExecution.running);
   });
 
   test('duplicate taps do not execute a command twice', () async {
     final reply = Completer<Map<String, dynamic>>();
     host.respond = (_, _) => reply.future;
-    chat.draft = '/custom';
+    chat.composer.editText('/custom');
     final first = controller.send(chat);
     await controller.send(chat);
     reply.complete({'type': 'exec', 'output': 'Done'});
@@ -524,12 +676,12 @@ void main() {
   });
 
   test('text output settles without expecting stream events', () async {
-    chat.draft = '/custom';
+    chat.composer.editText('/custom');
     await controller.send(chat);
-    expect(chat.busy, isFalse);
-    expect(chat.commandRunning, isFalse);
+    expect(chat.runtime.blocksTurnAdmission, isFalse);
+    expect(chat.runtime.commandRunning, isFalse);
     expect(
-      chat.messages
+      chat.reading.messages
           .where((row) => row['_command_notice'] == true)
           .map((row) => row['content']),
       ['Done'],
@@ -545,11 +697,11 @@ void main() {
         'message': 'Edit this question',
         'notice': 'Rewound',
       };
-      chat.draft = '/undo';
+      chat.composer.editText('/undo');
       await controller.send(chat);
-      expect(chat.draft, 'Edit this question');
+      expect(chat.composer.observation.text, 'Edit this question');
       expect(
-        chat.messages
+        chat.reading.messages
             .where((row) => row['_command_notice'] == true)
             .map((row) => row['content']),
         ['Rewound'],
@@ -569,14 +721,14 @@ void main() {
       }
       return {'output': 'Model changed', 'warning': 'Session only'};
     };
-    chat.draft = '/model provider/model';
+    chat.composer.editText('/model provider/model');
     await controller.send(chat);
     expect(
       host.commandCalls.singleWhere((c) => c.$1 == 'slash.exec').$2['command'],
       '/model provider/model',
     );
     expect(
-      chat.messages
+      chat.reading.messages
           .where((row) => row['_command_notice'] == true)
           .map((row) => row['content']),
       ['Session only', 'Model changed'],
@@ -585,10 +737,10 @@ void main() {
 
   test('timeout never retries via slash.exec or prompt.submit', () async {
     host.respond = (_, _) async => throw TimeoutException('lost reply');
-    chat.draft = '/custom';
+    chat.composer.editText('/custom');
     await controller.send(chat);
-    expect(chat.draft, '/custom');
-    expect(chat.error, contains('uncertain'));
+    expect(chat.composer.observation.text, '/custom');
+    expect(chat.runtime.error, contains('uncertain'));
     expect(
       host.commandCalls.where(
         (c) => {'slash.exec', 'prompt.submit'}.contains(c.$1),
@@ -602,19 +754,19 @@ void main() {
     () async {
       host.respond = (method, _) async =>
           throw JsonRpcError(method, 'quick command failed', code: 4018);
-      chat.draft = '/custom';
+      chat.composer.editText('/custom');
       await controller.send(chat);
-      expect(chat.error, contains('quick command failed'));
-      expect(chat.draft, '/custom');
+      expect(chat.runtime.error, contains('quick command failed'));
+      expect(chat.composer.observation.text, '/custom');
       expect(host.commandCalls.where((c) => c.$1 == 'slash.exec'), isEmpty);
     },
   );
 
   test('alias cycles terminate without a model request', () async {
     host.respond = (_, _) async => {'type': 'alias', 'target': 'cycle'};
-    chat.draft = '/cycle';
+    chat.composer.editText('/cycle');
     await controller.send(chat);
-    expect(chat.error, contains('alias cycle'));
+    expect(chat.runtime.error, contains('alias cycle'));
     expect(
       host.commandCalls.where((c) => c.$1 == 'command.dispatch'),
       hasLength(1),
@@ -648,7 +800,7 @@ void main() {
   test(
     'side-question acknowledgement and completion stay with their owner',
     () async {
-      chat.draft = '/btw What changed?';
+      chat.composer.editText('/btw What changed?');
       await controller.send(chat);
       expect(
         chat.sideQuestionDeliveries.single.state,
@@ -657,7 +809,7 @@ void main() {
       expect(chat.sideQuestionDeliveries.single.taskId, 'side-task-1');
       expect(chat.sideQuestionDeliveries.single.question, 'What changed?');
       await controller.switchProfile('b');
-      final other = await controller.createChat();
+      final other = await controller.createChat(canDispatch: () => true);
       host.event('a', 'btw.complete', {
         'task_id': 'side-task-1',
         'question': 'What changed?',
@@ -667,13 +819,13 @@ void main() {
       expect(delivery.state, SideQuestionDeliveryState.completed);
       expect(delivery.result, 'Side answer');
       expect(
-        chat.messages
+        chat.reading.messages
             .where((row) => row['_command_notice'] == true)
             .map((row) => row['content']),
         ['Started /btw on the Hermes host.'],
       );
       expect(
-        other.messages
+        other.reading.messages
             .where((row) => row['_command_notice'] == true)
             .map((row) => row['content']),
         isEmpty,
@@ -692,9 +844,9 @@ void main() {
     'side-question completions correlate out of order and skip blanks',
     () async {
       host.sideQuestionTaskIds.add('side-task-2');
-      chat.draft = '/btw First question';
+      chat.composer.editText('/btw First question');
       await controller.send(chat);
-      chat.draft = '/btw Second question';
+      chat.composer.editText('/btw Second question');
       await controller.send(chat);
 
       host.event('a', 'btw.complete', {
@@ -740,8 +892,8 @@ void main() {
   test(
     'background acknowledgement and completion stay with their owner while busy',
     () async {
-      chat.status = ProfileTurnStatus.running;
-      chat.draft = '/bg Check the deployment';
+      emitChatEvent(controller, chat, 'message.start');
+      chat.composer.editText('/bg Check the deployment');
       await controller.send(chat);
 
       final pending = chat.sideQuestionDeliveries.single;
@@ -749,9 +901,9 @@ void main() {
       expect(pending.taskId, 'background-task-1');
       expect(pending.question, 'Check the deployment');
       expect(pending.state, SideQuestionDeliveryState.pending);
-      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.runtime.execution, ChatExecution.running);
       await controller.switchProfile('b');
-      final other = await controller.createChat();
+      final other = await controller.createChat(canDispatch: () => true);
 
       host.event('a', 'background.complete', {
         'task_id': 'background-task-1',
@@ -779,7 +931,7 @@ void main() {
     'background completion before acknowledgement keeps its result and prompt',
     () async {
       host.sideQuestionTaskIds[0] = 'shared-task';
-      chat.draft = '/btw Side work';
+      chat.composer.editText('/btw Side work');
       await controller.send(chat);
       host.backgroundRespond = (params) {
         host.event('a', 'background.complete', {
@@ -789,7 +941,7 @@ void main() {
         return {'task_id': 'shared-task'};
       };
 
-      chat.draft = '/background Background work';
+      chat.composer.editText('/background Background work');
       await controller.send(chat);
 
       expect(chat.sideQuestionDeliveries, hasLength(2));
@@ -823,25 +975,25 @@ void main() {
     'background acknowledgement without a task ID preserves the draft',
     () async {
       host.backgroundRespond = (_) => <String, dynamic>{};
-      chat.draft = '/bg Keep this command';
+      chat.composer.editText('/bg Keep this command');
 
       await controller.send(chat);
 
-      expect(chat.draft, '/bg Keep this command');
+      expect(chat.composer.observation.text, '/bg Keep this command');
       expect(chat.sideQuestionDeliveries, isEmpty);
       expect(
-        chat.error,
+        chat.runtime.error,
         'Hermes did not confirm the background task. '
         'Check whether it started before sending this draft again.',
       );
-      expect(chat.error, isNot(contains('FormatException')));
+      expect(chat.runtime.error, isNot(contains('FormatException')));
     },
   );
 
   test('yolo toggles the hydrated live session while busy', () async {
-    chat.status = ProfileTurnStatus.running;
+    emitChatEvent(controller, chat, 'message.start');
     host.event('a', 'session.info', {'yolo': true});
-    chat.draft = '/yolo';
+    chat.composer.editText('/yolo');
 
     await controller.send(chat);
 
@@ -850,14 +1002,14 @@ void main() {
       {'session_id': 'a-runtime', 'key': 'yolo', 'value': '0', 'profile': 'a'},
     );
     expect(
-      chat.messages
+      chat.reading.messages
           .where((row) => row['_command_notice'] == true)
           .map((row) => row['content']),
       ['YOLO disabled for this session.'],
     );
     expect(chat.yolo, isFalse);
-    expect(chat.draft, isEmpty);
-    expect(chat.status, ProfileTurnStatus.running);
+    expect(chat.composer.observation.text, isEmpty);
+    expect(chat.runtime.execution, ChatExecution.running);
     expect(
       host.commandCalls.where(
         (call) => {'command.dispatch', 'slash.exec'}.contains(call.$1),
@@ -869,10 +1021,38 @@ void main() {
   test(
     'yolo resumes unknown state and displays the acknowledged state',
     () async {
-      chat.yolo = null;
+      // A fresh create response already reports YOLO. Open an existing chat
+      // whose initial info omits it, then let the deliberate command resume
+      // observe the server's current value through the real owner path.
+      controller.dispose();
+      host = CommandHost()..reportYolo = false;
+      controller = ProfileWorkspaceController(
+        connectionIdentity: 'slash-test-host',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'host',
+            label: 'Host',
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
+        ),
+        preferences: await SharedPreferences.getInstance(),
+        appPreferences: appPreferences,
+        gatewayFactory: host.gateway,
+        draftStore: draftStore,
+      );
+      await controller.initialize();
+      chat = (await controller.openSession(
+        ProfileSessionKey(controller.current!.scope, 'same'),
+      ))!;
+      expect(chat.yolo, isNull);
+      host.commandCalls.clear();
+      host.reportYolo = true;
       host.yolo = '1';
       host.yoloSetResult = '1';
-      chat.draft = '/yolo';
+      chat.composer.editText('/yolo');
 
       final notification = await controller.send(chat);
 
@@ -888,24 +1068,27 @@ void main() {
         {'session_id': 'same', 'omit_messages': true, 'profile': 'a'},
       );
       expect(notification, isNull);
-      expect(chat.messages.last['content'], 'YOLO enabled for this session.');
+      expect(
+        chat.reading.messages.last['content'],
+        'YOLO enabled for this session.',
+      );
       expect(chat.yolo, isTrue);
     },
   );
 
   test('terminal commands explain requirement and preserve draft', () async {
-    chat.draft = '/clear';
+    chat.composer.editText('/clear');
     await controller.send(chat);
-    expect(chat.error, contains('requires the Hermes terminal'));
-    expect(chat.draft, '/clear');
+    expect(chat.runtime.error, contains('requires the Hermes terminal'));
+    expect(chat.composer.observation.text, '/clear');
     expect(host.commandCalls.where((c) => c.$1 == 'command.dispatch'), isEmpty);
   });
 
   test(
     'interrupt while busy uses exact session and preserves turn status',
     () async {
-      chat.status = ProfileTurnStatus.running;
-      chat.draft = '/interrupt';
+      emitChatEvent(controller, chat, 'message.start');
+      chat.composer.editText('/interrupt');
       await controller.send(chat);
       expect(
         host.commandCalls
@@ -913,7 +1096,7 @@ void main() {
             .$2['session_id'],
         'a-runtime',
       );
-      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.runtime.execution, ChatExecution.running);
     },
   );
 
@@ -941,8 +1124,9 @@ void main() {
             body: Column(
               children: [
                 SlashCommandSuggestions(
-                  controller: controller,
-                  chat: chat,
+                  loadCompletion: (query) =>
+                      controller.completeCommand(chat, query),
+                  saveDraft: (text) => controller.updateDraft(chat, text),
                   composer: input,
                 ),
               ],
@@ -971,8 +1155,9 @@ void main() {
             body: Column(
               children: [
                 SlashCommandSuggestions(
-                  controller: controller,
-                  chat: chat,
+                  loadCompletion: (query) =>
+                      controller.completeCommand(chat, query),
+                  saveDraft: (text) => controller.updateDraft(chat, text),
                   composer: input,
                 ),
               ],
@@ -985,17 +1170,47 @@ void main() {
       expect(find.text('/a-skill'), findsOneWidget);
       await tester.tap(find.text('/a-skill'));
       expect(input.text, '/a-skill ');
-      expect(chat.draft, '/a-skill ');
+      expect(chat.composer.observation.text, '/a-skill ');
       expect(host.commandCalls.where((c) => c.$1 == 'prompt.submit'), isEmpty);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 
+  test(
+    'completion captures Unicode range and keeps suffix without mutable items',
+    () {
+      final row = {'text': 'provider/model', 'meta': 'Model'};
+      final completion = SlashCompletion.fromJson('/model 😀pr', {
+        'items': [row],
+        'replace_from': 8,
+      }, warning: 'Current catalog warning');
+      row['text'] = 'changed later';
+      expect(completion.replaceFrom, 9);
+      expect(completion.items.single.text, 'provider/model');
+      expect(() => completion.items.clear(), throwsUnsupportedError);
+      final edit = completion.select(
+        completion.items.single,
+        text: '/model 😀pr keep',
+        cursor: 11,
+      )!;
+      expect(edit.text, '/model 😀provider/model keep');
+      expect(edit.cursor, 23);
+      expect(
+        completion.select(
+          completion.items.single,
+          text: '/model other',
+          cursor: 12,
+        ),
+        isNull,
+      );
+    },
+  );
+
   test('completion keeps the owning session after a profile switch', () async {
     await controller.switchProfile('b');
-    final other = await controller.createChat();
+    final other = await controller.createChat(canDispatch: () => true);
 
-    expect(other.runtimeId, isNot(chat.runtimeId));
+    expect(other.runtime.runtimeId, isNot(chat.runtime.runtimeId));
     await controller.completeCommand(chat, '/approvals ');
     await controller.completeCommand(other, '/model ');
 
@@ -1004,8 +1219,8 @@ void main() {
           .where((call) => call.$1 == 'complete.slash')
           .map((call) => call.$2),
       [
-        {'session_id': chat.runtimeId, 'text': '/approvals '},
-        {'session_id': other.runtimeId, 'text': '/model '},
+        {'session_id': chat.runtime.runtimeId, 'text': '/approvals '},
+        {'session_id': other.runtime.runtimeId, 'text': '/model '},
       ],
     );
   });
@@ -1022,8 +1237,8 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: SlashCommandSuggestions(
-            controller: controller,
-            chat: chat,
+            loadCompletion: (query) => controller.completeCommand(chat, query),
+            saveDraft: (text) => controller.updateDraft(chat, text),
             composer: input,
           ),
         ),
@@ -1036,7 +1251,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(input.text, '/approvals ');
-    expect(chat.draft, '/approvals ');
+    expect(chat.composer.observation.text, '/approvals ');
     expect(find.text('Could not load commands. Tap to retry.'), findsNothing);
     expect(find.text('manual'), findsOneWidget);
     expect(host.commandCalls.singleWhere((c) => c.$1 == 'complete.slash').$2, {
@@ -1067,8 +1282,9 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: SlashCommandSuggestions(
-              controller: controller,
-              chat: chat,
+              loadCompletion: (query) =>
+                  controller.completeCommand(chat, query),
+              saveDraft: (text) => controller.updateDraft(chat, text),
               composer: input,
             ),
           ),
@@ -1080,6 +1296,31 @@ void main() {
       expect(input.text, '/model provider/model keep');
       expect(input.selection.extentOffset, 21);
       await tester.pumpWidget(const SizedBox.shrink());
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.reload();
+      final saved =
+          await ComposerDraftStore(
+            preferences,
+            connectionIdentity: controller.connectionIdentity,
+          ).read(
+            profileName: chat.key.workspace.profileName,
+            sessionId: chat.key.sessionId,
+          );
+      expect(saved?.text, '/model provider/model keep');
+      final restored = ProfileWorkspaceController(
+        access: controller.access,
+        connectionIdentity: controller.connectionIdentity,
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: host.gateway,
+      );
+      addTearDown(restored.dispose);
+      await restored.initialize();
+      await restored.openSession(chat.key);
+      expect(
+        restored.current!.chat!.composer.observation.text,
+        '/model provider/model keep',
+      );
     },
   );
 
@@ -1092,8 +1333,8 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: SlashCommandSuggestions(
-            controller: controller,
-            chat: chat,
+            loadCompletion: (query) => controller.completeCommand(chat, query),
+            saveDraft: (text) => controller.updateDraft(chat, text),
             composer: input,
           ),
         ),
@@ -1132,14 +1373,14 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Send'));
       // The fixture and widget callbacks use different async zones.
-      for (var i = 0; i < 100 && chat.commandRunning; i++) {
+      for (var i = 0; i < 100 && chat.runtime.commandRunning; i++) {
         await tester.pump(const Duration(milliseconds: 10));
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 10)),
         );
       }
       await tester.pump();
-      expect(chat.commandRunning, isFalse);
+      expect(chat.runtime.commandRunning, isFalse);
       expect(
         find.byWidgetPredicate(
           (widget) =>
@@ -1150,7 +1391,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Internal expanded skill body'), findsNothing);
-      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.runtime.execution, ChatExecution.running);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );

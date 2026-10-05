@@ -1,3 +1,4 @@
+import 'package:wing/core/services/app_preferences.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -12,6 +13,8 @@ import 'package:wing/core/services/android_voice.dart';
 import 'package:wing/core/services/microphone_permission.dart';
 
 import 'profile_connection_identity_test.dart' show MemoryIdentityStore;
+
+const _nativeNotifications = MethodChannel(NativeNotificationSink.channelName);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -35,9 +38,7 @@ void main() {
     enabled = false;
     granted = true;
     failRequest = false;
-    messenger.setMockMethodCallHandler(NativeNotificationSink.channel, (
-      call,
-    ) async {
+    messenger.setMockMethodCallHandler(_nativeNotifications, (call) async {
       if (call.method == 'show') calls.add('show');
       return call.method == 'initialize' ? [] : null;
     });
@@ -67,13 +68,17 @@ void main() {
   });
 
   tearDown(() {
-    messenger.setMockMethodCallHandler(NativeNotificationSink.channel, null);
+    messenger.setMockMethodCallHandler(_nativeNotifications, null);
     messenger.setMockMethodCallHandler(AndroidVoice.channel, null);
     messenger.setMockMethodCallHandler(channel, null);
   });
 
   Future<void> launch(WidgetTester tester) async {
-    await tester.pumpWidget(WingApp(connManager: manager));
+    final appPreferences = AppPreferences(manager.prefs);
+    addTearDown(appPreferences.dispose);
+    await tester.pumpWidget(
+      WingApp(connManager: manager, appPreferences: appPreferences),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -175,9 +180,12 @@ void main() {
     tester,
   ) async {
     final ready = Completer<void>();
+    final appPreferences = AppPreferences(manager.prefs);
+    addTearDown(appPreferences.dispose);
     await tester.pumpWidget(
       WingApp(
         connManager: manager,
+        appPreferences: appPreferences,
         startupExternalNavigationReady: ready.future,
       ),
     );

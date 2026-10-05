@@ -1,3 +1,4 @@
+import 'package:wing/core/models/chat_runtime.dart';
 import 'package:flutter/material.dart';
 
 import '../models/gateway_activity.dart';
@@ -14,45 +15,51 @@ class ProfileActivityStatus extends StatelessWidget {
   const ProfileActivityStatus({super.key, required this.chat});
 
   String? get label {
-    if (chat.openingError != null) {
+    if (chat.runtime.openingError != null) {
       return 'Chat unavailable · Your draft is kept';
     }
-    if (chat.opening || chat.offlineSnapshot) return 'You can keep writing';
-    switch (chat.status) {
-      case ProfileTurnStatus.reconnecting:
-        return 'Reconnecting… · checking current activity';
-      case ProfileTurnStatus.attention:
-        return chat.approval != null
-            ? 'Waiting for your approval'
-            : 'Waiting for your reply';
-      case ProfileTurnStatus.submitting:
+    if (chat.runtime.opening || chat.runtime.offline) {
+      return 'You can keep writing';
+    }
+    if (chat.runtime.reconnecting) {
+      return 'Reconnecting… · checking current activity';
+    }
+    if (chat.runtime.needsInput) {
+      return chat.runtime.approval != null
+          ? 'Waiting for your approval'
+          : 'Waiting for your reply';
+    }
+    switch (chat.runtime.execution) {
+      case ChatExecution.submitting:
         return 'Sending message…';
-      case ProfileTurnStatus.failed:
+      case ChatExecution.failed:
         return 'Something went wrong';
       default:
         break;
     }
-    if (chat.commandRunning) return 'Running command…';
+    if (chat.runtime.commandRunning) return 'Running command…';
     final children = chat.subagents.where((item) => !item.isTerminal).length;
     final childLabel = '$children subagent${children == 1 ? '' : 's'}';
-    if (chat.status != ProfileTurnStatus.running) {
+    if (chat.runtime.execution != ChatExecution.running) {
       if (children > 0) return 'Waiting for $childLabel…';
-      if (chat.error != null) return 'History needs attention';
+      if (chat.runtime.error != null) return 'History needs attention';
       return null;
     }
-    final mainLabel = switch (chat.mainActivity) {
-      ProfileMainActivity.writing => 'Writing response…',
-      ProfileMainActivity.thinking => 'Thinking…',
-      ProfileMainActivity.tool => _toolLabel,
-      ProfileMainActivity.working => 'Hermes is working…',
+    final mainLabel = switch (chat.runtime.mainActivity) {
+      ChatMainActivity.writing => 'Writing response…',
+      ChatMainActivity.thinking => 'Thinking…',
+      ChatMainActivity.tool => _toolLabel,
+      ChatMainActivity.working => 'Hermes is working…',
     };
     return children > 0 ? '$mainLabel · $childLabel active' : mainLabel;
   }
 
   String get _toolLabel {
-    final active = chat.mainToolActivity;
+    final active = chat.runtime.mainToolActivity;
     if (active == null) {
-      return chat.tool == null ? 'Hermes is working…' : 'Using ${chat.tool}';
+      return chat.runtime.tool == null
+          ? 'Hermes is working…'
+          : 'Using ${chat.runtime.tool}';
     }
     final action = active.phase == GatewayToolActivityPhase.generating
         ? 'Preparing'
@@ -72,11 +79,16 @@ class ProfileActivityStatus extends StatelessWidget {
   Widget _status(BuildContext context, String text) {
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
     final active =
-        chat.status != ProfileTurnStatus.attention &&
-        chat.status != ProfileTurnStatus.reconnecting &&
-        chat.status != ProfileTurnStatus.failed &&
-        (chat.commandRunning ||
-            chat.activityState == ProfileLiveActivityState.running);
+        !chat.runtime.needsInput &&
+        !chat.runtime.reconnecting &&
+        chat.runtime.execution != ChatExecution.failed &&
+        (chat.runtime.commandRunning ||
+            chat.runtime.activity(
+                  backgroundWorking: chat.subagents.any(
+                    (item) => !item.isTerminal,
+                  ),
+                ) ==
+                ProfileLiveActivityState.running);
     return Semantics(
       container: true,
       liveRegion: true,
@@ -88,9 +100,9 @@ class ProfileActivityStatus extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
               children: [
-                if (chat.commandRunning &&
-                    chat.status != ProfileTurnStatus.attention &&
-                    chat.status != ProfileTurnStatus.reconnecting)
+                if (chat.runtime.commandRunning &&
+                    !chat.runtime.needsInput &&
+                    !chat.runtime.reconnecting)
                   SizedBox(
                     width: 18,
                     height: 18,
@@ -101,11 +113,16 @@ class ProfileActivityStatus extends StatelessWidget {
                             color: color,
                           ),
                   )
-                else if (chat.status == ProfileTurnStatus.idle &&
-                    chat.activityState == null)
+                else if (chat.runtime.execution == ChatExecution.idle &&
+                    chat.runtime.activity(
+                          backgroundWorking: chat.subagents.any(
+                            (item) => !item.isTerminal,
+                          ),
+                        ) ==
+                        null)
                   Icon(Icons.chat_bubble_outline, size: 18, color: color)
                 else
-                  ProfileChatIndicator(chat: chat, row: const {}),
+                  ProfileChatIndicator(chat: chat),
                 const SizedBox(width: 8),
                 Expanded(
                   child: ActivityShimmer(

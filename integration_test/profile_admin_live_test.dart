@@ -1,12 +1,18 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/models/profile_identity_edit.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/profile_identity_edit_session.dart';
+import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/services/server_connection_status.dart';
 import 'package:wing/core/screens/administration/admin_identity_page.dart';
 
 /// Opt-in UI acceptance against the disposable android-qa-a profile.
@@ -35,11 +41,15 @@ void main() {
     profileName: 'android-qa-a',
   );
 
-  Future<ProfileWorkspaceController> controller() async {
+  Future<ProfileWorkspaceController> controller(
+    SharedPreferences preferences,
+    AppPreferences appPreferences,
+  ) async {
     final result = ProfileWorkspaceController(
       connectionIdentity: 'profile-admin-controller',
-      connection: connection(),
-      preferences: await SharedPreferences.getInstance(),
+      access: ConnectionAccess(connection: connection(), dashboardOAuth: null),
+      preferences: preferences,
+      appPreferences: appPreferences,
     );
     await result.initialize();
     await result.switchProfile('android-qa-a');
@@ -61,31 +71,40 @@ void main() {
     expect(condition(), isTrue, reason: diagnostic?.call());
   }
 
-  Future<Map<String, dynamic>> describe(ProfileGateway gateway) async {
-    final result = await gateway.call('profiles.describe', {
-      'name': 'android-qa-a',
-    });
-    expect(result['name'], 'android-qa-a');
-    expect(result['description'], isA<String>());
-    expect(result['soul'], isA<String>());
+  Future<ProfileIdentityObservation> describe(
+    ProfileAdministration profile,
+  ) async {
+    final result = await profile.loadIdentity();
+    expect(result.issues, isEmpty);
+    expect(result.values.keys, containsAll(ProfileIdentityField.values));
     return result;
   }
 
   Future<void> configure(
-    ProfileGateway gateway, {
+    ProfileAdministration profile, {
     required String description,
     required String soul,
   }) async {
-    await gateway.requireProfile();
-    final result = await gateway.call('profiles.configure', {
-      'name': 'android-qa-a',
-      'description': description,
-      'soul': soul,
-    });
-    expect(result['ok'], true);
-    expect(result['applied'], isA<Map>());
-    expect(result['applied']['description'], true);
-    expect(result['applied']['soul'], true);
+    final opening = await describe(profile);
+    final result = await profile.saveIdentity(
+      ProfileIdentityEditIntent(
+        baseline: opening.values,
+        wanted: {
+          ProfileIdentityField.description: description,
+          ProfileIdentityField.soul: soul,
+        },
+      ),
+      canDispatch: () => true,
+      onDispatched: (_) {},
+    );
+    expect(
+      result.fields.values.every(
+        (field) =>
+            field.disposition == ProfileIdentityWriteDisposition.confirmed ||
+            field.disposition == ProfileIdentityWriteDisposition.converged,
+      ),
+      isTrue,
+    );
   }
 
   testWidgets(
@@ -93,9 +112,12 @@ void main() {
     (tester) async {
       expect(port, greaterThan(0), reason: 'Supply HERMES_TEST_PORT');
       SharedPreferences.setMockInitialValues({});
-      final workspace = await controller();
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
+      final workspace = await controller(preferences, appPreferences);
       final verifier = ProfileGateway.forConnection(
-        connection(),
+        ConnectionAccess(connection: connection(), dashboardOAuth: null),
         scope('profile-admin-project-verifier'),
       );
       final nonce = DateTime.now().microsecondsSinceEpoch;
@@ -285,7 +307,7 @@ void main() {
           for (final row in owned) {
             final id = row['id'];
             if (id is String && id.isNotEmpty) {
-              await verifier.deleteProject(id);
+              await verifier.deleteProject(id, canDispatch: () => true);
             }
           }
         } catch (error) {
@@ -308,21 +330,25 @@ void main() {
     (tester) async {
       expect(port, greaterThan(0), reason: 'Supply HERMES_TEST_PORT');
       SharedPreferences.setMockInitialValues({});
-      final editorGateway = ProfileGateway.forConnection(
-        connection(),
-        scope('profile-admin-editor'),
+      final editorStatus = ServerConnectionStatus(connection().label);
+      final verifierStatus = ServerConnectionStatus(connection().label);
+      final editorServer = AdministrationRepository.forConnection(
+        ConnectionAccess(connection: connection(), dashboardOAuth: null),
+        'profile-admin-editor',
+        connectionStatus: editorStatus,
       );
-      final verifier = ProfileGateway.forConnection(
-        connection(),
-        scope('profile-admin-editor-verifier'),
+      final verifierServer = AdministrationRepository.forConnection(
+        ConnectionAccess(connection: connection(), dashboardOAuth: null),
+        'profile-admin-editor-verifier',
+        connectionStatus: verifierStatus,
       );
+      final editorProfile = editorServer.profile('android-qa-a');
+      final verifierProfile = verifierServer.profile('android-qa-a');
       final nonce = DateTime.now().microsecondsSinceEpoch;
-      Map<String, dynamic>? original;
+      ProfileIdentityObservation? original;
       Object? cleanupFailure;
       try {
-        await editorGateway.connect();
-        await verifier.connect();
-        original = await describe(verifier);
+        original = await describe(verifierProfile);
         final description = 'Android live description $nonce';
         final soul = 'Android live SOUL $nonce\nPreserve this newline.\n';
         await tester.pumpWidget(
@@ -333,8 +359,8 @@ void main() {
                   child: FilledButton(
                     onPressed: () => showAdminIdentityEditor(
                       context,
-                      gateway: editorGateway,
-                      connectionLabel: connection().label,
+                      createSession: () =>
+                          ProfileIdentityEditSession(editorProfile),
                     ),
                     child: const Text('Edit profile'),
                   ),
@@ -369,26 +395,35 @@ void main() {
               .isEmpty,
         );
 
-        final reloaded = await describe(verifier);
-        expect(reloaded['description'], description);
-        expect(reloaded['soul'], soul);
+        final reloaded = await describe(verifierProfile);
+        expect(reloaded.values[ProfileIdentityField.description], description);
+        expect(reloaded.values[ProfileIdentityField.soul], soul);
       } finally {
         try {
           if (original != null) {
             await configure(
-              verifier,
-              description: original['description'] as String,
-              soul: original['soul'] as String,
+              verifierProfile,
+              description: original.values[ProfileIdentityField.description]!,
+              soul: original.values[ProfileIdentityField.soul]!,
             );
-            final restored = await describe(editorGateway);
-            expect(restored['description'], original['description']);
-            expect(restored['soul'], original['soul']);
+            final restored = await describe(editorProfile);
+            expect(
+              restored.values[ProfileIdentityField.description],
+              original.values[ProfileIdentityField.description],
+            );
+            expect(
+              restored.values[ProfileIdentityField.soul],
+              original.values[ProfileIdentityField.soul],
+            );
           }
         } catch (error) {
           cleanupFailure = error;
         } finally {
-          verifier.close();
-          editorGateway.close();
+          await tester.pumpWidget(const SizedBox.shrink());
+          verifierServer.close();
+          editorServer.close();
+          verifierStatus.dispose();
+          editorStatus.dispose();
         }
         if (cleanupFailure != null) {
           fail('Profile editor live cleanup failed: $cleanupFailure');

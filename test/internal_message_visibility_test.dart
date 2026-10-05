@@ -1,3 +1,10 @@
+import 'package:wing/core/models/transcript_timeline.dart';
+import 'package:wing/core/services/chat_reading_session.dart';
+import 'package:wing/core/models/transcript_message.dart';
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/answer_versions.dart';
@@ -8,7 +15,6 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/widgets/chat_find_sheet.dart';
 import 'package:wing/core/services/profile_gateway.dart';
-import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'helpers/pump_markdown_widget.dart';
 
@@ -154,19 +160,21 @@ void main() {
   testWidgets('process heartbeat never renders a chat bubble', (tester) async {
     const row = {'role': 'user', 'content': _processHeartbeat};
     await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(body: ProfileMessage(message: row)),
+      MaterialApp(
+        home: Scaffold(
+          body: ProfileMessage(message: TranscriptMessage.fromRow(row)),
+        ),
       ),
     );
     expect(find.textContaining('heartbeat #9'), findsNothing);
     expect(find.byTooltip('Copy message'), findsNothing);
-    final sections = groupTranscriptSections([
+    final sections = TranscriptTimeline.project([
       {'id': 1, 'role': 'tool', 'content': 'first'},
       row,
       {'id': 2, 'role': 'tool', 'content': 'second'},
-    ]);
+    ], presentationId: (_) => Object()).sections;
     expect(sections, hasLength(1));
-    expect(sections.single.messages.map((row) => row['id']), [1, 2]);
+    expect(sections.single.messages.map((row) => row.message.id), [1, 2]);
   });
 
   test('technical envelopes are hidden across message encodings', () {
@@ -237,20 +245,22 @@ void main() {
   ) async {
     const row = {'role': 'user', 'content': _continuationEnvelope};
     await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(body: ProfileMessage(message: row)),
+      MaterialApp(
+        home: Scaffold(
+          body: ProfileMessage(message: TranscriptMessage.fromRow(row)),
+        ),
       ),
     );
     expect(find.textContaining(_continuationHeader), findsNothing);
     expect(find.byTooltip('Copy message'), findsNothing);
     expect(answerMessageText(row), _continuationEnvelope);
-    final sections = groupTranscriptSections([
+    final sections = TranscriptTimeline.project([
       {'id': 1, 'role': 'tool', 'content': 'first'},
       row,
       {'id': 2, 'role': 'tool', 'content': 'second'},
-    ]);
+    ], presentationId: (_) => Object()).sections;
     expect(sections, hasLength(1));
-    expect(sections.single.messages.map((row) => row['id']), [1, 2]);
+    expect(sections.single.messages.map((row) => row.message.id), [1, 2]);
   });
 
   for (final width in [360.0, 900.0]) {
@@ -265,7 +275,10 @@ void main() {
           home: Scaffold(
             body: SingleChildScrollView(
               child: ProfileMessage(
-                message: {'role': 'user', 'content': processBatchEnvelope},
+                message: TranscriptMessage.fromRow({
+                  'role': 'user',
+                  'content': processBatchEnvelope,
+                }),
               ),
             ),
           ),
@@ -295,9 +308,14 @@ void main() {
         'completed normally (exit code 0).\n'
         'Command: env -u ANTHROPIC_API_KEY claude --print\nOutput:\n]';
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: Scaffold(
-          body: ProfileMessage(message: {'role': 'user', 'content': envelope}),
+          body: ProfileMessage(
+            message: TranscriptMessage.fromRow({
+              'role': 'user',
+              'content': envelope,
+            }),
+          ),
         ),
       ),
     );
@@ -312,7 +330,9 @@ void main() {
       final row = _notice();
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(body: ProfileMessage(message: row)),
+          home: Scaffold(
+            body: ProfileMessage(message: TranscriptMessage.fromRow(row)),
+          ),
         ),
       );
       expect(find.text(_envelope), findsNothing);
@@ -338,21 +358,27 @@ void main() {
       addTearDown(tester.view.reset);
       SharedPreferences.setMockInitialValues({});
       final host = _NoticeHistory();
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: identityTestConnection(),
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
         connectionIdentity: 'notice-history',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: host.gateway,
       );
       addTearDown(controller.dispose);
       await controller.initialize();
-      final chat = ProfileChat(
+      final chat = await openFixtureChat(
+        controller: controller,
         key: ProfileSessionKey(controller.current!.scope, 'chat-0'),
-        runtimeId: '',
         title: 'Notice history',
       );
-      controller.current!.chats['chat-0'] = chat;
-      controller.current!.selectedSession = 'chat-0';
+
       await controller.refreshHistory(chat);
       await tester.pumpWidget(
         MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
@@ -385,7 +411,7 @@ void main() {
         expect(find.textContaining('heartbeat #9'), findsNothing);
         expect(find.byKey(const ValueKey('edit-message-13')), findsNothing);
         // Retain server history and IDs for paging/rewind; filter only the view.
-        expect(chat.messages.map((row) => row['id']), [
+        expect(chat.reading.messages.map((row) => row['id']), [
           1,
           2,
           3,
@@ -411,7 +437,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: ChatFindSheet(
+        home: _findSheet(
           loadHistory: (_) async => ProfileHistoryPage(
             'chat',
             _NoticeHistory().historyRows('default', 'chat'),
@@ -461,7 +487,9 @@ void main() {
         final delivery = transcriptUserDelivery(row)!;
         await tester.pumpWidget(
           MaterialApp(
-            home: Scaffold(body: ProfileMessage(message: row)),
+            home: Scaffold(
+              body: ProfileMessage(message: TranscriptMessage.fromRow(row)),
+            ),
           ),
         );
         expect(find.text(envelope), findsNothing);
@@ -582,13 +610,13 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: Scaffold(
           body: ProfileMessage(
-            message: {
+            message: TranscriptMessage.fromRow({
               'role': 'system',
               'content': 'slash:/model\nModel changed',
-            },
+            }),
           ),
         ),
       ),
@@ -603,7 +631,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: ChatFindSheet(
+        home: _findSheet(
           loadHistory: (_) async => ProfileHistoryPage(
             'chat',
             _NoticeHistory().historyRows('default', 'chat'),
@@ -650,13 +678,13 @@ void main() {
       'content': 'private',
       'display_kind': 'hidden',
     };
-    final sections = groupTranscriptSections([
+    final sections = TranscriptTimeline.project([
       {'id': 1, 'role': 'tool', 'content': 'first'},
       hidden,
       {'id': 3, 'role': 'tool', 'content': 'second'},
-    ]);
+    ], presentationId: (_) => Object()).sections;
     expect(sections, hasLength(1));
-    expect(sections.single.messages.map((row) => row['id']), [1, 3]);
+    expect(sections.single.messages.map((row) => row.message.id), [1, 3]);
     expect(isAnswerPrompt(hidden), isFalse);
   });
 
@@ -764,7 +792,13 @@ void main() {
         expect(transcriptNoticeKind(row), isNull);
         expect(isAnswerPrompt(row), isTrue);
         expect(isHiddenAnswerMessage(row), isFalse);
-        expect(groupTranscriptSections([row]).single.messages.single, row);
+        final message = TranscriptTimeline.project(
+          [row],
+          presentationId: (_) => Object(),
+        ).sections.single.messages.single.message;
+        expect(message.role, 'user');
+        expect(message.kind, TranscriptMessageKind.dialogue);
+        expect(message.text, text);
       }
       expect(
         transcriptNoticeKind({'role': 'assistant', 'content': _envelope}),
@@ -789,4 +823,21 @@ void main() {
     expect(target.userOrdinal, 0);
     expect(target.prompt, 'Compare the options');
   });
+}
+
+Widget _findSheet({
+  required Future<ProfileHistoryPage> Function(int) loadHistory,
+}) => ChatFindSheet(
+  createSession: () => ChatReadingSession(_FindSource(loadHistory)),
+);
+
+final class _FindSource extends ChangeNotifier implements ChatReadingSource {
+  _FindSource(this.loadHistory);
+  final Future<ProfileHistoryPage> Function(int) loadHistory;
+  @override
+  bool get current => true;
+  @override
+  Future<ProfileHistoryPage> load(int offset) => loadHistory(offset);
+  @override
+  bool show(ProfileHistoryPage page, int rowId) => true;
 }

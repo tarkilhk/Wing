@@ -1,3 +1,25 @@
+# Maintainability purpose
+
+Make Wing easy to maintain and change, with clear module boundaries that let
+agents work independently. Keep this purpose in view throughout each task.
+
+- Give each business fact and workflow one explicit owner. Views render immutable
+  observations and forward user intent; owners decide, persist and coordinate I/O.
+- Prefer small interfaces that hide implementation details. Keep changes local to
+  the responsible module and remove superseded code after checking its callers.
+- Protect each incorrect pattern encountered with a small, deterministic linter
+  where feasible. Use behavioral regressions for properties static checks cannot
+  establish, such as lifetime, uncertainty and asynchronous ordering.
+- Prioritize completed production migrations and dead-code removal. Run focused
+  checks for each change and broad verification at integration milestones.
+- For parallel work, assign explicit module/file ownership and integrate bounded
+  handoffs before starting dependent changes.
+
+Before changing ownership, read [the architecture map](docs/ARCHITECTURE.md).
+For the active cleanup program, follow [the implementation plan](plans/001-clean-architecture-program.md)
+and its completion criteria. Report progress as accepted responsibility moves,
+removed code and remaining obligations.
+
 # Hermes deployment constraint
 
 Wing targets **the latest upstream, unmodified Hermes**, including changes on

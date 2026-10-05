@@ -1,6 +1,13 @@
+import '../services/profile_supervision_session.dart';
+import '../widgets/deleted_chat_recovery_notice.dart';
+import '../services/chat_browser_data.dart';
+import '../services/completion_diagnostics.dart';
+import '../models/transcript_timeline.dart';
+import 'package:wing/core/services/chat_outputs_session.dart';
+import '../models/profile_session_key.dart';
+import 'package:wing/core/models/model_choice.dart';
 import '../models/side_question_delivery.dart';
 import '../services/workspace_connection_failure.dart';
-import '../services/server_connection_status.dart';
 import '../widgets/server_connection_label.dart';
 import '../widgets/workspace_picker.dart';
 import '../widgets/workspace_profile_navigation.dart';
@@ -17,35 +24,34 @@ import '../services/background_monitoring_service.dart';
 import 'package:flutter/services.dart';
 
 import '../services/profile_workspace_controller.dart';
+import '../models/chat_reading.dart';
 import '../services/image_clipboard.dart';
 import '../widgets/image_paste_menu.dart';
 import '../models/composer_action.dart';
 import '../widgets/composer_action_button.dart';
 import '../widgets/composer_attachment_tile.dart';
-import '../services/remote_files_client.dart';
-import '../services/remote_file_saver.dart';
+import '../presentation/attachment_preview_image.dart';
+import '../services/owned_remote_files.dart';
 import '../widgets/profile_message.dart';
 import '../widgets/profile_transcript_disclosure.dart';
 import '../widgets/anchored_expansion_tile.dart';
 import '../widgets/profile_activity_tabs.dart';
 import '../models/gateway_todo.dart';
 import '../widgets/profile_queued_messages.dart';
-import '../models/queued_prompt_draft.dart';
+import '../models/composer_work.dart';
 import '../models/answer_versions.dart';
-import '../models/transcript_notice.dart';
 import '../models/chat_output.dart';
 import '../widgets/answer_actions.dart';
-import '../models/gateway_clarify.dart';
-import '../models/gateway_approval.dart';
 import '../widgets/gateway_approval_panel.dart';
 import '../widgets/gateway_sensitive_prompt_panel.dart';
 import '../widgets/gateway_clarify_dialog.dart';
 import '../widgets/chat_find_sheet.dart';
 import '../theme/profile_workspace_theme.dart';
+import '../theme/app_preferences_rendering.dart';
+import '../services/app_preferences.dart';
 import '../theme/wing_theme.dart';
 import '../widgets/profile_activity_status.dart';
 import '../widgets/chat_intelligence_picker.dart';
-import '../widgets/model_chooser.dart';
 import '../widgets/chat_model_confirmation.dart';
 import '../widgets/context_ring.dart';
 import '../widgets/profile_execution_activity.dart';
@@ -65,10 +71,10 @@ import 'analytics_content.dart';
 import 'administration/admin_widgets.dart' show adminToolbarHeight;
 import 'workspace_overview_content.dart';
 import '../controllers/voice_input_controller.dart';
+import '../models/voice_processing_settings.dart';
 import '../controllers/voice_output_controller.dart';
 import '../services/android_voice.dart';
-import '../services/hermes_voice.dart';
-import '../services/voice_preferences.dart';
+import '../services/voice_preferences_session.dart';
 import 'administration/voice_settings_navigation.dart';
 import 'administration/provider_access_navigation.dart';
 
@@ -117,12 +123,13 @@ class ProfileWorkspaceScreen extends StatefulWidget {
 class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     with WidgetsBindingObserver {
   ProfileWorkspaceController get controller => widget.controller;
+  (ProfileWorkspaceController, ChatReadingFocus)? _renderedReadingFocus;
   final _composer = TextEditingController();
   final _profileNavigation = WorkspaceProfileNavigation();
   final _composerFocus = FocusNode();
   final _chatSearchFocus = FocusNode();
   final _queuedEditErrors = <ProfileSessionKey, String>{};
-  final _fileReads = <RemoteFilesClient>{};
+  final _fileReads = <OwnedRemoteFiles>{};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   int _settingsRevision = 0;
   ProfileSessionKey? _composerKey;
@@ -143,14 +150,15 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   Map<String, GlobalKey> _chatNotificationAnchors(ProfileChat chat) {
     final ids = <String>[
-      if (chat.error != null && chat.notificationReadTarget?.kind == 'status')
-        chat.notificationReadTarget!.identity,
-      for (final request in chat.approvals.requests)
-        "approval:${request['request_id']}",
-      if (chat.pendingQuestion != null)
-        "question:${chat.pendingQuestion!['request_id']}",
-      if (chat.sensitivePrompt != null)
-        'secure:${chat.sensitivePrompt!.requestId}',
+      if (chat.runtime.error != null &&
+          chat.reading.notificationReadTarget?.kind == 'status')
+        chat.reading.notificationReadTarget!.identity,
+      for (final request in chat.runtime.approvals)
+        "approval:${request.requestId}",
+      if (chat.runtime.pendingQuestion != null)
+        "question:${chat.runtime.pendingQuestion!.requestId}",
+      if (chat.runtime.secureInput != null)
+        'secure:${chat.runtime.secureInput!.requestId}',
       for (final delivery in chat.sideQuestionDeliveries)
         '${delivery.kind == SideQuestionDeliveryKind.backgroundTask ? 'background' : 'side'}:${delivery.taskId ?? ''}',
     ];
@@ -160,35 +168,45 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     };
   }
 
-  ChatFindResult? _findResult;
-  ProfileSessionKey? _findOwner;
-  int? _findHistoryGeneration;
-  int _findRequestGeneration = 0;
+  ProfileSupervisionSession? _supervision;
+  ProfileChat? _supervisionChat;
+  ProfileSupervisionSession _supervisionFor(ProfileChat chat) {
+    if (!identical(_supervisionChat, chat) || _supervision?.active != true) {
+      _supervision?.dispose();
+      _supervisionChat = chat;
+      _supervision = ProfileSupervisionSession(
+        controller: controller,
+        chat: chat,
+      );
+    }
+    return _supervision!;
+  }
+
+  void _supervisionWorkspaceChanged() {
+    final current = controller.notificationChat ?? controller.current?.chat;
+    if (_supervision != null &&
+        (!identical(current, _supervisionChat) || !_supervision!.active)) {
+      _supervision!.dispose();
+      _supervision = null;
+      _supervisionChat = null;
+    }
+  }
+
   bool _launchingCamera = false;
-  ProfileSessionKey? _voiceOwner;
   late final _voiceInput = VoiceInputController(
     device: widget.voiceDevice ?? AndroidVoice.instance,
-    createRemote: () => HermesVoice.forConnection(
-      controller.connection,
-      _voiceOwner!.workspace.profileName,
-    ),
   );
   late final _voiceOutput = VoiceOutputController(
     widget.voiceDevice ?? AndroidVoice.instance,
   );
 
-  void _voiceWorkspaceChanged() {
-    final current = controller.notificationChat ?? controller.current?.chat;
-    if (_voiceOwner != null &&
-        (_voiceOwner != current?.key ||
-            controller.switching ||
-            current?.editingQueuedPrompt != null)) {
-      _cancelVoice();
-    }
+  void _syncVoiceTarget() {
+    final target = controller.voiceTarget;
+    _voiceInput.retainTarget(target);
+    _voiceOutput.retainTarget(target);
   }
 
   void _cancelVoice() {
-    _voiceOwner = null;
     unawaited(_voiceInput.cancel().catchError((Object _) {}));
     unawaited(_voiceOutput.stop().catchError((Object _) {}));
   }
@@ -196,14 +214,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   VoidCallback? _hermesSpeechSettingsLink(BuildContext context) {
     final profile = controller.current?.scope.profileName;
     if (profile == null) return null;
-    final connection = controller.connection;
+    final access = controller.access;
     final identity = controller.connectionIdentity;
     final status = controller.connectionStatus;
     return () => unawaited(
       _run(
         () => openProfileVoiceSettings(
           context,
-          connection: connection,
+          access: access,
           connectionIdentity: identity,
           connectionStatus: status,
           profileName: profile,
@@ -212,64 +230,45 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     );
   }
 
-  Future<void> _dictate(ProfileChat chat) async {
-    await _voiceOutput.stop();
-    if (!mounted ||
-        (controller.notificationChat ?? controller.current?.chat) != chat ||
-        controller.switching) {
-      return;
-    }
-    _voiceOwner = chat.key;
-    final original = _composer.value;
+  Future<void> _requestDictation(ProfileChat chat) async {
+    final capture = controller.captureVoiceDraft(chat);
+    final selection = _composer.selection;
     _composerFocus.unfocus();
-    await _voiceInput.start(
-      VoicePreferences.read(controller.preferences),
-      original,
-      (result) {
-        final current = controller.notificationChat ?? controller.current?.chat;
-        if (!mounted ||
-            _voiceOwner != chat.key ||
-            current != chat ||
-            _destination != AppDestination.chats) {
-          return;
-        }
-        if (_composer.text != original.text) {
-          showStudioError(
-            context,
-            'The draft changed while recording. Please dictate again.',
-          );
-          return;
-        }
-        _composer.value = result;
-        unawaited(_run(() => controller.updateDraft(chat, result.text)));
+    await _voiceInput.dictate(
+      target: chat.key,
+      draft: VoiceDraft(
+        text: capture.text,
+        selectionStart: selection.start,
+        selectionEnd: selection.end,
+      ),
+      settings: () => controller.appPreferences.current.voiceInputSettings,
+      stopPlayback: _voiceOutput.stop,
+      admitsTarget: (target) => controller.admitsDictation(chat, target),
+      admitPresentation: () => mounted && _destination == AppDestination.chats,
+      createRemote: (target) => controller.voiceForChat(chat, target),
+      applyDraft: (text) => controller.applyVoiceDraft(chat, capture, text),
+      onApplied: (result) {
+        _composer.value = TextEditingValue(
+          text: result.text,
+          selection: TextSelection.collapsed(offset: result.selectionEnd),
+        );
       },
+      onNotice: (message) => showStudioError(context, message),
     );
   }
 
-  Future<void> _readAloud(
+  Future<void> _requestReadAloud(
     ProfileChat chat,
     Map<String, dynamic> message,
-  ) async {
-    final owner = (chat.key, answerMessageId(message) ?? message);
-    if (_voiceOutput.owner == owner) {
-      await _voiceOutput.stop();
-      return;
-    }
-    await _voiceInput.cancel();
-    if (!mounted ||
-        (controller.notificationChat ?? controller.current?.chat) != chat) {
-      return;
-    }
-    _voiceOwner = chat.key;
-    final connection = controller.connection;
-    final profile = chat.key.workspace.profileName;
-    await _voiceOutput.speak(
-      owner,
-      answerMessageText(message),
-      VoicePreferences.read(controller.preferences),
-      () => HermesVoice.forConnection(connection, profile),
-    );
-  }
+  ) => _voiceOutput.readAloud(
+    reply: controller.voiceReply(chat, message),
+    settings: () => controller.appPreferences.current.voiceOutputSettings,
+    cancelDictation: _voiceInput.cancel,
+    admitsTarget: (target) => controller.admitsVoice(chat, target),
+    admitPresentation: () => mounted,
+    createRemote: (target) => controller.voiceForChat(chat, target),
+    onNotice: (notice) => showStudioError(context, notice),
+  );
 
   Widget _voiceActivity() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -339,12 +338,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   );
 
   bool _canPasteImage(ProfileChat chat) =>
-      controller.canAddAttachment(chat) &&
-      chat.editingQueuedPrompt == null &&
-      !chat.changingAnswer &&
-      !chat.commandRunning &&
-      !controller.switching &&
-      !_launchingCamera;
+      controller.canAddAttachment(chat) && !_launchingCamera;
   late AppDestination _destination;
   AppDestination? _chatOrigin;
   WorkspaceActivityFilter _recentFilter = WorkspaceActivityFilter.all;
@@ -371,7 +365,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     _appIsActive =
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
-    controller.addListener(_voiceWorkspaceChanged);
+    controller.addListener(_syncVoiceTarget);
+    controller.addListener(_supervisionWorkspaceChanged);
     WidgetsBinding.instance.addObserver(this);
     controller.setRouteMounted(this, true);
     controller.setRouteVisibility(this, _hasChatFocus);
@@ -399,7 +394,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
     if (widget.initialQuickChat) {
       await _run(() async {
-        await controller.createChat();
+        await controller.createChat(canDispatch: () => mounted);
         if (mounted) setState(() {});
       });
     }
@@ -415,6 +410,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       _cancelVoice();
     }
     final active = state == AppLifecycleState.resumed;
+    _supervision?.setActive(active);
     if (_appIsActive != active) {
       // A notification handoff can render the answer while inactive. Rebuild
       // on resume so the transcript checks its visibility again.
@@ -446,11 +442,16 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   @override
   void dispose() {
+    if (_renderedReadingFocus case final rendered?) {
+      rendered.$1.releaseReadingFocus(rendered.$2);
+    }
     for (final files in _fileReads) {
-      files.close();
+      files.dispose();
     }
     _fileReads.clear();
-    controller.removeListener(_voiceWorkspaceChanged);
+    controller.removeListener(_syncVoiceTarget);
+    controller.removeListener(_supervisionWorkspaceChanged);
+    _supervision?.dispose();
     _voiceInput.dispose();
     _voiceOutput.dispose();
     controller.setRouteVisibility(this, false);
@@ -464,23 +465,26 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   }
 
   @override
-  Widget build(BuildContext context) => Theme(
-    data: profileWorkspaceTheme(
-      Theme.of(context),
-      accent: WorkspaceAccent.fromName(
-        controller.preferences.getString(WorkspaceAccent.preferenceKey),
-      ),
-    ),
-    child: ServerConnectionScope(
-      key: ValueKey(_destination),
-      status: controller.connectionStatus,
-      icon: controller.connection.icon,
-      profileNavigation: _profileNavigation,
-      onPickWorkspace: (anchor, {required mode}) =>
-          unawaited(_pickWorkspace(anchor, mode: mode)),
-      child: Builder(builder: (context) => _buildWorkspace(context)),
-    ),
-  );
+  Widget build(BuildContext context) =>
+      ValueListenableBuilder<AppPreferencesState>(
+        valueListenable: controller.appPreferences.state,
+        builder: (context, preferences, _) => Theme(
+          data: profileWorkspaceTheme(
+            Theme.of(context),
+            accent:
+                preferences.values.accent?.appearance ?? WorkspaceAccent.teal,
+          ),
+          child: ServerConnectionScope(
+            key: ValueKey(_destination),
+            status: controller.connectionStatus,
+            icon: controller.connection.icon,
+            profileNavigation: _profileNavigation,
+            onPickWorkspace: (anchor, {required mode}) =>
+                unawaited(_pickWorkspace(anchor, mode: mode)),
+            child: Builder(builder: (context) => _buildWorkspace(context)),
+          ),
+        ),
+      );
 
   Future<void> _pickWorkspace(
     BuildContext anchor, {
@@ -569,17 +573,18 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   void _syncComposer(ProfileChat? chat) {
     if (_composerKey != chat?.key ||
-        _composer.text != (chat?.composerText ?? '')) {
+        _composer.text != (chat?.composer.observation.displayedText ?? '')) {
       _composerKey = chat?.key;
       _composer.value = TextEditingValue(
-        text: chat?.composerText ?? '',
+        text: chat?.composer.observation.displayedText ?? '',
         selection: TextSelection.collapsed(
-          offset: chat?.composerText.length ?? 0,
+          offset: chat?.composer.observation.displayedText.length ?? 0,
         ),
       );
     }
   }
 
+  ProfileWorkspaceController? _browserOwner;
   ProfileWorkspaceBrowser? _browser;
 
   Widget _buildWorkspace(BuildContext context) => ListenableBuilder(
@@ -596,10 +601,18 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         // Transcript notifications must not recreate the Chats subtree.
         // Leaving the list or changing its owner starts a fresh visit.
         if (_browser?.key != ValueKey(current?.scope) ||
-            _browser?.controller != controller) {
+            _browserOwner != controller) {
+          _browserOwner = controller;
           _browser = ProfileWorkspaceBrowser(
             key: ValueKey(current?.scope),
-            controller: controller,
+            createData: () => ChatBrowserData(controller),
+            connectionLabel: controller.connection.label,
+            connectionIcon: controller.connection.icon,
+            connectionStatus: controller.connectionStatus,
+            createColors: controller.createProfileColors,
+            deletionRecovery: DeletedChatRecoveryNotice(
+              presentation: controller.deletedDraftCleanupPresentation,
+            ),
             newProject: _projectDialog,
             drawer: _drawer(),
             searchFocusNode: _chatSearchFocus,
@@ -613,19 +626,24 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           MediaQuery.textScalerOf(context).scale(12) > 18 &&
           MediaQuery.sizeOf(context).width < 480;
       final canMoveProject =
-          !chat.opening &&
-          !chat.offlineSnapshot &&
+          !chat.runtime.opening &&
+          !chat.runtime.offline &&
           !controller.switching &&
           !(current?.mutatingSessions.contains(chat.key.sessionId) ?? false);
       void openProjectPicker() => unawaited(
-        _run(
-          () => showChatProjectPicker(
-            context,
-            controller,
-            chat.key,
-            currentProjectId: chat.projectId,
-          ),
-        ),
+        _run(() async {
+          final browser = ChatBrowserData(controller);
+          try {
+            final issued = browser.projectPickerFor(chat.key);
+            try {
+              if (mounted) await showChatProjectPicker(context, issued);
+            } finally {
+              issued.dispose();
+            }
+          } finally {
+            browser.dispose();
+          }
+        }),
       );
       return PopScope(
         canPop: false,
@@ -633,7 +651,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           if (!didPop) {
             if (_scaffoldKey.currentState?.isDrawerOpen == true) {
               unawaited(SystemNavigator.pop());
-            } else if (chat.editingQueuedPrompt != null) {
+            } else if (chat.composer.observation.editingEntry != null) {
               unawaited(_run(() => controller.cancelQueuedPromptEdit(chat)));
             } else {
               _leaveChat();
@@ -684,7 +702,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                               fontWeight: FontWeight.w400,
                             );
                         final projectLabel =
-                            chat.opening || chat.offlineSnapshot
+                            chat.runtime.opening || chat.runtime.offline
                             ? chat.key.workspace.profileName
                             : controller.chatProjectLabel(chat);
                         final server = ServerConnectionLabel(
@@ -784,8 +802,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     unawaited(
                       _openWorkDetails(
                         ProfileSubagentPanel(
-                          controller: controller,
-                          chat: chat,
+                          session: _supervisionFor(chat),
                           initiallyExpanded: true,
                         ),
                       ),
@@ -794,8 +811,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     unawaited(
                       _openWorkDetails(
                         ProfileGoalPanel(
-                          controller: controller,
-                          chat: chat,
+                          session: _supervisionFor(chat),
                           initiallyExpanded: true,
                         ),
                       ),
@@ -804,8 +820,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     unawaited(
                       _openWorkDetails(
                         ProfileBackgroundWorkPanel(
-                          controller: controller,
-                          chat: chat,
+                          session: _supervisionFor(chat),
                           initiallyExpanded: true,
                         ),
                       ),
@@ -848,8 +863,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               WorkspaceConnectionStatus(
                 status: controller.connectionStatus,
                 showHint:
-                    chat.openingError == null &&
-                    (!chat.opening || chat.messages.isNotEmpty),
+                    chat.runtime.openingError == null &&
+                    (!chat.runtime.opening || chat.reading.messages.isNotEmpty),
               ),
               if (controller.error != null)
                 MaterialBanner(
@@ -861,10 +876,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     ),
                   ],
                 ),
-              if (chat.openingError != null && chat.messages.isNotEmpty)
+              if (chat.runtime.openingError != null &&
+                  chat.reading.messages.isNotEmpty)
                 MaterialBanner(
                   forceActionsBelow: true,
-                  content: StudioError(chat.openingError!),
+                  content: StudioError(chat.runtime.openingError!),
                   actions: [
                     TextButton(
                       onPressed: () => _run(controller.resumeConnection),
@@ -893,69 +909,34 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   );
 
   Future<void> _openFind(ProfileChat chat) async {
-    final owner = chat.key;
-    final historyGeneration = chat.historyGeneration;
-    final requestGeneration = ++_findRequestGeneration;
-    final result = await showChatFindSheet(
+    await showChatFindSheet(
       context,
-      loadHistory: (offset) =>
-          controller.savedHistoryPage(chat, offset: offset),
+      createSession: () => controller.openReadingSession(chat),
     );
-    if (!mounted ||
-        result == null ||
-        requestGeneration != _findRequestGeneration ||
-        controller.current?.chat != chat ||
-        chat.key != owner ||
-        chat.historyGeneration != historyGeneration ||
-        result.page.sessionId !=
-            (chat.historySessionId ?? chat.key.sessionId)) {
-      return;
-    }
-    setState(() {
-      _findResult = result;
-      _findOwner = owner;
-      _findHistoryGeneration = historyGeneration;
-    });
   }
 
-  ChatFindResult? _activeFindResult(ProfileChat chat) {
-    if (_findOwner != chat.key ||
-        _findHistoryGeneration != chat.historyGeneration) {
-      return null;
+  ChatReadingFocus? _readingFocus(ProfileChat chat) {
+    final focus = controller.readingFocus(chat);
+    if (focus != null) {
+      _renderedReadingFocus = (controller, focus);
     }
-    return _findResult;
-  }
-
-  void _backToLatest() {
-    setState(() {
-      final owner = _findOwner;
-      final chat = controller.current?.chat;
-      if (owner != null && chat?.key == owner) {
-        chat!.historyScrollOffset = 0;
-      }
-      _findResult = null;
-      _findOwner = null;
-      _findHistoryGeneration = null;
-    });
+    return focus;
   }
 
   Future<void> _openOutputs(ProfileChat chat) async {
     final files = _retainOutputFiles(chat);
-    final owner = chat.key;
-    final ownedFiles = OwnedRemoteFiles(
-      source: files,
-      profileName: owner.workspace.profileName,
-      storedSessionId: owner.sessionId,
-    );
+    final ownedFiles = files;
     try {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => ChatOutputsScreen(
             chatTitle: chat.title,
-            loadHistory: (offset) =>
-                controller.savedHistoryPage(chat, offset: offset),
-            download: ownedFiles.download,
-            readText: ownedFiles.readText,
+            createSession: () => ChatOutputsSession(
+              loadHistory: (offset) =>
+                  controller.savedHistoryPage(chat, offset: offset),
+              download: ownedFiles.download,
+              readText: ownedFiles.readText,
+            ),
           ),
         ),
       );
@@ -965,23 +946,20 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   }
 
   Future<void> _openAnswerOutput(ProfileChat chat, ChatOutput output) async {
-    final owner = chat.key;
     final files = _retainOutputFiles(chat);
-    final ownedFiles = OwnedRemoteFiles(
-      source: files,
-      profileName: owner.workspace.profileName,
-      storedSessionId: owner.sessionId,
-    );
+    final ownedFiles = files;
     try {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => ChatOutputsScreen(
             chatTitle: chat.title,
             initialOutput: output,
-            loadHistory: (offset) =>
-                controller.savedHistoryPage(chat, offset: offset),
-            download: ownedFiles.download,
-            readText: ownedFiles.readText,
+            createSession: () => ChatOutputsSession(
+              loadHistory: (offset) =>
+                  controller.savedHistoryPage(chat, offset: offset),
+              download: ownedFiles.download,
+              readText: ownedFiles.readText,
+            ),
           ),
         ),
       );
@@ -997,66 +975,46 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     final owner = chat.key;
     final files = _retainOutputFiles(chat);
     try {
-      final file = await OwnedRemoteFiles(
-        source: files,
-        profileName: owner.workspace.profileName,
-        storedSessionId: owner.sessionId,
-      ).download(output.path!);
-      // A completed network request must not open a picker over another chat.
-      if (!mounted ||
-          controller.current?.chat?.key != owner ||
-          ModalRoute.of(context)?.isCurrent != true) {
-        return false;
-      }
-      return await saveRemoteFile(file);
+      return await files.downloadAndSave(
+        output.path!,
+        admitPresentation: () =>
+            mounted &&
+            controller.current?.chat?.key == owner &&
+            ModalRoute.of(context)?.isCurrent == true,
+      );
     } finally {
       _releaseOutputFiles(files);
     }
   }
 
   Future<Uint8List> _loadAttachmentImage(ProfileChat chat, String path) async {
-    final owner = chat.key;
     final files = _retainOutputFiles(chat);
     try {
-      return (await files.download(
-        path,
-        profileName: owner.workspace.profileName,
-        storedSessionId: owner.sessionId,
-      )).bytes;
+      return (await files.download(path)).bytes;
     } finally {
       _releaseOutputFiles(files);
     }
   }
 
-  RemoteFilesClient _retainOutputFiles(ProfileChat chat) {
+  OwnedRemoteFiles _retainOutputFiles(ProfileChat chat) {
     final files = controller.outputFiles(chat);
     _fileReads.add(files);
     return files;
   }
 
-  void _releaseOutputFiles(RemoteFilesClient files) {
-    if (_fileReads.remove(files)) files.close();
+  void _releaseOutputFiles(OwnedRemoteFiles files) {
+    if (_fileReads.remove(files)) files.dispose();
   }
 
   Widget _questionPanel(ProfileChat chat) {
-    final payload = chat.clarification!;
-    final questions = GatewayClarifyRequest.fromEventDataList(payload);
-    final pending = chat.pendingQuestion!;
-    final index = questions.indexWhere(
-      (q) => q.questionId == pending['question_id'],
-    );
-    if (index < 0) {
-      return const Text(
-        'This question could not be displayed. Refresh to try again.',
-      );
-    }
-    final question = questions[index];
+    final payload = chat.runtime.questions!;
+    final question = payload.pending!;
+    final index = payload.pendingNumber - 1;
     return GatewayClarifyDialog(
       key: ValueKey((chat.key, question.requestId, question.questionId)),
-      inline: true,
       request: question,
       number: index + 1,
-      total: questions.length,
+      total: payload.questions.length,
       onRespond: (answer) =>
           controller.clarify(chat, answer, expectedRequest: payload),
     );
@@ -1064,23 +1022,21 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   Widget _answer(
     ProfileChat chat,
-    Map<String, dynamic> message, {
+    TranscriptTimelineEntry entry, {
+    required List<Map<String, dynamic>> capturedRows,
     bool allowSavedActions = true,
-    bool streaming = false,
   }) {
-    if (isHiddenAnswerMessage(message)) return const SizedBox.shrink();
-    final reasoning = profileMessageReasoning(message);
-    final displayedHistory =
-        _activeFindResult(chat)?.page.rows ?? chat.messages;
-    final sender = streaming
-        ? null
-        : interAgentReplySender(
-            displayedHistory,
-            displayedHistory.indexOf(message),
-          );
+    if (entry.suppressed) return const SizedBox.shrink();
+    final streaming = entry.streaming;
+    final displayedHistory = capturedRows;
+    // Resolve only the captured immutable input used by existing runtime commands.
+    // The ordinal itself never admits an execution or a replacement chat.
+    final message = displayedHistory[entry.sourceIndex];
+    final reasoning = entry.reasoning;
+    final sender = entry.interAgentSender;
     if (sender != null) {
       return AnchoredExpansionTile(
-        key: ValueKey(('agent-reply', answerMessageId(message))),
+        key: ValueKey(('agent-reply', entry.savedMessageId)),
         title: Text(
           'Replied to $sender',
           style: Theme.of(context).textTheme.bodySmall,
@@ -1090,8 +1046,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         children: [
           if (reasoning.isNotEmpty) ProfileReasoningDisclosure(text: reasoning),
           ProfileMessage(
-            key: ValueKey(chat.messagePresentationId(message)),
-            message: message,
+            key: ValueKey(entry.presentationId),
+            message: entry.message,
             loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
             onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
             onDownloadRemoteFile: (output) =>
@@ -1100,33 +1056,22 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         ],
       );
     }
-    final savedPrompt =
-        allowSavedActions &&
-        isHumanAnswerPrompt(message) &&
-        answerMessageId(message) != null;
-    final index = displayedHistory.indexOf(message);
-    final previous = index > 0 ? displayedHistory[index - 1] : null;
-    final next = index >= 0 && index + 1 < displayedHistory.length
-        ? displayedHistory[index + 1]
+    final savedPrompt = allowSavedActions && entry.editablePrompt;
+    final previous = entry.sharedAnswerMessageId != null
+        ? displayedHistory[entry.sourceIndex - 1]
         : null;
     final sharesPreviousActions =
-        allowSavedActions &&
-        transcriptNoticeKind(message) == 'async_delegation_complete' &&
-        previous != null &&
-        _hasAnswerActions(displayedHistory, previous);
-    final sharesNextNotice =
-        next != null &&
-        transcriptNoticeKind(next) == 'async_delegation_complete';
-    final savedAnswer =
-        allowSavedActions && _hasAnswerActions(displayedHistory, message);
+        allowSavedActions && entry.sharedAnswerMessageId != null;
+    final sharesNextNotice = entry.followedByResultNotice;
+    final savedAnswer = allowSavedActions && entry.branchAnswer;
     final enabled =
-        !chat.opening &&
-        !chat.offlineSnapshot &&
+        !chat.runtime.opening &&
+        !chat.runtime.offline &&
         !controller.recovering &&
-        !chat.busy &&
-        !chat.changingAnswer &&
+        !chat.runtime.blocksTurnAdmission &&
+        !chat.runtime.changingAnswer &&
         !chat.changingIntelligence &&
-        !chat.commandRunning &&
+        !chat.runtime.commandRunning &&
         !controller.switching;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1138,7 +1083,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               Padding(
                 padding: const EdgeInsets.only(right: 48),
                 child: ProfileMessage(
-                  message: message,
+                  message: entry.message,
                   loadAttachmentImage: (path) =>
                       _loadAttachmentImage(chat, path),
                   onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
@@ -1150,7 +1095,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 right: 0,
                 bottom: 12,
                 child: IconButton(
-                  key: ValueKey('edit-message-${answerMessageId(message)}'),
+                  key: ValueKey('edit-message-${entry.savedMessageId}'),
                   tooltip: 'Edit message',
                   constraints: const BoxConstraints.tightFor(
                     width: 48,
@@ -1166,20 +1111,29 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           )
         else
           ProfileMessage(
-            key: ValueKey(chat.messagePresentationId(message)),
-            message: message,
+            key: ValueKey(entry.presentationId),
+            message: entry.message,
             streaming: streaming,
-            onReadAloud: message['role'] == 'assistant'
-                ? () => _run(() => _readAloud(chat, message))
+            onReadAloud: entry.message.role == 'assistant'
+                ? () => _run(() => _requestReadAloud(chat, message))
                 : null,
             actions: sharesPreviousActions
-                ? _answerActions(chat, previous, enabled: enabled)
+                ? _answerActions(
+                    chat,
+                    previous!,
+                    enabled: enabled,
+                    messageId: entry.sharedAnswerMessageId!,
+                  )
                 : savedAnswer && !sharesNextNotice
-                ? _answerActions(chat, message, enabled: enabled)
+                ? _answerActions(
+                    chat,
+                    message,
+                    enabled: enabled,
+                    messageId: entry.savedMessageId!,
+                  )
                 : null,
             readingAloud:
-                _voiceOutput.owner ==
-                (chat.key, answerMessageId(message) ?? message),
+                _voiceOutput.owner == controller.voiceReplyKey(chat, message),
             loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
             onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
             onDownloadRemoteFile: (output) =>
@@ -1189,28 +1143,20 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     );
   }
 
-  bool _hasAnswerActions(
-    List<Map<String, dynamic>> history,
-    Map<String, dynamic> message,
-  ) =>
-      message['role'] == 'assistant' &&
-      answerMessageId(message) != null &&
-      isBranchMessage(message) &&
-      interAgentReplySender(history, history.indexOf(message)) == null;
-
   Widget _answerActions(
     ProfileChat chat,
     Map<String, dynamic> message, {
     required bool enabled,
+    required int messageId,
   }) {
     return AnswerActions(
-      key: ValueKey('answer-actions-${answerMessageId(message)}'),
-      busy: chat.changingAnswer,
+      key: ValueKey('answer-actions-$messageId'),
+      busy: chat.runtime.changingAnswer,
       onBranch: enabled
           ? () => _run(() async {
               await controller.branchAnswer(
                 chat,
-                chat.messages.indexOf(message),
+                chat.reading.messages.indexOf(message),
               );
             })
           : null,
@@ -1218,7 +1164,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           ? () => _run(() async {
               await controller.branchAnswer(
                 chat,
-                chat.messages.indexOf(message),
+                chat.reading.messages.indexOf(message),
                 regenerate: true,
               );
             })
@@ -1238,7 +1184,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) {
           final canSubmit =
-              !submitting && !chat.busy && input.trim().isNotEmpty;
+              !submitting &&
+              !chat.runtime.blocksTurnAdmission &&
+              input.trim().isNotEmpty;
           return PopScope(
             canPop: !submitting,
             child: AlertDialog(
@@ -1305,7 +1253,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                           setDialogState(() {
                             submitting = false;
                             inlineError =
-                                chat.error ??
+                                chat.runtime.error ??
                                 'Hermes did not accept the edited message.';
                           });
                         }
@@ -1323,204 +1271,237 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     );
   }
 
-  Widget _chat(ProfileChat chat, BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => Column(
-      children: [
-        Expanded(
-          child: ProfileTranscript(
-            key: ValueKey((
-              chat.key,
-              _activeFindResult(chat)?.page.offset,
-              _activeFindResult(chat)?.rowId,
-            )),
-            chat: chat,
-            controller: controller,
-            messageBuilder: (message, {required bool streaming}) => _answer(
-              chat,
-              message,
-              streaming: streaming,
-              allowSavedActions: _activeFindResult(chat) == null,
-            ),
-            nearbyMessages: _activeFindResult(chat)?.page.rows,
-            focusedMessageId: _activeFindResult(chat)?.rowId,
-            notificationAnchors: _chatNotificationAnchors(chat),
-            onBackToLatest: _activeFindResult(chat) == null
-                ? null
-                : _backToLatest,
-            liveToolCount: chat.toolActivities.length,
-            currentActivity: [
-              if (chat.tool != null &&
-                  !chat.toolActivities.any((activity) => !activity.isTerminal))
-                ProfileTranscriptDisclosure(
-                  icon: Icons.terminal_rounded,
-                  label: 'Using ${chat.tool!}',
-                  children: const [
-                    Text('Running on the connected Hermes host'),
-                  ],
-                ),
-              if (chat.toolActivities.isNotEmpty)
-                ProfileLiveToolActivity(activities: chat.toolActivities),
-            ],
-            activityTabs: [
-              if (chat.todos.isNotEmpty)
-                ProfileActivityTab(
-                  id: 'tasks',
-                  label:
-                      'Tasks ${chat.todos.where((todo) => todo.status == GatewayTodoStatus.completed).length}/${chat.todos.length}',
-                  child: ProfileTodoPanel(todos: chat.todos, embedded: true),
-                ),
-              if (chat.subagents.isNotEmpty)
-                ProfileActivityTab(
-                  id: 'agents',
-                  label:
-                      'Agents ${chat.subagents.where((agent) => !agent.isTerminal).length}/${chat.subagents.length}',
-                  onSelected: () =>
-                      unawaited(controller.refreshSubagents(chat)),
-                  child: ProfileSubagentPanel(
-                    key: ValueKey(('subagents', chat.key)),
-                    controller: controller,
-                    chat: chat,
-                    embedded: true,
-                  ),
-                ),
-              if (chat.sessionControl?.goal != null ||
-                  chat.sessionControl?.loop != null ||
-                  chat.sessionControl?.heartbeat != null ||
-                  chat.processes.isNotEmpty)
-                ProfileActivityTab(
-                  id: 'work',
-                  label: 'Work',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (chat.sessionControl?.goal != null)
-                        ProfileGoalPanel(
-                          key: ValueKey(('goal', chat.key)),
-                          controller: controller,
-                          chat: chat,
-                        ),
-                      if (chat.sessionControl?.loop != null ||
-                          chat.sessionControl?.heartbeat != null ||
-                          chat.processes.isNotEmpty)
-                        ProfileBackgroundWorkPanel(
-                          key: ValueKey(('background', chat.key)),
-                          controller: controller,
-                          chat: chat,
-                        ),
+  Widget _chat(ProfileChat chat, BuildContext context) {
+    final nearby = controller.nearbyReadingMessages(chat);
+    final live = nearby == null ? chat.reading.streamingMessage : null;
+    final capturedRows = List<Map<String, dynamic>>.unmodifiable([
+      ...(nearby ?? chat.reading.messages),
+      ?live,
+    ]);
+    final groupStarted = CompletionDiagnostics.enabled
+        ? CompletionDiagnostics.start()
+        : 0;
+    final timeline = TranscriptTimeline.project(
+      capturedRows,
+      presentationId: chat.reading.messagePresentationId,
+      liveMessageIndex: live == null ? null : capturedRows.length - 1,
+    );
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.finish(
+        'transcript.group_sync',
+        groupStarted,
+        values: {
+          'rows': capturedRows.length,
+          'sections': timeline.sections.length,
+        },
+      );
+    }
+    final focus = _readingFocus(chat);
+    return LayoutBuilder(
+      builder: (context, constraints) => Column(
+        children: [
+          Expanded(
+            child: ProfileTranscript(
+              key: ValueKey((
+                chat.key,
+                _readingFocus(chat)?.offset,
+                _readingFocus(chat)?.rowId,
+              )),
+              chat: chat,
+              controller: controller,
+              onLoadOlder: () => controller.loadOlderMessages(chat),
+              timeline: timeline,
+              messageBuilder: (entry) => _answer(
+                chat,
+                entry,
+                capturedRows: capturedRows,
+                allowSavedActions: nearby == null,
+              ),
+              focusedMessageId: focus?.rowId,
+              notificationAnchors: _chatNotificationAnchors(chat),
+              onBackToLatest: _readingFocus(chat) == null
+                  ? null
+                  : () => controller.backToLatest(chat),
+              liveToolCount: chat.runtime.toolActivities.length,
+              currentActivity: [
+                if (chat.runtime.tool != null &&
+                    !chat.runtime.toolActivities.any(
+                      (activity) => !activity.isTerminal,
+                    ))
+                  ProfileTranscriptDisclosure(
+                    icon: Icons.terminal_rounded,
+                    label: 'Using ${chat.runtime.tool!}',
+                    children: const [
+                      Text('Running on the connected Hermes host'),
                     ],
                   ),
-                ),
-            ],
-            activityThinking: chat.reasoning.isEmpty
-                ? null
-                : ProfileReasoningDisclosure(
-                    text: chat.reasoning,
-                    running: chat.busy,
+                if (chat.runtime.toolActivities.isNotEmpty)
+                  ProfileLiveToolActivity(
+                    activities: chat.runtime.toolActivities,
                   ),
-            tail: [
-              if (chat.error != null)
-                chat.notificationReadTarget?.kind == 'status'
-                    ? _notificationAnchor(
-                        chat,
-                        'status',
-                        chat.notificationReadTarget!.id,
-                        StudioError(chat.error!),
-                      )
-                    : StudioError(chat.error!),
-              if (chat.approval != null)
-                Builder(
-                  builder: (context) {
-                    final request = chat.approval!;
-                    return _notificationAnchor(
-                      chat,
-                      'approval',
-                      request['request_id'] as String,
-                      GatewayApprovalPanel(
-                        key: ValueKey((chat.key, request['request_id'])),
-                        request: GatewayApprovalRequest.fromEventData(request),
-                        position: chat.approvals.position,
-                        total: chat.approvals.total,
-                        enabled:
-                            !chat.approvalResponding &&
-                            chat.status != ProfileTurnStatus.reconnecting,
-                        onRespond: (choice) => _run(
-                          () => controller.approve(
-                            chat,
-                            choice.wireValue,
-                            requestId: request['request_id'] as String,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              if (chat.sensitivePrompt != null)
-                Builder(
-                  builder: (context) {
-                    final request = chat.sensitivePrompt!;
-                    return _notificationAnchor(
-                      chat,
-                      'secure',
-                      request.requestId,
-                      GatewaySensitivePromptPanel(
-                        key: ValueKey((
-                          chat.key,
-                          request.kind,
-                          request.requestId,
-                        )),
-                        request: request,
-                        enabled:
-                            !chat.sensitivePromptResponding &&
-                            chat.status != ProfileTurnStatus.reconnecting,
-                        onRespond: (value) => controller.respondSensitivePrompt(
-                          chat,
-                          value,
-                          expectedRequest: request,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              if (chat.markReadFailed)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: SelectionArea(
-                    child: StudioError(
-                      ProfileWorkspaceController.markReadFailureNotice,
+              ],
+              activityTabs: [
+                if (chat.todos.isNotEmpty)
+                  ProfileActivityTab(
+                    id: 'tasks',
+                    label:
+                        'Tasks ${chat.todos.where((todo) => todo.status == GatewayTodoStatus.completed).length}/${chat.todos.length}',
+                    child: ProfileTodoPanel(todos: chat.todos, embedded: true),
+                  ),
+                if (chat.subagents.isNotEmpty)
+                  ProfileActivityTab(
+                    id: 'agents',
+                    label:
+                        'Agents ${chat.subagents.where((agent) => !agent.isTerminal).length}/${chat.subagents.length}',
+                    onSelected: () =>
+                        unawaited(_supervisionFor(chat).refreshSubagents()),
+                    child: ProfileSubagentPanel(
+                      key: ValueKey(('subagents', chat.key)),
+                      session: _supervisionFor(chat),
+                      embedded: true,
                     ),
                   ),
-                ),
-              for (final delivery in chat.sideQuestionDeliveries)
-                _notificationAnchor(
-                  chat,
-                  delivery.kind == SideQuestionDeliveryKind.backgroundTask
-                      ? 'background'
-                      : 'side',
-                  delivery.taskId ?? '',
-                  SideQuestionDeliveryCard(
-                    key: ValueKey((
-                      chat.key,
-                      delivery.kind,
-                      delivery.taskId,
-                      delivery.state,
-                    )),
-                    delivery: delivery,
+                if (chat.sessionControl?.goal != null ||
+                    chat.sessionControl?.loop != null ||
+                    chat.sessionControl?.heartbeat != null ||
+                    chat.processes.isNotEmpty)
+                  ProfileActivityTab(
+                    id: 'work',
+                    label: 'Work',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (chat.sessionControl?.goal != null)
+                          ProfileGoalPanel(
+                            key: ValueKey(('goal', chat.key)),
+                            session: _supervisionFor(chat),
+                          ),
+                        if (chat.sessionControl?.loop != null ||
+                            chat.sessionControl?.heartbeat != null ||
+                            chat.processes.isNotEmpty)
+                          ProfileBackgroundWorkPanel(
+                            key: ValueKey(('background', chat.key)),
+                            session: _supervisionFor(chat),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-              if (chat.pendingQuestion != null)
-                _notificationAnchor(
-                  chat,
-                  'question',
-                  chat.pendingQuestion!['request_id'] as String,
-                  _questionPanel(chat),
-                ),
-            ],
+              ],
+              activityThinking: chat.runtime.reasoning.isEmpty
+                  ? null
+                  : ProfileReasoningDisclosure(
+                      text: chat.runtime.reasoning,
+                      running: chat.runtime.blocksTurnAdmission,
+                    ),
+              tail: [
+                if (chat.composer.observation.error case final error?
+                    when error != chat.runtime.error)
+                  StudioError(error),
+                if (chat.runtime.error != null)
+                  chat.reading.notificationReadTarget?.kind == 'status'
+                      ? _notificationAnchor(
+                          chat,
+                          'status',
+                          chat.reading.notificationReadTarget!.id,
+                          StudioError(chat.runtime.error!),
+                        )
+                      : StudioError(chat.runtime.error!),
+                if (chat.runtime.approval != null)
+                  Builder(
+                    builder: (context) {
+                      final request = chat.runtime.approval!;
+                      return _notificationAnchor(
+                        chat,
+                        'approval',
+                        request.requestId,
+                        GatewayApprovalPanel(
+                          key: ValueKey((chat.key, request.requestId)),
+                          request: request.request,
+                          position: chat.runtime.approvalPosition,
+                          total: chat.runtime.approvalTotal,
+                          enabled:
+                              !chat.runtime.approvalResponding &&
+                              !chat.runtime.reconnecting,
+                          onRespond: (choice) => _run(
+                            () => controller.approve(
+                              chat,
+                              choice.wireValue,
+                              requestId: request.requestId,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                if (chat.runtime.secureInput != null)
+                  Builder(
+                    builder: (context) {
+                      final request = chat.runtime.secureInput!;
+                      return _notificationAnchor(
+                        chat,
+                        'secure',
+                        request.requestId,
+                        GatewaySensitivePromptPanel(
+                          key: ValueKey((
+                            chat.key,
+                            request.kind,
+                            request.requestId,
+                          )),
+                          request: request,
+                          enabled:
+                              !chat.runtime.secureResponding &&
+                              !chat.runtime.reconnecting,
+                          onRespond: (value) =>
+                              controller.respondSensitivePrompt(
+                                chat,
+                                value,
+                                expectedRequest: request,
+                              ),
+                        ),
+                      );
+                    },
+                  ),
+                if (chat.markReadFailed)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: SelectionArea(
+                      child: StudioError(
+                        ProfileWorkspaceController.markReadFailureNotice,
+                      ),
+                    ),
+                  ),
+                for (final delivery in chat.sideQuestionDeliveries)
+                  _notificationAnchor(
+                    chat,
+                    delivery.kind == SideQuestionDeliveryKind.backgroundTask
+                        ? 'background'
+                        : 'side',
+                    delivery.taskId ?? '',
+                    SideQuestionDeliveryCard(
+                      key: ValueKey((
+                        chat.key,
+                        delivery.kind,
+                        delivery.taskId,
+                        delivery.state,
+                      )),
+                      delivery: delivery,
+                    ),
+                  ),
+                if (chat.runtime.pendingQuestion != null)
+                  _notificationAnchor(
+                    chat,
+                    'question',
+                    chat.runtime.pendingQuestion!.requestId,
+                    _questionPanel(chat),
+                  ),
+              ],
+            ),
           ),
-        ),
-        _composerPanel(chat, constraints),
-      ],
-    ),
-  );
+          _composerPanel(chat, constraints),
+        ],
+      ),
+    );
+  }
 
   Widget _composerPanel(
     ProfileChat chat,
@@ -1536,29 +1517,30 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (!chat.commandRunning && chat.editingQueuedPrompt == null)
+              if (!chat.runtime.commandRunning &&
+                  chat.composer.observation.editingEntry == null)
                 SlashCommandSuggestions(
                   key: ValueKey(chat.key),
-                  controller: controller,
-                  chat: chat,
+                  loadCompletion: (query) =>
+                      controller.completeCommand(chat, query),
+                  saveDraft: (text) => controller.updateDraft(chat, text),
                   composer: _composer,
                 ),
-              if (chat.commandRunning) const LinearProgressIndicator(),
+              if (chat.runtime.commandRunning) const LinearProgressIndicator(),
               ProfileActivityStatus(
                 key: const ValueKey('profile-activity-status'),
                 chat: chat,
               ),
               ProfileQueuedMessages(
                 key: ValueKey(('queued-messages', chat.key)),
-                chat: chat,
+                work: chat.composer.observation,
                 onOpenActions: _hasMessageActions(chat)
                     ? () => _showBusyActions(chat, context)
                     : null,
-                onEdit:
-                    chat.queueMutating || chat.queueDraining || chat.steering
+                onEdit: !chat.composer.actions().canEditQueue
                     ? null
                     : (prompt) => _beginQueuedEdit(chat, prompt),
-                onDelete: chat.queueMutating || chat.steering
+                onDelete: !chat.composer.actions().canEditQueue
                     ? null
                     : (prompt) => _deleteQueuedPrompt(chat, prompt),
               ),
@@ -1583,7 +1565,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (chat.editingQueuedPrompt != null)
+                              if (chat.composer.observation.editingEntry !=
+                                  null)
                                 Row(
                                   children: [
                                     const SizedBox(width: 12),
@@ -1598,7 +1581,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                     ContextRing(occupancy: chat.context),
                                     TextButton(
                                       onPressed:
-                                          chat.queueMutating || chat.steering
+                                          chat.composer.observation.saving ||
+                                              chat.composer.observation.steering
                                           ? null
                                           : () => _run(
                                               () => controller
@@ -1608,8 +1592,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                     ),
                                   ],
                                 ),
-                              if ((chat.editingQueuedPrompt?.attachments ??
-                                      chat.attachments)
+                              if ((chat
+                                          .composer
+                                          .observation
+                                          .editingEntry
+                                          ?.attachments ??
+                                      chat.composer.observation.attachments)
                                   .isNotEmpty)
                                 Align(
                                   alignment: Alignment.centerLeft,
@@ -1623,32 +1611,41 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                       children: [
                                         for (final file
                                             in chat
-                                                    .editingQueuedPrompt
+                                                    .composer
+                                                    .observation
+                                                    .editingEntry
                                                     ?.attachments ??
-                                                chat.attachments)
+                                                chat
+                                                    .composer
+                                                    .observation
+                                                    .attachments)
                                           Padding(
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 4,
                                             ),
                                             child: ComposerAttachmentTile(
-                                              draft: file,
+                                              name: file.name,
+                                              kind: file.kind,
+                                              error: file.error,
+                                              previewImage: file.isImage
+                                                  ? AttachmentPreviewImage(
+                                                      chat.composer.preview(
+                                                        file.id,
+                                                      ),
+                                                    )
+                                                  : null,
                                               onRemove:
-                                                  chat.editingQueuedPrompt !=
-                                                          null ||
-                                                      !controller
-                                                          .canRemoveAttachment(
-                                                            chat,
-                                                            file,
-                                                          ) ||
-                                                      chat.changingAnswer ||
-                                                      chat.commandRunning ||
-                                                      controller.switching
+                                                  !controller
+                                                      .canRemoveAttachment(
+                                                        chat,
+                                                        file.id,
+                                                      )
                                                   ? null
                                                   : () => _run(
                                                       () => controller
                                                           .removeAttachment(
                                                             chat,
-                                                            file,
+                                                            file.id,
                                                           ),
                                                     ),
                                             ),
@@ -1664,9 +1661,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                 focusNode: _composerFocus,
                                 enabled:
                                     !_voiceInput.active &&
-                                    !chat.commandRunning &&
-                                    !(chat.editingQueuedPrompt != null &&
-                                        (chat.queueMutating || chat.steering)),
+                                    chat.composer.actions().canEditText,
                                 minLines: 1,
                                 maxLines: 5,
                                 keyboardType: TextInputType.multiline,
@@ -1716,7 +1711,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                   );
                                 },
                                 onChanged: (value) {
-                                  if (chat.editingQueuedPrompt != null) {
+                                  if (chat.composer.observation.editingEntry !=
+                                      null) {
                                     _queuedEditErrors.remove(chat.key);
                                     controller.updateQueuedPromptEdit(
                                       chat,
@@ -1745,9 +1741,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                 decoration: InputDecoration(
                                   isDense: true,
                                   hintMaxLines: 1,
-                                  hintText: chat.editingQueuedPrompt != null
+                                  hintText:
+                                      chat.composer.observation.editingEntry !=
+                                          null
                                       ? 'Edit queued message'
-                                      : chat.busy
+                                      : chat.runtime.blocksTurnAdmission
                                       ? 'Draft your next message'
                                       : 'Message Hermes or type /',
                                   border: InputBorder.none,
@@ -1760,7 +1758,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                   ),
                                 ),
                               ),
-                              if (chat.editingQueuedPrompt != null)
+                              if (chat.composer.observation.editingEntry !=
+                                  null)
                                 _queuedEditActions(chat)
                               else
                                 Row(
@@ -1774,9 +1773,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                       icon: const Icon(Icons.add),
                                       onPressed:
                                           !controller.canAddAttachment(chat) ||
-                                              chat.changingAnswer ||
-                                              chat.commandRunning ||
-                                              controller.switching ||
                                               _launchingCamera
                                           ? null
                                           : () => _run(() async {
@@ -1901,12 +1897,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                   chat.key ||
                                               chat.changingIntelligence,
                                           onPressed:
-                                              chat.opening ||
-                                                  chat.offlineSnapshot ||
+                                              chat.runtime.opening ||
+                                                  chat.runtime.offline ||
                                                   controller.recovering ||
-                                                  chat.busy ||
-                                                  chat.changingAnswer ||
-                                                  chat.commandRunning ||
+                                                  chat
+                                                      .runtime
+                                                      .blocksTurnAdmission ||
+                                                  chat.runtime.changingAnswer ||
+                                                  chat.runtime.commandRunning ||
                                                   controller.switching ||
                                                   chat.changingIntelligence ||
                                                   _loadingIntelligence != null
@@ -1924,13 +1922,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                       tooltip: 'Dictate message',
                                       icon: const Icon(Icons.mic_none),
                                       onPressed:
-                                          _voiceInput.active ||
-                                              controller.switching ||
-                                              chat.opening ||
-                                              chat.commandRunning ||
-                                              chat.changingAnswer
-                                          ? null
-                                          : () => _run(() => _dictate(chat)),
+                                          _voiceInput.canDictate(
+                                            controller.canDictate(chat),
+                                          )
+                                          ? () => _run(
+                                              () => _requestDictation(chat),
+                                            )
+                                          : null,
                                     ),
                                     const SizedBox(width: 8),
                                     _composerActionButton(chat),
@@ -1990,7 +1988,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         refreshModels: () => controller.refreshModelChoices(chat),
         reviewProviderAccess: () => openProfileProviderAccess(
           context,
-          connection: controller.connection,
+          access: controller.access,
           connectionIdentity: controller.connectionIdentity,
           connectionStatus: controller.connectionStatus,
           profileName: chat.key.workspace.profileName,
@@ -2011,117 +2009,51 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
   }
 
-  bool _canForkDraft(ProfileChat chat) =>
-      !chat.busy &&
-      !chat.preparingAttachments &&
-      !chat.queueDraining &&
-      chat.draft.trim().isNotEmpty &&
-      !chat.draft.trimLeft().startsWith('/') &&
-      chat.attachments.isEmpty &&
-      chat.messages.any(
-        (message) =>
-            message['role'] == 'assistant' &&
-            answerMessageId(message) != null &&
-            isBranchMessage(message),
-      );
+  bool _canForkDraft(ProfileChat chat) => chat.composer.actions().canFork;
 
-  Map<ComposerAction, String?> _composerActions(ProfileChat chat) {
-    if (_voiceInput.active) {
-      return {
-        for (final action in ComposerAction.values)
-          action: 'Finish or cancel dictation first',
-      };
-    }
-    final text = chat.draft.trim();
-    final blocked =
-        controller.switching ||
-        chat.changingAnswer ||
-        chat.commandRunning ||
-        chat.changingIntelligence ||
-        chat.queueMutating ||
-        chat.editingQueuedPrompt != null;
-    final hasDraft = text.isNotEmpty || chat.attachments.isNotEmpty;
-    final slash = text.startsWith('/');
-    if (_waitingForConnection(chat)) {
-      return {
-        for (final action in ComposerAction.values)
-          action: 'Reconnect to use this action',
-        ComposerAction.send: blocked
-            ? 'Wait for this draft to finish saving'
-            : chat.preparingAttachments
-            ? 'Wait for the attachment to finish preparing'
-            : !hasDraft
-            ? 'Type a message or add an attachment'
-            : slash
-            ? 'Reconnect before running a command'
-            : null,
-      };
-    }
-    return {
-      ComposerAction.send: chat.preparingAttachments
-          ? 'Wait for the attachment to finish preparing'
-          : !blocked && hasDraft && (!slash || !chat.sendingPrompt)
-          ? null
-          : 'Wait for the current turn',
-      ComposerAction.steer:
-          blocked || chat.steering || chat.preparingAttachments
-          ? 'Wait before steering'
-          : !{
-              ProfileTurnStatus.running,
-              ProfileTurnStatus.attention,
-            }.contains(chat.status)
-          ? 'Steer needs a running turn'
-          : chat.attachments.isNotEmpty
-          ? 'Steer supports text only'
-          : text.isEmpty || slash
-          ? 'Type a message to steer'
-          : null,
-      ComposerAction.stop: !blocked && chat.busy
-          ? null
-          : 'No running turn to stop',
-      ComposerAction.queue: chat.preparingAttachments
-          ? 'Wait for the attachment to finish preparing'
-          : chat.sendingPrompt
-          ? 'Wait for the current message to finish sending'
-          : !blocked &&
-                chat.busy &&
-                hasDraft &&
-                !slash &&
-                !chat.queueMutating &&
-                !chat.queueDraining
-          ? null
-          : 'Queue a draft during a running turn',
-      ComposerAction.fork: !blocked && _canForkDraft(chat)
-          ? null
-          : 'Fork needs a completed saved answer and text',
-    };
+  Map<ComposerAction, String?> _composerActionLabels(ProfileChat chat) {
+    return _voiceInput
+        .composerAvailability(chat.composer.actions())
+        .map(
+          (action, reason) => MapEntry(action, switch (reason) {
+            null => null,
+            ComposerUnavailableReason.dictation =>
+              'Finish or cancel dictation first',
+            ComposerUnavailableReason.reconnect =>
+              'Reconnect to use this action',
+            ComposerUnavailableReason.saving =>
+              'Wait for this draft to finish saving',
+            ComposerUnavailableReason.preparingAttachment =>
+              'Wait for the attachment to finish preparing',
+            ComposerUnavailableReason.empty =>
+              'Type a message or add an attachment',
+            ComposerUnavailableReason.disconnectedCommand =>
+              'Reconnect before running a command',
+            ComposerUnavailableReason.currentTurn =>
+              'Wait for the current turn',
+            ComposerUnavailableReason.steering => 'Wait before steering',
+            ComposerUnavailableReason.needsRunningTurn =>
+              action == ComposerAction.stop
+                  ? 'No running turn to stop'
+                  : 'Steer needs a running turn',
+            ComposerUnavailableReason.textOnly => 'Steer supports text only',
+            ComposerUnavailableReason.textRequired => 'Type a message to steer',
+            ComposerUnavailableReason.sending =>
+              'Wait for the current message to finish sending',
+            ComposerUnavailableReason.queueDuringTurn =>
+              'Queue a draft during a running turn',
+            ComposerUnavailableReason.savedAnswerRequired =>
+              'Fork needs a completed saved answer and text',
+          }),
+        );
   }
-
-  bool _waitingForConnection(ProfileChat chat) =>
-      controller.recovering ||
-      chat.opening ||
-      chat.offlineSnapshot ||
-      controller.connectionStatus.access ==
-          ConnectionAvailability.unavailable ||
-      (controller.connectionStatus.hasLiveObservation(
-            chat.key.workspace.profileName,
-          ) &&
-          !controller.connectionStatus.liveAvailable(
-            chat.key.workspace.profileName,
-          ));
 
   Widget _composerActionButton(ProfileChat chat) => ComposerActionButton(
     key: ValueKey(chat.key),
-    primary:
-        chat.busy &&
-            !chat.sendingPrompt &&
-            !_waitingForConnection(chat) &&
-            !chat.draft.trimLeft().startsWith('/')
-        ? ComposerAction.fromPreference(
-            controller.preferences.getString(ComposerAction.preferenceKey),
-          )
+    primary: chat.composer.actions().prefersRunningAction
+        ? controller.appPreferences.current.preferredRunningAction
         : ComposerAction.send,
-    unavailable: _composerActions(chat),
+    unavailable: _composerActionLabels(chat),
     onSelected: (action) => _performComposerAction(chat, action),
   );
 
@@ -2130,10 +2062,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     ComposerAction action,
   ) async {
     if (controller.current?.chat != chat ||
-        _composerActions(chat)[action] != null) {
+        _composerActionLabels(chat)[action] != null) {
       return;
     }
-    final text = chat.draft.trim();
+    final text = chat.composer.observation.text.trim();
     switch (action) {
       case ComposerAction.send:
         final notification = await _runValue(() => controller.send(chat));
@@ -2160,9 +2092,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         });
       case ComposerAction.steer:
         final accepted = await _runValue(() => controller.steer(chat, text));
-        if (accepted == true && mounted && chat.draft.trim() == text) {
-          await _run(() => controller.updateDraft(chat, ''));
-        } else if (accepted == false && mounted) {
+        if (accepted == false && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: StudioError('Hermes rejected the steering message.'),
@@ -2173,26 +2103,18 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   }
 
   bool _hasMessageActions(ProfileChat chat) =>
-      chat.editingQueuedPrompt == null &&
-      !controller.switching &&
-      !chat.commandRunning &&
-      !chat.changingAnswer &&
-      !chat.changingIntelligence &&
-      !chat.queueMutating &&
-      (_canForkDraft(chat) ||
-          chat.queuedPrompts.isNotEmpty ||
-          (chat.busy &&
-              (chat.draft.trim().isNotEmpty || chat.attachments.isNotEmpty) &&
-              !chat.draft.trimLeft().startsWith('/')));
+      chat.composer.actions().hasMessageActions;
 
-  Future<void> _beginQueuedEdit(ProfileChat chat, QueuedPromptDraft prompt) =>
-      _run(() async {
-        _queuedEditErrors.remove(chat.key);
-        await controller.beginQueuedPromptEdit(chat, prompt);
-        if (mounted && controller.current?.chat == chat) {
-          _composerFocus.requestFocus();
-        }
-      });
+  Future<void> _beginQueuedEdit(
+    ProfileChat chat,
+    ComposerQueueObservation prompt,
+  ) => _run(() async {
+    _queuedEditErrors.remove(chat.key);
+    await controller.beginQueuedPromptEdit(chat, prompt.id);
+    if (mounted && controller.current?.chat == chat) {
+      _composerFocus.requestFocus();
+    }
+  });
 
   Future<void> _runQueuedEdit(
     ProfileChat chat,
@@ -2215,20 +2137,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   }
 
   Widget _queuedEditActions(ProfileChat chat) {
-    final text = chat.queuedEditText.trim();
-    final prompt = chat.editingQueuedPrompt!;
-    final saving = chat.queueMutating || chat.steering || controller.switching;
-    final valid =
-        !text.startsWith('/') &&
-        (text.isNotEmpty || prompt.attachments.isNotEmpty);
-    final canSteer =
-        valid &&
-        text.isNotEmpty &&
-        prompt.attachments.isEmpty &&
-        {
-          ProfileTurnStatus.running,
-          ProfileTurnStatus.attention,
-        }.contains(chat.status);
+    final prompt = chat.composer.observation.editingEntry!;
+    final saving = chat.composer.actions().editingBusy;
+    final actions = chat.composer.actions();
+    final valid = actions.canSaveQueueEdit;
+    final canSteer = actions.canSteerQueueEdit;
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
       child: Column(
@@ -2288,7 +2201,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   Future<void> _deleteQueuedPrompt(
     ProfileChat chat,
-    QueuedPromptDraft prompt,
+    ComposerQueueObservation prompt,
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -2318,19 +2231,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       ),
     );
     if (confirmed == true && mounted) {
-      await _run(
-        () => controller.removeQueuedPrompt(
-          chat,
-          chat.queuedPrompts.indexOf(prompt),
-          expectedPrompt: prompt,
-        ),
-      );
+      await _run(() => controller.removeQueuedPrompt(chat, prompt.id));
     }
   }
 
   Future<void> _showBusyActions(ProfileChat chat, BuildContext context) async {
     if (!_hasMessageActions(chat)) return;
-    final text = chat.draft.trim();
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (sheetContext) => ListenableBuilder(
@@ -2349,10 +2255,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     ),
                     onTap: () => Navigator.pop(sheetContext, 'fork'),
                   ),
-                if (text.isNotEmpty &&
-                    !text.startsWith('/') &&
-                    chat.busy &&
-                    chat.attachments.isEmpty) ...[
+                if (chat.composer.actions().offered.contains(
+                  ComposerAction.steer,
+                )) ...[
                   ListTile(
                     leading: const Icon(Icons.explore_outlined),
                     title: const Text('Steer this turn'),
@@ -2360,41 +2265,41 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                       'Send this text into the running turn',
                     ),
                     onTap:
-                        !chat.steering &&
-                            {
-                              ProfileTurnStatus.running,
-                              ProfileTurnStatus.attention,
-                            }.contains(chat.status)
+                        chat.composer
+                                .actions()
+                                .unavailable[ComposerAction.steer] ==
+                            null
                         ? () => Navigator.pop(sheetContext, 'steer')
                         : null,
                   ),
                 ],
-                if ((text.isNotEmpty || chat.attachments.isNotEmpty) &&
-                    !text.startsWith('/') &&
-                    chat.busy)
+                if (chat.composer.actions().offered.contains(
+                  ComposerAction.queue,
+                ))
                   ListTile(
                     leading: const Icon(Icons.queue),
                     title: const Text('Queue for the next turn'),
                     subtitle: Text(
-                      chat.attachments.isEmpty
+                      chat.composer.observation.attachments.isEmpty
                           ? 'Keep this message for when Hermes is idle'
-                          : 'Keep this message and ${chat.attachments.length} attachment${chat.attachments.length == 1 ? '' : 's'} for when Hermes is idle',
+                          : 'Keep this message and ${chat.composer.observation.attachments.length} attachment${chat.composer.observation.attachments.length == 1 ? '' : 's'} for when Hermes is idle',
                     ),
                     onTap:
-                        chat.queueMutating ||
-                            chat.queueDraining ||
-                            chat.preparingAttachments
+                        chat.composer
+                                .actions()
+                                .unavailable[ComposerAction.queue] !=
+                            null
                         ? null
                         : () => Navigator.pop(sheetContext, 'queue'),
                   ),
-                if (chat.queuePaused)
+                if (chat.composer.observation.paused)
                   ListTile(
                     leading: const Icon(Icons.pause_circle_outline),
                     title: const Text('Queued messages are paused'),
                     subtitle: const Text(
                       'Check history before resuming; a previous send may have reached Hermes.',
                     ),
-                    onTap: chat.queueDraining || chat.queueMutating
+                    onTap: !chat.composer.actions().canResumeQueue
                         ? null
                         : () async {
                             await _run(() => controller.resumeQueue(chat));
@@ -2404,8 +2309,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                           },
                     trailing: const Icon(Icons.play_arrow),
                   ),
-                if (chat.queuedPrompts.isNotEmpty)
-                  ...chat.queuedPrompts.asMap().entries.map(
+                if (chat.composer.observation.queue.isNotEmpty)
+                  ...chat.composer.observation.queue.asMap().entries.map(
                     (entry) => ListTile(
                       leading: const Icon(Icons.keyboard_return),
                       title: Text(
@@ -2418,7 +2323,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
-                      onTap: chat.queueDraining || chat.queueMutating
+                      onTap: !chat.composer.actions().canEditQueue
                           ? null
                           : () async {
                               Navigator.pop(sheetContext);
@@ -2426,7 +2331,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                             },
                     ),
                   ),
-                if (chat.busy)
+                if (chat.composer.actions().offered.contains(
+                  ComposerAction.stop,
+                ))
                   ListTile(
                     leading: const Icon(Icons.stop),
                     title: const Text('Stop'),
@@ -2465,7 +2372,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   Widget _drawer() => AppDrawer(
     selected: _destination,
-    connection: controller.connection,
+    access: controller.access,
     connectionStatus: controller.connectionStatus,
     onSelected: _selectDestination,
   );
@@ -2590,9 +2497,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               ),
               AppDestination.settings => AppSettingsContent(
                 key: ValueKey(_settingsRevision),
-                preferences: controller.preferences,
-                hermesVoiceProfileLabel: controller.current?.scope.profileName,
-                openHermesVoiceSettings: _hermesSpeechSettingsLink(context),
+                preferences: controller.appPreferences,
+                createVoiceSession: () => VoicePreferencesSession(
+                  preferences: controller.appPreferences,
+                  device: AndroidVoice.instance,
+                  hermesProfileLabel: controller.current?.scope.profileName,
+                  openHermesSettings: _hermesSpeechSettingsLink(context),
+                ),
                 enableNotifications: widget.enableNotifications,
                 backgroundMonitoringState: widget.backgroundMonitoringState,
                 openMonitoringBatterySettings:
@@ -2677,26 +2588,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     );
   }
 
-  Future<void> _projectDialog() async {
-    final owner = controller.current;
-    if (owner == null) return;
-    final name = await _textDialog('New project', 'Project name');
-    if (!mounted) return;
-    if (!identical(controller.current, owner)) {
-      throw StateError('Profile changed. Open Projects and try again.');
-    }
-    if (name == null || name.isEmpty) return;
-    final path = await showDialog<String>(
-      context: context,
-      builder: (_) => ProjectFolderPickerDialog(
-        discover: owner.gateway.discoverProjectFolders,
-      ),
-    );
-    if (!mounted) return;
-    if (!identical(controller.current, owner)) {
-      throw StateError('Profile changed. Open Projects and try again.');
-    }
-    if (path == null || path.isEmpty) return;
-    await controller.createProject(name, path);
-  }
+  Future<void> _projectDialog(ChatBrowserData browser) => browser.createProject(
+    readName: () => _textDialog('New project', 'Project name'),
+    chooseFolder: (discover) {
+      if (!mounted) return Future.value();
+      return showDialog<String>(
+        context: context,
+        builder: (context) => ProjectFolderPickerDialog(discover: discover),
+      );
+    },
+  );
 }

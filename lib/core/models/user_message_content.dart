@@ -12,6 +12,35 @@ class UserMessageAttachment {
     required this.isImage,
   });
 
+  /// Passive metadata for the reading cache, without bytes or upload authority.
+  bool get canCacheReadingMetadata =>
+      name.isNotEmpty &&
+      name.length <= 1024 &&
+      target.isNotEmpty &&
+      target.length <= 8192 &&
+      Uri.tryParse(target.trimLeft())?.scheme.toLowerCase() != 'data';
+
+  Map<String, dynamic> toReadingJson() => {
+    'name': name,
+    'target': target,
+    'is_image': isImage,
+  };
+
+  static UserMessageAttachment? fromReadingJson(Object? value) {
+    if (value is! Map ||
+        value['name'] is! String ||
+        value['target'] is! String ||
+        value['is_image'] is! bool) {
+      return null;
+    }
+    final attachment = UserMessageAttachment(
+      name: value['name'] as String,
+      target: value['target'] as String,
+      isImage: value['is_image'] as bool,
+    );
+    return attachment.canCacheReadingMetadata ? attachment : null;
+  }
+
   String get extension {
     final dot = name.lastIndexOf('.');
     return dot > 0 && dot < name.length - 1

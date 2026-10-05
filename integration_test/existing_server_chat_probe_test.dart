@@ -1,3 +1,7 @@
+import '../test/support/composer_fixture.dart';
+import 'package:wing/core/models/chat_runtime.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -5,7 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
-import 'package:wing/core/services/profile_selection_store.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/composer_action_button.dart';
@@ -58,9 +61,18 @@ void main() {
       );
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
-      await ProfileSelectionStore(preferences).write(connection.id, 'default');
+      final appPreferences = AppPreferences(preferences);
+      expect(
+        (await appPreferences
+                .admitProfileSelection(connection.id, 'default')
+                .settled)
+            .confirmed,
+        isTrue,
+      );
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: connection,
+        appPreferences: appPreferences,
+        access: ConnectionAccess(connection: connection, dashboardOAuth: null),
         connectionIdentity: connection.id,
         preferences: preferences,
       );
@@ -73,16 +85,20 @@ void main() {
             if (owner == null ||
                 owner.scope != chat.key.workspace ||
                 !identical(owner.chats[chat.key.sessionId], chat) ||
-                chat.busy ||
-                chat.sendingPrompt ||
-                chat.commandRunning ||
-                chat.draftSubmissionUncertain) {
+                chat.runtime.blocksTurnAdmission ||
+                chat.composer.observation.sending ||
+                chat.runtime.commandRunning ||
+                chat.composer.observation.submissionUncertain) {
               debugPrint('Owned QA chat retained: ${chat.key.sessionId}');
             } else {
               // deleteSession also verifies exact scoped ownership and backend
               // idleness before closing the runtime and deleting its transcript.
               try {
-                await controller.mutateSession(chat.key, delete: true);
+                await controller.mutateSession(
+                  chat.key,
+                  delete: true,
+                  canDispatch: () => true,
+                );
                 debugPrint('Owned QA chat deleted: ${chat.key.sessionId}');
               } catch (_) {
                 debugPrint('Owned QA chat retained: ${chat.key.sessionId}');
@@ -100,26 +116,33 @@ void main() {
       final owner = controller.current!;
       expect(owner.scope.profileName, 'default');
       expect(owner.chat, isNull);
-      final chat = ownedChat = await controller.createChat(owner: owner.scope);
+      final chat = ownedChat = await controller.createChat(
+        owner: owner.scope,
+        canDispatch: () => true,
+      );
       expect(chat.key.workspace, owner.scope);
-      expect(chat.messages, isEmpty);
-      expect(chat.attachments, isEmpty);
-      expect(chat.queuedPrompts, isEmpty);
+      expect(chat.reading.messages, isEmpty);
+      expect(chat.composer.observation.attachments, isEmpty);
+      expect(chat.composer.observation.queue, isEmpty);
       debugPrint('Owned QA chat created: ${chat.key.sessionId} ($title)');
       // session.title is stock and supports a newly minted runtime before its
       // first prompt; no private title lookup or pre-existing chat is touched.
       final titled = await owner.gateway.call('session.title', {
-        'session_id': chat.runtimeId,
+        'session_id': chat.runtime.runtimeId,
         'title': title,
       });
       expect(titled['title'], title);
-      chat.title = title;
+      emitChatEvent(controller, chat, 'session.title', {
+        'session_id': chat.key.sessionId,
+        'title': title,
+      });
 
       var sawStreamedText = false;
       var sawToolActivity = false;
       void observeStream() {
-        if (chat.streaming.isNotEmpty) sawStreamedText = true;
-        if (chat.toolActivities.isNotEmpty || chat.tool != null) {
+        if (chat.reading.streaming.isNotEmpty) sawStreamedText = true;
+        if (chat.runtime.toolActivities.isNotEmpty ||
+            chat.runtime.tool != null) {
           sawToolActivity = true;
         }
       }
@@ -137,34 +160,37 @@ void main() {
       expect(composer, findsOneWidget);
       await tester.enterText(composer, prompt);
       await tester.pump(const Duration(milliseconds: 300));
-      expect(chat.draft, prompt);
+      expect(chat.composer.observation.text, prompt);
       // Exactly one user gesture: no send retry, queue, steer or regeneration.
       await tester.tap(find.byType(ComposerActionButton));
       final deadline = DateTime.now().add(const Duration(minutes: 3));
       while (DateTime.now().isBefore(deadline)) {
         await tester.pump(const Duration(milliseconds: 100));
         if (sawStreamedText &&
-            chat.status == ProfileTurnStatus.completed &&
-            !chat.historyLoading &&
+            chat.runtime.execution == ChatExecution.completed &&
+            !chat.reading.historyLoading &&
             !controller.hasActiveChats) {
           break;
         }
-        if (chat.status == ProfileTurnStatus.failed ||
-            chat.status == ProfileTurnStatus.attention) {
+        if (chat.runtime.execution == ChatExecution.failed ||
+            chat.runtime.needsInput) {
           fail('The owned QA turn failed or needs input; it was not retried.');
         }
       }
-      expect(chat.status, ProfileTurnStatus.completed);
-      expect(chat.error, isNull);
-      expect(chat.historyError, isNull);
-      expect(chat.historyUnavailable, isFalse);
-      expect(chat.historySessionId, chat.key.sessionId);
-      expect(chat.draftSubmissionUncertain, isFalse);
-      expect(chat.draft, isEmpty);
-      expect(chat.streaming, isEmpty);
+      expect(chat.runtime.execution, ChatExecution.completed);
+      expect(chat.runtime.error, isNull);
+      expect(chat.reading.historyError, isNull);
+      expect(chat.reading.historyUnavailable, isFalse);
+      expect(chat.reading.historySessionId, chat.key.sessionId);
+      expect(chat.composer.observation.submissionUncertain, isFalse);
+      expect(chat.composer.observation.text, isEmpty);
+      expect(chat.reading.streaming, isEmpty);
       expect(sawStreamedText, isTrue);
-      expect(chat.messages.where((row) => row['role'] == 'user'), hasLength(1));
-      final answers = chat.messages
+      expect(
+        chat.reading.messages.where((row) => row['role'] == 'user'),
+        hasLength(1),
+      );
+      final answers = chat.reading.messages
           .where((row) => row['role'] == 'assistant')
           .toList();
       expect(answers, hasLength(1));
@@ -174,8 +200,8 @@ void main() {
         (widget) =>
             widget is ProfileMessage &&
             !widget.streaming &&
-            widget.message['role'] == 'assistant' &&
-            (widget.message['content'] as String).trim() == marker,
+            widget.message.role == 'assistant' &&
+            widget.message.text.trim() == marker,
       );
       expect(renderedAnswer, findsOneWidget);
       await tester.ensureVisible(renderedAnswer);

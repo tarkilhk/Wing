@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "analyzer_feature_flags": [
+    "private-named-parameters"
+  ],
+  "targets": [
+    {
+      "id": "DC03-mode",
+      "file": "lib/core/services/attachment_draft_service.dart",
+      "symbol": "AttachmentDraftMode",
+      "include_members": true,
+      "disposition": "candidate-interface-removal"
+    },
+    {
+      "id": "DC03-rest-limit",
+      "file": "lib/core/services/attachment_draft_service.dart",
+      "symbol": "maxRestImageBytes",
+      "include_members": false,
+      "disposition": "candidate"
+    },
+    {
+      "id": "DC03-rest-validation",
+      "file": "lib/core/services/attachment_draft_service.dart",
+      "symbol": "AttachmentDraftService.validateRestDrafts",
+      "include_members": false,
+      "disposition": "candidate"
+    },
+    {
+      "id": "DC03-multiple-helper",
+      "file": "lib/core/services/attachment_draft_service.dart",
+      "symbol": "allowsMultipleImageSelection",
+      "include_members": false,
+      "disposition": "candidate"
+    },
+    {
+      "id": "KEEP-image-preparation",
+      "file": "lib/core/services/attachment_draft_service.dart",
+      "symbol": "AttachmentDraftService.prepareImage",
+      "include_members": false,
+      "disposition": "retain-interface-simplify"
+    },
+    {
+      "id": "KEEP-image-bytes",
+      "file": "lib/core/services/attachment_draft_service.dart",
+      "symbol": "AttachmentDraftService.prepareImageBytes",
+      "include_members": false,
+      "disposition": "retain-interface-simplify"
+    },
+    {
+      "id": "KEEP-remote-validation",
+      "file": "lib/core/services/attachment_draft_service.dart",
+      "symbol": "AttachmentDraftService.validateRemoteDrafts",
+      "include_members": false,
+      "disposition": "retain"
+    },
+    {
+      "id": "DC10-constant-busy",
+      "file": "lib/core/screens/administration/admin_providers_page.dart",
+      "symbol": "_AdminProvidersPageState._busy",
+      "include_members": false,
+      "disposition": "candidate"
+    }
+  ]
+}

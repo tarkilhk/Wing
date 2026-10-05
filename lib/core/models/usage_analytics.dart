@@ -8,14 +8,17 @@ const usageTokenLabels = ['Uncached input', 'Cached input', 'Output'];
 class UsageTokens {
   final List<int?> values;
   UsageTokens.fromJson(Map<String, dynamic> row)
-    : values = [for (final key in usageTokenKeys) usageTokenCount(row[key])];
+    : values = List.unmodifiable([
+        for (final key in usageTokenKeys) usageTokenCount(row[key]),
+      ]);
   const UsageTokens.zero() : values = const [0, 0, 0];
   const UsageTokens.unavailable() : values = const [null, null, null];
+  UsageTokens.fromCost(ModelUsageCost row) : values = row.tokenCounts;
   UsageTokens.sum(Iterable<UsageTokens> rows)
-    : values = [
+    : values = List.unmodifiable([
         for (var i = 0; i < 3; i++)
           _completeSum(rows.map((row) => row.values[i])),
-      ];
+      ]);
   int? get total => _completeSum(values);
   bool get complete => total != null;
 
@@ -40,7 +43,9 @@ class UsageDay {
 class UsageDaily {
   final List<UsageDay> days;
   final Set<String> reportedDates;
-  UsageDaily._(this.days, this.reportedDates);
+  UsageDaily._(Iterable<UsageDay> days, Iterable<String> reportedDates)
+    : days = List.unmodifiable(days),
+      reportedDates = Set.unmodifiable(reportedDates);
 
   /// A browsing year ending at the latest returned server date. Earlier
   /// padding is unknown, rather than pretending to know the server's cutoff.
@@ -106,17 +111,20 @@ class UsageDaily {
 class UsageModelGroup {
   final String model;
   final List<ModelUsageCost> rows;
-  UsageModelGroup(this.model, this.rows);
+  UsageModelGroup(this.model, Iterable<ModelUsageCost> rows)
+    : rows = List.unmodifiable(rows);
   String get id => model;
   UsageTokens get tokens =>
-      UsageTokens.sum(rows.map((r) => UsageTokens.fromJson(r.usage)));
+      UsageTokens.sum(rows.map((r) => UsageTokens.fromCost(r)));
   UsageCostSummary get costs => UsageCostSummary(rows);
 }
 
 class UsageModels {
   final List<ModelUsageCost> rows;
   final List<UsageModelGroup> groups;
-  UsageModels._(this.rows, this.groups);
+  UsageModels._(Iterable<ModelUsageCost> rows, Iterable<UsageModelGroup> groups)
+    : rows = List.unmodifiable(rows),
+      groups = List.unmodifiable(groups);
   factory UsageModels.fromJson(
     Map<String, dynamic> data,
     OpenAiPricingCatalog? prices,
@@ -142,7 +150,7 @@ class UsageModels {
   }
   UsageCostSummary get costs => UsageCostSummary(rows);
   UsageTokens get tokens =>
-      UsageTokens.sum(rows.map((r) => UsageTokens.fromJson(r.usage)));
+      UsageTokens.sum(rows.map((r) => UsageTokens.fromCost(r)));
 
   /// Reported provider totals cannot be split into token-type costs.
   List<double>? get tokenCosts {

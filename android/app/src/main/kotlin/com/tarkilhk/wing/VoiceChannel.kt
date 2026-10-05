@@ -8,28 +8,42 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 class VoiceChannel(private val activity: Activity, messenger: BinaryMessenger) {
-    companion object { const val PERMISSION_REQUEST = 7314 }
+    companion object {
+        const val PERMISSION_REQUEST = 7314
+        // Android returns only a request code even after Activity recreation.
+        // A retired channel cannot free the process slot before that callback.
+        private val permissions = VoicePermissionRequests<Permission>()
+    }
     private val channel = MethodChannel(messenger, "com.tarkilhk.wing/voice")
     private val capture = VoiceCapture(activity, ::emit)
     private val playback = VoicePlayback(activity, ::emit)
-    private var pending: Pair<MethodCall, MethodChannel.Result>? = null
+    private var closed = false
+    private val replies = mutableSetOf<Reply>()
+    private class Permission(val owner: VoiceChannel, val call: MethodCall, val reply: Reply)
+    private inner class Reply(private val delegate: MethodChannel.Result) : MethodChannel.Result {
+        private val once = VoiceReply<() -> Unit> { action, _ -> replies.remove(this); action?.invoke() }
+        private fun finish(action: () -> Unit) { once.settle(action) }
+        override fun success(result: Any?) = finish { delegate.success(result) }
+        override fun error(code: String, message: String?, details: Any?) = finish { delegate.error(code, message, details) }
+        override fun notImplemented() = finish { delegate.notImplemented() }
+    }
     init {
-        // A previous process may have died before its normal cleanup.
-        voiceDirectory(activity).listFiles()?.forEach { it.delete() }
+        // Preparation and process-death file cleanup run once on the same owned
+        // transfer thread, before current-process files can be created.
+        VoiceFileWork.process.prepare(voicePath(activity))
         channel.setMethodCallHandler(::handle)
     }
-    private fun emit(event: Map<String, Any>) { channel.invokeMethod("event", event) }
-    private fun handle(call: MethodCall, result: MethodChannel.Result) {
+    private fun emit(event: Map<String, Any>) { if (!closed) channel.invokeMethod("event", event) }
+    private fun handle(call: MethodCall, rawResult: MethodChannel.Result) {
+        val result = Reply(rawResult)
+        replies.add(result)
+        if (closed) { result.error("cancelled", "Voice channel closed.", null); return }
         try {
             val id = call.argument<String>("id").orEmpty()
             when (call.method) {
                 "requestPermission" -> {
                     if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) result.success(true)
-                    else {
-                        check(pending == null) { "Wait for microphone permission." }
-                        pending = call to result
-                        activity.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSION_REQUEST)
-                    }
+                    else requestPermission(call, result)
                 }
                 "capabilities" -> capture.languages { languages -> playback.withTts { ready ->
                     result.success(mapOf("recognitionAvailable" to capture.available(), "languages" to languages,
@@ -37,16 +51,20 @@ class VoiceChannel(private val activity: Activity, messenger: BinaryMessenger) {
                 } }
                 "start" -> {
                     check(id.isNotEmpty()) { "Missing capture ID." }
-                    if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                        check(pending == null) { "Wait for microphone permission." }
-                        pending = call to result
-                        activity.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSION_REQUEST)
-                    } else start(call, result)
+                    if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) requestPermission(call, result)
+                    else start(call, result)
                 }
-                "stop" -> result.success(capture.stop(id))
+                "stop" -> capture.stop(id) { bytes, error ->
+                    if (error == null) result.success(bytes)
+                    else result.error("voice_unavailable", error.message ?: "Could not finish recording.", null)
+                }
                 "cancel" -> {
-                    if (pending?.first?.argument<String>("id") == id) {
-                        pending?.second?.error("cancelled", "Recording cancelled.", null); pending = null
+                    permissions.current?.takeIf { it.value?.owner === this && it.value?.call?.argument<String>("id") == id }?.let {
+                        val pending = it.value
+                        it.cancel()
+                        pending?.reply?.error("cancelled", "Recording cancelled.", null)
+                        // Keep the Android request-code slot until its actual
+                        // callback; a cancelled request cannot rebound to a new ID.
                     }
                     capture.cancel(id); result.success(null)
                 }
@@ -58,30 +76,57 @@ class VoiceChannel(private val activity: Activity, messenger: BinaryMessenger) {
             }
         } catch (error: Exception) { result.error("voice_unavailable", error.message ?: "Voice is unavailable.", null) }
     }
+    private fun requestPermission(call: MethodCall, result: Reply) {
+        permissions.begin(Permission(this, call, result))
+        try { activity.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSION_REQUEST) }
+        catch (error: Exception) { permissions.finish(); throw error }
+    }
     private fun start(call: MethodCall, result: MethodChannel.Result) {
+        if (closed) { result.error("cancelled", "Voice channel closed.", null); return }
         playback.stop()
         capture.start(call.argument<String>("id")!!, call.argument<Boolean>("local") == true,
-            call.argument<String>("language").orEmpty())
-        result.success(null)
+            call.argument<String>("language").orEmpty()) { error ->
+            if (error == null) result.success(null)
+            else result.error("voice_unavailable", error.message ?: "Could not start recording.", null)
+        }
     }
     fun permissionResult(requestCode: Int, grants: IntArray): Boolean {
         if (requestCode != PERMISSION_REQUEST) return false
-        val request = pending; pending = null
-        if (request != null) {
-            if (request.first.method == "requestPermission") {
-                request.second.success(grants.firstOrNull() == PackageManager.PERMISSION_GRANTED)
-                return true
-            }
-            if (grants.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-                try { start(request.first, request.second) }
-                catch (error: Exception) { request.second.error("voice_unavailable", error.message, null) }
-            } else request.second.error("permission_denied", "Allow microphone access in Android app permissions to record your voice.", null)
-        }
+        // A stale callback on a retired channel cannot consume another live
+        // channel's newly admitted request. A cancelled payload is already
+        // cleared and may be consumed by the recreated Activity's OS callback.
+        if (permissions.current?.value?.owner?.let { it !== this } == true) return true
+        val permission = permissions.finish()
+        if (permission == null || permission.cancelled || closed) return true
+        val request = permission.value ?: return true
+        if (request.call.method == "requestPermission") {
+            request.reply.success(grants.firstOrNull() == PackageManager.PERMISSION_GRANTED)
+        } else if (grants.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            try { start(request.call, request.reply) }
+            catch (error: Exception) { request.reply.error("voice_unavailable", error.message, null) }
+        } else request.reply.error("permission_denied", "Allow microphone access in Android app permissions to record your voice.", null)
         return true
     }
-    fun pause() { capture.pause(); playback.stop() }
+    fun pause() {
+        if (closed) return
+        // Android's permission dialog pauses the Activity while it remains visible.
+        capture.pause(); playback.stop()
+    }
+    fun leaveForeground() {
+        if (closed) return
+        permissions.current?.takeIf { it.value?.owner === this }?.let {
+            val pending = it.value
+            it.cancel()
+            pending?.reply?.error("cancelled", "Voice request left the foreground.", null)
+        }
+        // A grant can arrive after onPause but before the Activity becomes hidden.
+        pause()
+    }
     fun close() {
-        pending?.second?.error("cancelled", "Recording cancelled.", null); pending = null
+        if (closed) return
+        closed = true
+        replies.toList().forEach { it.error("cancelled", "Voice channel closed.", null) }
+        permissions.current?.takeIf { it.value?.owner === this }?.cancel()
         capture.close(); playback.close(); channel.setMethodCallHandler(null)
     }
 }

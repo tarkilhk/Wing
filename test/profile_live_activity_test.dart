@@ -1,3 +1,7 @@
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -95,18 +99,25 @@ class ActivityHost {
 void main() {
   late ActivityHost host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
 
   Future<void> initialize() async {
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Host',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Host',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       connectionIdentity: 'activity-test',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
@@ -118,7 +129,10 @@ void main() {
     await initialize();
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   Future<void> restorePending(String profile) async {
     final key = ProfileSessionKey(
@@ -184,7 +198,7 @@ void main() {
   );
 
   test('discovers unopened live sessions without changing selection', () async {
-    final selected = await controller.createChat();
+    final selected = await controller.createChat(canDispatch: () => true);
     final selectedScope = controller.current!.scope;
     host.reads.clear();
     host.live.addAll([
@@ -230,8 +244,12 @@ void main() {
   });
 
   test('removes ended entries from the global snapshot', () async {
-    final completed = await controller.createChat();
-    completed.status = ProfileTurnStatus.completed;
+    final completed = await controller.createChat(canDispatch: () => true);
+    emitChatEvent(controller, completed, 'message.start');
+    emitChatEvent(controller, completed, 'session.info', {
+      'open_requests': [],
+      'running': false,
+    });
     host.live.addAll([
       {'id': 'old-a', 'session_key': 'same', 'status': 'working'},
     ]);
@@ -287,12 +305,12 @@ void main() {
   test(
     'uses an exact local runtime and durable identity to resolve ownership',
     () async {
-      final local = await controller.createChat();
+      final local = await controller.createChat(canDispatch: () => true);
       host.saved['b'] = [
         {'id': local.key.sessionId, 'title': 'Colliding chat', 'profile': 'b'},
       ];
       host.live.add({
-        'id': local.runtimeId,
+        'id': local.runtime.runtimeId,
         'session_key': local.key.sessionId,
         'status': 'working',
       });

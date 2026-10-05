@@ -1,14 +1,19 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'administration_fixture.dart';
+import 'stock_task_blueprints.dart';
 
 Map<String, dynamic> taskJson({
   String id = 'morning',
   String state = 'scheduled',
   String? name,
+  String profile = 'personal',
 }) => {
   'id': id,
+  'profile': profile,
+  'profile_name': profile,
   'name': name ?? 'Morning briefing',
   'prompt':
       'Summarize my calendar and the three things that need my attention today.',
@@ -22,8 +27,12 @@ Map<String, dynamic> taskJson({
 };
 
 class ScheduledTasksFixture {
-  ScheduledTasksFixture({String serverId = 'Home server', bool samples = true})
-    : admin = AdministrationFixture(serverId) {
+  ScheduledTasksFixture({
+    String serverId = 'Home server',
+    bool samples = true,
+    DateTime? now,
+  }) : admin = AdministrationFixture(serverId),
+       _now = now ?? DateTime.utc(2026, 10, 3, 12) {
     if (samples) {
       jobs['morning'] = taskJson();
       jobs['review'] = taskJson(
@@ -38,6 +47,7 @@ class ScheduledTasksFixture {
     admin.override = send;
   }
   final AdministrationFixture admin;
+  final DateTime _now;
   final jobs = <String, Map<String, dynamic>>{};
   final runRows = <Map<String, dynamic>>[
     {
@@ -49,6 +59,7 @@ class ScheduledTasksFixture {
     },
   ];
   bool failList = false,
+      failListAfterMutation = false,
       failRuns = false,
       missingProfile = false,
       deleteOneShot = false;
@@ -97,38 +108,18 @@ class ScheduledTasksFixture {
       };
     }
     if (path == 'cron/blueprints') {
-      return {
-        'blueprints': [
-          {
-            'key': 'morning-brief',
-            'title': 'Morning briefing',
-            'description': 'Start the day with a clear picture.',
-            'fields': [
-              {
-                'name': 'topic',
-                'label': 'What to cover',
-                'type': 'text',
-                'default': '',
-                'optional': false,
-              },
-              {
-                'name': 'time',
-                'label': 'Time',
-                'type': 'time',
-                'default': '09:00',
-                'optional': false,
-              },
-              {
-                'name': 'deliver',
-                'label': 'Results',
-                'type': 'enum',
-                'default': 'origin',
-                'options': ['local', 'telegram'],
-              },
-            ],
-          },
-        ],
-      };
+      // Copy the immutable form schema so callers cannot mutate later replies.
+      // Stock's HTTP route advertises discovered platform IDs for deliver.
+      final blueprints = (jsonDecode(jsonEncode(stockTaskBlueprints)) as List)
+          .cast<Map<String, dynamic>>();
+      for (final blueprint in blueprints) {
+        for (final field in blueprint['fields'] as List) {
+          if (field['name'] == 'deliver') {
+            field['options'] = ['origin', 'local', 'telegram', 'discord'];
+          }
+        }
+      }
+      return {'blueprints': blueprints};
     }
     if (path == 'cron/jobs' && method == 'GET') {
       if (failList) throw StateError('offline');
@@ -138,20 +129,47 @@ class ScheduledTasksFixture {
     }
     if (path.endsWith('/runs')) {
       if (failRuns) throw StateError('offline');
-      return {'runs': runRows, 'limit': int.parse(query['limit']!)};
+      final limit = int.parse(query['limit']!);
+      return {'runs': runRows.take(limit).toList(), 'limit': limit};
     }
     if (method != 'GET') {
       mutations++;
+      if (failListAfterMutation) failList = true;
       if (gate != null) await gate!.future;
       if (mutationError != null) throw mutationError!;
     }
     if (path == 'cron/jobs' && method == 'POST' ||
         path == 'cron/blueprints/instantiate') {
+      if (path == 'cron/blueprints/instantiate') {
+        final matching = stockTaskBlueprints.where(
+          (blueprint) => blueprint['key'] == body?['blueprint'],
+        );
+        if (matching.isEmpty) throw CronHttpException(404, path, null);
+        final fields = (matching.single['fields'] as List)
+            .cast<Map<String, dynamic>>();
+        final values = Map<String, dynamic>.from(body!['values'] as Map);
+        final names = fields.map((field) => field['name']).toSet();
+        if (values.keys.any((name) => !names.contains(name))) {
+          throw CronHttpException(422, path, null);
+        }
+        for (final field in fields) {
+          final value = values.containsKey(field['name'])
+              ? values[field['name']]
+              : field['default'];
+          if ((value == null || value == '') && field['optional'] == false ||
+              field['type'] == 'enum' &&
+                  field['strict'] == true &&
+                  !(field['options'] as List).contains(value.toString())) {
+            throw CronHttpException(422, path, null);
+          }
+        }
+      }
       final job = taskJson(id: 'new-${jobs.length}')..addAll(body ?? {});
-      job['schedule'] = {
-        'kind': 'cron',
-        'expr': body?['schedule'] ?? '0 9 * * *',
-      };
+      final expression = path == 'cron/blueprints/instantiate'
+          ? '0 9 * * *'
+          : body!['schedule'] as String;
+      job['schedule'] = _projectSchedule(expression, _now);
+      job['schedule_display'] = job['schedule']['display'];
       jobs[job['id'] as String] = job;
       return {...job};
     }
@@ -166,7 +184,11 @@ class ScheduledTasksFixture {
     if (method == 'PUT') {
       final updates = Map<String, dynamic>.from(body!['updates'] as Map);
       if (updates['schedule'] is String) {
-        updates['schedule'] = {'kind': 'cron', 'expr': updates['schedule']};
+        updates['schedule'] = _projectSchedule(
+          updates['schedule'] as String,
+          _now,
+        );
+        updates['schedule_display'] = updates['schedule']['display'];
       }
       job.addAll(updates);
     }
@@ -184,4 +206,69 @@ class ScheduledTasksFixture {
     }
     return {...job};
   }
+}
+
+// A bounded fake adapter for canonical UI-emitted forms, not a croniter clone.
+// Stock projection golden cases are pinned in hermes_task_schedule_projection.json.
+Map<String, dynamic> _projectSchedule(String value, DateTime now) {
+  final text = value.trim();
+  final instant = RegExp(
+    r'^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:\d{2})$',
+  ).firstMatch(text);
+  if (instant != null) {
+    final parts = [for (var i = 1; i <= 6; i++) int.parse(instant[i]!)];
+    final wall = DateTime.utc(
+      parts[0],
+      parts[1],
+      parts[2],
+      parts[3],
+      parts[4],
+      parts[5],
+    );
+    final fraction = (instant[7] ?? '').padRight(6, '0');
+    final offset = instant[8]!;
+    if (parts[0] < 1 ||
+        wall.year != parts[0] ||
+        wall.month != parts[1] ||
+        wall.day != parts[2] ||
+        wall.hour != parts[3] ||
+        wall.minute != parts[4] ||
+        wall.second != parts[5] ||
+        offset != 'Z' &&
+            (int.parse(offset.substring(1, 3)) > 23 ||
+                int.parse(offset.substring(4)) > 59)) {
+      throw const FormatException('Invalid fixture timestamp');
+    }
+    final stored =
+        '${text.substring(0, 19)}${int.parse(fraction) == 0 ? '' : '.$fraction'}${offset == 'Z' ? '+00:00' : offset}';
+    return {
+      'kind': 'once',
+      'run_at': stored,
+      'display': 'once at ${text.substring(0, 10)} ${text.substring(11, 16)}',
+    };
+  }
+  final duration = RegExp(r'^(every|in) ([1-9][0-9]*)m$').firstMatch(text);
+  if (duration != null) {
+    final minutes = int.parse(duration[2]!);
+    if (duration[1] == 'every') {
+      return {
+        'kind': 'interval',
+        'minutes': minutes,
+        'display': 'every ${minutes}m',
+      };
+    }
+    final utc = now.toUtc().add(Duration(minutes: minutes));
+    final fraction = utc.millisecond * 1000 + utc.microsecond;
+    final stored =
+        '${utc.toIso8601String().substring(0, 19)}${fraction == 0 ? '' : '.${fraction.toString().padLeft(6, '0')}'}+00:00';
+    return {'kind': 'once', 'run_at': stored, 'display': 'once in ${minutes}m'};
+  }
+  final fields = text.split(RegExp(r'\s+'));
+  if ((fields.length == 5 || fields.length == 6) &&
+      fields.every((field) => RegExp(r'^[A-Za-z0-9*\-,/]+$').hasMatch(field))) {
+    return {'kind': 'cron', 'expr': text, 'display': text};
+  }
+  throw const FormatException(
+    'Fixture schedule is outside its explicitly supported canonical forms',
+  );
 }

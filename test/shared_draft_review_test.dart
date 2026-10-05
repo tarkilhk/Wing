@@ -1,12 +1,21 @@
+import 'package:wing/core/services/shared_draft_session.dart';
+import 'package:wing/core/services/workspace_entry_session.dart';
+import 'package:wing/core/services/profile_workspace_registry.dart';
+import 'package:wing/core/services/profile_connection_identity.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/ws_client.dart';
+import 'package:wing/core/models/composer_work.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/attachment_draft.dart';
-import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/shared_draft_review.dart';
 import 'package:wing/core/services/android_share_intent_service.dart';
 import 'package:wing/core/services/attachment_draft_service.dart';
-import 'package:wing/core/services/composer_draft_store.dart';
 import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/composer_draft_store.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,20 +24,46 @@ import 'support/profile_paging_fixture.dart';
 
 Future<ProfileWorkspaceController> _controller(
   ProfileBrowserFixture fixture, {
+  required AppPreferences appPreferences,
   AttachmentDraftService? attachments,
+  Set<String> missingSessions = const {},
 }) async {
   final preferences = await SharedPreferences.getInstance();
   final controller = ProfileWorkspaceController(
-    connection: SavedConnection(
-      id: 'host',
-      label: 'Review host',
-      host: 'localhost',
-      port: 1,
-      apiKey: '',
+    access: ConnectionAccess(
+      connection: SavedConnection(
+        id: 'host',
+        label: 'Review host',
+        host: 'localhost',
+        port: 1,
+        apiKey: '',
+      ),
+      dashboardOAuth: null,
     ),
     connectionIdentity: 'share-review',
     preferences: preferences,
-    gatewayFactory: fixture.gateway,
+    appPreferences: appPreferences,
+    gatewayFactory: (scope) {
+      final base = fixture.gateway(scope);
+      return ProfileGateway(
+        scope: scope,
+        discover: base.discover,
+        connect: base.connect,
+        close: base.close,
+        get: base.read,
+        rpc: (method, params) {
+          if (method == 'session.resume' &&
+              missingSessions.contains(params['session_id'])) {
+            throw JsonRpcError(
+              'session.resume',
+              'session not found',
+              code: 4007,
+            );
+          }
+          return base.call(method, params);
+        },
+      );
+    },
     attachmentService: attachments,
   );
   await controller.initialize();
@@ -50,14 +85,79 @@ class _FailingAttachments extends AttachmentDraftService {
   }
 }
 
+class _ReviewCredentials implements CredentialStore {
+  final _values = <String, String>{};
+  @override
+  Future<String?> read(String key) async => _values[key];
+  @override
+  Future<void> write(String key, String value) async {
+    _values[key] = value;
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    _values.remove(key);
+  }
+}
+
 Future<Future<bool>> _openReview(
   WidgetTester tester,
   ProfileWorkspaceController controller,
   AndroidSharePayload payload, {
   double textScale = 1,
   ProfileChat? initialChat,
-  ({ProfileSessionKey key, ComposerDraftSnapshot draft})? recoverableDraft,
+  ({ProfileSessionKey key, ComposerSavedWork draft})? recoverableDraft,
 }) async {
+  final manager = await ConnectionManager.create(
+    controller.preferences,
+    credentialStore: _ReviewCredentials(),
+  );
+  await manager.importConnections(
+    [controller.connection],
+    replaceExisting: true,
+    canCommit: () => true,
+  );
+  final registry = ProfileWorkspaceRegistry(
+    identities: ProfileConnectionIdentity(
+      credentialStore: _ReviewCredentials(),
+    ),
+    create: (_, _) => controller,
+  );
+  final entry = WorkspaceEntrySession(
+    connectionManager: manager,
+    appPreferences: controller.appPreferences,
+    registry: registry,
+    launchIntents: null,
+  );
+  final shares = AndroidShareIntentService();
+  // Recovery is discovered from the exact stock missing-session receipt and the
+  // real saved draft; no fabricated owner recovery state is installed.
+  shares.pendingShare.value = AndroidSharePayload(
+    id: payload.id,
+    text: payload.text,
+    files: payload.files,
+    target: recoverableDraft?.key.toJson() ?? payload.target,
+  );
+  final session = SharedDraftSession(
+    connectionManager: manager,
+    entrySession: entry,
+    shareIntents: shares,
+  );
+  session.start(startupReady: null, deferredShareId: null);
+  final offer = session.claim(explicit: true, presentationBlocked: false)!;
+  final needsReview = await session.prepare(
+    offer,
+    manager.getConnections().single,
+    reviewDestination: initialChat?.key,
+  );
+  expect(needsReview, isTrue);
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    session.dispose();
+    entry.dispose();
+    registry.dispose();
+    shares.dispose();
+  });
   Future<bool>? result;
   await tester.pumpWidget(
     MaterialApp(
@@ -71,13 +171,7 @@ Future<Future<bool>> _openReview(
         builder: (context) => FilledButton(
           key: const Key('open-review'),
           onPressed: () {
-            result = reviewSharedDraft(
-              context,
-              controller,
-              payload,
-              initialChat: initialChat,
-              recoverableDraft: recoverableDraft,
-            );
+            result = reviewSharedDraft(context, session: session, offer: offer);
           },
           child: const Text('Review share'),
         ),
@@ -90,7 +184,12 @@ Future<Future<bool>> _openReview(
 }
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  late AppPreferences appPreferences;
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    appPreferences = AppPreferences(await SharedPreferences.getInstance());
+  });
+  tearDown(() => appPreferences.dispose());
 
   testWidgets(
     'reviews text and files with New chat selected on a large phone',
@@ -98,8 +197,10 @@ void main() {
       tester.view.physicalSize = const Size(320, 640);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      final controller = await _controller(ProfileBrowserFixture());
-      addTearDown(controller.dispose);
+      final controller = await _controller(
+        ProfileBrowserFixture(),
+        appPreferences: appPreferences,
+      );
 
       final result = await _openReview(
         tester,
@@ -146,8 +247,10 @@ void main() {
     tester,
   ) async {
     final fixture = ProfileBrowserFixture();
-    final controller = await _controller(fixture);
-    addTearDown(controller.dispose);
+    final controller = await _controller(
+      fixture,
+      appPreferences: appPreferences,
+    );
     await ComposerDraftStore(
       await SharedPreferences.getInstance(),
       connectionIdentity: 'share-review',
@@ -176,7 +279,10 @@ void main() {
     expect(await result, isTrue);
     expect(controller.current!.scope.profileName, 'work');
     expect(controller.current!.chat!.key.sessionId, 'newest');
-    expect(controller.current!.chat!.draft, 'Existing draft\n\nShared text');
+    expect(
+      controller.current!.chat!.composer.observation.text,
+      'Existing draft\n\nShared text',
+    );
     expect(fixture.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
   });
 
@@ -185,8 +291,11 @@ void main() {
   ) async {
     final fixture = ProfileBrowserFixture();
     final attachments = _FailingAttachments();
-    final controller = await _controller(fixture, attachments: attachments);
-    addTearDown(controller.dispose);
+    final controller = await _controller(
+      fixture,
+      appPreferences: appPreferences,
+      attachments: attachments,
+    );
     final result = await _openReview(
       tester,
       controller,
@@ -233,8 +342,12 @@ void main() {
     (tester) async {
       final fixture = ProfileBrowserFixture();
       final attachments = _FailingAttachments();
-      final controller = await _controller(fixture, attachments: attachments);
-      addTearDown(controller.dispose);
+      final controller = await _controller(
+        fixture,
+        appPreferences: appPreferences,
+        attachments: attachments,
+        missingSessions: {'expired-draft'},
+      );
       final source = ProfileSessionKey(
         controller.current!.scope,
         'expired-draft',
@@ -271,7 +384,10 @@ void main() {
         await tester.tap(find.byKey(const Key('share-add-to-draft')));
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('share-review-error')), findsOneWidget);
-        expect(controller.current!.chat!.draft, 'Keep the original draft');
+        expect(
+          controller.current!.chat!.composer.observation.text,
+          'Keep the original draft',
+        );
         expect(
           fixture.calls.where((call) => call.$2 == 'session.create'),
           hasLength(1),
@@ -298,8 +414,10 @@ void main() {
   ) async {
     final fixture = ProfilePagingFixture()..count = 75;
     fixture.pageFailures.add(('personal', 50));
-    final controller = await _controller(fixture);
-    addTearDown(controller.dispose);
+    final controller = await _controller(
+      fixture,
+      appPreferences: appPreferences,
+    );
     final result = await _openReview(
       tester,
       controller,
@@ -341,8 +459,10 @@ void main() {
     tester,
   ) async {
     final fixture = ProfilePagingFixture()..count = 75;
-    final controller = await _controller(fixture);
-    addTearDown(controller.dispose);
+    final controller = await _controller(
+      fixture,
+      appPreferences: appPreferences,
+    );
     await controller.openSession(
       ProfileSessionKey(controller.current!.scope, 'chat-60'),
     );
@@ -368,26 +488,37 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(await result, isTrue);
-    expect(initialChat.draft, 'Append to the older chat');
+    expect(initialChat.composer.observation.text, 'Append to the older chat');
     expect(fixture.calls.where((call) => call.$2 == 'session.create'), isEmpty);
   });
 
   testWidgets('does not expose an unowned initial chat as a destination', (
     tester,
   ) async {
-    final controller = await _controller(ProfileBrowserFixture());
-    addTearDown(controller.dispose);
-    final wrongOwner = ProfileChat(
-      key: ProfileSessionKey(
-        WorkspaceScope(
-          connectionId: 'other-connection',
-          connectionIdentity: 'other-identity',
-          profileName: 'personal',
+    final controller = await _controller(
+      ProfileBrowserFixture(),
+      appPreferences: appPreferences,
+    );
+    final foreign = ProfileWorkspaceController(
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'other-connection',
+          label: 'Other',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
         ),
-        'chat-60',
+        dashboardOAuth: null,
       ),
-      runtimeId: 'other-runtime',
-      title: 'Unowned chat',
+      connectionIdentity: 'other-identity',
+      preferences: controller.preferences,
+      appPreferences: appPreferences,
+      gatewayFactory: ProfileBrowserFixture().gateway,
+    );
+    addTearDown(foreign.dispose);
+    await foreign.initialize();
+    final wrongOwner = await foreign.openSession(
+      ProfileSessionKey(foreign.current!.scope, 'chat-60'),
     );
     final result = await _openReview(
       tester,

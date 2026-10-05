@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/reading_snapshot_message.dart';
+
 /// Bounded reading snapshots, partitioned by the verified credential identity.
 /// Runtime state, approvals, credentials and pending writes are never restored
 /// from this store. Hermes remains authoritative on every reconnection.
@@ -11,12 +13,27 @@ class WorkspaceSnapshotStore {
   Future<void>? _writeTail;
 
   WorkspaceSnapshotStore(this.preferences, this.identity);
+
   String get _key => 'workspace_reading_v1_$identity';
   Map<String, dynamic> read() {
     try {
-      return Map<String, dynamic>.from(
+      final snapshot = Map<String, dynamic>.from(
         jsonDecode(preferences.getString(_key) ?? '{}') as Map,
       );
+      for (final profile
+          in (snapshot['profiles'] as List? ?? []).whereType<Map>()) {
+        for (final chat in (profile['chats'] as List? ?? []).whereType<Map>()) {
+          for (final message
+              in (chat['messages'] as List? ?? []).whereType<Map>()) {
+            if (message['submitted_attachments'] is List) {
+              message['submitted_attachments'] = readingSnapshotAttachments(
+                message['submitted_attachments'],
+              );
+            }
+          }
+        }
+      }
+      return snapshot;
     } catch (_) {
       return {};
     }
@@ -86,7 +103,11 @@ String _encodeSnapshot(Map<String, dynamic> snapshot) {
                       ...chat,
                       'messages': [
                         for (final row in chat['messages'] as List)
-                          if (jsonEncode(row).length < 32768) row,
+                          if (row is Map)
+                            if (projectReadingSnapshotMessage(row)
+                                case final projected
+                                when jsonEncode(projected).length < 32768)
+                              projected,
                       ],
                     }
                   else

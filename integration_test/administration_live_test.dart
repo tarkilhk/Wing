@@ -1,3 +1,9 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/models/provider_access.dart';
+import 'package:wing/core/models/provider_inventory.dart';
+import 'package:wing/core/screens/administration/admin_provider_credentials.dart';
+import 'package:wing/core/models/settings_edit.dart';
 import 'package:wing/core/services/server_connection_status.dart';
 import 'package:flutter/material.dart';
 import 'package:wing/core/widgets/compact_switch.dart';
@@ -8,8 +14,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/administration/administration_content.dart';
 import 'package:wing/core/screens/administration/admin_settings_page.dart';
 import 'package:wing/core/screens/administration/admin_tool_setup_page.dart';
+import 'package:wing/core/screens/administration/admin_voice_routes.dart';
+import 'package:wing/core/services/android_voice.dart';
+import 'package:wing/core/services/profile_tool_setup_session.dart';
 import 'package:wing/core/screens/administration/admin_widgets.dart';
-import 'package:wing/core/screens/administration/admin_providers_page.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
@@ -38,13 +46,20 @@ void main() {
     expect(isolated, isTrue, reason: 'Requires HERMES_ADMIN_DISPOSABLE=true');
     expect(port, greaterThan(0));
     server = AdministrationRepository.forConnection(
-      connection,
+      ConnectionAccess(connection: connection, dashboardOAuth: null),
       'admin-verifier',
       connectionStatus: ServerConnectionStatus(connection.label),
     );
     for (final name in ['admin-live-a', 'admin-live-b']) {
       if ((await server.discover()).named(name) == null) {
-        await server.write('POST', 'profiles', {'name': name});
+        await server.ownedMutation(
+          'POST',
+          'profiles',
+          const {},
+          {'name': name},
+          () => isolated,
+          () {},
+        );
       }
     }
     profile = server.profile('admin-live-a');
@@ -54,17 +69,24 @@ void main() {
     // an active MCP stderr handle prevents profile deletion until process exit.
     server.close();
   });
+  late AppPreferences appPreferences;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    final fixturePreferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(fixturePreferences);
     controller = ProfileWorkspaceController(
-      connection: connection,
+      appPreferences: appPreferences,
+      access: ConnectionAccess(connection: connection, dashboardOAuth: null),
       connectionIdentity: 'admin-live-ui',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: fixturePreferences,
     );
     await controller.initialize();
     expect(await controller.switchProfile('admin-live-a'), isTrue);
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   Future<void> idle(WidgetTester tester) async {
     for (var i = 0; i < 6; i++) {
@@ -190,16 +212,10 @@ void main() {
     await tap(tester, 'Memory');
     await until(
       tester,
-      () => find
-          .textContaining('Memory correction is unavailable')
-          .evaluate()
-          .isNotEmpty,
+      () => find.text('Read only').evaluate().isNotEmpty,
       'memory browser loaded',
     );
-    expect(
-      find.textContaining('Memory correction is unavailable'),
-      findsOneWidget,
-    );
+    expect(find.text('Read only'), findsOneWidget);
     await tester.tap(find.byTooltip('Memory settings'));
     await idle(tester);
     await visible(tester, find.text('Retain memories'));
@@ -750,7 +766,24 @@ void main() {
         MaterialApp(
           key: ValueKey(tool),
           theme: wingTheme(Brightness.dark),
-          home: AdminToolSetupPage(profile: profile, name: tool),
+          home: tool == 'tts'
+              ? profileSpeechSynthesisPage(
+                  profile,
+                  device: AndroidVoice.instance,
+                )
+              : AdminToolSetupPage(
+                  createSession: () =>
+                      ProfileToolSetupSession(profile, tool: tool),
+                  onCredential: (context, field) => adminPushProfile(
+                    context,
+                    profile,
+                    (context, profile) => AdminSecretPage(
+                      profile: profile,
+                      name: field.key,
+                      isSet: field.isSet,
+                    ),
+                  ),
+                ),
         ),
       );
       await idle(tester);
@@ -1036,8 +1069,10 @@ void main() {
       final context = tester.element(find.byType(HermesAdministrationContent));
       Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) =>
-              AdminProviderSignIn(profile: profile, provider: candidate),
+          builder: (_) => AdminProviderSignIn(
+            profile: profile,
+            target: ProviderSignInTarget.fromAccess(ProviderAccess(candidate)),
+          ),
         ),
       );
       await idle(tester);

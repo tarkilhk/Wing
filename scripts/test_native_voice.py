@@ -201,7 +201,7 @@ class Driver:
             record = self.evidence['suites'][name]
             record.update({'flutter_exit': result, 'observed_markers': sorted(seen)})
             if result:
-                raise RuntimeError('Flutter ' + name + ' assertions failed; inspect ' + str(log_path))
+                raise RuntimeError('Flutter ' + name + ' suite exited unsuccessfully; inspect ' + str(log_path))
             if required_markers and seen != required_markers:
                 raise RuntimeError('Missing permission stages: ' + str(sorted(required_markers - seen)))
             if 'All tests passed!' not in transcript:

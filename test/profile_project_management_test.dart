@@ -1,3 +1,7 @@
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +29,7 @@ class _ProjectHost {
       {'id': 'project-b', 'label': 'B project', 'path': '/b', 'lastActive': 1},
     ],
   };
+  final history = <String, List<Map<String, dynamic>>>{};
   bool rejectUpdateAck = false;
   bool rejectDeleteAck = false;
   bool failDeleteRefresh = false;
@@ -59,11 +64,41 @@ class _ProjectHost {
           ],
         };
       }
+      if (path.endsWith('/messages')) {
+        final id = Uri.decodeComponent(path.split('/')[1]);
+        final offset = int.parse(query['offset']!);
+        final limit = int.parse(query['limit']!);
+        final rows = (history[id] ?? <Map<String, dynamic>>[])
+            .skip(offset)
+            .take(limit)
+            .toList();
+        return {
+          'session_id': id,
+          'messages': rows,
+          'pagination': {
+            'offset': offset,
+            'limit': limit,
+            'returned': rows.length,
+            'order': 'latest',
+          },
+        };
+      }
       throw StateError('Unexpected read $path');
     },
     rpc: (method, params) async {
       calls.add((scope.profileName, method, params));
       switch (method) {
+        case 'session.resume':
+          return {
+            'session_id': '${scope.profileName}-runtime',
+            'session_key': params['session_id'],
+            'resumed': params['session_id'],
+            'status': 'idle',
+            'messages':
+                history[params['session_id']] ?? <Map<String, dynamic>>[],
+            'running': false,
+            'info': {'profile_name': scope.profileName},
+          };
         case 'projects.tree':
           if (failNextTree.remove(scope.profileName)) {
             throw StateError('Tree refresh failed');
@@ -122,31 +157,41 @@ class _ProjectHost {
 void main() {
   late _ProjectHost host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     host = _ProjectHost();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
       connectionIdentity: 'project-host',
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Host',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Host',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   test('updates server appearance and refreshes selected metadata', () async {
     final resource = controller.current!;
     await controller.selectProject(resource.projects.single);
-    resource.selectedSession = 'a-chat';
+    await controller.openSession(ProfileSessionKey(resource.scope, 'a-chat'));
 
     await controller.updateProject(
       resource.scope,
@@ -154,6 +199,7 @@ void main() {
       name: 'Renamed',
       color: '',
       icon: 'rocket',
+      canDispatch: () => true,
     );
 
     final call = host.calls.lastWhere((entry) => entry.$2 == 'projects.update');
@@ -176,25 +222,30 @@ void main() {
     'late delete changes only its owner and preserves chat records',
     () async {
       final resourceA = controller.current!;
+      host.history['a-chat'] = [
+        {'id': 1, 'role': 'assistant', 'content': 'Keep this answer'},
+      ];
       await controller.selectProject(resourceA.projects.single);
-      final cachedChat =
-          ProfileChat(
-              key: ProfileSessionKey(resourceA.scope, 'a-chat'),
-              runtimeId: 'a-runtime',
-              title: 'A chat',
-              projectId: 'project-a',
-            )
-            ..draft = 'Keep this draft'
-            ..messages = [
-              {'role': 'assistant', 'content': 'Keep this answer'},
-            ];
-      resourceA.chats['a-chat'] = cachedChat;
+      final cachedChat = await openFixtureChat(
+        controller: controller,
+        key: ProfileSessionKey(resourceA.scope, 'a-chat'),
+        title: 'A chat',
+        select: false,
+      );
+      await cachedChat.composer.editText('Keep this draft');
+
       host.deleteStarted = Completer<void>();
       host.deleteGate = Completer<void>();
 
-      final deleting = controller.deleteProject(resourceA.scope, 'project-a');
+      final deleting = controller.deleteProject(
+        resourceA.scope,
+        'project-a',
+        canDispatch: () => true,
+      );
       await host.deleteStarted!.future;
-      resourceA.selectedSession = 'a-chat';
+      await controller.openSession(
+        ProfileSessionKey(resourceA.scope, 'a-chat'),
+      );
       await controller.navigateProfile('b');
       final resourceB = controller.current!;
       await controller.selectProject(resourceB.projects.single);
@@ -211,8 +262,8 @@ void main() {
       expect(resourceA.sessions.single['id'], 'a-chat');
       expect(resourceA.visibleSessions.single['id'], 'a-chat');
       expect(cachedChat.projectId, isNull);
-      expect(cachedChat.draft, 'Keep this draft');
-      expect(cachedChat.messages.single['content'], 'Keep this answer');
+      expect(cachedChat.composer.observation.text, 'Keep this draft');
+      expect(cachedChat.reading.messages.single['content'], 'Keep this answer');
     },
   );
 
@@ -225,7 +276,12 @@ void main() {
 
       host.rejectUpdateAck = true;
       await expectLater(
-        controller.updateProject(resource.scope, 'project-a', name: 'Ignored'),
+        controller.updateProject(
+          resource.scope,
+          'project-a',
+          name: 'Ignored',
+          canDispatch: () => true,
+        ),
         throwsA(isA<FormatException>()),
       );
       expect(resource.projects.single['name'], 'A project');
@@ -233,7 +289,11 @@ void main() {
 
       host.rejectDeleteAck = true;
       await expectLater(
-        controller.deleteProject(resource.scope, 'project-a'),
+        controller.deleteProject(
+          resource.scope,
+          'project-a',
+          canDispatch: () => true,
+        ),
         throwsA(isA<FormatException>()),
       );
       expect(resource.projects.single['id'], 'project-a');
@@ -249,7 +309,11 @@ void main() {
       host.failDeleteRefresh = true;
       host.calls.clear();
 
-      await controller.deleteProject(resource.scope, 'project-a');
+      await controller.deleteProject(
+        resource.scope,
+        'project-a',
+        canDispatch: () => true,
+      );
 
       expect(resource.projects, isEmpty);
       expect(resource.selectedProject, isNull);

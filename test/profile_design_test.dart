@@ -1,15 +1,19 @@
+import 'support/color_contrast.dart';
+import 'package:wing/core/models/app_preferences.dart';
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/transcript_timeline.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'support/chat_browser_interactions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
-import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/theme/wing_icons.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
-import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'support/profile_actions_fixture.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'helpers/pump_markdown_widget.dart';
@@ -17,6 +21,7 @@ import 'helpers/pump_markdown_widget.dart';
 void main() {
   late ProfileActionsFixture host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   setUp(() async {
     PackageInfo.setMockInitialValues(
       appName: 'Hermes',
@@ -28,15 +33,24 @@ void main() {
     );
     SharedPreferences.setMockInitialValues({});
     host = ProfileActionsFixture();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'design',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   test('workspace status-bar icons contrast with the active theme', () {
     for (final brightness in Brightness.values) {
@@ -138,7 +152,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('accent-iris')));
       await tester.pumpAndSettle();
       expect(
-        controller.preferences.getString(WorkspaceAccent.preferenceKey),
+        controller.preferences.getString(AppPreferenceField.accent.storageKey),
         'iris',
       );
       await controller.navigateProfile('work');
@@ -218,47 +232,149 @@ void main() {
         {'id': 1, 'role': 'user'},
         {'id': 2, 'role': 'tool'},
         {'id': 3, 'role': 'tool'},
-        {'id': 4, 'role': 'assistant'},
+        {'id': 4, 'role': 'assistant', 'content': 'Saved answer'},
         {'id': 5, 'role': 'tool'},
         {'id': 6, 'role': 'system'},
       ];
-      final groups = groupTranscriptRows(rows);
-      expect(groups.map((group) => group.map((row) => row['id']).toList()), [
-        [1],
-        [2, 3],
-        [4],
-        [5],
-        [6],
-      ]);
+      final groups = TranscriptTimeline.project(
+        rows,
+        presentationId: (_) => Object(),
+      ).sections.expand((section) => section.groups).toList();
+      expect(
+        groups.map(
+          (group) => group.messages.map((row) => row.message.id).toList(),
+        ),
+        [
+          [1],
+          [2, 3],
+          [4],
+          [5],
+          [6],
+        ],
+      );
       expect(rows.length, 6);
-      final extended = groupTranscriptRows([
-        {'id': 0, 'role': 'tool'},
-        ...rows.skip(1),
-      ]);
-      expect(extended.first.last['id'], 3);
+      final extended = TranscriptTimeline.project(
+        [
+          {'id': 0, 'role': 'tool'},
+          ...rows.skip(1),
+        ],
+        presentationId: (_) => Object(),
+      ).sections.expand((section) => section.groups).toList();
+      expect(extended.first.messages.last.message.id, 3);
     },
   );
+
+  test(
+    'timeline preserves hidden continuity, empty card boundaries and latest review',
+    () {
+      final source = <Map<String, dynamic>>[
+        {'id': 1, 'role': 'tool', 'content': 'First'},
+        {
+          'id': 2,
+          'role': 'user',
+          'content': 'Private',
+          'display_kind': 'hidden',
+        },
+        {'id': 3, 'role': 'tool', 'content': 'Second'},
+        {'id': 4, 'role': 'assistant', 'content': ''},
+        {'id': 5, 'role': 'tool', 'content': 'Third'},
+        {'id': 6, 'role': 'system', 'content': 'review: Details'},
+      ];
+      final tokens = List<Object>.generate(source.length, (_) => Object());
+      final timeline = TranscriptTimeline.project(
+        source,
+        presentationId: (row) => tokens[source.indexOf(row)],
+      );
+      final section = timeline.sections.single;
+      expect(
+        section.groups.map(
+          (group) => group.messages.map((entry) => entry.message.id).toList(),
+        ),
+        [
+          [1, 3],
+          [5],
+          [6],
+        ],
+      );
+      expect(section.toolCount, 3);
+      expect(section.reviewCount, 1);
+      expect(section.latestReview, 'Details');
+      expect(section.precedingLatestReview!.groups, hasLength(2));
+      expect(timeline.joinsCurrentActivity, isFalse);
+      expect(section.messages.first.presentationId, same(tokens.first));
+      source.first['content'] = 'Caller rewrite';
+      expect(section.groups.first.toolResults.first.text, 'First');
+      expect(() => timeline.entries.clear(), throwsUnsupportedError);
+      expect(() => section.groups.clear(), throwsUnsupportedError);
+      expect(
+        () => section.groups.first.messages.clear(),
+        throwsUnsupportedError,
+      );
+      expect(
+        () => section.groups.first.toolResults.clear(),
+        throwsUnsupportedError,
+      );
+    },
+  );
+
+  test('nearby timeline selects nine source rows before hidden grouping', () {
+    final source = List<Map<String, dynamic>>.generate(
+      15,
+      (id) => {
+        'id': id,
+        'role': 'tool',
+        'content': 'Result $id',
+        if (id.isEven) 'display_kind': 'hidden',
+      },
+    );
+    final timeline = TranscriptTimeline.project(
+      source,
+      presentationId: (_) => Object(),
+    );
+    final nearby = timeline.nearby(7)!;
+    expect(nearby.entries.map((entry) => entry.sourceIndex), [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+    ]);
+    expect(nearby.sections.single.messages.map((entry) => entry.message.id), [
+      3,
+      5,
+      7,
+      9,
+      11,
+    ]);
+    expect(nearby.nearby(6), isNull);
+    expect(timeline.nearby(99), isNull);
+    expect(timeline.entries, hasLength(15));
+  });
 
   testWidgets(
     'current execution stays in one collapsed Activity section per chat',
     (tester) async {
-      final chat = await controller.createChat();
-      chat.messages.addAll([
-        {
-          'id': 1,
-          'role': 'tool',
-          'tool_name': 'Saved read',
-          'content': 'Saved tool result',
-        },
-        {'id': 2, 'role': 'assistant', 'content': 'Visible saved reply'},
+      final chat = await controller.createChat(canDispatch: () => true);
+      chat.reading.installSavedHistory([
+        ...chat.reading.messages,
+        ...[
+          {
+            'id': 1,
+            'role': 'tool',
+            'tool_name': 'Saved read',
+            'content': 'Saved tool result',
+          },
+          {'id': 2, 'role': 'assistant', 'content': 'Visible saved reply'},
+        ],
       ]);
-      chat.toolActivities.add(
-        const GatewayToolActivity(
-          name: 'terminal',
-          phase: GatewayToolActivityPhase.running,
-        ),
-      );
-      chat.reasoning = 'Current private reasoning';
+      emitChatEvent(controller, chat, 'tool.start', {'name': 'terminal'});
+      emitChatEvent(controller, chat, 'reasoning.available', {
+        'text': 'Current private reasoning',
+      });
 
       await show(tester);
       expect(find.text('Activity'), findsNWidgets(2));
@@ -294,22 +410,25 @@ void main() {
   testWidgets(
     'conversation groups contiguous tools without hiding the answer',
     (tester) async {
-      final chat = await controller.createChat();
-      chat.messages.addAll([
-        {'id': 1, 'role': 'user', 'content': 'Check the project'},
-        {
-          'id': 2,
-          'role': 'tool',
-          'tool_name': 'Read',
-          'content': 'Private tool detail A',
-        },
-        {
-          'id': 3,
-          'role': 'tool',
-          'tool_name': 'Search',
-          'content': 'Private tool detail B',
-        },
-        {'id': 4, 'role': 'assistant', 'content': 'Here is the answer.'},
+      final chat = await controller.createChat(canDispatch: () => true);
+      chat.reading.installSavedHistory([
+        ...chat.reading.messages,
+        ...[
+          {'id': 1, 'role': 'user', 'content': 'Check the project'},
+          {
+            'id': 2,
+            'role': 'tool',
+            'tool_name': 'Read',
+            'content': 'Private tool detail A',
+          },
+          {
+            'id': 3,
+            'role': 'tool',
+            'tool_name': 'Search',
+            'content': 'Private tool detail B',
+          },
+          {'id': 4, 'role': 'assistant', 'content': 'Here is the answer.'},
+        ],
       ]);
       await show(tester);
       expect(find.text('Activity'), findsOneWidget);

@@ -1,3 +1,6 @@
+import 'package:wing/core/services/profile_supervision_session.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
@@ -78,22 +81,35 @@ class _GoalFixture extends ProfileActionsFixture {
 void main() {
   late _GoalFixture fixture;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileChat chat;
+  late ProfileSupervisionSession supervision;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     fixture = _GoalFixture();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'goal-panel',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: fixture.gateway,
     );
     await controller.initialize();
-    chat = await controller.createChat();
+    chat = await controller.createChat(canDispatch: () => true);
+    supervision = ProfileSupervisionSession(controller: controller, chat: chat);
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    supervision.dispose();
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   Future<void> showPanel(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -101,11 +117,7 @@ void main() {
         home: Scaffold(
           body: ListView(
             children: [
-              ProfileGoalPanel(
-                controller: controller,
-                chat: chat,
-                initiallyExpanded: true,
-              ),
+              ProfileGoalPanel(session: supervision, initiallyExpanded: true),
             ],
           ),
         ),
@@ -294,8 +306,7 @@ void main() {
             return Scaffold(
               body: showGoalPanel
                   ? ProfileGoalPanel(
-                      controller: controller,
-                      chat: chat,
+                      session: supervision,
                       initiallyExpanded: true,
                     )
                   : const SizedBox.shrink(),
@@ -364,11 +375,7 @@ void main() {
         home: Scaffold(
           body: ListView(
             children: [
-              ProfileGoalPanel(
-                controller: controller,
-                chat: chat,
-                initiallyExpanded: true,
-              ),
+              ProfileGoalPanel(session: supervision, initiallyExpanded: true),
             ],
           ),
         ),

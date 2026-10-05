@@ -32,15 +32,19 @@ void main() {
         reason:
             'A completed queue from an earlier widget zone must not strand this operation.',
       );
-      await manager!.importConnections([
-        SavedConnection(
-          id: 'widget-$iteration',
-          label: 'Widget $iteration',
-          host: 'widget.example',
-          port: 443,
-          apiKey: 'synthetic-widget-$iteration',
-        ),
-      ], replaceExisting: true);
+      await manager!.importConnections(
+        [
+          SavedConnection(
+            id: 'widget-$iteration',
+            label: 'Widget $iteration',
+            host: 'widget.example',
+            port: 443,
+            apiKey: 'synthetic-widget-$iteration',
+          ),
+        ],
+        replaceExisting: true,
+        canCommit: () => true,
+      );
       expect(
         manager!.getConnections().single.apiKey,
         'synthetic-widget-$iteration',

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../services/administration_repository.dart';
+import '../services/usage_analytics.dart';
+import '../services/usage_analytics_session.dart';
 import '../services/profile_workspace_controller.dart';
 import '../widgets/workspace_picker.dart';
 import 'administration/admin_usage_dashboard.dart';
@@ -25,7 +27,7 @@ class _HermesAnalyticsContentState extends State<HermesAnalyticsContent> {
   late final _server =
       widget.repository ??
       AdministrationRepository.forConnection(
-        widget.controller.connection,
+        widget.controller.access,
         widget.controller.connectionIdentity,
         connectionStatus: widget.controller.connectionStatus,
       );
@@ -50,7 +52,11 @@ class _HermesAnalyticsContentState extends State<HermesAnalyticsContent> {
         );
       }
       final profile = _server.profile(name);
-      return UsageDashboard(key: ValueKey(profile.scope), profile: profile);
+      return UsageDashboard(
+        key: ValueKey(profile.scope),
+        createSession: () =>
+            UsageAnalyticsSession(UsageAnalyticsReader(profile)),
+      );
     },
   );
 }
@@ -65,6 +71,9 @@ class AnalyticsPage extends StatelessWidget {
     title: 'Hermes analytics',
     scope: profile.label,
     pickerMode: WorkspacePickerMode.profiles,
-    child: UsageDashboard(key: ValueKey(profile.scope), profile: profile),
+    child: UsageDashboard(
+      key: ValueKey(profile.scope),
+      createSession: () => UsageAnalyticsSession(UsageAnalyticsReader(profile)),
+    ),
   );
 }

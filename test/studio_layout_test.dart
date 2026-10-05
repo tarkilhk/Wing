@@ -1,3 +1,14 @@
+import 'support/color_contrast.dart';
+import 'package:wing/core/models/app_preferences.dart';
+import 'package:wing/core/services/shared_draft_session.dart';
+import 'home_config_restore_test.dart' show homeEntryFactory, profileController;
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/backup_session.dart';
+import 'package:wing/core/services/config_backup_service.dart';
+import 'package:wing/core/services/config_backup_io.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/models/model_choice.dart';
 import 'support/chat_browser_interactions.dart';
 import 'package:wing/core/widgets/studio_selection_tile.dart';
 import 'dart:io';
@@ -22,7 +33,6 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/theme/wing_icons.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/widgets/chat_intelligence_picker.dart';
-import 'package:wing/core/widgets/model_chooser.dart';
 import 'package:wing/core/widgets/compact_switch.dart';
 import 'package:wing/core/widgets/playful_portrait.dart';
 import 'package:wing/main.dart';
@@ -92,7 +102,11 @@ class _StudioConversationFixture extends ProfileBrowserFixture {
       scope: scope,
       discover: base.discover,
       get: base.read,
-      patch: (path, body) async {
+      ownedPatch: (path, body, canDispatch, onDispatched) async {
+        if (!canDispatch()) {
+          throw DashboardRequestNotSentException(StateError('Menu retired'));
+        }
+        onDispatched();
         calls.add((scope.profileName, 'PATCH $path', body));
         return {'ok': true};
       },
@@ -185,9 +199,10 @@ void main() {
     ) async {
       FlutterSecureStorage.setMockInitialValues({});
       SharedPreferences.setMockInitialValues({});
-      final manager = await ConnectionManager.create(
-        await SharedPreferences.getInstance(),
-      );
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
+      final manager = await ConnectionManager.create(preferences);
       addTearDown(tester.view.reset);
       for (final viewport in [(360.0, 1.0), (320.0, 2.0)]) {
         _viewport(tester, Size(viewport.$1, 800));
@@ -203,7 +218,33 @@ void main() {
                 ).copyWith(textScaler: TextScaler.linear(viewport.$2)),
                 child: child!,
               ),
-              home: HomeScreen(connManager: manager),
+              home: HomeScreen(
+                createSharedDraftSession: (entry) => SharedDraftSession(
+                  connectionManager: manager,
+                  entrySession: entry,
+                  shareIntents: null,
+                ),
+                createEntrySession: homeEntryFactory(
+                  tester,
+                  manager,
+                  appPreferences,
+                  create: (connection) => profileController(
+                    connection,
+                    manager.prefs,
+                    appPreferences,
+                  ),
+                  launchIntents: null,
+                ),
+                connManager: manager,
+                appPreferences: appPreferences,
+                createBackupSession: () => BackupSession(
+                  configuration: ConfigBackupService(
+                    connectionManager: manager,
+                    appPreferences: appPreferences,
+                  ),
+                  io: ConfigBackupIo(),
+                ),
+              ),
             ),
           ),
         );
@@ -275,7 +316,7 @@ void main() {
             _viewport(tester, Size(width, 800));
             addTearDown(tester.view.reset);
             SharedPreferences.setMockInitialValues({
-              WorkspaceAccent.preferenceKey: accent.name,
+              AppPreferenceField.accent.storageKey: accent.name,
             });
             PackageInfo.setMockInitialValues(
               appName: 'Wing',
@@ -285,16 +326,23 @@ void main() {
               buildSignature: '',
             );
             final fixture = _StudioConversationFixture();
+            final preferences = await SharedPreferences.getInstance();
+            final appPreferences = AppPreferences(preferences);
+            addTearDown(appPreferences.dispose);
             final controller = ProfileWorkspaceController(
-              connection: SavedConnection(
-                id: 'studio',
-                label: 'Studio preview',
-                host: 'unused',
-                port: 1,
-                apiKey: '',
+              access: ConnectionAccess(
+                connection: SavedConnection(
+                  id: 'studio',
+                  label: 'Studio preview',
+                  host: 'unused',
+                  port: 1,
+                  apiKey: '',
+                ),
+                dashboardOAuth: null,
               ),
               connectionIdentity: 'studio-layout',
-              preferences: await SharedPreferences.getInstance(),
+              preferences: preferences,
+              appPreferences: appPreferences,
               gatewayFactory: fixture.gateway,
             );
             addTearDown(controller.dispose);
@@ -334,7 +382,7 @@ void main() {
             expect(search.bottom, lessThan(400));
             expect(create.top, greaterThan(650));
             expect(create.height, greaterThanOrEqualTo(48));
-            final export = accent == WorkspaceAccent.mint && width <= 360;
+            final export = accent == WorkspaceAccent.teal && width <= 360;
             if (export) {
               await _capture(tester, '${brightness.name}-chats-$scale');
             }
@@ -407,7 +455,7 @@ void main() {
               findsNothing,
             );
 
-            await controller.createChat();
+            await controller.createChat(canDispatch: () => true);
             await tester.pumpAndSettle();
             if (export) {
               await _capture(tester, '${brightness.name}-empty-chat-$scale');
@@ -418,7 +466,7 @@ void main() {
             controller.current!.gateway.onEvent!(
               StreamEvent(
                 type: 'session.usage',
-                sessionId: chat.runtimeId,
+                sessionId: chat.runtime.runtimeId,
                 data: {
                   'usage': {
                     'context_used': 42000,
@@ -487,7 +535,7 @@ void main() {
             await tester.pumpAndSettle();
             expect(tester.takeException(), isNull);
             expect(controller.current!.chat, same(chat));
-            expect(chat.draft, contains('An unsent draft'));
+            expect(chat.composer.observation.text, contains('An unsent draft'));
             if (export) {
               await _capture(tester, '${brightness.name}-keyboard-$scale');
               final heldAction = await tester.startGesture(
@@ -508,7 +556,10 @@ void main() {
               await _capture(tester, '${brightness.name}-held-action-$scale');
               await heldAction.cancel();
               await tester.pumpAndSettle();
-              expect(chat.draft, contains('An unsent draft'));
+              expect(
+                chat.composer.observation.text,
+                contains('An unsent draft'),
+              );
             }
             tester.view.resetViewInsets();
             await tester.pumpAndSettle();
@@ -727,6 +778,7 @@ void main() {
             theme: theme,
             home: Scaffold(
               body: ChatIntelligenceSheet(
+                onCommit: (_) async => true,
                 choices: const [
                   choice,
                   ModelChoice(provider: 'anthropic', model: 'claude-opus'),

@@ -98,7 +98,7 @@ class ConfigBackup {
       );
     }
     final version = json['version'];
-    if (version != currentVersion) {
+    if (version is! int || version != currentVersion) {
       throw const ConfigBackupException(
         'This backup uses an unsupported format version. Export a new backup '
         'using the current app.',
@@ -106,17 +106,33 @@ class ConfigBackup {
     }
 
     try {
+      ConfigBackupLimits.checkStructure(json);
+      const requiredFields = {
+        'format',
+        'version',
+        'created_at',
+        'app_version',
+        'connections',
+        'preferences',
+      };
+      if (!requiredFields.every(json.containsKey)) {
+        throw const ConfigBackupException('Missing required backup settings.');
+      }
+      final createdAtText = json['created_at'] as String;
+      final createdAt = DateTime.tryParse(createdAtText);
+      if (createdAt == null ||
+          createdAt.toUtc().toIso8601String() != createdAtText) {
+        throw const ConfigBackupException('Invalid backup creation date.');
+      }
+      final appVersion = json['app_version'] as String;
       final rawConnections = json['connections'] as List<dynamic>;
-      final rawPreferences =
-          (json['preferences'] as Map<String, dynamic>?) ??
-          const <String, dynamic>{};
+      final rawPreferences = json['preferences'] as Map<String, dynamic>;
       if (rawConnections.length > ConfigBackupLimits.maxConnections ||
           rawPreferences.length > ConfigBackupLimits.maxPreferences) {
         throw const ConfigBackupException(
           'This backup exceeds its data limits.',
         );
       }
-      ConfigBackupLimits.checkStructure(json);
       final connections = rawConnections
           .map((entry) => _connectionFromJson(entry as Map<String, dynamic>))
           .toList();
@@ -128,10 +144,8 @@ class ConfigBackup {
       }
 
       return ConfigBackup(
-        createdAt:
-            DateTime.tryParse(json['created_at'] as String? ?? '')?.toUtc() ??
-            DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
-        appVersion: (json['app_version'] as String?) ?? 'unknown',
+        createdAt: createdAt.toUtc(),
+        appVersion: appVersion,
         connections: connections,
         preferences: rawPreferences.map(
           (key, value) =>
@@ -172,39 +186,62 @@ class ConfigBackup {
   }
 
   static SavedConnection _connectionFromJson(Map<String, dynamic> map) {
-    String? nonEmpty(Object? value) {
-      final text = (value as String?)?.trim();
-      return (text == null || text.isEmpty) ? null : text;
-    }
-
-    if (map['icon'] is! String ||
+    const requiredFields = {
+      'id',
+      'label',
+      'icon',
+      'host',
+      'port',
+      'api_key',
+      'use_https',
+      'gateway_prefix',
+      'dashboard_prefix',
+      'dashboard_proxied',
+      'desktop_gateway_url',
+      'dashboard_port',
+      'dashboard_username',
+      'dashboard_password',
+      'gateway_headers',
+    };
+    final dashboardPort = map['dashboard_port'];
+    if (!requiredFields.every(map.containsKey) ||
+        map['icon'] is! String ||
         map['port'] is! int ||
         (map['port'] as int) < 1 ||
         (map['port'] as int) > 65535 ||
         map['use_https'] is! bool ||
-        map['api_key'] is! String) {
+        map['dashboard_proxied'] is! bool ||
+        map['api_key'] is! String ||
+        map['gateway_headers'] is! Map ||
+        dashboardPort != null &&
+            (dashboardPort is! int ||
+                dashboardPort < 1 ||
+                dashboardPort > 65535) ||
+        map.containsKey('cloud_instance_id') &&
+            map['cloud_instance_id'] is! String ||
+        map.containsKey('cloud_organization') &&
+            map['cloud_organization'] is! String) {
       throw const ConfigBackupException('Invalid backup connection settings.');
     }
     return SavedConnection(
       id: map['id'] as String,
-      cloudInstanceId: nonEmpty(map['cloud_instance_id']),
-      cloudOrganization: nonEmpty(map['cloud_organization']),
+      cloudInstanceId: map['cloud_instance_id'] as String?,
+      cloudOrganization: map['cloud_organization'] as String?,
       label: map['label'] as String,
       icon: ConnectionIcon.fromStored(map['icon']),
       host: map['host'] as String,
-      port: (map['port'] as int?) ?? 8642,
-      apiKey: (map['api_key'] as String?) ?? '',
-      useHttps: (map['use_https'] as bool?) ?? false,
-      gatewayPrefix: nonEmpty(map['gateway_prefix']),
-      dashboardPrefix: nonEmpty(map['dashboard_prefix']),
-      dashboardProxied: (map['dashboard_proxied'] as bool?) ?? false,
-      desktopGatewayUrl: nonEmpty(map['desktop_gateway_url']),
+      port: map['port'] as int,
+      apiKey: map['api_key'] as String,
+      useHttps: map['use_https'] as bool,
+      gatewayPrefix: map['gateway_prefix'] as String?,
+      dashboardPrefix: map['dashboard_prefix'] as String?,
+      dashboardProxied: map['dashboard_proxied'] as bool,
+      desktopGatewayUrl: map['desktop_gateway_url'] as String?,
       dashboardPortOverride: map['dashboard_port'] as int?,
-      dashboardUsername: nonEmpty(map['dashboard_username']),
-      dashboardPassword: nonEmpty(map['dashboard_password']),
-      gatewayHeaders: map['gateway_headers'] == null
-          ? const {}
-          : Map<String, String>.from(map['gateway_headers'] as Map),
+      dashboardUsername: map['dashboard_username'] as String?,
+      // Password bytes are credentials, including empty or surrounding space.
+      dashboardPassword: map['dashboard_password'] as String?,
+      gatewayHeaders: Map<String, String>.from(map['gateway_headers'] as Map),
     );
   }
 

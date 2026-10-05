@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -71,22 +73,32 @@ class _SubagentHost extends Host {
 void main() {
   late _SubagentHost host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileChat chat;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     host = _SubagentHost();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'subagent-test',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
-    chat = await controller.createChat();
+    chat = await controller.createChat(canDispatch: () => true);
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   test('events merge sparse updates and normalize terminal status', () {
     host.event('a', 'subagent.start', {
@@ -253,7 +265,11 @@ void main() {
     () async {
       host.event('a', 'subagent.start', {'subagent_id': 'child'});
       host.pendingControl = Completer<Map<String, dynamic>>();
-      final interrupt = controller.interruptSubagent(chat, 'child');
+      final interrupt = controller.interruptSubagent(
+        chat,
+        'child',
+        canDispatch: () => true,
+      );
       host.event('a', 'subagent.complete', {
         'subagent_id': 'child',
         'status': 'interrupted',
@@ -352,7 +368,15 @@ void main() {
     expect(clipped!.text, hasLength(GatewaySubagentTail.maxTextLength));
     expect(clipped.truncated, isTrue);
 
-    expect(await controller.steerSubagent(chat, 'child', ' redirect '), isTrue);
+    expect(
+      await controller.steerSubagent(
+        chat,
+        'child',
+        ' redirect ',
+        canDispatch: () => true,
+      ),
+      isTrue,
+    );
     expect(host.calls.last.$3, {
       'session_id': 'a-runtime',
       'subagent_id': 'child',
@@ -361,20 +385,46 @@ void main() {
     });
 
     host.steerResponse = {'status': 'rejected'};
-    expect(await controller.steerSubagent(chat, 'child', 'again'), isFalse);
+    expect(
+      await controller.steerSubagent(
+        chat,
+        'child',
+        'again',
+        canDispatch: () => true,
+      ),
+      isFalse,
+    );
     host.interruptResponse = {'found': true, 'subagent_id': 'other'};
-    expect(await controller.interruptSubagent(chat, 'child'), isFalse);
+    expect(
+      await controller.interruptSubagent(
+        chat,
+        'child',
+        canDispatch: () => true,
+      ),
+      isFalse,
+    );
 
     host.pendingControl = Completer<Map<String, dynamic>>();
-    final scoped = controller.steerSubagent(chat, 'child', 'scoped');
+    final scoped = controller.steerSubagent(
+      chat,
+      'child',
+      'scoped',
+      canDispatch: () => true,
+    );
     await controller.switchProfile('b');
     host.pendingControl!.complete({'status': 'queued', 'subagent_id': 'child'});
     expect(await scoped, isTrue);
     expect(host.calls.lastWhere((call) => call.$2 == 'subagent.steer').$1, 'a');
 
     host.pendingControl = Completer<Map<String, dynamic>>();
-    final late = controller.steerSubagent(chat, 'child', 'late');
-    chat.runtimeId = 'replacement-runtime';
+    final late = controller.steerSubagent(
+      chat,
+      'child',
+      'late',
+      canDispatch: () => true,
+    );
+    host.runtimeForResume['a'] = 'replacement-runtime';
+    await controller.openSession(chat.key);
     host.pendingControl!.complete({'status': 'queued', 'subagent_id': 'child'});
     expect(await late, isFalse);
     expect(host.calls.last.$1, 'a');

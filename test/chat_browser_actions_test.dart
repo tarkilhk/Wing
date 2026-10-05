@@ -1,3 +1,8 @@
+import 'package:wing/core/widgets/deleted_chat_recovery_notice.dart';
+import 'package:wing/core/services/chat_browser_data.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -17,25 +22,35 @@ import 'support/browser_mutations_fixture.dart';
 void main() {
   late BrowserMutationsFixture host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     host = BrowserMutationsFixture();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Test server',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Test server',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       connectionIdentity: 'browser-actions',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   const capture = bool.fromEnvironment('BROWSER_ACTIONS_REVIEW');
   setUpAll(() async {
@@ -74,8 +89,15 @@ void main() {
             child: child!,
           ),
           home: ProfileWorkspaceBrowser(
-            controller: controller,
-            newProject: () async {},
+            createData: () => ChatBrowserData(controller),
+            connectionLabel: controller.connection.label,
+            connectionIcon: controller.connection.icon,
+            connectionStatus: controller.connectionStatus,
+            createColors: controller.createProfileColors,
+            deletionRecovery: DeletedChatRecoveryNotice(
+              presentation: controller.deletedDraftCleanupPresentation,
+            ),
+            newProject: (_) async {},
           ),
         ),
       ),
@@ -142,8 +164,24 @@ void main() {
             'a confirmed action must not lock the list during background reads',
       );
       expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(gate.isCompleted, isFalse);
       final row = find.byKey(const ValueKey('chat-personal-newest'));
+      // Pin moves this retained chat into the first group. Its old viewport
+      // position need not remain mounted while the background read is held.
+      await tester.scrollUntilVisible(
+        row,
+        -200,
+        scrollable: find.descendant(
+          of: find.byKey(const ValueKey('chat-list-false')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.pump();
+      expect(gate.isCompleted, isFalse);
+      expect(row.hitTestable(), findsOneWidget);
       expect(tester.widget<ListTile>(row).onTap, isNotNull);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(host.updates, hasLength(1));
       gate.complete();
       await tester.pumpAndSettle();
     },
@@ -275,6 +313,7 @@ void main() {
           await controller.mutateSession(
             ProfileSessionKey(controller.current!.scope, 'newest'),
             changes: {'pinned': true},
+            canDispatch: () => true,
           );
           await tester.pump(const Duration(milliseconds: 200));
           final progress = find.byType(LinearProgressIndicator);

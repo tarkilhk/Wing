@@ -1,3 +1,5 @@
+import 'package:wing/core/models/provider_inventory.dart';
+import 'package:wing/core/screens/administration/admin_provider_credentials.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -8,8 +10,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/provider_access.dart';
 import 'package:wing/core/models/provider_recovery.dart';
+import 'package:wing/core/services/provider_recovery.dart';
 import 'package:wing/core/screens/administration/admin_provider_detail.dart';
-import 'package:wing/core/screens/administration/admin_providers_page.dart';
+import 'package:wing/core/screens/administration/provider_recovery_routes.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'support/administration_fixture.dart';
 import 'provider_recovery_test.dart' show claude, pool;
@@ -116,7 +119,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Widget detail() => AdminProviderDetail(
+  Widget detail() => providerRecoveryPage(
     profile: fixture.server.profile('personal'),
     providerId: observation['id'] as String,
   );
@@ -271,8 +274,10 @@ void main() {
       await show(
         tester,
         AdminProviderFileRemoval(
-          profile: fixture.server.profile('personal'),
-          access: ProviderAccess(observation),
+          createSession: () => ProviderRecovery.forFileReview(
+            fixture.server.profile('personal'),
+            ProviderAccess(observation),
+          ),
         ),
       );
       await tester.tap(
@@ -370,19 +375,22 @@ void main() {
         return {
           'session_id': 'test-session',
           'flow': 'device_code',
+          'expires_in': 900,
           'user_code': 'ABCD-EFGH',
           'poll_interval': 5,
           'verification_url': 'https://example.com/sign-in',
         };
       }
-      if (path.contains('/poll/')) return {'status': 'expired'};
+      if (path.contains('/poll/')) {
+        return {'session_id': 'test-session', 'status': 'expired'};
+      }
       throw StateError('Unexpected $path');
     };
     await show(
       tester,
       AdminProviderSignIn(
         profile: fixture.server.profile('personal'),
-        provider: const {'id': 'nous', 'name': 'Nous'},
+        target: const ProviderSignInTarget(id: 'nous', name: 'Nous'),
       ),
     );
     await tester.tap(find.text('Start sign-in'));

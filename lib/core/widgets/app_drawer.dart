@@ -1,4 +1,4 @@
-import '../models/connection.dart';
+import '../services/connection_access.dart';
 import 'drawer_versions.dart';
 import '../services/versions_controller.dart';
 import '../services/server_connection_status.dart';
@@ -27,7 +27,7 @@ class AppDrawer extends StatelessWidget {
     super.key,
     required this.selected,
     required this.onSelected,
-    this.connection,
+    this.access,
     this.versionsControllerFactory,
     this.connectionStatus,
     this.hasConnection = true,
@@ -35,7 +35,7 @@ class AppDrawer extends StatelessWidget {
 
   final AppDestination selected;
   final ValueChanged<AppDestination> onSelected;
-  final SavedConnection? connection;
+  final ConnectionAccess? access;
   final VersionsControllerFactory? versionsControllerFactory;
   final ServerConnectionStatus? connectionStatus;
   final bool hasConnection;
@@ -116,7 +116,7 @@ class AppDrawer extends StatelessWidget {
                     ],
                   ),
                   DrawerVersions(
-                    connection: connection,
+                    access: access,
                     connectionStatus: connectionStatus,
                     controllerFactory: versionsControllerFactory,
                   ),

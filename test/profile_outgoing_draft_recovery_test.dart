@@ -1,3 +1,7 @@
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/chat_runtime.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -48,19 +52,24 @@ class _FailingDraftStore extends ComposerDraftStore {
 void main() {
   late Host host;
   late SharedPreferences preferences;
+  late AppPreferences appPreferences;
   late Directory sandbox;
   final controllers = <ProfileWorkspaceController>[];
   ProfileWorkspaceController makeController({ComposerDraftStore? draftStore}) {
     final controller = ProfileWorkspaceController(
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Host',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Host',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       connectionIdentity: 'outgoing-recovery',
       preferences: preferences,
+      appPreferences: appPreferences,
       draftStore: draftStore,
       gatewayFactory: host.gateway,
       attachmentService: AttachmentDraftService(
@@ -74,6 +83,7 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     host = Host();
     sandbox = await Directory.systemTemp.createTemp('wing-outgoing-recovery-');
   });
@@ -82,6 +92,7 @@ void main() {
       controller.dispose();
     }
     controllers.clear();
+    appPreferences.dispose();
     await sandbox.delete(recursive: true);
   });
 
@@ -109,13 +120,16 @@ void main() {
     () async {
       final controller = makeController();
       await controller.initialize();
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'Original outgoing');
       host.promptSubmitFails = true;
       await controller.send(chat);
-      expect(chat.draft, isEmpty);
-      expect(chat.draftSubmissionUncertain, isFalse);
-      expect(chat.queuedPrompts.single.submissionUncertain, isTrue);
+      expect(chat.composer.observation.text, isEmpty);
+      expect(chat.composer.observation.submissionUncertain, isFalse);
+      expect(
+        chat.composer.observation.queue.single.submissionUncertain,
+        isTrue,
+      );
       host.promptSubmitFails = false;
       await controller.updateDraft(chat, 'Fresh follow-up');
       final stored = await saved(chat);
@@ -139,7 +153,7 @@ void main() {
       );
       final controller = makeController(draftStore: store);
       await controller.initialize();
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'Original outgoing');
       host.promptSubmitFails = true;
       await controller.send(chat);
@@ -156,7 +170,7 @@ void main() {
       expect(stored.submissionUncertain, isFalse);
       expect(stored.queuedPrompts.single.text, 'Original outgoing');
       expect(stored.queuedPrompts.single.submissionUncertain, isTrue);
-      expect(chat.queuePaused, isTrue);
+      expect(chat.composer.observation.paused, isTrue);
       expect(
         host.calls.where((call) => call.$2 == 'prompt.submit'),
         hasLength(1),
@@ -174,13 +188,13 @@ void main() {
         );
         final controller = makeController(draftStore: store);
         await controller.initialize();
-        final chat = await controller.createChat();
+        final chat = await controller.createChat(canDispatch: () => true);
         await controller.updateDraft(chat, 'Original outgoing');
         final delay = Completer<void>();
         store.failureDelay = delay;
         final sending = controller.send(chat);
         final rejected = expectLater(sending, throwsStateError);
-        expect(chat.draft, isEmpty);
+        expect(chat.composer.observation.text, isEmpty);
         final editing = fresh.isEmpty
             ? Future<void>.value()
             : controller.updateDraft(chat, fresh);
@@ -193,8 +207,8 @@ void main() {
           fresh.isEmpty ? 'Original outgoing' : 'Original outgoing\n\n$fresh',
         );
         expect(stored.queuedPrompts, isEmpty);
-        expect(chat.status, ProfileTurnStatus.idle);
-        expect(chat.sendingPrompt, isFalse);
+        expect(chat.runtime.execution, ChatExecution.idle);
+        expect(chat.composer.observation.sending, isFalse);
         expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
       },
     );
@@ -205,12 +219,12 @@ void main() {
     () async {
       final controller = makeController();
       await controller.initialize();
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, '  Exact outgoing text  ');
       host.discoveryStarted = Completer<void>();
       host.discoveryDelay = Completer<void>();
       final sending = controller.send(chat);
-      expect(chat.draft, isEmpty);
+      expect(chat.composer.observation.text, isEmpty);
       await host.discoveryStarted!.future.timeout(const Duration(seconds: 3));
       final stored = await saved(chat);
       expect(stored.text, isEmpty);
@@ -229,12 +243,12 @@ void main() {
       () async {
         final controller = makeController();
         await controller.initialize();
-        final chat = await controller.createChat();
+        final chat = await controller.createChat(canDispatch: () => true);
         final file = await File(
           '${sandbox.path}/failed.txt',
         ).writeAsString('Payload');
         await controller.addAttachment(chat, file.path, 'failed.txt');
-        final outgoingFile = chat.attachments.single;
+        final outgoingFile = (await saved(chat)).attachments.single;
         await controller.updateDraft(chat, '  Original outgoing  ');
         host.fileAttachStarted = Completer<void>();
         host.fileAttachDelay = Completer<void>();
@@ -245,7 +259,7 @@ void main() {
         );
         await controller.updateDraft(chat, 'Existing queued message');
         await controller.send(chat);
-        chat.queuePaused = true;
+        await chat.composer.pause();
         if (fresh.isNotEmpty) await controller.updateDraft(chat, fresh);
         host.fileAttachDelay!.complete();
         await sending;
@@ -261,7 +275,7 @@ void main() {
         expect(ownedFiles.single.id, outgoingFile.id);
         expect(await File(ownedFiles.single.cachedPath).exists(), isTrue);
         expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
-        expect(chat.status, ProfileTurnStatus.failed);
+        expect(chat.runtime.execution, ChatExecution.failed);
       },
     );
   }
@@ -271,12 +285,12 @@ void main() {
     () async {
       final controller = makeController();
       await controller.initialize();
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       final file = await File(
         '${sandbox.path}/accepted.txt',
       ).writeAsString('Payload');
       await controller.addAttachment(chat, file.path, 'accepted.txt');
-      final outgoingFile = chat.attachments.single;
+      final outgoingFile = (await saved(chat)).attachments.single;
       await controller.updateDraft(chat, 'Original outgoing');
       host.promptSubmitStarted = Completer<void>();
       host.promptSubmitDelay = Completer<void>();
@@ -286,7 +300,7 @@ void main() {
       );
       await controller.updateDraft(chat, 'Existing queued message');
       await controller.send(chat);
-      chat.queuePaused = true;
+      await chat.composer.pause();
       await controller.updateDraft(chat, 'Fresh follow-up');
       // Receipts may be reusable, but the original owned bytes survive until ack.
       expect(await File(outgoingFile.cachedPath).exists(), isTrue);
@@ -308,7 +322,7 @@ void main() {
       () async {
         final controller = makeController();
         await controller.initialize();
-        final chat = await controller.createChat();
+        final chat = await controller.createChat(canDispatch: () => true);
         await controller.updateDraft(chat, 'Original outgoing');
         host.promptSubmitStarted = Completer<void>();
         host.promptSubmitDelay = Completer<void>();
@@ -330,17 +344,20 @@ void main() {
         expect(stored.queuedPrompts.single.text, 'Original outgoing');
         expect(stored.queuedPrompts.single.submissionUncertain, isTrue);
         final restored = await restart(controller, chat);
-        expect(restored.draft, 'Fresh follow-up');
-        expect(restored.draftSubmissionUncertain, isFalse);
-        expect(restored.queuedPrompts.single.submissionUncertain, isTrue);
-        expect(restored.queuePaused, isTrue);
-        expect(restored.error, contains('queued message is uncertain'));
+        expect(restored.composer.observation.text, 'Fresh follow-up');
+        expect(restored.composer.observation.submissionUncertain, isFalse);
+        expect(
+          restored.composer.observation.queue.single.submissionUncertain,
+          isTrue,
+        );
+        expect(restored.composer.observation.paused, isTrue);
+        expect(restored.runtime.error, contains('queued message is uncertain'));
         final restarted = controllers.last;
         await expectLater(restarted.resumeQueue(restored), throwsStateError);
-        restored.status = ProfileTurnStatus.running;
+        emitChatEvent(restarted, restored, 'message.start');
         await restarted.beginQueuedPromptEdit(
           restored,
-          restored.queuedPrompts.single,
+          restored.composer.observation.queue.single.id,
         );
         expect(await restarted.steerQueuedPromptEdit(restored), isFalse);
         await restarted.cancelQueuedPromptEdit(restored);
@@ -348,22 +365,21 @@ void main() {
           host.calls.where((call) => call.$2 == 'prompt.submit'),
           hasLength(1),
         );
-        final head = restored.queuedPrompts.single;
-        await restarted.editQueuedPrompt(
-          restored,
-          0,
-          head.text,
-          expectedPrompt: head,
+        final head = restored.composer.observation.queue.single;
+        await restarted.beginQueuedPromptEdit(restored, head.id);
+        restarted.updateQueuedPromptEdit(restored, head.text);
+        await restarted.saveQueuedPromptEdit(restored);
+        expect(
+          restored.composer.observation.queue.single.submissionUncertain,
+          isTrue,
         );
-        expect(restored.queuedPrompts.single.submissionUncertain, isTrue);
         await expectLater(restarted.resumeQueue(restored), throwsStateError);
         await restarted.removeQueuedPrompt(
           restored,
-          0,
-          expectedPrompt: restored.queuedPrompts.single,
+          restored.composer.observation.queue.single.id,
         );
         expect((await saved(restored)).queuedPrompts, isEmpty);
-        expect(restored.draft, 'Fresh follow-up');
+        expect(restored.composer.observation.text, 'Fresh follow-up');
       },
     );
   }
@@ -373,8 +389,8 @@ void main() {
     () async {
       final controller = makeController();
       await controller.initialize();
-      final chat = await controller.createChat();
-      chat.status = ProfileTurnStatus.running;
+      final chat = await controller.createChat(canDispatch: () => true);
+      emitChatEvent(controller, chat, 'message.start');
       await controller.queuePrompt(chat, 'Queued outgoing');
       await controller.queuePrompt(chat, 'Later queued');
       await controller.updateDraft(chat, 'Fresh composer');
@@ -392,8 +408,11 @@ void main() {
       ]);
       expect(stored.queuedPrompts.first.submissionUncertain, isTrue);
       final restored = await restart(controller, chat);
-      expect(restored.queuedPrompts, hasLength(2));
-      expect(restored.queuedPrompts.first.submissionUncertain, isTrue);
+      expect(restored.composer.observation.queue, hasLength(2));
+      expect(
+        restored.composer.observation.queue.first.submissionUncertain,
+        isTrue,
+      );
       await expectLater(
         controllers.last.resumeQueue(restored),
         throwsStateError,
@@ -411,12 +430,12 @@ void main() {
       () async {
         final controller = makeController();
         await controller.initialize();
-        final chat = await controller.createChat();
+        final chat = await controller.createChat(canDispatch: () => true);
         final key = chat.key;
         final file = File('${sandbox.path}/note.txt');
         await file.writeAsString('Attachment contents');
         await controller.addAttachment(chat, file.path, 'note.txt');
-        final attachment = chat.attachments.single;
+        final attachment = (await saved(chat)).attachments.single;
         await controller.updateDraft(chat, 'Original outgoing');
         host.fileAttachStarted = Completer<void>();
         host.fileAttachDelay = Completer<void>();
@@ -425,7 +444,7 @@ void main() {
         await host.fileAttachStarted!.future.timeout(
           const Duration(seconds: 3),
         );
-        expect(chat.draft, isEmpty);
+        expect(chat.composer.observation.text, isEmpty);
         await controller.updateDraft(chat, fresh);
         final stored = await ComposerDraftStore(
           preferences,
@@ -450,30 +469,38 @@ void main() {
         await restarted.initialize();
         await restarted.openSession(key);
         final restored = restarted.current!.chat!;
-        expect(restored.draft, fresh);
-        expect(restored.attachments, isEmpty);
-        expect(restored.queuedPrompts.single.text, 'Original outgoing');
+        expect(restored.composer.observation.text, fresh);
+        expect(restored.composer.observation.attachments, isEmpty);
         expect(
-          restored.queuedPrompts.single.attachments.single.id,
+          restored.composer.observation.queue.single.text,
+          'Original outgoing',
+        );
+        expect(
+          restored.composer.observation.queue.single.attachments.single.id,
           attachment.id,
         );
         expect(
           await File(
-            restored.queuedPrompts.single.attachments.single.cachedPath,
+            (await saved(
+              restored,
+            )).queuedPrompts.single.attachments.single.cachedPath,
           ).exists(),
           isTrue,
         );
-        expect(restored.queuePaused, isFalse);
-        expect(restored.queuedPrompts.single.submissionUncertain, isFalse);
+        expect(restored.composer.observation.paused, isFalse);
+        expect(
+          restored.composer.observation.queue.single.submissionUncertain,
+          isFalse,
+        );
         expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
         host
           ..fileAttachDelay = null
           ..fileAttachStarted = null
           ..running = false;
         await restarted.resumeQueue(restored);
-        expect(restored.draft, fresh);
-        expect(restored.attachments, isEmpty);
-        expect(restored.queuedPrompts, isEmpty);
+        expect(restored.composer.observation.text, fresh);
+        expect(restored.composer.observation.attachments, isEmpty);
+        expect(restored.composer.observation.queue, isEmpty);
         expect(
           host.calls.where((call) => call.$2 == 'prompt.submit'),
           hasLength(1),

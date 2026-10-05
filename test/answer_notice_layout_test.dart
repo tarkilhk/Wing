@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -28,13 +29,13 @@ void main() {
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: ProfileMessage(
-                    message: const {
+                    message: TranscriptMessage.fromRow(const {
                       'role': 'user',
                       'display_kind': 'async_delegation_complete',
                       'display_metadata': {'task_count': 2},
                       'content':
                           'Background result with enough detail to span several lines when expanded.',
-                    },
+                    }),
                     actions: AnswerActions(
                       onBranch: () {},
                       onRegenerate: () {},

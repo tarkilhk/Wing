@@ -3,12 +3,8 @@ import '../theme/wing_theme.dart';
 import 'anchored_expansion_tile.dart';
 import 'package:flutter/services.dart';
 
-import '../models/answer_versions.dart';
 import '../models/chat_output.dart';
-import '../models/review_notice.dart';
-import '../models/transcript_notice.dart';
-import '../models/user_message_content.dart';
-import '../services/web_preview.dart';
+import '../models/transcript_message.dart';
 import 'markdown_message_content.dart';
 import 'profile_tool_activity.dart';
 import 'profile_review_notice_card.dart';
@@ -18,7 +14,7 @@ import 'user_message_attachment.dart';
 /// User attachments and explicit assistant deliverables render inline;
 /// server paths are resolved only by the owning chat's loader.
 class ProfileMessage extends StatelessWidget {
-  final Map<String, dynamic> message;
+  final TranscriptMessage message;
   final bool streaming;
   final Future<void> Function(ChatOutput output)? onOpenRemoteFile;
   final Future<bool> Function(ChatOutput output)? onDownloadRemoteFile;
@@ -37,8 +33,6 @@ class ProfileMessage extends StatelessWidget {
     this.readingAloud = false,
     this.actions,
   });
-
-  static Uri? externalLink(String href) => externalWebLink(href);
 
   Widget _copy(BuildContext context, String content, {Widget? timestamp}) =>
       IconButton(
@@ -77,13 +71,14 @@ class ProfileMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isHiddenAnswerMessage(message)) return const SizedBox.shrink();
+    if (message.kind == TranscriptMessageKind.hidden) {
+      return const SizedBox.shrink();
+    }
     final theme = Theme.of(context);
-    final role = message['role']?.toString() ?? '';
-    final notice = transcriptNoticeText(message);
-    if (notice != null) {
-      final result = transcriptNoticeResult(message);
-      final delivery = transcriptUserDelivery(message);
+    final role = message.role;
+    final notice = message.text;
+    if (message.kind == TranscriptMessageKind.notice) {
+      final result = message.noticeResult;
       final label = Text(
         notice,
         style: theme.textTheme.bodySmall?.copyWith(
@@ -93,18 +88,18 @@ class ProfileMessage extends StatelessWidget {
       final noticeBody = result == null
           ? Center(child: label)
           : _TranscriptNotice(
-              key: ValueKey(('transcript-notice', message['id'])),
+              key: ValueKey(('transcript-notice', message.id)),
               title: label,
-              subtitle: Text(delivery?.disclosure ?? 'View result'),
+              subtitle: Text(message.noticeDisclosure),
               actions: actions,
               children: [
                 Padding(
                   padding: const EdgeInsets.all(12),
-                  child: delivery != null
+                  child: message.noticePlainText
                       ? SelectableText(
                           result,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            fontFamily: delivery.kind == 'process_notification'
+                            fontFamily: message.noticeMonospace
                                 ? 'monospace'
                                 : null,
                           ),
@@ -134,10 +129,10 @@ class ProfileMessage extends StatelessWidget {
               ),
       );
     }
-    final review = reviewMessageText(message);
-    if (review != null) return ProfileReviewNoticeRow(text: review);
-    final steering = steeringMessageText(message);
-    if (steering != null) {
+    if (message.kind == TranscriptMessageKind.review) {
+      return ProfileReviewNoticeRow(text: message.text);
+    }
+    if (message.kind == TranscriptMessageKind.steering) {
       final style = theme.textTheme.bodySmall?.copyWith(
         fontSize: 12,
         color: theme.colorScheme.onSurfaceVariant,
@@ -162,7 +157,7 @@ class ProfileMessage extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text('steered', style: style),
                   Text(' · ', style: style),
-                  Flexible(child: SelectableText(steering, style: style)),
+                  Flexible(child: SelectableText(message.text, style: style)),
                 ],
               ),
             ),
@@ -170,23 +165,10 @@ class ProfileMessage extends StatelessWidget {
         ),
       );
     }
-    final userContent = role == 'user'
-        ? UserMessageContent.fromMessage(message)
-        : null;
-    final content = userContent != null
-        ? userContent.text
-        : (message['display_content'] ?? message['content'] ?? '').toString();
-    if (content.isEmpty && (userContent?.attachments.isEmpty ?? true)) {
-      return const SizedBox.shrink();
-    }
-    if (role == 'system') {
-      final slash = RegExp(r'^slash:(/[^\n]+)\n([\s\S]*)$').firstMatch(content);
-      final command = message['_command'] as String? ?? slash?.group(1)?.trim();
-      final output = slash == null ? content : slash.group(2)!.trim();
-      final multiline = output.contains('\n');
-      final text = command == null
-          ? output
-          : '$command${multiline ? '\n' : ' · '}$output';
+    final content = message.text;
+    if (message.kind == TranscriptMessageKind.system) {
+      final multiline = message.systemMultiline;
+      final text = content;
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
         child: Center(
@@ -200,8 +182,8 @@ class ProfileMessage extends StatelessWidget {
         ),
       );
     }
-    if (role == 'tool') {
-      return ProfileToolActivity(messages: [message]);
+    if (message.kind == TranscriptMessageKind.tool) {
+      return ProfileToolActivity(results: [message.tool!]);
     }
     final user = role == 'user';
     final timestamp = _timestamp(context);
@@ -320,27 +302,22 @@ class ProfileMessage extends StatelessWidget {
                   ),
                 ),
                 if (user && !streaming)
-                  _copy(
-                    context,
-                    answerMessageDisplayText(message),
-                    timestamp: timestamp,
-                  ),
+                  _copy(context, message.copyText, timestamp: timestamp),
               ],
             ),
-          if (userContent != null)
-            for (final attachment in userContent.attachments)
-              Padding(
-                padding: EdgeInsets.only(
-                  left: 28,
-                  right: streaming ? 0 : 48,
-                  top: 8,
-                ),
-                child: UserMessageAttachmentTile(
-                  key: ValueKey(attachment.target),
-                  attachment: attachment,
-                  loadImage: loadAttachmentImage,
-                ),
+          for (final attachment in message.attachments)
+            Padding(
+              padding: EdgeInsets.only(
+                left: 28,
+                right: streaming ? 0 : 48,
+                top: 8,
               ),
+              child: UserMessageAttachmentTile(
+                key: ValueKey(attachment.target),
+                attachment: attachment,
+                loadImage: loadAttachmentImage,
+              ),
+            ),
           if (user && content.isEmpty && timestamp != null) timestamp,
           if (actions != null)
             Align(alignment: Alignment.centerRight, child: actions),
@@ -350,12 +327,8 @@ class ProfileMessage extends StatelessWidget {
   }
 
   Widget? _timestamp(BuildContext context) {
-    // The transcript contract uses Unix seconds. Unknown times stay absent.
-    final seconds = message['timestamp'];
-    if (seconds is! num || !seconds.isFinite || seconds.abs() > 8640000000000) {
-      return null;
-    }
-    final date = DateTime.fromMillisecondsSinceEpoch((seconds * 1000).round());
+    final date = message.timestamp;
+    if (date == null) return null;
     final localizations = MaterialLocalizations.of(context);
     final time = TimeOfDay.fromDateTime(date);
     final compact = localizations.formatTimeOfDay(

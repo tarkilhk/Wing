@@ -1,3 +1,4 @@
+import 'package:wing/core/services/chat_outputs_session.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -13,7 +14,7 @@ import 'package:wing/core/services/android_file_delivery_service.dart';
 import 'package:wing/core/services/media_preview_service.dart';
 import 'package:wing/core/services/pdf_preview_service.dart';
 import 'package:wing/core/services/profile_gateway.dart';
-import 'package:wing/core/widgets/markdown_code_block.dart';
+import 'package:wing/core/widgets/source_code_block.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 import 'package:wing/core/widgets/chat_inline_image.dart';
 import 'package:wing/core/widgets/web_output_preview.dart';
@@ -59,18 +60,20 @@ Widget _screen({
 }) => MaterialApp(
   home: ChatOutputsScreen(
     chatTitle: 'Only this chat',
-    loadHistory: (offset) async => ProfileHistoryPage(
-      'chat',
-      await loadHistory(),
-      offset,
-      500,
-      isComplete: true,
+    createSession: () => ChatOutputsSession(
+      loadHistory: (offset) async => ProfileHistoryPage(
+        'chat',
+        await loadHistory(),
+        offset,
+        500,
+        isComplete: true,
+      ),
+      download: download,
+      readText: readText,
+      deliver: deliver,
+      fileDelivery: fileDelivery,
+      mediaPreview: mediaPreview,
     ),
-    download: download,
-    readText: readText,
-    deliver: deliver,
-    fileDelivery: fileDelivery,
-    mediaPreview: mediaPreview,
   ),
 );
 
@@ -79,7 +82,6 @@ RemoteTextPreview _textPreview(String path) => RemoteTextPreview(
   text: 'void main() {}',
   language: 'dart',
   mimeType: 'text/plain',
-  byteSize: 14,
   binary: false,
   truncated: false,
 );
@@ -110,7 +112,6 @@ void main() {
             text: source,
             language: 'markdown',
             mimeType: 'text/markdown',
-            byteSize: source.length,
             binary: false,
             truncated: false,
           );
@@ -156,15 +157,17 @@ void main() {
             url: null,
             label: 'report.txt',
           ),
-          loadHistory: (_) async {
-            historyLoads++;
-            throw StateError('history must not load');
-          },
-          readText: (path) async {
-            previewPath = path;
-            return _textPreview(path);
-          },
-          download: (_) async => throw StateError('Unexpected download'),
+          createSession: () => ChatOutputsSession(
+            loadHistory: (_) async {
+              historyLoads++;
+              throw StateError('history must not load');
+            },
+            readText: (path) async {
+              previewPath = path;
+              return _textPreview(path);
+            },
+            download: (_) async => throw StateError('Unexpected download'),
+          ),
         ),
       ),
     );
@@ -172,7 +175,7 @@ void main() {
 
     expect(historyLoads, 0);
     expect(previewPath, '../exports/report.txt');
-    expect(find.byType(MarkdownCodeBlock), findsOneWidget);
+    expect(find.byType(SourceCodeBlock), findsOneWidget);
   });
 
   testWidgets('initial output retries the same unavailable target', (
@@ -189,13 +192,15 @@ void main() {
             url: null,
             label: 'report.txt',
           ),
-          loadHistory: (_) async => throw StateError('Unexpected history'),
-          readText: (path) async {
-            attempts++;
-            if (attempts == 1) throw StateError('gone');
-            return _textPreview(path);
-          },
-          download: (_) async => throw StateError('Unexpected download'),
+          createSession: () => ChatOutputsSession(
+            loadHistory: (_) async => throw StateError('Unexpected history'),
+            readText: (path) async {
+              attempts++;
+              if (attempts == 1) throw StateError('gone');
+              return _textPreview(path);
+            },
+            download: (_) async => throw StateError('Unexpected download'),
+          ),
         ),
       ),
     );
@@ -211,7 +216,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(attempts, 2);
-    expect(find.byType(MarkdownCodeBlock), findsOneWidget);
+    expect(find.byType(SourceCodeBlock), findsOneWidget);
   });
 
   testWidgets('initial output explains an HTTP access denial', (tester) async {
@@ -225,10 +230,12 @@ void main() {
             url: null,
             label: 'report.md',
           ),
-          loadHistory: (_) async => throw StateError('Unexpected history'),
-          readText: (_) async =>
-              throw const DashboardHttpException(403, 'files/read'),
-          download: (_) async => throw StateError('Unexpected download'),
+          createSession: () => ChatOutputsSession(
+            loadHistory: (_) async => throw StateError('Unexpected history'),
+            readText: (_) async =>
+                throw const DashboardHttpException(403, 'files/read'),
+            download: (_) async => throw StateError('Unexpected download'),
+          ),
         ),
       ),
     );
@@ -335,11 +342,13 @@ void main() {
                       url: null,
                       label: 'report.txt',
                     ),
-                    loadHistory: (_) async =>
-                        throw StateError('Unexpected history'),
-                    readText: (_) async => throw StateError('gone'),
-                    download: (_) async =>
-                        throw StateError('Unexpected download'),
+                    createSession: () => ChatOutputsSession(
+                      loadHistory: (_) async =>
+                          throw StateError('Unexpected history'),
+                      readText: (_) async => throw StateError('gone'),
+                      download: (_) async =>
+                          throw StateError('Unexpected download'),
+                    ),
                   ),
                 ),
               ),
@@ -378,11 +387,13 @@ void main() {
                       url: null,
                       label: 'report.txt',
                     ),
-                    loadHistory: (_) async =>
-                        throw StateError('Unexpected history'),
-                    readText: (_) => pending.future,
-                    download: (_) async =>
-                        throw StateError('Unexpected download'),
+                    createSession: () => ChatOutputsSession(
+                      loadHistory: (_) async =>
+                          throw StateError('Unexpected history'),
+                      readText: (_) => pending.future,
+                      download: (_) async =>
+                          throw StateError('Unexpected download'),
+                    ),
                   ),
                 ),
               ),
@@ -403,7 +414,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Open owned output'), findsOneWidget);
-    expect(find.byType(MarkdownCodeBlock), findsNothing);
+    expect(find.byType(SourceCodeBlock), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -439,7 +450,6 @@ void main() {
           text: '',
           language: '',
           mimeType: 'application/pdf',
-          byteSize: 4,
           binary: true,
           truncated: false,
         ),
@@ -491,7 +501,6 @@ void main() {
           text: '',
           language: '',
           mimeType: 'application/pdf',
-          byteSize: 4,
           binary: true,
           truncated: false,
         ),
@@ -541,7 +550,6 @@ void main() {
           text: '',
           language: '',
           mimeType: 'application/pdf',
-          byteSize: 4,
           binary: true,
           truncated: false,
         ),
@@ -592,7 +600,6 @@ void main() {
           text: '',
           language: '',
           mimeType: 'video/mp4',
-          byteSize: 3,
           binary: true,
           truncated: false,
         ),
@@ -641,7 +648,6 @@ void main() {
           text: '',
           language: '',
           mimeType: 'video/mp4',
-          byteSize: 3,
           binary: true,
           truncated: false,
         ),
@@ -732,7 +738,7 @@ void main() {
       await tester.tap(find.byTooltip('Show source'));
       await tester.pumpAndSettle();
       expect(
-        tester.widget<MarkdownCodeBlock>(find.byType(MarkdownCodeBlock)).code,
+        tester.widget<SourceCodeBlock>(find.byType(SourceCodeBlock)).code,
         source,
       );
       await tester.pageBack();
@@ -780,7 +786,6 @@ void main() {
             text: '<p>short preview</p>',
             language: 'html',
             mimeType: 'text/html; charset=utf-8',
-            byteSize: source.length,
             binary: false,
             truncated: true,
           ),
@@ -827,7 +832,7 @@ void main() {
       await tester.tap(find.byTooltip('Show source'));
       await tester.pumpAndSettle();
       expect(
-        tester.widget<MarkdownCodeBlock>(find.byType(MarkdownCodeBlock)).code,
+        tester.widget<SourceCodeBlock>(find.byType(SourceCodeBlock)).code,
         source,
       );
       expect(find.byTooltip('Show HTML'), findsOneWidget);
@@ -867,7 +872,6 @@ void main() {
           text: '<p>preview</p>',
           language: 'html',
           mimeType: 'text/html',
-          byteSize: 14,
           binary: false,
           truncated: false,
         ),
@@ -912,7 +916,6 @@ void main() {
           text: '<p>preview</p>',
           language: 'text',
           mimeType: 'text/plain',
-          byteSize: WebOutputPreview.maxHtmlSourceLength + 1,
           binary: false,
           truncated: true,
         ),
@@ -1002,7 +1005,6 @@ void main() {
             text: source,
             language: 'text',
             mimeType: 'text/plain',
-            byteSize: source.length,
             binary: false,
             truncated: true,
           ),
@@ -1026,7 +1028,7 @@ void main() {
       await tester.tap(find.text('Source'));
       await tester.pump();
       expect(find.byType(MarkdownMessageContent), findsNothing);
-      expect(find.byType(MarkdownCodeBlock), findsOneWidget);
+      expect(find.byType(SourceCodeBlock), findsOneWidget);
       expect(find.text('Rendered'), findsOneWidget);
       await tester.tap(find.byTooltip('Copy code'));
       await tester.pump();
@@ -1057,7 +1059,6 @@ void main() {
                 text: source,
                 language: 'markdown',
                 mimeType: 'text/markdown',
-                byteSize: source.length,
                 binary: false,
                 truncated: false,
               );
@@ -1067,7 +1068,6 @@ void main() {
               text: 'Scoped report contents',
               language: 'text',
               mimeType: 'text/plain',
-              byteSize: 22,
               binary: false,
               truncated: false,
             );
@@ -1128,7 +1128,6 @@ void main() {
               text: '# Heading',
               language: current.language,
               mimeType: current.mimeType,
-              byteSize: 9,
               binary: current.binary,
               truncated: false,
             );
@@ -1241,23 +1240,25 @@ void main() {
           data: const MediaQueryData(textScaler: TextScaler.linear(2)),
           child: ChatOutputsScreen(
             chatTitle: 'Only this chat',
-            loadHistory: (offset) async => ProfileHistoryPage(
-              'chat',
-              [
-                {
-                  'role': 'assistant',
-                  'content': 'Saved /srv/current/very-long-report-name.pdf',
-                },
-              ],
-              offset,
-              500,
-              isComplete: true,
+            createSession: () => ChatOutputsSession(
+              loadHistory: (offset) async => ProfileHistoryPage(
+                'chat',
+                [
+                  {
+                    'role': 'assistant',
+                    'content': 'Saved /srv/current/very-long-report-name.pdf',
+                  },
+                ],
+                offset,
+                500,
+                isComplete: true,
+              ),
+              download: (_) async =>
+                  throw const DashboardResponseTooLargeException(
+                    32 * 1024 * 1024,
+                  ),
+              readText: (_) async => throw StateError('Unexpected preview'),
             ),
-            download: (_) async =>
-                throw const DashboardResponseTooLargeException(
-                  32 * 1024 * 1024,
-                ),
-            readText: (_) async => throw StateError('Unexpected preview'),
           ),
         ),
       ),

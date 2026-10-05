@@ -1,3 +1,14 @@
+import 'dart:async';
+import 'package:wing/core/models/profile_session_key.dart';
+
+import 'package:wing/core/services/shared_draft_session.dart';
+import 'home_config_restore_test.dart' show homeEntryFactory;
+import 'package:wing/core/services/backup_session.dart';
+import 'package:wing/core/services/config_backup_service.dart';
+import 'package:wing/core/services/config_backup_io.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/services/attachment_image_worker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,9 +38,6 @@ class _Credentials implements CredentialStore {
   Future<String?> read(String key) async => values[key];
 
   @override
-  String? readCached(String key) => values[key];
-
-  @override
   Future<void> write(String key, String value) async => values[key] = value;
 }
 
@@ -41,7 +49,7 @@ class _CameraAttachments extends AttachmentDraftService {
     required String sourcePath,
     required String displayName,
     required Iterable<AttachmentDraft> existingDrafts,
-    required AttachmentDraftMode mode,
+    void Function(AttachmentImageJob)? onImageJob,
   }) async {
     if (fail) throw const AttachmentDraftException('Photo could not be saved.');
     return AttachmentDraft(
@@ -57,22 +65,31 @@ class _CameraAttachments extends AttachmentDraftService {
   }
 }
 
-Future<ConnectionManager> _manager() async {
+Future<({ConnectionManager manager, AppPreferences appPreferences})>
+_homeFixture() async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
-  return ConnectionManager.create(prefs, credentialStore: _Credentials());
+  final appPreferences = AppPreferences(prefs);
+  addTearDown(appPreferences.dispose);
+  final manager = await ConnectionManager.create(
+    prefs,
+    credentialStore: _Credentials(),
+  );
+  return (manager: manager, appPreferences: appPreferences);
 }
 
 ProfileWorkspaceController _controller(
   SavedConnection connection,
-  SharedPreferences prefs, {
+  SharedPreferences prefs,
+  AppPreferences appPreferences, {
   Set<String> missingSessions = const {},
   AttachmentDraftService? attachments,
 }) {
   final controller = ProfileWorkspaceController(
-    connection: connection,
+    access: ConnectionAccess(connection: connection, dashboardOAuth: null),
     connectionIdentity: 'home-share-${connection.id}',
     preferences: prefs,
+    appPreferences: appPreferences,
     attachmentService: attachments,
     gatewayFactory: (scope) => ProfileGateway(
       scope: scope,
@@ -114,21 +131,42 @@ Future<void> _pumpHome(
   WidgetTester tester,
   ConnectionManager manager,
   AndroidShareIntentService shareIntents, {
+  required AppPreferences appPreferences,
   Set<String> missingSessions = const {},
   ProfileWorkspaceController? controller,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
       home: HomeScreen(
+        createSharedDraftSession: (entry) => SharedDraftSession(
+          connectionManager: manager,
+          entrySession: entry,
+          shareIntents: shareIntents,
+        ),
         connManager: manager,
+        appPreferences: appPreferences,
         shareIntents: shareIntents,
-        profileController: (connection) =>
-            controller ??
-            _controller(
-              connection,
-              manager.prefs,
-              missingSessions: missingSessions,
-            ),
+        createEntrySession: homeEntryFactory(
+          tester,
+          manager,
+          appPreferences,
+          create: (connection) =>
+              controller ??
+              _controller(
+                connection,
+                manager.prefs,
+                appPreferences,
+                missingSessions: missingSessions,
+              ),
+          launchIntents: null,
+        ),
+        createBackupSession: () => BackupSession(
+          configuration: ConfigBackupService(
+            connectionManager: manager,
+            appPreferences: appPreferences,
+          ),
+          io: ConfigBackupIo(),
+        ),
       ),
     ),
   );
@@ -159,7 +197,9 @@ void main() {
       tester.view.physicalSize = const Size(800, 1200);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      final manager = await _manager();
+      final fixture = await _homeFixture();
+      final manager = fixture.manager;
+      final appPreferences = fixture.appPreferences;
       await manager.saveConnection('Work', 'work.local', 8642, 'work-key');
       await manager.saveConnection('Home', 'home.local', 8642, 'home-key');
       final shares = AndroidShareIntentService();
@@ -169,9 +209,9 @@ void main() {
         text: 'Shared from another app',
       );
 
-      await _pumpHome(tester, manager, shares);
+      await _pumpHome(tester, manager, shares, appPreferences: appPreferences);
       shares.pendingShare.value = payload;
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(
         find.text('Choose a Hermes instance for this shared draft'),
@@ -210,7 +250,9 @@ void main() {
   testWidgets(
     'cancel keeps Home review controls and Discard clears the share',
     (tester) async {
-      final manager = await _manager();
+      final fixture = await _homeFixture();
+      final manager = fixture.manager;
+      final appPreferences = fixture.appPreferences;
       await manager.saveConnection('Work', 'work.local', 8642, 'work-key');
       final shares = AndroidShareIntentService();
       addTearDown(shares.dispose);
@@ -219,7 +261,7 @@ void main() {
         text: 'Keep pending until reviewed',
       );
 
-      await _pumpHome(tester, manager, shares);
+      await _pumpHome(tester, manager, shares, appPreferences: appPreferences);
       shares.pendingShare.value = payload;
       await tester.pump();
       await tester.pumpAndSettle();
@@ -239,6 +281,57 @@ void main() {
     },
   );
 
+  testWidgets('held native ACK cannot navigate to a different selected chat', (
+    tester,
+  ) async {
+    final acknowledged = Completer<void>();
+    final release = Completer<void>();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'acknowledgeShare') {
+            acknowledged.complete();
+            await release.future;
+          }
+          return null;
+        });
+    final fixture = await _homeFixture();
+    final manager = fixture.manager;
+    final appPreferences = fixture.appPreferences;
+    await manager.saveConnection('Work', 'work.local', 8642, 'work-key');
+    final connection = manager.getConnections().single;
+    final controller = _controller(connection, manager.prefs, appPreferences);
+    final shares = AndroidShareIntentService();
+    addTearDown(shares.dispose);
+    const payload = AndroidSharePayload(
+      id: 'held-ack-selection',
+      text: 'Keep this draft at its captured destination',
+    );
+    await _pumpHome(
+      tester,
+      manager,
+      shares,
+      appPreferences: appPreferences,
+      controller: controller,
+    );
+    shares.pendingShare.value = payload;
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('share-add-to-draft')));
+    await tester.pump();
+    expect(acknowledged.isCompleted, isTrue);
+    final staged = controller.current!.chat!;
+    expect(staged.composer.observation.text, payload.text);
+    await controller.openSession(
+      ProfileSessionKey(controller.current!.scope, 'another-chat'),
+    );
+    release.complete();
+    await tester.pumpAndSettle();
+    expect(shares.pendingShare.value, isNull);
+    expect(controller.current!.selectedSession, 'another-chat');
+    expect(staged.composer.observation.text, payload.text);
+    expect(find.byType(ProfileWorkspaceScreen), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('ACK failure keeps the staged draft and incoming share visible', (
     tester,
   ) async {
@@ -254,7 +347,9 @@ void main() {
       () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, null),
     );
-    final manager = await _manager();
+    final fixture = await _homeFixture();
+    final manager = fixture.manager;
+    final appPreferences = fixture.appPreferences;
     await manager.saveConnection('Work', 'work.local', 8642, 'work-key');
     final shares = AndroidShareIntentService();
     addTearDown(shares.dispose);
@@ -263,7 +358,7 @@ void main() {
       text: 'Do not lose this staged draft',
     );
 
-    await _pumpHome(tester, manager, shares);
+    await _pumpHome(tester, manager, shares, appPreferences: appPreferences);
     shares.pendingShare.value = payload;
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('share-add-to-draft')));
@@ -292,7 +387,9 @@ void main() {
       () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, null),
     );
-    final manager = await _manager();
+    final fixture = await _homeFixture();
+    final manager = fixture.manager;
+    final appPreferences = fixture.appPreferences;
     await manager.saveConnection('Work', 'work.local', 8642, 'work-key');
     final shares = AndroidShareIntentService();
     addTearDown(shares.dispose);
@@ -301,7 +398,7 @@ void main() {
       text: 'Keep this pending',
     );
 
-    await _pumpHome(tester, manager, shares);
+    await _pumpHome(tester, manager, shares, appPreferences: appPreferences);
     shares.pendingShare.value = payload;
     await tester.pumpAndSettle();
     await tester.pageBack();
@@ -319,7 +416,9 @@ void main() {
   testWidgets('camera returns directly to its original connection and draft', (
     tester,
   ) async {
-    final manager = await _manager();
+    final fixture = await _homeFixture();
+    final manager = fixture.manager;
+    final appPreferences = fixture.appPreferences;
     await manager.saveConnection('Work', 'work.local', 8642, 'work-key');
     await manager.saveConnection('Home', 'home.local', 8642, 'home-key');
     final work = manager.getConnections().firstWhere(
@@ -337,7 +436,7 @@ void main() {
         'session': 'original-chat',
       },
     );
-    await _pumpHome(tester, manager, shares);
+    await _pumpHome(tester, manager, shares, appPreferences: appPreferences);
     shares.pendingShare.value = payload;
     await tester.pumpAndSettle();
     expect(
@@ -349,7 +448,10 @@ void main() {
       find.byType(ProfileWorkspaceScreen),
     );
     expect(workspace.controller.current!.chat!.key.sessionId, 'original-chat');
-    expect(workspace.controller.current!.chat!.draft, payload.text);
+    expect(
+      workspace.controller.current!.chat!.composer.observation.text,
+      payload.text,
+    );
     expect(shares.pendingShare.value, isNull);
   });
 
@@ -359,7 +461,9 @@ void main() {
     'acknowledgement failed',
   ]) {
     testWidgets('photo taken inside a chat: $outcome', (tester) async {
-      final manager = await _manager();
+      final fixture = await _homeFixture();
+      final manager = fixture.manager;
+      final appPreferences = fixture.appPreferences;
       await manager.saveConnection('Work', 'work.local', 8642, 'work-key');
       final connection = manager.getConnections().single;
       final attachments = _CameraAttachments()
@@ -367,11 +471,11 @@ void main() {
       final controller = _controller(
         connection,
         manager.prefs,
+        appPreferences,
         attachments: attachments,
       );
-      addTearDown(controller.dispose);
       await controller.initialize();
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'Existing draft');
       await manager.prefs.setString('last_connection_id', connection.id);
       final drafts = ComposerDraftStore(
@@ -413,7 +517,13 @@ void main() {
             return null;
           });
 
-      await _pumpHome(tester, manager, shares, controller: controller);
+      await _pumpHome(
+        tester,
+        manager,
+        shares,
+        appPreferences: appPreferences,
+        controller: controller,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Attach file'));
       await tester.pumpAndSettle();
@@ -423,10 +533,13 @@ void main() {
       expect(find.text('Add shared content'), findsNothing);
       expect(find.byType(ProfileWorkspaceScreen), findsOneWidget);
       expect(controller.current!.chat, same(chat));
-      expect(chat.draft, 'Existing draft');
-      expect(chat.messages, isEmpty);
+      expect(chat.composer.observation.text, 'Existing draft');
+      expect(chat.reading.messages, isEmpty);
       expect(acknowledgements, attachments.fail ? 0 : 1);
-      expect(chat.attachments, hasLength(attachments.fail ? 0 : 1));
+      expect(
+        chat.composer.observation.attachments,
+        hasLength(attachments.fail ? 0 : 1),
+      );
       expect(
         shares.pendingShare.value,
         outcome == 'saved' ? isNull : same(payload),
@@ -452,7 +565,9 @@ void main() {
   testWidgets('cold camera recovery keeps the saved text in its new draft', (
     tester,
   ) async {
-    final manager = await _manager();
+    final fixture = await _homeFixture();
+    final manager = fixture.manager;
+    final appPreferences = fixture.appPreferences;
     await manager.saveConnection('Work', 'work.local', 8642, 'work-key');
     final connection = manager.getConnections().single;
     final drafts = ComposerDraftStore(
@@ -471,6 +586,7 @@ void main() {
       tester,
       manager,
       shares,
+      appPreferences: appPreferences,
       missingSessions: {'expired-unsent'},
     );
     shares.pendingShare.value = AndroidSharePayload(
@@ -492,7 +608,7 @@ void main() {
       find.byType(ProfileWorkspaceScreen),
     );
     expect(
-      workspace.controller.current!.chat!.draft,
+      workspace.controller.current!.chat!.composer.observation.text,
       'Cold camera draft check\n\nCaptured content',
     );
     expect(
@@ -512,7 +628,9 @@ void main() {
   testWidgets(
     'changed camera connection requires explicit destination review',
     (tester) async {
-      final manager = await _manager();
+      final fixture = await _homeFixture();
+      final manager = fixture.manager;
+      final appPreferences = fixture.appPreferences;
       await manager.saveConnection('Work', 'work.local', 8642, 'work-key');
       final work = manager.getConnections().single;
       final shares = AndroidShareIntentService();
@@ -527,7 +645,7 @@ void main() {
           'session': 'original-chat',
         },
       );
-      await _pumpHome(tester, manager, shares);
+      await _pumpHome(tester, manager, shares, appPreferences: appPreferences);
       shares.pendingShare.value = payload;
       await tester.pumpAndSettle();
       expect(

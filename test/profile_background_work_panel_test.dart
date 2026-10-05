@@ -1,3 +1,6 @@
+import 'package:wing/core/services/profile_supervision_session.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
@@ -117,22 +120,35 @@ class _BackgroundFixture extends ProfileActionsFixture {
 void main() {
   late _BackgroundFixture fixture;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileChat chat;
+  late ProfileSupervisionSession supervision;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     fixture = _BackgroundFixture();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'background-work-panel',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: fixture.gateway,
     );
     await controller.initialize();
-    chat = await controller.createChat();
+    chat = await controller.createChat(canDispatch: () => true);
+    supervision = ProfileSupervisionSession(controller: controller, chat: chat);
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    supervision.dispose();
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   Future<void> showPanel(
     WidgetTester tester, {
@@ -154,8 +170,7 @@ void main() {
           body: ListView(
             children: [
               ProfileBackgroundWorkPanel(
-                controller: controller,
-                chat: chat,
+                session: supervision,
                 initiallyExpanded: true,
               ),
             ],

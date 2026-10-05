@@ -1,3 +1,4 @@
+import 'package:wing/core/services/scheduled_tasks_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -16,15 +17,19 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final fixture = ScheduledTasksFixture();
+      final taskPreferences = await SharedPreferences.getInstance();
       await tester.pumpWidget(
         MaterialApp(
           theme: profileWorkspaceTheme(
             wingTheme(Brightness.dark),
-            accent: WorkspaceAccent.mint,
+            accent: WorkspaceAccent.teal,
           ),
           home: AdminScheduledTasksPage(
             profile: fixture.profile,
-            preferences: await SharedPreferences.getInstance(),
+            acquireController: () => ScheduledTasksController.acquire(
+              fixture.profile,
+              taskPreferences,
+            ),
             onOpenSession: (_) async {},
           ),
         ),

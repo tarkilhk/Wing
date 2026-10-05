@@ -205,10 +205,9 @@ List<Map<String, dynamic>> answerHistoryRows(
     .toList();
 
 class AnswerTarget {
-  final int messageIndex;
   final int userOrdinal;
   final String prompt;
-  const AnswerTarget(this.messageIndex, this.userOrdinal, this.prompt);
+  const AnswerTarget(this.userOrdinal, this.prompt);
 
   static AnswerTarget? at(List<Map<String, dynamic>> messages, int index) {
     if (index < 0 ||
@@ -225,6 +224,6 @@ class AnswerTarget {
         prompt = answerMessageText(message);
       }
     }
-    return AnswerTarget(index, ordinal, prompt);
+    return AnswerTarget(ordinal, prompt);
   }
 }

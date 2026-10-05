@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/answer_versions.dart';
@@ -81,14 +82,14 @@ void main() {
     'saved steering renders a compact note without the delivery wrapper',
     (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
           home: Scaffold(
             body: ProfileMessage(
-              message: {
+              message: TranscriptMessage.fromRow({
                 'role': 'user',
                 'content': wrappedSteer,
                 'display_kind': 'steer',
-              },
+              }),
             ),
           ),
         ),

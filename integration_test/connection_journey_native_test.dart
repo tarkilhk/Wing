@@ -1,3 +1,5 @@
+import 'package:wing/core/services/connection_setup_session.dart';
+import 'package:wing/core/services/hermes_cloud.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -25,17 +27,22 @@ void main() {
               debugShowCheckedModeBanner: false,
               theme: wingTheme(brightness),
               home: ConnectionSetupScreen(
-                onSaveIcon: null,
-                createProbe: (_) => fixture,
-                onSave: (connection) async {
-                  if (++saveAttempts == 1) {
-                    throw const CredentialStorageException(
-                      'private storage detail',
-                    );
-                  }
-                  saved = connection;
-                  return connection;
-                },
+                createSession: () => ConnectionSetupSession(
+                  initialAccess: null,
+                  savedConnections: () => const [],
+                  cloud: HermesCloud(),
+                  onSaveIcon: null,
+                  createProbe: (_) => fixture,
+                  onSave: (connection) async {
+                    if (++saveAttempts == 1) {
+                      throw const CredentialStorageException(
+                        'private storage detail',
+                      );
+                    }
+                    saved = connection;
+                    return connection;
+                  },
+                ),
               ),
             ),
           ),

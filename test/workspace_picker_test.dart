@@ -1,3 +1,14 @@
+import 'package:wing/core/services/profile_connectors_session.dart';
+import 'package:wing/core/screens/administration/admin_connectors_page.dart';
+import 'package:wing/core/services/shared_draft_session.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/backup_session.dart';
+import 'package:wing/core/services/config_backup_service.dart';
+import 'package:wing/core/services/config_backup_io.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/screens/administration/provider_recovery_routes.dart';
+import 'package:wing/core/models/settings_edit.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:ui' as ui;
@@ -10,8 +21,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/administration/admin_widgets.dart';
 import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/screens/administration/admin_settings_page.dart';
-import 'package:wing/core/screens/administration/admin_connectors_page.dart';
-import 'package:wing/core/screens/administration/admin_providers_page.dart';
+import 'package:wing/core/screens/administration/admin_connector_routes.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
@@ -20,7 +30,7 @@ import 'package:wing/core/widgets/app_drawer.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
 import 'package:wing/main.dart';
 
-import 'home_config_restore_test.dart' show buildManager;
+import 'home_config_restore_test.dart' show createHomeFixture, homeEntryFactory;
 import 'support/profile_browser_fixture.dart';
 import 'support/administration_fixture.dart';
 
@@ -42,6 +52,7 @@ void main() {
     }
   });
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileBrowserFixture fixture;
   final first = SavedConnection(
     id: 'claw',
@@ -60,15 +71,21 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     fixture = ProfileBrowserFixture();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: first,
+      access: ConnectionAccess(connection: first, dashboardOAuth: null),
       connectionIdentity: 'picker-claw',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: fixture.gateway,
     );
     await controller.initialize();
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   Future<void> show(
     WidgetTester tester, {
@@ -268,7 +285,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(selected, 'travel');
       expect(controller.current!.scope.profileName, 'personal');
-      expect(chat.composerText, 'Keep this draft');
+      expect(chat.composer.observation.displayedText, 'Keep this draft');
     },
   );
 
@@ -383,7 +400,7 @@ void main() {
     adminPushProfile(
       context,
       administration.server.profile('personal'),
-      (context, profile) => AdminConnectorsPage(profile: profile),
+      (context, profile) => profileConnectorsPage(profile),
     );
     await tester.pumpAndSettle();
     expect(find.text('MCP connectors'), findsOneWidget);
@@ -402,6 +419,69 @@ void main() {
       isTrue,
     );
   });
+
+  testWidgets(
+    'list-borrowed connector detail admits fresh owners across personal work personal',
+    (tester) async {
+      final administration = AdministrationFixture('Claw');
+      addTearDown(administration.server.close);
+      administration.override = (method, path, query, body) async {
+        expect(method, 'GET');
+        expect(path, 'mcp/servers');
+        return {
+          'servers': [
+            {
+              'name': 'docs',
+              'transport': 'http',
+              'auth': null,
+              'enabled': true,
+              'source': 'config',
+              'plugin': null,
+            },
+          ],
+        };
+      };
+      await show(tester, destination: AppDestination.health);
+      adminPushProfile(
+        tester.element(find.byType(ServerConnectionLabel)),
+        administration.server.profile('personal'),
+        (_, profile) => profileConnectorsPage(profile),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'docs'));
+      await tester.pumpAndSettle();
+      expect(find.text('Test connection'), findsOneWidget);
+      expect(find.text('Claw / personal'), findsOneWidget);
+      for (final selected in ['work', 'personal']) {
+        final marker = administration.requests.length;
+        await tester.tap(picker);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(ValueKey('workspace-profile-$selected')));
+        await tester.pumpAndSettle();
+        expect(controller.current!.scope.profileName, selected);
+        expect(find.text('Claw / $selected'), findsOneWidget);
+        expect(find.text('Test connection'), findsOneWidget);
+        expect(
+          administration.requests
+              .skip(marker)
+              .where(
+                (request) =>
+                    request.$2 == 'mcp/servers' &&
+                    request.$3['profile'] == selected,
+              ),
+          isNotEmpty,
+        );
+        expect(tester.takeException(), isNull);
+      }
+      expect(
+        administration.requests.every((request) => request.$1 == 'GET'),
+        isTrue,
+      );
+      expect(administration.rpcRequests, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets('Health Connectors stays open across profile changes and Back', (
     tester,
@@ -454,7 +534,7 @@ void main() {
       tester.element(find.byType(ServerConnectionLabel)),
       administration.server.profile('personal'),
       (context, profile) =>
-          AdminProviderDetail(profile: profile, providerId: 'claude-code'),
+          providerRecoveryPage(profile: profile, providerId: 'claude-code'),
     );
     await tester.pumpAndSettle();
     expect(find.text('Renew access'), findsOneWidget);
@@ -490,7 +570,7 @@ void main() {
           onPressed: () => adminPushProfile(
             context,
             profile,
-            (context, profile) => AdminConnectorsPage(profile: profile),
+            (context, profile) => profileConnectorsPage(profile),
           ),
           child: const Text('Open connectors'),
         ),
@@ -526,7 +606,7 @@ void main() {
         adminPushProfile(
           tester.element(find.byType(ServerConnectionLabel)),
           administration.server.profile('personal'),
-          (context, profile) => AdminConnectorsPage(profile: profile),
+          (context, profile) => profileConnectorsPage(profile),
         );
         await tester.pumpAndSettle();
         final gate = Completer<void>();
@@ -563,7 +643,14 @@ void main() {
       administration.override = (method, path, query, body) async => {
         'servers': query['profile'] == 'personal'
             ? [
-                {'name': 'example', 'auth': 'oauth'},
+                {
+                  'name': 'example',
+                  'auth': 'oauth',
+                  'transport': 'http',
+                  'enabled': true,
+                  'source': 'config',
+                  'plugin': null,
+                },
               ]
             : [],
       };
@@ -571,8 +658,13 @@ void main() {
       adminPushProfile(
         tester.element(find.byType(ServerConnectionLabel)),
         administration.server.profile('personal'),
-        (context, profile) =>
-            AdminConnectorDetail(profile: profile, name: 'example'),
+        (context, profile) => AdminConnectorDetail(
+          createRoute: () {
+            final parent = ProfileConnectorsSession(profile);
+            addTearDown(parent.dispose);
+            return parent.openDetail('example', signInOnOpen: false);
+          },
+        ),
       );
       await tester.pumpAndSettle();
       expect(find.text('Test connection'), findsOneWidget);
@@ -687,25 +779,52 @@ void main() {
   testWidgets(
     'Home replaces connection, preserves section and retained owner',
     (tester) async {
-      final manager = await buildManager();
+      final homeFixture = await createHomeFixture();
+      final manager = homeFixture.manager;
+      final appPreferences = homeFixture.appPreferences;
       final a = await manager.saveConnection('Claw', 'localhost', 1, '');
       final b = await manager.saveConnection('Travel', 'localhost', 2, '');
       final owners = <String, ProfileWorkspaceController>{};
       ProfileWorkspaceController owner(SavedConnection connection) =>
           owners.putIfAbsent(connection.id, () {
             final value = ProfileWorkspaceController(
-              connection: connection,
+              access: ConnectionAccess(
+                connection: connection,
+                dashboardOAuth: null,
+              ),
               connectionIdentity: connection.id,
               preferences: manager.prefs,
+              appPreferences: appPreferences,
               gatewayFactory: ProfileBrowserFixture().gateway,
             );
-            addTearDown(value.dispose);
             return value;
           });
       await manager.prefs.setString('last_connection_id', a.id);
       await tester.pumpWidget(
         MaterialApp(
-          home: HomeScreen(connManager: manager, profileController: owner),
+          home: HomeScreen(
+            createSharedDraftSession: (entry) => SharedDraftSession(
+              connectionManager: manager,
+              entrySession: entry,
+              shareIntents: null,
+            ),
+            connManager: manager,
+            appPreferences: appPreferences,
+            createEntrySession: homeEntryFactory(
+              tester,
+              manager,
+              appPreferences,
+              create: owner,
+              launchIntents: null,
+            ),
+            createBackupSession: () => BackupSession(
+              configuration: ConfigBackupService(
+                connectionManager: manager,
+                appPreferences: appPreferences,
+              ),
+              io: ConfigBackupIo(),
+            ),
+          ),
         ),
       );
       await tester.pumpAndSettle();

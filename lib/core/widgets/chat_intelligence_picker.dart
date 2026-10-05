@@ -1,20 +1,11 @@
+import 'package:wing/core/models/chat_intelligence.dart';
+import 'package:wing/core/models/model_choice.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/wing_theme.dart';
 import 'model_chooser.dart';
 import 'studio_error.dart';
 import 'studio_selection_tile.dart';
-
-/// The per-chat model and reasoning values chosen in the picker.
-class ChatIntelligenceSelection {
-  final ModelChoice choice;
-  final String reasoningEffort;
-
-  const ChatIntelligenceSelection({
-    required this.choice,
-    required this.reasoningEffort,
-  });
-}
 
 const chatReasoningEffortLabels = <String, String>{
   'none': 'Off',
@@ -153,7 +144,7 @@ Future<ChatIntelligenceSelection?> showChatIntelligencePicker({
   required String profileName,
   required Future<List<ModelChoice>> Function() refreshModels,
   required Future<void> Function() reviewProviderAccess,
-  Future<bool> Function(ChatIntelligenceSelection)? onCommit,
+  required Future<bool> Function(ChatIntelligenceSelection) onCommit,
   String? defaultProvider,
 }) async {
   var reviewAccess = false;
@@ -196,7 +187,7 @@ class ChatIntelligenceSheet extends StatefulWidget {
   final Future<List<ModelChoice>> Function() onRefreshModels;
   final VoidCallback onReviewProviderAccess;
   final ValueChanged<ChatIntelligenceSelection> onApply;
-  final Future<bool> Function(ChatIntelligenceSelection)? onCommit;
+  final Future<bool> Function(ChatIntelligenceSelection) onCommit;
   final VoidCallback onCancel;
 
   const ChatIntelligenceSheet({
@@ -209,7 +200,7 @@ class ChatIntelligenceSheet extends StatefulWidget {
     required this.onReviewProviderAccess,
     required this.onApply,
     required this.onCancel,
-    this.onCommit,
+    required this.onCommit,
     this.defaultProvider,
     super.key,
   });
@@ -233,10 +224,6 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
       reasoningEffort: _selectedEffort,
     );
     final commit = widget.onCommit;
-    if (commit == null) {
-      widget.onApply(selection);
-      return;
-    }
     setState(() {
       _applying = true;
       _applyError = null;

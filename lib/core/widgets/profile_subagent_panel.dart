@@ -1,22 +1,19 @@
 import 'studio_error.dart';
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'profile_transcript_disclosure.dart';
 
 import '../models/gateway_insight.dart';
-import '../services/profile_workspace_controller.dart';
+import '../services/profile_supervision_session.dart';
 
 class ProfileSubagentPanel extends StatefulWidget {
-  final ProfileWorkspaceController controller;
-  final ProfileChat chat;
+  final ProfileSupervisionSession session;
   final bool initiallyExpanded;
   final bool embedded;
 
   const ProfileSubagentPanel({
     super.key,
-    required this.controller,
-    required this.chat,
+    required this.session,
     this.initiallyExpanded = false,
     this.embedded = false,
   });
@@ -30,7 +27,7 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
   void initState() {
     super.initState();
     if (!widget.embedded &&
-        (widget.initiallyExpanded || widget.chat.subagents.isEmpty)) {
+        (widget.initiallyExpanded || widget.session.state.subagents.isEmpty)) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
     }
   }
@@ -39,8 +36,8 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
   void didUpdateWidget(ProfileSubagentPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!widget.embedded &&
-        !identical(oldWidget.chat, widget.chat) &&
-        (widget.initiallyExpanded || widget.chat.subagents.isEmpty)) {
+        !identical(oldWidget.session, widget.session) &&
+        (widget.initiallyExpanded || widget.session.state.subagents.isEmpty)) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
     }
   }
@@ -50,17 +47,31 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
       return;
     }
     try {
-      await widget.controller.refreshSubagents(widget.chat);
+      await widget.session.refreshSubagents();
     } catch (_) {
       // The controller retains the profile-scoped error for the panel.
     }
   }
 
+  Future<void> _openSubagent(String id) async {
+    final detail = widget.session.openSubagent(id);
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (_) => _SubagentDetailSheet(session: detail),
+      );
+    } finally {
+      detail.dispose();
+    }
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.controller,
+    listenable: widget.session,
     builder: (context, _) {
-      final chat = widget.chat;
+      final chat = widget.session.state;
       final children = <Widget>[
         if (widget.embedded && chat.subagentsLoading)
           const LinearProgressIndicator(minHeight: 1),
@@ -136,17 +147,7 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
                 const Icon(Icons.chevron_right, size: 16),
               ],
             ),
-            onTap: () => showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              showDragHandle: true,
-              builder: (_) => _SubagentDetailSheet(
-                controller: widget.controller,
-                chat: chat,
-                subagentId: activity.id,
-                initialActivity: activity,
-              ),
-            ),
+            onTap: () => _openSubagent(activity.id),
           ),
         Align(
           alignment: Alignment.centerRight,
@@ -172,7 +173,7 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
         },
         icon: Icons.account_tree_outlined,
         label: 'Subagents',
-        summary: Text(_summary(chat.subagents, chat.unconfirmedSubagentIds)),
+        summary: Text(chat.subagentSummary),
         loading: chat.subagentsLoading,
         childrenPadding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
         children: children,
@@ -182,17 +183,8 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
 }
 
 class _SubagentDetailSheet extends StatefulWidget {
-  final ProfileWorkspaceController controller;
-  final ProfileChat chat;
-  final String subagentId;
-  final GatewaySubagentActivity initialActivity;
-
-  const _SubagentDetailSheet({
-    required this.controller,
-    required this.chat,
-    required this.subagentId,
-    required this.initialActivity,
-  });
+  final SubagentSupervisionDetail session;
+  const _SubagentDetailSheet({required this.session});
 
   @override
   State<_SubagentDetailSheet> createState() => _SubagentDetailSheetState();
@@ -201,206 +193,46 @@ class _SubagentDetailSheet extends StatefulWidget {
 class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
     with WidgetsBindingObserver {
   final _steer = TextEditingController();
-  Timer? _tailTimer;
-  GatewaySubagentTail? _tail;
-  String? _tailError;
-  String? _controlMessage;
-  bool _controlFailed = false;
-  int _tailFailures = 0;
-  bool _loadingTail = false;
-  bool _steering = false;
-  bool _interrupting = false;
-  GatewaySubagentTail? _lastAvailableTail;
   bool _expandedGoal = false;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startTail());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.session.setActive(
+          WidgetsBinding.instance.lifecycleState == null ||
+              WidgetsBinding.instance.lifecycleState ==
+                  AppLifecycleState.resumed,
+        );
+      }
+    });
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _startTail();
-    } else {
-      _tailTimer?.cancel();
-      _tailTimer = null;
-    }
-  }
-
-  void _startTail() {
-    if (!mounted || _tailTimer != null) {
-      return;
-    }
-    final lifecycle = WidgetsBinding.instance.lifecycleState;
-    if (lifecycle != null && lifecycle != AppLifecycleState.resumed) {
-      return;
-    }
-    unawaited(_refreshTail());
-    _tailTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => unawaited(_refreshTail()),
-    );
-  }
-
-  Future<void> _refreshTail() async {
-    if (!mounted || _loadingTail) {
-      return;
-    }
-    setState(() => _loadingTail = true);
-    try {
-      final tail = await widget.controller.loadSubagentTail(
-        widget.chat,
-        widget.subagentId,
-      );
-      if (!mounted) {
-        return;
-      }
-      if (tail == null) {
-        throw StateError('Live output is unavailable.');
-      }
-      setState(() {
-        _tail = tail;
-        if (tail.available && tail.text.isNotEmpty) _lastAvailableTail = tail;
-        _tailError = null;
-        _tailFailures = 0;
-      });
-      final activity = widget.chat.subagents
-          .where((item) => item.id == widget.subagentId)
-          .firstOrNull;
-      if (!tail.available && activity?.isTerminal == true) {
-        _tailTimer?.cancel();
-        _tailTimer = null;
-      }
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _tailFailures += 1;
-        _tailError = 'Could not refresh live output.';
-      });
-      if (_tailFailures >= 3) {
-        _tailTimer?.cancel();
-        _tailTimer = null;
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _loadingTail = false);
-      }
-    }
-  }
-
-  void _retryTail() {
-    setState(() {
-      _tailFailures = 0;
-      _tailError = null;
-    });
-    _tailTimer?.cancel();
-    _tailTimer = null;
-    _startTail();
-  }
-
+  void didChangeAppLifecycleState(AppLifecycleState state) =>
+      widget.session.setActive(state == AppLifecycleState.resumed);
   Future<void> _submitSteer() async {
-    final text = _steer.text.trim();
-    if (text.isEmpty || _steering) {
-      return;
-    }
-    setState(() {
-      _steering = true;
-      _controlMessage = null;
-      _controlFailed = false;
-    });
-    try {
-      final accepted = await widget.controller.steerSubagent(
-        widget.chat,
-        widget.subagentId,
-        text,
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        if (accepted) {
-          _steer.clear();
-          _controlMessage = 'Steering queued.';
-        } else {
-          _controlMessage = 'The subagent did not accept that steering.';
-          _controlFailed = true;
-        }
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _controlMessage = 'Steering could not be queued.';
-          _controlFailed = true;
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _steering = false);
-      }
-    }
-  }
-
-  Future<void> _interrupt() async {
-    if (_interrupting) {
-      return;
-    }
-    setState(() {
-      _interrupting = true;
-      _controlMessage = null;
-      _controlFailed = false;
-    });
-    try {
-      final found = await widget.controller.interruptSubagent(
-        widget.chat,
-        widget.subagentId,
-      );
-      if (mounted) {
-        setState(() {
-          _controlMessage = found
-              ? 'Interrupt requested.'
-              : 'The subagent is no longer running.';
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _controlMessage = 'Interrupt could not be requested.';
-          _controlFailed = true;
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _interrupting = false);
-      }
-    }
+    final text = _steer.text;
+    final accepted = await widget.session.steer(text);
+    if (mounted && accepted && _steer.text == text) _steer.clear();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _tailTimer?.cancel();
     _steer.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.controller,
+    listenable: widget.session,
     builder: (context, _) {
-      final activity = widget.chat.subagents
-          .where((item) => item.id == widget.subagentId)
-          .firstOrNull;
-      final current = activity ?? widget.initialActivity;
-      final unconfirmed = widget.chat.unconfirmedSubagentIds.contains(
-        widget.subagentId,
-      );
-      final canControl =
-          activity != null && !activity.isTerminal && !unconfirmed;
+      final state = widget.session.state;
+      final current = state.activity;
+      final unconfirmed = state.unconfirmed;
+      final canControl = state.canControl;
       return SafeArea(
         child: AnimatedPadding(
           duration: const Duration(milliseconds: 150),
@@ -439,7 +271,7 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
                       controller: _steer,
                       minLines: 1,
                       maxLines: 3,
-                      enabled: !_steering,
+                      enabled: !widget.session.state.steering,
                       decoration: const InputDecoration(
                         labelText: 'Steer subagent',
                         hintText: 'Add guidance for the current task',
@@ -454,20 +286,27 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
                     children: [
                       if (canControl)
                         OutlinedButton.icon(
-                          onPressed: _interrupting ? null : _interrupt,
+                          onPressed: widget.session.state.interrupting
+                              ? null
+                              : widget.session.interrupt,
                           icon: const Icon(Icons.stop_circle_outlined),
                           label: const Text('Interrupt'),
                         ),
                       if (current.acceptingSteer && canControl)
                         FilledButton(
-                          onPressed: _steering ? null : _submitSteer,
+                          onPressed: widget.session.state.steering
+                              ? null
+                              : _submitSteer,
                           child: const Text('Steer'),
                         ),
                     ],
                   ),
-                  if (_controlMessage case final message?) ...[
+                  if (widget.session.state.controlMessage
+                      case final message?) ...[
                     const SizedBox(height: 8),
-                    _controlFailed ? StudioError(message) : Text(message),
+                    widget.session.state.controlFailed
+                        ? StudioError(message)
+                        : Text(message),
                   ],
                   const SizedBox(height: 12),
                   _tailBody(current),
@@ -481,35 +320,37 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
   );
 
   Widget _tailBody(GatewaySubagentActivity activity) {
-    final tail = _tail;
+    final tail = widget.session.state.tail;
     final readableTail = tail != null && tail.available && tail.text.isNotEmpty
         ? tail
-        : _lastAvailableTail;
+        : widget.session.state.lastAvailableTail;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
             const Expanded(child: Text('Live output')),
-            if (_loadingTail)
+            if (widget.session.state.loadingTail)
               const SizedBox.square(
                 dimension: 18,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
             IconButton(
               tooltip: 'Refresh live output',
-              onPressed: _loadingTail ? null : _refreshTail,
+              onPressed: widget.session.state.loadingTail
+                  ? null
+                  : widget.session.refreshTail,
               icon: const Icon(Icons.refresh),
             ),
           ],
         ),
-        if (_tailError case final error?) ...[
+        if (widget.session.state.tailError case final error?) ...[
           StudioError(error),
-          if (_tailFailures >= 3)
+          if (widget.session.state.tailFailures >= 3)
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton(
-                onPressed: _retryTail,
+                onPressed: widget.session.retryTail,
                 child: const Text('Retry'),
               ),
             ),
@@ -525,7 +366,7 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
           const Text('Waiting for transcript text...'),
         ],
         if (readableTail != null) ...[
-          if (_tailError != null ||
+          if (widget.session.state.tailError != null ||
               tail?.available != true ||
               tail!.text.isEmpty)
             const Text('Showing the last received output.'),
@@ -550,32 +391,6 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
       ],
     );
   }
-}
-
-String _summary(
-  List<GatewaySubagentActivity> activities,
-  Set<String> unconfirmedIds,
-) {
-  if (activities.isEmpty) {
-    return 'No live tasks';
-  }
-  final running = activities.where((activity) => !activity.isTerminal).length;
-  final unconfirmed = activities
-      .where(
-        (activity) =>
-            !activity.isTerminal && unconfirmedIds.contains(activity.id),
-      )
-      .length;
-  if (unconfirmed > 0) {
-    return [
-      if (running > unconfirmed) '${running - unconfirmed} active',
-      '$unconfirmed unconfirmed',
-      '${activities.length} total',
-    ].join(' · ');
-  }
-  return running == 0
-      ? '${activities.length} finished'
-      : '$running active · ${activities.length} total';
 }
 
 String _activitySubtitle(

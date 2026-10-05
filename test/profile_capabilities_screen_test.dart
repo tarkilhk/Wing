@@ -1,3 +1,4 @@
+import 'package:wing/core/services/profile_capabilities_session.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -23,7 +24,13 @@ ProfileGateway _gateway({
   get: (path, query) => skillsOnly && path == 'tools/toolsets'
       ? Future.value({'data': []})
       : get(path, query),
-  put: put,
+  ownedPut: put == null
+      ? null
+      : (path, body, canDispatch, onDispatched) async {
+          if (!canDispatch()) throw StateError('Retired command');
+          onDispatched();
+          return put(path, body);
+        },
   rpc: (_, _) async => {},
   discover: () async => _profiles,
 );
@@ -36,7 +43,7 @@ Future<void> _show(WidgetTester tester, ProfileGateway gateway) async {
         onLibrary: () {},
         onHub: () {},
         onPlugins: () {},
-        gateway: gateway,
+        createSession: () => ProfileCapabilitiesSession(gateway),
         connectionLabel: 'Server A',
       ),
     ),
@@ -127,26 +134,28 @@ void main() {
             onHub: () {},
             onPlugins: () {},
             connectionLabel: 'Server A',
-            gateway: _gateway(
-              skillsOnly: false,
-              get: (path, _) => path == 'skills'
-                  ? skills.future
-                  : Future.value({
-                      'data': [
-                        {
-                          'name': 'browser',
-                          'label': 'Browser',
-                          'description': 'Browse pages',
-                          'enabled': false,
-                          'configured': false,
-                          'tools': ['browse'],
-                        },
-                      ],
-                    }),
-              put: (_, _) async {
-                writes++;
-                return {};
-              },
+            createSession: () => ProfileCapabilitiesSession(
+              _gateway(
+                skillsOnly: false,
+                get: (path, _) => path == 'skills'
+                    ? skills.future
+                    : Future.value({
+                        'data': [
+                          {
+                            'name': 'browser',
+                            'label': 'Browser',
+                            'description': 'Browse pages',
+                            'enabled': false,
+                            'configured': false,
+                            'tools': ['browse'],
+                          },
+                        ],
+                      }),
+                put: (_, _) async {
+                  writes++;
+                  return {};
+                },
+              ),
             ),
           ),
         ),

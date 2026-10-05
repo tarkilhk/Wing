@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -17,16 +19,23 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final browser = ProfileBrowserFixture();
       final server = AdministrationFixture();
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: SavedConnection(
-          id: 'host',
-          label: 'Claw',
-          host: 'localhost',
-          port: 1,
-          apiKey: '',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'host',
+            label: 'Claw',
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
         ),
         connectionIdentity: 'analytics',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: browser.gateway,
       );
       addTearDown(controller.dispose);

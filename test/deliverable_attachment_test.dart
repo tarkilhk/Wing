@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_message.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -29,7 +30,10 @@ Widget message(
     body: SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: ProfileMessage(
-        message: {'role': 'assistant', 'content': text},
+        message: TranscriptMessage.fromRow({
+          'role': 'assistant',
+          'content': text,
+        }),
         onOpenRemoteFile: open,
         onDownloadRemoteFile: download,
       ),
@@ -369,11 +373,11 @@ void main() {
                 body: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: ProfileMessage(
-                    message: const {
+                    message: TranscriptMessage.fromRow(const {
                       'role': 'assistant',
                       'content':
                           'The visual report is ready:\n\n$htmlReportPath\n\nOpen it to explore the charts and tables.',
-                    },
+                    }),
                     onOpenRemoteFile: (_) async {},
                     onDownloadRemoteFile: (_) async => true,
                   ),

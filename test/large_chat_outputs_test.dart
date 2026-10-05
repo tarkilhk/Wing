@@ -1,3 +1,6 @@
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,16 +36,23 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({});
     final host = _LargeChat();
+    final preferences = await SharedPreferences.getInstance();
+    final appPreferences = AppPreferences(preferences);
+    addTearDown(appPreferences.dispose);
     final controller = ProfileWorkspaceController(
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Test',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Test',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       connectionIdentity: 'test',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     addTearDown(controller.dispose);
@@ -115,15 +125,15 @@ void main() {
     expect(find.text('Nearby messages'), findsOneWidget);
     expect(find.text('Back to latest'), findsOneWidget);
     expect(find.text('Saved /srv/earlier.pdf'), findsOneWidget);
-    expect(chat.messages, hasLength(50));
-    expect(chat.messages.any((row) => row['id'] == 9500), isFalse);
+    expect(chat.reading.messages, hasLength(50));
+    expect(chat.reading.messages.any((row) => row['id'] == 9500), isFalse);
 
     await tester.tap(find.text('Back to latest'));
     await tester.pumpAndSettle();
     await tester.settleMarkdown();
     expect(find.text('Search result'), findsNothing);
     expect(find.text('Saved /srv/latest.pdf'), findsOneWidget);
-    expect(chat.historyScrollOffset, 0);
+    expect(chat.reading.historyScrollOffset, 0);
 
     await tester.tap(find.byTooltip('Chat actions'));
     await tester.pumpAndSettle();
@@ -141,7 +151,7 @@ void main() {
       find.widgetWithText(ExpansionTile, 'Saved /srv/latest.pdf'),
     );
     await tester.pumpAndSettle();
-    chat.historyGeneration++;
+    chat.reading.cancelReads();
     await tester.tap(find.text('View in chat'));
     await tester.pumpAndSettle();
     await tester.settleMarkdown();
@@ -153,16 +163,23 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final host = _LargeChat();
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: SavedConnection(
-          id: 'host',
-          label: 'Test',
-          host: 'localhost',
-          port: 1,
-          apiKey: '',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'host',
+            label: 'Test',
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
         ),
         connectionIdentity: 'test',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: host.gateway,
       );
       addTearDown(controller.dispose);

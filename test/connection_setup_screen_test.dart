@@ -1,3 +1,6 @@
+import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/services/connection_setup_session.dart';
+import 'package:wing/core/services/hermes_cloud.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -51,7 +54,7 @@ Future<void> _pump(
   void Function(SavedConnection)? candidate,
   SavedConnection? initial,
   Brightness brightness = Brightness.light,
-  WorkspaceAccent accent = WorkspaceAccent.mint,
+  WorkspaceAccent accent = WorkspaceAccent.teal,
   double scale = 1,
   double keyboard = 0,
 }) async {
@@ -69,13 +72,19 @@ Future<void> _pump(
           child: child!,
         ),
         home: ConnectionSetupScreen(
-          initialConnection: initial,
-          onSaveIcon: initial == null ? null : saveIcon ?? (_) async {},
-          createProbe: (connection) {
-            candidate?.call(connection);
-            return fixture ?? ConnectionProbeFixture();
-          },
-          onSave: save ?? (connection) async => connection,
+          createSession: () => ConnectionSetupSession(
+            initialAccess: initial == null
+                ? null
+                : ConnectionAccess(connection: initial, dashboardOAuth: null),
+            savedConnections: () => const [],
+            cloud: HermesCloud(),
+            onSaveIcon: initial == null ? null : saveIcon ?? (_) async {},
+            createProbe: (connection) {
+              candidate?.call(connection.connection);
+              return fixture ?? ConnectionProbeFixture();
+            },
+            onSave: save ?? (connection) async => connection,
+          ),
         ),
       ),
     ),

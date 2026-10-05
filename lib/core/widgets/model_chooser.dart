@@ -1,92 +1,9 @@
+import 'package:wing/core/models/model_choice.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/wing_theme.dart';
 import 'studio_error.dart';
 import 'studio_selection_tile.dart';
-
-/// A model and its actual provider route. Display text never becomes identity.
-class ModelChoice {
-  final String provider;
-  final String model;
-  final String? providerLabel;
-  final String? displayName;
-  final String? detail;
-
-  const ModelChoice({
-    required this.provider,
-    required this.model,
-    this.providerLabel,
-    this.displayName,
-    this.detail,
-  });
-
-  String get routeLabel => providerLabel?.trim().isNotEmpty == true
-      ? providerLabel!.trim()
-      : provider;
-
-  String get label =>
-      displayName?.trim().isNotEmpty == true ? displayName!.trim() : model;
-
-  static List<ModelChoice> fromOptions(Map<String, dynamic> response) {
-    final choices = <ModelChoice>[];
-    final providers = response['providers'];
-    if (providers is! List || providers.any((row) => row is! Map)) {
-      throw const FormatException('Expected a list of records');
-    }
-    for (final row in providers) {
-      final provider = Map<String, dynamic>.from(row as Map);
-      final slug =
-          (provider['slug'] ?? provider['id'])?.toString().trim() ?? '';
-      final label =
-          (provider['name'] ?? provider['display_name'] ?? provider['title'])
-              ?.toString()
-              .trim();
-      final models = provider['models'];
-      if (slug.isEmpty || models is! List) continue;
-      for (final value in models) {
-        final model = value is String
-            ? value.trim()
-            : value is Map
-            ? (value['id'] ?? value['model'] ?? value['name'])
-                      ?.toString()
-                      .trim() ??
-                  ''
-            : '';
-        if (model.isNotEmpty) {
-          choices.add(
-            ModelChoice(
-              provider: slug,
-              model: model,
-              providerLabel: label?.isEmpty == true ? null : label,
-            ),
-          );
-        }
-      }
-    }
-    return choices;
-  }
-}
-
-enum ModelSpecialChoice { automatic, profileDefault }
-
-/// A typed selection. The two inherited choices cannot be mistaken for a route.
-class ModelSelection {
-  final ModelChoice? choice;
-  final ModelSpecialChoice? special;
-
-  const ModelSelection.model(ModelChoice this.choice) : special = null;
-  const ModelSelection.special(ModelSpecialChoice this.special) : choice = null;
-
-  @override
-  bool operator ==(Object other) =>
-      other is ModelSelection &&
-      special == other.special &&
-      choice?.provider == other.choice?.provider &&
-      choice?.model == other.choice?.model;
-
-  @override
-  int get hashCode => Object.hash(special, choice?.provider, choice?.model);
-}
 
 class ModelSpecialOption {
   final ModelSpecialChoice value;

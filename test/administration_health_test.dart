@@ -1,3 +1,5 @@
+import 'package:wing/core/models/administration_operation.dart';
+import 'package:wing/core/models/health_finding.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -7,30 +9,85 @@ import 'package:wing/core/services/administration_overview.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/server_connection_status.dart';
-import 'package:wing/core/services/profile_workspace_controller.dart';
-import 'package:wing/core/widgets/profile_diagnostics_panel.dart';
+import 'package:wing/core/services/profile_diagnostics_controller.dart';
 
 void main() {
+  test(
+    'diagnostic observations retain independent deeply immutable status',
+    () {
+      final status = <String, dynamic>{
+        'running': false,
+        'exit_code': 0,
+        'lines': ['Confirmed output'],
+      };
+      final observation = AdminDiagnosticObservation(
+        const AdministrationAction('doctor', 7),
+        status,
+        DateTime.utc(2026, 10, 4),
+      );
+      status['exit_code'] = 1;
+      (status['lines'] as List).add('Later input');
+      expect(observation.failed, isFalse);
+      expect(observation.lines, ['Confirmed output']);
+      expect(
+        () => diagnosticStatusSnapshot(observation)['running'] = true,
+        throwsUnsupportedError,
+      );
+      expect(() => observation.lines.clear(), throwsUnsupportedError);
+    },
+  );
+
   final observedAt = DateTime.utc(2026, 9, 17, 12);
   late DateTime now;
   late AdministrationRepository server;
   late AdministrationHealth health;
   late Future<Map<String, dynamic>> Function(String) readiness;
   late List<String> calls;
+  Future<Map<String, dynamic>> Function(String path)? overviewRead;
+  var diagnosticPid = 7;
+  var rejectDiagnostic = false;
+  var diagnosticExit = 0;
 
   setUp(() {
     now = observedAt;
     calls = [];
+    overviewRead = null;
+    diagnosticPid = 7;
+    rejectDiagnostic = false;
+    diagnosticExit = 0;
     readiness = (profile) async => {
       'profile': profile,
       'provider_configured': true,
     };
     server = AdministrationRepository(
+      ownedMutation: (_, path, _, _, active, dispatched) async {
+        if (!active() || rejectDiagnostic) {
+          throw StateError('Start unavailable');
+        }
+        dispatched();
+        return {'ok': true, 'name': path.substring(4), 'pid': diagnosticPid};
+      },
+      settingsWrite: (_, _, _, _) async =>
+          throw StateError('Unexpected settings write'),
       connectionId: 'server',
       connectionIdentity: 'endpoint',
       connectionLabel: 'Server',
       request: (method, path, query, body) async {
         calls.add('$method $path');
+        if (path.startsWith('actions/')) {
+          return {
+            'name': path.split('/')[1],
+            'pid': diagnosticPid,
+            'running': false,
+            'exit_code': diagnosticExit,
+            'lines': ['Finding'],
+          };
+        }
+        if (overviewRead != null &&
+            path != 'profiles' &&
+            path != 'profiles/active') {
+          return overviewRead!(path);
+        }
         return switch (path) {
           'profiles/active' => {'current': 'default'},
           'profiles' => {
@@ -72,11 +129,16 @@ void main() {
       'tools': {'data': <Map<String, dynamic>>[]},
       'connectors': {'servers': <Map<String, dynamic>>[]},
     };
-    for (final entry in data.entries) {
-      value.observations[entry.key] = AdministrationObservation()
-        ..data = entry.value
-        ..checkedAt = now;
-    }
+    value.restoreHealth({
+      'observations': {
+        for (final entry in data.entries)
+          entry.key: AdministrationObservation(
+            data: entry.value,
+            checkedAt: now,
+          ).healthSnapshot(),
+      },
+      'connectorChecks': <String, bool?>{},
+    });
     addTearDown(value.dispose);
     return value;
   }
@@ -90,8 +152,6 @@ void main() {
       await health.refreshReadiness();
       expect(calls, ['setup.status default']);
       expect(health.status, AdministrationHealthStatus.healthy);
-      expect(health.diagnosticCoverage, 'Doctor and security audit not run');
-      expect(health.statusLabel, 'No issues in available observations');
     },
   );
 
@@ -101,26 +161,33 @@ void main() {
       final source = overview('default');
       health.selectProfile(source);
       await health.refreshReadiness();
-      final model = source.observations['model']!;
-      model.data = {};
+      overviewRead = (_) async => {};
+      await source.refresh(keys: {'model'});
       expect(health.status, AdministrationHealthStatus.unknown);
-      model.data = {'provider': 'example', 'model': 'research'};
-      model.loading = true;
+      final modelRead = Completer<Map<String, dynamic>>();
+      overviewRead = (_) => modelRead.future;
+      final refreshing = source.refresh(keys: {'model'});
       expect(health.status, AdministrationHealthStatus.healthy);
-      model.loading = false;
-      model.error = 'Offline';
+      modelRead.complete({'provider': 'example', 'model': 'research'});
+      await refreshing;
+      overviewRead = (_) async => throw StateError('Offline');
+      await source.refresh(keys: {'model'});
       expect(health.status, AdministrationHealthStatus.unknown);
-      model.error = null;
-      source.observations['tools']!.data = {
+      overviewRead = (_) async => {'provider': 'example', 'model': 'research'};
+      await source.refresh(keys: {'model'});
+      overviewRead = (_) async => {
         'data': [<String, dynamic>{}],
       };
+      await source.refresh(keys: {'tools'});
       expect(health.status, AdministrationHealthStatus.unknown);
-      source.observations['tools']!.data = {'data': []};
-      source.observations['access']!.data = {
+      overviewRead = (_) async => {'data': []};
+      await source.refresh(keys: {'tools'});
+      overviewRead = (_) async => {
         'providers': [
-          {'status': {}},
+          {'id': 'example', 'status': {}},
         ],
       };
+      await source.refresh(keys: {'access'});
       expect(health.status, AdministrationHealthStatus.unknown);
     },
   );
@@ -154,15 +221,17 @@ void main() {
       final source = overview('default');
       health.selectProfile(source);
       await health.refreshReadiness();
-      source.observations['tools']!.data = {
+      overviewRead = (_) async => {
         'data': [
           {'enabled': true, 'configured': false},
         ],
       };
+      await source.refresh(keys: {'tools'});
       expect(health.status, AdministrationHealthStatus.warning);
-      source.observations['access']!.data = {
+      overviewRead = (_) async => {
         'providers': [
           {
+            'id': 'example',
             'status': {
               'logged_in': true,
               'expires_at': observedAt
@@ -172,15 +241,19 @@ void main() {
           },
         ],
       };
+      await source.refresh(keys: {'access'});
       expect(health.status, AdministrationHealthStatus.failure);
-      source.observations['access']!.error = 'Offline';
+      overviewRead = (_) async => throw StateError('Offline');
+      await source.refresh(keys: {'access'});
       now = observedAt.add(const Duration(minutes: 6));
       expect(health.status, AdministrationHealthStatus.failure);
       expect(
-        health.profileFindings
-            .where((f) => f.title == 'Provider access')
-            .single
-            .stale,
+        health.isStale(
+          health.profileFindings
+              .where((f) => f.title == 'Provider access')
+              .single
+              .checkedAt,
+        ),
         isTrue,
       );
     },
@@ -193,7 +266,10 @@ void main() {
       await health.refreshReadiness();
       now = observedAt.add(const Duration(minutes: 5));
       expect(health.status, AdministrationHealthStatus.healthy);
-      expect(health.profileFindings.every((f) => f.stale), isTrue);
+      expect(
+        health.profileFindings.every((f) => health.isStale(f.checkedAt)),
+        isTrue,
+      );
       now = observedAt;
       readiness = (_) => Future.error(StateError('Offline'));
       await health.refreshReadiness();
@@ -230,41 +306,21 @@ void main() {
       const path = 'ops/doctor';
       health.selectProfile(overview('default'));
       await health.refreshReadiness();
-      final generation = health.beginDiagnostic(path)!;
-      health.observeDiagnostic(
-        path,
-        AdminDiagnosticObservation(const AdministrationAction('doctor', 7), {
-          'running': false,
-          'exit_code': 1,
-          'lines': ['Finding'],
-        }, now),
-        generation: generation,
-      );
-      health.finishDiagnostic(path, generation);
+      await health.startDiagnostic(AdministrationDiagnostic.doctor);
+      await health.diagnosticOperation(path)!.refresh();
+      diagnosticExit = 1;
+      await health.diagnosticOperation(path)!.refresh();
       health.selectProfile(overview('work'));
       expect(health.status, AdministrationHealthStatus.failure);
       expect(health.diagnostics[path]!.action.pid, 7);
-      final rerun = health.beginDiagnostic(path)!;
-      health.observeDiagnostic(
-        path,
-        AdminDiagnosticObservation(const AdministrationAction('doctor', 8), {
-          'running': false,
-          'exit_code': 0,
-          'lines': ['Warnings remain'],
-        }, now),
-        generation: rerun,
-      );
-      health.finishDiagnostic(path, rerun);
+      final old = health.diagnosticOperation(path)!;
+      diagnosticPid = 8;
+      diagnosticExit = 0;
+      await health.startDiagnostic(AdministrationDiagnostic.doctor);
+      await health.diagnosticOperation(path)!.refresh();
       await health.refreshReadiness();
       expect(health.status, AdministrationHealthStatus.unknown);
-      health.observeDiagnostic(
-        path,
-        AdminDiagnosticObservation(const AdministrationAction('doctor', 7), {
-          'running': false,
-          'exit_code': 1,
-        }, now),
-        generation: generation,
-      );
+      await old.refresh();
       expect(health.diagnostics[path]!.action.pid, 8);
       expect(health.status, AdministrationHealthStatus.unknown);
       expect(calls.where((c) => c.startsWith('POST')), isEmpty);
@@ -292,28 +348,25 @@ void main() {
 
       final runtime = Completer<Map<String, dynamic>>();
       final checks = ProfileDiagnosticsController(
-        workspace: ProfileWorkspaceData(
-          ProfileGateway(
-            scope: selected.profile.scope,
-            get: (path, query) async {
-              expect(path, 'sessions');
-              return {};
-            },
-            rpc: (method, params) async {
-              expect(params['profile'], 'default');
-              return switch (method) {
-                'setup.status' => {
-                  'profile': 'default',
-                  'provider_configured': true,
-                },
-                'setup.runtime_check' => await runtime.future,
-                _ => throw StateError('Unexpected diagnostic'),
-              };
-            },
-            discover: () => server.discover(),
-          ),
+        gateway: ProfileGateway(
+          scope: selected.profile.scope,
+          get: (path, query) async {
+            expect(path, 'sessions');
+            return {};
+          },
+          rpc: (method, params) async {
+            expect(params['profile'], 'default');
+            return switch (method) {
+              'setup.status' => {
+                'profile': 'default',
+                'provider_configured': true,
+              },
+              'setup.runtime_check' => await runtime.future,
+              _ => throw StateError('Unexpected diagnostic'),
+            };
+          },
+          discover: () => server.discover(),
         ),
-        connectionLabel: server.connectionLabel,
       );
       addTearDown(checks.dispose);
       checks.addListener(
@@ -348,17 +401,14 @@ void main() {
     health.selectProfile(overview('default'));
     await health.refreshReadiness();
     final checks = ProfileDiagnosticsController(
-      workspace: ProfileWorkspaceData(
-        ProfileGateway(
-          scope: health.overview!.profile.scope,
-          get: (path, query) async => {},
-          rpc: (method, params) async => method == 'setup.status'
-              ? {'profile': 'default', 'provider_configured': true}
-              : {},
-          discover: () => server.discover(),
-        ),
+      gateway: ProfileGateway(
+        scope: server.profile('default').scope,
+        get: (path, query) async => {},
+        rpc: (method, params) async => method == 'setup.status'
+            ? {'profile': 'default', 'provider_configured': true}
+            : {},
+        discover: () => server.discover(),
       ),
-      connectionLabel: server.connectionLabel,
     );
     addTearDown(checks.dispose);
     checks.addListener(
@@ -367,7 +417,7 @@ void main() {
     await checks.check();
     now = DateTime.now();
     expect(health.status, AdministrationHealthStatus.unknown);
-    expect(health.profileFindings.last.stale, isFalse);
+    expect(health.isStale(health.profileFindings.last.checkedAt), isFalse);
     expect(health.profileFindings.last.detail, 'Check incomplete');
   });
 
@@ -397,82 +447,71 @@ void main() {
   );
   test(
     'tool setup counts enabled groups and distinguishes empty from unknown',
-    () {
+    () async {
       final source = overview('default');
       health.selectProfile(source);
       AdministrationHealthFinding finding() =>
           health.profileFindings.singleWhere((f) => f.title == 'Tool setup');
       expect(finding().detail, 'No tools enabled');
-      source.observations['tools']!.data = {
+      final tools = <String, dynamic>{
         'data': [
           {'name': 'search', 'enabled': true, 'configured': true},
           {'name': 'images', 'enabled': true, 'configured': false},
           {'name': 'disabled', 'enabled': false, 'configured': false},
         ],
       };
+      overviewRead = (_) async => tools;
+      await source.refresh(keys: {'tools'});
       expect(finding().detail, '2 enabled · 1 needs setup');
       expect(finding().status, AdministrationHealthStatus.warning);
-      source.observations['tools']!.data!['data'][1]['configured'] = true;
+      tools['data'][1]['configured'] = true;
+      await source.refresh(keys: {'tools'});
       expect(finding().detail, '2 enabled · All set up');
       expect(finding().status, AdministrationHealthStatus.healthy);
-      source.observations['tools']!.data!['data'][1].remove('configured');
+      tools['data'][1].remove('configured');
+      await source.refresh(keys: {'tools'});
       expect(finding().status, AdministrationHealthStatus.unknown);
     },
   );
 
-  test('server time advances only when both checks in a refresh finish', () {
-    void complete(String path, {int exitCode = 0}) {
-      final generation = health.beginDiagnostic(path)!;
-      health.recordDiagnosticAttempt(path);
-      health.observeDiagnostic(
-        path,
-        AdminDiagnosticObservation(
-          AdministrationAction(path.substring(4), generation),
-          {'running': false, 'exit_code': exitCode, 'lines': <String>[]},
-          now,
-        ),
-        generation: generation,
-      );
-      health.finishDiagnostic(path, generation);
-    }
-
-    health.beginServerRefresh();
-    complete('ops/doctor');
-    expect(health.serverCheckedAt, isNull);
-    expect(health.serverCheckIncomplete, isTrue);
-    now = now.add(const Duration(minutes: 1));
-    complete('ops/security-audit', exitCode: 1);
-    final first = now;
-    expect(health.serverCheckedAt, first);
-    expect(
-      health.serverCheckIncomplete,
-      isFalse,
-    ); // Findings are a completed check.
-    now = now.add(const Duration(hours: 2));
-    complete('ops/doctor');
-    expect(health.serverCheckedAt, first);
-    expect(health.serverCheckIncomplete, isFalse);
-    health.beginServerRefresh();
-    complete('ops/doctor');
-    expect(health.serverCheckedAt, first);
-    final saved = health.snapshot();
-    health.dispose();
-    health = AdministrationHealth(server, now: () => now)..restore(saved);
-    expect(health.serverCheckIncomplete, isTrue);
-    complete('ops/security-audit');
-    expect(health.serverCheckedAt, now);
-    expect(health.serverCheckIncomplete, isFalse);
-    // Even within the same clock tick, old results cannot complete a new refresh.
-    health.beginServerRefresh();
-    expect(health.serverCheckIncomplete, isTrue);
-    complete('ops/doctor');
-    final generation = health.beginDiagnostic('ops/security-audit')!;
-    health.recordDiagnosticAttempt('ops/security-audit');
-    health.finishDiagnostic('ops/security-audit', generation); // Start failed.
-    expect(health.serverCheckIncomplete, isTrue);
-    now = now.add(const Duration(minutes: 1));
-    complete('ops/security-audit'); // An individual retry completes the batch.
-    expect(health.serverCheckIncomplete, isFalse);
-    expect(health.serverCheckedAt, now);
-  });
+  test(
+    'server time advances only when both checks in a refresh finish',
+    () async {
+      await health.runAllDiagnostics();
+      await health.diagnosticOperation('ops/doctor')!.refresh();
+      expect(health.serverCheckedAt, isNull);
+      expect(health.serverCheckIncomplete, isTrue);
+      now = now.add(const Duration(minutes: 1));
+      diagnosticExit = 1;
+      await health.diagnosticOperation('ops/security-audit')!.refresh();
+      final first = now;
+      expect(health.serverCheckedAt, first);
+      expect(health.serverCheckIncomplete, isFalse);
+      now = now.add(const Duration(hours: 2));
+      diagnosticExit = 0;
+      await health.startDiagnostic(AdministrationDiagnostic.doctor);
+      await health.diagnosticOperation('ops/doctor')!.refresh();
+      expect(health.serverCheckedAt, first);
+      await health.runAllDiagnostics();
+      await health.diagnosticOperation('ops/doctor')!.refresh();
+      expect(health.serverCheckedAt, first);
+      final saved = health.snapshot();
+      health.dispose();
+      health = AdministrationHealth(server, now: () => now)..restore(saved);
+      expect(health.serverCheckIncomplete, isTrue);
+      await health.diagnosticOperation('ops/security-audit')!.refresh();
+      expect(health.serverCheckedAt, now);
+      rejectDiagnostic = true;
+      await health.runAllDiagnostics();
+      expect(health.serverCheckIncomplete, isTrue);
+      rejectDiagnostic = false;
+      now = now.add(const Duration(minutes: 1));
+      await health.startDiagnostic(AdministrationDiagnostic.doctor);
+      await health.diagnosticOperation('ops/doctor')!.refresh();
+      await health.startDiagnostic(AdministrationDiagnostic.securityAudit);
+      await health.diagnosticOperation('ops/security-audit')!.refresh();
+      expect(health.serverCheckIncomplete, isFalse);
+      expect(health.serverCheckedAt, now);
+    },
+  );
 }

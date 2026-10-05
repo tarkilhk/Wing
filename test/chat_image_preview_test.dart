@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_message.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -16,10 +17,10 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ProfileMessage(
-            message: const {
+            message: TranscriptMessage.fromRow(const {
               'role': 'assistant',
               'content': '![Result chart](/srv/chart.png)',
-            },
+            }),
             loadAttachmentImage: (_) async => Uint8List.fromList(
               img.encodePng(img.Image(width: 120, height: 80)),
             ),

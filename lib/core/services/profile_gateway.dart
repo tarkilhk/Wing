@@ -1,8 +1,10 @@
+import 'connection_access.dart';
 // Named transport seams keep request functions injectable.
 // ignore_for_file: prefer_initializing_formals
 
 import 'dart:async';
 import '../models/session_visibility.dart';
+import '../models/deleted_draft_cleanup.dart';
 import '../models/hermes_profile.dart';
 import '../models/answer_versions.dart';
 import 'connection_manager.dart';
@@ -22,15 +24,19 @@ typedef ScopedRpc =
       Map<String, dynamic> params,
     );
 
-typedef ScopedPatch =
+typedef ScopedPost =
     Future<Map<String, dynamic>> Function(
       String endpoint,
       Map<String, dynamic> body,
     );
 
-typedef ScopedPost = ScopedPatch;
-typedef ScopedDelete =
-    Future<void> Function(String endpoint, Map<String, String> query);
+typedef ScopedOwnedPost =
+    Future<Map<String, dynamic>> Function(
+      String endpoint,
+      Map<String, dynamic> body,
+      bool Function() canDispatch,
+      void Function() onDispatched,
+    );
 
 /// The REST page may include extra pinned rows outside its offset window.
 class ProfileSessionPage {
@@ -71,25 +77,29 @@ class ProjectFolderSuggestion {
   const ProjectFolderSuggestion({required this.path, required this.label});
 }
 
-DashboardClient _dashboardFor(SavedConnection connection) => DashboardClient(
-  host: connection.host,
-  port: connection.dashboardPort,
-  useHttps: connection.useHttps,
-  pathPrefix: connection.dashboardPrefix ?? '',
-  proxied: connection.dashboardProxied,
-  username: connection.dashboardUsername,
-  password: connection.dashboardPassword,
-  dashboardOAuth: connection.dashboardOAuth,
-  requiresOAuth: connection.isCloud,
-  gatewayHeaders: connection.gatewayHeaders,
-);
+DashboardClient _dashboardFor(ConnectionAccess access) {
+  final connection = access.connection;
+  return DashboardClient(
+    host: connection.host,
+    port: connection.dashboardPort,
+    useHttps: connection.useHttps,
+    pathPrefix: connection.dashboardPrefix ?? '',
+    proxied: connection.dashboardProxied,
+    username: connection.dashboardUsername,
+    password: connection.dashboardPassword,
+    dashboardOAuth: access.dashboardOAuth,
+    requiresOAuth: connection.isCloud,
+    gatewayHeaders: connection.gatewayHeaders,
+  );
+}
 
 /// Authentication and HTTP pooling belong to one saved connection, not to each
 /// profile or short-lived project reader. Gateways still own separate sockets.
 class ProfileGatewayConnection {
-  ProfileGatewayConnection(this.connection);
-  final SavedConnection connection;
-  late final DashboardClient _dashboard = _dashboardFor(connection);
+  ProfileGatewayConnection(this.access);
+  final ConnectionAccess access;
+  SavedConnection get connection => access.connection;
+  late final DashboardClient _dashboard = _dashboardFor(access);
   bool _closed = false;
 
   ProfileGateway create(WorkspaceScope scope) {
@@ -131,10 +141,11 @@ class ProfileGateway {
     }
   }
 
-  final ScopedPatch? _patch;
+  final ScopedOwnedPost? _ownedPatch;
+  final ScopedOwnedPost? _ownedDelete;
   final ScopedPost? _post;
-  final ScopedPost? _put;
-  final ScopedDelete? _delete;
+  final ScopedOwnedPost? _ownedPost;
+  final ScopedOwnedPost? _ownedPut;
   final Future<void> Function() _connect;
   final void Function() _close;
   final void Function() disconnect;
@@ -165,10 +176,11 @@ class ProfileGateway {
     required this.scope,
     required ScopedGet get,
     required ScopedRpc rpc,
-    ScopedPatch? patch,
+    ScopedOwnedPost? ownedPatch,
+    ScopedOwnedPost? ownedDelete,
     ScopedPost? post,
-    ScopedPost? put,
-    ScopedDelete? delete,
+    ScopedOwnedPost? ownedPost,
+    ScopedOwnedPost? ownedPut,
     required Future<ProfileDiscovery> Function() discover,
     Future<void> Function()? connect,
     void Function()? close,
@@ -176,10 +188,11 @@ class ProfileGateway {
   }) : _getRequest = get,
        _discover = discover,
        _rpcRequest = rpc,
-       _patch = patch,
+       _ownedPatch = ownedPatch,
+       _ownedDelete = ownedDelete,
        _post = post,
-       _put = put,
-       _delete = delete,
+       _ownedPost = ownedPost,
+       _ownedPut = ownedPut,
        _connect = connect ?? _nothing,
        _close = close ?? _noop,
        disconnect = disconnect ?? _noop;
@@ -188,16 +201,17 @@ class ProfileGateway {
   static void _noop() {}
 
   factory ProfileGateway.forConnection(
-    SavedConnection connection,
+    ConnectionAccess access,
     WorkspaceScope scope,
   ) {
+    final connection = access.connection;
     if (scope.connectionId != connection.id) {
       throw ArgumentError('Connection does not own this workspace');
     }
     return ProfileGateway._forDashboard(
       connection,
       scope,
-      _dashboardFor(connection),
+      _dashboardFor(access),
       ownsDashboard: true,
     );
   }
@@ -265,20 +279,81 @@ class ProfileGateway {
       get: (endpoint, query) => dashboard
           .apiGet(endpoint, queryParameters: query)
           .timeout(const Duration(seconds: 20)),
-      patch: (endpoint, body) => dashboard
-          .apiPatch(endpoint, body: body)
-          .timeout(const Duration(seconds: 20)),
+      ownedPatch: (endpoint, body, canDispatch, onDispatched) async {
+        var dispatchAllowed = true;
+        try {
+          return await dashboard
+              .apiWriteOwned(
+                'PATCH',
+                endpoint,
+                body: body,
+                canDispatch: () => !closed && dispatchAllowed && canDispatch(),
+                onDispatched: onDispatched,
+              )
+              .timeout(const Duration(seconds: 20));
+        } finally {
+          dispatchAllowed = false;
+        }
+      },
+      ownedDelete: (endpoint, body, canDispatch, onDispatched) async {
+        var dispatchAllowed = true;
+        try {
+          return await dashboard
+              .apiWriteOwned(
+                'DELETE',
+                Uri.parse(endpoint)
+                    .replace(
+                      queryParameters: body.map(
+                        (key, value) => MapEntry(key, value.toString()),
+                      ),
+                    )
+                    .toString(),
+                body: const {},
+                canDispatch: () => !closed && dispatchAllowed && canDispatch(),
+                onDispatched: onDispatched,
+              )
+              .timeout(const Duration(seconds: 20));
+        } finally {
+          dispatchAllowed = false;
+        }
+      },
       post: (endpoint, body) => dashboard
           .apiPost(endpoint, body: body)
           .timeout(const Duration(seconds: 30)),
-      put: (endpoint, body) => dashboard
-          .apiPut(endpoint, body: body)
-          .timeout(const Duration(seconds: 30)),
-      delete: (endpoint, query) => dashboard
-          .apiDelete(
-            Uri.parse(endpoint).replace(queryParameters: query).toString(),
-          )
-          .timeout(const Duration(seconds: 20)),
+      ownedPost: (endpoint, body, canDispatch, onDispatched) async {
+        var dispatchAllowed = true;
+        bool active() => !closed && dispatchAllowed && canDispatch();
+        try {
+          return await dashboard
+              .apiWriteOwned(
+                'POST',
+                endpoint,
+                body: body,
+                canDispatch: active,
+                onDispatched: onDispatched,
+              )
+              .timeout(const Duration(seconds: 30));
+        } finally {
+          dispatchAllowed = false;
+        }
+      },
+      ownedPut: (endpoint, body, canDispatch, onDispatched) async {
+        var dispatchAllowed = true;
+        bool active() => !closed && dispatchAllowed && canDispatch();
+        try {
+          return await dashboard
+              .apiWriteOwned(
+                'PUT',
+                endpoint,
+                body: body,
+                canDispatch: active,
+                onDispatched: onDispatched,
+              )
+              .timeout(const Duration(seconds: 30));
+        } finally {
+          dispatchAllowed = false;
+        }
+      },
       rpc: (method, params) async {
         final current = socket;
         if (current == null) {
@@ -380,8 +455,77 @@ class ProfileGateway {
 
   /// Reload is process-wide. Its stock schema forbids a profile parameter;
   /// this gateway provides the connection, not the operation's scope.
-  Future<Map<String, dynamic>> reloadMcp({bool confirm = false}) =>
-      _rpc('reload.mcp', {if (confirm) 'confirm': true});
+  Future<Map<String, dynamic>> reloadMcp({
+    required bool confirm,
+    required bool Function() canDispatch,
+    required void Function() onDispatched,
+  }) async {
+    await connect();
+    if (!canDispatch()) {
+      throw JsonRpcError(
+        'reload.mcp',
+        'Operation retired',
+        reason: 'operation_retired',
+      );
+    }
+    onDispatched();
+    return _rpc('reload.mcp', {'confirm': confirm});
+  }
+
+  /// MCP uses stock RPC for raw OAuth/header/TLS creation and loopback sign-in.
+  /// Production RPC sends synchronously: no await follows the authority check.
+  Future<Map<String, dynamic>> mcpCommand(
+    String action,
+    Map<String, dynamic> params, {
+    required bool Function() canDispatch,
+    required void Function() onDispatched,
+  }) async {
+    if (!{
+      'add',
+      'oauth.start',
+      'oauth.callback',
+      'oauth.cancel',
+      'oauth.poll',
+    }.contains(action)) {
+      throw ArgumentError('Unknown MCP command');
+    }
+    await connect();
+    if (!canDispatch()) {
+      throw JsonRpcError(
+        'mcp.servers.$action',
+        'Operation retired',
+        reason: 'operation_retired',
+      );
+    }
+    onDispatched();
+    return call('mcp.servers.$action', params);
+  }
+
+  /// Exact stock plugin toggle; no await separates route authority from RPC send.
+  Future<Map<String, dynamic>> togglePlugin(
+    String key,
+    bool enabled, {
+    required bool Function() canDispatch,
+    required void Function() onDispatched,
+  }) async {
+    if (key.isEmpty) {
+      throw ArgumentError('Plugin key is empty');
+    }
+    await connect();
+    if (!canDispatch()) {
+      throw JsonRpcError(
+        'plugins.manage',
+        'Operation retired',
+        reason: 'operation_retired',
+      );
+    }
+    onDispatched();
+    return call('plugins.manage', {
+      'action': 'toggle',
+      'key': key,
+      'enable': enabled,
+    });
+  }
 
   /// Stock completion derives profile and workspace from the owning session.
   /// An additional profile is unnecessary for an existing owned runtime.
@@ -410,15 +554,18 @@ class ProfileGateway {
     );
   }
 
-  Future<void> deleteResource(String endpoint) {
-    final send = _delete;
-    if (send == null) throw StateError('Dashboard writes are unavailable');
-    return send(endpoint, {'profile': scope.profileName});
-  }
-
-  Future<Map<String, dynamic>> put(String endpoint, Map<String, dynamic> body) {
-    final send = _put;
-    if (send == null) throw StateError('Dashboard writes are unavailable');
+  /// A distinct capability for route-owned commands. Unsupported adapters fail
+  /// closed; generic writes never substitute for physical dispatch fencing.
+  Future<Map<String, dynamic>> postOwned(
+    String endpoint,
+    Map<String, dynamic> body, {
+    required bool Function() canDispatch,
+    required void Function() onDispatched,
+  }) {
+    final send = _ownedPost;
+    if (send == null) {
+      throw StateError('Owned dashboard writes are unavailable');
+    }
     final uri = Uri.parse(endpoint);
     return send(
       uri
@@ -430,6 +577,34 @@ class ProfileGateway {
           )
           .toString(),
       body,
+      canDispatch,
+      onDispatched,
+    );
+  }
+
+  Future<Map<String, dynamic>> putOwned(
+    String endpoint,
+    Map<String, dynamic> body, {
+    required bool Function() canDispatch,
+    required void Function() onDispatched,
+  }) {
+    final send = _ownedPut;
+    if (send == null) {
+      throw StateError('Owned dashboard writes are unavailable');
+    }
+    final uri = Uri.parse(endpoint);
+    return send(
+      uri
+          .replace(
+            queryParameters: {
+              ...uri.queryParameters,
+              'profile': scope.profileName,
+            },
+          )
+          .toString(),
+      body,
+      canDispatch,
+      onDispatched,
     );
   }
 
@@ -527,6 +702,7 @@ class ProfileGateway {
 
   Future<Map<String, dynamic>> createSession({
     required bool cwdExplicit,
+    required bool Function() canDispatch,
     String? cwd,
     String? title,
   }) async {
@@ -535,13 +711,13 @@ class ProfileGateway {
     }
     await requireProfile();
     final session = _ownedSession(
-      await call('session.create', {
+      await _browserCommand('session.create', {
         'source': 'desktop',
         'close_on_disconnect': false,
         'cwd': ?cwd,
         'cwd_explicit': cwdExplicit,
         'title': ?title,
-      }),
+      }, canDispatch),
     );
     // Stock Hermes resolves the destination and acknowledges it in info.cwd.
     // An unavailable directory can resolve elsewhere even with cwd_explicit.
@@ -633,6 +809,35 @@ class ProfileGateway {
       records(
         (await call('session.history', {'session_id': runtimeId}))['messages'],
       );
+
+  /// Current stock resume uses session_key for persisted sessions and
+  /// stored_session_id for a still-live session without a database row.
+  /// Preserve the raw response; runtime identity never substitutes for storage.
+  String resumeDurableId(Map<String, dynamic> result) {
+    _ownedSession(result);
+    String? identity(String field) {
+      if (!result.containsKey(field)) return null;
+      final value = result[field];
+      if (value is! String || value.trim().isEmpty) {
+        throw const FormatException(
+          'Resume response has an invalid durable identity',
+        );
+      }
+      return value;
+    }
+
+    final sessionKey = identity('session_key');
+    final storedId = identity('stored_session_id');
+    if (sessionKey == null && storedId == null) {
+      throw const FormatException('Resume response has no durable identity');
+    }
+    if (sessionKey != null && storedId != null && sessionKey != storedId) {
+      throw const FormatException(
+        'Resume response has conflicting durable identities',
+      );
+    }
+    return sessionKey ?? storedId!;
+  }
 
   Map<String, dynamic> _ownedSession(Map<String, dynamic> result) {
     final info = result['info'];
@@ -739,13 +944,31 @@ class ProfileGateway {
         .toList();
   }
 
-  Future<Map<String, dynamic>> createProject(String name, String path) async {
+  Future<Map<String, dynamic>> _browserCommand(
+    String method,
+    Map<String, dynamic> params,
+    bool Function() canDispatch,
+  ) async {
+    await connect();
+    if (!canDispatch()) {
+      throw DashboardRequestNotSentException(
+        StateError('Profile changed. Open the menu again.'),
+      );
+    }
+    return call(method, params);
+  }
+
+  Future<Map<String, dynamic>> createProject(
+    String name,
+    String path, {
+    required bool Function() canDispatch,
+  }) async {
     await requireProfile();
-    final result = await call('projects.create', {
+    final result = await _browserCommand('projects.create', {
       'name': name,
       'folders': [path],
       'primary_path': path,
-    });
+    }, canDispatch);
     if (result['project'] is! Map) {
       throw const FormatException('Missing project');
     }
@@ -784,6 +1007,7 @@ class ProfileGateway {
     String? name,
     String? color,
     String? icon,
+    required bool Function() canDispatch,
   }) async {
     final projectId = id.trim();
     final projectName = name?.trim();
@@ -797,7 +1021,10 @@ class ProfileGateway {
     };
     if (changes.isEmpty) throw ArgumentError('No project changes supplied');
     await requireProfile();
-    final result = await call('projects.update', {'id': projectId, ...changes});
+    final result = await _browserCommand('projects.update', {
+      'id': projectId,
+      ...changes,
+    }, canDispatch);
     final project = result['project'];
     if (project is! Map || project['id'] != projectId) {
       throw const FormatException('Project update not acknowledged');
@@ -805,11 +1032,16 @@ class ProfileGateway {
     return Map<String, dynamic>.from(project);
   }
 
-  Future<void> deleteProject(String id) async {
+  Future<void> deleteProject(
+    String id, {
+    required bool Function() canDispatch,
+  }) async {
     final projectId = id.trim();
     if (projectId.isEmpty) throw ArgumentError('Missing project');
     await requireProfile();
-    final result = await call('projects.delete', {'id': projectId});
+    final result = await _browserCommand('projects.delete', {
+      'id': projectId,
+    }, canDispatch);
     final projects = result['projects'];
     final activeId = result['active_id'];
     if (projects is! List ||
@@ -823,8 +1055,9 @@ class ProfileGateway {
 
   Future<Map<String, dynamic>> updateSession(
     String id,
-    Map<String, dynamic> changes,
-  ) async {
+    Map<String, dynamic> changes, {
+    required bool Function() canDispatch,
+  }) async {
     if (id.isEmpty ||
         changes.isEmpty ||
         changes.keys.any(
@@ -833,14 +1066,16 @@ class ProfileGateway {
       throw ArgumentError('Invalid session update');
     }
     await requireProfile();
-    final patch = _patch;
+    final patch = _ownedPatch;
     if (patch == null) {
       throw StateError('Session mutation transport unavailable');
     }
-    final result = await patch('sessions/${Uri.encodeComponent(id)}', {
-      ...changes,
-      'profile': scope.profileName,
-    });
+    final result = await patch(
+      'sessions/${Uri.encodeComponent(id)}',
+      {...changes, 'profile': scope.profileName},
+      canDispatch,
+      () {},
+    );
     if (result['ok'] != true) {
       throw const FormatException('Session update not acknowledged');
     }
@@ -848,7 +1083,11 @@ class ProfileGateway {
   }
 
   /// Same operation as Desktop: moves the stored workspace, not a local tag.
-  Future<Map<String, dynamic>> moveSession(String id, String cwd) async {
+  Future<Map<String, dynamic>> moveSession(
+    String id,
+    String cwd, {
+    required bool Function() canDispatch,
+  }) async {
     if (id.isEmpty || cwd.trim().isEmpty) {
       throw ArgumentError('A chat and project folder are required');
     }
@@ -857,7 +1096,12 @@ class ProfileGateway {
     // profile ownership. Resolve the owner and reject colliding live sessions.
     final live = records((await call('session.active_list'))['sessions']);
     if (live.any((row) => row['session_key'] == id)) {
-      final session = await resume(id);
+      final session = _ownedSession(
+        await _browserCommand('session.resume', {
+          'session_id': id,
+          'omit_messages': true,
+        }, canDispatch),
+      );
       final storedId = session['stored_session_id'] ?? session['session_key'];
       if (storedId != id ||
           session.containsKey('session_key') && session['session_key'] != id) {
@@ -880,10 +1124,10 @@ class ProfileGateway {
         );
       }
     }
-    final result = await call('session.workspace.move', {
+    final result = await _browserCommand('session.workspace.move', {
       'session_key': id,
       'cwd': cwd,
-    });
+    }, canDispatch);
     if (result['cwd'] is! String ||
         (result['cwd'] as String).trim().isEmpty ||
         (result['branch'] != null && result['branch'] is! String) ||
@@ -911,18 +1155,55 @@ class ProfileGateway {
     return '';
   }
 
-  Future<void> deleteSession(String id) async {
+  /// Read-only recovery observation for an uncertain deletion receipt. A generic
+  /// 404 may mean the profile disappeared; only exact stock detail absence and
+  /// fresh profile membership authorize local cleanup. Later server races remain.
+  Future<SessionPresence> verifyDeletedSession(String id) async {
+    if (id.isEmpty) return SessionPresence.unavailable;
+    try {
+      await requireProfile();
+      final endpoint = 'sessions/${Uri.encodeComponent(id)}';
+      final Map<String, dynamic> row;
+      try {
+        row = await read(endpoint);
+      } on DashboardSessionNotFound catch (failure) {
+        if (failure.endpoint != endpoint) return SessionPresence.unavailable;
+        await requireProfile();
+        return SessionPresence.absent;
+      }
+      if (row['id'] != id || row['profile'] != scope.profileName) {
+        return SessionPresence.unavailable;
+      }
+      await requireProfile();
+      return SessionPresence.present;
+    } catch (_) {
+      return SessionPresence.unavailable;
+    }
+  }
+
+  Future<void> deleteSession(
+    String id, {
+    required bool Function() canDispatch,
+  }) async {
     if (id.isEmpty) throw ArgumentError('Missing session');
     await requireProfile();
-    final remove = _delete;
+    final remove = _ownedDelete;
     if (remove == null) {
       throw StateError('Session mutation transport unavailable');
     }
+    var admitted = false;
+    var historyDispatched = false;
+    bool active() => canDispatch() || admitted && !historyDispatched;
     final live = records((await call('session.active_list'))['sessions']);
     if (live.any((row) => row['session_key'] == id)) {
       // The live list has no profile owner. Resolve through scoped resume before
       // closing anything: the same durable ID can exist in another profile.
-      final session = await resume(id);
+      final session = _ownedSession(
+        await _browserCommand('session.resume', {
+          'session_id': id,
+          'omit_messages': true,
+        }, canDispatch),
+      );
       // Fresh resumes expose stored_session_id; reusing an open runtime exposes
       // session_key instead. If both are present they must agree.
       final storedId = session['stored_session_id'] ?? session['session_key'];
@@ -942,16 +1223,32 @@ class ProfileGateway {
       }
       // Finalize the runtime before removing its stored history, so a later
       // agent flush cannot write into a deleted session.
-      final result = await call('session.close', {'session_id': runtimeId});
+      final result = await _browserCommand(
+        'session.close',
+        {'session_id': runtimeId},
+        () {
+          if (!canDispatch()) return false;
+          admitted = true;
+          return true;
+        },
+      );
       if (result['closed'] != true) {
         throw StateError(
           'Hermes could not close this chat. Try deleting again.',
         );
       }
     }
-    await remove('sessions/${Uri.encodeComponent(id)}', {
-      'profile': scope.profileName,
-    });
+    final result = await remove(
+      'sessions/${Uri.encodeComponent(id)}',
+      {'profile': scope.profileName},
+      active,
+      () {
+        historyDispatched = true;
+      },
+    );
+    if (result['ok'] != true) {
+      throw const FormatException('Session deletion not acknowledged');
+    }
   }
 
   static List<Map<String, dynamic>> records(Object? value) {

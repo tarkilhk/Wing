@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_message.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -58,11 +59,11 @@ void main() {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: ProfileMessage(
-                  message: {
+                  message: TranscriptMessage.fromRow({
                     'role': role,
                     'content': content,
                     'timestamp': timestamp,
-                  },
+                  }),
                 ),
               ),
             ),

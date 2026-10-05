@@ -10,6 +10,13 @@ From the actual checkout root:
 
 ```sh
 flutter pub get
+dart run tools/architecture/check_all.dart
+dart run tools/architecture/rules/required_quality_gates.dart
+dart run tools/architecture/rules/dart_main_roots.dart
+dart run tools/architecture/rules/completed_setup_view.dart
+dart run tools/architecture/rules/app_preferences_view.dart
+python3 tools/architecture/rules/authored_census.py
+python3 -m unittest discover -s tools/qa -p 'test_*.py' -v
 flutter analyze --fatal-infos
 flutter test
 flutter build apk --debug
@@ -53,6 +60,12 @@ performance entry points before adding another implementation of an existing flo
 Read [AGENTS.md](AGENTS.md) before UI changes. Use [the design system](docs/DESIGN_SYSTEM.md) and its shared light/dark tokens. Administration changes also require [the ownership handoff](docs/design/2026-09-14-administration-handoff.md).
 
 Keep connection/profile/chat ownership intact. Preserve newer composer text during asynchronous operations. Hermes remains authoritative for saved conversation state. Do not introduce backend patches or infer server support from a fixture. Prefer a regression test at the failing behavior's real boundary for reliability changes.
+
+The [architecture contracts](tools/architecture/README.md) define independently
+runnable guards and their fixtures. The temporary architecture baseline may only
+shrink: remove an entry when its violation is fixed. PR checks compare it with the
+preceding baseline and reject new exceptions or stale entries. Both quality and
+release workflows require the architecture and offline QA gates as hard failures.
 
 Run analysis and relevant tests, then the full suite before a release. Tests under `integration_test/` and opt-in live tests may create chats, change profile settings or use providers. Read each test's environment flags and cleanup behavior before running it against an explicitly authorized server. Ordinary `flutter test` does not replace device or live-server acceptance.
 

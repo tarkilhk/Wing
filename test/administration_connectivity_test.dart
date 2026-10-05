@@ -2,8 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wing/core/screens/administration/admin_operations_page.dart';
-import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/models/administration_operation.dart';
 
 import 'support/administration_fixture.dart';
 
@@ -21,7 +20,7 @@ void main() {
             osError: OSError('Connection refused', 111),
           );
         }
-        return {'name': 'security-audit', 'pid': 7};
+        return {'ok': true, 'name': 'security-audit', 'pid': 7};
       };
       AdministrationAction? action;
       await tester.pumpWidget(
@@ -30,12 +29,9 @@ void main() {
             body: Builder(
               builder: (context) => TextButton(
                 onPressed: () async {
-                  action = await startAdminOperation(
-                    context,
-                    fixture.server,
+                  action = await fixture.server.startDiagnostic(
                     'ops/security-audit',
-                    'Security audit',
-                    confirm: false,
+                    isActive: () => context.mounted,
                   );
                 },
                 child: const Text('Run'),

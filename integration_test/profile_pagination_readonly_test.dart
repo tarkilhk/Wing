@@ -1,3 +1,4 @@
+import 'package:wing/core/services/app_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -25,8 +26,11 @@ void main() {
       final connection = connections.singleWhere(
         (c) => c.label == label && c.host == expectedHost,
       );
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: connection,
+        appPreferences: appPreferences,
+        access: manager.accessFor(connection),
         connectionIdentity: await ProfileConnectionIdentity().resolve(
           connection,
         ),

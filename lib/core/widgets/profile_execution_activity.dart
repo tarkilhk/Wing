@@ -9,7 +9,7 @@ import 'profile_transcript_disclosure.dart';
 import 'profile_activity_tabs.dart';
 
 class ProfileLiveToolActivity extends StatelessWidget {
-  final List<GatewayToolActivity> activities;
+  final Iterable<GatewayToolActivity> activities;
 
   const ProfileLiveToolActivity({super.key, required this.activities});
 
@@ -30,10 +30,7 @@ class ProfileLiveToolActivity extends StatelessWidget {
         ProfileTranscriptDisclosure(
           key: ValueKey(('live-tool', activity.toolId ?? activity.name)),
           maintainState: false,
-          isError: activity.isFailed,
-          icon: activity.isFailed
-              ? Icons.error_outline
-              : activity.isTerminal
+          icon: activity.isTerminal
               ? Icons.flag_outlined
               : Icons.pending_outlined,
           label: activity.displayName,
@@ -228,17 +225,4 @@ class ProfileReasoningDisclosure extends StatelessWidget {
       ),
     ],
   );
-}
-
-String profileMessageReasoning(Map<String, dynamic> message) {
-  for (final key in [
-    '_gateway_reasoning',
-    'reasoning',
-    'reasoning_content',
-    'reasoning_details',
-  ]) {
-    final value = message[key];
-    if (value is String && value.trim().isNotEmpty) return value;
-  }
-  return '';
 }

@@ -1,8 +1,9 @@
+import 'package:wing/core/models/chat_intelligence.dart';
+import 'package:wing/core/models/model_choice.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/chat_intelligence_picker.dart';
-import 'package:wing/core/widgets/model_chooser.dart';
 
 void main() {
   test('model options reject malformed lists instead of partial choices', () {
@@ -79,6 +80,7 @@ void main() {
         home: Scaffold(
           body: Center(
             child: ChatIntelligenceSheet(
+              onCommit: (_) async => true,
               choices: choices,
               initialChoice: choices.first,
               initialReasoningEffort: 'high',
@@ -148,6 +150,7 @@ void main() {
         theme: wingTheme(Brightness.dark),
         home: Scaffold(
           body: ChatIntelligenceSheet(
+            onCommit: (_) async => true,
             choices: grouped,
             initialChoice: grouped.first,
             initialReasoningEffort: 'high',
@@ -228,6 +231,7 @@ void main() {
         theme: wingTheme(Brightness.dark),
         home: Scaffold(
           body: ChatIntelligenceSheet(
+            onCommit: (_) async => true,
             choices: choices,
             initialChoice: choices.first,
             initialReasoningEffort: 'high',
@@ -262,6 +266,7 @@ void main() {
           theme: wingTheme(Brightness.dark),
           home: Scaffold(
             body: ChatIntelligenceSheet(
+              onCommit: (_) async => true,
               choices: choices,
               initialChoice: choices.first,
               initialReasoningEffort: 'high',
@@ -306,6 +311,7 @@ void main() {
           body: Builder(
             builder: (context) => TextButton(
               onPressed: () => showChatIntelligencePicker(
+                onCommit: (_) async => true,
                 context: context,
                 choices: choices,
                 initialChoice: choices.first,

@@ -1,14 +1,15 @@
+import 'package:wing/core/services/app_preferences.dart';
 import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/background_monitoring_service.dart';
-import 'package:wing/core/services/turn_notification_service.dart';
 
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
   late SharedPreferences preferences;
+  late AppPreferences appPreferences;
   late BackgroundMonitoringService service;
   late List<String> calls;
   late bool activeChats;
@@ -21,6 +22,7 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     calls = [];
     activeChats = allowed = unrestricted = running = true;
     startGate = null;
@@ -38,7 +40,7 @@ void main() {
       },
     );
     service = BackgroundMonitoringService(
-      preferences: preferences,
+      preferences: appPreferences,
       hasActiveChats: () => activeChats,
       notificationsEnabled: () async => allowed,
       supported: true,
@@ -47,6 +49,7 @@ void main() {
 
   tearDown(() {
     service.dispose();
+    appPreferences.dispose();
     binding.defaultBinaryMessenger.setMockMethodCallHandler(
       BackgroundMonitoringService.channel,
       null,
@@ -81,8 +84,8 @@ void main() {
       startGate = Completer<void>();
       final first = service.sync();
       await Future<void>.delayed(Duration.zero);
-      await preferences.setBool(completionNotificationsKey, false);
-      await preferences.setBool(attentionNotificationsKey, false);
+      await appPreferences.setCompletedNotifications(false);
+      await appPreferences.setAttentionNotifications(false);
       final second = service.sync();
       startGate!.complete();
       await Future.wait([first, second]);
@@ -107,10 +110,10 @@ void main() {
   );
 
   test('both alert categories off stops monitoring', () async {
-    await preferences.setBool(completionNotificationsKey, false);
+    await appPreferences.setCompletedNotifications(false);
     await service.sync();
     expect(calls, ['start']);
-    await preferences.setBool(attentionNotificationsKey, false);
+    await appPreferences.setAttentionNotifications(false);
     await service.sync();
     expect(calls, ['start', 'stop']);
     expect(service.state.value, BackgroundMonitoringState.disabled);
@@ -161,10 +164,10 @@ void main() {
   test(
     'enabling either alert category automatically restarts monitoring',
     () async {
-      await preferences.setBool(completionNotificationsKey, false);
-      await preferences.setBool(attentionNotificationsKey, false);
+      await appPreferences.setCompletedNotifications(false);
+      await appPreferences.setAttentionNotifications(false);
       await service.sync();
-      await preferences.setBool(attentionNotificationsKey, true);
+      await appPreferences.setAttentionNotifications(true);
       await service.sync();
       expect(calls, ['stop', 'start']);
       expect(service.state.value, BackgroundMonitoringState.active);

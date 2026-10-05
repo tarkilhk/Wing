@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wing/core/models/administration_operation.dart';
 import 'package:wing/core/screens/administration/admin_health_page.dart';
 import 'package:wing/core/screens/administration/admin_operations_page.dart';
 import 'package:wing/core/services/administration_health.dart';
@@ -58,13 +59,14 @@ void main() {
         fixture.override = (method, path, query, body) async {
           if (path.startsWith('ops/')) {
             await starts.future;
-            return {'name': path.substring(4), 'pid': 7};
+            return {'ok': true, 'name': path.substring(4), 'pid': 7};
           }
           if (path.startsWith('actions/')) {
             final running = path.contains('/doctor/')
                 ? doctorRunning
                 : auditRunning;
             return {
+              'name': path.split('/')[1],
               'pid': 7,
               'running': running,
               'exit_code': running ? null : 0,
@@ -92,9 +94,9 @@ void main() {
             home: Scaffold(
               appBar: AppBar(title: const Text('Hermes health')),
               body: AdminHealthContent(
-                server: fixture.server,
                 health: health,
                 accessChecks: () => null,
+                onReviewAccess: null,
                 profile: fixture.server.profile('default'),
                 onRefresh: () async => fail('Must not refresh'),
                 onOpenDestination: (_) async {},
@@ -200,12 +202,13 @@ void main() {
     addTearDown(fixture.server.close);
     fixture.override = (method, path, query, body) async => switch (path) {
       'ops/doctor' => throw StateError('Doctor unavailable'),
-      'ops/security-audit' => {'name': 'security-audit', 'pid': 8},
+      'ops/security-audit' => {'ok': true, 'name': 'security-audit', 'pid': 8},
       'actions/security-audit/status' => {
+        'name': path.split('/')[1],
         'pid': 8,
         'running': false,
         'exit_code': 1,
-        'lines': ['Audit failed'],
+        'lines': File('test/fixtures/security_audit.txt').readAsLinesSync(),
       },
       _ => throw StateError('Unexpected $method $path'),
     };
@@ -216,9 +219,9 @@ void main() {
         theme: wingTheme(Brightness.dark),
         home: Scaffold(
           body: AdminHealthContent(
-            server: fixture.server,
             health: health,
             accessChecks: () => null,
+            onReviewAccess: null,
             profile: null,
             onRefresh: () async {},
             onOpenDestination: (_) async {},
@@ -241,7 +244,11 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.textContaining('Review audit findings'), findsOneWidget);
+    expect(
+      health.diagnostics['ops/security-audit']!.classification,
+      AdministrationOperationOutcome.findings,
+    );
+    expect(find.textContaining('21 vulnerabilities found'), findsOneWidget);
     expect(health.diagnostics.keys, ['ops/security-audit']);
     expect(health.starting, isEmpty);
     expect(

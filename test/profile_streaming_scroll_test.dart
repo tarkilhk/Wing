@@ -1,3 +1,9 @@
+import 'package:wing/core/models/transcript_timeline.dart';
+import 'package:wing/core/models/transcript_reading.dart';
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -62,28 +68,43 @@ void main({Future<void> Function(WidgetTester, String)? captureFrame}) {
           }
           SharedPreferences.setMockInitialValues({});
           final fixture = ProfileHistoryFixture();
+          final preferences = await SharedPreferences.getInstance();
+          final appPreferences = AppPreferences(preferences);
+          addTearDown(appPreferences.dispose);
           final controller = ProfileWorkspaceController(
-            connection: identityTestConnection(),
+            access: ConnectionAccess(
+              connection: identityTestConnection(),
+              dashboardOAuth: null,
+            ),
             connectionIdentity: 'streaming-scroll',
-            preferences: await SharedPreferences.getInstance(),
+            preferences: preferences,
+            appPreferences: appPreferences,
             gatewayFactory: fixture.gateway,
           );
           addTearDown(controller.dispose);
           await controller.initialize();
-          final chat = ProfileChat(
+          final chat = await openFixtureChat(
+            controller: controller,
             key: ProfileSessionKey(controller.current!.scope, 'chat-0'),
-            runtimeId: '',
             title: 'Streaming answer',
           );
-          controller.current!.chats['chat-0'] = chat;
-          controller.current!.selectedSession = 'chat-0';
-          chat.messages = [
-            {'id': 1, 'role': 'user', 'content': 'Explain how this works.'},
-          ];
-          chat.streaming = List.generate(
-            40,
-            (i) => 'Paragraph $i: You can read this answer at your own pace.',
-          ).join('\n\n');
+
+          // This render fixture owns a complete synthetic transcript. Adopt it
+          // as a passive snapshot instead of retaining the gateway page cursor.
+          chat.reading.installSnapshot(
+            TranscriptReadingSnapshot(
+              historySessionId: chat.reading.historySessionId,
+              messages: [
+                {'id': 1, 'role': 'user', 'content': 'Explain how this works.'},
+              ],
+            ),
+          );
+          chat.reading.updateStreaming(
+            List.generate(
+              40,
+              (i) => 'Paragraph $i: You can read this answer at your own pace.',
+            ).join('\n\n'),
+          );
           await tester.pumpWidget(
             MaterialApp(
               theme: wingTheme(brightness),
@@ -101,11 +122,21 @@ void main({Future<void> Function(WidgetTester, String)? captureFrame}) {
                     builder: (_, _) => ProfileTranscript(
                       chat: chat,
                       controller: controller,
-                      messageBuilder: (message, {required bool streaming}) =>
-                          ProfileMessage(
-                            message: message,
-                            streaming: streaming,
-                          ),
+                      onLoadOlder: () => controller.loadOlderMessages(chat),
+                      timeline: TranscriptTimeline.project(
+                        [
+                          ...chat.reading.messages,
+                          ?chat.reading.streamingMessage,
+                        ],
+                        presentationId: chat.reading.messagePresentationId,
+                        liveMessageIndex: chat.reading.streamingMessage == null
+                            ? null
+                            : chat.reading.messages.length,
+                      ),
+                      messageBuilder: (message) => ProfileMessage(
+                        message: message.message,
+                        streaming: message.streaming,
+                      ),
 
                       tail: const [],
                     ),
@@ -121,8 +152,17 @@ void main({Future<void> Function(WidgetTester, String)? captureFrame}) {
           // With no user scrolling, every update stays at the bottom and its
           // newest text is visible, including when the answer exceeds the screen.
           for (var update = 0; update < 5; update++) {
-            chat.streaming += '\n\nLive update $update';
-            controller.clearSearch();
+            chat.reading.appendStreaming('\n\nLive update $update');
+            tester
+                .element(
+                  find
+                      .ancestor(
+                        of: find.byType(ProfileTranscript),
+                        matching: find.byType(ListenableBuilder),
+                      )
+                      .first,
+                )
+                .markNeedsBuild();
             await tester.pump();
             await tester.pump(const Duration(milliseconds: 16));
             await tester.settleMarkdown();
@@ -150,8 +190,19 @@ void main({Future<void> Function(WidgetTester, String)? captureFrame}) {
           final before = tester.getTopLeft(marker).dy;
           await snapshot(tester, '${brightness.name}-$scale-before');
           for (var update = 0; update < 4; update++) {
-            chat.streaming += '\n\nMore text is arriving at the bottom. ' * 3;
-            controller.clearSearch();
+            chat.reading.appendStreaming(
+              '\n\nMore text is arriving at the bottom. ' * 3,
+            );
+            tester
+                .element(
+                  find
+                      .ancestor(
+                        of: find.byType(ProfileTranscript),
+                        matching: find.byType(ListenableBuilder),
+                      )
+                      .first,
+                )
+                .markNeedsBuild();
             await tester.pump();
             expect(tester.getTopLeft(marker).dy, closeTo(before, 1));
             await tester.pump(const Duration(milliseconds: 16));
@@ -172,16 +223,24 @@ void main({Future<void> Function(WidgetTester, String)? captureFrame}) {
           // No intermediate pump: the saved source is newer than the last
           // completed live snapshot, so its first frame must use the ready prefix.
           if (finalParagraphs.isNotEmpty) {
-            chat.streaming += '\n\n${finalParagraphs.join('\n\n')}';
+            chat.reading.appendStreaming('\n\n${finalParagraphs.join('\n\n')}');
           }
-          final finalSource = chat.streaming;
-          chat.messages.add({
-            'id': 2,
-            'role': 'assistant',
-            'content': chat.streaming,
-          });
-          chat.streaming = '';
-          controller.clearSearch();
+          final finalSource = chat.reading.streaming;
+          chat.reading.installSavedHistory([
+            ...chat.reading.messages,
+            {'id': 2, 'role': 'assistant', 'content': chat.reading.streaming},
+          ]);
+          chat.reading.updateStreaming('');
+          tester
+              .element(
+                find
+                    .ancestor(
+                      of: find.byType(ProfileTranscript),
+                      matching: find.byType(ListenableBuilder),
+                    )
+                    .first,
+              )
+              .markNeedsBuild();
           await tester.pump();
           expect(tester.getTopLeft(marker).dy, closeTo(before, 1));
           await tester.settleMarkdown();
@@ -201,14 +260,25 @@ void main({Future<void> Function(WidgetTester, String)? captureFrame}) {
           await tester.tap(find.byKey(const ValueKey('jump-to-latest')));
           await tester.pumpAndSettle();
           expect(scroll.offset, closeTo(0, 1));
-          chat.streaming = 'Following resumes after returning to Latest.';
-          controller.clearSearch();
+          chat.reading.updateStreaming(
+            'Following resumes after returning to Latest.',
+          );
+          tester
+              .element(
+                find
+                    .ancestor(
+                      of: find.byType(ProfileTranscript),
+                      matching: find.byType(ListenableBuilder),
+                    )
+                    .first,
+              )
+              .markNeedsBuild();
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 16));
           await tester.settleMarkdown();
           expect(scroll.offset, closeTo(0, 1));
           expect(
-            find.text(chat.streaming, findRichText: true).hitTestable(),
+            find.text(chat.reading.streaming, findRichText: true).hitTestable(),
             findsOneWidget,
           );
           expect(tester.takeException(), isNull);

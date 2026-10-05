@@ -1,3 +1,5 @@
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -15,13 +17,14 @@ import 'package:wing/core/services/chat_notification_coordinator.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/native_notification_sink.dart';
 import 'package:wing/core/services/profile_connection_identity.dart';
-import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/main.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
 import 'support/recording_turn_notification_sink.dart';
 import 'helpers/pump_markdown_widget.dart';
+
+const _nativeNotifications = MethodChannel(NativeNotificationSink.channelName);
 
 void main() {
   for (final savedOffset in [0.0, 1000.0]) {
@@ -34,9 +37,15 @@ void main() {
           'microphone_permission_requested': true,
         });
         final preferences = await SharedPreferences.getInstance();
+        final appPreferences = AppPreferences(preferences);
+        addTearDown(appPreferences.dispose);
         final manager = await ConnectionManager.create(preferences);
         final connection = identityTestConnection();
-        await manager.importConnections([connection], replaceExisting: true);
+        await manager.importConnections(
+          [connection],
+          replaceExisting: true,
+          canCommit: () => true,
+        );
         final identity = await ProfileConnectionIdentity().resolve(connection);
         final key = ProfileSessionKey(
           WorkspaceScope(
@@ -47,7 +56,11 @@ void main() {
           'same',
         );
         final seedSink = RecordingTurnNotificationSink();
-        final seed = ChatNotificationCoordinator(preferences, seedSink);
+        final seed = ChatNotificationCoordinator(
+          preferences,
+          seedSink,
+          appPreferences: appPreferences,
+        );
         const answer =
             'WING-RESTORE-REPLY: The unread result is ready. Open Wing to read it.';
         await seed.result(
@@ -76,19 +89,14 @@ void main() {
             _ => null,
           },
         );
-        messenger.setMockMethodCallHandler(NativeNotificationSink.channel, (
-          call,
-        ) async {
+        messenger.setMockMethodCallHandler(_nativeNotifications, (call) async {
           if (call.method == 'show') shown.add(call.arguments as Map);
           if (call.method == 'cancel') cancelled.add(call.arguments as int);
           return call.method == 'initialize' ? [] : null;
         });
         addTearDown(() {
           messenger.setMockMethodCallHandler(plugin, null);
-          messenger.setMockMethodCallHandler(
-            NativeNotificationSink.channel,
-            null,
-          );
+          messenger.setMockMethodCallHandler(_nativeNotifications, null);
         });
         final host = Host()
           ..running = false
@@ -109,6 +117,7 @@ void main() {
           WingApp(
             key: app,
             connManager: manager,
+            appPreferences: appPreferences,
             gatewayFactory: (_, scope) => host.gateway(scope),
           ),
         );
@@ -123,7 +132,7 @@ void main() {
         );
         if (savedOffset > 0) {
           final previousChat = (await controller.openSession(key))!;
-          previousChat.historyScrollOffset = savedOffset;
+          previousChat.reading.recordScrollOffset(savedOffset);
           await controller.updateDraft(
             previousChat,
             'An unsent draft to preserve',
@@ -135,7 +144,7 @@ void main() {
         // Exercise the native interaction entry point and production-created
         // controller callbacks, not a coordinator.read or app routing test double.
         final tap = messenger.handlePlatformMessage(
-          NativeNotificationSink.channel.name,
+          _nativeNotifications.name,
           const StandardMethodCodec().encodeMethodCall(
             MethodCall('interaction', {'payload': shown.single['payload']}),
           ),
@@ -161,8 +170,8 @@ void main() {
           isTrue,
         );
         if (savedOffset > 0) {
-          expect(chat.historyScrollOffset, lessThan(savedOffset));
-          expect(chat.draft, 'An unsent draft to preserve');
+          expect(chat.reading.historyScrollOffset, lessThan(savedOffset));
+          expect(chat.composer.observation.text, 'An unsent draft to preserve');
           expect(
             tester
                 .widget<TextField>(
@@ -173,16 +182,19 @@ void main() {
             'An unsent draft to preserve',
           );
         }
-        expect(chat.historyError, isNull);
-        expect(chat.offlineSnapshot, isFalse);
+        expect(chat.reading.historyError, isNull);
+        expect(chat.runtime.offline, isFalse);
         expect(cancelled, contains(seedSink.shown.single.id));
         expect(controller.visible, isTrue);
         await tester.pumpWidget(const SizedBox.shrink());
         shown.clear();
         cancelled.clear();
+        final restartedPreferences = AppPreferences(preferences);
+        addTearDown(restartedPreferences.dispose);
         await tester.pumpWidget(
           WingApp(
             connManager: manager,
+            appPreferences: restartedPreferences,
             gatewayFactory: (_, scope) => host.gateway(scope),
           ),
         );

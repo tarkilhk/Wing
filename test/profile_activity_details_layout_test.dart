@@ -1,7 +1,9 @@
+import 'package:wing/core/services/profile_supervision_session.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wing/core/models/gateway_insight.dart';
 import 'package:wing/core/models/gateway_todo.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -11,6 +13,7 @@ import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_transcript_disclosure.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
+import 'support/composer_fixture.dart' show emitChatEvent;
 
 void main() {
   for (final scale in [1.0, 2.0, 3.0]) {
@@ -19,26 +22,36 @@ void main() {
     ) async {
       SharedPreferences.setMockInitialValues({});
       final fixture = ProfileActionsFixture();
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: identityTestConnection(),
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
         connectionIdentity: 'compact-details',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: fixture.gateway,
       );
       addTearDown(controller.dispose);
       await controller.initialize();
-      final chat = await controller.createChat();
-      chat.subagents = [
-        GatewaySubagentActivity.fromGatewayEvent('subagent.start', {
-          'subagent_id': 'one',
-          'goal': 'Compare the available stays',
-        })!,
-        GatewaySubagentActivity.fromGatewayEvent('subagent.complete', {
-          'subagent_id': 'two',
-          'goal': 'Check privacy',
-          'status': 'completed',
-        })!,
-      ];
+      final chat = await controller.createChat(canDispatch: () => true);
+      final supervision = ProfileSupervisionSession(
+        controller: controller,
+        chat: chat,
+      );
+      addTearDown(supervision.dispose);
+      emitChatEvent(controller, chat, 'subagent.start', {
+        'subagent_id': 'one',
+        'goal': 'Compare the available stays',
+      });
+      emitChatEvent(controller, chat, 'subagent.complete', {
+        'subagent_id': 'two',
+        'goal': 'Check privacy',
+        'status': 'completed',
+      });
       tester.view.physicalSize = const Size(360, 800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -61,19 +74,17 @@ void main() {
                     const ProfileTodoPanel(
                       todos: [
                         GatewayTodo(
-                          id: 'one',
                           content:
                               'Check the full list of available properties and compare privacy.',
                           status: GatewayTodoStatus.completed,
                         ),
                         GatewayTodo(
-                          id: 'two',
                           content: 'Review alternatives',
                           status: GatewayTodoStatus.pending,
                         ),
                       ],
                     ),
-                    ProfileSubagentPanel(controller: controller, chat: chat),
+                    ProfileSubagentPanel(session: supervision),
                   ],
                 ),
               ],

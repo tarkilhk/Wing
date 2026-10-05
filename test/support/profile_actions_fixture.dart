@@ -1,3 +1,4 @@
+import 'package:wing/core/services/connection_manager.dart';
 import 'dart:async';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/profile_gateway.dart';
@@ -6,6 +7,7 @@ import 'profile_browser_fixture.dart';
 class ProfileActionsFixture extends ProfileBrowserFixture {
   final updates = <(String, String, Map<String, dynamic>)>[];
   final deletes = <(String, Map<String, String>)>[];
+  final deleteAttempts = <(String, Map<String, String>)>[];
   final moves = <(String, Map<String, dynamic>)>[];
   final closes = <(String, Map<String, dynamic>)>[];
   final changes = <String, Map<String, Map<String, dynamic>>>{};
@@ -45,7 +47,20 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
     return ProfileGateway(
       scope: scope,
       discover: base.discover,
-      get: base.read,
+      get: (endpoint, query) async {
+        final path = Uri.parse(endpoint).path;
+        if (path != 'sessions/search' &&
+            path.startsWith('sessions/') &&
+            path.split('/').length == 2) {
+          final id = Uri.decodeComponent(path.substring('sessions/'.length));
+          final row = sessions(
+            scope.profileName,
+          ).where((row) => row['id'] == id).firstOrNull;
+          if (row == null) throw DashboardSessionNotFound(path);
+          return {...row, 'profile': scope.profileName};
+        }
+        return base.read(endpoint, query);
+      },
       rpc: (method, params) async {
         if (method == 'session.workspace.move') {
           moves.add((scope.profileName, params));
@@ -104,7 +119,11 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
         }
         return base.call(method, params);
       },
-      patch: (endpoint, body) async {
+      ownedPatch: (endpoint, body, canDispatch, onDispatched) async {
+        if (!canDispatch()) {
+          throw DashboardRequestNotSentException(StateError('Menu retired'));
+        }
+        onDispatched();
         updates.add((scope.profileName, endpoint, body));
         await mutationDelay?.future;
         if (failMutation) throw StateError('Write rejected');
@@ -114,13 +133,24 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
         profile[id] = {...?profile[id], ...update};
         return {'ok': true, 'title': update['title'] ?? 'Chat', ...update};
       },
-      delete: (endpoint, query) async {
+      ownedDelete: (endpoint, parameters, canDispatch, onDispatched) async {
+        if (!canDispatch()) {
+          throw DashboardRequestNotSentException(StateError('Menu retired'));
+        }
+        final query = parameters.map(
+          (key, value) => MapEntry(key, value.toString()),
+        );
+        onDispatched();
+
+        deleteAttempts.add((endpoint, Map.unmodifiable(query)));
         if (failMutation) throw StateError('Delete rejected');
         if (active) throw StateError('Runtime must be closed before deletion');
         deletes.add((endpoint, query));
         removed
             .putIfAbsent(scope.profileName, () => {})
             .add(Uri.decodeComponent(endpoint.split('/').last));
+
+        return {'ok': true};
       },
     );
   }

@@ -1,16 +1,17 @@
+import 'package:wing/core/services/profile_tool_setup_session.dart';
+import 'package:wing/core/screens/administration/admin_provider_credentials.dart';
+import 'package:wing/core/models/settings_edit.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_settings_page.dart';
 import 'package:wing/core/screens/administration/admin_memory_page.dart';
-import 'package:wing/core/screens/administration/admin_providers_page.dart';
-import 'package:wing/core/screens/administration/admin_widgets.dart';
 import 'package:wing/core/screens/administration/admin_tool_setup_page.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'support/administration_fixture.dart';
 
-const _fields = [
+final _fields = [
   AdminField(
     'memory.memory_char_limit',
     'Memory budget',
@@ -34,17 +35,24 @@ void main() {
       if (method == 'PUT' && path == 'tools/toolsets/stt/provider') {
         return {
           'ok': true,
+          'name': 'stt',
           'provider': 'Nous Subscription',
           'needs_nous_auth': true,
         };
       }
       return {
+        'name': 'stt',
+        'has_category': true,
         'active_provider': null,
         'providers': [
           {
             'name': 'Nous Subscription',
             'status': 'needs_auth',
             'requires_nous_auth': true,
+            'is_active': false,
+            'badge': '',
+            'tag': '',
+            'env_vars': [],
           },
         ],
       };
@@ -53,8 +61,11 @@ void main() {
       MaterialApp(
         theme: wingTheme(Brightness.dark),
         home: AdminToolSetupPage(
-          profile: fixture.server.profile('personal'),
-          name: 'stt',
+          createSession: () => ProfileToolSetupSession(
+            fixture.server.profile('personal'),
+            tool: 'stt',
+          ),
+          onCredential: (_, _) async {},
         ),
       ),
     );
@@ -67,35 +78,6 @@ void main() {
     );
     expect(find.textContaining('could not be confirmed'), findsNothing);
   });
-  testWidgets(
-    'late operation refresh after leaving a page does not load or set state',
-    (tester) async {
-      late VoidCallback refresh;
-      var reads = 0;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: AdminLoad(
-              load: () async {
-                reads++;
-                return <String, dynamic>{};
-              },
-              builder: (_, _, reload) {
-                refresh = reload;
-                return const Text('Loaded');
-              },
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.pumpWidget(const SizedBox.shrink());
-      refresh();
-      await tester.pumpAndSettle();
-      expect(reads, 1);
-      expect(tester.takeException(), isNull);
-    },
-  );
   testWidgets(
     'save confirmation stays above editor actions with the keyboard open',
     (tester) async {

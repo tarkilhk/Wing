@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/remote_files_client.dart';
-import 'markdown_code_block.dart';
+import 'source_code_block.dart';
 
 enum WebOutputFormat { mermaid, svg, html }
 
@@ -93,10 +93,10 @@ class _WebOutputPreviewState extends State<WebOutputPreview> {
                   children: [
                     if (!canRender)
                       Text('This $label is available as source here.'),
-                    MarkdownCodeBlock(
+                    SourceCodeBlock(
                       code: widget.source,
                       language: language,
-                      previewEnabled: false,
+                      headerAction: null,
                     ),
                   ],
                 ),

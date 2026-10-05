@@ -1,3 +1,10 @@
+import 'package:wing/core/services/profile_capabilities_session.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/voice_preferences_session.dart';
+import 'package:wing/core/screens/administration/provider_recovery_routes.dart';
+import 'package:wing/core/screens/administration/admin_provider_credentials.dart';
+import 'package:wing/core/models/settings_edit.dart';
+import 'package:wing/core/models/retained_memory.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -16,6 +23,7 @@ import 'package:wing/core/screens/administration/admin_settings_page.dart';
 import 'package:wing/core/screens/profile_capabilities_screen.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/services/administration_health.dart';
+import 'package:wing/core/services/profile_identity_edit_session.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/widgets/voice_preferences_card.dart';
 import 'support/administration_design_fixture.dart';
@@ -71,6 +79,17 @@ void main() {
       testWidgets('$family layout $mode', (tester) async {
         SharedPreferences.setMockInitialValues({});
         final preferences = await SharedPreferences.getInstance();
+        late AppPreferences appPreferences;
+        late VoiceDeviceFixture voiceDevice;
+        if (family == 'voice') {
+          appPreferences = AppPreferences(preferences);
+          voiceDevice = VoiceDeviceFixture();
+          addTearDown(() async {
+            await tester.pumpWidget(const SizedBox.shrink());
+            appPreferences.dispose();
+            await voiceDevice.stream.close();
+          });
+        }
         final fixture = AdministrationDesignFixture();
         final profile = fixture.server.profile('personal');
         final health = AdministrationHealth(fixture.server);
@@ -95,23 +114,24 @@ void main() {
           ),
           'models' => AdminDefaultsPage(profile: profile),
           'identity' => AdminIdentityPage(
-            gateway: fixture.identityGateway(),
-            connectionLabel: 'Home server',
+            createSession: () => ProfileIdentityEditSession(profile),
           ),
           'memory' => AdminMemoryPage(profile: profile),
           'memory-detail' => AdminMemoryDetail(
             profile: profile,
-            id: 'memory:MEMORY.md:0',
+            identity: RetainedMemoryIdentity.fromWire(
+              'memory:memory:0:111111111111',
+            ),
           ),
           'providers' => AdminProvidersPage(profile: profile),
-          'provider-detail' => AdminProviderDetail(
+          'provider-detail' => providerRecoveryPage(
             profile: profile,
 
             providerId: 'research',
           ),
           'service-keys' => AdminServiceKeyCatalog(profile: profile),
           'capabilities' => ProfileCapabilitiesScreen(
-            gateway: profile.gateway,
+            createSession: () => ProfileCapabilitiesSession(profile.gateway),
             connectionLabel: 'Home server',
             onToolSetup: (_) async {},
             onLibrary: () async {},
@@ -129,8 +149,12 @@ void main() {
             body: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: VoicePreferencesCard(
-                preferences: preferences,
-                device: VoiceDeviceFixture(),
+                createSession: () => VoicePreferencesSession(
+                  preferences: appPreferences,
+                  device: voiceDevice,
+                  hermesProfileLabel: null,
+                  openHermesSettings: null,
+                ),
               ),
             ),
           ),
@@ -146,7 +170,7 @@ void main() {
               ),
               accent: mode == 'wide'
                   ? WorkspaceAccent.gold
-                  : WorkspaceAccent.mint,
+                  : WorkspaceAccent.teal,
             ),
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(context).copyWith(

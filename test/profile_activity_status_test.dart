@@ -1,3 +1,9 @@
+import 'package:wing/core/services/chat_runtime.dart';
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/models/chat_runtime.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
@@ -12,22 +18,42 @@ import 'profile_workspace_controller_test.dart' show Host;
 void main() {
   late Host host;
   late ProfileWorkspaceController controller;
+  late WorkspaceRuntimeFixture runtimes;
+  late AppPreferences appPreferences;
   late ProfileChat chat;
+  late ChatRuntime runtime;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    runtimes = WorkspaceRuntimeFixture();
     host = Host()..running = false;
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'activity-status',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
+      runtimeFactory: runtimes.create,
     );
     await controller.initialize();
-    chat = await controller.createChat();
+
+    chat = await openFixtureChat(
+      controller: controller,
+      key: ProfileSessionKey(controller.current!.scope, 'same'),
+      title: 'Activity',
+    );
+    runtime = runtimes.forChat(chat);
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   String? label() => ProfileActivityStatus(chat: chat).label;
 
@@ -35,26 +61,39 @@ void main() {
     'idle and cancelled hide while other status messages remain available',
     () {
       for (final status in [
-        ProfileTurnStatus.idle,
-        ProfileTurnStatus.completed,
-        ProfileTurnStatus.cancelled,
+        ChatExecution.idle,
+        ChatExecution.completed,
+        ChatExecution.cancelled,
       ]) {
-        chat.status = status;
+        switch (status) {
+          case ChatExecution.idle:
+            runtime.resetCompleted();
+          case ChatExecution.completed:
+            runtime.completeTurn(failed: false, cancelled: false, error: null);
+          case ChatExecution.cancelled:
+            runtime.completeTurn(failed: false, cancelled: true, error: null);
+          default:
+            throw StateError('Unexpected fixture execution');
+        }
         expect(label(), isNull);
       }
-      chat.error = 'History failed';
+      runtime.reportError('History failed');
       expect(label(), 'History needs attention');
-      chat.error = null;
-      chat.commandRunning = true;
+      runtime.reportError(null);
+      runtime.beginCommand();
       expect(label(), 'Running command…');
-      chat.commandRunning = false;
+      runtime.finishCommand();
       host.event('a', 'subagent.start', {'subagent_id': 'child'});
       expect(label(), 'Waiting for 1 subagent…');
       for (final entry in {
-        ProfileTurnStatus.submitting: 'Sending message…',
-        ProfileTurnStatus.failed: 'Something went wrong',
+        ChatExecution.submitting: 'Sending message…',
+        ChatExecution.failed: 'Something went wrong',
       }.entries) {
-        chat.status = entry.key;
+        if (entry.key == ChatExecution.submitting) {
+          runtime.beginTurn(submitting: true);
+        } else {
+          runtime.failTurn('Turn failed');
+        }
         expect(label(), entry.value);
       }
     },
@@ -76,7 +115,7 @@ void main() {
     final row = find.byType(ProfileActivityStatus);
     await render();
     expect(tester.getSize(row).height, 0);
-    chat.status = ProfileTurnStatus.running;
+    runtime.beginTurn(submitting: false);
     await render();
     expect(tester.getSize(row).height, 0);
     await tester.pump(const Duration(milliseconds: 60));
@@ -93,7 +132,7 @@ void main() {
     final expanded = tester.getSize(row).height;
     expect(expanded, greaterThan(entering));
 
-    chat.status = ProfileTurnStatus.cancelled;
+    runtime.completeTurn(failed: false, cancelled: true, error: null);
     await render();
     await tester.pump(const Duration(milliseconds: 60));
     expect(tester.getSize(row).height, inExclusiveRange(0, expanded));
@@ -103,23 +142,23 @@ void main() {
     expect(find.text('Hermes is working…'), findsNothing);
 
     // A quick new turn during collapse must restore the current status.
-    chat.status = ProfileTurnStatus.running;
+    runtime.beginTurn(submitting: false);
     await render();
     await tester.pump(const Duration(milliseconds: 60));
-    chat.status = ProfileTurnStatus.cancelled;
+    runtime.completeTurn(failed: false, cancelled: true, error: null);
     await render();
     await tester.pump(const Duration(milliseconds: 40));
-    chat.status = ProfileTurnStatus.failed;
+    runtime.failTurn('Turn failed');
     await render();
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('Something went wrong'), findsOneWidget);
     expect(find.text('Hermes is working…'), findsNothing);
 
     await render(reducedMotion: true);
-    chat.status = ProfileTurnStatus.cancelled;
+    runtime.completeTurn(failed: false, cancelled: true, error: null);
     await render(reducedMotion: true);
     expect(tester.getSize(row).height, 0);
-    chat.status = ProfileTurnStatus.running;
+    runtime.beginTurn(submitting: false);
     await render(reducedMotion: true);
     expect(tester.getSize(row).height, expanded);
     expect(find.byType(CircularProgressIndicator), findsNothing);
@@ -134,17 +173,20 @@ void main() {
     expect(label(), 'Thinking…');
     host.event('a', 'tool.generating', {'name': 'web_search'});
     expect(label(), 'Preparing Web search');
-    host.event('a', 'tool.start', {'name': 'web_search'});
-    host.event('a', 'tool.progress', {
+    host.event('a', 'tool.start', {
+      'tool_id': 'search',
       'name': 'web_search',
-      'preview': 'Checking accommodation',
+      'context': 'Checking accommodation',
     });
     expect(label(), 'Using Web search · Checking accommodation');
-    host.event('a', 'tool.complete', {'name': 'web_search'});
+    host.event('a', 'tool.complete', {
+      'tool_id': 'search',
+      'name': 'web_search',
+    });
     expect(label(), 'Hermes is working…');
     // Accumulated text and reasoning remain in the transcript, not the status.
-    expect(chat.streaming, isNotEmpty);
-    expect(chat.reasoning, isNotEmpty);
+    expect(chat.reading.streaming, isNotEmpty);
+    expect(chat.runtime.reasoning, isNotEmpty);
     host.event('a', 'message.delta', {'text': 'Here are the results.'});
     host.event('a', 'reasoning.available', {'text': 'Earlier reasoning'});
     expect(label(), 'Writing response…');
@@ -158,9 +200,10 @@ void main() {
     host.event('a', 'tool.start', {'name': 'read_file', 'tool_id': 'two'});
     host.event('a', 'tool.complete', {'name': 'read_file', 'tool_id': 'two'});
     expect(label(), 'Using Web search');
-    host.event('a', 'tool.progress', {
+    host.event('a', 'tool.start', {
       'tool_id': 'one',
-      'preview': 'Reading results',
+      'name': 'web_search',
+      'context': 'Reading results',
     });
     expect(label(), 'Using Web search · Reading results');
     host.event('a', 'message.delta', {'text': 'Result'});
@@ -177,16 +220,23 @@ void main() {
       'tool': 'read_file',
     });
     expect(label(), 'Thinking… · 1 subagent active');
-    host.event('a', 'clarify', {'question': 'Which city?'});
+    host.event('a', 'clarify', {
+      'request_id': 'city',
+      'question': 'Which city?',
+    });
     expect(label(), 'Waiting for your reply');
     host.event('a', 'approval', {
       'request_id': 'file',
+      'server_request_id': 'file-server',
       'command': 'Check a file',
     });
     expect(label(), 'Waiting for your approval');
-    chat.status = ProfileTurnStatus.reconnecting;
+    runtime.beginRecovery();
     expect(label(), 'Reconnecting… · checking current activity');
-    chat.status = ProfileTurnStatus.completed;
+    runtime.recovered();
+    runtime.reconcileOpenRequests(const []);
+    runtime.cancelRequest({'id': 'file-server', 'method': 'approval'});
+    runtime.completeTurn(failed: false, cancelled: false, error: null);
     expect(label(), 'Waiting for 1 subagent…');
     host.event('a', 'subagent.complete', {
       'subagent_id': 'child',
@@ -195,28 +245,35 @@ void main() {
     expect(label(), isNull);
   });
 
-  test('same-name tools show latest progress after a third call completes', () {
-    host.event('a', 'message.start');
-    host.event('a', 'tool.start', {'name': 'web_search', 'tool_id': 'one'});
-    host.event('a', 'tool.start', {'name': 'web_search', 'tool_id': 'two'});
-    host.event('a', 'tool.start', {'name': 'read_file', 'tool_id': 'three'});
-    host.event('a', 'tool.progress', {
-      'tool_id': 'one',
-      'preview': 'Latest search progress',
-    });
-    expect(label(), 'Using Web search · Latest search progress');
-    host.event('a', 'tool.complete', {'tool_id': 'three'});
-    expect(label(), 'Using Web search · Latest search progress');
-  });
+  test(
+    'same-name tools retain latest context after a third call completes',
+    () {
+      host.event('a', 'message.start');
+      host.event('a', 'tool.start', {'name': 'web_search', 'tool_id': 'one'});
+      host.event('a', 'tool.start', {'name': 'web_search', 'tool_id': 'two'});
+      host.event('a', 'tool.start', {'name': 'read_file', 'tool_id': 'three'});
+      host.event('a', 'tool.start', {
+        'tool_id': 'one',
+        'name': 'web_search',
+        'context': 'Latest search context',
+      });
+      expect(label(), 'Using Web search · Latest search context');
+      host.event('a', 'tool.complete', {'tool_id': 'three'});
+      expect(label(), 'Using Web search · Latest search context');
+    },
+  );
 
   test('a new submission clears the previous execution phase', () async {
     host.event('a', 'message.start');
     host.event('a', 'tool.start', {'name': 'web_search'});
-    chat.status = ProfileTurnStatus.completed;
-    chat.draft = 'Next question';
+    runtime.recovered();
+    runtime.reconcileOpenRequests(const []);
+    runtime.cancelRequest({'id': 'file-server', 'method': 'approval'});
+    runtime.completeTurn(failed: false, cancelled: false, error: null);
+    chat.composer.editText('Next question');
     await controller.send(chat);
     expect(label(), 'Hermes is working…');
-    expect(chat.tool, isNull);
+    expect(chat.runtime.tool, isNull);
   });
 
   test('preparation before tool ID assignment does not leave phantom work', () {
@@ -225,7 +282,10 @@ void main() {
     host.event('a', 'tool.start', {'name': 'web_search', 'tool_id': 'one'});
     host.event('a', 'tool.complete', {'tool_id': 'one'});
     expect(label(), 'Hermes is working…');
-    expect(chat.toolActivities.where((item) => !item.isTerminal), isEmpty);
+    expect(
+      chat.runtime.toolActivities.where((item) => !item.isTerminal),
+      isEmpty,
+    );
   });
 
   test(
@@ -265,7 +325,10 @@ void main() {
     expect(find.text('Thinking…'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.byType(ShaderMask), findsOneWidget);
-    host.event('a', 'clarify', {'question': 'Which city?'});
+    host.event('a', 'clarify', {
+      'request_id': 'city',
+      'question': 'Which city?',
+    });
     await tester.pump();
     expect(find.text('Waiting for your reply'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
@@ -278,13 +341,15 @@ void main() {
     tester.view.physicalSize = const Size(360, 760);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    chat.messages = List.generate(
-      30,
-      (i) => {
-        'id': i,
-        'role': 'user',
-        'content': 'Message $i with enough text to fill the history.',
-      },
+    chat.reading.installSavedHistory(
+      List.generate(
+        30,
+        (i) => {
+          'id': i,
+          'role': 'user',
+          'content': 'Message $i with enough text to fill the history.',
+        },
+      ),
     );
     host.event('a', 'message.start');
     await tester.pumpWidget(
@@ -324,7 +389,7 @@ void main() {
     host.event('a', 'message.start');
     host.event('a', 'tool.start', {
       'name': 'web_search',
-      'detail': 'Searching many sources for a very long accommodation request',
+      'context': 'Searching many sources for a very long accommodation request',
     });
     await tester.pumpWidget(
       MaterialApp(

@@ -79,9 +79,6 @@ class NotificationInteractionSecurityTest {
         assertNull(store.consume(old, NotificationHandleStore.actionPurpose))
         assertNull(store.consume(main, NotificationHandleStore.mainPurpose))
         assertNotNull(store.consume(other, NotificationHandleStore.actionPurpose))
-        val latest = store.issue(42, NotificationHandleStore.actionPurpose, action())!!
-        assertTrue(store.invalidate())
-        assertNull(store.consume(latest, NotificationHandleStore.actionPurpose))
     }
 
     @Test fun storageFailureNeverDeliversAndCorruptStorageIsRecoverable() {

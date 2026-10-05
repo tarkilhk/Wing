@@ -1,3 +1,4 @@
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/slash_command.dart';
@@ -21,7 +22,7 @@ void main() {
       );
       for (final profile in ['android-qa-a', 'android-qa-b']) {
         final gateway = ProfileGateway.forConnection(
-          connection,
+          ConnectionAccess(connection: connection, dashboardOAuth: null),
           WorkspaceScope(connectionId: connection.id, profileName: profile),
         );
         addTearDown(gateway.close);
@@ -29,6 +30,7 @@ void main() {
         final session = await gateway.createSession(
           cwdExplicit: false,
           title: 'Android slash contract check',
+          canDispatch: () => true,
         );
         final id = session['session_id'] as String;
         final catalog = SlashCatalog.fromJson(

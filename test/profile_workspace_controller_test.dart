@@ -1,3 +1,10 @@
+import 'package:wing/core/models/chat_intelligence.dart';
+import 'package:wing/core/models/model_choice.dart';
+import 'package:wing/core/models/chat_runtime.dart';
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -13,7 +20,7 @@ import 'package:wing/core/services/attachment_draft_service.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/server_connection_status.dart';
-import 'package:wing/core/services/profile_selection_store.dart';
+import 'package:wing/core/models/profile_selection.dart';
 import 'package:wing/core/services/profiles_repository.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -51,9 +58,11 @@ class Host {
   final closed = <String>[];
   List<String> profiles = ['a', 'b'];
   bool running = true;
+  final runtimeForResume = <String, String>{};
   bool promptSubmitFails = false;
   bool fileAttachFails = false;
   Object? sessionTitle;
+  List<Map<String, dynamic>>? indexedSessions;
   Completer<void>? fileAttachStarted;
   Completer<void>? fileAttachDelay;
   Map<String, dynamic> imageAttachResult = {
@@ -78,6 +87,8 @@ class Host {
   int connectCalls = 0;
   int disconnectCalls = 0;
   int resumeFailures = 0;
+  Completer<void>? resumeStarted;
+  Completer<void>? resumeDelay;
   bool expireUnsubmittedResume = false;
   int sessionCreates = 0;
   String? createdCwdOverride;
@@ -90,11 +101,18 @@ class Host {
   Map<String, dynamic>? inflight;
   Map<String, dynamic>? todoState;
   List<Map<String, dynamic>>? historyMessages;
+  Completer<void>? heldHistoryStarted;
+  Completer<void>? heldHistoryDelay;
+  Object? heldHistoryFailure;
   Completer<void>? projectDelay;
+  final projectPaths = <String, String?>{};
   bool wrongProjectOwner = false;
   Object? discoveryFailure;
   Completer<void>? discoveryDelay;
   Completer<void>? discoveryStarted;
+  Completer<void>? defaultDiscoveryDelay;
+  Completer<void>? defaultDiscoveryStarted;
+  Object? defaultDiscoveryFailure;
   Map<String, dynamic> clarifyResult = {'status': 'ok'};
   Map<String, dynamic> steerResult = {'status': 'queued'};
   Future<ProfileDiscovery> discover() async {
@@ -115,7 +133,14 @@ class Host {
     late final ProfileGateway gateway;
     gateway = ProfileGateway(
       scope: scope,
-      discover: discover,
+      discover: () async {
+        if (name == 'default' && defaultDiscoveryDelay != null) {
+          defaultDiscoveryStarted?.complete();
+          await defaultDiscoveryDelay!.future;
+          if (defaultDiscoveryFailure case final failure?) throw failure;
+        }
+        return discover();
+      },
       connect: () async {
         if (gateway.onEvent != null) {
           gateways[name] = gateway;
@@ -140,11 +165,23 @@ class Host {
           return {
             'offset': int.parse(query['offset']!),
             'limit': int.parse(query['limit']!),
-            'total': 1,
-            'sessions': [
-              {'id': 'same', 'title': '$name chat', 'profile': name},
-            ],
+            'total': indexedSessions?.length ?? 1,
+            'sessions':
+                indexedSessions ??
+                [
+                  {'id': 'same', 'title': '$name chat', 'profile': name},
+                ],
           };
+        }
+        if (path.startsWith('sessions/') &&
+            path.endsWith('/messages') &&
+            heldHistoryDelay != null) {
+          final delay = heldHistoryDelay!;
+          final failure = heldHistoryFailure;
+          heldHistoryDelay = null;
+          heldHistoryStarted!.complete();
+          await delay.future;
+          if (failure != null) throw failure;
         }
         return {
           'session_id': path.split('/')[1],
@@ -161,8 +198,19 @@ class Host {
               ],
         };
       },
-      delete: (endpoint, query) async {
-        calls.add((name, 'DELETE $endpoint', query));
+      ownedDelete: (endpoint, query, canDispatch, onDispatched) async {
+        if (!canDispatch()) {
+          throw DashboardRequestNotSentException(
+            StateError('Fixture owner retired'),
+          );
+        }
+        onDispatched();
+        calls.add((
+          name,
+          'DELETE $endpoint',
+          Map<String, dynamic>.unmodifiable(query),
+        ));
+        return {'ok': true};
       },
       rpc: (method, params) async {
         calls.add((name, method, params));
@@ -242,7 +290,9 @@ class Host {
                 'id': 'same',
                 'label': '$name project',
                 'sessionIds': <String>[],
-                'path': '/$name',
+                'path': projectPaths.containsKey(name)
+                    ? projectPaths[name]
+                    : '/$name',
                 'lastActive': 1,
               },
             ],
@@ -278,8 +328,11 @@ class Host {
             replacementCreateStarted?.complete();
             await replacementCreateDelay?.future;
           }
-          return {
-            'session_id': replacement
+          final response = <String, dynamic>{
+            'session_id':
+                method == 'session.resume' && runtimeForResume.containsKey(name)
+                ? runtimeForResume[name]
+                : replacement
                 ? '$name-replacement-runtime'
                 : '$name-runtime',
             'stored_session_id': replacement ? 'replacement' : 'same',
@@ -300,6 +353,13 @@ class Host {
                         : '/$name/profile-default'),
             },
           };
+          if (method == 'session.resume' && resumeDelay != null) {
+            final delay = resumeDelay!;
+            resumeDelay = null;
+            resumeStarted?.complete();
+            await delay.future;
+          }
+          return response;
         }
         if (method == 'projects.create') {
           return {
@@ -331,39 +391,137 @@ void main() {
   late Host host;
   late ProfileWorkspaceController controller;
   late SharedPreferences preferences;
+  late AppPreferences appPreferences;
   late List<ProfileSessionKey> notifications;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     host = Host();
     notifications = [];
     controller = ProfileWorkspaceController(
       connectionIdentity: 'original-settings',
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Host',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Host',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
       onAttention: (notification) async => notifications.add(notification.key),
     );
     await controller.initialize();
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
+
+  test(
+    'discovery retains unchanged facts and publishes real membership changes',
+    () async {
+      final first = controller.discovery!;
+      await controller.switchProfile('a');
+      expect(controller.discovery, same(first));
+      host.profiles = ['a', 'b', 'c'];
+      await controller.switchProfile('a');
+      expect(controller.discovery, isNot(same(first)));
+      expect(controller.discovery!.profiles.map((profile) => profile.name), [
+        'a',
+        'b',
+        'c',
+      ]);
+      expect(first.profiles.map((profile) => profile.name), ['a', 'b']);
+      expect(
+        () => controller.discovery!.profiles.clear(),
+        throwsUnsupportedError,
+      );
+    },
+  );
+
+  test(
+    'canonical rows detach producer data and publish stable deep readonly facts',
+    () async {
+      final nested = <String, dynamic>{
+        'paths': <String>['/original'],
+      };
+      final row = <String, dynamic>{
+        'id': 'same',
+        'title': 'Original',
+        'profile': 'a',
+        'metadata': nested,
+      };
+      host.indexedSessions = [row];
+      await controller.refresh();
+      final resource = controller.current!;
+      final discovery = controller.discovery!;
+      expect(identical(discovery, controller.discovery), isTrue);
+      expect(() => discovery.profiles.clear(), throwsUnsupportedError);
+      final published = resource.sessions.single;
+      expect(identical(published, resource.sessions.single), isTrue);
+      expect(() => resource.sessions.clear(), throwsUnsupportedError);
+      expect(() => published['title'] = 'Outside', throwsUnsupportedError);
+      final metadata = published['metadata'] as Map;
+      expect(() => metadata['paths'] = [], throwsUnsupportedError);
+      expect(() => (metadata['paths'] as List).clear(), throwsUnsupportedError);
+      nested['paths'] = ['/changed'];
+      row['title'] = 'Producer changed';
+      expect(published['title'], 'Original');
+      expect(metadata['paths'], ['/original']);
+      final chat = (await controller.openSession(
+        ProfileSessionKey(resource.scope, 'same'),
+      ))!;
+      expect(() => resource.chats.clear(), throwsUnsupportedError);
+      expect(
+        () => resource.deletedSessions.add('same'),
+        throwsUnsupportedError,
+      );
+      expect(
+        () => (chat as dynamic).title = 'Outside',
+        throwsNoSuchMethodError,
+      );
+      expect(
+        () => (resource as dynamic).selectedSession = null,
+        throwsNoSuchMethodError,
+      );
+      expect(
+        () => (controller as dynamic).current = null,
+        throwsNoSuchMethodError,
+      );
+      emitChatEvent(controller, chat, 'subagent.start', {
+        'subagent_id': 'readonly-child',
+        'goal': 'Work',
+      });
+      final subagents = chat.subagents;
+      expect(() => subagents.clear(), throwsUnsupportedError);
+      expect(
+        () => subagents.single.recentActivity.add('Outside'),
+        throwsUnsupportedError,
+      );
+    },
+  );
 
   for (final hasCachedRow in [false, true]) {
     test(
       'server title overrides cached or absent row: cached=$hasCachedRow',
       () async {
         final resource = controller.current!;
-        if (hasCachedRow) {
-          resource.sessions.single['title'] = 'Outdated cached title';
-        } else {
-          resource.sessions.clear();
-        }
+        host.indexedSessions = hasCachedRow
+            ? [
+                {
+                  'id': 'same',
+                  'title': 'Outdated cached title',
+                  'profile': 'a',
+                },
+              ]
+            : [];
+        await controller.refresh();
         host.sessionTitle = 'Current server title';
         await controller.openSession(ProfileSessionKey(resource.scope, 'same'));
         expect(controller.current!.chat!.title, 'Current server title');
@@ -374,9 +532,9 @@ void main() {
   test(
     'session title events update only their runtime and durable owner',
     () async {
-      final first = await controller.createChat();
+      final first = await controller.createChat(canDispatch: () => true);
       await controller.navigateProfile('b');
-      final second = await controller.createChat();
+      final second = await controller.createChat(canDispatch: () => true);
       host.event('a', 'session.title', {
         'session_id': 'same',
         'title': 'Explicit rename',
@@ -402,8 +560,11 @@ void main() {
   );
 
   test('unknown session title info keeps an existing title', () async {
-    final chat = await controller.createChat();
-    chat.title = 'Known title';
+    final chat = await controller.createChat(canDispatch: () => true);
+    emitChatEvent(controller, chat, 'session.title', {
+      'session_id': chat.key.sessionId,
+      'title': 'Known title',
+    });
     for (final title in [null, '', '  ', 123]) {
       host.event('a', 'session.info', {'title': title});
       expect(chat.title, 'Known title');
@@ -418,14 +579,15 @@ void main() {
       controller.dispose();
       controller = ProfileWorkspaceController(
         connectionIdentity: 'original-settings',
-        connection: connection,
+        access: ConnectionAccess(connection: connection, dashboardOAuth: null),
         preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: host.gateway,
         onAttention: (notice) async => received.add(notice),
       );
       await controller.initialize();
-      final chat = await controller.createChat();
-      chat.draft = 'work';
+      final chat = await controller.createChat(canDispatch: () => true);
+      chat.composer.editText('work');
       await controller.send(chat);
       host.historyMessages = [
         {
@@ -457,7 +619,7 @@ void main() {
       controller.showList();
       final chat = await controller.loadNotificationApproval(key);
       await Future<void>.delayed(Duration.zero);
-      expect(chat?.approval?['request_id'], 'cold-review');
+      expect(chat?.runtime.approval?.requestId, 'cold-review');
       expect(controller.notificationChat, isNull);
       expect(controller.visible, isFalse);
       expect(
@@ -477,7 +639,7 @@ void main() {
   ]) {
     test('notification approval recovery: $outcome', () async {
       host.running = false;
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       final request = <String, dynamic>{
         'request_id': 'notification-original',
         'command': 'print("test")',
@@ -545,11 +707,8 @@ void main() {
         expect(failure, isNotNull);
         expect(decisions, isEmpty);
         if (outcome == 'failed' || outcome == 'timed out') {
-          expect(
-            chat.notificationActionErrorRequestId,
-            'notification-original',
-          );
-          expect(chat.notificationActionError, isNotNull);
+          expect(chat.runtime.decisionErrorRequestId, 'notification-original');
+          expect(chat.runtime.decisionError, isNotNull);
         }
         host.connectFailures = 0;
         await controller.reconnect(chat.key.workspace);
@@ -559,7 +718,7 @@ void main() {
   }
 
   test('restores draft text after controller restart', () async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     await controller.updateDraft(chat, 'unfinished thought');
     final key = chat.key;
     final connection = controller.connection;
@@ -567,14 +726,18 @@ void main() {
 
     controller = ProfileWorkspaceController(
       connectionIdentity: 'original-settings',
-      connection: connection,
+      access: ConnectionAccess(connection: connection, dashboardOAuth: null),
       preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
     await controller.openSession(key);
 
-    expect(controller.current!.chat!.draft, 'unfinished thought');
+    expect(
+      controller.current!.chat!.composer.observation.text,
+      'unfinished thought',
+    );
   });
 
   test('recovers a cold saved draft into a fresh local chat', () async {
@@ -591,14 +754,14 @@ void main() {
       queuedPrompts: [QueuedPromptDraft(text: 'send later')],
     );
     expect((await controller.savedDraft(source))!.text, contains('Cold'));
-    final destination = await controller.createChat();
+    final destination = await controller.createChat(canDispatch: () => true);
 
     await controller.recoverDraft(source, destination);
 
-    expect(destination.draft, 'Cold camera draft check');
-    expect(destination.draftSubmissionUncertain, isFalse);
-    expect(destination.queuedPrompts.single.text, 'send later');
-    expect(destination.queuePaused, isTrue);
+    expect(destination.composer.observation.text, 'Cold camera draft check');
+    expect(destination.composer.observation.submissionUncertain, isFalse);
+    expect(destination.composer.observation.queue.single.text, 'send later');
+    expect(destination.composer.observation.paused, isTrue);
     expect(await controller.savedDraft(source), isNull);
     final durable = await store.read(
       profileName: 'a',
@@ -622,16 +785,16 @@ void main() {
       preferences,
       connectionIdentity: 'original-settings',
     );
-    final source = await controller.createChat();
+    final source = await controller.createChat(canDispatch: () => true);
     await controller.updateDraft(source, 'still being edited');
-    final destination = await controller.createChat();
+    final destination = await controller.createChat(canDispatch: () => true);
 
     await expectLater(
       controller.recoverDraft(source.key, destination),
       throwsStateError,
     );
 
-    expect(destination.draft, isEmpty);
+    expect(destination.composer.observation.text, isEmpty);
     expect(
       (await store.read(
         profileName: 'a',
@@ -648,16 +811,19 @@ void main() {
         preferences,
         connectionIdentity: 'original-settings',
       );
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'send once');
       host.promptSubmitFails = true;
 
       await controller.send(chat);
 
-      expect(chat.draft, isEmpty);
-      expect(chat.queuedPrompts.single.text, 'send once');
-      expect(chat.queuedPrompts.single.submissionUncertain, isTrue);
-      expect(chat.queuePaused, isTrue);
+      expect(chat.composer.observation.text, isEmpty);
+      expect(chat.composer.observation.queue.single.text, 'send once');
+      expect(
+        chat.composer.observation.queue.single.submissionUncertain,
+        isTrue,
+      );
+      expect(chat.composer.observation.paused, isTrue);
       final saved = (await store.read(profileName: 'a', sessionId: 'same'))!;
       expect(saved.text, isEmpty);
       expect(saved.queuedPrompts.single.text, 'send once');
@@ -665,11 +831,14 @@ void main() {
 
       await controller.reconnect(chat.key.workspace);
 
-      expect(chat.draft, isEmpty);
-      expect(chat.queuedPrompts.single.text, 'send once');
-      expect(chat.queuedPrompts.single.submissionUncertain, isTrue);
+      expect(chat.composer.observation.text, isEmpty);
+      expect(chat.composer.observation.queue.single.text, 'send once');
+      expect(
+        chat.composer.observation.queue.single.submissionUncertain,
+        isTrue,
+      );
       await expectLater(controller.resumeQueue(chat), throwsStateError);
-      expect(chat.error, contains('uncertain'));
+      expect(chat.runtime.error, contains('uncertain'));
       expect(
         host.calls.where((call) => call.$2 == 'prompt.submit'),
         hasLength(1),
@@ -682,12 +851,12 @@ void main() {
       preferences,
       connectionIdentity: 'original-settings',
     );
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     await controller.updateDraft(chat, 'send once');
 
     await controller.send(chat);
 
-    expect(chat.draft, isEmpty);
+    expect(chat.composer.observation.text, isEmpty);
     expect(await store.read(profileName: 'a', sessionId: 'same'), isNull);
   });
 
@@ -699,7 +868,10 @@ void main() {
         connectionIdentity: 'original-settings',
       );
       final project = controller.current!.projects.single;
-      final chat = await controller.createChat(inProject: project);
+      final chat = await controller.createChat(
+        inProject: project,
+        canDispatch: () => true,
+      );
       final oldKey = chat.key;
       final attachment = AttachmentDraft(
         id: 'camera',
@@ -711,27 +883,48 @@ void main() {
         sourceImageFormat: AttachmentImageFormat.png,
         sanitized: true,
       );
-      chat.attachments.add(attachment);
-      chat.queuedPrompts.add(QueuedPromptDraft(text: 'later'));
-      chat
-        ..model = 'chosen-model'
-        ..provider = 'chosen-provider'
-        ..reasoningEffort = 'low'
-        ..intelligenceRuntime = chat.runtimeId
-        ..yolo = true;
+      await restoreComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+        appendAttachments: [attachment],
+      );
+      await restoreComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+        appendQueued: [QueuedPromptDraft(text: 'later')],
+      );
+      await controller.setIntelligence(
+        chat,
+        const ChatIntelligenceSelection(
+          choice: ModelChoice(
+            provider: 'chosen-provider',
+            model: 'chosen-model',
+          ),
+          reasoningEffort: 'low',
+        ),
+        confirmModelChange: (_) async => true,
+      );
+      emitChatEvent(controller, chat, 'session.info', {'yolo': true});
       await controller.updateDraft(chat, 'keep this draft');
       host.expireUnsubmittedResume = true;
-      controller.current!.reconnectError =
-          'Could not reconnect to a. No prompts were resent.';
+      host.connectError = StateError('Synthetic permanent connection failure');
+      await controller.reconnect(chat.key.workspace);
+      expect(controller.current!.reconnectError, isNotNull);
+      host.connectError = null;
 
       await controller.navigateProfile('a');
+      // Model selection setup uses genuine RPCs on the original runtime.
+      // Only calls admitted by this replacement action target its new runtime.
+      final replacementCallStart = host.calls.length;
       await controller.openSession(oldKey, recoverExpiredDraft: true);
 
       expect(chat.key.sessionId, 'replacement');
-      expect(chat.runtimeId, 'a-replacement-runtime');
-      expect(chat.draft, 'keep this draft');
-      expect(chat.attachments, [same(attachment)]);
-      expect(chat.queuedPrompts.single.text, 'later');
+      expect(chat.runtime.runtimeId, 'a-replacement-runtime');
+      expect(chat.composer.observation.text, 'keep this draft');
+      expect(chat.composer.observation.attachments.map((file) => file.id), [
+        attachment.id,
+      ]);
+      expect(chat.composer.observation.queue.single.text, 'later');
       expect(chat.projectId, project['id']);
       expect(chat.intelligenceRuntime, 'a-replacement-runtime');
       expect(chat.yolo, isTrue);
@@ -757,12 +950,14 @@ void main() {
       expect(migrated?.queuedPrompts.single.text, 'later');
       expect(
         host.calls
+            .skip(replacementCallStart)
             .where((call) => call.$2 == 'config.set')
             .map((call) => call.$3['session_id']),
         everyElement('a-replacement-runtime'),
       );
       expect(
         host.calls
+            .skip(replacementCallStart)
             .where((call) => call.$2 == 'config.set')
             .map((call) => call.$3['key']),
         containsAll(['model', 'reasoning', 'yolo']),
@@ -775,7 +970,7 @@ void main() {
   test(
     'profile chat inherits its directory without explicit provenance',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       final params = host.calls
           .lastWhere((call) => call.$2 == 'session.create')
           .$3;
@@ -791,6 +986,7 @@ void main() {
       final response = await controller.current!.gateway.createSession(
         cwd: '/a',
         cwdExplicit: false,
+        canDispatch: () => true,
       );
       final params = host.calls
           .lastWhere((call) => call.$2 == 'session.create')
@@ -803,7 +999,10 @@ void main() {
 
   test('project chat chooses its directory over the profile default', () async {
     final project = controller.current!.projects.single;
-    final chat = await controller.createChat(inProject: project);
+    final chat = await controller.createChat(
+      inProject: project,
+      canDispatch: () => true,
+    );
     final params = host.calls
         .lastWhere((call) => call.$2 == 'session.create')
         .$3;
@@ -813,10 +1012,14 @@ void main() {
   });
 
   test('project directory permits stock lexical normalization', () async {
+    host.projectPaths['a'] = '/a/./';
+    await controller.navigateProfile('a');
     final project = controller.current!.projects.single;
-    project['primary_path'] = '/a/./';
     host.createdCwdOverride = '/a';
-    final chat = await controller.createChat(inProject: project);
+    final chat = await controller.createChat(
+      inProject: project,
+      canDispatch: () => true,
+    );
     expect(chat.projectId, project['id']);
   });
 
@@ -828,7 +1031,7 @@ void main() {
         host.createdCwdOverride = '/a/profile-default';
         host.omitCreatedCwd = missingAcknowledgement;
         await expectLater(
-          controller.createChat(inProject: project),
+          controller.createChat(inProject: project, canDispatch: () => true),
           throwsStateError,
         );
         expect(controller.current!.chats, isEmpty);
@@ -839,10 +1042,11 @@ void main() {
   }
 
   test('project without a directory refuses creation before RPC', () async {
+    host.projectPaths['a'] = null;
+    await controller.navigateProfile('a');
     final project = controller.current!.projects.single;
-    project['primary_path'] = null;
     await expectLater(
-      controller.createChat(inProject: project),
+      controller.createChat(inProject: project, canDispatch: () => true),
       throwsStateError,
     );
     expect(host.sessionCreates, 0);
@@ -854,26 +1058,28 @@ void main() {
       'expired project draft stays put when destination ${unavailablePath ? 'is unavailable' : 'disagrees'}',
       () async {
         final project = controller.current!.projects.single;
-        final chat = await controller.createChat(inProject: project);
+        final chat = await controller.createChat(
+          inProject: project,
+          canDispatch: () => true,
+        );
         final oldKey = chat.key;
         await controller.updateDraft(chat, 'Keep this project draft');
         host.expireUnsubmittedResume = true;
         if (!unavailablePath) {
           host.createdCwdOverride = '/a/profile-default';
+        } else {
+          host.projectPaths['a'] = null;
         }
+        // Reload stock project metadata through the actual captured owner.
         await controller.navigateProfile('a');
-        if (unavailablePath) {
-          // Navigation reloads project metadata; change the current snapshot.
-          controller.current!.projects.single['primary_path'] = null;
-        }
         await expectLater(
           controller.openSession(oldKey, recoverExpiredDraft: true),
           throwsStateError,
         );
         expect(chat.key, oldKey);
-        expect(chat.runtimeId, 'a-runtime');
+        expect(chat.runtime.runtimeId, 'a-runtime');
         expect(chat.projectId, project['id']);
-        expect(chat.draft, 'Keep this project draft');
+        expect(chat.composer.observation.text, 'Keep this project draft');
         expect(controller.current!.chats.keys, ['same']);
         final store = ComposerDraftStore(
           preferences,
@@ -896,7 +1102,7 @@ void main() {
   test(
     'unknown resume failure does not replace an unsubmitted runtime',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       final oldKey = chat.key;
       await controller.updateDraft(chat, 'keep this draft');
       host.resumeFailures = 1;
@@ -908,13 +1114,13 @@ void main() {
       );
 
       expect(chat.key, oldKey);
-      expect(chat.draft, 'keep this draft');
+      expect(chat.composer.observation.text, 'keep this draft');
       expect(host.sessionCreates, 1);
     },
   );
 
   test('ordinary open does not replace a definitively expired draft', () async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     final oldKey = chat.key;
     await controller.updateDraft(chat, 'keep this draft');
     host.expireUnsubmittedResume = true;
@@ -926,19 +1132,19 @@ void main() {
     );
 
     expect(chat.key, oldKey);
-    expect(chat.draft, 'keep this draft');
+    expect(chat.composer.observation.text, 'keep this draft');
     expect(host.sessionCreates, 1);
   });
 
   test('reconnect replaces the selected definitively expired draft', () async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     await controller.updateDraft(chat, 'keep this draft');
     host.expireUnsubmittedResume = true;
 
     await controller.reconnect(chat.key.workspace);
 
     expect(chat.key.sessionId, 'replacement');
-    expect(chat.draft, 'keep this draft');
+    expect(chat.composer.observation.text, 'keep this draft');
     expect(controller.current!.chat, same(chat));
     expect(controller.current!.reconnectError, isNull);
   });
@@ -950,7 +1156,7 @@ void main() {
         preferences,
         connectionIdentity: 'original-settings',
       );
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       final oldKey = chat.key;
       await controller.updateDraft(chat, 'keep this draft');
       host
@@ -983,7 +1189,7 @@ void main() {
   test(
     'camera target follows a draft already replaced by background reconnect',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       final capturedKey = chat.key;
       await controller.updateDraft(chat, 'camera draft');
       host.expireUnsubmittedResume = true;
@@ -1001,9 +1207,9 @@ void main() {
       );
 
       expect(opened, same(chat));
-      expect(chat.draft, 'camera draft');
+      expect(chat.composer.observation.text, 'camera draft');
       expect(
-        chat.messages
+        chat.reading.messages
             .where((row) => row['_command_notice'] == true)
             .map((row) => row['content']),
         isEmpty,
@@ -1016,7 +1222,7 @@ void main() {
   test(
     'explicit recovery waits for an in-flight replacement of its captured key',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       final capturedKey = chat.key;
       await controller.updateDraft(chat, 'camera draft');
       host
@@ -1040,7 +1246,7 @@ void main() {
       expect(await openingResult, same(chat));
 
       expect(chat.key.sessionId, 'replacement');
-      expect(chat.draft, 'camera draft');
+      expect(chat.composer.observation.text, 'camera draft');
       expect(host.sessionCreates, 2);
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
     },
@@ -1049,7 +1255,7 @@ void main() {
   test(
     'explicit recovery joins replacement started during its resume request',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       final capturedKey = chat.key;
       await controller.updateDraft(chat, 'camera draft');
       host
@@ -1074,14 +1280,14 @@ void main() {
       await openingExpectation;
 
       expect(chat.key.sessionId, 'replacement');
-      expect(chat.draft, 'camera draft');
+      expect(chat.composer.observation.text, 'camera draft');
       expect(host.sessionCreates, 2);
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
     },
   );
 
   test('definitive resume failure does not replace a submitted chat', () async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     final oldKey = chat.key;
     await controller.updateDraft(chat, 'accepted prompt');
     await controller.send(chat);
@@ -1100,7 +1306,7 @@ void main() {
   test(
     'reconnect does not clear text edited after a lost acknowledgement',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'first version');
       host.promptSubmitFails = true;
       await controller.send(chat);
@@ -1109,12 +1315,12 @@ void main() {
 
       await controller.reconnect(chat.key.workspace);
 
-      expect(chat.draft, 'edited while checking');
+      expect(chat.composer.observation.text, 'edited while checking');
     },
   );
 
   test('rapid prompt taps submit once', () async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     await controller.updateDraft(chat, 'one prompt');
     host.promptSubmitStarted = Completer<void>();
     host.promptSubmitDelay = Completer<void>();
@@ -1131,13 +1337,13 @@ void main() {
   });
 
   test('send consumes the composer before asynchronous preparation', () async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     await controller.updateDraft(chat, 'outgoing prompt');
     host.discoveryStarted = Completer<void>();
     host.discoveryDelay = Completer<void>();
     final sending = controller.send(chat);
     try {
-      expect(chat.draft, isEmpty);
+      expect(chat.composer.observation.text, isEmpty);
       await host.discoveryStarted!.future;
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
       final savedDraft =
@@ -1154,26 +1360,26 @@ void main() {
       host.discoveryDelay!.complete();
       await sending;
     }
-    expect(chat.draft, 'immediate follow-up');
+    expect(chat.composer.observation.text, 'immediate follow-up');
     expect(
       host.calls.singleWhere((call) => call.$2 == 'prompt.submit').$3['text'],
       'outgoing prompt',
     );
-    expect(chat.messages.last['content'], 'outgoing prompt');
+    expect(chat.reading.messages.last['content'], 'outgoing prompt');
   });
 
   for (final freshDraft in ['', 'immediate follow-up']) {
     test(
       'preparation failure keeps unsent outbox with ${freshDraft.isEmpty ? 'empty' : 'fresh'} composer',
       () async {
-        final chat = await controller.createChat();
+        final chat = await controller.createChat(canDispatch: () => true);
         await controller.updateDraft(chat, 'outgoing prompt');
         host.discoveryStarted = Completer<void>();
         host.discoveryDelay = Completer<void>();
         host.discoveryFailure = StateError('Profile unavailable');
         final sending = controller.send(chat);
         try {
-          expect(chat.draft, isEmpty);
+          expect(chat.composer.observation.text, isEmpty);
           await host.discoveryStarted!.future;
           if (freshDraft.isNotEmpty) {
             await controller.updateDraft(chat, freshDraft);
@@ -1182,12 +1388,15 @@ void main() {
           host.discoveryDelay!.complete();
           await sending;
         }
-        expect(chat.draft, freshDraft);
-        expect(chat.draftSubmissionUncertain, isFalse);
-        expect(chat.queuedPrompts.single.text, 'outgoing prompt');
-        expect(chat.queuedPrompts.single.submissionUncertain, isFalse);
-        expect(chat.queuePaused, isTrue);
-        expect(chat.status, ProfileTurnStatus.failed);
+        expect(chat.composer.observation.text, freshDraft);
+        expect(chat.composer.observation.submissionUncertain, isFalse);
+        expect(chat.composer.observation.queue.single.text, 'outgoing prompt');
+        expect(
+          chat.composer.observation.queue.single.submissionUncertain,
+          isFalse,
+        );
+        expect(chat.composer.observation.paused, isTrue);
+        expect(chat.runtime.execution, ChatExecution.failed);
         expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
         final savedDraft =
             (await ComposerDraftStore(
@@ -1208,39 +1417,39 @@ void main() {
   test(
     'accepted prompt does not clear follow-up text typed while waiting',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'first prompt');
       host.promptSubmitStarted = Completer<void>();
       host.promptSubmitDelay = Completer<void>();
 
       final sending = controller.send(chat);
       await host.promptSubmitStarted!.future;
-      expect(chat.messages.last['content'], 'first prompt');
-      expect(chat.draft, isEmpty);
+      expect(chat.reading.messages.last['content'], 'first prompt');
+      expect(chat.composer.observation.text, isEmpty);
       await controller.updateDraft(chat, 'follow-up draft');
       host.promptSubmitDelay!.complete();
       await sending;
 
-      expect(chat.draft, 'follow-up draft');
+      expect(chat.composer.observation.text, 'follow-up draft');
     },
   );
 
   test(
     'acknowledgement keeps a new draft identical to the sent prompt',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'same text');
       host.promptSubmitStarted = Completer<void>();
       host.promptSubmitDelay = Completer<void>();
 
       final sending = controller.send(chat);
       await host.promptSubmitStarted!.future;
-      expect(chat.draft, isEmpty);
+      expect(chat.composer.observation.text, isEmpty);
       await controller.updateDraft(chat, 'same text');
       host.promptSubmitDelay!.complete();
       await sending;
 
-      expect(chat.draft, 'same text');
+      expect(chat.composer.observation.text, 'same text');
       expect(
         host.calls.where((call) => call.$2 == 'prompt.submit'),
         hasLength(1),
@@ -1251,7 +1460,7 @@ void main() {
   test(
     'lost acknowledgement keeps untouched sent content in the outbox',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'recover this prompt');
       host.promptSubmitStarted = Completer<void>();
       host.promptSubmitDelay = Completer<void>();
@@ -1259,15 +1468,21 @@ void main() {
 
       final sending = controller.send(chat);
       await host.promptSubmitStarted!.future;
-      expect(chat.draft, isEmpty);
+      expect(chat.composer.observation.text, isEmpty);
       host.promptSubmitDelay!.complete();
       await sending;
 
-      expect(chat.draft, isEmpty);
-      expect(chat.draftSubmissionUncertain, isFalse);
-      expect(chat.queuedPrompts.single.text, 'recover this prompt');
-      expect(chat.queuedPrompts.single.submissionUncertain, isTrue);
-      expect(chat.queuePaused, isTrue);
+      expect(chat.composer.observation.text, isEmpty);
+      expect(chat.composer.observation.submissionUncertain, isFalse);
+      expect(
+        chat.composer.observation.queue.single.text,
+        'recover this prompt',
+      );
+      expect(
+        chat.composer.observation.queue.single.submissionUncertain,
+        isTrue,
+      );
+      expect(chat.composer.observation.paused, isTrue);
       final saved = (await controller.savedDraft(chat.key))!;
       expect(saved.text, isEmpty);
       expect(saved.queuedPrompts.single.text, 'recover this prompt');
@@ -1280,7 +1495,7 @@ void main() {
   );
 
   test('lost acknowledgement preserves a fresh follow-up draft', () async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     await controller.updateDraft(chat, 'first prompt');
     host.promptSubmitStarted = Completer<void>();
     host.promptSubmitDelay = Completer<void>();
@@ -1288,12 +1503,12 @@ void main() {
 
     final sending = controller.send(chat);
     await host.promptSubmitStarted!.future;
-    expect(chat.draft, isEmpty);
+    expect(chat.composer.observation.text, isEmpty);
     await controller.updateDraft(chat, 'follow-up draft');
     host.promptSubmitDelay!.complete();
     await sending;
 
-    expect(chat.draft, 'follow-up draft');
+    expect(chat.composer.observation.text, 'follow-up draft');
     expect(
       host.calls.where((call) => call.$2 == 'prompt.submit'),
       hasLength(1),
@@ -1312,25 +1527,29 @@ void main() {
       controller.dispose();
       controller = ProfileWorkspaceController(
         connectionIdentity: 'original-settings',
-        connection: SavedConnection(
-          id: 'host',
-          label: 'Host',
-          host: 'localhost',
-          port: 1,
-          apiKey: '',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'host',
+            label: 'Host',
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
         ),
         preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: host.gateway,
         attachmentService: attachmentService,
       );
       await controller.initialize();
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'first prompt');
       host.promptSubmitStarted = Completer<void>();
       host.promptSubmitDelay = Completer<void>();
       final sending = controller.send(chat);
       await host.promptSubmitStarted!.future;
-      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.runtime.execution, ChatExecution.running);
 
       final source = File(
         '${sandbox.path}${Platform.pathSeparator}follow-up.txt',
@@ -1341,10 +1560,10 @@ void main() {
       host
         ..promptSubmitStarted = null
         ..promptSubmitDelay = null;
-      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.runtime.execution, ChatExecution.running);
       await controller.updateDraft(chat, 'queued follow-up');
       await controller.queuePrompt(chat, 'queued follow-up');
-      expect(chat.queuedPrompts, hasLength(1));
+      expect(chat.composer.observation.queue, hasLength(1));
       bool? lastCanAdd;
       void observeAttachmentControls() {
         lastCanAdd = controller.canAddAttachment(chat);
@@ -1359,7 +1578,7 @@ void main() {
       await attachmentService.preparationStarted.future;
       final settled = Completer<void>();
       void observeSettlement() {
-        if (chat.status == ProfileTurnStatus.completed &&
+        if (chat.runtime.execution == ChatExecution.completed &&
             !settled.isCompleted) {
           settled.complete();
         }
@@ -1372,9 +1591,12 @@ void main() {
       attachmentService.finishPreparation.complete();
       await adding;
 
-      final added = chat.attachments.single;
-      expect(chat.queuedPrompts, isEmpty);
-      expect(chat.queuePaused, isFalse);
+      final added = (await readComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+      ))!.attachments.single;
+      expect(chat.composer.observation.queue, isEmpty);
+      expect(chat.composer.observation.paused, isFalse);
       final submissions = host.calls
           .where((call) => call.$2 == 'prompt.submit')
           .toList();
@@ -1382,10 +1604,10 @@ void main() {
       expect(submissions.last.$3['text'], 'queued follow-up');
       expect(lastCanAdd, isTrue);
       controller.removeListener(observeAttachmentControls);
-      expect(controller.canRemoveAttachment(chat, added), isTrue);
+      expect(controller.canRemoveAttachment(chat, added.id), isTrue);
       expect(await File(added.cachedPath).exists(), isTrue);
-      await controller.removeAttachment(chat, added);
-      expect(chat.attachments, isEmpty);
+      await controller.removeAttachment(chat, added.id);
+      expect(chat.composer.observation.attachments, isEmpty);
       expect(await File(added.cachedPath).exists(), isFalse);
     } finally {
       if (await sandbox.exists()) await sandbox.delete(recursive: true);
@@ -1400,14 +1622,18 @@ void main() {
       controller.dispose();
       controller = ProfileWorkspaceController(
         connectionIdentity: 'original-settings',
-        connection: SavedConnection(
-          id: 'host',
-          label: 'Host',
-          host: 'localhost',
-          port: 1,
-          apiKey: '',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'host',
+            label: 'Host',
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
         ),
         preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: host.gateway,
         attachmentService: AttachmentDraftService(
           cacheDirectoryProvider: () async =>
@@ -1415,29 +1641,40 @@ void main() {
         ),
       );
       await controller.initialize();
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       final source = File(
         '${sandbox.path}${Platform.pathSeparator}original.txt',
       );
       await source.writeAsString('original file');
       await controller.addAttachment(chat, source.path, 'original.txt');
-      final captured = chat.attachments.single;
+      final captured = (await readComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+      ))!.attachments.single;
       host.promptSubmitStarted = Completer<void>();
       host.promptSubmitDelay = Completer<void>();
       final sending = controller.send(chat);
       await host.promptSubmitStarted!.future;
 
       expect(controller.canAddAttachment(chat), isTrue);
-      expect(controller.canRemoveAttachment(chat, captured), isFalse);
-      await controller.removeAttachment(chat, captured);
-      expect(chat.attachments, isEmpty);
-      expect(chat.queuedPrompts.single.attachments, contains(same(captured)));
+      expect(controller.canRemoveAttachment(chat, captured.id), isFalse);
+      await controller.removeAttachment(chat, captured.id);
+      expect(chat.composer.observation.attachments, isEmpty);
+      expect(
+        chat.composer.observation.queue.single.attachments.map(
+          (file) => file.id,
+        ),
+        contains(captured.id),
+      );
       expect(await File(captured.cachedPath).exists(), isTrue);
       final nextSource = File('${sandbox.path}/next.txt');
       await nextSource.writeAsString('Next composer file');
       await controller.addAttachment(chat, nextSource.path, 'next.txt');
-      final next = chat.attachments.single;
-      expect(controller.canRemoveAttachment(chat, next), isTrue);
+      final next = (await readComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+      ))!.attachments.single;
+      expect(controller.canRemoveAttachment(chat, next.id), isTrue);
       expect(
         host.calls.where((call) => call.$2 == 'prompt.submit'),
         hasLength(1),
@@ -1445,12 +1682,14 @@ void main() {
 
       host.promptSubmitDelay!.complete();
       await sending;
-      expect(chat.attachments, [same(next)]);
-      expect(chat.queuedPrompts, isEmpty);
+      expect(chat.composer.observation.attachments.map((file) => file.id), [
+        next.id,
+      ]);
+      expect(chat.composer.observation.queue, isEmpty);
       expect(await File(captured.cachedPath).exists(), isFalse);
       expect(await File(next.cachedPath).exists(), isTrue);
       expect(controller.canAddAttachment(chat), isTrue);
-      await controller.removeAttachment(chat, next);
+      await controller.removeAttachment(chat, next.id);
       expect(await File(next.cachedPath).exists(), isFalse);
     } finally {
       if (await sandbox.exists()) await sandbox.delete(recursive: true);
@@ -1465,14 +1704,18 @@ void main() {
       controller.dispose();
       controller = ProfileWorkspaceController(
         connectionIdentity: 'original-settings',
-        connection: SavedConnection(
-          id: 'host',
-          label: 'Host',
-          host: 'localhost',
-          port: 1,
-          apiKey: '',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'host',
+            label: 'Host',
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
         ),
         preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: host.gateway,
         attachmentService: AttachmentDraftService(
           cacheDirectoryProvider: () async =>
@@ -1490,14 +1733,17 @@ void main() {
       await existing.writeAsString('existing file');
       await controller.addAttachment(chat, existing.path, 'existing.txt');
       final callsBeforePickerReturn = host.calls.length;
-      chat.status = ProfileTurnStatus.reconnecting;
+      controller
+          .browserResource(chat.key.workspace.profileName)
+          .gateway
+          .onConnectionChanged!(false);
       final picked = File('${sandbox.path}${Platform.pathSeparator}picked.txt');
       await picked.writeAsString('picked after background reconnect');
 
       await controller.addAttachment(chat, picked.path, 'picked.txt');
 
-      expect(chat.draft, 'Keep this next message');
-      expect(chat.attachments.map((draft) => draft.name), [
+      expect(chat.composer.observation.text, 'Keep this next message');
+      expect(chat.composer.observation.attachments.map((draft) => draft.name), [
         'existing.txt',
         'picked.txt',
       ]);
@@ -1510,12 +1756,16 @@ void main() {
   });
 
   test('a stale question panel cannot answer a newer request', () async {
-    final chat = await controller.createChat();
-    final old = <String, dynamic>{
+    final chat = await controller.createChat(canDispatch: () => true);
+    emitChatEvent(controller, chat, 'clarify', {
       'request_id': 'old',
       'question': 'Old question',
-    };
-    chat.clarification = {'request_id': 'new', 'question': 'New question'};
+    });
+    final old = chat.runtime.questions!;
+    emitChatEvent(controller, chat, 'clarify', {
+      'request_id': 'new',
+      'question': 'New question',
+    });
     await expectLater(
       controller.clarify(chat, 'old answer', expectedRequest: old),
       throwsStateError,
@@ -1526,7 +1776,7 @@ void main() {
       ),
       isEmpty,
     );
-    expect(chat.clarification!['request_id'], 'new');
+    expect(chat.runtime.questions!.questions.first.requestId, 'new');
   });
 
   test(
@@ -1547,18 +1797,18 @@ void main() {
   );
 
   test('all reads and RPCs carry immutable canonical profile', () async {
-    await controller.createProject('Test', '/a');
-    final chat = await controller.createChat();
-    chat.draft = 'hello';
+    await controller.createProject('Test', '/a', canDispatch: () => true);
+    final chat = await controller.createChat(canDispatch: () => true);
+    chat.composer.editText('hello');
     await controller.send(chat);
-    chat.approvals.add({
+    emitChatEvent(controller, chat, 'approval', {
       'request_id': 'once',
       'choices': ['once', 'deny'],
     });
     await controller.approve(
       chat,
       'once',
-      requestId: chat.approval!['request_id'] as String,
+      requestId: chat.runtime.approval!.requestId,
     );
     await controller.stop(chat);
     expect(host.calls.every((c) => c.$3['profile'] == c.$1), isTrue);
@@ -1578,8 +1828,8 @@ void main() {
   test(
     'steer preserves ownership and reports accepted or rejected status',
     () async {
-      final chat = await controller.createChat();
-      chat.draft = 'hello';
+      final chat = await controller.createChat(canDispatch: () => true);
+      chat.composer.editText('hello');
       await controller.send(chat);
       expect(await controller.steer(chat, 'focus on the error'), isTrue);
       expect(host.calls.last.$2, 'session.steer');
@@ -1591,12 +1841,12 @@ void main() {
 
       host.steerResult = {'status': 'rejected'};
       expect(await controller.steer(chat, 'keep this draft'), isFalse);
-      expect(chat.runtimeId, 'a-runtime');
+      expect(chat.runtime.runtimeId, 'a-runtime');
     },
   );
 
   test('steer rejects slash text and a chat without a running turn', () async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     expect(await controller.steer(chat, '/status'), isFalse);
     expect(await controller.steer(chat, 'later'), isFalse);
     expect(host.calls.where((call) => call.$2 == 'session.steer'), isEmpty);
@@ -1609,7 +1859,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await controller.createChat();
+    await controller.createChat(canDispatch: () => true);
     host.event('a', 'approval', {
       'request_id': 'long',
       'command': List.generate(100, (i) => 'echo command line $i').join('\n'),
@@ -1639,27 +1889,27 @@ void main() {
   });
 
   test('approval accepts each server-supported scope', () async {
-    final chat = await controller.createChat();
-    chat.draft = 'hello';
+    final chat = await controller.createChat(canDispatch: () => true);
+    chat.composer.editText('hello');
     await controller.send(chat);
 
-    chat.approvals.add({
+    emitChatEvent(controller, chat, 'approval', {
       'request_id': 'session',
       'choices': ['session', 'deny'],
     });
     await controller.approve(
       chat,
       'session',
-      requestId: chat.approval!['request_id'] as String,
+      requestId: chat.runtime.approval!.requestId,
     );
-    chat.approvals.add({
+    emitChatEvent(controller, chat, 'approval', {
       'request_id': 'always',
       'choices': ['always', 'deny'],
     });
     await controller.approve(
       chat,
       'always',
-      requestId: chat.approval!['request_id'] as String,
+      requestId: chat.runtime.approval!.requestId,
     );
 
     expect(
@@ -1671,8 +1921,8 @@ void main() {
   });
 
   test('approval sends request ID and keeps a replacement request', () async {
-    final chat = await controller.createChat();
-    chat.approvals.add({
+    final chat = await controller.createChat(canDispatch: () => true);
+    emitChatEvent(controller, chat, 'approval', {
       'request_id': 'old-request',
       'choices': ['once', 'deny'],
       'command': 'old command',
@@ -1681,19 +1931,19 @@ void main() {
     final response = controller.approve(
       chat,
       'once',
-      requestId: chat.approval!['request_id'] as String,
+      requestId: chat.runtime.approval!.requestId,
     );
     await Future<void>.delayed(Duration.zero);
-    expect(chat.approvalResponding, isTrue);
-    chat.approvals.add({
+    expect(chat.runtime.approvalResponding, isTrue);
+    emitChatEvent(controller, chat, 'approval', {
       'request_id': 'new-request',
       'choices': ['session', 'deny'],
       'command': 'new command',
     });
     host.approvalDelay!.complete();
     await response;
-    expect(chat.approval?['request_id'], 'new-request');
-    expect(chat.approvalResponding, isFalse);
+    expect(chat.runtime.approval?.requestId, 'new-request');
+    expect(chat.runtime.approvalResponding, isFalse);
     expect(
       host.calls.lastWhere((c) => c.$2 == 'approval.respond').$3['request_id'],
       'old-request',
@@ -1701,8 +1951,8 @@ void main() {
   });
 
   test('failed approval retains the request for retry', () async {
-    final chat = await controller.createChat();
-    chat.approvals.add({
+    final chat = await controller.createChat(canDispatch: () => true);
+    emitChatEvent(controller, chat, 'approval', {
       'request_id': 'failed-request',
       'choices': ['always', 'deny'],
     });
@@ -1711,17 +1961,17 @@ void main() {
       controller.approve(
         chat,
         'always',
-        requestId: chat.approval!['request_id'] as String,
+        requestId: chat.runtime.approval!.requestId,
       ),
       throwsException,
     );
-    expect(chat.approval?['request_id'], 'failed-request');
-    expect(chat.approvalResponding, isFalse);
+    expect(chat.runtime.approval?.requestId, 'failed-request');
+    expect(chat.runtime.approvalResponding, isFalse);
   });
 
   test('approval rejects a scope the server did not offer', () async {
-    final chat = await controller.createChat();
-    chat.approvals.add({
+    final chat = await controller.createChat(canDispatch: () => true);
+    emitChatEvent(controller, chat, 'approval', {
       'request_id': 'once-only',
       'choices': ['once', 'deny'],
     });
@@ -1729,7 +1979,7 @@ void main() {
       controller.approve(
         chat,
         'always',
-        requestId: chat.approval!['request_id'] as String,
+        requestId: chat.runtime.approval!.requestId,
       ),
       throwsArgumentError,
     );
@@ -1740,12 +1990,12 @@ void main() {
     'completion refresh keeps the entered project bound to refreshed rows',
     () async {
       await controller.selectProject(controller.current!.projects.single);
-      final chat = await controller.createChat();
-      chat.draft = 'Project work';
+      final chat = await controller.createChat(canDispatch: () => true);
+      chat.composer.editText('Project work');
       await controller.send(chat);
       host.event('a', 'message.complete');
       await Future<void>.delayed(Duration.zero);
-      expect(chat.status, ProfileTurnStatus.completed);
+      expect(chat.runtime.execution, ChatExecution.completed);
       expect(
         controller.current!.selectedProject,
         same(controller.current!.projects.single),
@@ -1758,7 +2008,7 @@ void main() {
   test(
     'unsolicited message starts settle as separate turns without clearing composer state',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       final attachment = AttachmentDraft(
         id: 'kept-attachment',
         cachedPath: '/tmp/kept.txt',
@@ -1767,32 +2017,46 @@ void main() {
         mediaType: 'text/plain',
         kind: AttachmentDraftKind.genericFile,
       );
-      chat
-        ..messages = [
-          {'id': 1, 'role': 'user', 'content': 'Keep this turn'},
-        ]
-        ..draft = 'Keep this draft'
-        ..attachments.add(attachment)
-        ..queuedPrompts.add(QueuedPromptDraft(text: 'Keep this queued prompt'))
-        ..queuePaused = true
-        ..model = 'known-model'
-        ..provider = 'known-provider'
-        ..reasoningEffort = 'high'
-        ..status = ProfileTurnStatus.completed;
+      chat.reading.installSavedHistory([
+        {'id': 1, 'role': 'user', 'content': 'Keep this turn'},
+      ]);
+      emitChatEvent(controller, chat, 'session.info', {
+        'model': 'known-model',
+        'provider': 'known-provider',
+        'reasoning_effort': 'high',
+      });
+      emitChatEvent(controller, chat, 'message.start');
+      emitChatEvent(controller, chat, 'session.info', {
+        'open_requests': [],
+        'running': false,
+      });
+      await restoreComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+        text: 'Keep this draft',
+        appendAttachments: [attachment],
+        appendQueued: [QueuedPromptDraft(text: 'Keep this queued prompt')],
+        paused: true,
+      );
 
       host.event('a', 'message.start');
-      expect(chat.status, ProfileTurnStatus.running);
-      expect(chat.draft, 'Keep this draft');
-      expect(chat.attachments, [same(attachment)]);
-      expect(chat.queuedPrompts.single.text, 'Keep this queued prompt');
+      expect(chat.runtime.execution, ChatExecution.running);
+      expect(chat.composer.observation.text, 'Keep this draft');
+      expect(chat.composer.observation.attachments.map((file) => file.id), [
+        attachment.id,
+      ]);
+      expect(
+        chat.composer.observation.queue.single.text,
+        'Keep this queued prompt',
+      );
       expect(chat.model, 'known-model');
       expect(chat.provider, 'known-provider');
       expect(chat.reasoningEffort, 'high');
-      expect(chat.messages.single['content'], 'Keep this turn');
+      expect(chat.reading.messages.single['content'], 'Keep this turn');
 
       host.event('a', 'message.delta', {'text': 'First'});
       host.event('a', 'message.start');
-      expect(chat.streaming, 'First');
+      expect(chat.reading.streaming, 'First');
       host.event('a', 'message.delta', {'text': ' loop reply'});
       host.historyMessages = [
         {'id': 1, 'role': 'user', 'content': 'Keep this turn'},
@@ -1800,11 +2064,11 @@ void main() {
       ];
       host.event('a', 'message.complete');
       await Future<void>.delayed(Duration.zero);
-      expect(chat.status, ProfileTurnStatus.completed);
-      expect(chat.streaming, isEmpty);
+      expect(chat.runtime.execution, ChatExecution.completed);
+      expect(chat.reading.streaming, isEmpty);
 
       host.event('a', 'message.start');
-      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.runtime.execution, ChatExecution.running);
       host.event('a', 'message.delta', {'text': 'Second loop reply'});
       host.historyMessages = [
         {'id': 1, 'role': 'user', 'content': 'Keep this turn'},
@@ -1814,26 +2078,31 @@ void main() {
       host.event('a', 'message.complete');
       await Future<void>.delayed(Duration.zero);
 
-      expect(chat.status, ProfileTurnStatus.completed);
-      expect(chat.streaming, isEmpty);
-      expect(chat.historyError, isNull);
+      expect(chat.runtime.execution, ChatExecution.completed);
+      expect(chat.reading.streaming, isEmpty);
+      expect(chat.reading.historyError, isNull);
       expect(
-        chat.messages
+        chat.reading.messages
             .where((message) => message['role'] == 'assistant')
             .map((message) => message['content']),
         ['First loop reply', 'Second loop reply'],
       );
-      expect(chat.draft, 'Keep this draft');
-      expect(chat.attachments, [same(attachment)]);
-      expect(chat.queuedPrompts.single.text, 'Keep this queued prompt');
-      expect(chat.queuePaused, isTrue);
+      expect(chat.composer.observation.text, 'Keep this draft');
+      expect(chat.composer.observation.attachments.map((file) => file.id), [
+        attachment.id,
+      ]);
+      expect(
+        chat.composer.observation.queue.single.text,
+        'Keep this queued prompt',
+      );
+      expect(chat.composer.observation.paused, isTrue);
     },
   );
 
   testWidgets('send is available while completed history is still loading', (
     tester,
   ) async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     await controller.updateDraft(chat, 'Next question');
     host.event('a', 'message.start');
     final history = host.delays['a'] = Completer<void>();
@@ -1854,23 +2123,23 @@ void main() {
         host.calls.where((call) => call.$2 == 'prompt.submit'),
         hasLength(1),
       );
-      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.runtime.execution, ChatExecution.running);
     } finally {
       history.complete();
       await tester.pump();
     }
     // The older history response must not remove the new prompt or finish it.
-    expect(chat.status, ProfileTurnStatus.running);
-    expect(chat.messages.last['content'], 'Next question');
+    expect(chat.runtime.execution, ChatExecution.running);
+    expect(chat.reading.messages.last['content'], 'Next question');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
   test('an older idle snapshot cannot finish a new submission', () async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     host.running = false;
     host.notificationActiveSessions = [
       {
-        'id': chat.runtimeId,
+        'id': chat.runtime.runtimeId,
         'session_key': chat.key.sessionId,
         'status': 'idle',
       },
@@ -1882,14 +2151,14 @@ void main() {
     await controller.send(chat);
     host.activeListDelay!.complete();
     await Future<void>.delayed(Duration.zero);
-    expect(chat.status, ProfileTurnStatus.running);
+    expect(chat.runtime.execution, ChatExecution.running);
     expect(host.calls.where((call) => call.$2 == 'session.resume'), isEmpty);
   });
 
   test(
     'completion before acknowledgement cannot submit the next draft twice',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'First question');
       host.promptSubmitStarted = Completer<void>();
       host.promptSubmitDelay = Completer<void>();
@@ -1903,15 +2172,17 @@ void main() {
           host.calls.where((call) => call.$2 == 'prompt.submit'),
           hasLength(1),
         );
-        expect(chat.draft, isEmpty);
-        expect(chat.queuedPrompts.map((prompt) => prompt.text), [
+        expect(chat.composer.observation.text, isEmpty);
+        expect(chat.composer.observation.queue.map((prompt) => prompt.text), [
           'First question',
           'Next question',
         ]);
-        expect(chat.queuedPrompts.map((prompt) => prompt.submissionUncertain), [
-          true,
-          false,
-        ]);
+        expect(
+          chat.composer.observation.queue.map(
+            (prompt) => prompt.submissionUncertain,
+          ),
+          [true, false],
+        );
         final saved = (await controller.savedDraft(chat.key))!;
         expect(saved.text, isEmpty);
         expect(saved.queuedPrompts.map((prompt) => prompt.text), [
@@ -1920,14 +2191,14 @@ void main() {
         ]);
         // Another tap on the empty composer adds nothing.
         await controller.send(chat);
-        expect(chat.queuedPrompts, hasLength(2));
+        expect(chat.composer.observation.queue, hasLength(2));
       } finally {
         host.promptSubmitStarted = null;
         host.promptSubmitDelay!.complete();
         await sending;
       }
       await Future<void>.delayed(Duration.zero);
-      expect(chat.queuedPrompts, isEmpty);
+      expect(chat.composer.observation.queue, isEmpty);
       expect(
         host.calls
             .where((call) => call.$2 == 'prompt.submit')
@@ -1940,26 +2211,28 @@ void main() {
   test(
     'queued follow-up waits for acknowledgement after early completion',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'First question');
       host.promptSubmitStarted = Completer<void>();
       host.promptSubmitDelay = Completer<void>();
       final sending = controller.send(chat);
       await host.promptSubmitStarted!.future;
-      chat.queuedPrompts.add(QueuedPromptDraft(text: 'Queued question'));
-      await controller.updateDraft(chat, '');
+      await controller.updateDraft(chat, 'Queued question');
+      await controller.send(chat);
       host.event('a', 'message.complete', {'text': 'First answer'});
       await Future<void>.delayed(Duration.zero);
       try {
-        expect(chat.queuePaused, isFalse);
-        expect(chat.queuedPrompts.map((prompt) => prompt.text), [
+        expect(chat.composer.observation.paused, isFalse);
+        expect(chat.composer.observation.queue.map((prompt) => prompt.text), [
           'First question',
           'Queued question',
         ]);
-        expect(chat.queuedPrompts.map((prompt) => prompt.submissionUncertain), [
-          true,
-          false,
-        ]);
+        expect(
+          chat.composer.observation.queue.map(
+            (prompt) => prompt.submissionUncertain,
+          ),
+          [true, false],
+        );
         expect(
           host.calls.where((call) => call.$2 == 'prompt.submit'),
           hasLength(1),
@@ -1970,8 +2243,8 @@ void main() {
         await sending;
       }
       await Future<void>.delayed(Duration.zero);
-      expect(chat.queuePaused, isFalse);
-      expect(chat.queuedPrompts, isEmpty);
+      expect(chat.composer.observation.paused, isFalse);
+      expect(chat.composer.observation.queue, isEmpty);
       expect(
         host.calls
             .where((call) => call.$2 == 'prompt.submit')
@@ -1984,8 +2257,12 @@ void main() {
   test(
     'unsolicited message start survives an older completed history refresh',
     () async {
-      final chat = await controller.createChat();
-      chat.status = ProfileTurnStatus.completed;
+      final chat = await controller.createChat(canDispatch: () => true);
+      emitChatEvent(controller, chat, 'message.start');
+      emitChatEvent(controller, chat, 'session.info', {
+        'open_requests': [],
+        'running': false,
+      });
       host.delays['a'] = Completer<void>();
       host.historyMessages = [
         {'id': 1, 'role': 'assistant', 'content': 'First reply'},
@@ -1994,20 +2271,20 @@ void main() {
       host.event('a', 'message.start');
       host.event('a', 'message.delta', {'text': 'First reply'});
       host.event('a', 'message.complete');
-      expect(chat.status, ProfileTurnStatus.completed);
+      expect(chat.runtime.execution, ChatExecution.completed);
 
       host.event('a', 'message.start');
       host.event('a', 'reasoning.delta', {'text': 'Second reasoning'});
       host.event('a', 'message.delta', {'text': 'Second reply'});
-      expect(chat.status, ProfileTurnStatus.running);
-      expect(chat.streaming, 'Second reply');
-      expect(chat.reasoning, 'Second reasoning');
+      expect(chat.runtime.execution, ChatExecution.running);
+      expect(chat.reading.streaming, 'Second reply');
+      expect(chat.runtime.reasoning, 'Second reasoning');
 
       host.delays['a']!.complete();
       await Future<void>.delayed(Duration.zero);
-      expect(chat.status, ProfileTurnStatus.running);
-      expect(chat.streaming, 'Second reply');
-      expect(chat.reasoning, 'Second reasoning');
+      expect(chat.runtime.execution, ChatExecution.running);
+      expect(chat.reading.streaming, 'Second reply');
+      expect(chat.runtime.reasoning, 'Second reasoning');
 
       host.historyMessages = [
         {'id': 1, 'role': 'assistant', 'content': 'First reply'},
@@ -2015,10 +2292,10 @@ void main() {
       ];
       host.event('a', 'message.complete');
       await Future<void>.delayed(Duration.zero);
-      expect(chat.status, ProfileTurnStatus.completed);
-      expect(chat.streaming, isEmpty);
-      expect(chat.historyError, isNull);
-      expect(chat.messages.map((message) => message['content']), [
+      expect(chat.runtime.execution, ChatExecution.completed);
+      expect(chat.reading.streaming, isEmpty);
+      expect(chat.reading.historyError, isNull);
+      expect(chat.reading.messages.map((message) => message['content']), [
         'First reply',
         'Second reply',
       ]);
@@ -2026,28 +2303,31 @@ void main() {
   );
 
   test('A continues while B is visible; duplicate IDs stay separate', () async {
-    final a = await controller.createChat();
-    a.draft = 'A work';
+    final a = await controller.createChat(canDispatch: () => true);
+    a.composer.editText('A work');
     await controller.send(a);
     controller.setRouteVisibility(controller, true);
     await controller.switchProfile('b');
-    final b = await controller.createChat();
-    b.draft = 'B draft';
+    final b = await controller.createChat(canDispatch: () => true);
+    b.composer.editText('B draft');
     host.event('a', 'message.delta', {'text': 'A result'});
-    expect(a.streaming, 'A result');
-    expect(b.streaming, isEmpty);
+    expect(a.reading.streaming, 'A result');
+    expect(b.reading.streaming, isEmpty);
     expect(a.key, isNot(b.key));
     expect(host.closed, isEmpty);
     expect(host.calls.where((c) => c.$2 == 'session.interrupt'), isEmpty);
     host.event('a', 'message.complete');
     await Future<void>.delayed(Duration.zero);
-    expect(a.status, ProfileTurnStatus.completed);
+    expect(a.runtime.execution, ChatExecution.completed);
     expect(controller.current!.chat, same(b));
-    expect(b.draft, 'B draft');
+    expect(b.composer.observation.text, 'B draft');
     expect(notifications, [a.key]);
     await controller.openSession(a.key);
     expect(controller.current!.scope.profileName, 'a');
-    expect(controller.current!.chat!.messages.single['content'], 'a completed');
+    expect(
+      controller.current!.chat!.reading.messages.single['content'],
+      'a completed',
+    );
   });
 
   test('forwards the server push identity with live attention', () async {
@@ -2056,14 +2336,15 @@ void main() {
     controller.dispose();
     controller = ProfileWorkspaceController(
       connectionIdentity: 'original-settings',
-      connection: connection,
+      access: ConnectionAccess(connection: connection, dashboardOAuth: null),
       preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
       onAttention: (notification) async => eventIds.add(notification.eventId),
     );
     await controller.initialize();
-    final chat = await controller.createChat();
-    chat.draft = 'work';
+    final chat = await controller.createChat(canDispatch: () => true);
+    chat.composer.editText('work');
     await controller.send(chat);
     host.event('a', 'message.complete', {'mobile_push_event_id': 'delivery-1'});
     await Future<void>.delayed(Duration.zero);
@@ -2078,7 +2359,12 @@ void main() {
     host.delays['b']!.complete();
     expect(await b, isFalse);
     expect(controller.current!.scope.profileName, 'a');
-    expect(ProfileSelectionStore(preferences).read('original-settings'), 'a');
+    expect(
+      ProfileSelectionCodec.canonicalName(
+        preferences.get(ProfileSelectionCodec.storageKey('original-settings')),
+      ),
+      'a',
+    );
   });
 
   test(
@@ -2092,7 +2378,7 @@ void main() {
         'session_limit': 5000,
         'profile': 'a',
       });
-      final draft = await controller.createChat();
+      final draft = await controller.createChat(canDispatch: () => true);
       expect(draft.projectId, project['id']);
       expect(
         host.calls.lastWhere((call) => call.$2 == 'session.create').$3['cwd'],
@@ -2125,8 +2411,8 @@ void main() {
   });
 
   test('stock error completion is not reported as success', () async {
-    final chat = await controller.createChat();
-    chat.draft = 'test';
+    final chat = await controller.createChat(canDispatch: () => true);
+    chat.composer.editText('test');
     await controller.send(chat);
     host.event('a', 'message.complete', {
       'status': 'error',
@@ -2134,13 +2420,13 @@ void main() {
       'error': 'Provider unavailable',
     });
     await Future<void>.delayed(Duration.zero);
-    expect(chat.status, ProfileTurnStatus.failed);
-    expect(chat.error, contains('Provider unavailable'));
+    expect(chat.runtime.execution, ChatExecution.failed);
+    expect(chat.runtime.error, contains('Provider unavailable'));
   });
 
   test('final text survives a failed history refresh', () async {
-    final chat = await controller.createChat();
-    chat.draft = 'test';
+    final chat = await controller.createChat(canDispatch: () => true);
+    chat.composer.editText('test');
     await controller.send(chat);
     host.failures.add('a');
     host.event('a', 'message.complete', {
@@ -2148,9 +2434,9 @@ void main() {
       'text': 'The final response',
     });
     await Future<void>.delayed(Duration.zero);
-    expect(chat.messages.last['content'], 'The final response');
-    expect(chat.status, ProfileTurnStatus.completed);
-    expect(chat.error, contains('History refresh failed'));
+    expect(chat.reading.messages.last['content'], 'The final response');
+    expect(chat.runtime.execution, ChatExecution.completed);
+    expect(chat.runtime.error, contains('History refresh failed'));
   });
 
   test('failed switch retains committed profile and data', () async {
@@ -2164,7 +2450,10 @@ void main() {
     await controller.switchProfile('b');
     host.profiles = ['a'];
     final before = host.calls.length;
-    await expectLater(controller.createChat(), throwsStateError);
+    await expectLater(
+      controller.createChat(canDispatch: () => true),
+      throwsStateError,
+    );
     expect(host.calls.length, before);
     expect(controller.current!.scope.profileName, 'b');
   });
@@ -2198,8 +2487,8 @@ void main() {
   );
 
   test('reconnect uses original durable owner without resubmitting', () async {
-    final a = await controller.createChat();
-    a.draft = 'once';
+    final a = await controller.createChat(canDispatch: () => true);
+    a.composer.editText('once');
     await controller.send(a);
     await controller.switchProfile('b');
     await controller.reconnect(a.key.workspace);
@@ -2210,18 +2499,18 @@ void main() {
       'profile': 'a',
       'omit_messages': true,
     });
-    expect(a.status, ProfileTurnStatus.running);
+    expect(a.runtime.execution, ChatExecution.running);
   });
 
   test(
     'reconnect restores stock inflight assistant text and failure',
     () async {
-      final chat = await controller.createChat();
-      chat.draft = 'once';
+      final chat = await controller.createChat(canDispatch: () => true);
+      chat.composer.editText('once');
       await controller.send(chat);
       host.inflight = {'assistant': 'Partial response', 'streaming': true};
       await controller.reconnect(chat.key.workspace);
-      expect(chat.streaming, 'Partial response');
+      expect(chat.reading.streaming, 'Partial response');
       host.running = false;
       host.inflight = {
         'assistant': 'Partial response',
@@ -2229,8 +2518,8 @@ void main() {
         'error': 'Provider stopped',
       };
       await controller.reconnect(chat.key.workspace);
-      expect(chat.status, ProfileTurnStatus.failed);
-      expect(chat.error, 'Provider stopped');
+      expect(chat.runtime.execution, ChatExecution.failed);
+      expect(chat.runtime.error, 'Provider stopped');
       expect(host.calls.where((c) => c.$2 == 'prompt.submit').length, 1);
     },
   );
@@ -2238,17 +2527,17 @@ void main() {
   test(
     'partial response survives resume until server history is available',
     () async {
-      final chat = await controller.createChat();
-      chat.status = ProfileTurnStatus.running;
-      chat.streaming = 'An answer in progress';
+      final chat = await controller.createChat(canDispatch: () => true);
+      emitChatEvent(controller, chat, 'message.start');
+      chat.reading.updateStreaming('An answer in progress');
       host.running = false;
       host.failures.add('a');
       await controller.reconnect(chat.key.workspace);
-      expect(chat.streaming, 'An answer in progress');
+      expect(chat.reading.streaming, 'An answer in progress');
       host.failures.clear();
       await controller.reconnect(chat.key.workspace);
-      expect(chat.streaming, isEmpty);
-      expect(chat.messages.single['content'], 'a completed');
+      expect(chat.reading.streaming, isEmpty);
+      expect(chat.reading.messages.single['content'], 'a completed');
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
     },
   );
@@ -2258,15 +2547,19 @@ void main() {
   ) async {
     controller.dispose();
     controller = ProfileWorkspaceController(
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Host',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Host',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       connectionIdentity: 'original-settings',
       preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     host.discoveryFailure = TimeoutException(
@@ -2313,7 +2606,7 @@ void main() {
   testWidgets('idle chat recovers after a transient reconnect failure', (
     tester,
   ) async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     host.running = false;
     host.connectFailures = 1;
     host.gateways['a']!.onConnectionChanged!(false);
@@ -2325,15 +2618,93 @@ void main() {
 
     expect(host.calls.where((c) => c.$2 == 'session.resume'), hasLength(1));
     expect(controller.error, isNull);
-    expect(chat.status, ProfileTurnStatus.idle);
+    expect(chat.runtime.execution, ChatExecution.idle);
     expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
   });
+
+  for (final missingFact in ['access', 'live observation']) {
+    test('automatic queue drain requires confirmed $missingFact', () async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      final profile = chat.key.workspace.profileName;
+      expect(
+        controller.connectionStatus.access,
+        ConnectionAvailability.available,
+      );
+      expect(controller.connectionStatus.liveAvailable(profile), isTrue);
+      if (missingFact == 'access') {
+        controller.connectionStatus.access = ConnectionAvailability.unchecked;
+      } else {
+        controller.connectionStatus.forgetLive(profile);
+      }
+
+      await controller.queuePrompt(chat, 'Keep until connected');
+
+      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      expect(
+        chat.composer.observation.queue.single.text,
+        'Keep until connected',
+      );
+      expect(
+        chat.composer.observation.queue.single.submissionUncertain,
+        isFalse,
+      );
+      expect(chat.composer.observation.paused, isFalse);
+      expect(
+        (await controller.savedDraft(chat.key))!.queuedPrompts.single.text,
+        'Keep until connected',
+      );
+
+      controller.connectionStatus.accessAvailable();
+      controller.connectionStatus.liveChanged(profile, true);
+      await controller.beginQueuedPromptEdit(
+        chat,
+        chat.composer.observation.queue.single.id,
+      );
+      controller.updateQueuedPromptEdit(chat, 'Keep until connected');
+      await controller.saveQueuedPromptEdit(chat);
+
+      expect(
+        host.calls.where((call) => call.$2 == 'prompt.submit'),
+        hasLength(1),
+      );
+      expect(chat.composer.observation.queue, isEmpty);
+    });
+  }
+
+  test(
+    'missing session reconnect durably pauses retained queued work',
+    () async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      emitChatEvent(controller, chat, 'message.start');
+      await controller.queuePrompt(chat, 'Keep missing session work');
+      expect(chat.composer.observation.paused, isFalse);
+      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      host.expireUnsubmittedResume = true;
+
+      await controller.reconnect(chat.key.workspace);
+
+      expect(
+        host.calls.where((call) => call.$2 == 'session.resume'),
+        hasLength(1),
+      );
+      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      expect(chat.runtime.execution, ChatExecution.failed);
+      expect(chat.composer.observation.paused, isTrue);
+      expect(
+        chat.composer.observation.queue.single.text,
+        'Keep missing session work',
+      );
+      final saved = (await controller.savedDraft(chat.key))!;
+      expect(saved.queuePaused, isTrue);
+      expect(saved.queuedPrompts.single.text, 'Keep missing session work');
+    },
+  );
 
   testWidgets('successful automatic recovery clears the reconnect banner', (
     tester,
   ) async {
-    final chat = await controller.createChat();
-    chat.draft = 'once';
+    final chat = await controller.createChat(canDispatch: () => true);
+    chat.composer.editText('once');
     await tester.runAsync(() => controller.send(chat));
     host.connectFailures = 1;
     host.gateways['a']!.onConnectionChanged!(false);
@@ -2342,7 +2713,7 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pump();
 
-    expect(chat.status, ProfileTurnStatus.running);
+    expect(chat.runtime.execution, ChatExecution.running);
     expect(controller.error, isNull);
     expect(host.calls.where((c) => c.$2 == 'prompt.submit'), hasLength(1));
   });
@@ -2350,7 +2721,7 @@ void main() {
   testWidgets('idle chat retries a transient session resume failure', (
     tester,
   ) async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     host.running = false;
     host.resumeFailures = 1;
     await controller.reconnect(chat.key.workspace);
@@ -2359,13 +2730,13 @@ void main() {
     await tester.pump();
     expect(host.calls.where((c) => c.$2 == 'session.resume'), hasLength(2));
     expect(controller.error, isNull);
-    expect(controller.current!.retry, isNull);
+    expect(controller.current!.reconnectScheduled, isFalse);
   });
 
   testWidgets('app focus restarts recovery after the short retry burst', (
     tester,
   ) async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     await controller.updateDraft(chat, 'Keep this draft');
     host.running = false;
     host.connectFailures = 5;
@@ -2381,11 +2752,11 @@ void main() {
     }
     expect(host.connectCalls - before, 5);
     expect(controller.connectionStatus.liveAvailable('a'), isFalse);
-    expect(chat.draft, 'Keep this draft');
+    expect(chat.composer.observation.text, 'Keep this draft');
     await controller.send(chat);
-    expect(chat.draft, isEmpty);
-    expect(chat.queuedPrompts.single.text, 'Keep this draft');
-    expect(chat.queuedPrompts.single.submissionUncertain, isFalse);
+    expect(chat.composer.observation.text, isEmpty);
+    expect(chat.composer.observation.queue.single.text, 'Keep this draft');
+    expect(chat.composer.observation.queue.single.submissionUncertain, isFalse);
     final saved = (await controller.savedDraft(chat.key))!;
     expect(saved.text, isEmpty);
     expect(saved.queuedPrompts.single.text, 'Keep this draft');
@@ -2401,18 +2772,20 @@ void main() {
     await tester.pump();
     for (
       var attempt = 0;
-      attempt < 20 && (chat.sendingPrompt || chat.queuedPrompts.isNotEmpty);
+      attempt < 20 &&
+          (chat.composer.observation.sending ||
+              chat.composer.observation.queue.isNotEmpty);
       attempt++
     ) {
       await tester.runAsync(() => Future<void>.delayed(Duration.zero));
       await tester.pump(const Duration(milliseconds: 10));
     }
     expect(controller.recovering, isFalse);
-    expect(chat.sendingPrompt, isFalse);
-    expect(chat.queuedPrompts, isEmpty);
+    expect(chat.composer.observation.sending, isFalse);
+    expect(chat.composer.observation.queue, isEmpty);
     expect(find.text('Live updates interrupted'), findsNothing);
-    expect(chat.draft, isEmpty);
-    expect(chat.status, ProfileTurnStatus.running);
+    expect(chat.composer.observation.text, isEmpty);
+    expect(chat.runtime.execution, ChatExecution.running);
     expect(host.calls.where((c) => c.$2 == 'prompt.submit'), hasLength(1));
     host.event('a', 'message.complete', {'text': 'Accepted queued question'});
     await tester.pumpAndSettle();
@@ -2485,7 +2858,7 @@ void main() {
       throwsA(isA<TimeoutException>()),
     );
     expect(controller.connectionStatus.liveAvailable('b'), isFalse);
-    expect(background.retry, isNotNull);
+    expect(background.reconnectScheduled, isTrue);
 
     await controller.resumeConnection();
 
@@ -2493,7 +2866,7 @@ void main() {
     expect(controller.connectionStatus.description, 'Connected');
     expect(controller.current, same(owner));
     expect(background.loaded, isFalse);
-    expect(background.retry, isNull);
+    expect(background.reconnectScheduled, isFalse);
   });
 
   test(
@@ -2560,21 +2933,21 @@ void main() {
       final calls = host.connectCalls;
       await tester.pump(const Duration(minutes: 2));
       expect(host.connectCalls, calls);
-      expect(controller.current!.retry, isNull);
+      expect(controller.current!.reconnectScheduled, isFalse);
       expect(controller.recovering, isTrue);
       expect(controller.current!.reconnectAttempt, 5);
       host.connectFailures = 0;
       await tester.runAsync(controller.resumeConnection);
       await tester.pump();
       expect(controller.connectionStatus.description, 'Connected');
-      expect(controller.current!.retry, isNull);
+      expect(controller.current!.reconnectScheduled, isFalse);
     },
   );
 
   testWidgets('exhausted session recovery cannot show a green connection', (
     tester,
   ) async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     await controller.updateDraft(chat, 'Keep this draft');
     host.running = false;
     host.resumeFailures = 5;
@@ -2587,7 +2960,7 @@ void main() {
     await tester.runAsync(() => controller.current!.gateway.connect());
     expect(controller.connectionStatus.liveAvailable('a'), isTrue);
     expect(controller.recovering, isTrue);
-    expect(controller.current!.retry, isNull);
+    expect(controller.current!.reconnectScheduled, isFalse);
     expect(
       controller.connectionStatus.phase,
       ServerConnectionPhase.disconnected,
@@ -2596,7 +2969,7 @@ void main() {
     await tester.runAsync(controller.connectionStatus.retry!);
     expect(controller.recovering, isFalse);
     expect(controller.connectionStatus.phase, ServerConnectionPhase.connected);
-    expect(chat.draft, 'Keep this draft');
+    expect(chat.composer.observation.text, 'Keep this draft');
     expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
   });
 
@@ -2609,7 +2982,7 @@ void main() {
     final calls = host.connectCalls;
     await tester.pump(const Duration(minutes: 2));
     expect(host.connectCalls, calls);
-    expect(controller.current!.retry, isNull);
+    expect(controller.current!.reconnectScheduled, isFalse);
     expect(controller.current!.reconnectError, contains('Sign-in'));
     expect(controller.recovering, isFalse);
   });
@@ -2617,7 +2990,7 @@ void main() {
   testWidgets('manual reconnect cancels a pending automatic retry', (
     tester,
   ) async {
-    await controller.createChat();
+    await controller.createChat(canDispatch: () => true);
     host.running = false;
     host.gateways['a']!.onConnectionChanged!(false);
     await tester.runAsync(
@@ -2626,21 +2999,25 @@ void main() {
     final before = host.connectCalls;
     await tester.pump(const Duration(minutes: 1));
     expect(host.connectCalls, before);
-    expect(controller.current!.retry, isNull);
+    expect(controller.current!.reconnectScheduled, isFalse);
   });
 
   test(
     'refresh resumes the selected chat and keeps unrelated errors',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       host.running = false;
       await controller.refresh();
       expect(host.calls.where((c) => c.$2 == 'session.resume'), hasLength(1));
-      expect(chat.status, ProfileTurnStatus.idle);
+      expect(chat.runtime.execution, ChatExecution.idle);
 
-      controller.error = 'An unrelated operation failed';
+      host.failures.add('b');
+      await controller.switchProfile('b');
+      final unrelatedError = controller.error;
+      expect(unrelatedError, isNotNull);
+      host.failures.remove('b');
       await controller.reconnect(chat.key.workspace);
-      expect(controller.error, 'An unrelated operation failed');
+      expect(controller.error, unrelatedError);
     },
   );
 
@@ -2663,17 +3040,17 @@ void main() {
   });
 
   test('background approval stays with its owning profile', () async {
-    final a = await controller.createChat();
-    a.draft = 'test';
+    final a = await controller.createChat(canDispatch: () => true);
+    a.composer.editText('test');
     await controller.send(a);
     await controller.switchProfile('b');
     host.event('a', 'approval', {'request_id': 'dummy', 'command': 'dummy'});
-    expect(a.status, ProfileTurnStatus.attention);
+    expect(a.runtime.needsInput, isTrue);
     expect(notifications, [a.key]);
     await controller.approve(
       a,
       'deny',
-      requestId: a.approval!['request_id'] as String,
+      requestId: a.runtime.approval!.requestId,
     );
     expect(host.calls.lastWhere((c) => c.$2 == 'approval.respond').$3, {
       'session_id': 'a-runtime',
@@ -2686,8 +3063,8 @@ void main() {
   test(
     'persistent targets include connection profile and durable ID only',
     () async {
-      final a = await controller.createChat();
-      a.draft = 'secret draft';
+      final a = await controller.createChat(canDispatch: () => true);
+      a.composer.editText('secret draft');
       await controller.send(a);
       final key = preferences.getKeys().singleWhere(
         (k) => k.startsWith('profile_pending'),
@@ -2700,21 +3077,25 @@ void main() {
   );
 
   test('unavailable pending owner survives unrelated journal writes', () async {
-    final chat = await controller.createChat();
-    chat.draft = 'A turn';
+    final chat = await controller.createChat(canDispatch: () => true);
+    chat.composer.editText('A turn');
     await controller.send(chat);
     final connection = controller.connection;
     controller.dispose();
     host.profiles = ['b'];
     controller = ProfileWorkspaceController(
       connectionIdentity: 'original-settings',
-      connection: connection,
+      access: ConnectionAccess(connection: connection, dashboardOAuth: null),
       preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
-    final b = await controller.createChat();
-    b.draft = 'B turn';
+    expect(controller.initialized, isFalse);
+    expect(controller.error, contains('saved profile is unavailable'));
+    expect(await controller.switchProfile('b'), isTrue);
+    final b = await controller.createChat(canDispatch: () => true);
+    b.composer.editText('B turn');
     await controller.send(b);
     final journalKey = preferences.getKeys().singleWhere(
       (k) => k.startsWith('profile_pending'),
@@ -2725,18 +3106,257 @@ void main() {
   });
 
   test(
+    'an older failed discovery cannot overwrite a newer initialized selection',
+    () async {
+      final connection = controller.connection;
+      controller.dispose();
+      host.defaultDiscoveryDelay = Completer<void>();
+      host.defaultDiscoveryStarted = Completer<void>();
+      host.defaultDiscoveryFailure = StateError('Older discovery failed');
+      controller = ProfileWorkspaceController(
+        connectionIdentity: 'original-settings',
+        access: ConnectionAccess(connection: connection, dashboardOAuth: null),
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: host.gateway,
+      );
+      final older = controller.initialize();
+      await host.defaultDiscoveryStarted!.future;
+      expect(await controller.switchProfile('b'), isTrue);
+      expect(controller.current!.scope.profileName, 'b');
+      expect(controller.initialized, isTrue);
+      await preferences.reload();
+      expect(
+        ProfileSelectionCodec.canonicalName(
+          preferences.get(
+            ProfileSelectionCodec.storageKey('original-settings'),
+          ),
+        ),
+        'b',
+      );
+      expect(controller.error, isNull);
+      expect(controller.recovering, isFalse);
+      final observations = <(String?, bool)>[];
+      controller.addListener(() {
+        observations.add((controller.error, controller.recovering));
+      });
+      host.defaultDiscoveryDelay!.complete();
+      await older;
+      expect(controller.current!.scope.profileName, 'b');
+      expect(controller.initialized, isTrue);
+      expect(
+        preferences.get(ProfileSelectionCodec.storageKey('original-settings')),
+        'b',
+      );
+      expect(controller.error, isNull);
+      expect(controller.recovering, isFalse);
+      expect(observations, everyElement((null, false)));
+    },
+  );
+
+  test(
+    'unavailable selected profile retains pending owners during notification recovery before repair',
+    () async {
+      final first = await controller.createChat(canDispatch: () => true);
+      first.composer.editText('A turn');
+      await controller.send(first);
+      final journalKey = preferences.getKeys().singleWhere(
+        (key) => key.startsWith('profile_pending'),
+      );
+      final before = preferences.getStringList(journalKey)!;
+      expect(before.any((value) => value.contains('"profile":"a"')), isTrue);
+      final connection = controller.connection;
+      controller.dispose();
+      host.profiles = ['b'];
+      controller = ProfileWorkspaceController(
+        connectionIdentity: 'original-settings',
+        access: ConnectionAccess(connection: connection, dashboardOAuth: null),
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: host.gateway,
+      );
+      await controller.initialize();
+      expect(controller.initialized, isFalse);
+      expect(controller.error, contains('saved profile is unavailable'));
+      expect(preferences.getStringList(journalKey), before);
+      host.calls.clear();
+      final target = ProfileSessionKey(
+        WorkspaceScope(
+          connectionId: connection.id,
+          connectionIdentity: 'original-settings',
+          profileName: 'b',
+        ),
+        'same',
+      );
+      final observed = await controller.loadNotificationApproval(target);
+      expect(observed, isNotNull);
+      expect(observed!.key, target);
+      expect(observed.runtime.blocksTurnAdmission, isTrue);
+      expect(
+        host.calls.where((call) => call.$2 == 'session.resume').single.$1,
+        'b',
+      );
+      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      final after = preferences.getStringList(journalKey)!;
+      expect(after.any((value) => value.contains('"profile":"b"')), isTrue);
+      expect(
+        after.any((value) => value.contains('"profile":"a"')),
+        isTrue,
+        reason:
+            'an unresolved earlier owner survives an unrelated admitted read',
+      );
+    },
+  );
+
+  test(
+    'notification recovery before initialization retains other pending owners',
+    () async {
+      final first = await controller.createChat(canDispatch: () => true);
+      first.composer.editText('A turn');
+      await controller.send(first);
+      final journalKey = preferences.getKeys().singleWhere(
+        (key) => key.startsWith('profile_pending'),
+      );
+      final before = preferences.getStringList(journalKey)!;
+      expect(before.any((value) => value.contains('"profile":"a"')), isTrue);
+      final connection = controller.connection;
+      controller.dispose();
+      host.profiles = ['b'];
+      controller = ProfileWorkspaceController(
+        connectionIdentity: 'original-settings',
+        access: ConnectionAccess(connection: connection, dashboardOAuth: null),
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: host.gateway,
+      );
+      expect(controller.initialized, isFalse);
+      expect(controller.discovery, isNull);
+      host.calls.clear();
+      final target = ProfileSessionKey(
+        WorkspaceScope(
+          connectionId: connection.id,
+          connectionIdentity: 'original-settings',
+          profileName: 'b',
+        ),
+        'same',
+      );
+      final observed = await controller.loadNotificationApproval(target);
+      expect(observed, isNotNull);
+      expect(observed!.key, target);
+      expect(observed.runtime.blocksTurnAdmission, isTrue);
+      expect(
+        host.calls.where((call) => call.$2 == 'session.resume').single.$1,
+        'b',
+      );
+      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      final after = preferences.getStringList(journalKey)!;
+      expect(after.any((value) => value.contains('"profile":"b"')), isTrue);
+      expect(after.any((value) => value.contains('"profile":"a"')), isTrue);
+      expect(controller.initialized, isFalse);
+      expect(controller.discovery, isNull);
+    },
+  );
+
+  for (final invalid in <Object>[
+    7,
+    <String>['not-json'],
+    <String>['{"session":"same"}'],
+  ]) {
+    test(
+      'notification recovery refuses to overwrite unreadable pending owners: $invalid',
+      () async {
+        final connection = controller.connection;
+        controller.dispose();
+        const journalKey = 'profile_pending_v2_original-settings';
+        if (invalid is int) {
+          await preferences.setInt(journalKey, invalid);
+        } else {
+          await preferences.setStringList(journalKey, invalid as List<String>);
+        }
+        controller = ProfileWorkspaceController(
+          connectionIdentity: 'original-settings',
+          access: ConnectionAccess(
+            connection: connection,
+            dashboardOAuth: null,
+          ),
+          preferences: preferences,
+          appPreferences: appPreferences,
+          gatewayFactory: host.gateway,
+        );
+        host.calls.clear();
+        final target = ProfileSessionKey(
+          WorkspaceScope(
+            connectionId: connection.id,
+            connectionIdentity: 'original-settings',
+            profileName: 'b',
+          ),
+          'same',
+        );
+        await expectLater(
+          controller.loadNotificationApproval(target),
+          throwsFormatException,
+        );
+        expect(
+          host.calls.where((call) => call.$2 == 'session.resume').single.$1,
+          'b',
+        );
+        expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+        expect(preferences.get(journalKey), invalid);
+        expect(controller.error, contains('Saved pending chat owners'));
+        expect(controller.initialized, isFalse);
+      },
+    );
+  }
+
+  test('settled pending owners are not seeded again by later writes', () async {
+    final first = await controller.createChat(canDispatch: () => true);
+    first.composer.editText('A turn');
+    await controller.send(first);
+    const journalKey = 'profile_pending_v2_original-settings';
+    expect(
+      preferences
+          .getStringList(journalKey)!
+          .any((value) => value.contains('"profile":"a"')),
+      isTrue,
+    );
+    final connection = controller.connection;
+    controller.dispose();
+    host.running = false;
+    controller = ProfileWorkspaceController(
+      connectionIdentity: 'original-settings',
+      access: ConnectionAccess(connection: connection, dashboardOAuth: null),
+      preferences: preferences,
+      appPreferences: appPreferences,
+      gatewayFactory: host.gateway,
+    );
+    await controller.initialize();
+    expect(controller.initialized, isTrue);
+    expect(preferences.getStringList(journalKey), isEmpty);
+    expect(await controller.switchProfile('b'), isTrue);
+    final second = await controller.createChat(canDispatch: () => true);
+    second.composer.editText('B turn');
+    await controller.send(second);
+    final saved = preferences.getStringList(journalKey)!;
+    expect(saved.any((value) => value.contains('"profile":"b"')), isTrue);
+    expect(saved.any((value) => value.contains('"profile":"a"')), isFalse);
+  });
+
+  test(
     'stock batched clarification routes the unanswered question ID',
     () async {
-      final chat = await controller.createChat();
-      chat.clarification = {
+      final chat = await controller.createChat(canDispatch: () => true);
+      emitChatEvent(controller, chat, 'clarify', {
         'request_id': 'request',
         'questions': [
           {'qid': 'q0', 'question': 'First question'},
           {'qid': 'q1', 'question': 'What is the recovery marker?'},
         ],
         'answers': {'q0': 'already answered'},
-      };
-      expect(chat.pendingQuestion!['question'], 'What is the recovery marker?');
+      });
+      expect(
+        chat.runtime.pendingQuestion!.question,
+        'What is the recovery marker?',
+      );
       await controller.clarify(chat, 'PROCESS_RECOVERY_QA');
       expect(host.calls.last.$3['question_id'], 'q1');
       expect(host.calls.last.$3['request_id'], 'request');
@@ -2746,30 +3366,30 @@ void main() {
   test(
     'batch answers keep remaining questions attached to their owner',
     () async {
-      final chat = await controller.createChat();
-      chat.status = ProfileTurnStatus.attention;
-      chat.clarification = {
+      final chat = await controller.createChat(canDispatch: () => true);
+      emitChatEvent(controller, chat, 'message.start');
+      emitChatEvent(controller, chat, 'clarify', {
         'request_id': 'batch',
         'questions': [
           {'qid': 'q0', 'question': 'First'},
           {'qid': 'q1', 'question': 'Second'},
         ],
-      };
+      });
       await controller.switchProfile('b');
       host.clarifyResult = {
         'status': 'ok',
         'remaining': ['q1'],
       };
       await controller.clarify(chat, 'one');
-      expect(chat.pendingQuestion!['question'], 'Second');
-      expect(chat.status, ProfileTurnStatus.attention);
+      expect(chat.runtime.pendingQuestion!.question, 'Second');
+      expect(chat.runtime.needsInput, isTrue);
       expect(host.calls.last.$1, 'a');
       expect(host.calls.last.$3['question_id'], 'q0');
       host.clarifyResult = {'status': 'ok', 'remaining': []};
       await controller.clarify(chat, 'two');
       expect(host.calls.last.$3['question_id'], 'q1');
-      expect(chat.clarification, isNull);
-      expect(chat.status, ProfileTurnStatus.running);
+      expect(chat.runtime.questions, isNull);
+      expect(chat.runtime.execution, ChatExecution.running);
       expect(controller.current!.scope.profileName, 'b');
     },
   );
@@ -2777,41 +3397,45 @@ void main() {
   test(
     'single clarification sends its request ID without a batch ID',
     () async {
-      final chat = await controller.createChat();
-      chat.status = ProfileTurnStatus.attention;
-      chat.clarification = {
+      final chat = await controller.createChat(canDispatch: () => true);
+      emitChatEvent(controller, chat, 'message.start');
+      emitChatEvent(controller, chat, 'clarify', {
         'request_id': 'single',
         'question': 'Which marker?',
-      };
-      expect(chat.pendingQuestion!['question'], 'Which marker?');
+      });
+      expect(chat.runtime.pendingQuestion!.question, 'Which marker?');
       await controller.clarify(chat, 'marker');
       expect(host.calls.last.$2, 'request.answer');
       expect(host.calls.last.$3['id'], 'single');
       expect(host.calls.last.$3['result'], {'answer': 'marker'});
       expect(host.calls.last.$3.containsKey('question_id'), isFalse);
-      expect(chat.clarification, isNull);
+      expect(chat.runtime.questions, isNull);
     },
   );
 
   test(
     'expired input refreshes its owner without retrying the answer',
     () async {
-      final chat = await controller.createChat();
-      chat.status = ProfileTurnStatus.attention;
-      chat.clarification = {'request_id': 'expired', 'question': 'Marker?'};
+      final chat = await controller.createChat(canDispatch: () => true);
+      emitChatEvent(controller, chat, 'message.start');
+      emitChatEvent(controller, chat, 'clarify', {
+        'request_id': 'expired',
+        'question': 'Marker?',
+      });
       host.running = false;
       host.clarifyResult = {'status': 'expired'};
       await controller.clarify(chat, 'marker');
-      expect(chat.clarification, isNull);
-      expect(chat.status, ProfileTurnStatus.completed);
-      expect(chat.error, contains('expired'));
+      expect(chat.runtime.questions, isNull);
+      expect(chat.runtime.execution, ChatExecution.completed);
+      expect(chat.runtime.error, contains('expired'));
       expect(host.calls.where((c) => c.$2 == 'request.answer'), hasLength(1));
       expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
     },
   );
 
   test('server cancellation removes only the matching clarification', () async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
+    host.event('a', 'message.start');
     host.event('a', 'clarify', {
       'request_id': 'current-request',
       'questions': [
@@ -2823,14 +3447,14 @@ void main() {
       'method': 'clarify',
       'reason': 'timeout',
     });
-    expect(chat.pendingQuestion!['question'], 'Which room?');
+    expect(chat.runtime.pendingQuestion!.question, 'Which room?');
     host.event('a', 'request.cancel', {
       'id': 'current-request',
       'method': 'clarify',
       'reason': 'timeout',
     });
-    expect(chat.pendingQuestion, isNull);
-    expect(chat.status, ProfileTurnStatus.running);
+    expect(chat.runtime.pendingQuestion, isNull);
+    expect(chat.runtime.execution, ChatExecution.running);
     expect(
       host.calls.where(
         (call) => {

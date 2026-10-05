@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 // Offline profile fixture. Native draft storage is excluded: preferences use
 // an isolated in-memory store. Rendering, controller events and composer input
 // run through the real workspace. No gateway performs network requests.
@@ -109,6 +111,7 @@ class WorkspaceStreamingReplay extends StatefulWidget {
 class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     with WidgetsBindingObserver {
   ProfileWorkspaceController? controller;
+  AppPreferences? _appPreferences;
   ProfileChat? _chat;
   _ReplayGateway? _fixture;
   ProfileGateway? _gateway;
@@ -128,8 +131,8 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     'running': _running,
     'keyboard': mounted && View.of(context).viewInsets.bottom > 0,
     'composerFocused': _composer?.widget.focusNode.hasFocus ?? false,
-    'draft': _chat?.composerText,
-    'sourceCharacters': _chat?.streaming.length ?? 0,
+    'draft': _chat?.composer.observation.displayedText,
+    'sourceCharacters': _chat?.reading.streaming.length ?? 0,
     'nativeDraftStorage': false,
   };
 
@@ -272,7 +275,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     final segmentsMatch = workspaceReplayMatchesSegments(
       source,
       elements.map((element) => element.widget),
-      streaming: _chat!.busy,
+      streaming: _chat!.runtime.blocksTurnAdmission,
     );
     var editableMarkers = 0;
     var paragraphMarkers = 0;
@@ -296,7 +299,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
       'bodyCount': bodies.length,
       'expectedSegments': splitMarkdownCodeBlocks(
         source,
-        streaming: _chat!.busy,
+        streaming: _chat!.runtime.blocksTurnAdmission,
       ).length,
       'mountedProse': elements
           .where((element) => element.widget is BlockReusingMarkdownBody)
@@ -362,7 +365,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
 
   void _emit(String type, Map<String, dynamic> data) {
     _gateway!.onEvent!(
-      StreamEvent(type: type, sessionId: _chat!.runtimeId, data: data),
+      StreamEvent(type: type, sessionId: _chat!.runtime.runtimeId, data: data),
     );
   }
 
@@ -385,26 +388,50 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
       old?.dispose();
       // This offline profile benchmark intentionally excludes native draft
       // storage and must never read or mutate the installed app's preferences.
+      if (!mounted) throw StateError('Replay unmounted');
+      // Journals remain sample-local: an old controller may finish a retained
+      // reading-copy write after disposal. The device preference owner itself
+      // is shared across the entire replay root and never replaces its store.
       // ignore: invalid_use_of_visible_for_testing_member
       SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      if (!mounted) throw StateError('Replay unmounted');
+      _appPreferences ??= AppPreferences(preferences);
       final fixture = _fixture = _ReplayGateway();
       final next = ProfileWorkspaceController(
-        connection: SavedConnection(
-          id: 'qa-render-replay',
-          label: 'Offline replay',
-          host: 'localhost',
-          port: 1,
-          apiKey: '',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'qa-render-replay',
+            label: 'Offline replay',
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
         ),
         connectionIdentity: 'qa-render-replay',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: _appPreferences!,
         gatewayFactory: fixture.gateway,
       );
       controller = next;
       await next.initialize();
-      _chat = await next.createChat();
+      if (!mounted) throw StateError('Replay unmounted');
+      final resource = next.current;
+      final preparation = _abort;
+      _chat = await next.createChat(
+        canDispatch: () =>
+            mounted &&
+            !_canceled &&
+            _preparing &&
+            identical(_abort, preparation) &&
+            identical(controller, next) &&
+            identical(next.current, resource),
+      );
+      if (!mounted) throw StateError('Replay unmounted');
       _gateway = next.current!.gateway;
       await next.refreshHistory(_chat!);
+      if (!mounted) throw StateError('Replay unmounted');
       setState(() {});
       _emit('message.start', {});
       _emit('message.delta', {'text': streamingReplayInitial()});
@@ -477,8 +504,8 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
           chat == null ||
           !owner.initialized ||
           !identical(owner.current?.chat, chat) ||
-          !chat.busy ||
-          chat.streaming != streamingReplayInitial() ||
+          !chat.runtime.blocksTurnAdmission ||
+          chat.reading.streaming != streamingReplayInitial() ||
           !_rendered(streamingReplayInitial())) {
         throw StateError(
           'Prepared source or selected chat changed; prepare again',
@@ -594,7 +621,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
           )
           .toList();
       await _awaitRendered(finalSource);
-      final exactSource = _chat!.messages.any(
+      final exactSource = _chat!.reading.messages.any(
         (row) => row['role'] == 'assistant' && row['content'] == finalSource,
       );
       return {
@@ -610,11 +637,11 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
         'sourceCodeUnits': finalSource.length,
         'source': finalSource,
         'initialSource': streamingReplayInitial(),
-        'draft': _chat!.composerText,
+        'draft': _chat!.composer.observation.displayedText,
         'exactFinalSource': exactSource,
         'finalRendererReady': _rendered(finalSource),
         'rendererMetrics': renderedReadiness(finalSource),
-        'completed': !_chat!.busy,
+        'completed': !_chat!.runtime.blocksTurnAdmission,
         'geometryStable': geometryStable,
         'focusHeld': focusHeld,
         'keyboardStartPx': keyboardStart,
@@ -627,7 +654,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
         'nativeDraftStorage': false,
         'valid':
             exactSource &&
-            !_chat!.busy &&
+            !_chat!.runtime.blocksTurnAdmission &&
             _rendered(finalSource) &&
             geometryStable &&
             focusHeld &&
@@ -660,6 +687,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     WidgetsBinding.instance.removeObserver(this);
     WidgetsBinding.instance.removeTimingsCallback(_timings);
     controller?.dispose();
+    _appPreferences?.dispose();
     super.dispose();
   }
 }

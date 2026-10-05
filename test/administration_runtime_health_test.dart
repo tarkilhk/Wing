@@ -27,8 +27,13 @@ void main() {
               {'name': 'default', 'is_default': true},
             ],
           },
-          _ when path == 'ops/$action' => {'name': action, 'pid': 7},
+          _ when path == 'ops/$action' => {
+            'ok': true,
+            'name': action,
+            'pid': 7,
+          },
           _ when path == 'actions/$action/status' => {
+            'name': path.split('/')[1],
             'pid': 7,
             'running': running,
             'exit_code': running ? null : 0,
@@ -136,9 +141,10 @@ void main() {
               {'name': 'default', 'is_default': true},
             ],
           },
-          'ops/doctor' => {'name': 'doctor', 'pid': 7},
+          'ops/doctor' => {'ok': true, 'name': 'doctor', 'pid': 7},
           'actions/doctor/status' when failRead => throw Exception('Offline'),
           'actions/doctor/status' => {
+            'name': path.split('/')[1],
             'pid': 7,
             'running': false,
             'exit_code': exitCode,
@@ -198,7 +204,8 @@ void main() {
         expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(1));
         expect(
           fixture.requests.where((r) => r.$2 == 'actions/doctor/status'),
-          hasLength(exitCode == null ? 3 : 1),
+          // Result routes borrow the same tracker without polling on mount.
+          hasLength(1),
         );
         expect(
           fixture.requests.every((r) => !r.$3.containsKey('profile')),
@@ -209,6 +216,10 @@ void main() {
         failRead = true;
         await tester.tap(find.text('Doctor'));
         await tester.pumpAndSettle();
+        if (exitCode == null) {
+          await tester.tap(find.byTooltip('Refresh result'));
+          await tester.pumpAndSettle();
+        }
         expect(find.text(outcome), findsOneWidget);
         expect(find.text('Fixture diagnostic output'), findsOneWidget);
         await tester.pageBack();

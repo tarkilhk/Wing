@@ -6,18 +6,16 @@ import 'profile_transcript_disclosure.dart';
 
 import '../models/gateway_process.dart';
 import '../models/session_control.dart';
-import '../services/profile_workspace_controller.dart';
+import '../services/profile_supervision_session.dart';
 
 /// Server-owned recurring work and background processes for one captured chat.
 class ProfileBackgroundWorkPanel extends StatefulWidget {
-  final ProfileWorkspaceController controller;
-  final ProfileChat chat;
+  final ProfileSupervisionSession session;
   final bool initiallyExpanded;
 
   const ProfileBackgroundWorkPanel({
     super.key,
-    required this.controller,
-    required this.chat,
+    required this.session,
     this.initiallyExpanded = false,
   });
 
@@ -29,11 +27,6 @@ class ProfileBackgroundWorkPanel extends StatefulWidget {
 class _ProfileBackgroundWorkPanelState
     extends State<ProfileBackgroundWorkPanel> {
   bool _requested = false;
-  bool _actionBusy = false;
-  final Set<String> _stopping = {};
-  String? _actionError;
-  final Map<String, String> _processErrors = {};
-
   @override
   void initState() {
     super.initState();
@@ -43,11 +36,8 @@ class _ProfileBackgroundWorkPanelState
   @override
   void didUpdateWidget(ProfileBackgroundWorkPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.chat, widget.chat)) {
+    if (!identical(oldWidget.session, widget.session)) {
       _requested = false;
-      _actionError = null;
-      _processErrors.clear();
-      _stopping.clear();
       _requestRefresh();
     }
   }
@@ -60,54 +50,15 @@ class _ProfileBackgroundWorkPanelState
     });
   }
 
-  Future<void> _refresh() async {
-    setState(() {
-      _actionError = null;
-      _processErrors.clear();
-    });
-    await Future.wait([_refreshSessionControl(), _refreshProcesses()]);
-  }
-
-  Future<void> _refreshSessionControl() async {
-    try {
-      await widget.controller.refreshSessionControl(widget.chat);
-    } catch (_) {
-      // The controller publishes the error for this chat.
-    }
-  }
-
-  Future<void> _refreshProcesses() async {
-    try {
-      await widget.controller.refreshProcesses(widget.chat);
-    } catch (_) {
-      // The controller publishes the error for this chat.
-    }
-  }
-
+  Future<void> _refresh() => widget.session.refreshWork();
+  Future<void> _refreshSessionControl() => widget.session.refreshControl();
+  Future<void> _refreshProcesses() => widget.session.refreshProcesses();
   Future<void> _control(SessionControlAction action) async {
-    if (_actionBusy) return;
-    setState(() {
-      _actionBusy = true;
-      _actionError = null;
-    });
-    try {
-      final accepted = await widget.controller.controlSession(
-        widget.chat,
-        action,
-      );
-      if (!accepted && mounted && widget.chat.sessionControlError == null) {
-        setState(() => _actionError = 'The server did not accept the action.');
-      }
-    } catch (_) {
-      if (mounted && widget.chat.sessionControlError == null) {
-        setState(() => _actionError = 'The action could not be completed.');
-      }
-    } finally {
-      if (mounted) setState(() => _actionBusy = false);
-    }
+    await widget.session.control(action);
   }
 
   Future<void> _confirmClearHeartbeat() async {
+    final session = widget.session;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -127,47 +78,22 @@ class _ProfileBackgroundWorkPanelState
         ],
       ),
     );
-    if (confirmed == true && mounted) {
-      await _control(SessionControlAction.heartbeatClear);
+    if (confirmed == true && mounted && identical(widget.session, session)) {
+      await session.control(SessionControlAction.heartbeatClear);
     }
   }
 
-  Future<void> _stopProcess(GatewayProcessActivity process) async {
-    if (_stopping.contains(process.id)) return;
-    setState(() {
-      _stopping.add(process.id);
-      _processErrors.remove(process.id);
-    });
-    try {
-      final accepted = await widget.controller.stopProcess(
-        widget.chat,
-        process.id,
-      );
-      if (!accepted && mounted && widget.chat.processesError == null) {
-        setState(() {
-          _processErrors[process.id] =
-              'The server did not confirm that this process stopped.';
-        });
-      }
-    } catch (_) {
-      if (mounted && widget.chat.processesError == null) {
-        setState(() {
-          _processErrors[process.id] = 'This process could not be stopped.';
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _stopping.remove(process.id));
-    }
-  }
+  Future<void> _stopProcess(GatewayProcessActivity process) =>
+      widget.session.stopProcess(process.id);
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.controller,
+    listenable: widget.session,
     builder: (context, _) {
-      final chat = widget.chat;
+      final chat = widget.session.state;
       final snapshot = chat.sessionControl;
       final working =
-          _actionBusy ||
+          chat.actionBusy ||
           chat.sessionControlLoading ||
           chat.sessionControlWorking;
       final refreshing = chat.sessionControlLoading || chat.processesLoading;
@@ -177,15 +103,21 @@ class _ProfileBackgroundWorkPanelState
         maintainState: false,
         icon: Icons.work_history_outlined,
         label: 'Background work',
-        summary: Text(_summary(snapshot, chat.processes)),
+        summary: Text(chat.backgroundSummary),
         loading: refreshing,
         childrenPadding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
         children: [
           if (snapshot?.loop case final loop?)
-            _LoopSection(loop: loop, disabled: working, onAction: _control),
+            _LoopSection(
+              loop: loop,
+              actions: chat.loopActions,
+              disabled: working,
+              onAction: _control,
+            ),
           if (snapshot?.heartbeat case final heartbeat?)
             _HeartbeatSection(
               heartbeat: heartbeat,
+              actions: chat.heartbeatActions,
               disabled: working,
               onAction: _control,
               onClear: _confirmClearHeartbeat,
@@ -200,7 +132,7 @@ class _ProfileBackgroundWorkPanelState
               message: error,
               onRetry: working ? null : _refreshSessionControl,
             ),
-          if (_actionError case final error?)
+          if (chat.actionError case final error?)
             Align(alignment: Alignment.centerLeft, child: StudioError(error)),
           if (chat.sessionControlNotice case final notice?)
             Align(alignment: Alignment.centerLeft, child: Text(notice)),
@@ -225,18 +157,15 @@ class _ProfileBackgroundWorkPanelState
           for (final process in chat.processes)
             _ProcessTile(
               process: process,
-              stopping: _stopping.contains(process.id),
-              error: _processErrors[process.id],
+              stopping: chat.stopping.contains(process.id),
+              error: chat.processErrors[process.id],
               onStop: () => _stopProcess(process),
-              onDismiss: () {
-                setState(() => _processErrors.remove(process.id));
-                widget.controller.dismissProcess(chat, process.id);
-              },
+              onDismiss: () => widget.session.dismissProcess(process.id),
             ),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
-              onPressed: refreshing || _actionBusy ? null : _refresh,
+              onPressed: refreshing || chat.actionBusy ? null : _refresh,
               icon: const Icon(Icons.refresh, size: 18),
               label: const Text('Refresh'),
             ),
@@ -245,29 +174,18 @@ class _ProfileBackgroundWorkPanelState
       );
     },
   );
-
-  static String _summary(
-    SessionControlSnapshot? snapshot,
-    List<GatewayProcessActivity> processes,
-  ) {
-    final recurring = [
-      snapshot?.loop,
-      snapshot?.heartbeat,
-    ].where((item) => item != null).length;
-    final running = processes.where((process) => process.isRunning).length;
-    if (recurring == 0 && processes.isEmpty) return 'Server state';
-    return '$recurring recurring · $running running';
-  }
 }
 
 class _LoopSection extends StatelessWidget {
   final SessionLoop loop;
+  final List<SessionControlAction> actions;
   final bool disabled;
   final Future<void> Function(SessionControlAction) onAction;
 
   const _LoopSection({
     required this.loop,
     required this.disabled,
+    required this.actions,
     required this.onAction,
   });
 
@@ -289,7 +207,7 @@ class _LoopSection extends StatelessWidget {
         'Stopped: $reason',
     ],
     actions: [
-      if (loop.status == SessionLoopStatus.active)
+      if (actions.contains(SessionControlAction.loopPause))
         TextButton.icon(
           onPressed: disabled
               ? null
@@ -297,7 +215,7 @@ class _LoopSection extends StatelessWidget {
           icon: const Icon(Icons.pause, size: 18),
           label: const Text('Pause loop'),
         ),
-      if (loop.status == SessionLoopStatus.paused)
+      if (actions.contains(SessionControlAction.loopResume))
         TextButton.icon(
           onPressed: disabled
               ? null
@@ -305,7 +223,7 @@ class _LoopSection extends StatelessWidget {
           icon: const Icon(Icons.play_arrow, size: 18),
           label: const Text('Resume loop'),
         ),
-      if (loop.status != SessionLoopStatus.done)
+      if (actions.contains(SessionControlAction.loopStop))
         TextButton.icon(
           onPressed: disabled
               ? null
@@ -319,6 +237,7 @@ class _LoopSection extends StatelessWidget {
 
 class _HeartbeatSection extends StatelessWidget {
   final SessionHeartbeat heartbeat;
+  final List<SessionControlAction> actions;
   final bool disabled;
   final Future<void> Function(SessionControlAction) onAction;
   final Future<void> Function() onClear;
@@ -326,6 +245,7 @@ class _HeartbeatSection extends StatelessWidget {
   const _HeartbeatSection({
     required this.heartbeat,
     required this.disabled,
+    required this.actions,
     required this.onAction,
     required this.onClear,
   });
@@ -340,7 +260,7 @@ class _HeartbeatSection extends StatelessWidget {
       '${heartbeat.fireCount} runs',
     ],
     actions: [
-      if (heartbeat.status == SessionHeartbeatStatus.active)
+      if (actions.contains(SessionControlAction.heartbeatPause))
         TextButton.icon(
           onPressed: disabled
               ? null
@@ -348,7 +268,7 @@ class _HeartbeatSection extends StatelessWidget {
           icon: const Icon(Icons.pause, size: 18),
           label: const Text('Pause heartbeat'),
         ),
-      if (heartbeat.status == SessionHeartbeatStatus.paused)
+      if (actions.contains(SessionControlAction.heartbeatResume))
         TextButton.icon(
           onPressed: disabled
               ? null

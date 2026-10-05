@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/chat_output.dart';
 import 'package:wing/core/widgets/deliverable_attachment.dart';
-import 'package:wing/core/widgets/markdown_code_block.dart';
+import 'package:wing/core/widgets/source_code_block.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 
 Widget _host(
@@ -65,9 +65,9 @@ void main() {
       await tester.pumpMarkdownWidget(
         _host(MarkdownMessageContent(data: fixture.$1, streaming: true)),
       );
-      expect(find.byType(MarkdownCodeBlock), findsOneWidget);
+      expect(find.byType(SourceCodeBlock), findsOneWidget);
       expect(
-        tester.widget<MarkdownCodeBlock>(find.byType(MarkdownCodeBlock)).code,
+        tester.widget<SourceCodeBlock>(find.byType(SourceCodeBlock)).code,
         fixture.$2,
       );
       await tester.tap(find.byTooltip('Copy code'));
@@ -96,7 +96,7 @@ void main() {
     );
     expect(find.byTooltip('Open diagram'), findsOneWidget);
     expect(
-      tester.widget<MarkdownCodeBlock>(find.byType(MarkdownCodeBlock)).code,
+      tester.widget<SourceCodeBlock>(find.byType(SourceCodeBlock)).code,
       'graph TD\nA --> B\n',
     );
     await tester.pumpMarkdownWidget(
@@ -214,7 +214,7 @@ void main() {
     expect(tester.getSize(prose).height, greaterThan(normalHeight));
     final codeText = tester.widget<SelectableText>(
       find.descendant(
-        of: find.byType(MarkdownCodeBlock),
+        of: find.byType(SourceCodeBlock),
         matching: find.byType(SelectableText),
       ),
     );
@@ -278,7 +278,7 @@ void main() {
     expect(opens, 1);
     await tester.pumpMarkdownWidget(_host(content('Replacement paragraph.')));
     expect(find.byType(DeliverableAttachment), findsNothing);
-    expect(find.byType(MarkdownCodeBlock), findsNothing);
+    expect(find.byType(SourceCodeBlock), findsNothing);
     expect(find.text('Tail', findRichText: true), findsNothing);
     expect(
       find.text('Replacement paragraph.', findRichText: true),
@@ -287,7 +287,7 @@ void main() {
     await tester.pumpMarkdownWidget(_host(content('')));
     expect(find.byType(SelectableText), findsNothing);
     expect(find.byType(DeliverableAttachment), findsNothing);
-    expect(find.byType(MarkdownCodeBlock), findsNothing);
+    expect(find.byType(SourceCodeBlock), findsNothing);
     await tester.pumpMarkdownWidget(const SizedBox());
     expect(tester.takeException(), isNull);
   });

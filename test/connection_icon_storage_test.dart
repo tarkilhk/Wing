@@ -4,14 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/config_backup.dart';
 import 'package:wing/core/services/config_backup_service.dart';
+import 'package:wing/core/models/config_backup_operation.dart';
+import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
 
 class _Secrets implements CredentialStore {
   final values = <String, String>{};
   int writes = 0;
 
-  @override
-  String? readCached(String key) => values[key];
   @override
   Future<String?> read(String key) async => values[key];
   @override
@@ -160,9 +160,11 @@ void main() {
             prefs,
             credentialStore: _Secrets(),
           );
+          final owner = AppPreferences(prefs);
+          addTearDown(owner.dispose);
           final service = ConfigBackupService(
             connectionManager: manager,
-            preferences: prefs,
+            appPreferences: owner,
           );
           final saved = await manager.saveConnection(
             'Claw',
@@ -189,7 +191,7 @@ void main() {
             encoded,
             passphrase: passphrase,
           );
-          await service.import(decoded, mode: mode);
+          await service.import(decoded, mode: mode, canCommit: () => true);
           final connections = manager.getConnections();
           expect(
             connections.firstWhere((c) => c.id == saved.id).icon,

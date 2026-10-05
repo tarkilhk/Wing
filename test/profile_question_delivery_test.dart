@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,15 +15,22 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final host = Host();
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: identityTestConnection(),
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
         connectionIdentity: 'test-identity',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: host.gateway,
       );
       addTearDown(controller.dispose);
       await controller.initialize();
-      await controller.createChat();
+      await controller.createChat(canDispatch: () => true);
       await tester.pumpWidget(
         MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
       );

@@ -22,6 +22,9 @@ class WorkspaceOptionsMenu extends StatelessWidget {
           ? null
           : () => showChatListMenu(
               anchor,
+              // This single-action route captures this immutable widget's
+              // choices; invoking any action closes the captured menu first.
+              choicesChanges: null,
               title: 'Chat list options',
               maxVisible: 9,
               choices: () => [

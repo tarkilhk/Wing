@@ -2,15 +2,14 @@ import 'administration/admin_widgets.dart';
 import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
 
-import '../services/profile_gateway.dart';
+import '../models/profile_capabilities.dart';
+import '../services/profile_capabilities_session.dart';
 import '../widgets/compact_switch.dart';
-
-enum _CapabilityKind { skills, tools }
 
 /// Controls the capabilities of the captured server profile, never a chat override.
 class ProfileCapabilitiesScreen extends StatefulWidget {
   const ProfileCapabilitiesScreen({
-    required this.gateway,
+    required this.createSession,
     required this.connectionLabel,
     required this.onToolSetup,
     required this.onLibrary,
@@ -19,7 +18,7 @@ class ProfileCapabilitiesScreen extends StatefulWidget {
     super.key,
   });
 
-  final ProfileGateway gateway;
+  final ProfileCapabilitiesSession Function() createSession;
   final String connectionLabel;
   final Future<void> Function(String name) onToolSetup;
   final VoidCallback onLibrary;
@@ -32,72 +31,35 @@ class ProfileCapabilitiesScreen extends StatefulWidget {
 }
 
 class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
-  late final _gateway = widget.gateway;
-  _CapabilityKind _kind = _CapabilityKind.tools;
-  List<Map<String, dynamic>> _rows = [];
-  bool _loading = true;
-  bool _saving = false;
+  late final _session = widget.createSession();
+  ProfileCapabilityKind _kind = ProfileCapabilityKind.tools;
   String _query = '';
-  String? _error;
-  String? _notice;
-  int _loadGeneration = 0;
-
-  bool get _skills => _kind == _CapabilityKind.skills;
+  ProfileCapabilitiesState get _state => _session.state;
+  bool get _skills => _kind == ProfileCapabilityKind.skills;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _session.addListener(_changed);
+    _session.load(_kind);
   }
 
-  Future<void> _load() async {
-    final generation = ++_loadGeneration;
-    final skills = _skills;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final result = await _gateway.read(skills ? 'skills' : 'tools/toolsets');
-      final data = result['data'];
-      if (data is! List ||
-          data.any(
-            (row) =>
-                row is! Map ||
-                row['name'] is! String ||
-                (row['name'] as String).isEmpty ||
-                row['enabled'] is! bool ||
-                (!skills && row['configured'] is! bool),
-          )) {
-        throw const FormatException('Invalid capability list');
-      }
-      if (!mounted || generation != _loadGeneration) return;
-      setState(
-        () => _rows = data
-            .map((row) => Map<String, dynamic>.from(row as Map))
-            .toList(),
-      );
-    } catch (_) {
-      if (!mounted || generation != _loadGeneration) return;
-      setState(
-        () => _error =
-            'Could not load ${skills ? 'skills' : 'tools'} from this profile. Check the connection and retry.',
-      );
-    } finally {
-      if (mounted && generation == _loadGeneration) {
-        setState(() => _loading = false);
-      }
-    }
+  void _changed() {
+    if (mounted) setState(() {});
   }
 
-  Future<void> _toggle(Map<String, dynamic> row, bool enabled) async {
-    if (_saving || _loading) return;
-    final name = row['name'] as String;
-    if (!_skills && enabled && row['configured'] != true) {
-      final accepted = await showDialog<bool>(
+  @override
+  void dispose() {
+    _session.removeListener(_changed);
+    _session.dispose();
+    super.dispose();
+  }
+
+  Future<bool> _confirmEnable(ProfileCapability row) async =>
+      await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text('Enable ${row['label'] ?? name}?'),
+          title: Text('Enable ${row.title}?'),
           content: const Text(
             'This toolset still needs setup. Hermes may start its existing setup process on the server. Enabling it does not guarantee it is ready.',
           ),
@@ -112,60 +74,20 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
             ),
           ],
         ),
-      );
-      if (accepted != true || !mounted) return;
-    }
-    setState(() {
-      _saving = true;
-      _error = null;
-      _notice = null;
-    });
-    try {
-      await _gateway.requireProfile();
-      final result = await _gateway.put(
-        _skills
-            ? 'skills/toggle'
-            : 'tools/toolsets/${Uri.encodeComponent(name)}',
-        {if (_skills) 'name': name, 'enabled': enabled},
-      );
-      if (result['ok'] != true ||
-          result['name'] != name ||
-          result['enabled'] != enabled) {
-        throw const FormatException('The change was not acknowledged');
-      }
-      if (!mounted) return;
-      setState(() {
-        row['enabled'] = enabled;
-        _notice = result['post_setup_started'] != null
-            ? 'Saved. Hermes started server setup; refresh to check readiness.'
-            : 'Saved on the server for ${_gateway.scope.profileName}.';
-      });
-      await _load();
-    } catch (_) {
-      if (!mounted) return;
-      setState(
-        () => _error =
-            'The change could not be confirmed. Refresh to check the server before trying again.',
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
+      ) ==
+      true;
 
   Future<void> _readSkill(String name) async {
     try {
-      final result = await _gateway.read('skills/content', {'name': name});
-      if (result['name'] != name || result['content'] is! String) {
-        throw const FormatException('Invalid skill content');
-      }
-      if (!mounted) return;
+      final instructions = await _session.instructions(name);
+      if (!mounted || instructions == null) return;
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => Scaffold(
-            appBar: AppBar(title: Text(name)),
+            appBar: AppBar(title: Text(instructions.name)),
             body: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
-              child: SelectableText(result['content'] as String),
+              child: SelectableText(instructions.content),
             ),
           ),
         ),
@@ -182,9 +104,6 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
     }
   }
 
-  int _rank(Map<String, dynamic> row) =>
-      row['enabled'] == true ? (row['configured'] == false ? 0 : 1) : 2;
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -194,24 +113,7 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
       letterSpacing: 0,
       color: theme.colorScheme.onSurfaceVariant,
     );
-    final rows = _rows
-        .where(
-          (row) =>
-              '${row['name']} ${row['label'] ?? ''} ${row['description'] ?? ''}'
-                  .toLowerCase()
-                  .contains(_query.toLowerCase()),
-        )
-        .toList();
-    if (!_skills) {
-      rows.sort((a, b) {
-        final byState = _rank(a).compareTo(_rank(b));
-        return byState != 0
-            ? byState
-            : '${a['label'] ?? a['name']}'.compareTo(
-                '${b['label'] ?? b['name']}',
-              );
-      });
-    }
+    final rows = _state.rows.where((row) => row.matches(_query)).toList();
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: adminToolbarHeight(
@@ -241,7 +143,9 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
           ),
           IconButton(
             tooltip: 'Refresh capabilities',
-            onPressed: _loading || _saving ? null : _load,
+            onPressed: _state.loading || _state.busy
+                ? null
+                : () => _session.load(_kind),
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -257,7 +161,7 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        '${widget.connectionLabel} · ${_gateway.scope.profileName}',
+                        '${widget.connectionLabel} · ${_session.profileName}',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 4),
@@ -268,7 +172,7 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                       const SizedBox(height: 12),
                       LayoutBuilder(
                         builder: (context, constraints) =>
-                            SegmentedButton<_CapabilityKind>(
+                            SegmentedButton<ProfileCapabilityKind>(
                               showSelectedIcon: false,
                               direction:
                                   constraints.maxWidth <
@@ -279,31 +183,27 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                                   : Axis.horizontal,
                               segments: const [
                                 ButtonSegment(
-                                  value: _CapabilityKind.tools,
+                                  value: ProfileCapabilityKind.tools,
                                   label: Text('Capabilities'),
                                 ),
                                 ButtonSegment(
-                                  value: _CapabilityKind.skills,
+                                  value: ProfileCapabilityKind.skills,
                                   label: Text('Installed skills'),
                                 ),
                               ],
                               selected: {_kind},
-                              onSelectionChanged: _saving
+                              onSelectionChanged: _state.busy
                                   ? null
                                   : (value) {
-                                      setState(() {
-                                        _kind = value.single;
-                                        _rows = [];
-                                        _notice = null;
-                                      });
-                                      _load();
+                                      setState(() => _kind = value.single);
+                                      _session.load(_kind);
                                     },
                             ),
                       ),
                       const SizedBox(height: 12),
                       TextField(
                         decoration: InputDecoration(
-                          hintText: _kind == _CapabilityKind.tools
+                          hintText: _kind == ProfileCapabilityKind.tools
                               ? 'Find a capability'
                               : 'Find a skill',
                           prefixIcon: Icon(Icons.search),
@@ -313,29 +213,32 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                     ],
                   ),
                 ),
-                if (_notice != null)
+                if (_state.notice != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(_notice!),
+                    child: Text(_state.notice!),
                   ),
-                if (_error != null)
+                if (_state.error != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Column(
                       children: [
-                        StudioError(_error!),
+                        StudioError(_state.error!),
                         TextButton(
-                          onPressed: _loading || _saving ? null : _load,
+                          onPressed: _state.loading || _state.busy
+                              ? null
+                              : () => _session.load(_kind),
                           child: const Text('Retry'),
                         ),
                       ],
                     ),
                   ),
-                if (_loading || _saving) const LinearProgressIndicator(),
+                if (_state.loading || _state.saving)
+                  const LinearProgressIndicator(),
               ],
             ),
           ),
-          if (!_loading && rows.isEmpty && _error == null)
+          if (!_state.loading && rows.isEmpty && _state.error == null)
             SliverFillRemaining(
               hasScrollBody: false,
               child: Center(
@@ -351,22 +254,23 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
               itemCount: rows.length,
               itemBuilder: (context, index) {
                 final row = rows[index];
-                final name = row['name'] as String;
-                final title = row['label']?.toString() ?? name;
-                final tools = row['tools'];
-                final group = _rank(row);
+                final name = row.name;
+                final title = row.title;
+                final tools = row.tools;
+                final group = row.group;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (!_skills &&
-                        (index == 0 || _rank(rows[index - 1]) != group))
+                        (index == 0 || rows[index - 1].group != group))
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                         child: Text(
                           switch (group) {
-                            0 => 'Needs setup',
-                            1 => 'Enabled capabilities',
-                            _ => 'Not enabled',
+                            ProfileCapabilityGroup.needsSetup => 'Needs setup',
+                            ProfileCapabilityGroup.enabled =>
+                              'Enabled capabilities',
+                            ProfileCapabilityGroup.disabled => 'Not enabled',
                           },
                           style: theme.textTheme.labelLarge?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
@@ -379,27 +283,22 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                       minTileHeight: 56,
                       childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                       title: Text(title, style: theme.textTheme.bodyLarge),
-                      subtitle: Text(
-                        _skills
-                            ? '${row['category'] ?? 'Skill'} · ${row['provenance'] ?? 'Installed'}'
-                            : '${row['enabled'] == true ? 'Enabled' : 'Off'} · ${row['configured'] is! bool
-                                  ? 'Setup status unavailable'
-                                  : row['configured'] == true
-                                  ? 'Configured'
-                                  : 'Setup needed'}${row['platform_label'] == null ? '' : ' · ${row['platform_label']}'}',
-                        style: metadataStyle,
-                      ),
+                      subtitle: Text(row.subtitle(_kind), style: metadataStyle),
                       trailing: CompactSwitch(
                         semanticLabel: 'Enable $title',
-                        value: row['enabled'] == true,
-                        onChanged:
-                            _loading || _saving || row['enabled'] is! bool
+                        value: row.enabled,
+                        onChanged: !_state.canToggle
                             ? null
-                            : (value) => _toggle(row, value),
+                            : (value) => _session.toggle(
+                                _kind,
+                                name,
+                                value,
+                                confirm: _confirmEnable,
+                              ),
                       ),
                       expandedCrossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(row['description']?.toString() ?? ''),
+                        Text(row.description),
                         if (_skills)
                           TextButton(
                             onPressed: () => _readSkill(name),
@@ -407,16 +306,16 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                           ),
                         if (!_skills)
                           TextButton.icon(
-                            onPressed: _saving
+                            onPressed: _state.busy
                                 ? null
-                                : () async {
-                                    await widget.onToolSetup(name);
-                                    if (mounted) await _load();
-                                  },
+                                : () => _session.reviewSetup(
+                                    name,
+                                    widget.onToolSetup,
+                                  ),
                             icon: const Icon(Icons.tune, size: 18),
                             label: const Text('Setup and providers'),
                           ),
-                        if (!_skills && tools is List) ...[
+                        if (!_skills && row.hasTools) ...[
                           const SizedBox(height: 8),
                           SelectableText(tools.join(', ')),
                         ],

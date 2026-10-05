@@ -1,9 +1,10 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
-import 'package:wing/core/services/profile_selection_store.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profiles_repository.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -30,17 +31,26 @@ void main() {
         loginFile: loginFile,
         id: 'existing-admin-readonly',
       );
-      final repository = ProfilesRepository.forConnection(connection);
+      final repository = ProfilesRepository.forConnection(
+        ConnectionAccess(connection: connection, dashboardOAuth: null),
+      );
       addTearDown(repository.close);
       final discovery = await repository.discover();
       expect(discovery.named('default') != null, isTrue);
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
-      await ProfileSelectionStore(
-        preferences,
-      ).write('existing-admin-readonly', 'default');
+      final appPreferences = AppPreferences(preferences);
+      expect(
+        (await appPreferences
+                .admitProfileSelection('existing-admin-readonly', 'default')
+                .settled)
+            .confirmed,
+        isTrue,
+      );
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: connection,
+        appPreferences: appPreferences,
+        access: ConnectionAccess(connection: connection, dashboardOAuth: null),
         connectionIdentity: 'existing-admin-readonly',
         preferences: preferences,
       );

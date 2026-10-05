@@ -5,13 +5,8 @@ class GatewayReasoningUpdate {
 
   final String text;
   final GatewayReasoningEventMode mode;
-  final bool verbose;
 
-  const GatewayReasoningUpdate({
-    required this.text,
-    required this.mode,
-    required this.verbose,
-  });
+  const GatewayReasoningUpdate({required this.text, required this.mode});
 
   static GatewayReasoningUpdate? fromGatewayEvent(
     String eventType,
@@ -27,7 +22,6 @@ class GatewayReasoningUpdate {
       mode: eventType == 'reasoning.available'
           ? GatewayReasoningEventMode.replace
           : GatewayReasoningEventMode.append,
-      verbose: data['verbose'] == true,
     );
   }
 
@@ -49,38 +43,6 @@ class GatewayReasoningUpdate {
   }
 }
 
-class GatewayInterimTransition {
-  final String sealedText;
-  final bool startsNewMessage;
-
-  const GatewayInterimTransition({
-    required this.sealedText,
-    required this.startsNewMessage,
-  });
-
-  factory GatewayInterimTransition.resolve({
-    required String currentText,
-    required String interimText,
-    required bool alreadyStreamed,
-  }) {
-    final safeInterim = interimText.replaceAll('\u0000', '');
-    var sealed = currentText;
-    if (safeInterim.isNotEmpty &&
-        currentText != safeInterim &&
-        !currentText.endsWith(safeInterim)) {
-      if (!alreadyStreamed) {
-        sealed = '$currentText$safeInterim';
-      } else if (currentText.isEmpty || safeInterim.startsWith(currentText)) {
-        sealed = safeInterim;
-      }
-    }
-    return GatewayInterimTransition(
-      sealedText: sealed,
-      startsNewMessage: sealed.trim().isNotEmpty,
-    );
-  }
-}
-
 enum GatewayNoticeKind { background, review }
 
 class GatewayNotice {
@@ -94,14 +56,6 @@ class GatewayNotice {
   const GatewayNotice({required this.kind, required this.text, this.taskId});
 
   String get identity => '${kind.name}|${taskId ?? ''}|$text';
-
-  String get title => switch (kind) {
-    GatewayNoticeKind.background =>
-      taskId == null
-          ? 'Background task completed'
-          : 'Background task $taskId completed',
-    GatewayNoticeKind.review => 'Hermes review',
-  };
 
   static GatewayNotice? fromGatewayEvent(
     String eventType,
@@ -130,46 +84,6 @@ class GatewayNotice {
     return safe.length <= maxLength
         ? safe
         : '${safe.substring(0, maxLength - 1)}…';
-  }
-}
-
-enum GatewayNotificationLevel { info, success, warning, error }
-
-class GatewayNotification {
-  final String key;
-  final String text;
-  final GatewayNotificationLevel level;
-  final Duration? ttl;
-
-  const GatewayNotification({
-    required this.key,
-    required this.text,
-    required this.level,
-    this.ttl,
-  });
-
-  static GatewayNotification? fromEventData(Map<String, dynamic> data) {
-    final text = GatewayNotice.safeLine(data['text']?.toString(), 1000);
-    if (text == null) return null;
-    final key =
-        GatewayNotice.safeLine((data['key'] ?? data['id'])?.toString(), 120) ??
-        'latest';
-    final ttlMs = switch (data['ttl_ms']) {
-      int value when value > 0 => value,
-      num value when value > 0 => value.toInt(),
-      _ => null,
-    };
-    return GatewayNotification(
-      key: key,
-      text: text,
-      level: switch (data['level']?.toString()) {
-        'success' => GatewayNotificationLevel.success,
-        'warn' => GatewayNotificationLevel.warning,
-        'error' => GatewayNotificationLevel.error,
-        _ => GatewayNotificationLevel.info,
-      },
-      ttl: ttlMs == null ? null : Duration(milliseconds: ttlMs),
-    );
   }
 }
 
@@ -224,7 +138,6 @@ class GatewaySubagentActivity {
       };
 
   bool get acceptingSteer => !isTerminal && (_acceptingSteer ?? false);
-  bool get isComplete => isTerminal;
   bool get isTerminal => const {
     GatewaySubagentStatus.completed,
     GatewaySubagentStatus.failed,

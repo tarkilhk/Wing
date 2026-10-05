@@ -1,3 +1,4 @@
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -55,7 +56,7 @@ void main() {
       );
       final status = ServerConnectionStatus('Claw');
       final chat = ProfileGateway.forConnection(
-        connection,
+        ConnectionAccess(connection: connection, dashboardOAuth: null),
         WorkspaceScope(
           connectionId: 'test',
           connectionIdentity: 'test',
@@ -63,7 +64,7 @@ void main() {
         ),
       )..connectionStatus = status;
       final administration = AdministrationRepository.forConnection(
-        connection,
+        ConnectionAccess(connection: connection, dashboardOAuth: null),
         'test',
         connectionStatus: status,
       );

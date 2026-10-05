@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_message.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -22,6 +23,7 @@ Finder inlineImage() => find.descendant(
 );
 
 Future<void> settleImages(WidgetTester tester) async {
+  await tester.pump();
   await tester.pump();
   for (final element in find.byType(Image).evaluate()) {
     final image = element.widget as Image;
@@ -75,7 +77,10 @@ void main() {
     home: Scaffold(
       body: SingleChildScrollView(
         child: ProfileMessage(
-          message: {'role': 'assistant', 'content': content},
+          message: TranscriptMessage.fromRow({
+            'role': 'assistant',
+            'content': content,
+          }),
           loadAttachmentImage: load,
           onOpenRemoteFile: open,
           onDownloadRemoteFile: download,
@@ -147,7 +152,7 @@ void main() {
     await settleImages(tester);
     expect(
       tester.widget<ChatImagePreview>(find.byType(ChatImagePreview)).bytes,
-      same(bytes),
+      orderedEquals(bytes),
     );
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -180,7 +185,7 @@ void main() {
     final preview = tester.widget<ChatImagePreview>(
       find.byType(ChatImagePreview),
     );
-    expect(preview.bytes, same(bytes));
+    expect(preview.bytes, orderedEquals(bytes));
   });
 
   testWidgets('failed read retries; stale result cannot replace a new target', (
@@ -299,10 +304,10 @@ void main() {
               body: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: ProfileMessage(
-                  message: const {
+                  message: TranscriptMessage.fromRow(const {
                     'role': 'assistant',
                     'content': 'MEDIA:/srv/bouquet.jpg',
-                  },
+                  }),
                   loadAttachmentImage: (_) async =>
                       throw StateError('unavailable'),
                   onDownloadRemoteFile: (_) async => false,
@@ -349,13 +354,13 @@ void main() {
                 body: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: ProfileMessage(
-                    message: const {
+                    message: TranscriptMessage.fromRow(const {
                       'role': 'assistant',
                       'content':
                           '**Windflower · S\$66**\n\n'
                           'A mixed bouquet in warm pastels.\n\n'
                           'MEDIA:/srv/daily-surprise-bouquet.jpg',
-                    },
+                    }),
                     loadAttachmentImage: (_) async => bytes,
                     onOpenRemoteFile: (_) async {},
                     onDownloadRemoteFile: (_) async => false,

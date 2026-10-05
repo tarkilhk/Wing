@@ -7,6 +7,7 @@ import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/administration/admin_mcp_setup_page.dart';
 import 'package:wing/core/screens/administration/admin_navigation.dart';
 import 'package:wing/core/services/server_connection_status.dart';
+import 'package:wing/core/services/mcp_setup.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
 import 'package:wing/core/widgets/workspace_picker.dart';
 import 'package:wing/core/widgets/workspace_profile_navigation.dart';
@@ -62,7 +63,9 @@ void main() {
                 onPressed: () => adminPushProfile(
                   context,
                   fixture.server.profile('personal'),
-                  (_, profile) => AdminMcpSetupPage(profile: profile),
+                  (_, profile) => AdminMcpSetupPage(
+                    createSession: () => McpSetupSession(profile),
+                  ),
                 ),
                 child: const Text('Open setup'),
               ),
@@ -84,7 +87,7 @@ void main() {
 
   testWidgets('pristine setup leaves without a discard prompt', (tester) async {
     await show(tester);
-    expect(navigation.canSwitch, isTrue);
+    expect(navigation.canRequestSwitch, isTrue);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.text('Discard edits?'), findsNothing);
@@ -96,7 +99,13 @@ void main() {
     final name = find.byKey(const ValueKey('mcp-field-Connector name'));
     await tester.enterText(name, 'Unfinished connector');
     await tester.pump();
-    expect(navigation.canSwitch, isFalse);
+    expect(
+      ModalRoute.of(
+        tester.element(find.byType(AdminMcpSetupPage)),
+      )!.popDisposition,
+      RoutePopDisposition.doNotPop,
+    );
+    expect(navigation.canRequestSwitch, isTrue);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     await tester.tap(find.text('Cancel'));
@@ -138,13 +147,7 @@ void main() {
       await tester.tap(find.text('Discard'));
       await tester.pumpAndSettle();
       expect(selected, ['work']);
-      expect(
-        tester
-            .widget<AdminMcpSetupPage>(find.byType(AdminMcpSetupPage))
-            .profile
-            .name,
-        'work',
-      );
+      expect(find.text('Server A / work'), findsOneWidget);
       expect(tester.widget<TextField>(name).controller!.text, isEmpty);
       expect(fixture.requests, isEmpty);
     },
@@ -189,7 +192,15 @@ void main() {
         await pending.future;
         return {
           'ok': true,
-          'server': {'name': params['name']},
+          'name': params['name'],
+          'server': {
+            'name': params['name'],
+            'transport': 'http',
+            'auth': 'oauth',
+            'enabled': true,
+            'source': 'config',
+            'plugin': null,
+          },
         };
       };
       await show(tester);

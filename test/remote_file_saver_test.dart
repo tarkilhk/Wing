@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:wing/core/services/owned_remote_files.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,6 +29,22 @@ class _Picker extends FilePickerPlatform {
     if (error != null) throw error!;
     return destination;
   }
+}
+
+class _Files implements RemoteFilesDataSource {
+  final pending = Completer<RemoteFileDownload>();
+  @override
+  Future<RemoteTextPreview> readText(
+    String path, {
+    required String profileName,
+    required String storedSessionId,
+  }) => throw UnimplementedError();
+  @override
+  Future<RemoteFileDownload> download(
+    String path, {
+    required String profileName,
+    required String storedSessionId,
+  }) => pending.future;
 }
 
 void main() {
@@ -78,6 +96,31 @@ void main() {
         isTrue,
       );
       expect(picker.data, isEmpty);
+    },
+  );
+
+  test(
+    'a held download rechecks route admission before opening a picker',
+    () async {
+      final source = _Files();
+      var current = true;
+      var releases = 0;
+      final owner = OwnedRemoteFiles(
+        source: source,
+        profileName: 'captured-profile',
+        storedSessionId: 'captured-chat',
+        release: () => releases++,
+      );
+      final pending = owner.downloadAndSave(
+        'report.txt',
+        admitPresentation: () => current,
+      );
+      current = false;
+      source.pending.complete(file);
+      expect(await pending, isFalse);
+      expect(picker.filename, isNull);
+      owner.dispose();
+      expect(releases, 1);
     },
   );
 }

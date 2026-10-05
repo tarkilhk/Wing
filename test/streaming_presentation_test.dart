@@ -1,50 +1,52 @@
-import 'dart:collection';
+import 'package:wing/core/models/chat_runtime.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
 
-class _ReadingMessage extends MapBase<String, dynamic> {
-  final _data = <String, dynamic>{
-    'id': 1,
-    'role': 'assistant',
-    'content': 'Saved answer',
-  };
-  int contentReads = 0;
+class _ReadingPreferences extends InMemorySharedPreferencesStore {
+  _ReadingPreferences() : super.empty();
+
+  int snapshotWrites = 0;
+  Completer<void>? nextSnapshot;
 
   @override
-  dynamic operator [](Object? key) {
-    if (key == 'content') contentReads++;
-    return _data[key];
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (key == 'flutter.workspace_reading_v1_streaming-presentation') {
+      snapshotWrites++;
+      final waiting = nextSnapshot;
+      if (waiting != null && !waiting.isCompleted) waiting.complete();
+    }
+    return super.setValue(valueType, key, value);
   }
-
-  @override
-  void operator []=(String key, dynamic value) => _data[key] = value;
-
-  @override
-  Iterable<String> get keys => _data.keys;
-
-  @override
-  bool containsKey(Object? key) => _data.containsKey(key);
-
-  @override
-  void clear() => _data.clear();
-
-  @override
-  dynamic remove(Object? key) => _data.remove(key);
 }
 
 void main() {
-  Future<ProfileWorkspaceController> initialize(Host host) async {
+  late SharedPreferences preferences;
+  late AppPreferences appPreferences;
+  setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
+  });
+  tearDown(() => appPreferences.dispose());
+  Future<ProfileWorkspaceController> initialize(Host host) async {
     final controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'streaming-presentation',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
@@ -52,10 +54,20 @@ void main() {
   }
 
   test('streaming text does not prepare unchanged reading history', () async {
+    final previousPlatform = SharedPreferencesStorePlatform.instance;
+    SharedPreferences.setMockInitialValues({});
+    final storage = _ReadingPreferences();
+    SharedPreferencesStorePlatform.instance = storage;
+    addTearDown(
+      () => SharedPreferencesStorePlatform.instance = previousPlatform,
+    );
+    preferences = await SharedPreferences.getInstance();
+    appPreferences.dispose();
+    appPreferences = AppPreferences(preferences);
     final host = Host();
     final controller = await initialize(host);
     addTearDown(controller.dispose);
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     host.event('a', 'message.start');
     // The controller uses wall time to rate-limit reading snapshots. Cross its
     // interval so this test catches a snapshot triggered by streaming alone.
@@ -64,8 +76,11 @@ void main() {
     // unchanged history. Subsequent text must not mark it dirty again.
     host.event('a', 'message.delta', {'text': ''});
     await Future<void>.delayed(const Duration(milliseconds: 1100));
-    final saved = _ReadingMessage();
-    chat.messages = [saved];
+    chat.reading.installSavedHistory([
+      {'id': 1, 'role': 'assistant', 'content': 'Saved answer'},
+    ]);
+    final saved = chat.reading.messages.single;
+    storage.snapshotWrites = 0;
 
     host.event('a', 'message.delta', {'text': 'First'});
     host.event('a', 'message.delta', {'text': ' second'});
@@ -74,16 +89,21 @@ void main() {
     host.event('a', 'reasoning.delta', {'text': ' more'});
     await Future<void>.delayed(const Duration(milliseconds: 150));
 
-    expect(chat.streaming, 'First second');
-    expect(chat.reasoning, 'Thinking more');
-    expect(saved.contentReads, 0);
+    expect(chat.reading.streaming, 'First second');
+    expect(chat.runtime.reasoning, 'Thinking more');
+    expect(storage.snapshotWrites, 0);
+    expect(chat.reading.messages.single, same(saved));
 
     // An actual saved-message change must still refresh offline reading.
+    storage.nextSnapshot = Completer<void>();
     host.event('a', 'message.interim');
-    expect(saved.contentReads, greaterThan(0));
-    final preferences = await SharedPreferences.getInstance();
+    await storage.nextSnapshot!.future.timeout(const Duration(seconds: 3));
+    expect(storage.snapshotWrites, greaterThan(0));
+    expect(chat.reading.messages.first, same(saved));
+    final snapshotPreferences = await SharedPreferences.getInstance();
     final storageKey = 'workspace_reading_v1_streaming-presentation';
-    expect(preferences.getString(storageKey), contains('First second'));
+    expect(snapshotPreferences.getString(storageKey), contains('First second'));
+    expect(snapshotPreferences.getString(storageKey), contains('Saved answer'));
   });
 
   test(
@@ -92,7 +112,7 @@ void main() {
       final host = Host();
       final controller = await initialize(host);
       addTearDown(controller.dispose);
-      await controller.createChat();
+      await controller.createChat(canDispatch: () => true);
       host.event('a', 'message.start');
       host.event('a', 'message.delta', {'text': 'Saved interim answer'});
       host.event('a', 'message.interim');
@@ -122,7 +142,7 @@ void main() {
     final host = Host();
     final controller = await initialize(host);
     addTearDown(controller.dispose);
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     host.event('a', 'message.start');
     await tester.pump();
     var updates = 0;
@@ -131,7 +151,7 @@ void main() {
     host.event('a', 'message.delta', {'text': 'First'});
     expect(updates, 1);
     host.event('a', 'message.delta', {'text': ' second'});
-    expect(chat.streaming, 'First second');
+    expect(chat.reading.streaming, 'First second');
     expect(updates, 1);
     await tester.pump(const Duration(milliseconds: 99));
     expect(updates, 1);
@@ -139,15 +159,15 @@ void main() {
     expect(updates, 2);
 
     host.event('a', 'reasoning.delta', {'text': 'Thinking'});
-    expect(chat.mainActivity, ProfileMainActivity.thinking);
+    expect(chat.runtime.mainActivity, ChatMainActivity.thinking);
     expect(updates, 3);
     host.event('a', 'reasoning.delta', {'text': ' more'});
-    expect(chat.reasoning, 'Thinking more');
+    expect(chat.runtime.reasoning, 'Thinking more');
     expect(updates, 3);
     host.event('a', 'message.delta', {'text': ' third'});
-    expect(chat.mainActivity, ProfileMainActivity.writing);
+    expect(chat.runtime.mainActivity, ChatMainActivity.writing);
     expect(updates, 4);
-    expect(chat.streaming, 'First second third');
+    expect(chat.reading.streaming, 'First second third');
     await tester.pump(const Duration(milliseconds: 100));
     expect(updates, 4);
   });
@@ -159,7 +179,7 @@ void main() {
       final host = Host();
       final controller = await initialize(host);
       addTearDown(controller.dispose);
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       host.event('a', 'message.start');
       await tester.pump();
       var updates = 0;
@@ -177,16 +197,16 @@ void main() {
       });
       expect(updates, 2);
       if (event == 'approval') {
-        expect(chat.approval?['request_id'], 'review');
-        expect(chat.status, ProfileTurnStatus.attention);
-        expect(chat.streaming, 'First pending');
+        expect(chat.runtime.approval?.requestId, 'review');
+        expect(chat.runtime.needsInput, isTrue);
+        expect(chat.reading.streaming, 'First pending');
       } else if (event == 'turn.error') {
-        expect(chat.error, 'Provider stopped');
-        expect(chat.status, ProfileTurnStatus.failed);
-        expect(chat.streaming, 'First pending');
+        expect(chat.runtime.error, 'Provider stopped');
+        expect(chat.runtime.execution, ChatExecution.failed);
+        expect(chat.reading.streaming, 'First pending');
       } else {
-        expect(chat.messages.last['content'], 'First pending');
-        expect(chat.streaming, isEmpty);
+        expect(chat.reading.messages.last['content'], 'First pending');
+        expect(chat.reading.streaming, isEmpty);
       }
       await tester.pump(const Duration(milliseconds: 100));
       expect(updates, 2);
@@ -199,13 +219,13 @@ void main() {
     final host = Host();
     final controller = await initialize(host);
     addTearDown(controller.dispose);
-    final a = await controller.createChat();
+    final a = await controller.createChat(canDispatch: () => true);
     host.event('a', 'message.start');
     host.event('a', 'message.delta', {'text': 'A'});
     await controller.switchProfile('b');
     // Host's replacement counter is global; this is B's first independent chat.
     host.sessionCreates = 0;
-    final b = await controller.createChat();
+    final b = await controller.createChat(canDispatch: () => true);
     host.event('b', 'message.start');
     await tester.pump();
     host.event('a', 'message.delta', {'text': ''});
@@ -217,9 +237,9 @@ void main() {
     expect(updates, 0);
     host.event('a', 'turn.error', {'message': 'A stopped'});
     expect(updates, 1);
-    expect(a.streaming, 'A pending');
-    expect(b.streaming, 'B pending');
-    expect(b.status, ProfileTurnStatus.running);
+    expect(a.reading.streaming, 'A pending');
+    expect(b.reading.streaming, 'B pending');
+    expect(b.runtime.execution, ChatExecution.running);
     expect(controller.browserChanges.value.chat, isNull);
     await tester.pump(const Duration(milliseconds: 100));
     expect(updates, 1);
@@ -230,13 +250,13 @@ void main() {
   ) async {
     final host = Host();
     final controller = await initialize(host);
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     host.event('a', 'message.start');
     var updates = 0;
     controller.addListener(() => updates++);
     host.event('a', 'message.delta', {'text': 'First'});
     host.event('a', 'message.delta', {'text': ' pending'});
-    expect(chat.streaming, 'First pending');
+    expect(chat.reading.streaming, 'First pending');
     controller.dispose();
     await tester.pump(const Duration(milliseconds: 100));
     expect(updates, 1);

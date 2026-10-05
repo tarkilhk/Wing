@@ -1,3 +1,4 @@
+import '../models/profile_session_key.dart';
 // Keep the factory's named argument public without exposing mutable state.
 // ignore_for_file: prefer_initializing_formals
 
@@ -98,10 +99,48 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
     if (removed) _activityChanged();
   }
 
+  /// Resolve current secure saved authority before using the existing registry.
+  Future<ProfileWorkspaceController> forSavedConnection(
+    ConnectionManager manager,
+    String connectionId, {
+    required bool Function() canUse,
+  }) async {
+    if (_closed) {
+      throw StateError('Workspace registry is closed');
+    }
+    if (!canUse()) {
+      throw StateError('Workspace entry is no longer active');
+    }
+    final current = (await manager.loadConnectionsWithSecrets())
+        .where((connection) => connection.id == connectionId)
+        .firstOrNull;
+    if (_closed) {
+      throw StateError('Workspace registry is closed');
+    }
+    if (!canUse()) {
+      throw StateError('Workspace entry is no longer active');
+    }
+    if (current == null) {
+      throw StateError('The connection is unavailable');
+    }
+    final identity = await identities.resolve(current);
+    if (!canUse()) {
+      throw StateError('Workspace entry is no longer active');
+    }
+    return _forResolvedConnection(current, identity);
+  }
+
   Future<ProfileWorkspaceController> forConnection(
     SavedConnection connection,
   ) async {
     final identity = await identities.resolve(connection);
+    return _forResolvedConnection(connection, identity);
+  }
+
+  ProfileWorkspaceController _forResolvedConnection(
+    SavedConnection connection,
+    String identity,
+  ) {
     if (_closed) throw StateError('Workspace registry is closed');
     final controller = _controllers.putIfAbsent(identity, () {
       final owner = _create(connection, identity);

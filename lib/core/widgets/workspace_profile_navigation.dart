@@ -44,11 +44,6 @@ class WorkspaceProfileNavigation extends ChangeNotifier {
     );
   }
 
-  bool get canSwitch => _routes.every(
-    (route) =>
-        !route.isActive || route.popDisposition != RoutePopDisposition.doNotPop,
-  );
-
   /// Registered editors can ask to discard. Other blocking routes must finish
   /// their own operation before workspace replacement can be requested.
   bool get canRequestSwitch => _routes.every(

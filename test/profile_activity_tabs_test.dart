@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/widgets/profile_activity_tabs.dart';
@@ -51,15 +52,15 @@ void main() {
                         text: 'Reasoning details',
                         running: true,
                       ),
-                      children: const [
+                      children: [
                         ProfileToolActivity(
-                          messages: [
-                            {
+                          results: [
+                            TranscriptToolResult.fromRow({
                               'id': 1,
                               'role': 'tool',
                               'tool_name': 'skill_view',
                               'content': 'Saved tool detail',
-                            },
+                            }),
                           ],
                         ),
                       ],

@@ -1,3 +1,4 @@
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -72,6 +73,7 @@ void main() {
           cwdExplicit: project,
           cwd: project ? '/selected-project' : null,
           title: 'Strict stock contract QA',
+          canDispatch: () => true,
         );
         expect(creates, 1);
         expect(response['stored_session_id'], 'owned-stored');
@@ -97,7 +99,7 @@ void main() {
       );
       for (final profile in ['android-qa-a', 'android-qa-b']) {
         final gateway = ProfileGateway.forConnection(
-          connection,
+          ConnectionAccess(connection: connection, dashboardOAuth: null),
           WorkspaceScope(connectionId: connection.id, profileName: profile),
         );
         addTearDown(gateway.close);
@@ -109,6 +111,7 @@ void main() {
         final session = await gateway.createSession(
           cwdExplicit: false,
           title: 'Android QA draft',
+          canDispatch: () => true,
         );
         expect(session['info']['profile_name'], profile);
         expect(session['stored_session_id'], isA<String>());

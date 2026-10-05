@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
 import 'package:wing/core/services/versions_controller.dart';
@@ -10,7 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
-import 'package:wing/core/services/profile_color_store.dart';
+import 'package:wing/core/models/profile_colors.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/screens/administration/administration_content.dart';
@@ -21,6 +23,28 @@ import 'support/scheduled_tasks_fixture.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/profiles_repository.dart';
 import 'support/profile_browser_fixture.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+
+class _AdministrationProfilesFixture extends ProfileBrowserFixture {
+  ProfileDiscovery discovery = const ProfileDiscovery(
+    profiles: [
+      HermesProfile(name: 'personal'),
+      HermesProfile(name: 'work'),
+    ],
+    currentName: 'personal',
+    activeName: 'personal',
+  );
+  @override
+  ProfileGateway gateway(WorkspaceScope scope) {
+    final wire = super.gateway(scope);
+    return ProfileGateway(
+      scope: scope,
+      discover: () async => discovery,
+      get: wire.read,
+      rpc: wire.call,
+    );
+  }
+}
 
 void main() {
   const capture = bool.fromEnvironment('CAPTURE_ADMINISTRATION');
@@ -42,6 +66,8 @@ void main() {
     });
   }
   late ProfileWorkspaceController controller;
+  late _AdministrationProfilesFixture profiles;
+  late AppPreferences appPreferences;
   late AdministrationFixture admin;
   late GlobalKey<ScaffoldState> shellKey;
   setUp(() async {
@@ -53,30 +79,39 @@ void main() {
       buildSignature: '',
     );
     SharedPreferences.setMockInitialValues({});
-    final fixture = ProfileBrowserFixture();
+    profiles = _AdministrationProfilesFixture();
     admin = AdministrationFixture();
     shellKey = GlobalKey<ScaffoldState>();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: SavedConnection(
-        id: admin.server.connectionId,
-        label: 'Home server',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: admin.server.connectionId,
+          label: 'Home server',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       connectionIdentity: admin.server.connectionIdentity,
-      preferences: await SharedPreferences.getInstance(),
-      gatewayFactory: fixture.gateway,
+      preferences: preferences,
+      appPreferences: appPreferences,
+      gatewayFactory: profiles.gateway,
     );
     await controller.initialize();
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
   Future<void> show(
     WidgetTester tester,
     Brightness brightness, {
     double scale = 1,
     double width = 390,
-    WorkspaceAccent accent = WorkspaceAccent.mint,
+    WorkspaceAccent accent = WorkspaceAccent.teal,
     bool healthOnly = false,
   }) async {
     tester.view.physicalSize = Size(width, 844);
@@ -101,7 +136,7 @@ void main() {
                   ? AppDestination.health
                   : AppDestination.administration,
               onSelected: (_) {},
-              connection: controller.connection,
+              access: controller.access,
               connectionStatus: controller.connectionStatus,
               versionsControllerFactory: (_) =>
                   VersionsController(gateway: admin.server.gateway('default')),
@@ -149,6 +184,26 @@ void main() {
     });
   }
 
+  testWidgets('ordinary Administration does not start retained Health checks', (
+    tester,
+  ) async {
+    await show(tester, Brightness.dark);
+    expect(find.byType(HermesAdministrationContent), findsOneWidget);
+    expect(
+      controller.healthSession(repository: admin.server).overviews,
+      isEmpty,
+    );
+    expect(
+      admin.requests.where((request) => request.$2.startsWith('ops/')),
+      isEmpty,
+    );
+    expect(
+      admin.rpcRequests.where((request) => request.$2 == 'setup.runtime_check'),
+      isEmpty,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
     'header refresh reloads overview reads without duplicate action',
     (tester) async {
@@ -194,6 +249,83 @@ void main() {
         [('POST', 'ops/doctor'), ('POST', 'ops/security-audit')],
       );
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'returning from an editor does not refresh a newly selected profile',
+    (tester) async {
+      await show(tester, Brightness.dark);
+      try {
+        await tester.enterText(
+          find.byWidgetPredicate(
+            (widget) => widget is TextField && !widget.readOnly,
+          ),
+          'Memory budget',
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Memory budget').last);
+        await tester.pumpAndSettle();
+        expect(find.text('Memory settings'), findsOneWidget);
+        expect(find.text('Server A / personal'), findsOneWidget);
+        expect(
+          admin.requests.where(
+            (request) =>
+                request.$1 == 'GET' &&
+                request.$2 == 'config' &&
+                request.$3['profile'] == 'personal',
+          ),
+          isNotEmpty,
+        );
+
+        expect(await controller.switchProfile('work'), isTrue);
+        await tester.pumpAndSettle();
+        expect(controller.current?.scope.profileName, 'work');
+        // The open editor keeps its original scope while the underlying
+        // Administration route has finished loading the newly selected owner.
+        expect(find.text('Server A / personal'), findsOneWidget);
+        expect(
+          admin.requests.where(
+            (request) =>
+                request.$1 == 'GET' &&
+                request.$2 == 'config' &&
+                request.$3['profile'] == 'work',
+          ),
+          hasLength(1),
+        );
+        expect(tester.takeException(), isNull);
+        final readsBeforeReturn = admin.requests.length;
+        final rpcBeforeReturn = admin.rpcRequests.length;
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.byType(HermesAdministrationContent), findsOneWidget);
+        expect(controller.current?.scope.profileName, 'work');
+        expect(
+          tester
+              .widget<ProfileSelector>(find.byType(ProfileSelector))
+              .selectedProfile,
+          'work',
+        );
+        expect(tester.takeException(), isNull);
+        expect(
+          admin.requests
+              .skip(readsBeforeReturn)
+              .where((request) => request.$3['profile'] == 'work'),
+          isEmpty,
+          reason: 'Returning from the personal editor cannot refresh work.',
+        );
+        expect(
+          admin.rpcRequests
+              .skip(rpcBeforeReturn)
+              .where((request) => request.$1 == 'work'),
+          isEmpty,
+        );
+        expect(admin.requests.where((request) => request.$1 != 'GET'), isEmpty);
+      } finally {
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpAndSettle();
+      }
     },
   );
 
@@ -245,11 +377,12 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('profile-color-8')));
       await tester.pumpAndSettle();
       expect(
-        ProfileColorStore(
-          controller.preferences,
-          controller.connectionIdentity,
-        ).read('work'),
-        8,
+        appPreferences
+            .profileColorsFor(controller.connectionIdentity)
+            .value
+            .profiles['work']!
+            .selected,
+        ProfileColorChoice.blue,
       );
       await screenshot(tester, '${brightness.name}-$scale-profile-blue');
       expect(tester.takeException(), isNull);
@@ -266,7 +399,7 @@ void main() {
           name: 'Morning research and a deliberately long project name',
         )..['next_run_at'] = '2026-09-18T01:00:00Z',
       );
-      controller.discovery = ProfileDiscovery(
+      profiles.discovery = ProfileDiscovery(
         profiles: [
           HermesProfile(
             name: 'personal',
@@ -281,6 +414,7 @@ void main() {
         currentName: 'personal',
         activeName: 'personal',
       );
+      await controller.switchProfile('personal');
       await show(
         tester,
         mode == 'light' ? Brightness.light : Brightness.dark,
@@ -476,7 +610,16 @@ void main() {
   testWidgets('runtime health remains available without a selected profile', (
     tester,
   ) async {
-    controller.current = null;
+    final previous = controller;
+    controller = ProfileWorkspaceController(
+      access: previous.access,
+      connectionIdentity: 'unselected-administration',
+      preferences: previous.preferences,
+      appPreferences: appPreferences,
+      gatewayFactory: profiles.gateway,
+    );
+    previous.dispose();
+    expect(controller.current, isNull);
     await show(tester, Brightness.dark, scale: 1.3, healthOnly: true);
     expect(find.byType(TabBar), findsNothing);
     expect(find.textContaining('Runtime profile:'), findsNothing);
@@ -543,7 +686,7 @@ void main() {
       testWidgets(
         'profile management scrolls after the last profile ${brightness.name} $scale',
         (tester) async {
-          controller.discovery = const ProfileDiscovery(
+          profiles.discovery = const ProfileDiscovery(
             profiles: [
               HermesProfile(name: 'personal'),
               HermesProfile(name: 'client-work'),
@@ -553,6 +696,7 @@ void main() {
             currentName: 'personal',
             activeName: 'personal',
           );
+          await controller.switchProfile('personal');
           await show(
             tester,
             brightness,

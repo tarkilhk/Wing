@@ -14,23 +14,19 @@ import 'package:wing/core/widgets/profile_tool_activity.dart';
 const _capture = bool.fromEnvironment('CAPTURE_TASK_ICONS');
 const _todos = [
   GatewayTodo(
-    id: 'done',
     content: 'Audit original sources and create blind calibration cases',
     status: GatewayTodoStatus.completed,
   ),
   GatewayTodo(
-    id: 'running',
     content: 'Independently grade real answers and controlled variants',
     status: GatewayTodoStatus.inProgress,
   ),
   GatewayTodo(
-    id: 'pending',
     parent: 'running',
     content: 'Resolve the remaining source-scope decision',
     status: GatewayTodoStatus.pending,
   ),
   GatewayTodo(
-    id: 'cancelled',
     content: 'Repeat the superseded comparison',
     status: GatewayTodoStatus.cancelled,
   ),
@@ -148,9 +144,7 @@ void main() {
             builder: (context, setState) {
               update = setState;
               return ProfileTodoPanel(
-                todos: [
-                  GatewayTodo(id: 'one', content: 'Review', status: status),
-                ],
+                todos: [GatewayTodo(content: 'Review', status: status)],
               );
             },
           ),

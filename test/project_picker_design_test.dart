@@ -1,4 +1,8 @@
+import 'support/composer_fixture.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:io';
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -13,6 +17,18 @@ import 'package:wing/core/widgets/server_connection_label.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
+
+class _ProjectDesignHost extends ProfileActionsFixture {
+  final projectChanges = <String, Map<String, dynamic>>{};
+  bool projectsVisible = true;
+  @override
+  List<Map<String, dynamic>> projects(String profile) => projectsVisible
+      ? [
+          for (final row in super.projects(profile))
+            {...row, ...?projectChanges[row['id']]},
+        ]
+      : [];
+}
 
 void main() {
   const capture = bool.fromEnvironment('CAPTURE_PROJECT_PICKER');
@@ -33,20 +49,30 @@ void main() {
   });
 
   late ProfileWorkspaceController controller;
-  late ProfileActionsFixture host;
+  late AppPreferences appPreferences;
+  late _ProjectDesignHost host;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    host = ProfileActionsFixture();
+    host = _ProjectDesignHost();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'project-design',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
-    await controller.createChat();
+    await controller.createChat(canDispatch: () => true);
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   Future<void> screenshot(WidgetTester tester, String name) async {
     if (!capture) return;
@@ -97,9 +123,12 @@ void main() {
         'separate header actions and Studio sheets ${brightness.name} $scale',
         (tester) async {
           final project = controller.current!.projects.first;
-          project['name'] = 'Wing Android workspace and release planning';
-          project['color'] = '#126D70';
-          project['icon'] = 'repo';
+          host.projectChanges[project['id'] as String] = {
+            'label': 'Wing Android workspace and release planning',
+            'color': '#126D70',
+            'icon': 'repo',
+          };
+          await controller.switchProfile('personal');
           await show(
             tester,
             brightness: brightness,
@@ -161,10 +190,26 @@ void main() {
           await tester.tap(find.byTooltip('Close connection details'));
           await tester.pumpAndSettle();
           expect(host.moves, isEmpty);
-          project['name'] = 'australia-rwc-2027';
-          controller.current!.chat!.projectId = project['id'] as String;
-          controller.current!.chat!.title = 'Find budget car rental in Perth';
-          controller.notifyListeners();
+          host.projectChanges[project['id'] as String]!['label'] =
+              'australia-rwc-2027';
+          await controller.switchProfile('personal');
+          final assignedResource = controller.current!;
+          final assignedProject = assignedResource.projects.first;
+          await controller.createChat(
+            inProject: assignedProject,
+            canDispatch: () =>
+                identical(controller.current, assignedResource) &&
+                assignedResource.projects.contains(assignedProject),
+          );
+          emitChatEvent(
+            controller,
+            controller.current!.chat!,
+            'session.title',
+            {
+              'session_id': controller.current!.chat!.key.sessionId,
+              'title': 'Find budget car rental in Perth',
+            },
+          );
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
           final projectText = find.text('australia-rwc-2027');
@@ -226,10 +271,19 @@ void main() {
       expect(find.byKey(const ValueKey('chat-project-sheet')), findsOneWidget);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
-      controller.current!.mutatingSessions.add(
-        controller.current!.chat!.key.sessionId,
+      host.mutationDelay = Completer<void>();
+      addTearDown(() {
+        if (!host.mutationDelay!.isCompleted) host.mutationDelay!.complete();
+      });
+      final mutationOwner = controller.current!;
+      final mutationKey = mutationOwner.chat!.key;
+      final mutation = controller.mutateSession(
+        mutationKey,
+        changes: {'pinned': true},
+        canDispatch: () =>
+            identical(controller.current, mutationOwner) &&
+            mutationOwner.chat?.key == mutationKey,
       );
-      controller.notifyListeners();
       await tester.pump();
       expect(tester.widget<InkWell>(selector).onTap, isNull);
       await tester.tap(selector);
@@ -239,13 +293,16 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Connection details'), findsOneWidget);
       expect(host.moves, isEmpty);
+      host.mutationDelay!.complete();
+      await mutation;
     },
   );
 
   testWidgets('empty project list explains availability and can be dismissed', (
     tester,
   ) async {
-    controller.current!.projects.clear();
+    host.projectsVisible = false;
+    await controller.switchProfile('personal');
     await show(tester);
     await tester.tap(find.text('Unassigned'));
     await tester.pumpAndSettle();

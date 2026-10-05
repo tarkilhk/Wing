@@ -12,6 +12,7 @@ Switching to gpt-5.6-sol makes the next reply re-read all of it uncached (provid
 Threshold: model.switch_context_confirm_tokens (currently 100,000; 0 disables this check).
 Confirm only if you intend to switch now.''';
   final writes = <Map<String, dynamic>>[];
+  String? resumedRuntimeId;
   bool failReasoning = false;
   bool confirmModel = false;
   bool repeatConfirmation = false;
@@ -71,6 +72,8 @@ Confirm only if you intend to switch now.''';
         if (method == 'session.resume' || method == 'session.create') {
           return {
             ...result,
+            if (method == 'session.resume' && resumedRuntimeId != null)
+              'session_id': resumedRuntimeId,
             'info': {
               'profile_name': scope.profileName,
               'model': 'gpt-6-astra',

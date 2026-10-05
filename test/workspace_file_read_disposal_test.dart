@@ -1,3 +1,7 @@
+import 'package:wing/core/services/owned_remote_files.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -37,31 +41,43 @@ class _FileReadController extends ProfileWorkspaceController {
   _FileReadController(
     SharedPreferences preferences,
     AnswerHost host,
-    this.transport,
-  ) : super(
-        connection: SavedConnection(
-          id: 'file-reader',
-          label: 'File reader',
-          host: 'localhost',
-          port: 1,
-          apiKey: '',
-        ),
-        connectionIdentity: 'file-reader-owner',
-        preferences: preferences,
-        gatewayFactory: host.gateway,
-      );
+    this.transport, {
+    required super.appPreferences,
+  }) : super(
+         access: ConnectionAccess(
+           connection: SavedConnection(
+             id: 'file-reader',
+             label: 'File reader',
+             host: 'localhost',
+             port: 1,
+             apiKey: '',
+           ),
+           dashboardOAuth: null,
+         ),
+         connectionIdentity: 'file-reader-owner',
+         preferences: preferences,
+         gatewayFactory: host.gateway,
+       );
 
   final _StalledBodyClient transport;
 
   @override
-  RemoteFilesClient outputFiles(ProfileChat chat) => RemoteFilesClient(
-    dashboard: DashboardClient(
-      host: 'localhost',
-      proxied: true,
-      httpClient: transport,
-      readTimeout: const Duration(minutes: 1),
-    ),
-  );
+  OwnedRemoteFiles outputFiles(ProfileChat chat) {
+    final files = RemoteFilesClient(
+      dashboard: DashboardClient(
+        host: 'localhost',
+        proxied: true,
+        httpClient: transport,
+        readTimeout: const Duration(minutes: 1),
+      ),
+    );
+    return OwnedRemoteFiles(
+      source: files,
+      profileName: chat.key.workspace.profileName,
+      storedSessionId: chat.key.sessionId,
+      release: files.close,
+    );
+  }
 }
 
 void main() {
@@ -70,6 +86,9 @@ void main() {
       'workspace removal aborts a stalled ${attachmentImage ? 'attachment image' : 'inline download'}',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
+        final preferences = await SharedPreferences.getInstance();
+        final appPreferences = AppPreferences(preferences);
+        addTearDown(appPreferences.dispose);
         final transport = _StalledBodyClient();
         final host = AnswerHost();
         final path = attachmentImage
@@ -85,9 +104,10 @@ void main() {
           },
         ];
         final controller = _FileReadController(
-          await SharedPreferences.getInstance(),
+          preferences,
           host,
           transport,
+          appPreferences: appPreferences,
         );
         addTearDown(() async {
           controller.dispose();

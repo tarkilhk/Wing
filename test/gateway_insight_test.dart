@@ -22,7 +22,6 @@ void main() {
         available.applyTo(streamed),
         'Verified the complete gateway contract.',
       );
-      expect(available.verbose, isTrue);
     });
 
     test('ignores unrelated, empty, and NUL-only events', () {
@@ -52,26 +51,14 @@ void main() {
       })!;
 
       expect(background.kind, GatewayNoticeKind.background);
-      expect(background.title, 'Background task bg-7 completed');
+      expect(background.taskId, 'bg-7');
+      expect(background.text, 'Indexed the selected files.');
       expect(review.kind, GatewayNoticeKind.review);
-      expect(review.title, 'Hermes review');
+      expect(review.text, 'Two changes require review.');
     });
   });
 
   group('Gateway Desktop activity events', () {
-    test('parses notification level, stable key, and TTL', () {
-      final notification = GatewayNotification.fromEventData({
-        'key': 'usage',
-        'level': 'warn',
-        'text': 'Context usage is high.',
-        'ttl_ms': 2500,
-      })!;
-
-      expect(notification.key, 'usage');
-      expect(notification.level, GatewayNotificationLevel.warning);
-      expect(notification.ttl, const Duration(milliseconds: 2500));
-    });
-
     test('merges subagent progress into its stable activity', () {
       final started =
           GatewaySubagentActivity.fromGatewayEvent('subagent.start', {
@@ -89,43 +76,9 @@ void main() {
 
       final merged = started.merge(completed);
       expect(merged.id, 'child-1');
-      expect(merged.isComplete, isTrue);
+      expect(merged.isTerminal, isTrue);
       expect(merged.detail, 'Transport inspected.');
       expect(merged.taskIndex, 1);
-    });
-  });
-
-  group('GatewayInterimTransition', () {
-    test('does not duplicate text that was already streamed', () {
-      final result = GatewayInterimTransition.resolve(
-        currentText: 'Interim result.',
-        interimText: 'Interim result.',
-        alreadyStreamed: true,
-      );
-
-      expect(result.sealedText, 'Interim result.');
-      expect(result.startsNewMessage, isTrue);
-    });
-
-    test('repairs a partially streamed interim from authoritative text', () {
-      final result = GatewayInterimTransition.resolve(
-        currentText: 'Interim ',
-        interimText: 'Interim result.',
-        alreadyStreamed: true,
-      );
-
-      expect(result.sealedText, 'Interim result.');
-    });
-
-    test('adds an interim that was not previously streamed', () {
-      final result = GatewayInterimTransition.resolve(
-        currentText: '',
-        interimText: 'Fresh interim.',
-        alreadyStreamed: false,
-      );
-
-      expect(result.sealedText, 'Fresh interim.');
-      expect(result.startsNewMessage, isTrue);
     });
   });
 }

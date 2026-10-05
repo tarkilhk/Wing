@@ -2,9 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'turn_notification_service.dart';
+import 'app_preferences.dart';
 
 enum BackgroundMonitoringState {
   unsupported,
@@ -23,7 +21,7 @@ class BackgroundMonitoringService {
   static const channel = MethodChannel(
     'com.tarkilhk.wing/background_monitoring',
   );
-  final SharedPreferences preferences;
+  final AppPreferences preferences;
   final bool Function() hasActiveChats;
   final Future<bool?> Function() notificationsEnabled;
   final bool supported;
@@ -55,8 +53,8 @@ class BackgroundMonitoringService {
     }
     try {
       final enabled =
-          (preferences.getBool(completionNotificationsKey) ?? true) ||
-          (preferences.getBool(attentionNotificationsKey) ?? true);
+          preferences.current.completedNotificationsAllowed ||
+          preferences.current.attentionNotificationsAllowed;
       final activeChats = hasActiveChats();
       final allowed = await notificationsEnabled() != false;
       if (_disposed) return;

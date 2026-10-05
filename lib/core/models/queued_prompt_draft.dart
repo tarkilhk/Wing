@@ -3,7 +3,7 @@ import 'attachment_draft.dart';
 class QueuedPromptDraft {
   final String text;
   final List<AttachmentDraft> attachments;
-  bool submissionUncertain;
+  final bool submissionUncertain;
 
   QueuedPromptDraft({
     required this.text,

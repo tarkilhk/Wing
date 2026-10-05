@@ -1,3 +1,4 @@
+import 'package:wing/core/services/chat_outputs_session.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -84,17 +85,19 @@ void main() {
                       url: null,
                       label: 'index.html',
                     ),
-                    loadHistory: (_) => throw StateError('Unneeded history'),
-                    readText: (_) => throw StateError(
-                      'HTML must bypass the text-preview limit',
+                    createSession: () => ChatOutputsSession(
+                      loadHistory: (_) => throw StateError('Unneeded history'),
+                      readText: (_) => throw StateError(
+                        'HTML must bypass the text-preview limit',
+                      ),
+                      download: (path) async {
+                        downloads.add(path);
+                        return RemoteFileDownload(
+                          filename: 'index.html',
+                          bytes: utf8.encode(source),
+                        );
+                      },
                     ),
-                    download: (path) async {
-                      downloads.add(path);
-                      return RemoteFileDownload(
-                        filename: 'index.html',
-                        bytes: utf8.encode(source),
-                      );
-                    },
                   ),
                 ),
               ),

@@ -1,3 +1,6 @@
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +12,7 @@ import 'profile_workspace_controller_test.dart' show Host;
 void main() {
   late Host host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   Completer<Map<String, dynamic>>? pending;
   late Map<String, dynamic> breakdownResponse;
   const snapshot = {
@@ -21,10 +25,16 @@ void main() {
     host = Host();
     pending = null;
     breakdownResponse = snapshot;
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'context-test',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: (scope) {
         final base = host.gateway(scope);
         late final ProfileGateway gateway;
@@ -51,17 +61,20 @@ void main() {
     );
     await controller.initialize();
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   test(
     'usage belongs to the original chat and partial events retain server limits',
     () async {
-      final a = await controller.createChat();
+      final a = await controller.createChat(canDispatch: () => true);
       await controller.refreshContext(a);
       expect(a.context!.percent, 25);
       expect(host.calls.last.$3, {'session_id': 'a-runtime', 'profile': 'a'});
       await controller.switchProfile('b');
-      final b = await controller.createChat();
+      final b = await controller.createChat(canDispatch: () => true);
       await controller.refreshContext(b);
       host.event('a', 'session.usage', {
         'usage': {'context_used': 750, 'context_percent': 75},
@@ -73,7 +86,7 @@ void main() {
   );
 
   test('late breakdown cannot overwrite a newer live usage event', () async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     await controller.refreshContext(chat);
     pending = Completer();
     final refresh = controller.refreshContext(chat);
@@ -127,7 +140,7 @@ void main() {
 
       expect(restored.context?.percent, 30);
       expect(restored.context?.estimated, isTrue);
-      expect(restored.messages, isNotEmpty);
+      expect(restored.reading.messages, isNotEmpty);
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
       expect(
         host.calls.where((call) => call.$2 == 'session.context_breakdown'),

@@ -66,7 +66,12 @@ void main() {
         });
 
         expect(
-          await console.run('personal', 'auth list anthropic'),
+          await console.run(
+            'personal',
+            'auth list anthropic',
+            canDispatch: () => true,
+            onDispatched: () {},
+          ),
           'Credential status',
         );
         expect(requests, hasLength(2));
@@ -145,7 +150,12 @@ void main() {
         });
 
         await expectLater(
-          console.run('personal', 'auth list anthropic'),
+          console.run(
+            'personal',
+            'auth list anthropic',
+            canDispatch: () => true,
+            onDispatched: () {},
+          ),
           throwsA(isA<ProviderRecoveryFailure>()),
         );
         expect(sourceRequests, hasLength(2));

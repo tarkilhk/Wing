@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../services/owned_remote_files.dart';
 import '../services/web_preview.dart';
 import '../theme/wing_theme.dart';
 import 'chat_image_preview.dart';
@@ -28,19 +29,17 @@ class ChatInlineImage extends StatefulWidget {
 }
 
 class _ChatInlineImageState extends State<ChatInlineImage> {
-  late Future<ImageProvider> _image = _load();
+  late Future<ImageProvider> _image = _imageProvider();
   int _attempt = 0;
 
-  Future<ImageProvider> _load() async {
-    final uri = externalWebLink(widget.target);
-    if (uri != null) return NetworkImage(uri.toString());
-    if (Uri.tryParse(widget.target)?.hasScheme == true &&
-        !RegExp(r'^[A-Za-z]:[\\/]').hasMatch(widget.target)) {
-      throw const FormatException('Unsupported image address');
-    }
-    final load = widget.loadImage;
-    if (load == null) throw StateError('Image loader unavailable');
-    return MemoryImage(await load(widget.target));
+  Future<ImageProvider> _imageProvider() async {
+    final resource = await acquireConversationImage(
+      widget.target,
+      widget.loadImage,
+    );
+    return resource.bytes != null
+        ? MemoryImage(resource.bytes!)
+        : NetworkImage(resource.uri.toString());
   }
 
   @override
@@ -49,7 +48,7 @@ class _ChatInlineImageState extends State<ChatInlineImage> {
     if (oldWidget.target != widget.target ||
         (oldWidget.loadImage == null) != (widget.loadImage == null)) {
       _attempt++;
-      _image = _load();
+      _image = _imageProvider();
     }
   }
 
@@ -89,7 +88,7 @@ class _ChatInlineImageState extends State<ChatInlineImage> {
         OutlinedButton.icon(
           onPressed: () => setState(() {
             _attempt++;
-            _image = _load();
+            _image = _imageProvider();
           }),
           icon: const Icon(Icons.refresh),
           label: const Text('Retry image'),

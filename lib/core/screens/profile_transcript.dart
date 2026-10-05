@@ -1,6 +1,6 @@
 import '../services/server_connection_status.dart';
 import '../models/notification_focus.dart';
-import '../models/answer_versions.dart';
+import '../models/transcript_timeline.dart' as timeline_facts;
 import '../widgets/studio_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -19,14 +19,14 @@ import '../widgets/playful_portrait.dart';
 class ProfileTranscript extends StatefulWidget {
   final ProfileChat chat;
   final ProfileWorkspaceController controller;
-  final Widget Function(Map<String, dynamic>, {required bool streaming})
-  messageBuilder;
+  final Widget Function(timeline_facts.TranscriptTimelineEntry) messageBuilder;
   final List<Widget> tail;
+  final Future<void> Function() onLoadOlder;
   final List<Widget> currentActivity;
   final List<ProfileActivityTab> activityTabs;
   final Widget? activityThinking;
   final int liveToolCount;
-  final List<Map<String, dynamic>>? nearbyMessages;
+  final timeline_facts.TranscriptTimeline timeline;
   final int? focusedMessageId;
   final VoidCallback? onBackToLatest;
   final Map<String, GlobalKey> notificationAnchors;
@@ -34,31 +34,30 @@ class ProfileTranscript extends StatefulWidget {
     super.key,
     required this.chat,
     required this.controller,
+    required this.onLoadOlder,
     required this.messageBuilder,
+    required this.timeline,
     required this.tail,
     this.currentActivity = const [],
     this.activityTabs = const [],
     this.activityThinking,
     this.liveToolCount = 0,
-    this.nearbyMessages,
     this.focusedMessageId,
     this.onBackToLatest,
     this.notificationAnchors = const {},
-  }) : assert(
-         nearbyMessages == null ||
-             (focusedMessageId != null && onBackToLatest != null),
-       );
+  }) : assert(focusedMessageId == null || onBackToLatest != null);
   @override
   State<ProfileTranscript> createState() => _ProfileTranscriptState();
 }
 
 class _ProfileTranscriptState extends State<ProfileTranscript> {
   late final _scroll = ExpansionScrollController(
-    initialScrollOffset: widget.nearbyMessages == null
-        ? widget.chat.historyScrollOffset
+    initialScrollOffset: widget.focusedMessageId == null
+        ? widget.chat.reading.historyScrollOffset
         : 0,
     restoreInitialOffset:
-        widget.nearbyMessages == null && widget.chat.historyScrollOffset > 0,
+        widget.focusedMessageId == null &&
+        widget.chat.reading.historyScrollOffset > 0,
   );
   final _viewport = GlobalKey();
   final _focusedRow = GlobalKey();
@@ -70,6 +69,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   int _noticeRevealAttempts = 0;
   int _noticeRevealGeneration = -1;
   bool _noticeFrameScheduled = false;
+  bool _olderLoadScheduled = false;
   bool _jumping = false;
   bool _hasNewContent = false;
   Object? _newestId;
@@ -77,9 +77,11 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   Object? _streamingPresentationId;
   String? _segment;
   late bool _restoringMarkdown =
-      widget.nearbyMessages == null && widget.chat.historyScrollOffset > 0;
+      widget.focusedMessageId == null &&
+      widget.chat.reading.historyScrollOffset > 0;
   late final _jumpLabel = ValueNotifier<String?>(
-    widget.nearbyMessages == null && widget.chat.historyScrollOffset > 48
+    widget.focusedMessageId == null &&
+            widget.chat.reading.historyScrollOffset > 48
         ? 'Latest'
         : null,
   );
@@ -87,20 +89,47 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   @override
   void initState() {
     super.initState();
-    _newestId = widget.chat.messages.lastOrNull?['id'];
-    _streaming = widget.chat.streaming;
-    final live = widget.chat.streamingMessage;
-    _streamingPresentationId = live == null
-        ? null
-        : widget.chat.messagePresentationId(live);
-    _segment = widget.chat.historySessionId;
+    _newestId = widget.timeline.entries
+        .where((entry) => !entry.streaming)
+        .lastOrNull
+        ?.message
+        .id;
+    _streaming = widget.chat.reading.streaming;
+    _streamingPresentationId = widget.timeline.entries
+        .where((entry) => entry.streaming)
+        .firstOrNull
+        ?.presentationId;
+    _segment = widget.chat.reading.historySessionId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.nearbyMessages == null) {
+      if (widget.focusedMessageId == null) {
         _updateJump();
       } else {
         _revealFocusedRow();
       }
       _finishMarkdownRestoration();
+    });
+  }
+
+  // Scroll-end can be delivered during viewport layout. Owner commands may
+  // publish synchronously, so issue this request only after the current frame.
+  void _scheduleLoadOlder() {
+    if (_olderLoadScheduled) return;
+    _olderLoadScheduled = true;
+    final chat = widget.chat;
+    final controller = widget.controller;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _olderLoadScheduled = false;
+      if (!mounted ||
+          !identical(widget.chat, chat) ||
+          !identical(widget.controller, controller) ||
+          !_scroll.hasClients ||
+          _scroll.position.extentAfter >= 180 ||
+          _scroll.position.pixels <= 0 ||
+          chat.reading.historyLoading ||
+          chat.reading.historyError != null) {
+        return;
+      }
+      unawaited(widget.onLoadOlder());
     });
   }
 
@@ -121,7 +150,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     (context as Element).visitChildren(visit);
     if (!pending) {
       _cancelMarkdownRestoration();
-      if (_scroll.hasClients) widget.chat.historyScrollOffset = _scroll.offset;
+      if (_scroll.hasClients) {
+        widget.chat.reading.recordScrollOffset(_scroll.offset);
+      }
     }
   }
 
@@ -145,19 +176,13 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       return widget.notificationAnchors[target.identity];
     }
     if (target.kind == 'answer' || target.kind == 'status') {
-      final answer = widget.chat.messages.reversed
-          .where(
-            (row) =>
-                row['role'] == 'assistant' &&
-                !isHiddenAnswerMessage(row) &&
-                row['content'] is String &&
-                (row['content'] as String).trim().isNotEmpty &&
-                (target.messageId == null || row['id'] == target.messageId),
-          )
-          .firstOrNull;
-      return answer == null
-          ? null
-          : _rows[widget.chat.messagePresentationId(answer)];
+      final answer =
+          timeline_facts.TranscriptTimeline.notificationAnswerPresentation(
+            widget.chat.reading.messages,
+            presentationId: widget.chat.reading.messagePresentationId,
+            messageId: target.messageId,
+          );
+      return answer == null ? null : _rows[answer];
     }
     return widget.notificationAnchors[target.identity];
   }
@@ -169,18 +194,20 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       _noticeFrameScheduled = false;
       if (!mounted ||
           !_scroll.hasClients ||
-          widget.nearbyMessages != null ||
-          widget.chat.opening ||
-          widget.chat.historyLoading) {
+          widget.focusedMessageId != null ||
+          widget.chat.runtime.opening ||
+          widget.chat.reading.historyLoading) {
         return;
       }
       final chat = widget.chat;
-      final focus = chat.notificationFocus;
+      final focus = chat.reading.notificationFocus;
       if (focus != null &&
-          _revealedNotificationGeneration != chat.notificationFocusGeneration) {
+          _revealedNotificationGeneration !=
+              chat.reading.notificationFocusGeneration) {
         _cancelMarkdownRestoration();
-        if (_noticeRevealGeneration != chat.notificationFocusGeneration) {
-          _noticeRevealGeneration = chat.notificationFocusGeneration;
+        if (_noticeRevealGeneration !=
+            chat.reading.notificationFocusGeneration) {
+          _noticeRevealGeneration = chat.reading.notificationFocusGeneration;
           _noticeRevealAttempts = 0;
           _scroll.jumpTo(0);
           _scheduleNoticeVisibility();
@@ -189,9 +216,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         }
         final anchor = _notificationAnchor(focus)?.currentContext;
         if (anchor != null) {
-          _revealedNotificationGeneration = chat.notificationFocusGeneration;
+          _revealedNotificationGeneration =
+              chat.reading.notificationFocusGeneration;
           _noticeRevealAttempts = 0;
-          chat.notificationFocus = null;
+          chat.reading.releaseNotificationFocus(focus, _noticeRevealGeneration);
           unawaited(
             Scrollable.ensureVisible(
               anchor,
@@ -210,11 +238,12 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
             _scroll.jumpTo(next);
             _scheduleNoticeVisibility();
           } else {
-            _revealedNotificationGeneration = chat.notificationFocusGeneration;
+            _revealedNotificationGeneration =
+                chat.reading.notificationFocusGeneration;
           }
         }
       }
-      final target = chat.notificationReadTarget;
+      final target = chat.reading.notificationReadTarget;
       if (target == null) return;
       final viewport = _viewport.currentContext?.findRenderObject();
       final answer = _notificationAnchor(
@@ -240,10 +269,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     _scheduleNoticeVisibility();
     final distance = _scroll.offset;
     if (distance <= 24) _hasNewContent = false;
-    final attention =
-        widget.chat.approval != null ||
-        widget.chat.pendingQuestion != null ||
-        widget.chat.sensitivePrompt != null;
+    final attention = widget.chat.runtime.needsInput;
     _jumpLabel.value =
         distance <= 24 || (distance <= 48 && !_hasNewContent && !attention)
         ? null
@@ -274,33 +300,37 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   @override
   void didUpdateWidget(covariant ProfileTranscript oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.nearbyMessages != null) return;
+    if (widget.focusedMessageId != null) return;
     if (!_scroll.hasClients) return;
     final atBottom =
         !_scroll.hasExpansionAnchor &&
         (_jumping ||
             (_scroll.offset <= 0.5 &&
                 !_scroll.position.isScrollingNotifier.value));
-    final newest = widget.chat.messages.lastOrNull?['id'];
-    final segmentChanged = _segment != widget.chat.historySessionId;
+    final newest = widget.timeline.entries
+        .where((entry) => !entry.streaming)
+        .lastOrNull
+        ?.message
+        .id;
+    final segmentChanged = _segment != widget.chat.reading.historySessionId;
     final growingRow =
         _rows[_streamingPresentationId]?.currentContext?.findRenderObject()
             as TranscriptAnchorBox?;
     if (!atBottom &&
         !segmentChanged &&
         ((_newestId != null && newest != null && newest != _newestId) ||
-            (widget.chat.streaming.isNotEmpty &&
-                widget.chat.streaming != _streaming))) {
+            (widget.chat.reading.streaming.isNotEmpty &&
+                widget.chat.reading.streaming != _streaming))) {
       _hasNewContent = true;
     }
     _newestId = newest;
-    _streaming = widget.chat.streaming;
-    _segment = widget.chat.historySessionId;
+    _streaming = widget.chat.reading.streaming;
+    _segment = widget.chat.reading.historySessionId;
     _preserveReaderAnchor(growingRow);
-    final live = widget.chat.streamingMessage;
-    _streamingPresentationId = live == null
-        ? null
-        : widget.chat.messagePresentationId(live);
+    _streamingPresentationId = widget.timeline.entries
+        .where((entry) => entry.streaming)
+        .firstOrNull
+        ?.presentationId;
     final generation = ++_layoutGeneration;
     final gesture = _gestureGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -311,7 +341,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         return;
       }
       if (!_restoringMarkdown) {
-        widget.chat.historyScrollOffset = _scroll.offset;
+        widget.chat.reading.recordScrollOffset(_scroll.offset);
       }
       _updateJump();
     });
@@ -324,7 +354,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     // A restored pixel offset already includes the old rendered heights.
     // Anchoring initial empty Markdown bodies would add that growth twice.
     if (_restoringMarkdown ||
-        widget.nearbyMessages != null ||
+        widget.focusedMessageId != null ||
         !_scroll.hasClients) {
       return;
     }
@@ -368,10 +398,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
 
   @override
   void dispose() {
-    if (widget.nearbyMessages == null &&
+    if (widget.focusedMessageId == null &&
         !_restoringMarkdown &&
         _scroll.hasClients) {
-      widget.chat.historyScrollOffset = _scroll.offset;
+      widget.chat.reading.recordScrollOffset(_scroll.offset);
     }
     _scroll.dispose();
     _jumpLabel.dispose();
@@ -380,29 +410,17 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.nearbyMessages != null) return _nearbyMessages(context);
+    if (widget.focusedMessageId != null) return _nearbyMessages(context);
     final buildStarted = CompletionDiagnostics.enabled
         ? CompletionDiagnostics.start()
         : 0;
     final chat = widget.chat;
     _scheduleNoticeVisibility();
-    final groupStarted = CompletionDiagnostics.enabled
-        ? CompletionDiagnostics.start()
-        : 0;
-    final live = chat.streamingMessage;
-    final messages = [...chat.messages, ?live];
-    final rows = groupTranscriptSections(messages).reversed.toList();
-    if (CompletionDiagnostics.enabled) {
-      CompletionDiagnostics.finish(
-        'transcript.group_sync',
-        groupStarted,
-        values: {'rows': chat.messages.length, 'sections': rows.length},
-      );
-    }
+    final timeline = widget.timeline;
+    final rows = timeline.sections.reversed.toList();
     // Join adjacent saved calls and live work without crossing visible prose
     // or hiding the latest review's standalone detail button.
-    final joinCurrentActivity =
-        live == null && rows.isNotEmpty && rows.first.isTool;
+    final joinCurrentActivity = timeline.joinsCurrentActivity;
     final tailContent = [
       if ((widget.currentActivity.isNotEmpty ||
               widget.activityTabs.isNotEmpty ||
@@ -428,20 +446,24 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         ),
     ];
     final showOpening =
-        chat.opening && chat.messages.isEmpty && chat.streaming.isEmpty;
+        chat.runtime.opening &&
+        chat.reading.messages.isEmpty &&
+        chat.reading.streaming.isEmpty;
     final showWelcome =
-        !chat.opening &&
-        chat.messages.isEmpty &&
-        !chat.historyLoading &&
-        chat.historyError == null &&
-        chat.nextHistoryOffset == null &&
-        chat.streaming.isEmpty &&
-        !chat.busy &&
+        !chat.runtime.opening &&
+        chat.reading.messages.isEmpty &&
+        !chat.reading.historyLoading &&
+        chat.reading.historyError == null &&
+        chat.reading.nextHistoryOffset == null &&
+        chat.reading.streaming.isEmpty &&
+        !chat.runtime.blocksTurnAdmission &&
         tail.isEmpty;
     final keysStarted = CompletionDiagnostics.enabled
         ? CompletionDiagnostics.start()
         : 0;
-    final activeIds = messages.map(chat.messagePresentationId).toSet();
+    final activeIds = timeline.entries
+        .map((entry) => entry.presentationId)
+        .toSet();
     _rows.removeWhere((id, _) => !activeIds.contains(id));
     // A sliver needs an index lookup to retain mounted message/expansion state
     // when a new tail shifts every existing row's index.
@@ -452,11 +474,11 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     for (final section in rows) {
       final group = section.messages.toList();
       final existing = group.reversed
-          .map((row) => _rows[chat.messagePresentationId(row)])
+          .map((row) => _rows[row.presentationId])
           .whereType<GlobalKey>()
           .where((key) => !usedKeys.contains(key))
           .firstOrNull;
-      final id = group.last['id'];
+      final id = group.last.message.id;
       final key = existing ?? GlobalKey();
       if (CompletionDiagnostics.enabled && existing == null) {
         if (id == null) {
@@ -466,7 +488,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         }
       }
       for (final row in group) {
-        _rows[chat.messagePresentationId(row)] = key;
+        _rows[row.presentationId] = key;
       }
       keys.add(key);
       usedKeys.add(key);
@@ -498,7 +520,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         onNotification: (event) {
           if (event.depth == 0) {
             if (!_restoringMarkdown) {
-              widget.chat.historyScrollOffset = event.metrics.pixels;
+              widget.chat.reading.recordScrollOffset(event.metrics.pixels);
             }
             _updateJump();
           }
@@ -513,12 +535,12 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
               _gestureGeneration++;
               _cancelMarkdownRestoration();
               _revealedNotificationGeneration =
-                  widget.chat.notificationFocusGeneration;
+                  widget.chat.reading.notificationFocusGeneration;
               _jumping = false;
               _scroll.releaseExpansionAnchor();
             }
             if (!_restoringMarkdown) {
-              widget.chat.historyScrollOffset = event.metrics.pixels;
+              widget.chat.reading.recordScrollOffset(event.metrics.pixels);
             }
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _updateJump();
@@ -527,9 +549,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                     event is ScrollEndNotification) &&
                 event.metrics.extentAfter < 180 &&
                 event.metrics.pixels > 0 &&
-                !chat.historyLoading &&
-                chat.historyError == null) {
-              unawaited(widget.controller.loadOlderMessages(chat));
+                !chat.reading.historyLoading &&
+                chat.reading.historyError == null) {
+              _scheduleLoadOlder();
             }
             return false;
           },
@@ -552,9 +574,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                     key: keys[rowIndex],
                     child: section.isActivity
                         ? ProfileToolActivitySection(
-                            groups: section.groups,
+                            section: section,
                             showLatestReview:
-                                rowIndex == 0 && chat.streaming.isEmpty,
+                                rowIndex == 0 && chat.reading.streaming.isEmpty,
                             tabs: rowIndex == 0 && joinCurrentActivity
                                 ? widget.activityTabs
                                 : const [],
@@ -569,10 +591,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                                 ? widget.currentActivity
                                 : const [],
                           )
-                        : widget.messageBuilder(
-                            row,
-                            streaming: identical(row, live),
-                          ),
+                        : widget.messageBuilder(row),
                   );
                 }
                 return KeyedSubtree(
@@ -603,7 +622,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
-                                        chat.openingError ??
+                                        chat.runtime.openingError ??
                                             (waiting
                                                 ? 'Reconnecting to ${status.label}'
                                                 : 'Waiting for connection'),
@@ -614,7 +633,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                                       ),
                                       const SizedBox(height: 8),
                                       Text(
-                                        chat.openingError == null
+                                        chat.runtime.openingError == null
                                             ? 'This conversation will open automatically.'
                                             : 'You can retry or return to your chats.',
                                         textAlign: TextAlign.center,
@@ -693,10 +712,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
             )
           : const SizedBox.shrink(),
     );
-    final needsInput =
-        chat.approval != null ||
-        chat.pendingQuestion != null ||
-        chat.sensitivePrompt != null;
+    final needsInput = chat.runtime.needsInput;
     if (CompletionDiagnostics.enabled) {
       CompletionDiagnostics.finish(
         'transcript.build_setup_sync',
@@ -705,8 +721,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           'newIdlessKeys': newIdlessKeys,
           'newDurableKeys': newDurableKeys,
           'sections': rows.length,
-          'streaming': chat.streaming.isNotEmpty ? 1 : 0,
-          'busy': chat.busy ? 1 : 0,
+          'streaming': chat.reading.streaming.isNotEmpty ? 1 : 0,
+          'busy': chat.runtime.blocksTurnAdmission ? 1 : 0,
         },
       );
     }
@@ -755,16 +771,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
 
   Widget _nearbyMessages(BuildContext context) {
     final targetId = widget.focusedMessageId!;
-    final rows = widget.nearbyMessages!;
-    final rowIndex = rows.indexWhere((row) => row['id'] == targetId);
-    if (rowIndex < 0) return _missingSearchResult();
-    final start = (rowIndex - 4).clamp(0, rows.length).toInt();
-    final end = (rowIndex + 5).clamp(0, rows.length).toInt();
-    final sections = groupTranscriptSections(rows.sublist(start, end));
-    final targetIndex = sections.indexWhere(
-      (section) => section.messages.any((row) => row['id'] == targetId),
-    );
-    if (targetIndex < 0) return _missingSearchResult();
+    final timeline = widget.timeline.nearby(targetId);
+    if (timeline == null) return _missingSearchResult();
+    final sections = timeline.sections;
     return Column(
       children: [
         Padding(
@@ -804,17 +813,16 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                 for (final section in sections)
                   if (section.isActivity)
                     ProfileToolActivitySection(
-                      groups: section.groups,
+                      section: section,
                       expandedMessageId: targetId,
                       focusedMessageKey: _focusedRow,
                     )
                   else
                     Container(
-                      key: section.messages.any((row) => row['id'] == targetId)
+                      key: section.containsMessage(targetId)
                           ? _focusedRow
                           : null,
-                      decoration:
-                          section.messages.any((row) => row['id'] == targetId)
+                      decoration: section.containsMessage(targetId)
                           ? BoxDecoration(
                               border: Border.all(
                                 color: Theme.of(context).colorScheme.primary,
@@ -823,10 +831,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                               borderRadius: WingRadius.card,
                             )
                           : null,
-                      child: widget.messageBuilder(
-                        section.messages.last,
-                        streaming: false,
-                      ),
+                      child: widget.messageBuilder(section.messages.last),
                     ),
               ],
             ),
@@ -844,8 +849,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   );
 
   Widget _historyEdge(ProfileChat chat) {
-    if (chat.historyUnavailable) return const SizedBox.shrink();
-    if (chat.historyLoading) {
+    if (chat.reading.historyUnavailable) return const SizedBox.shrink();
+    if (chat.reading.historyLoading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 12),
         child: Row(
@@ -862,27 +867,27 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         ),
       );
     }
-    if (chat.historyError != null) {
+    if (chat.reading.historyError != null) {
       return Column(
         children: [
-          StudioError(chat.historyError!),
+          StudioError(chat.reading.historyError!),
           TextButton(
             onPressed: () => widget.controller.refreshHistory(chat),
             child: const Text('Refresh history'),
           ),
-          if (chat.nextHistoryOffset != null)
+          if (chat.reading.nextHistoryOffset != null)
             TextButton(
-              onPressed: () => widget.controller.loadOlderMessages(chat),
+              onPressed: () => widget.onLoadOlder(),
               child: const Text('Retry older messages'),
             ),
         ],
       );
     }
-    return chat.nextHistoryOffset == null
+    return chat.reading.nextHistoryOffset == null
         ? Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(
-              chat.messages.isEmpty
+              chat.reading.messages.isEmpty
                   ? 'Start a conversation'
                   : 'Start of loaded history',
               textAlign: TextAlign.center,
@@ -892,7 +897,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
             ),
           )
         : TextButton(
-            onPressed: () => widget.controller.loadOlderMessages(chat),
+            onPressed: () => widget.onLoadOlder(),
             child: const Text('Load older messages'),
           );
   }

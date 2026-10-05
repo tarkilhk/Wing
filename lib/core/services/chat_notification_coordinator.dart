@@ -3,47 +3,24 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/app_preferences.dart';
 import '../models/chat_notification_content.dart';
 import '../models/notification_focus.dart';
+import '../models/notification_input.dart';
 import 'turn_notification_service.dart';
+import 'app_preferences.dart';
 
-/// An immutable input snapshot. Secret values never belong here.
-class NotificationInput {
-  final NotificationFocus focus;
-  final ChatNotificationContent content;
-  final List<String> choices;
-  final int count;
-  final bool submitting;
-  final String? error;
-  const NotificationInput({
-    required this.focus,
-    required this.content,
-    this.choices = const [],
-    this.count = 1,
-    this.submitting = false,
-    this.error,
-  });
-  Map<String, dynamic> toJson() => {
-    'focus': focus.toJson(),
-    'content': content.toJson(),
-    'choices': choices,
-    'count': count,
-    'submitting': submitting,
-    'error': error,
-  };
-  factory NotificationInput.fromJson(
-    Map<String, dynamic> data,
-  ) => NotificationInput(
-    focus: NotificationFocus.fromJson(Map<String, dynamic>.from(data['focus'])),
-    content: ChatNotificationContent.fromJson(
-      Map<String, dynamic>.from(data['content']),
-    ),
-    choices: List<String>.from(data['choices']),
-    count: data['count'] as int,
-    // A process restart cannot leave the UI stuck in an in-flight submission.
-    error: data['error'] as String?,
-  );
-}
+import 'package:flutter/foundation.dart';
+import '../models/profile_session_key.dart';
+import '../models/gateway_approval.dart';
+import 'connection_manager.dart';
+import 'profile_workspace_controller.dart';
+import 'profile_workspace_registry.dart';
+import 'native_notification_sink.dart';
+import 'notification_delivery_ledger.dart';
+import 'background_monitoring_service.dart';
+
+part 'chat_notification_application.dart';
 
 class _ChatNotice {
   String title;
@@ -65,15 +42,32 @@ class _ChatNotice {
   };
 }
 
+typedef _NotificationPolicy = ({bool completed, bool attention, bool previews});
+
 /// One durable state per scoped chat. Rendering and writes are serialized so a
 /// delayed permission check or stale read callback cannot replace a newer state.
 class ChatNotificationCoordinator {
   static const storageKey = 'chat_notification_state';
   final SharedPreferences preferences;
+  final AppPreferences appPreferences;
   final TurnNotificationSink sink;
   final Map<String, _ChatNotice> _chats = {};
   Future<void> _tail = Future.value();
-  ChatNotificationCoordinator(this.preferences, this.sink) {
+  _NotificationPolicy? _lastPreferencePolicy;
+  _NotificationApplication? _application;
+  ChatNotificationCoordinator(
+    this.preferences,
+    this.sink, {
+    required this.appPreferences,
+  }) {
+    final state = appPreferences.current;
+    if ([
+      AppPreferenceField.completedNotifications,
+      AppPreferenceField.attentionNotifications,
+      AppPreferenceField.notificationPreviews,
+    ].every(state.isFieldCurrent)) {
+      _lastPreferencePolicy = _currentPreferencePolicy;
+    }
     final stored = preferences.getString(storageKey);
     if (stored == null) return;
     try {
@@ -103,17 +97,112 @@ class ChatNotificationCoordinator {
     }
   }
 
-  Future<void> _write() => preferences.setString(
-    storageKey,
-    jsonEncode(_chats.map((key, value) => MapEntry(key, value.toJson()))),
-  );
+  Future<void> _write() async {
+    final saved = await preferences.setString(
+      storageKey,
+      jsonEncode(_chats.map((key, value) => MapEntry(key, value.toJson()))),
+    );
+    if (!saved) throw StateError('Notification state was not saved');
+  }
+
   Future<void> _serialize(Future<void> Function() work) {
-    final next = _tail.then((_) => work());
+    final next = _tail.then((_) async {
+      final policy = _currentPreferencePolicy;
+      var stable = true;
+      void observePolicy() {
+        // A render can admit different facts after permission yields. Once
+        // changed, an ABA return cannot acknowledge that operation as stable.
+        if (_currentPreferencePolicy != policy) stable = false;
+      }
+
+      appPreferences.state.addListener(observePolicy);
+      try {
+        await work();
+      } catch (_) {
+        // Delivery may succeed without journal confirmation. Every operation
+        // leaves a queued or explicit refresh eligible after an uncertain write.
+        _lastPreferencePolicy = null;
+        rethrow;
+      } finally {
+        if (!stable || _currentPreferencePolicy != policy) {
+          _lastPreferencePolicy = null;
+        }
+        appPreferences.state.removeListener(observePolicy);
+      }
+    });
     _tail = next.catchError((Object _) {});
     return next;
   }
 
-  Map<String, dynamic>? resultFor(String chat) => _chats[chat]?.result;
+  NotificationFocus? resultFor(String chat) {
+    final value = _chats[chat]?.result;
+    return value == null
+        ? null
+        : NotificationFocus.fromJson(Map<String, dynamic>.from(value['focus']));
+  }
+
+  /// Application activation is mandatory before application commands. The
+  /// independent journal interface remains usable by its direct consumers.
+  void bindApplication({
+    required ConnectionManager manager,
+    required ProfileWorkspaceRegistry registry,
+    required NativeNotificationSink native,
+    required NotificationDeliveryLedger deliveries,
+    required Future<void> ready,
+    required BackgroundMonitoringService monitoring,
+    required Future<void> Function(NotificationChatRoute) showChat,
+    required Future<void> Function(NotificationApprovalReviewIntent)
+    reviewApproval,
+    required void Function() deferShare,
+    required void Function() showOpenError,
+    required Future<void> Function() beforeNavigation,
+  }) {
+    if (_application != null) {
+      throw StateError('Notification application already bound');
+    }
+    _application = _NotificationApplication(
+      this,
+      manager: manager,
+      registry: registry,
+      native: native,
+      deliveries: deliveries,
+      ready: ready,
+      monitoring: monitoring,
+      showChat: showChat,
+      reviewApproval: reviewApproval,
+      deferShare: deferShare,
+      showOpenError: showOpenError,
+      beforeNavigation: beforeNavigation,
+    );
+    _application!.activate();
+  }
+
+  _NotificationApplication get _activeApplication {
+    final value = _application;
+    if (value == null || value.closed) {
+      throw StateError('Notification application is not active');
+    }
+    return value;
+  }
+
+  Future<void> openPayload(String payload) =>
+      _activeApplication.openPayload(payload);
+  Future<void> receiveInteraction(NativeNotificationInteraction value) =>
+      _activeApplication.interaction(value);
+  Future<void> receiveNotice(ProfileNotification value) =>
+      _activeApplication.receive(value);
+  Future<void> receiveInputs(ProfileInputNotification value) =>
+      _activeApplication.receiveInputs(value);
+  Future<void> requestStartupPermission() =>
+      _activeApplication.requestStartupPermission();
+  Future<void> enableNotifications() => _activeApplication.enable();
+  Future<void> applicationResumed() => _activeApplication.resumed();
+  Future<void> syncMonitoring() => _activeApplication.syncMonitoring();
+  void closeApplication() => _activeApplication.close();
+  NotificationFocus? focusFor(ProfileSessionKey key) =>
+      resultFor(jsonEncode(key.toJson()));
+  Future<void> readTarget(ProfileSessionKey key, String identity) =>
+      read(jsonEncode(key.toJson()), identity);
   NotificationInput? inputFor(String chat) => _chats[chat]?.inputs.firstOrNull;
   bool hasNotice(String chat) => _chats[chat]?.posted != null;
   Iterable<String> get chatsWithNotices => _chats.entries
@@ -147,22 +236,27 @@ class ChatNotificationCoordinator {
     required String scope,
     required List<NotificationInput> inputs,
     bool alert = true,
-  }) => _serialize(() async {
-    final state = _chats.putIfAbsent(chat, () => _ChatNotice(title, scope));
-    state.title = title;
-    state.scope = scope;
-    // Preserve first-seen order across request kinds, refreshes and restarts.
-    final remaining = {for (final input in inputs) input.focus.identity: input};
-    final ordered = <NotificationInput>[];
-    for (final previous in state.inputs) {
-      final fresh = remaining.remove(previous.focus.identity);
-      if (fresh != null) ordered.add(fresh);
-    }
-    ordered.addAll(remaining.values);
-    state.inputs = ordered;
-    await _render(chat, state, alert: alert);
-    await _write();
-  });
+  }) {
+    final captured = List<NotificationInput>.unmodifiable(inputs);
+    return _serialize(() async {
+      final state = _chats.putIfAbsent(chat, () => _ChatNotice(title, scope));
+      state.title = title;
+      state.scope = scope;
+      // Preserve first-seen order across request kinds, refreshes and restarts.
+      final remaining = {
+        for (final input in captured) input.focus.identity: input,
+      };
+      final ordered = <NotificationInput>[];
+      for (final previous in state.inputs) {
+        final fresh = remaining.remove(previous.focus.identity);
+        if (fresh != null) ordered.add(fresh);
+      }
+      ordered.addAll(remaining.values);
+      state.inputs = ordered;
+      await _render(chat, state, alert: alert);
+      await _write();
+    });
+  }
 
   Future<void> read(String chat, String identity) => _serialize(() async {
     final state = _chats[chat];
@@ -204,13 +298,42 @@ class ChatNotificationCoordinator {
         await _write();
       });
 
+  _NotificationPolicy get _currentPreferencePolicy {
+    final state = appPreferences.current;
+    return (
+      completed: state.completedNotificationsAllowed,
+      attention: state.attentionNotificationsAllowed,
+      previews: state.notificationPreviewsAllowed,
+    );
+  }
+
   Future<void> refreshPreferences() => _serialize(() async {
+    // Unrelated settings observations do not invalidate native render equality.
+    // Startup force-redraw is explicitly owned by restore(), not this signal.
+    final policy = _currentPreferencePolicy;
+    if (policy == _lastPreferencePolicy) return;
     for (final entry in _chats.entries) {
       entry.value.rendered = null;
       await _render(entry.key, entry.value, alert: false);
     }
     await _write();
+    // Only a full refresh can acknowledge all chats. The serialized-operation
+    // boundary revokes this acknowledgment if any policy changed during it.
+    _lastPreferencePolicy = policy;
   });
+
+  bool _categoryAllowed(ChatNotificationContent content) =>
+      content.needsAttention
+      ? appPreferences.current.attentionNotificationsAllowed
+      : appPreferences.current.completedNotificationsAllowed;
+
+  Future<void> _withdraw(String chat, _ChatNotice state) async {
+    if (state.posted != null) {
+      await sink.cancel(TurnNotificationService.notificationIdFor(chat));
+    }
+    state.posted = null;
+    state.rendered = null;
+  }
 
   Future<void> _render(
     String chat,
@@ -232,21 +355,19 @@ class ChatNotificationCoordinator {
         ChatNotificationContent.fromJson(
           Map<String, dynamic>.from(result!['content']),
         );
-    final enabled =
-        preferences.getBool(
-          content.needsAttention
-              ? attentionNotificationsKey
-              : completionNotificationsKey,
-        ) ??
-        true;
-    if (!enabled) {
-      if (state.posted != null) {
-        await sink.cancel(TurnNotificationService.notificationIdFor(chat));
-      }
-      state.posted = null;
-      state.rendered = null;
+    // Known-disabled categories can withdraw without a platform permission read.
+    if (!_categoryAllowed(content)) {
+      await _withdraw(chat, state);
       return;
     }
+    // The native permission read can yield to a confirmed preference change.
+    // Capture dispatch facts only after it settles, before physical delivery.
+    final permitted = await sink.notificationsEnabled() != false;
+    if (!_categoryAllowed(content)) {
+      await _withdraw(chat, state);
+      return;
+    }
+    if (!permitted) return;
     final focus =
         first?.focus ??
         NotificationFocus.fromJson(Map<String, dynamic>.from(result!['focus']));
@@ -259,7 +380,7 @@ class ChatNotificationCoordinator {
           );
     // Silent baselines may reconcile existing alerts but never post history.
     if (state.dismissed == revision || (!alert && state.posted == null)) return;
-    final preview = preferences.getBool(notificationPreviewsKey) ?? true;
+    final preview = appPreferences.current.notificationPreviewsAllowed;
     final counts = <String, int>{};
     for (final input in state.inputs) {
       counts.update(
@@ -299,7 +420,6 @@ class ChatNotificationCoordinator {
     );
     final rendered = jsonEncode(notification.toJson());
     if (state.rendered == rendered) return;
-    if (await sink.notificationsEnabled() == false) return;
     await sink.show(notification);
     state.posted = revision;
     state.rendered = rendered;

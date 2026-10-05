@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -76,16 +78,22 @@ void main() {
       });
       SharedPreferences.setMockInitialValues({storageKey: seed});
       final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: SavedConnection(
-          id: 'projection',
-          label: 'Projection',
-          host: 'unused',
-          port: 1,
-          apiKey: '',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'projection',
+            label: 'Projection',
+            host: 'unused',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
         ),
         connectionIdentity: 'metadata-projection',
         preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: Host().gateway,
       );
       final source = <String, dynamic>{
@@ -96,7 +104,15 @@ void main() {
       };
       expect(jsonEncode(source).length, greaterThan(32768));
       final chat = controller.current!.chats.values.single;
-      chat.messages = [source];
+      chat.reading.installSavedHistory([source]);
+      final admitted = chat.reading.messages.single;
+      expect(admitted, isNot(same(source)));
+      expect(admitted, source);
+      (source['metadata'] as Map)['private'] = 'Caller rewrite';
+      expect(
+        (admitted['metadata'] as Map)['private'],
+        contains('excluded private value'),
+      );
 
       controller.dispose();
       await Future<void>(() async {
@@ -114,8 +130,59 @@ void main() {
         {'id': 7, 'role': 'assistant', 'content': 'Read this answer offline'},
       ]);
       expect(encoded, isNot(contains('excluded private value')));
-      expect(chat.messages.single, same(source));
+      expect(chat.reading.messages.single, same(admitted));
       expect(source['metadata'], isNotNull);
     },
   );
+
+  test('display metadata is typed before applying the message limit', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final store = WorkspaceSnapshotStore(preferences, 'display-limits');
+    final source = <String, dynamic>{
+      'id': 'notice',
+      'role': 'user',
+      'content': 'Small result',
+      'display_kind': 'async_delegation_complete',
+      'display_metadata': {'task_count': 2, 'private': 'excluded ' * 10000},
+      'open_requests': [
+        {'id': 'excluded'},
+      ],
+    };
+    await store.write({
+      'profiles': [
+        {
+          'name': 'a',
+          'chats': [
+            {
+              'id': 'chat',
+              'messages': [
+                source,
+                {
+                  'id': 'oversized-display',
+                  'content': 'Small content',
+                  'display_content': 'x' * 32768,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    final saved = store.read()['profiles'][0]['chats'][0]['messages'] as List;
+    expect(saved, [
+      {
+        'id': 'notice',
+        'role': 'user',
+        'display_kind': 'async_delegation_complete',
+        'content': 'Small result',
+        'display_metadata': {'task_count': 2},
+      },
+    ]);
+    expect(source['display_metadata']['private'], isNotNull);
+    expect(
+      preferences.getString('workspace_reading_v1_display-limits'),
+      isNot(contains('excluded')),
+    );
+  });
 }

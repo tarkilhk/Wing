@@ -1,3 +1,7 @@
+import 'package:wing/core/models/chat_runtime.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'helpers/pump_markdown_widget.dart';
 
@@ -31,6 +35,8 @@ class AnswerHost {
   bool omitRowIds = false;
   bool omitSessionParent = false;
   bool clearSessionParent = false;
+  bool omitListParent = false;
+  bool clearListParent = false;
   int next = 0;
   int nextRow = 10000;
 
@@ -72,130 +78,131 @@ class AnswerHost {
     };
   }
 
-  ProfileGateway gateway(
-    WorkspaceScope scope,
-  ) {
+  ProfileGateway gateway(WorkspaceScope scope) {
     late final ProfileGateway gateway;
     gateway = ProfileGateway(
-    scope: scope,
-    connect: () async {
-      // Short-lived project readers have no event subscription. Keep emitted
-      // turn events addressed to the controller's live transport.
-      if (gateway.onEvent != null) gateways[scope.profileName] = gateway;
-    },
-    discover: () async => const ProfileDiscovery(
-      profiles: [
-        HermesProfile(name: 'a'),
-        HermesProfile(name: 'b'),
-      ],
-      currentName: 'a',
-      activeName: 'a',
-    ),
-    get: (path, query) async => path == 'sessions'
-        ? {
-            'offset': int.parse(query['offset']!),
-            'limit': int.parse(query['limit']!),
-            'total': 1 + parents.length,
-            'sessions': [
-              {
-                'id': 'original',
-                'title': 'Original chat',
-                'profile': scope.profileName,
-              },
-              for (final entry in parents.entries)
+      scope: scope,
+      connect: () async {
+        // Short-lived project readers have no event subscription. Keep emitted
+        // turn events addressed to the controller's live transport.
+        if (gateway.onEvent != null) gateways[scope.profileName] = gateway;
+      },
+      discover: () async => const ProfileDiscovery(
+        profiles: [
+          HermesProfile(name: 'a'),
+          HermesProfile(name: 'b'),
+        ],
+        currentName: 'a',
+        activeName: 'a',
+      ),
+      get: (path, query) async => path == 'sessions'
+          ? {
+              'offset': int.parse(query['offset']!),
+              'limit': int.parse(query['limit']!),
+              'total': 1 + parents.length,
+              'sessions': [
                 {
-                  'id': entry.key,
-                  'title': 'Branched chat',
+                  'id': 'original',
+                  'title': 'Original chat',
                   'profile': scope.profileName,
-                  'parent_session_id': entry.value,
                 },
-            ],
-          }
-        : historyPage(scope.profileName, path, query),
-    rpc: (method, params) async {
-      calls.add((method, params));
-      final profile = scope.profileName;
-      final id = (params['session_id'] as String? ?? 'original').replaceFirst(
-        'runtime-',
-        '',
-      );
-      Map<String, dynamic> session(String child) => {
-        'session_id': 'runtime-$child',
-        'stored_session_id': child,
-        if (clearSessionParent)
-          'parent_session_id': null
-        else if (!omitSessionParent && parents.containsKey(child))
-          'parent_session_id': parents[child],
-        'messages': history(
-          profile,
-          child,
-        ).where(shown).map((m) => Map<String, dynamic>.from(m)).toList(),
-        'info': {'profile_name': profile},
-        'title': 'Branched chat',
-      };
-      switch (method) {
-        case 'projects.tree':
-          return {'projects': <Map<String, dynamic>>[]};
-        case 'session.resume':
-          await resumeDelay?.future;
-          return session(id);
-        case 'session.history':
-          return {
-            'messages': history(profile, id)
-                .where(shown)
-                .where((m) => m['compacted'] != true)
-                .map(
-                  (m) => {
-                    ...m,
-                    if (omitRowIds && m['role'] == 'user') 'row_id': null,
+                for (final entry in parents.entries)
+                  {
+                    'id': entry.key,
+                    'title': 'Branched chat',
+                    'profile': scope.profileName,
+                    if (clearListParent)
+                      'parent_session_id': null
+                    else if (!omitListParent)
+                      'parent_session_id': entry.value,
                   },
-                )
-                .toList(),
-          };
-        case 'session.branch':
-          await branchDelay?.future;
-          final child = 'child-${++next}';
-          histories['$profile/$child'] = history(profile, id)
-              .where(isBranchMessage)
-              .take(params['count'] as int)
-              .map((m) => Map<String, dynamic>.from(m))
-              .toList();
-          for (var i = 0; i < histories['$profile/$child']!.length; i++) {
-            histories['$profile/$child']![i]['row_id'] = next * 1000 + i + 1;
-          }
-          parents[child] = id;
-          alterBranch?.call(histories['$profile/$child']!);
-          return {
-            ...session(child),
-            'parent': id,
-            if (branchReplyMessages != null) 'messages': branchReplyMessages,
-          };
-        case 'prompt.submit':
-          await submitDelay?.future;
-          if (submitError != null && !submitErrorAfterAcceptance) {
-            throw submitError!;
-          }
-          final rows = history(profile, id);
-          final cut = params['truncate_before_row_id'];
-          if (cut != null) {
-            final index = rows.indexWhere((m) => m['row_id'] == cut);
-            rows.removeRange(index, rows.length);
-          }
-          rows.add({
-            'role': 'user',
-            'text': params['text'],
-            'row_id': nextRow++,
-          });
-          rows.add({
-            'role': 'assistant',
-            'text': 'New answer $next',
-            'row_id': nextRow++,
-          });
-          if (submitError != null) throw submitError!;
-          return {'status': 'streaming'};
-      }
-      return {};
-    },
+              ],
+            }
+          : historyPage(scope.profileName, path, query),
+      rpc: (method, params) async {
+        calls.add((method, params));
+        final profile = scope.profileName;
+        final id = (params['session_id'] as String? ?? 'original').replaceFirst(
+          'runtime-',
+          '',
+        );
+        Map<String, dynamic> session(String child) => {
+          'session_id': 'runtime-$child',
+          'stored_session_id': child,
+          if (clearSessionParent)
+            'parent_session_id': null
+          else if (!omitSessionParent && parents.containsKey(child))
+            'parent_session_id': parents[child],
+          'messages': history(
+            profile,
+            child,
+          ).where(shown).map((m) => Map<String, dynamic>.from(m)).toList(),
+          'info': {'profile_name': profile},
+          'title': 'Branched chat',
+        };
+        switch (method) {
+          case 'projects.tree':
+            return {'projects': <Map<String, dynamic>>[]};
+          case 'session.resume':
+            await resumeDelay?.future;
+            return session(id);
+          case 'session.history':
+            return {
+              'messages': history(profile, id)
+                  .where(shown)
+                  .where((m) => m['compacted'] != true)
+                  .map(
+                    (m) => {
+                      ...m,
+                      if (omitRowIds && m['role'] == 'user') 'row_id': null,
+                    },
+                  )
+                  .toList(),
+            };
+          case 'session.branch':
+            await branchDelay?.future;
+            final child = 'child-${++next}';
+            histories['$profile/$child'] = history(profile, id)
+                .where(isBranchMessage)
+                .take(params['count'] as int)
+                .map((m) => Map<String, dynamic>.from(m))
+                .toList();
+            for (var i = 0; i < histories['$profile/$child']!.length; i++) {
+              histories['$profile/$child']![i]['row_id'] = next * 1000 + i + 1;
+            }
+            parents[child] = id;
+            alterBranch?.call(histories['$profile/$child']!);
+            return {
+              ...session(child),
+              'parent': id,
+              if (branchReplyMessages != null) 'messages': branchReplyMessages,
+            };
+          case 'prompt.submit':
+            await submitDelay?.future;
+            if (submitError != null && !submitErrorAfterAcceptance) {
+              throw submitError!;
+            }
+            final rows = history(profile, id);
+            final cut = params['truncate_before_row_id'];
+            if (cut != null) {
+              final index = rows.indexWhere((m) => m['row_id'] == cut);
+              rows.removeRange(index, rows.length);
+            }
+            rows.add({
+              'role': 'user',
+              'text': params['text'],
+              'row_id': nextRow++,
+            });
+            rows.add({
+              'role': 'assistant',
+              'text': 'New answer $next',
+              'row_id': nextRow++,
+            });
+            if (submitError != null) throw submitError!;
+            return {'status': 'streaming'};
+        }
+        return {};
+      },
     );
     return gateway;
   }
@@ -204,7 +211,7 @@ class AnswerHost {
     gateways[chat.key.workspace.profileName]!.onEvent!(
       StreamEvent(
         type: 'message.complete',
-        sessionId: chat.runtimeId,
+        sessionId: chat.runtime.runtimeId,
         data: const {},
       ),
     );
@@ -216,24 +223,30 @@ void main() {
   late AnswerHost host;
   late SharedPreferences preferences;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileChat original;
 
   ProfileWorkspaceController makeController() => ProfileWorkspaceController(
     connectionIdentity: 'host-settings',
-    connection: SavedConnection(
-      id: 'host',
-      label: 'Host',
-      host: 'localhost',
-      port: 1,
-      apiKey: '',
+    access: ConnectionAccess(
+      connection: SavedConnection(
+        id: 'host',
+        label: 'Host',
+        host: 'localhost',
+        port: 1,
+        apiKey: '',
+      ),
+      dashboardOAuth: null,
     ),
     preferences: preferences,
+    appPreferences: appPreferences,
     gatewayFactory: host.gateway,
   );
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     host = AnswerHost();
     controller = makeController();
     await controller.initialize();
@@ -242,7 +255,10 @@ void main() {
     );
     original = controller.current!.chat!;
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   for (final delivery in [
     processBatchEnvelope,
@@ -257,7 +273,7 @@ void main() {
         await expectLater(
           controller.editSavedPrompt(
             original,
-            original.messages.first,
+            original.reading.messages.first,
             'replacement',
           ),
           throwsStateError,
@@ -439,7 +455,7 @@ void main() {}
     });
     final child = (await controller.branchAnswer(original, 2))!;
     expect(
-      child.messages
+      child.reading.messages
           .where((m) => !isHiddenAnswerMessage(m))
           .map(answerMessageText),
       ['Original prompt', 'Original answer'],
@@ -470,7 +486,7 @@ void main() {}
       ]);
       final child = (await controller.branchAnswer(original, 2))!;
       expect(controller.current!.chat, same(child));
-      expect(child.messages.map(answerMessageText), [
+      expect(child.reading.messages.map(answerMessageText), [
         'Archived prompt',
         'Archived answer',
         'Original prompt',
@@ -485,7 +501,7 @@ void main() {}
     host.history('a', 'original')[2]['compacted'] = true;
     final child = (await controller.branchAnswer(original, 2))!;
     expect(controller.current!.chat, same(child));
-    expect(child.messages.map(answerMessageText), [
+    expect(child.reading.messages.map(answerMessageText), [
       'Original prompt',
       'Original answer',
     ]);
@@ -500,7 +516,7 @@ void main() {}
       ];
       final child = (await controller.branchAnswer(original, 2))!;
       expect(controller.current!.chat, same(child));
-      expect(child.messages.map(answerMessageText), [
+      expect(child.reading.messages.map(answerMessageText), [
         'Original prompt',
         'Original answer',
       ]);
@@ -543,7 +559,7 @@ void main() {}
         );
         expect(host.parents.length, 1);
         expect(host.history('a', 'original').length, 5);
-        expect(original.changingAnswer, isFalse);
+        expect(original.runtime.changingAnswer, isFalse);
       },
     );
   }
@@ -566,7 +582,7 @@ void main() {}
           );
       final child = (await controller.branchAnswer(original, 2))!;
       expect(
-        child.messages
+        child.reading.messages
             .where((m) => !isHiddenAnswerMessage(m))
             .map(answerMessageText),
         ['Original prompt', 'Original answer'],
@@ -604,7 +620,7 @@ void main() {}
         reason: 'Reading answers uses only existing Hermes APIs',
       );
       expect(
-        original.messages.any(isHiddenAnswerMessage),
+        original.reading.messages.any(isHiddenAnswerMessage),
         isTrue,
         reason:
             'Raw rows remain available for pagination and branch addressing',
@@ -621,18 +637,18 @@ void main() {}
         'row_id': 8,
       });
       final child = (await controller.branchAnswer(original, 2))!;
-      child.draft = 'Continue the fork';
+      child.composer.editText('Continue the fork');
       await controller.send(child);
       await host.complete(child);
       final grandchild = (await controller.branchAnswer(
         child,
-        child.messages.length - 1,
+        child.reading.messages.length - 1,
       ))!;
       expect(
-        grandchild.messages
+        grandchild.reading.messages
             .where((m) => !isHiddenAnswerMessage(m))
             .map(answerMessageText),
-        child.messages
+        child.reading.messages
             .where((m) => !isHiddenAnswerMessage(m))
             .map(answerMessageText),
       );
@@ -644,12 +660,12 @@ void main() {}
     () async {
       final child = (await controller.branchAnswer(original, 2))!;
       expect(
-        child.messages
+        child.reading.messages
             .where((m) => !isHiddenAnswerMessage(m))
             .map(answerMessageText),
         ['Original prompt', 'Original answer'],
       );
-      expect(original.messages.length, 5);
+      expect(original.reading.messages.length, 5);
       expect(controller.current!.chat, same(child));
       expect(host.calls.lastWhere((c) => c.$1 == 'session.branch').$2, {
         'session_id': 'runtime-original',
@@ -661,7 +677,7 @@ void main() {}
   );
 
   test('regenerates in place without creating a branch', () async {
-    original.draft = 'Unsent draft';
+    original.composer.editText('Unsent draft');
     final regenerated = (await controller.branchAnswer(
       original,
       2,
@@ -671,7 +687,7 @@ void main() {}
     final submit = host.calls.lastWhere((c) => c.$1 == 'prompt.submit').$2;
     expect(host.calls.where((c) => c.$1 == 'session.branch'), isEmpty);
     expect(submit, {
-      'session_id': original.runtimeId,
+      'session_id': original.runtime.runtimeId,
       'profile': 'a',
       'text': 'Original prompt',
       'truncate_before_row_id': 1,
@@ -679,14 +695,14 @@ void main() {}
       'confirm_empty_truncate': true,
     });
     expect(
-      regenerated.messages
+      regenerated.reading.messages
           .where((m) => !isHiddenAnswerMessage(m))
           .map(answerMessageText),
       ['Original prompt', 'New answer 0'],
     );
     expect(regenerated, same(original));
     expect(regenerated.parentSessionId, isNull);
-    expect(original.draft, 'Unsent draft');
+    expect(original.composer.observation.text, 'Unsent draft');
     expect(
       preferences.getKeys().where((k) => k.startsWith('answer_versions')),
       isEmpty,
@@ -707,10 +723,13 @@ fixture-value-amber-729
       host.history('a', 'original')[0]
         ..remove('text')
         ..['content'] = persisted;
-      original.messages[0]
-        ..remove('text')
-        ..['content'] = persisted;
-      original.draft = 'Keep this draft';
+      original.reading.installSavedHistory([
+        Map<String, dynamic>.from(original.reading.messages.first)
+          ..remove('text')
+          ..['content'] = persisted,
+        ...original.reading.messages.skip(1),
+      ]);
+      original.composer.editText('Keep this draft');
 
       final regenerated = (await controller.branchAnswer(
         original,
@@ -720,28 +739,14 @@ fixture-value-amber-729
 
       final submit = host.calls.lastWhere((call) => call.$1 == 'prompt.submit');
       expect(regenerated, same(original));
-      expect(submit.$2['session_id'], original.runtimeId);
+      expect(submit.$2['session_id'], original.runtime.runtimeId);
       expect(submit.$2['truncate_before_row_id'], 1);
       expect(submit.$2['text'], visible);
       expect(submit.$2['text'], isNot(contains(marker)));
       expect(submit.$2['text'], isNot(contains('fixture-value-amber-729')));
-      expect(original.draft, 'Keep this draft');
+      expect(original.composer.observation.text, 'Keep this draft');
     },
   );
-
-  test('startup purges only obsolete local answer relationships', () async {
-    controller.dispose();
-    await preferences.setString('answer_versions_v1_old-host', 'obsolete');
-    await preferences.setString('answer_versions_v10_keep', 'other');
-    await preferences.setString('composer_draft_v1_keep', 'draft');
-    controller = makeController();
-
-    await controller.initialize();
-
-    expect(preferences.containsKey('answer_versions_v1_old-host'), isFalse);
-    expect(preferences.getString('answer_versions_v10_keep'), 'other');
-    expect(preferences.getString('composer_draft_v1_keep'), 'draft');
-  });
 
   test(
     'duplicate regeneration taps keep one replay while a fresh Send waits',
@@ -756,18 +761,28 @@ fixture-value-amber-729
       await controller.updateDraft(original, 'Queued follow-up');
       await controller.send(original);
       await controller.send(original);
-      expect(original.draft, isEmpty);
-      expect(original.queuedPrompts.single.text, 'Queued follow-up');
-      expect(original.queuedPrompts.single.submissionUncertain, isFalse);
+      expect(original.composer.observation.text, isEmpty);
+      expect(
+        original.composer.observation.queue.single.text,
+        'Queued follow-up',
+      );
+      expect(
+        original.composer.observation.queue.single.submissionUncertain,
+        isFalse,
+      );
       expect(host.calls.where((c) => c.$1 == 'prompt.submit').length, 1);
       await controller.updateDraft(original, 'Separate fresh draft');
       host.submitDelay!.complete();
       final regenerated = (await pending)!;
       expect(host.calls.where((c) => c.$1 == 'prompt.submit').length, 1);
-      expect(original.queuedPrompts.single.text, 'Queued follow-up');
+      expect(
+        original.composer.observation.queue.single.text,
+        'Queued follow-up',
+      );
       await host.complete(regenerated);
       await Future<void>(() async {
-        while (original.queuedPrompts.isNotEmpty || original.sendingPrompt) {
+        while (original.composer.observation.queue.isNotEmpty ||
+            original.composer.observation.sending) {
           await Future<void>.delayed(Duration.zero);
         }
       }).timeout(const Duration(seconds: 10));
@@ -784,7 +799,7 @@ fixture-value-amber-729
         submissions.last.$2.containsKey('truncate_before_row_id'),
         isFalse,
       );
-      expect(original.draft, 'Separate fresh draft');
+      expect(original.composer.observation.text, 'Separate fresh draft');
     },
   );
 
@@ -820,16 +835,22 @@ fixture-value-amber-729
   });
 
   test('stale history refuses the branch before mutation', () async {
-    original.messages[2]['content'] = 'Stale answer';
+    original.reading.installSavedHistory([
+      ...original.reading.messages.take(2),
+      {...original.reading.messages[2], 'content': 'Stale answer'},
+      ...original.reading.messages.skip(3),
+    ]);
     await expectLater(controller.branchAnswer(original, 2), throwsStateError);
     expect(host.calls.where((c) => c.$1 == 'session.branch'), isEmpty);
-    expect(original.changingAnswer, isFalse);
+    expect(original.runtime.changingAnswer, isFalse);
   });
 
   test(
     'a paged transcript uses the saved row rather than its local position',
     () async {
-      original.messages = original.messages.sublist(3);
+      original.reading.installSavedHistory(
+        original.reading.messages.sublist(3),
+      );
       final regenerated = (await controller.branchAnswer(
         original,
         1,
@@ -848,7 +869,7 @@ fixture-value-amber-729
         4,
       );
       expect(
-        regenerated.messages
+        regenerated.reading.messages
             .where((m) => !isHiddenAnswerMessage(m))
             .map(answerMessageText),
         [
@@ -880,13 +901,23 @@ fixture-value-amber-729
     'explicit server parent state wins while omitted metadata falls back',
     () async {
       final child = (await controller.branchAnswer(original, 2))!;
+      host.omitListParent = true;
+      expect(await controller.switchProfile('a'), isTrue);
+      expect(
+        controller.current!.sessions
+            .firstWhere((row) => row['id'] == child.key.sessionId)
+            .containsKey('parent_session_id'),
+        isFalse,
+      );
+      expect(controller.parentSessionId(child), original.key.sessionId);
+
+      host.clearListParent = true;
+      expect(await controller.switchProfile('a'), isTrue);
       final row = controller.current!.sessions.firstWhere(
         (row) => row['id'] == child.key.sessionId,
       );
-      row.remove('parent_session_id');
-      expect(controller.parentSessionId(child), original.key.sessionId);
-
-      row['parent_session_id'] = null;
+      expect(row.containsKey('parent_session_id'), isTrue);
+      expect(row['parent_session_id'], isNull);
       expect(controller.parentSessionId(child), isNull);
     },
   );
@@ -951,9 +982,9 @@ fixture-value-amber-729
       throwsStateError,
     );
     expect(controller.current!.chat, same(original));
-    expect(original.status, ProfileTurnStatus.failed);
+    expect(original.runtime.execution, ChatExecution.failed);
     expect(
-      original.error,
+      original.runtime.error,
       'Hermes did not accept the regeneration. The conversation is unchanged.',
     );
   });
@@ -972,31 +1003,32 @@ fixture-value-amber-729
         throwsStateError,
       );
 
-      expect(original.status, ProfileTurnStatus.failed);
+      expect(original.runtime.execution, ChatExecution.failed);
       expect(
-        original.error,
+        original.runtime.error,
         'Hermes could not match this saved prompt. The conversation is unchanged. Send a new message to continue.',
       );
-      expect(original.error, isNot(contains('JsonRpcError')));
+      expect(original.runtime.error, isNot(contains('JsonRpcError')));
       expect(controller.current!.chat, same(original));
-      expect(original.messages.last['text'], 'Later answer');
+      expect(original.reading.messages.last['text'], 'Later answer');
     },
   );
 
   test(
     'missing durable row IDs refuses regeneration without changing the chat',
     () async {
+      final originalStatus = original.runtime.execution;
       host.omitRowIds = true;
       await expectLater(
         controller.branchAnswer(original, 2, regenerate: true),
         throwsStateError,
       );
-      expect(original.status, ProfileTurnStatus.failed);
+      expect(original.runtime.execution, originalStatus);
       expect(
-        original.error,
+        original.runtime.error,
         'Hermes did not accept the regeneration. The conversation is unchanged.',
       );
-      expect(original.messages.last['text'], 'Later answer');
+      expect(original.reading.messages.last['text'], 'Later answer');
       expect(host.calls.where((c) => c.$1 == 'prompt.submit'), isEmpty);
       expect(controller.current!.chat, same(original));
     },
@@ -1012,11 +1044,11 @@ fixture-value-amber-729
         regenerate: true,
       ))!;
       expect(regenerated, same(original));
-      expect(original.status, ProfileTurnStatus.reconnecting);
+      expect(original.runtime.reconnecting, isTrue);
       expect(original.parentSessionId, isNull);
       await controller.reconnect(original.key.workspace);
       expect(host.calls.where((c) => c.$1 == 'prompt.submit').length, 1);
-      expect(original.messages.map(answerMessageText), [
+      expect(original.reading.messages.map(answerMessageText), [
         'Original prompt',
         'Tool output',
         'Original answer',
@@ -1053,10 +1085,12 @@ fixture-value-amber-729
         );
 
         expect(regenerated, same(original));
-        expect(original.status, ProfileTurnStatus.reconnecting);
-        expect(original.error, contains('uncertain'));
-        expect(original.error, isNot(contains('unchanged')));
-        expect(original.messages.map(answerMessageText), ['Original prompt']);
+        expect(original.runtime.reconnecting, isTrue);
+        expect(original.runtime.error, contains('uncertain'));
+        expect(original.runtime.error, isNot(contains('unchanged')));
+        expect(original.reading.messages.map(answerMessageText), [
+          'Original prompt',
+        ]);
 
         host.resumeDelay = Completer<void>();
         final recovery = controller.reconnect(original.key.workspace);
@@ -1064,12 +1098,12 @@ fixture-value-amber-729
         host.resumeDelay!.complete();
         await recovery;
 
-        expect(original.messages.map(answerMessageText), [
+        expect(original.reading.messages.map(answerMessageText), [
           'Original prompt',
           'New answer 0',
         ]);
-        expect(original.draft, 'New draft during recovery');
-        expect(original.status, ProfileTurnStatus.completed);
+        expect(original.composer.observation.text, 'New draft during recovery');
+        expect(original.runtime.execution, ChatExecution.completed);
         expect(
           host.calls.where((call) => call.$1 == 'prompt.submit'),
           hasLength(1),
@@ -1099,7 +1133,8 @@ fixture-value-amber-729
       );
       await tester.runAsync(() async {
         for (var i = 0; i < 100; i++) {
-          if (controller.current!.chat!.status == ProfileTurnStatus.running) {
+          if (controller.current!.chat!.runtime.execution ==
+              ChatExecution.running) {
             break;
           }
           await Future<void>.delayed(const Duration(milliseconds: 1));
@@ -1108,13 +1143,13 @@ fixture-value-amber-729
       await tester.pump();
       final regenerated = controller.current!.chat!;
       expect(regenerated, same(original));
-      expect(regenerated.status, ProfileTurnStatus.running);
+      expect(regenerated.runtime.execution, ChatExecution.running);
       await tester.runAsync(() => host.complete(regenerated));
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
-      expect(regenerated.status, ProfileTurnStatus.completed);
+      expect(regenerated.runtime.execution, ChatExecution.completed);
       expect(
-        regenerated.messages
+        regenerated.reading.messages
             .where((m) => !isHiddenAnswerMessage(m))
             .map(answerMessageText),
         ['Original prompt', 'New answer 0'],
@@ -1165,7 +1200,10 @@ fixture-value-amber-729
       host.calls.lastWhere((call) => call.$1 == 'session.branch').$2['count'],
       2,
     );
-    expect(controller.current!.chat!.messages.last['text'], 'Original answer');
+    expect(
+      controller.current!.chat!.reading.messages.last['text'],
+      'Original answer',
+    );
   });
 
   testWidgets(

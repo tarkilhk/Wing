@@ -1,3 +1,4 @@
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -90,16 +91,19 @@ void main() {
         final probe = ConnectionSetupProbe();
         try {
           final checking = probe.check(
-            SavedConnection(
-              id: 'transport-test',
-              label: 'test',
-              host: '127.0.0.1',
-              port: server.port,
-              apiKey: '',
-              dashboardPortOverride: server.port,
-              dashboardPrefix: '/agent',
-              dashboardUsername: 'alex',
-              dashboardPassword: ' exact password ',
+            ConnectionAccess(
+              connection: SavedConnection(
+                id: 'transport-test',
+                label: 'test',
+                host: '127.0.0.1',
+                port: server.port,
+                apiKey: '',
+                dashboardPortOverride: server.port,
+                dashboardPrefix: '/agent',
+                dashboardUsername: 'alex',
+                dashboardPassword: ' exact password ',
+              ),
+              dashboardOAuth: null,
             ),
           );
           await opened.future.timeout(const Duration(seconds: 5));

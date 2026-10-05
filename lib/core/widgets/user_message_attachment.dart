@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../models/user_message_content.dart';
+import '../services/owned_remote_files.dart';
 import '../theme/wing_theme.dart';
 import 'chat_image_preview.dart';
 
@@ -27,35 +28,16 @@ class _UserMessageAttachmentTileState extends State<UserMessageAttachmentTile> {
   late Future<ImageProvider>? _image = _load();
 
   Future<ImageProvider>? _load() =>
-      widget.attachment.isImage ? _loadImage() : null;
+      widget.attachment.isImage ? _imageProvider() : null;
 
-  Future<ImageProvider> _loadImage() async {
-    final target = widget.attachment.target;
-    if (target.length > 45 * 1024 * 1024) {
-      throw const FormatException('Image attachment too large');
-    }
-    final uri = Uri.tryParse(target);
-    if (uri?.scheme == 'data') {
-      // Match the existing remote download budget before decoding base64.
-      if (!uri!.data!.mimeType.startsWith('image/')) {
-        throw const FormatException('Invalid image attachment');
-      }
-      final bytes = uri.data!.contentAsBytes();
-      if (bytes.length > 32 * 1024 * 1024) {
-        throw const FormatException('Image attachment too large');
-      }
-      return MemoryImage(bytes);
-    }
-    if (uri != null &&
-        {'http', 'https'}.contains(uri.scheme) &&
-        uri.host.isNotEmpty) {
-      return NetworkImage(target);
-    }
-    if (uri == null || uri.hasScheme || widget.loadImage == null) {
-      throw const FormatException('Image unavailable');
-    }
-    // Never interpret a server path as a file on the Android device.
-    return MemoryImage(await widget.loadImage!(target));
+  Future<ImageProvider> _imageProvider() async {
+    final resource = await acquireUserAttachmentImage(
+      widget.attachment.target,
+      widget.loadImage,
+    );
+    return resource.bytes != null
+        ? MemoryImage(resource.bytes!)
+        : NetworkImage(resource.uri.toString());
   }
 
   @override

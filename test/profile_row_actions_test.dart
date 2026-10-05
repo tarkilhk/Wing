@@ -1,3 +1,11 @@
+import 'package:wing/core/models/browser_actions.dart';
+import 'package:wing/core/services/chat_browser_data.dart';
+import 'support/composer_fixture.dart';
+import 'package:wing/core/services/chat_runtime.dart';
+import 'package:wing/core/models/chat_runtime.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'support/chat_browser_interactions.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -6,6 +14,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/widgets/profile_chat_indicator.dart';
+import 'package:wing/core/widgets/chat_status_dot.dart';
+import 'package:wing/core/models/chat_list_status.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
@@ -13,20 +23,61 @@ import 'support/profile_actions_fixture.dart';
 void main() {
   late ProfileActionsFixture host;
   late ProfileWorkspaceController controller;
+  late ChatBrowserData browser;
+  late AppPreferences appPreferences;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     host = ProfileActionsFixture();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'actions',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
+    browser = ChatBrowserData(controller);
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    browser.dispose();
+    controller.dispose();
+    appPreferences.dispose();
+  });
   ProfileSessionKey key([String id = 'newest']) =>
       ProfileSessionKey(controller.current!.scope, id);
+  Future<void> keepBeforeNewDelete() async {
+    final owner = key();
+    final attempts = host.deleteAttempts.length;
+    expect(controller.current!.quarantinedSessions, contains(owner.sessionId));
+    expect(
+      controller.current!.sessions.any((row) => row['id'] == owner.sessionId),
+      isTrue,
+    );
+    await expectLater(
+      controller.mutateSession(owner, delete: true, canDispatch: () => true),
+      throwsStateError,
+    );
+    expect(host.deleteAttempts, hasLength(attempts));
+    await controller.inspectDeletedDraftCleanup(owner);
+    final recovery = controller.deletedDraftCleanupPresentation.value.entries
+        .singleWhere((entry) => entry.key == owner);
+    expect(recovery.actions.map((action) => action.label), [
+      'Check chat',
+      'Keep chat',
+    ]);
+    await controller.keepPreparedSession(owner);
+    expect(
+      controller.current!.quarantinedSessions,
+      isNot(contains(owner.sessionId)),
+    );
+    expect(host.deleteAttempts, hasLength(attempts));
+  }
+
   Future<void> show(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -70,30 +121,44 @@ void main() {
     () async {
       await loadNewestUnread();
       final resource = controller.current!;
-      final row = resource.sessions.firstWhere((row) => row['id'] == 'newest');
-      resource.projectSessions = [
-        {...row},
-      ];
-      resource.searchResults = [
-        {...row},
-      ];
+      final project = resource.projects.first;
+      host.changes['personal']!['newest'] = {
+        ...host.changes['personal']!['newest']!,
+        'cwd': project['primary_path'],
+      };
+      await controller.switchProfile('personal');
+      await controller.selectProject(resource.projects.first);
+      await browser.search('improve the conversation list');
 
-      await controller.openSession(key());
+      final target = browser
+          .project('improve the conversation list')
+          .entries
+          .singleWhere((entry) => entry.sessionKey == key());
+      await browser.open(target);
 
       expect(host.updates, hasLength(1));
       expect(host.updates.single.$1, 'personal');
       expect(host.updates.single.$2, 'sessions/newest');
       expect(host.updates.single.$3, {'unread': false, 'profile': 'personal'});
-      for (final rows in [
-        resource.sessions,
-        resource.projectSessions,
-        resource.searchResults,
-      ]) {
+      for (final rows in [resource.sessions, resource.projectSessions]) {
         expect(
           rows.firstWhere((row) => row['id'] == 'newest')['unread'],
           false,
         );
       }
+
+      expect(
+        browser.state.profiles['personal']!.searchMatches,
+        contains('newest'),
+      );
+      expect(
+        browser
+            .project('improve the conversation list')
+            .entries
+            .singleWhere((entry) => entry.sessionKey == target.sessionKey)
+            .unread,
+        isFalse,
+      );
 
       host.updates.clear();
       controller.showList();
@@ -130,7 +195,7 @@ void main() {
       await controller.openSession(key('notification-only'));
 
       expect(controller.current!.selectedSession, 'notification-only');
-      expect(controller.current!.chat!.historyError, isNotNull);
+      expect(controller.current!.chat!.reading.historyError, isNotNull);
       expect(host.updates, isEmpty);
     },
   );
@@ -142,7 +207,7 @@ void main() {
     await controller.openSession(key());
 
     expect(controller.current!.selectedSession, 'newest');
-    expect(controller.current!.chat!.historyError, isNotNull);
+    expect(controller.current!.chat!.reading.historyError, isNotNull);
     expect(
       controller.current!.sessions.firstWhere(
         (row) => row['id'] == 'newest',
@@ -180,7 +245,11 @@ void main() {
         await Future<void>.delayed(Duration.zero);
       }
 
-      await controller.mutateSession(key(), changes: {'unread': true});
+      await controller.mutateSession(
+        key(),
+        changes: {'unread': true},
+        canDispatch: () => true,
+      );
       delay.complete();
       await opening;
 
@@ -212,11 +281,15 @@ void main() {
         true,
       );
       expect(controller.current!.mutatingSessions, isEmpty);
-      expect(chat.error, isNull);
+      expect(chat.runtime.error, isNull);
       expect(chat.markReadFailed, isTrue);
 
       host.failMutation = false;
-      await controller.mutateSession(key(), changes: {'unread': false});
+      await controller.mutateSession(
+        key(),
+        changes: {'unread': false},
+        canDispatch: () => true,
+      );
       expect(chat.markReadFailed, isFalse);
       expect(
         controller.current!.sessions.firstWhere(
@@ -230,7 +303,11 @@ void main() {
   test('manual mark-unread survives app reconnect', () async {
     await loadNewestUnread();
     await controller.openSession(key());
-    await controller.mutateSession(key(), changes: {'unread': true});
+    await controller.mutateSession(
+      key(),
+      changes: {'unread': true},
+      canDispatch: () => true,
+    );
     host.updates.clear();
 
     await controller.reconnect(controller.current!.scope);
@@ -248,10 +325,15 @@ void main() {
     'pin rename unread use body profile and update only owner rows',
     () async {
       final owner = key();
-      await controller.mutateSession(owner, changes: {'pinned': true});
+      await controller.mutateSession(
+        owner,
+        changes: {'pinned': true},
+        canDispatch: () => true,
+      );
       await controller.mutateSession(
         owner,
         changes: {'title': 'Renamed', 'unread': true},
+        canDispatch: () => true,
       );
       expect(host.updates.last.$3['profile'], 'personal');
       expect(
@@ -263,7 +345,11 @@ void main() {
       await controller.navigateProfile('work');
       expect(controller.current!.sessions.single['title'], 'Work chat');
       await expectLater(
-        controller.mutateSession(owner, changes: {'pinned': false}),
+        controller.mutateSession(
+          owner,
+          changes: {'pinned': false},
+          canDispatch: () => true,
+        ),
         throwsStateError,
       );
     },
@@ -271,7 +357,11 @@ void main() {
   test('failed writes preserve visible data and allow retry', () async {
     host.failMutation = true;
     await expectLater(
-      controller.mutateSession(key(), changes: {'pinned': true}),
+      controller.mutateSession(
+        key(),
+        changes: {'pinned': true},
+        canDispatch: () => true,
+      ),
       throwsStateError,
     );
     expect(
@@ -282,7 +372,11 @@ void main() {
     );
     expect(controller.current!.mutatingSessions, isEmpty);
     host.failMutation = false;
-    await controller.mutateSession(key(), changes: {'pinned': true});
+    await controller.mutateSession(
+      key(),
+      changes: {'pinned': true},
+      canDispatch: () => true,
+    );
     expect(
       controller.current!.sessions.firstWhere(
         (r) => r['id'] == 'newest',
@@ -291,18 +385,38 @@ void main() {
     );
   });
   test('archive and unarchive are discoverable and survive refresh', () async {
-    await controller.mutateSession(key(), changes: {'archived': true});
-    expect(controller.current!.sessions.any((r) => r['id'] == 'newest'), false);
-    await controller.showArchived(true);
-    expect(controller.current!.sessions.single['id'], 'newest');
-    await controller.mutateSession(key(), changes: {'archived': false});
-    expect(controller.current!.sessions, isEmpty);
-    await controller.showArchived(false);
-    expect(controller.current!.sessions.any((r) => r['id'] == 'newest'), true);
+    final browser = ChatBrowserData(controller);
+    addTearDown(browser.dispose);
+    await browser.refresh(archivedOnly: false);
+    await controller.mutateSession(
+      key(),
+      changes: {'archived': true},
+      canDispatch: () => true,
+    );
+    await browser.refresh(archivedOnly: false);
+    expect(browser.entries.any((entry) => entry.sessionKey == key()), false);
+    await browser.refresh(archivedOnly: true);
+    expect(
+      browser.entries.where((entry) => entry.sessionKey == key()),
+      hasLength(1),
+    );
+    await controller.mutateSession(
+      key(),
+      changes: {'archived': false},
+      canDispatch: () => true,
+    );
+    await browser.refresh(archivedOnly: true);
+    expect(browser.entries.any((entry) => entry.sessionKey == key()), false);
+    await browser.refresh(archivedOnly: false);
+    expect(browser.entries.any((entry) => entry.sessionKey == key()), true);
   });
   test('refresh started during a write cannot restore stale flags', () async {
     host.mutationDelay = Completer<void>();
-    final write = controller.mutateSession(key(), changes: {'pinned': true});
+    final write = controller.mutateSession(
+      key(),
+      changes: {'pinned': true},
+      canDispatch: () => true,
+    );
     final delay = host.pageDelays[('personal', 0)] = Completer<void>();
     final readCount = host.reads.length;
     final refresh = controller.refresh();
@@ -322,7 +436,11 @@ void main() {
   });
   test('delete allows an idle chat still open on Hermes', () async {
     host.active = true;
-    await controller.mutateSession(key(), delete: true);
+    await controller.mutateSession(
+      key(),
+      delete: true,
+      canDispatch: () => true,
+    );
     expect(host.closes.single.$1, 'personal');
     expect(host.closes.single.$2, {
       'session_id': 'runtime',
@@ -336,7 +454,11 @@ void main() {
   test('delete accepts the reused live runtime resume response', () async {
     host.active = true;
     host.reuseLiveResume = true;
-    await controller.mutateSession(key(), delete: true);
+    await controller.mutateSession(
+      key(),
+      delete: true,
+      canDispatch: () => true,
+    );
     expect(host.closes.single.$2['session_id'], 'runtime');
     expect(host.deletes.single.$2, {'profile': 'personal'});
     expect(controller.current!.sessions.any((r) => r['id'] == 'newest'), false);
@@ -351,7 +473,7 @@ void main() {
       host.reuseLiveResume = true;
       host.resumeOverrides = response;
       await expectLater(
-        controller.mutateSession(key(), delete: true),
+        controller.mutateSession(key(), delete: true, canDispatch: () => true),
         throwsFormatException,
       );
       expect(host.closes, isEmpty);
@@ -362,13 +484,18 @@ void main() {
     host.active = true;
     host.activeStatus = 'working';
     await expectLater(
-      controller.mutateSession(key(), delete: true),
+      controller.mutateSession(key(), delete: true, canDispatch: () => true),
       throwsStateError,
     );
     expect(host.deletes, isEmpty);
     expect(host.closes, isEmpty);
     host.active = false;
-    await controller.mutateSession(key(), delete: true);
+    await keepBeforeNewDelete();
+    await controller.mutateSession(
+      key(),
+      delete: true,
+      canDispatch: () => true,
+    );
     expect(host.deletes.single.$2, {'profile': 'personal'});
     expect(controller.current!.sessions.any((r) => r['id'] == 'newest'), false);
     await controller.refresh();
@@ -379,7 +506,7 @@ void main() {
       host.active = true;
       host.activeStatus = status;
       await expectLater(
-        controller.mutateSession(key(), delete: true),
+        controller.mutateSession(key(), delete: true, canDispatch: () => true),
         throwsStateError,
       );
       expect(host.closes, isEmpty);
@@ -394,7 +521,7 @@ void main() {
     host.active = true;
     host.statusAfterResume = 'working';
     await expectLater(
-      controller.mutateSession(key(), delete: true),
+      controller.mutateSession(key(), delete: true, canDispatch: () => true),
       throwsStateError,
     );
     expect(host.closes, isEmpty);
@@ -404,37 +531,41 @@ void main() {
     'delete closes only the owning runtime for a colliding durable ID',
     () async {
       host.foreignActive = true;
-      await controller.mutateSession(key(), delete: true);
+      await controller.mutateSession(
+        key(),
+        delete: true,
+        canDispatch: () => true,
+      );
       expect(host.closes.single.$2['session_id'], 'runtime');
       expect(host.foreignActive, true);
       await controller.navigateProfile('work');
       expect(controller.current!.sessions.single['id'], 'newest');
     },
   );
-  test(
-    'delete refuses a resume response from a different profile or chat',
-    () async {
+  for (final wrongProfile in [true, false]) {
+    test('delete refuses a resume response from a different '
+        '${wrongProfile ? 'profile' : 'chat'}', () async {
       host.active = true;
-      host.resumeProfile = 'work';
+      if (wrongProfile) {
+        host.resumeProfile = 'work';
+      } else {
+        host.resumeSessionId = 'another-chat';
+      }
       await expectLater(
-        controller.mutateSession(key(), delete: true),
-        throwsFormatException,
-      );
-      host.resumeProfile = null;
-      host.resumeSessionId = 'another-chat';
-      await expectLater(
-        controller.mutateSession(key(), delete: true),
+        controller.mutateSession(key(), delete: true, canDispatch: () => true),
         throwsFormatException,
       );
       expect(host.closes, isEmpty);
       expect(host.deletes, isEmpty);
-    },
-  );
-  test('failed close preserves the chat and allows retry', () async {
+      expect(host.deleteAttempts, isEmpty);
+      expect(controller.current!.quarantinedSessions, contains('newest'));
+    });
+  }
+  test('failed close requires Keep before a new delete intent', () async {
     host.active = true;
     host.failClose = true;
     await expectLater(
-      controller.mutateSession(key(), delete: true),
+      controller.mutateSession(key(), delete: true, canDispatch: () => true),
       throwsStateError,
     );
     expect(host.deletes, isEmpty);
@@ -442,32 +573,45 @@ void main() {
     expect(controller.current!.mutatingSessions, isEmpty);
     host.failClose = false;
     host.acknowledgeClose = false;
+    await keepBeforeNewDelete();
     await expectLater(
-      controller.mutateSession(key(), delete: true),
+      controller.mutateSession(key(), delete: true, canDispatch: () => true),
       throwsStateError,
     );
     expect(host.deletes, isEmpty);
     host.acknowledgeClose = true;
-    await controller.mutateSession(key(), delete: true);
+    await keepBeforeNewDelete();
+    await controller.mutateSession(
+      key(),
+      delete: true,
+      canDispatch: () => true,
+    );
     expect(host.deletes, hasLength(1));
   });
   test(
-    'failed delete after close preserves the chat and allows retry',
+    'failed delete after close keeps work until Keep and a new delete intent',
     () async {
       host.active = true;
       host.failMutation = true;
       await expectLater(
-        controller.mutateSession(key(), delete: true),
+        controller.mutateSession(key(), delete: true, canDispatch: () => true),
         throwsStateError,
       );
       expect(host.closes, hasLength(1));
+      expect(host.deleteAttempts, hasLength(1));
       expect(
         controller.current!.sessions.any((r) => r['id'] == 'newest'),
         true,
       );
       host.failMutation = false;
-      await controller.mutateSession(key(), delete: true);
+      await keepBeforeNewDelete();
+      await controller.mutateSession(
+        key(),
+        delete: true,
+        canDispatch: () => true,
+      );
       expect(host.deletes, hasLength(1));
+      expect(host.deleteAttempts, hasLength(2));
     },
   );
   test(
@@ -479,8 +623,13 @@ void main() {
       final pending = controller.mutateSession(
         owner,
         changes: {'pinned': true},
+        canDispatch: () => true,
       );
-      await controller.mutateSession(owner, changes: {'pinned': true});
+      await controller.mutateSession(
+        owner,
+        changes: {'pinned': true},
+        canDispatch: () => true,
+      );
       await controller.navigateProfile('work');
       host.mutationDelay!.complete();
       await pending;
@@ -500,6 +649,7 @@ void main() {
       final chat = await controller.createChat(
         inProject: project,
         owner: owner,
+        canDispatch: () => true,
       );
       expect(chat.projectId, project['id']);
       expect(
@@ -508,7 +658,11 @@ void main() {
       );
       await controller.navigateProfile('work');
       await expectLater(
-        controller.createChat(inProject: project, owner: owner),
+        controller.createChat(
+          inProject: project,
+          owner: owner,
+          canDispatch: () => true,
+        ),
         throwsStateError,
       );
     },
@@ -533,21 +687,31 @@ void main() {
     () async {
       final owner = key();
       final project = controller.current!.projects.first;
-      controller.current!.searchResults = [
-        {
-          ...controller.current!.sessions.firstWhere(
-            (r) => r['id'] == 'newest',
-          ),
-        },
-      ];
-      await controller.moveSessionToProject(owner, project);
+      await browser.search('improve the conversation list');
+      final target = browser
+          .project('improve the conversation list')
+          .entries
+          .singleWhere((entry) => entry.sessionKey == owner);
+      final action = (await browser.actionsFor(target))!;
+      addTearDown(action.dispose);
+      final destination = action.projects.singleWhere(
+        (item) => item.id == project['id'],
+      );
+      expect(
+        await action.perform(BrowserAction.move, target: destination),
+        isTrue,
+      );
       expect(host.moves.single.$2, {
         'session_key': 'newest',
         'cwd': project['primary_path'],
         'profile': 'personal',
       });
       expect(
-        controller.current!.searchResults.single['cwd'],
+        browser
+            .project('improve the conversation list')
+            .entries
+            .singleWhere((entry) => entry.sessionKey == owner)
+            .cwd,
         project['primary_path'],
       );
       await controller.selectProject(controller.current!.projects.first);
@@ -557,10 +721,11 @@ void main() {
       );
       await controller.navigateProfile('work');
       expect(controller.current!.sessions.single['cwd'], isNull);
-      await expectLater(
-        controller.moveSessionToProject(owner, project),
-        throwsStateError,
+      expect(
+        await action.perform(BrowserAction.move, target: destination),
+        isFalse,
       );
+      expect(action.state.error, contains('Profile changed'));
       expect(host.moves.length, 1);
     },
   );
@@ -568,10 +733,18 @@ void main() {
     'moving out refreshes the entered project and preserves global rows',
     () async {
       final first = controller.current!.projects.first;
-      await controller.moveSessionToProject(key(), first);
+      await controller.moveSessionToProject(
+        key(),
+        first,
+        canDispatch: () => true,
+      );
       await controller.selectProject(controller.current!.projects.first);
       final destination = controller.current!.projects[1];
-      await controller.moveSessionToProject(key(), destination);
+      await controller.moveSessionToProject(
+        key(),
+        destination,
+        canDispatch: () => true,
+      );
       expect(controller.current!.selectedProject!['id'], first['id']);
       expect(
         controller.current!.projectSessions.any((r) => r['id'] == 'newest'),
@@ -593,14 +766,14 @@ void main() {
     host.active = true;
     host.activeStatus = 'working';
     await expectLater(
-      controller.moveSessionToProject(key(), project),
+      controller.moveSessionToProject(key(), project, canDispatch: () => true),
       throwsStateError,
     );
     expect(host.moves, isEmpty);
     host.active = false;
     host.failMutation = true;
     await expectLater(
-      controller.moveSessionToProject(key(), project),
+      controller.moveSessionToProject(key(), project, canDispatch: () => true),
       throwsStateError,
     );
     expect(
@@ -616,8 +789,19 @@ void main() {
       final personal = controller.current!;
       final project = personal.projects.first;
       host.mutationDelay = Completer<void>();
-      final move = controller.moveSessionToProject(owner, project);
-      expect(await controller.moveSessionToProject(owner, project), false);
+      final move = controller.moveSessionToProject(
+        owner,
+        project,
+        canDispatch: () => true,
+      );
+      expect(
+        await controller.moveSessionToProject(
+          owner,
+          project,
+          canDispatch: () => true,
+        ),
+        false,
+      );
       await controller.navigateProfile('work');
       host.mutationDelay!.complete();
       await move;
@@ -634,13 +818,22 @@ void main() {
     () async {
       final project = controller.current!.projects.first;
       await expectLater(
-        controller.moveSessionToProject(key(), {...project}),
+        controller.moveSessionToProject(key(), {
+          ...project,
+        }, canDispatch: () => true),
         throwsStateError,
       );
       expect(host.moves, isEmpty);
       host.failProjects = true;
       host.calls.clear();
-      expect(await controller.moveSessionToProject(key(), project), true);
+      expect(
+        await controller.moveSessionToProject(
+          key(),
+          project,
+          canDispatch: () => true,
+        ),
+        true,
+      );
       expect(controller.current!.projectsError, isNull);
       expect(host.calls.where((call) => call.$2 == 'projects.tree'), isEmpty);
     },
@@ -690,7 +883,7 @@ void main() {
   testWidgets('Unassigned opens projects independently of connection details', (
     tester,
   ) async {
-    await controller.createChat();
+    await controller.createChat(canDispatch: () => true);
     await show(tester);
     await tester.tap(find.textContaining('Unassigned'));
     await tester.pumpAndSettle();
@@ -717,7 +910,7 @@ void main() {
     expect(host.moves, hasLength(1));
     expect(host.closes, isEmpty);
     expect(controller.chatProjectLabel(chat), 'Mobile app');
-    expect(chat.composerText, 'Unsent draft');
+    expect(chat.composer.observation.displayedText, 'Unsent draft');
     expect(find.text('Mobile app'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('chat-project-picker')));
     await tester.pumpAndSettle();
@@ -734,7 +927,10 @@ void main() {
       controller.chatProjectLabel(controller.current!.chat!),
       'Mobile app',
     );
-    expect(controller.current!.chat!.composerText, 'Unsent draft');
+    expect(
+      controller.current!.chat!.composer.observation.displayedText,
+      'Unsent draft',
+    );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -746,7 +942,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     host.activeSessionKey = 'new-chat';
     host.resumeSessionId = 'new-chat';
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     host.active = true;
     await show(tester);
     await tester.tap(find.byKey(const ValueKey('chat-project-picker')));
@@ -826,6 +1022,7 @@ void main() {
           controller.moveSessionToProject(
             key(),
             controller.current!.projects.first,
+            canDispatch: () => true,
           ),
           throwsStateError,
         );
@@ -842,6 +1039,7 @@ void main() {
       controller.moveSessionToProject(
         key(),
         controller.current!.projects.first,
+        canDispatch: () => true,
       ),
       throwsStateError,
     );
@@ -856,6 +1054,7 @@ void main() {
         controller.moveSessionToProject(
           key(),
           controller.current!.projects.first,
+          canDispatch: () => true,
         ),
         throwsStateError,
       );
@@ -872,6 +1071,7 @@ void main() {
       controller.moveSessionToProject(
         key(),
         controller.current!.projects.first,
+        canDispatch: () => true,
       ),
       throwsFormatException,
     );
@@ -891,6 +1091,7 @@ void main() {
         controller.moveSessionToProject(
           key(),
           controller.current!.projects.first,
+          canDispatch: () => true,
         ),
         throwsFormatException,
       );
@@ -949,32 +1150,47 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
   testWidgets(
-    'status indicators distinguish runtime, unread and heuristic activity',
+    'runtime indicators and typed unread status retain their distinct labels',
     (tester) async {
-      final chat = await controller.createChat();
+      final runtime = ChatRuntime(runtimeId: 'indicator-runtime');
+      final chat = composeChat(
+        controller: controller,
+        preferences: controller.preferences,
+        key: ProfileSessionKey(controller.current!.scope, 'indicator'),
+        runtime: runtime,
+        title: 'Indicator',
+      );
       for (final (status, label) in [
-        (ProfileTurnStatus.running, 'Working'),
-        (ProfileTurnStatus.attention, 'Input needed'),
-        (ProfileTurnStatus.completed, 'Completed'),
-        (ProfileTurnStatus.failed, 'Failed'),
+        (ChatExecution.running, 'Working'),
+        (null, 'Input needed'),
+        (ChatExecution.completed, 'Completed'),
+        (ChatExecution.failed, 'Failed'),
       ]) {
-        chat.status = status;
+        runtime.reconcileApprovals(runtime.captureApprovalRead(), const []);
+        if (status == null) {
+          runtime.receiveApproval({
+            'request_id': 'indicator-input',
+            'command': 'Review',
+          });
+        } else if (status == ChatExecution.running) {
+          runtime.beginTurn(submitting: false);
+        } else {
+          runtime.completeTurn(
+            failed: status == ChatExecution.failed,
+            cancelled: false,
+            error: null,
+          );
+        }
         await tester.pumpWidget(
-          MaterialApp(
-            home: ProfileChatIndicator(chat: chat, row: const {}),
-          ),
+          MaterialApp(home: ProfileChatIndicator(chat: chat)),
         );
         await tester.pump();
         expect(find.byTooltip(label), findsOneWidget);
       }
       await tester.pumpWidget(
-        const MaterialApp(home: ProfileChatIndicator(row: {'unread': true})),
+        MaterialApp(home: ChatStatusDot(chatListStatus({'unread': true}))),
       );
       expect(find.byTooltip('Unread'), findsOneWidget);
-      await tester.pumpWidget(
-        const MaterialApp(home: ProfileChatIndicator(row: {'is_active': true})),
-      );
-      expect(find.byTooltip('Recent activity'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     },

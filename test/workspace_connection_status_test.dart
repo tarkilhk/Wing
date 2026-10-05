@@ -49,7 +49,7 @@ void main() {
   testWidgets(
     'connection notice animates both ways and hides stale semantics',
     (tester) async {
-    final semantics = tester.ensureSemantics();
+      final semantics = tester.ensureSemantics();
       await render(tester);
       status.beginRecovery('chat');
       await tester.pump(const Duration(seconds: 2));
@@ -90,9 +90,9 @@ void main() {
       );
       await render(tester);
       await tester.pumpAndSettle();
-    expect(tester.getSize(bar).height, expanded);
-    expect(tester.takeException(), isNull);
-    semantics.dispose();
+      expect(tester.getSize(bar).height, expanded);
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
     },
   );
 

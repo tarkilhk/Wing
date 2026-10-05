@@ -1,3 +1,8 @@
+import 'package:wing/core/services/doctor_finding_draft_session.dart';
+import 'package:wing/core/models/administration_operation.dart';
+import 'support/administration_operation_fixture.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -8,7 +13,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/administration/admin_operations_page.dart';
-import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -73,16 +77,23 @@ void main() {
         addTearDown(tester.view.reset);
         final fixture = AdministrationFixture();
         SharedPreferences.setMockInitialValues({});
+        final preferences = await SharedPreferences.getInstance();
+        final appPreferences = AppPreferences(preferences);
+        addTearDown(appPreferences.dispose);
         final controller = ProfileWorkspaceController(
-          connection: SavedConnection(
-            id: fixture.id,
-            label: fixture.id,
-            host: 'localhost',
-            port: 1,
-            apiKey: '',
+          access: ConnectionAccess(
+            connection: SavedConnection(
+              id: fixture.id,
+              label: fixture.id,
+              host: 'localhost',
+              port: 1,
+              apiKey: '',
+            ),
+            dashboardOAuth: null,
           ),
           connectionIdentity: fixture.server.connectionIdentity,
-          preferences: await SharedPreferences.getInstance(),
+          preferences: preferences,
+          appPreferences: appPreferences,
           gatewayFactory: ProfileBrowserFixture().gateway,
         );
         await controller.initialize();
@@ -90,8 +101,18 @@ void main() {
         var runs = 0;
         final opening = Completer<void>();
         fixture.override = (method, path, query, body) async {
-          return {'pid': 7, 'running': false, 'exit_code': 0, 'lines': lines};
+          return {
+            'name': 'doctor',
+            'pid': 7,
+            'running': false,
+            'exit_code': 0,
+            'lines': lines,
+          };
         };
+        final operation = fixtureOperation(
+          fixture.server,
+          const AdministrationAction('doctor', 7),
+        );
         await tester.pumpWidget(
           MaterialApp(
             debugShowCheckedModeBanner: false,
@@ -106,10 +127,10 @@ void main() {
               ),
             ),
             home: AdminActionPage(
-              server: fixture.server,
-              action: const AdministrationAction('doctor', 7),
+              operation: operation,
               title: 'Doctor',
-              chatController: controller,
+              createDraftSession: () =>
+                  DoctorFindingDraftSession(operation, controller),
               onOpenSession: (_) => opening.future,
               onRunAgain: () async {
                 runs++;
@@ -194,6 +215,7 @@ void main() {
         addTearDown(tester.view.reset);
         final fixture = AdministrationFixture();
         fixture.override = (method, path, query, body) async => {
+          'name': 'doctor',
           'pid': 7,
           'running': false,
           'exit_code': failed ? 1 : 0,
@@ -208,8 +230,10 @@ void main() {
             builder: (context, child) =>
                 RepaintBoundary(key: const ValueKey('capture'), child: child!),
             home: AdminActionPage(
-              server: fixture.server,
-              action: const AdministrationAction('doctor', 7),
+              operation: fixtureOperation(
+                fixture.server,
+                const AdministrationAction('doctor', 7),
+              ),
               title: 'Doctor',
               scope: 'Home server',
             ),
@@ -234,16 +258,20 @@ void main() {
   ) async {
     final fixture = AdministrationFixture();
     fixture.override = (method, path, query, body) async => {
+      'name': 'doctor',
       'pid': 7,
       'running': true,
       'exit_code': null,
       'lines': lines,
     };
+    final operation = fixtureOperation(
+      fixture.server,
+      const AdministrationAction('doctor', 7),
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: AdminActionPage(
-          server: fixture.server,
-          action: const AdministrationAction('doctor', 7),
+          operation: operation,
           title: 'Doctor',
           scope: 'Home server',
         ),
@@ -253,5 +281,6 @@ void main() {
     expect(find.text('Running'), findsOneWidget);
     expect(find.text(summary), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
+    operation.dispose();
   });
 }

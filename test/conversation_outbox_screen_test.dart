@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -57,15 +59,22 @@ void main() {
 
   Future<ProfileWorkspaceController> initialize(Host host) async {
     SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final appPreferences = AppPreferences(preferences);
+    addTearDown(appPreferences.dispose);
     final controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'outbox-screen',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     addTearDown(() => dispose(controller));
     await controller.initialize();
-    await controller.createChat();
+    await controller.createChat(canDispatch: () => true);
     return controller;
   }
 
@@ -114,21 +123,21 @@ void main() {
     final cancelled = expectLater(preparing, throwsStateError);
     try {
       await tester.pump();
-      expect(chat.preparingAttachments, isTrue);
+      expect(chat.composer.observation.preparing, isTrue);
       final button = tester.widget<ComposerActionButton>(send);
       expect(button.unavailable[ComposerAction.send], contains('attachment'));
       expect(button.unavailable[ComposerAction.queue], contains('attachment'));
       await tester.tap(send);
       await tester.pump();
-      expect(chat.draft, 'Include the image I am pasting');
-      expect(chat.queuedPrompts, isEmpty);
+      expect(chat.composer.observation.text, 'Include the image I am pasting');
+      expect(chat.composer.observation.queue, isEmpty);
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
     } finally {
       clipboard.completeError(StateError('Paste cancelled'));
       await cancelled;
       await tester.pump();
     }
-    expect(chat.preparingAttachments, isFalse);
+    expect(chat.composer.observation.preparing, isFalse);
     expect(
       tester
           .widget<ComposerActionButton>(send)
@@ -165,9 +174,9 @@ void main() {
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 50));
         }
-        expect(chat.draft, isEmpty);
+        expect(chat.composer.observation.text, isEmpty);
         expect(tester.widget<TextField>(editor).controller!.text, isEmpty);
-        expect(chat.queuedPrompts.map((message) => message.text), [
+        expect(chat.composer.observation.queue.map((message) => message.text), [
           'First offline message',
           'Second offline message',
         ]);
@@ -218,7 +227,7 @@ void main() {
       await tester.pump();
       await tester.enterText(editor, 'Fresh editable draft');
       await tester.pump();
-      expect(chat.queuedPrompts.map((message) => message.text), [
+      expect(chat.composer.observation.queue.map((message) => message.text), [
         'First message',
         'Second message',
       ]);
@@ -229,13 +238,13 @@ void main() {
       await snapshot(tester, 'awaiting-ack');
     } finally {
       host.promptSubmitDelay!.complete();
-      for (var i = 0; i < 30 && chat.sendingPrompt; i++) {
+      for (var i = 0; i < 30 && chat.composer.observation.sending; i++) {
         await tester.pump(const Duration(milliseconds: 10));
       }
     }
-    expect(chat.sendingPrompt, isFalse);
-    expect(chat.draft, 'Fresh editable draft');
-    expect(chat.queuedPrompts.single.text, 'Second message');
+    expect(chat.composer.observation.sending, isFalse);
+    expect(chat.composer.observation.text, 'Fresh editable draft');
+    expect(chat.composer.observation.queue.single.text, 'Second message');
     expect(
       tester.widget<ComposerActionButton>(send).primary,
       ComposerAction.steer,

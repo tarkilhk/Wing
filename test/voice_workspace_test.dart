@@ -1,3 +1,6 @@
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -34,6 +37,7 @@ class _Fixture extends ProfileBrowserFixture {
 void main() {
   late _Fixture fixture;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late VoiceDeviceFixture device;
   const capture = bool.fromEnvironment('VOICE_REVIEW');
   const frame = Key('voice-frame');
@@ -59,16 +63,22 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     fixture = _Fixture();
     device = VoiceDeviceFixture();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: SavedConnection(
-        id: 'voice-fixture',
-        label: 'Voice test server',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'voice-fixture',
+          label: 'Voice test server',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       connectionIdentity: 'voice-fixture',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: fixture.gateway,
     );
     await controller.initialize();
@@ -78,6 +88,7 @@ void main() {
   });
   tearDown(() async {
     controller.dispose();
+    appPreferences.dispose();
     await device.stream.close();
   });
   Future<void> show(
@@ -140,7 +151,7 @@ void main() {
         'final': true,
       });
       await tester.pumpAndSettle();
-      expect(chat.draft, 'Existing draft new words');
+      expect(chat.composer.observation.text, 'Existing draft new words');
       expect(fixture.calls.where((c) => c.$2 == 'session.prompt'), isEmpty);
       await tester.tap(find.byTooltip('Dictate message'));
       await tester.pump();
@@ -152,7 +163,7 @@ void main() {
       await tester.pump();
       await tester.tap(find.text('Cancel recording'));
       await tester.pumpAndSettle();
-      expect(chat.draft, 'Existing draft new words');
+      expect(chat.composer.observation.text, 'Existing draft new words');
     },
   );
   testWidgets(
@@ -167,7 +178,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(device.cancelled, contains(old));
       expect(find.text('wrong profile'), findsNothing);
-      expect(controller.current!.chat?.draft ?? '', isEmpty);
+      expect(
+        controller.current!.chat?.composer.observation.text ?? '',
+        isEmpty,
+      );
     },
   );
   testWidgets('read aloud uses reply prose and stops before dictation', (
@@ -200,7 +214,7 @@ void main() {
     device.stream.add({'id': id, 'text': 'late', 'final': true});
     await tester.pump();
     expect(device.cancelled, contains(id));
-    expect(controller.current!.chat!.draft, isEmpty);
+    expect(controller.current!.chat!.composer.observation.text, isEmpty);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);

@@ -23,7 +23,7 @@ class ComposerActionButton extends StatefulWidget {
     required this.onSelected,
   });
 
-  final ComposerAction primary;
+  final ComposerAction? primary;
 
   /// A null reason means the action is available.
   final Map<ComposerAction, String?> unavailable;
@@ -36,7 +36,7 @@ class ComposerActionButton extends StatefulWidget {
 class _ComposerActionButtonState extends State<ComposerActionButton>
     with WidgetsBindingObserver {
   final _anchorKey = GlobalKey();
-  final _iconAction = ValueNotifier(ComposerAction.send);
+  final _iconAction = ValueNotifier<ComposerAction?>(null);
   final _keyboardFocus = FocusNode(debugLabel: 'Composer actions');
   bool _keyboardFocused = false;
   int _menuRevision = 0;
@@ -46,7 +46,7 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
   ComposerAction? _selected;
   List<ComposerAction> _actions = [];
 
-  bool _enabled(ComposerAction action) =>
+  bool _enabled(ComposerAction? action) =>
       widget.unavailable.containsKey(action) &&
       widget.unavailable[action] == null;
 
@@ -54,6 +54,7 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _iconAction.value = widget.primary == null ? null : ComposerAction.send;
   }
 
   @override
@@ -93,7 +94,7 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
     _overlay?.dispose();
     _overlay = null;
     _selected = null;
-    _iconAction.value = ComposerAction.send;
+    _iconAction.value = widget.primary == null ? null : ComposerAction.send;
   }
 
   Future<void> _openKeyboardMenu() async {
@@ -144,7 +145,7 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
     }
     if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.space) {
       if (_enabled(widget.primary)) {
-        widget.onSelected(widget.primary);
+        widget.onSelected(widget.primary!);
       } else {
         _openKeyboardMenu();
       }
@@ -171,8 +172,10 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
           : ComposerAction.steer,
     ];
     // Keep the default directly above the finger.
-    _actions.remove(widget.primary);
-    _actions.add(widget.primary);
+    if (widget.primary case final ComposerAction primary) {
+      _actions.remove(primary);
+      _actions.add(primary);
+    }
     final media = MediaQuery.of(context);
     final width = math.min(64.0, overlayBox.size.width - 16);
     final left = (_anchor.center.dx - width / 2).clamp(
@@ -314,7 +317,8 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
     }
     if (_selected != next) {
       _selected = next;
-      _iconAction.value = next ?? ComposerAction.send;
+      _iconAction.value =
+          next ?? (widget.primary == null ? null : ComposerAction.send);
       _overlay!.markNeedsBuild();
       HapticFeedback.selectionClick();
     }
@@ -374,8 +378,8 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                tooltip: widget.primary.label,
-                icon: ValueListenableBuilder<ComposerAction>(
+                tooltip: widget.primary?.label ?? 'Choose chat action',
+                icon: ValueListenableBuilder<ComposerAction?>(
                   valueListenable: _iconAction,
                   builder: (context, action, _) => AnimatedSwitcher(
                     duration: MediaQuery.disableAnimationsOf(context)
@@ -400,13 +404,17 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
                       ),
                     ),
                     child: Icon(
-                      composerActionIcon(action),
-                      key: ValueKey('composer-button-icon-${action.name}'),
+                      action == null ? Icons.tune : composerActionIcon(action),
+                      key: ValueKey(
+                        'composer-button-icon-${action?.name ?? 'choose'}',
+                      ),
                     ),
                   ),
                 ),
                 onPressed: _enabled(widget.primary)
-                    ? () => widget.onSelected(widget.primary)
+                    ? () => widget.onSelected(widget.primary!)
+                    : widget.primary == null && hasActions
+                    ? _openKeyboardMenu
                     : null,
               ),
             ),

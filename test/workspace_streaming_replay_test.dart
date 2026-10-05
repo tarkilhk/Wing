@@ -82,7 +82,9 @@ void main() {
     tester,
   ) async {
     final state = await _preparedWorkspace(tester);
-    state.controller!.current!.chat!.streaming += 'Unexpected input';
+    state.controller!.current!.chat!.reading.appendStreaming(
+      'Unexpected input',
+    );
     await expectLater(
       state.replay(),
       throwsA(
@@ -172,8 +174,8 @@ void main() {
     expect(result!['nativeDraftStorage'], isFalse);
     expect(find.byType(ProfileWorkspaceScreen), findsOneWidget);
     final chat = key.currentState!.controller!.current!.chat!;
-    expect(chat.busy, isTrue);
-    expect(chat.streaming, streamingReplayInitial());
+    expect(chat.runtime.blocksTurnAdmission, isTrue);
+    expect(chat.reading.streaming, streamingReplayInitial());
     final rendered = key.currentState!.renderedReadiness(
       streamingReplayInitial(),
     );
@@ -189,11 +191,14 @@ void main() {
       'Physical typing equivalent',
     );
     await tester.pump();
-    expect(chat.composerText, 'Physical typing equivalent');
+    expect(
+      chat.composer.observation.displayedText,
+      'Physical typing equivalent',
+    );
     key.currentState!.controller!.current!.gateway.onEvent!(
       StreamEvent(
         type: 'message.delta',
-        sessionId: chat.runtimeId,
+        sessionId: chat.runtime.runtimeId,
         data: {'text': 'A deterministic appended paragraph.'},
       ),
     );

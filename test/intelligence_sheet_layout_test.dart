@@ -1,3 +1,5 @@
+import 'package:wing/core/models/chat_intelligence.dart';
+import 'package:wing/core/models/model_choice.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -7,7 +9,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/chat_intelligence_picker.dart';
-import 'package:wing/core/widgets/model_chooser.dart';
 
 void main() {
   const capture = bool.fromEnvironment('CAPTURE_INTELLIGENCE');
@@ -56,6 +57,7 @@ void main() {
                   child: TextButton(
                     onPressed: () async {
                       result = await showChatIntelligencePicker(
+                        onCommit: (_) async => true,
                         context: context,
                         choices: const [choice],
                         initialChoice: choice,
@@ -143,6 +145,7 @@ void main() {
                 body: Builder(
                   builder: (context) => TextButton(
                     onPressed: () => showChatIntelligencePicker(
+                      onCommit: (_) async => true,
                       context: context,
                       choices: const [choice],
                       initialChoice: choice,

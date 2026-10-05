@@ -1,0 +1,2997 @@
+{
+  "schema": 1,
+  "status": "validated-immediately-before-approved-deletion",
+  "source_units": 661,
+  "changed_since_resolution": [],
+  "runtime_root_inventory": "tools/architecture/roots.json",
+  "resolved_evidence": "tools/architecture/dead_code/resolved-proof.json",
+  "candidates": [
+    {
+      "id": "DC01-ApiClient",
+      "file": "lib/core/services/connection_manager.dart",
+      "symbol": "ApiClient",
+      "include_members": true,
+      "disposition": "candidate",
+      "reference_count": 184,
+      "reference_scope_counts": {
+        "production": 115,
+        "test": 69
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient._freshClient",
+          "lines": [
+            979
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient._headers",
+          "lines": [
+            983
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.apiDelete",
+          "lines": [
+            1129,
+            1130
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.apiDelete.res",
+          "lines": [
+            1125,
+            1126,
+            1127
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.apiGet",
+          "lines": [
+            1096,
+            1097
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.apiGet.res",
+          "lines": [
+            1092,
+            1093,
+            1094
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.apiGetList",
+          "lines": [
+            1105,
+            1106
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.apiGetList.res",
+          "lines": [
+            1101,
+            1102,
+            1103
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.apiPost",
+          "lines": [
+            1118,
+            1119,
+            1121
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.apiPost.res",
+          "lines": [
+            1113,
+            1114,
+            1115,
+            1116
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.checkHealth",
+          "lines": [
+            1060,
+            1062,
+            1063,
+            1071,
+            1075,
+            1077,
+            1078,
+            1081,
+            1083
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.checkHealth.activeEndpoint",
+          "lines": [
+            1055
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.checkHealth.health",
+          "lines": [
+            1057,
+            1058
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.checkHealth.healthEndpoint",
+          "lines": [
+            1054
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.checkHealth.sessions",
+          "lines": [
+            1072,
+            1073
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.checkHealth.sessionsEndpoint",
+          "lines": [
+            1070
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.close",
+          "lines": [
+            1152
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.deleteSession",
+          "lines": [
+            1027,
+            1028,
+            1029
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.deleteSession.encodedId",
+          "lines": [
+            1020
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.deleteSession.res",
+          "lines": [
+            1021,
+            1022,
+            1023
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getMessages",
+          "lines": [
+            1011,
+            1012,
+            1016
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getMessages.data",
+          "lines": [
+            1014
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getMessages.list",
+          "lines": [
+            1015
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getMessages.res",
+          "lines": [
+            1007,
+            1008,
+            1009
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getModelInfo",
+          "lines": [
+            1136
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getModelOptions",
+          "lines": [
+            1137
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getModels",
+          "lines": [
+            1040,
+            1045
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getModels.data",
+          "lines": [
+            1043
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getModels.list",
+          "lines": [
+            1044
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getModels.res",
+          "lines": [
+            1036,
+            1037,
+            1038
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getSessions",
+          "lines": [
+            989,
+            993,
+            994,
+            998
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getSessions.data",
+          "lines": [
+            996
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getSessions.list",
+          "lines": [
+            997
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getSessions.res",
+          "lines": [
+            990,
+            991,
+            992
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getSkills",
+          "lines": [
+            1140
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getSkills.data",
+          "lines": [
+            1139
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.healthCheck",
+          "lines": [
+            1087
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.new",
+          "lines": [
+            961,
+            966,
+            967,
+            968
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.setModel",
+          "lines": [
+            1147,
+            1149
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient",
+          "lines": [
+            1159
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.abort",
+          "lines": [
+            1384
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.new",
+          "lines": [
+            1165
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.sendMessageStreaming.headers",
+          "lines": [
+            1287
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.sendMessageStreaming.response",
+          "lines": [
+            1300
+          ]
+        },
+        {
+          "file": "test/api_client_timeout_test.dart",
+          "caller": "main",
+          "lines": [
+            29
+          ]
+        },
+        {
+          "file": "test/api_client_timeout_test.dart",
+          "caller": "main.client",
+          "lines": [
+            22,
+            23,
+            24,
+            25,
+            35,
+            36,
+            37,
+            38
+          ]
+        },
+        {
+          "file": "test/api_client_timeout_test.dart",
+          "caller": "main.sessions",
+          "lines": [
+            47
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            458,
+            459,
+            477,
+            478,
+            503,
+            528,
+            544,
+            545,
+            559,
+            560,
+            706,
+            1092,
+            1093
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.api",
+          "lines": [
+            674,
+            675,
+            676,
+            677
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.client",
+          "lines": [
+            443,
+            444,
+            445,
+            446,
+            463,
+            464,
+            465,
+            466,
+            484,
+            485,
+            486,
+            487,
+            488,
+            510,
+            511,
+            512,
+            513,
+            533,
+            534,
+            535,
+            536,
+            549,
+            550,
+            551,
+            552,
+            1087,
+            1088,
+            1089,
+            1090
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.result",
+          "lines": [
+            494,
+            519
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC01-GatewayChatClient",
+      "file": "lib/core/services/connection_manager.dart",
+      "symbol": "GatewayChatClient",
+      "include_members": true,
+      "disposition": "candidate",
+      "reference_count": 168,
+      "reference_scope_counts": {
+        "production": 138,
+        "test": 30
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.abort",
+          "lines": [
+            1384
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.buildChatCompletionMessages",
+          "lines": [
+            1180,
+            1181,
+            1186,
+            1189,
+            1208,
+            1209,
+            1211
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.buildChatCompletionMessages.alreadyLast",
+          "lines": [
+            1204,
+            1205,
+            1206,
+            1207
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.buildChatCompletionMessages.content",
+          "lines": [
+            1185
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.buildChatCompletionMessages.latest",
+          "lines": [
+            1193
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.buildChatCompletionMessages.latestContent",
+          "lines": [
+            1194,
+            1195,
+            1197,
+            1200
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.buildChatCompletionMessages.role",
+          "lines": [
+            1182
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.cancelActiveMessage",
+          "lines": [
+            1372,
+            1374,
+            1376,
+            1377,
+            1379
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.cancelActiveMessage.completion",
+          "lines": [
+            1371
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.cancelActiveMessage.subscription",
+          "lines": [
+            1375
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.new",
+          "lines": [
+            1165
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.parseSseFrame",
+          "lines": [
+            1215,
+            1223,
+            1225,
+            1226,
+            1227,
+            1228,
+            1229,
+            1233,
+            1235,
+            1239,
+            1240,
+            1244,
+            1246,
+            1249,
+            1251,
+            1252
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.parseSseFrame.choices",
+          "lines": [
+            1245
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.parseSseFrame.content",
+          "lines": [
+            1250
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.parseSseFrame.data",
+          "lines": [
+            1234
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.parseSseFrame.delta",
+          "lines": [
+            1248
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.parseSseFrame.first",
+          "lines": [
+            1247
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.parseSseFrame.line",
+          "lines": [
+            1224
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.parseSseFrame.parsed",
+          "lines": [
+            1238
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.sendMessageStreaming",
+          "lines": [
+            1289,
+            1290,
+            1297,
+            1298,
+            1302,
+            1303,
+            1305,
+            1309,
+            1314,
+            1315,
+            1316,
+            1317,
+            1319,
+            1321,
+            1326,
+            1330,
+            1331,
+            1332,
+            1335,
+            1341,
+            1345,
+            1346,
+            1350,
+            1354,
+            1356,
+            1358,
+            1360,
+            1361,
+            1362,
+            1363
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.sendMessageStreaming.body",
+          "lines": [
+            1282,
+            1283
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.sendMessageStreaming.err",
+          "lines": [
+            1313
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.sendMessageStreaming.errorBody",
+          "lines": [
+            1310
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.sendMessageStreaming.eventEnd",
+          "lines": [
+            1333
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.sendMessageStreaming.frame",
+          "lines": [
+            1334
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.sendMessageStreaming.headers",
+          "lines": [
+            1287
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.sendMessageStreaming.messages",
+          "lines": [
+            1275,
+            1276,
+            1277,
+            1278
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.sendMessageStreaming.request",
+          "lines": [
+            1295
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.sendMessageStreaming.response",
+          "lines": [
+            1300
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.sendMessageStreaming.subscription",
+          "lines": [
+            1304
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.sendMessageStreaming.token",
+          "lines": [
+            1337,
+            1339
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            700
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.gateway",
+          "lines": [
+            679
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.messages",
+          "lines": [
+            566,
+            567,
+            568,
+            584,
+            585,
+            586,
+            604,
+            605,
+            606,
+            635,
+            636,
+            637
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.sending",
+          "lines": [
+            684,
+            685,
+            686,
+            687,
+            690,
+            691
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.token",
+          "lines": [
+            648,
+            657,
+            660
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC01-ToolProgressCallback",
+      "file": "lib/core/services/connection_manager.dart",
+      "symbol": "ToolProgressCallback",
+      "include_members": true,
+      "disposition": "candidate",
+      "reference_count": 2,
+      "reference_scope_counts": {
+        "production": 2
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.parseSseFrame",
+          "lines": [
+            1218
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "GatewayChatClient.sendMessageStreaming",
+          "lines": [
+            1271
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC01-Session",
+      "file": "lib/core/models/session.dart",
+      "symbol": "Session",
+      "include_members": true,
+      "disposition": "candidate",
+      "reference_count": 64,
+      "reference_scope_counts": {
+        "production": 37,
+        "test": 27
+      },
+      "callers": [
+        {
+          "file": "lib/core/models/session.dart",
+          "caller": "Session",
+          "lines": [
+            16
+          ]
+        },
+        {
+          "file": "lib/core/models/session.dart",
+          "caller": "Session.fromJson",
+          "lines": [
+            41,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57
+          ]
+        },
+        {
+          "file": "lib/core/models/session.dart",
+          "caller": "Session.fromJson.endedAt",
+          "lines": [
+            42
+          ]
+        },
+        {
+          "file": "lib/core/models/session.dart",
+          "caller": "Session.fromJson.lastActive",
+          "lines": [
+            44
+          ]
+        },
+        {
+          "file": "lib/core/models/session.dart",
+          "caller": "Session.fromJson.startedAt",
+          "lines": [
+            43
+          ]
+        },
+        {
+          "file": "lib/core/models/session.dart",
+          "caller": "Session.new",
+          "lines": [
+            26
+          ]
+        },
+        {
+          "file": "lib/core/services/connection_manager.dart",
+          "caller": "ApiClient.getSessions",
+          "lines": [
+            989,
+            1000
+          ]
+        },
+        {
+          "file": "test/api_client_timeout_test.dart",
+          "caller": "main",
+          "lines": [
+            49
+          ]
+        },
+        {
+          "file": "test/session_model_test.dart",
+          "caller": "main",
+          "lines": [
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            39,
+            40,
+            41,
+            42,
+            43,
+            54,
+            65,
+            66
+          ]
+        },
+        {
+          "file": "test/session_model_test.dart",
+          "caller": "main.session",
+          "lines": [
+            7,
+            32,
+            48,
+            58
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-sendStreaming",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.sendStreaming",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 1,
+      "reference_scope_counts": {
+        "test": 1
+      },
+      "callers": [
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.response",
+          "lines": [
+            1598
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-submitPrompt",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.submitPrompt",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 6,
+      "reference_scope_counts": {
+        "production": 1,
+        "test": 5
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.sendMessageStreaming",
+          "lines": [
+            952
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "_expectFailClosedPromptDisconnect",
+          "lines": [
+            157
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            1826
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.first",
+          "lines": [
+            1526
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.second",
+          "lines": [
+            1535
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.secondSubmit",
+          "lines": [
+            1841
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-interruptSession",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.interruptSession",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 3,
+      "reference_scope_counts": {
+        "test": 3
+      },
+      "callers": [
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            1610,
+            1744,
+            1924
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-respondToApproval",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.respondToApproval",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 2,
+      "reference_scope_counts": {
+        "test": 2
+      },
+      "callers": [
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            2151,
+            2337
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-respondToSudo",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.respondToSudo",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 1,
+      "reference_scope_counts": {
+        "test": 1
+      },
+      "callers": [
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            2193
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-respondToSecret",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.respondToSecret",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 1,
+      "reference_scope_counts": {
+        "test": 1
+      },
+      "callers": [
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            2233
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-respondToClarify",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.respondToClarify",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 2,
+      "reference_scope_counts": {
+        "test": 2
+      },
+      "callers": [
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            2273,
+            2313
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-_respondToSensitivePrompt",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient._respondToSensitivePrompt",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 2,
+      "reference_scope_counts": {
+        "production": 2
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.respondToSecret",
+          "lines": [
+            831
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.respondToSudo",
+          "lines": [
+            824
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-resumeSession",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.resumeSession",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 1,
+      "reference_scope_counts": {
+        "test": 1
+      },
+      "callers": [
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            2009
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-setSessionTitle",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.setSessionTitle",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 1,
+      "reference_scope_counts": {
+        "test": 1
+      },
+      "callers": [
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            2044
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-branchSession",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.branchSession",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 1,
+      "reference_scope_counts": {
+        "test": 1
+      },
+      "callers": [
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.branch",
+          "lines": [
+            2045
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-sendMessageStreaming",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.sendMessageStreaming",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 0,
+      "reference_scope_counts": {},
+      "callers": []
+    },
+    {
+      "id": "DC02-sendMessage",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.sendMessage",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 0,
+      "reference_scope_counts": {},
+      "callers": []
+    },
+    {
+      "id": "DC02-attachFile",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.attachFile",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 1,
+      "reference_scope_counts": {
+        "test": 1
+      },
+      "callers": [
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            1962
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-createSession",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.createSession",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 0,
+      "reference_scope_counts": {},
+      "callers": []
+    },
+    {
+      "id": "DC02-createOrResumeSession",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.createOrResumeSession",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 0,
+      "reference_scope_counts": {},
+      "callers": []
+    },
+    {
+      "id": "DC02-setSessionModel",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.setSessionModel",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 0,
+      "reference_scope_counts": {},
+      "callers": []
+    },
+    {
+      "id": "DC02-getSessionReasoning",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.getSessionReasoning",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 1,
+      "reference_scope_counts": {
+        "test": 1
+      },
+      "callers": [
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            2088
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-setSessionReasoning",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.setSessionReasoning",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 2,
+      "reference_scope_counts": {
+        "test": 2
+      },
+      "callers": [
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            2089,
+            2121
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-_streams",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient._streams",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 5,
+      "reference_scope_counts": {
+        "production": 5
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._dispatchStreamEvent.listeners",
+          "lines": [
+            591
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._handleClosedConnection",
+          "lines": [
+            313
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._handleMessage",
+          "lines": [
+            442
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.sendStreaming",
+          "lines": [
+            662
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.sendStreaming.timer",
+          "lines": [
+            667
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-_sessionStreams",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient._sessionStreams",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 5,
+      "reference_scope_counts": {
+        "production": 5
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._dispatchEvent.listeners",
+          "lines": [
+            578
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._handleClosedConnection",
+          "lines": [
+            314
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.submitPrompt",
+          "lines": [
+            766
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.submitPrompt.current",
+          "lines": [
+            763
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.submitPrompt.listeners",
+          "lines": [
+            736
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-_connectionClosedListeners",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient._connectionClosedListeners",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 4,
+      "reference_scope_counts": {
+        "production": 4
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._addConnectionClosedListener",
+          "lines": [
+            333
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._handleClosedConnection",
+          "lines": [
+            310
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._handleClosedConnection.listenersToNotify",
+          "lines": [
+            306
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._removeConnectionClosedListener",
+          "lines": [
+            341
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-_nextConnectionClosedListenerToken",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient._nextConnectionClosedListenerToken",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 1,
+      "reference_scope_counts": {
+        "production": 1
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._addConnectionClosedListener.token",
+          "lines": [
+            332
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-_addConnectionClosedListener",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient._addConnectionClosedListener",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 1,
+      "reference_scope_counts": {
+        "production": 1
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.submitPrompt.closeListenerToken",
+          "lines": [
+            704
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-_removeConnectionClosedListener",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient._removeConnectionClosedListener",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 1,
+      "reference_scope_counts": {
+        "production": 1
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.submitPrompt",
+          "lines": [
+            762
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-_dispatchStreamEvent",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient._dispatchStreamEvent",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 1,
+      "reference_scope_counts": {
+        "production": 1
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._handleMessage",
+          "lines": [
+            448
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-RemoteFileAttachment",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "RemoteFileAttachment",
+      "include_members": true,
+      "disposition": "candidate",
+      "reference_count": 11,
+      "reference_scope_counts": {
+        "production": 11
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "RemoteFileAttachment.new",
+          "lines": [
+            140
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.attachFile",
+          "lines": [
+            969,
+            1007,
+            1008,
+            1009,
+            1010,
+            1011,
+            1012,
+            1015,
+            1018
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-_ConnectionClosedListener",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "_ConnectionClosedListener",
+      "include_members": true,
+      "disposition": "candidate",
+      "reference_count": 7,
+      "reference_scope_counts": {
+        "production": 7
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient",
+          "lines": [
+            177
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._addConnectionClosedListener",
+          "lines": [
+            333
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._handleClosedConnection",
+          "lines": [
+            311
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._handleClosedConnection.listenersToNotify",
+          "lines": [
+            307,
+            308
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "_ConnectionClosedListener.new",
+          "lines": [
+            1190
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-_gatewayResponseError",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "_gatewayResponseError",
+      "include_members": true,
+      "disposition": "candidate",
+      "reference_count": 34,
+      "reference_scope_counts": {
+        "production": 34
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._respondToSensitivePrompt",
+          "lines": [
+            888,
+            891
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.attachFile",
+          "lines": [
+            992,
+            995
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.branchSession",
+          "lines": [
+            934,
+            937
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.createOrResumeSession",
+          "lines": [
+            1045,
+            1048
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.createSession",
+          "lines": [
+            1030,
+            1033
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.getSessionReasoning",
+          "lines": [
+            1092,
+            1095
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.interruptSession",
+          "lines": [
+            776,
+            779
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.respondToApproval",
+          "lines": [
+            812,
+            815
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.respondToClarify",
+          "lines": [
+            863,
+            866
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.resumeSession",
+          "lines": [
+            900,
+            903
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.setSessionModel",
+          "lines": [
+            1068,
+            1071
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.setSessionReasoning",
+          "lines": [
+            1125,
+            1128
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.setSessionTitle",
+          "lines": [
+            916,
+            919
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.submitPrompt",
+          "lines": [
+            753,
+            756
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "_gatewayResponseError",
+          "lines": [
+            96,
+            98,
+            99,
+            100,
+            103
+          ]
+        }
+      ]
+    },
+    {
+      "id": "KEEP-connect",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.connect",
+      "include_members": false,
+      "disposition": "retain",
+      "reference_count": 34,
+      "reference_scope_counts": {
+        "production": 1,
+        "test": 33
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/profile_gateway.dart",
+          "caller": "ProfileGateway._forDashboard.open",
+          "lines": [
+            251
+          ]
+        },
+        {
+          "file": "test/approval_capability_transport_test.dart",
+          "caller": "main",
+          "lines": [
+            42,
+            120
+          ]
+        },
+        {
+          "file": "test/clarify_server_request_test.dart",
+          "caller": "main",
+          "lines": [
+            19
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "_expectFailClosedPromptDisconnect",
+          "lines": [
+            154
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            1235,
+            1277,
+            1314,
+            1367,
+            1392,
+            1457,
+            1525,
+            1597,
+            1681,
+            1741,
+            1824,
+            1840,
+            1923,
+            1961,
+            2008,
+            2043,
+            2087,
+            2150,
+            2192,
+            2232,
+            2272,
+            2312
+          ]
+        },
+        {
+          "file": "test/existing_backend_readonly_live_test.dart",
+          "caller": "main",
+          "lines": [
+            107
+          ]
+        },
+        {
+          "file": "test/gateway_headers_transport_test.dart",
+          "caller": "main",
+          "lines": [
+            174,
+            220
+          ]
+        },
+        {
+          "file": "test/profile_purifier_clarification_test.dart",
+          "caller": "main",
+          "lines": [
+            106
+          ]
+        },
+        {
+          "file": "test/profile_vault_server_request_test.dart",
+          "caller": "main.deliver",
+          "lines": [
+            56
+          ]
+        },
+        {
+          "file": "test/sensitive_server_request_test.dart",
+          "caller": "main",
+          "lines": [
+            26
+          ]
+        },
+        {
+          "file": "test/workspace_connection_failure_test.dart",
+          "caller": "main",
+          "lines": [
+            60
+          ]
+        }
+      ]
+    },
+    {
+      "id": "KEEP-send",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.send",
+      "include_members": false,
+      "disposition": "retain",
+      "reference_count": 21,
+      "reference_scope_counts": {
+        "production": 15,
+        "test": 6
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/profile_gateway.dart",
+          "caller": "ProfileGateway._forDashboard.envelope",
+          "lines": [
+            291
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._respondToSensitivePrompt.response",
+          "lines": [
+            882
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.attachFile.response",
+          "lines": [
+            989
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.branchSession.response",
+          "lines": [
+            928
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.createOrResumeSession.result",
+          "lines": [
+            1043
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.createSession.result",
+          "lines": [
+            1028
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.getSessionReasoning.response",
+          "lines": [
+            1086
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.interruptSession.response",
+          "lines": [
+            773
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.respondToApproval.response",
+          "lines": [
+            805
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.respondToClarify.response",
+          "lines": [
+            848
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.resumeSession.result",
+          "lines": [
+            898
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.setSessionModel.result",
+          "lines": [
+            1062
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.setSessionReasoning.response",
+          "lines": [
+            1118
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.setSessionTitle.response",
+          "lines": [
+            910
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.submitPrompt.response",
+          "lines": [
+            747
+          ]
+        },
+        {
+          "file": "test/approval_capability_transport_test.dart",
+          "caller": "main",
+          "lines": [
+            113
+          ]
+        },
+        {
+          "file": "test/clarify_server_request_test.dart",
+          "caller": "main",
+          "lines": [
+            48
+          ]
+        },
+        {
+          "file": "test/existing_backend_readonly_live_test.dart",
+          "caller": "main.capabilities",
+          "lines": [
+            113
+          ]
+        },
+        {
+          "file": "test/existing_backend_readonly_live_test.dart",
+          "caller": "main.ping",
+          "lines": [
+            110
+          ]
+        },
+        {
+          "file": "test/sensitive_server_request_test.dart",
+          "caller": "main",
+          "lines": [
+            48
+          ]
+        },
+        {
+          "file": "test/workspace_connection_failure_test.dart",
+          "caller": "main",
+          "lines": [
+            62
+          ]
+        }
+      ]
+    },
+    {
+      "id": "KEEP-waitForGatewayReady",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.waitForGatewayReady",
+      "include_members": false,
+      "disposition": "retain",
+      "reference_count": 8,
+      "reference_scope_counts": {
+        "production": 1,
+        "test": 7
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/profile_gateway.dart",
+          "caller": "ProfileGateway._forDashboard.open",
+          "lines": [
+            252
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            1316,
+            1682,
+            1690
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.frame",
+          "lines": [
+            1236
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.ready",
+          "lines": [
+            1416
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.readyFuture",
+          "lines": [
+            1278
+          ]
+        },
+        {
+          "file": "test/existing_backend_readonly_live_test.dart",
+          "caller": "main.ready",
+          "lines": [
+            108
+          ]
+        }
+      ]
+    },
+    {
+      "id": "KEEP-close",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.close",
+      "include_members": false,
+      "disposition": "retain",
+      "reference_count": 42,
+      "reference_scope_counts": {
+        "production": 5,
+        "test": 37
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/profile_gateway.dart",
+          "caller": "ProfileGateway._forDashboard",
+          "lines": [
+            324,
+            336,
+            340,
+            341
+          ]
+        },
+        {
+          "file": "lib/core/services/profile_gateway.dart",
+          "caller": "ProfileGateway._forDashboard.open",
+          "lines": [
+            256
+          ]
+        },
+        {
+          "file": "test/approval_capability_transport_test.dart",
+          "caller": "main",
+          "lines": [
+            37,
+            98,
+            133
+          ]
+        },
+        {
+          "file": "test/clarify_server_request_test.dart",
+          "caller": "main",
+          "lines": [
+            55
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "_expectFailClosedPromptDisconnect",
+          "lines": [
+            189
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            1259,
+            1296,
+            1324,
+            1390,
+            1427,
+            1459,
+            1464,
+            1556,
+            1616,
+            1700,
+            1767,
+            1839,
+            1860,
+            1861,
+            1868,
+            1930,
+            1981,
+            2014,
+            2058,
+            2111,
+            2165,
+            2205,
+            2245,
+            2285,
+            2327
+          ]
+        },
+        {
+          "file": "test/existing_backend_readonly_live_test.dart",
+          "caller": "main",
+          "lines": [
+            106
+          ]
+        },
+        {
+          "file": "test/gateway_headers_transport_test.dart",
+          "caller": "main",
+          "lines": [
+            172,
+            218
+          ]
+        },
+        {
+          "file": "test/profile_purifier_clarification_test.dart",
+          "caller": "main",
+          "lines": [
+            118
+          ]
+        },
+        {
+          "file": "test/profile_vault_server_request_test.dart",
+          "caller": "main.deliver",
+          "lines": [
+            61
+          ]
+        },
+        {
+          "file": "test/sensitive_server_request_test.dart",
+          "caller": "main",
+          "lines": [
+            55
+          ]
+        },
+        {
+          "file": "test/workspace_connection_failure_test.dart",
+          "caller": "main",
+          "lines": [
+            54
+          ]
+        }
+      ]
+    },
+    {
+      "id": "KEEP-parseGatewayEvent",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.parseGatewayEvent",
+      "include_members": false,
+      "disposition": "retain",
+      "reference_count": 12,
+      "reference_scope_counts": {
+        "production": 1,
+        "test": 11
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._handleMessage.event",
+          "lines": [
+            430
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            2488
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.boundaryEvent",
+          "lines": [
+            2463
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.event",
+          "lines": [
+            2347,
+            2360,
+            2387,
+            2412,
+            2441,
+            2478,
+            2499,
+            2509,
+            2519
+          ]
+        }
+      ]
+    },
+    {
+      "id": "KEEP-validReasoningEfforts",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.validReasoningEfforts",
+      "include_members": false,
+      "disposition": "retain",
+      "reference_count": 5,
+      "reference_scope_counts": {
+        "test": 2,
+        "production": 3
+      },
+      "callers": [
+        {
+          "file": "integration_test/profile_cross_client_live_test.dart",
+          "caller": "main",
+          "lines": [
+            76,
+            97
+          ]
+        },
+        {
+          "file": "lib/core/services/profile_workspace_controller.dart",
+          "caller": "ProfileWorkspaceController._writeIntelligence",
+          "lines": [
+            4821
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.normalizeReasoningEffort",
+          "lines": [
+            1146
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.setSessionReasoning",
+          "lines": [
+            1111
+          ]
+        }
+      ]
+    },
+    {
+      "id": "KEEP-normalizeReasoningEffort",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.normalizeReasoningEffort",
+      "include_members": false,
+      "disposition": "retain",
+      "reference_count": 2,
+      "reference_scope_counts": {
+        "production": 2
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/profile_workspace_controller.dart",
+          "caller": "ProfileWorkspaceController.loadIntelligence",
+          "lines": [
+            4797
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.getSessionReasoning",
+          "lines": [
+            1102
+          ]
+        }
+      ]
+    },
+    {
+      "id": "KEEP-buildSessionModelValue",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.buildSessionModelValue",
+      "include_members": false,
+      "disposition": "retain",
+      "reference_count": 5,
+      "reference_scope_counts": {
+        "production": 3,
+        "test": 2
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/profile_workspace_controller.dart",
+          "caller": "ProfileWorkspaceController._replaceExpiredDraftRuntime.modelResult",
+          "lines": [
+            3436
+          ]
+        },
+        {
+          "file": "lib/core/services/profile_workspace_controller.dart",
+          "caller": "ProfileWorkspaceController._writeIntelligence.params",
+          "lines": [
+            4850
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.setSessionModel.result",
+          "lines": [
+            1065
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            2530,
+            2537
+          ]
+        }
+      ]
+    },
+    {
+      "id": "KEEP-onStreamEvent",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.onStreamEvent",
+      "include_members": false,
+      "disposition": "retain",
+      "reference_count": 11,
+      "reference_scope_counts": {
+        "production": 2,
+        "test": 9
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/profile_gateway.dart",
+          "caller": "ProfileGateway._forDashboard.open",
+          "lines": [
+            238
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._dispatchEvent",
+          "lines": [
+            572
+          ]
+        },
+        {
+          "file": "test/approval_capability_transport_test.dart",
+          "caller": "main",
+          "lines": [
+            107
+          ]
+        },
+        {
+          "file": "test/clarify_server_request_test.dart",
+          "caller": "main.client",
+          "lines": [
+            17
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.client",
+          "lines": [
+            1232,
+            1358,
+            1519,
+            1671
+          ]
+        },
+        {
+          "file": "test/profile_purifier_clarification_test.dart",
+          "caller": "main.client",
+          "lines": [
+            101
+          ]
+        },
+        {
+          "file": "test/profile_vault_server_request_test.dart",
+          "caller": "main.deliver.client",
+          "lines": [
+            51
+          ]
+        },
+        {
+          "file": "test/sensitive_server_request_test.dart",
+          "caller": "main.client",
+          "lines": [
+            24
+          ]
+        }
+      ]
+    },
+    {
+      "id": "KEEP-onConnectionChanged",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.onConnectionChanged",
+      "include_members": false,
+      "disposition": "retain",
+      "reference_count": 8,
+      "reference_scope_counts": {
+        "production": 3,
+        "test": 5
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/profile_gateway.dart",
+          "caller": "ProfileGateway._forDashboard.open",
+          "lines": [
+            239
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._handleClosedConnection",
+          "lines": [
+            324
+          ]
+        },
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient.connect",
+          "lines": [
+            254
+          ]
+        },
+        {
+          "file": "test/approval_capability_transport_test.dart",
+          "caller": "main",
+          "lines": [
+            110
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.client",
+          "lines": [
+            1364,
+            1451,
+            1672,
+            1821
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-onGatewayReady",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.onGatewayReady",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 4,
+      "reference_scope_counts": {
+        "production": 1,
+        "test": 3
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._handleGatewayReady",
+          "lines": [
+            473
+          ]
+        },
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main.client",
+          "lines": [
+            1231,
+            1353,
+            1670
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-isConnected",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient.isConnected",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 2,
+      "reference_scope_counts": {
+        "test": 2
+      },
+      "callers": [
+        {
+          "file": "test/connection_manager_test.dart",
+          "caller": "main",
+          "lines": [
+            1458,
+            1461
+          ]
+        }
+      ]
+    },
+    {
+      "id": "KEEP-_dispatchEvent",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "WsClient._dispatchEvent",
+      "include_members": false,
+      "disposition": "retain",
+      "reference_count": 2,
+      "reference_scope_counts": {
+        "production": 2
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient._handleMessage",
+          "lines": [
+            390,
+            431
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC04",
+      "file": "lib/core/models/gateway_insight.dart",
+      "symbol": "GatewayInterimTransition",
+      "include_members": true,
+      "disposition": "candidate",
+      "reference_count": 47,
+      "reference_scope_counts": {
+        "production": 24,
+        "test": 23
+      },
+      "callers": [
+        {
+          "file": "lib/core/models/gateway_insight.dart",
+          "caller": "GatewayInterimTransition.new",
+          "lines": [
+            56
+          ]
+        },
+        {
+          "file": "lib/core/models/gateway_insight.dart",
+          "caller": "GatewayInterimTransition.resolve",
+          "lines": [
+            61,
+            68,
+            69,
+            70,
+            71,
+            72,
+            73,
+            74,
+            77,
+            78,
+            79
+          ]
+        },
+        {
+          "file": "lib/core/models/gateway_insight.dart",
+          "caller": "GatewayInterimTransition.resolve.safeInterim",
+          "lines": [
+            66
+          ]
+        },
+        {
+          "file": "lib/core/models/gateway_insight.dart",
+          "caller": "GatewayInterimTransition.resolve.sealed",
+          "lines": [
+            67
+          ]
+        },
+        {
+          "file": "test/gateway_insight_test.dart",
+          "caller": "main",
+          "lines": [
+            106,
+            107,
+            117,
+            127,
+            128
+          ]
+        },
+        {
+          "file": "test/gateway_insight_test.dart",
+          "caller": "main.result",
+          "lines": [
+            100,
+            101,
+            102,
+            103,
+            111,
+            112,
+            113,
+            114,
+            121,
+            122,
+            123,
+            124
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC05-level",
+      "file": "lib/core/models/gateway_insight.dart",
+      "symbol": "GatewayNotificationLevel",
+      "include_members": true,
+      "disposition": "candidate",
+      "reference_count": 11,
+      "reference_scope_counts": {
+        "production": 9,
+        "test": 2
+      },
+      "callers": [
+        {
+          "file": "lib/core/models/gateway_insight.dart",
+          "caller": "GatewayNotification",
+          "lines": [
+            141
+          ]
+        },
+        {
+          "file": "lib/core/models/gateway_insight.dart",
+          "caller": "GatewayNotification.fromEventData",
+          "lines": [
+            166,
+            167,
+            168,
+            169
+          ]
+        },
+        {
+          "file": "test/gateway_insight_test.dart",
+          "caller": "main",
+          "lines": [
+            71
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC05-value",
+      "file": "lib/core/models/gateway_insight.dart",
+      "symbol": "GatewayNotification",
+      "include_members": true,
+      "disposition": "candidate",
+      "reference_count": 27,
+      "reference_scope_counts": {
+        "production": 22,
+        "test": 5
+      },
+      "callers": [
+        {
+          "file": "lib/core/models/gateway_insight.dart",
+          "caller": "GatewayNotification.fromEventData",
+          "lines": [
+            151,
+            153,
+            162,
+            163,
+            164,
+            165,
+            171
+          ]
+        },
+        {
+          "file": "lib/core/models/gateway_insight.dart",
+          "caller": "GatewayNotification.fromEventData.key",
+          "lines": [
+            155
+          ]
+        },
+        {
+          "file": "lib/core/models/gateway_insight.dart",
+          "caller": "GatewayNotification.fromEventData.text",
+          "lines": [
+            152
+          ]
+        },
+        {
+          "file": "lib/core/models/gateway_insight.dart",
+          "caller": "GatewayNotification.fromEventData.ttlMs",
+          "lines": [
+            157,
+            158,
+            159
+          ]
+        },
+        {
+          "file": "lib/core/models/gateway_insight.dart",
+          "caller": "GatewayNotification.new",
+          "lines": [
+            144
+          ]
+        },
+        {
+          "file": "test/gateway_insight_test.dart",
+          "caller": "main",
+          "lines": [
+            70,
+            71,
+            72
+          ]
+        },
+        {
+          "file": "test/gateway_insight_test.dart",
+          "caller": "main.notification",
+          "lines": [
+            63
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC06",
+      "file": "lib/core/models/gateway_activity.dart",
+      "symbol": "GatewayTurnStatus",
+      "include_members": true,
+      "disposition": "candidate",
+      "reference_count": 36,
+      "reference_scope_counts": {
+        "production": 29,
+        "test": 7
+      },
+      "callers": [
+        {
+          "file": "lib/core/models/gateway_activity.dart",
+          "caller": "GatewayTurnStatus._fallbackText",
+          "lines": [
+            246
+          ]
+        },
+        {
+          "file": "lib/core/models/gateway_activity.dart",
+          "caller": "GatewayTurnStatus._normalize",
+          "lines": [
+            257,
+            259,
+            260,
+            261,
+            262
+          ]
+        },
+        {
+          "file": "lib/core/models/gateway_activity.dart",
+          "caller": "GatewayTurnStatus._normalize.normalized",
+          "lines": [
+            258
+          ]
+        },
+        {
+          "file": "lib/core/models/gateway_activity.dart",
+          "caller": "GatewayTurnStatus.fromGatewayEvent",
+          "lines": [
+            228,
+            232,
+            241,
+            242
+          ]
+        },
+        {
+          "file": "lib/core/models/gateway_activity.dart",
+          "caller": "GatewayTurnStatus.fromGatewayEvent.kind",
+          "lines": [
+            236,
+            238
+          ]
+        },
+        {
+          "file": "lib/core/models/gateway_activity.dart",
+          "caller": "GatewayTurnStatus.fromGatewayEvent.rawText",
+          "lines": [
+            239
+          ]
+        },
+        {
+          "file": "lib/core/models/gateway_activity.dart",
+          "caller": "GatewayTurnStatus.fromGatewayEvent.text",
+          "lines": [
+            240
+          ]
+        },
+        {
+          "file": "lib/core/models/gateway_activity.dart",
+          "caller": "GatewayTurnStatus.new",
+          "lines": [
+            226
+          ]
+        },
+        {
+          "file": "test/gateway_activity_test.dart",
+          "caller": "main",
+          "lines": [
+            125,
+            126,
+            127
+          ]
+        },
+        {
+          "file": "test/gateway_activity_test.dart",
+          "caller": "main.compacting",
+          "lines": [
+            121
+          ]
+        },
+        {
+          "file": "test/gateway_activity_test.dart",
+          "caller": "main.thinking",
+          "lines": [
+            118
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC07-status",
+      "file": "lib/core/theme/wing_theme.dart",
+      "symbol": "WingStatus",
+      "include_members": true,
+      "disposition": "candidate",
+      "reference_count": 21,
+      "reference_scope_counts": {
+        "production": 11,
+        "test": 10
+      },
+      "callers": [
+        {
+          "file": "lib/core/theme/wing_theme.dart",
+          "caller": "WingTokens.colorForStatus",
+          "lines": [
+            221,
+            223,
+            225,
+            227,
+            229,
+            231
+          ]
+        },
+        {
+          "file": "test/wing_theme_test.dart",
+          "caller": "main",
+          "lines": [
+            91,
+            92,
+            93,
+            94,
+            95
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC07-color",
+      "file": "lib/core/theme/wing_theme.dart",
+      "symbol": "WingTokens.colorForStatus",
+      "include_members": false,
+      "disposition": "candidate",
+      "reference_count": 5,
+      "reference_scope_counts": {
+        "test": 5
+      },
+      "callers": [
+        {
+          "file": "test/wing_theme_test.dart",
+          "caller": "main",
+          "lines": [
+            91,
+            92,
+            93,
+            94,
+            95
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DC02-GatewayReadyCallback",
+      "file": "lib/core/services/ws_client.dart",
+      "symbol": "GatewayReadyCallback",
+      "include_members": true,
+      "disposition": "candidate",
+      "reference_count": 1,
+      "reference_scope_counts": {
+        "production": 1
+      },
+      "callers": [
+        {
+          "file": "lib/core/services/ws_client.dart",
+          "caller": "WsClient",
+          "lines": [
+            186
+          ]
+        }
+      ]
+    }
+  ],
+  "additional_candidates": [],
+  "proof_obligations": [
+    "Pre-delete source/census recheck passed with root phase1 clearance; retain this pre-removal provenance and validate the resulting source separately.",
+    "Confirm every removed reference is inside the deletion closure, remove only obsolete test cases, and preserve supported transport/history/notification behavior tests.",
+    "Review declared dynamic/native/alternate roots before member deletion; absence from imports or name grep is insufficient.",
+    "Run the serialized root-owned Flutter analysis and targeted production transport/model/theme suites after approved deletion.",
+    "Reclassify removed files/roots and retain independent behavior coverage; do not replace deleted APIs with compatibility shims."
+  ],
+  "checkout_authored_count": 958,
+  "post_removal": {
+    "status": "implemented-static-checks-pass-root-behavior-gates-owned-by-root",
+    "removed_files": [
+      "lib/core/models/session.dart",
+      "test/api_client_timeout_test.dart",
+      "test/session_model_test.dart"
+    ],
+    "scope": "DC01/DC02/DC04\u201307 plus exclusive old tests and analyzer-proven orphan private test enum",
+    "scoped_analysis": "0 issues on all changed production/test files and independent guard",
+    "compatibility_surface": "none",
+    "retired_rule": "ARCH_RETIRED_DECLARATION"
+  }
+}

@@ -73,7 +73,14 @@ def main():
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 raise RuntimeError('Flutter exited while waiting for native dialog: ' + marker)
+            # Android can return success with no hierarchy while its native
+            # picker is opening. Wait within this step's existing deadline and
+            # remove the previous capture so it cannot be mistaken for readiness.
+            adb('shell', 'rm', '-f', dump_path)
             adb('shell', 'uiautomator', 'dump', dump_path)
+            if not exists(dump_path):
+                time.sleep(0.5)
+                continue
             xml = adb('shell', 'cat', dump_path)
             (args.output / f'{marker}.xml').write_text(xml)
             nodes = list(ET.fromstring(xml).iter('node'))

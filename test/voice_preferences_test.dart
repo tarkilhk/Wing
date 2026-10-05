@@ -5,33 +5,26 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wing/core/services/device_preference.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/models/app_preferences.dart';
 import 'package:wing/core/services/android_voice.dart';
-import 'package:wing/core/services/voice_preferences.dart';
+import 'package:wing/core/services/voice_preferences_session.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_select.dart';
 import 'package:wing/core/widgets/voice_preferences_card.dart';
 import 'support/voice_fixture.dart';
 
-class _FailingPreferences extends Fake implements SharedPreferences {
-  final values = <String, Object>{};
+class _FailingStorage extends InMemorySharedPreferencesStore {
+  _FailingStorage() : super.empty();
   bool failNext = true;
   @override
-  Object? get(String key) => values[key];
-  @override
-  String? getString(String key) => values[key] as String?;
-  @override
-  Future<bool> setString(String key, String value) async {
-    values[key] = value;
-    final failed = failNext;
-    failNext = false;
-    return !failed;
-  }
-
-  @override
-  Future<bool> remove(String key) async {
-    values.remove(key);
-    return true;
+  Future<bool> setValue(String type, String key, Object value) {
+    if (failNext) {
+      failNext = false;
+      return Future.value(false);
+    }
+    return super.setValue(type, key, value);
   }
 }
 
@@ -78,25 +71,27 @@ void main() {
     'independent engines and Android voice settings survive reload',
     () async {
       final prefs = await SharedPreferences.getInstance();
-      expect(VoicePreferences.read(prefs).input, VoiceProcessing.local);
-      expect(VoicePreferences.read(prefs).output, VoiceProcessing.local);
-      await saveDevicePreference(prefs, VoicePreferences.inputKey, 'hermes');
-      await saveDevicePreference(prefs, VoicePreferences.voiceKey, 'french');
-      await saveDevicePreference(prefs, VoicePreferences.languageKey, 'fr-FR');
-      await saveDevicePreference(prefs, VoicePreferences.rateKey, '0.8');
-      await prefs.reload();
-      final saved = VoicePreferences.read(prefs);
-      expect(saved.input, VoiceProcessing.hermes);
-      expect(saved.output, VoiceProcessing.local);
+      final owner = AppPreferences(prefs);
+      addTearDown(owner.dispose);
+      expect(owner.current.values.voiceInput, AppVoiceProcessing.local);
+      expect(owner.current.values.voiceOutput, AppVoiceProcessing.local);
+      await owner.setVoiceInput(AppVoiceProcessing.hermes);
+      await owner.setVoice('french');
+      await owner.setVoiceLanguage('fr-FR');
+      await owner.setVoiceRate(AppVoiceRate.slower);
+      await owner.reload();
+      final saved = owner.current.values;
+      expect(saved.voiceInput, AppVoiceProcessing.hermes);
+      expect(saved.voiceOutput, AppVoiceProcessing.local);
       expect(saved.voice, 'french');
-      expect(saved.language, 'fr-FR');
-      expect(saved.rate, 0.8);
+      expect(saved.voiceLanguage, 'fr-FR');
+      expect(saved.voiceRate, AppVoiceRate.slower);
     },
   );
 
   Future<void> show(
     WidgetTester tester,
-    SharedPreferences prefs,
+    AppPreferences owner,
     VoiceDeviceFixture device, {
     Brightness brightness = Brightness.light,
     double scale = 1,
@@ -116,10 +111,12 @@ void main() {
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: VoicePreferencesCard(
-                  preferences: prefs,
-                  device: device,
-                  hermesProfileLabel: 'Personal',
-                  openHermesSettings: link,
+                  createSession: () => VoicePreferencesSession(
+                    preferences: owner,
+                    device: device,
+                    hermesProfileLabel: 'Personal',
+                    openHermesSettings: link,
+                  ),
                 ),
               ),
             ),
@@ -134,106 +131,139 @@ void main() {
     'output selection persists; remote voice is a profile link, not a picker',
     (tester) async {
       final prefs = await SharedPreferences.getInstance();
+      final owner = AppPreferences(prefs);
+      addTearDown(owner.dispose);
       final device = VoiceDeviceFixture();
       var links = 0;
       addTearDown(device.stream.close);
-      await show(tester, prefs, device, link: () => links++);
+      await show(tester, owner, device, link: () => links++);
       final output = tester
-          .widgetList<StudioSelect<String>>(find.byType(StudioSelect<String>))
+          .widgetList<StudioSelect<AppVoiceProcessing>>(
+            find.byType(StudioSelect<AppVoiceProcessing>),
+          )
           .firstWhere((w) => w.label == 'Voice output');
-      output.onChanged!('hermes');
+      output.onChanged!(AppVoiceProcessing.hermes);
       await tester.pumpAndSettle();
-      expect(VoicePreferences.read(prefs).input, VoiceProcessing.local);
-      expect(VoicePreferences.read(prefs).output, VoiceProcessing.hermes);
+      expect(owner.current.values.voiceInput, AppVoiceProcessing.local);
+      expect(owner.current.values.voiceOutput, AppVoiceProcessing.hermes);
       expect(find.text('Android voice'), findsNothing);
-      expect(find.textContaining('belong to the selected server profile'), findsOneWidget);
+      expect(
+        find.textContaining('belong to the selected server profile'),
+        findsOneWidget,
+      );
       await tester.ensureVisible(find.text('Open speech synthesis'));
       await tester.tap(find.text('Open speech synthesis'));
       expect(links, 1);
       await tester.pumpWidget(const SizedBox());
-      await show(tester, prefs, device);
+      await show(tester, owner, device);
       expect(
         tester
-            .widgetList<StudioSelect<String>>(find.byType(StudioSelect<String>))
+            .widgetList<StudioSelect<AppVoiceProcessing>>(
+              find.byType(StudioSelect<AppVoiceProcessing>),
+            )
             .firstWhere((w) => w.label == 'Voice output')
             .value,
-        'hermes',
+        AppVoiceProcessing.hermes,
       );
     },
   );
   testWidgets('failed preference save keeps confirmed value after reopening', (
     tester,
   ) async {
-    final prefs = _FailingPreferences();
+    SharedPreferences.resetStatic();
+    SharedPreferencesStorePlatform.instance = _FailingStorage();
+    final prefs = await SharedPreferences.getInstance();
+    final owner = AppPreferences(prefs);
+    addTearDown(owner.dispose);
     final device = VoiceDeviceFixture();
     addTearDown(device.stream.close);
-    await show(tester, prefs, device);
+    await show(tester, owner, device);
     tester
-        .widgetList<StudioSelect<String>>(find.byType(StudioSelect<String>))
+        .widgetList<StudioSelect<AppVoiceProcessing>>(
+          find.byType(StudioSelect<AppVoiceProcessing>),
+        )
         .firstWhere((w) => w.label == 'Voice input')
-        .onChanged!('hermes');
+        .onChanged!(AppVoiceProcessing.hermes);
     await tester.pumpAndSettle();
     expect(
       find.text('Could not save this voice setting. Please retry.'),
       findsOneWidget,
     );
-    expect(VoicePreferences.read(prefs).input, VoiceProcessing.local);
+    expect(owner.current.values.voiceInput, AppVoiceProcessing.local);
     await tester.pumpWidget(const SizedBox());
-    await show(tester, prefs, device);
+    await show(tester, owner, device);
     expect(
       tester
-          .widgetList<StudioSelect<String>>(find.byType(StudioSelect<String>))
+          .widgetList<StudioSelect<AppVoiceProcessing>>(
+            find.byType(StudioSelect<AppVoiceProcessing>),
+          )
           .firstWhere((w) => w.label == 'Voice input')
           .value,
-      'local',
+      AppVoiceProcessing.local,
     );
   });
   for (final brightness in Brightness.values) {
-    testWidgets('voice settings fit 320dp at 200% text in $brightness', (
-      tester,
-    ) async {
-      tester.view.devicePixelRatio = 1;
-      tester.view.physicalSize = const Size(320, 800);
-      addTearDown(tester.view.reset);
-      final prefs = await SharedPreferences.getInstance();
-      final device = VoiceDeviceFixture();
-      device.capabilitiesValue = const AndroidVoiceCapabilities(
-        recognitionAvailable: false,
-        voices: [
-          (
-            id: 'long',
-            label:
-                'English (United Kingdom) · a very long installed Android voice name',
-          ),
-        ],
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'voice settings fit 320dp at ${scale * 100}% text in $brightness',
+        (tester) async {
+          tester.view.devicePixelRatio = 1;
+          tester.view.physicalSize = const Size(320, 800);
+          addTearDown(tester.view.reset);
+          final prefs = await SharedPreferences.getInstance();
+          final owner = AppPreferences(prefs);
+          addTearDown(owner.dispose);
+          final device = VoiceDeviceFixture();
+          device.capabilitiesValue = const AndroidVoiceCapabilities(
+            recognitionAvailable: false,
+            voices: [
+              (
+                id: 'long',
+                label:
+                    'English (United Kingdom) · a very long installed Android voice name',
+              ),
+            ],
+          );
+          addTearDown(device.stream.close);
+          await show(
+            tester,
+            owner,
+            device,
+            brightness: brightness,
+            scale: scale,
+            link: () {},
+          );
+          await screenshot(
+            tester,
+            'settings-input-${brightness.name}-${(scale * 100).round()}',
+          );
+          await tester.ensureVisible(
+            find.text('Refresh Android voices and languages'),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await screenshot(
+            tester,
+            'settings-output-${brightness.name}-${(scale * 100).round()}',
+          );
+          tester
+              .widgetList<StudioSelect<AppVoiceProcessing>>(
+                find.byType(StudioSelect<AppVoiceProcessing>),
+              )
+              .firstWhere((w) => w.label == 'Voice output')
+              .onChanged!(AppVoiceProcessing.hermes);
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(
+            find.text('Refresh Android voices and languages'),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await screenshot(
+            tester,
+            'settings-hermes-${brightness.name}-${(scale * 100).round()}',
+          );
+        },
       );
-      addTearDown(device.stream.close);
-      await show(
-        tester,
-        prefs,
-        device,
-        brightness: brightness,
-        scale: 2,
-        link: () {},
-      );
-      await screenshot(tester, 'settings-input-${brightness.name}-200');
-      await tester.ensureVisible(
-        find.text('Refresh Android voices and languages'),
-      );
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      await screenshot(tester, 'settings-output-${brightness.name}-200');
-      tester
-          .widgetList<StudioSelect<String>>(find.byType(StudioSelect<String>))
-          .firstWhere((w) => w.label == 'Voice output')
-          .onChanged!('hermes');
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(
-        find.text('Refresh Android voices and languages'),
-      );
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      await screenshot(tester, 'settings-hermes-${brightness.name}-200');
-    });
+    }
   }
 }

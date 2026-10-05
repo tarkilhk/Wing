@@ -1,3 +1,8 @@
+import 'package:wing/core/models/chat_runtime.dart';
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -15,22 +20,28 @@ import 'answer_versions_test.dart' show AnswerHost;
 void main() {
   late AnswerHost host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileChat original;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     host = AnswerHost();
     controller = ProfileWorkspaceController(
       connectionIdentity: 'host-settings',
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Host',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Host',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
@@ -40,15 +51,22 @@ void main() {
     original = controller.current!.chat!;
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   test('edit rewinds the addressed row and pauses queued followups', () async {
     await controller.updateDraft(original, 'Unrelated composer draft');
-    original.queuedPrompts.add(QueuedPromptDraft(text: 'Queued followup'));
+    await restoreComposerFixture(
+      chat: original,
+      preferences: controller.preferences,
+      appendQueued: [QueuedPromptDraft(text: 'Queued followup')],
+    );
 
     final accepted = await controller.editSavedPrompt(
       original,
-      original.messages.first,
+      original.reading.messages.first,
       'Corrected prompt',
     );
 
@@ -61,19 +79,27 @@ void main() {
       'confirm_truncate': true,
       'confirm_empty_truncate': true,
     });
-    expect(original.draft, 'Unrelated composer draft');
-    expect(original.queuedPrompts.single.text, 'Queued followup');
-    expect(original.queuePaused, isTrue);
-    expect(original.messages.map(answerMessageText), ['Corrected prompt']);
+    expect(original.composer.observation.text, 'Unrelated composer draft');
+    expect(original.composer.observation.queue.single.text, 'Queued followup');
+    expect(original.composer.observation.paused, isTrue);
+    expect(original.reading.messages.map(answerMessageText), [
+      'Corrected prompt',
+    ]);
   });
 
   test('rejected edit restores history and keeps local work paused', () async {
     await controller.updateDraft(original, 'Keep this draft');
-    original.queuedPrompts.add(
-      QueuedPromptDraft(text: 'Keep this queued message'),
+    await restoreComposerFixture(
+      chat: original,
+      preferences: controller.preferences,
+      appendQueued: [QueuedPromptDraft(text: 'Keep this queued message')],
     );
-    final before = List<Map<String, dynamic>>.of(original.messages);
-    final statusBefore = original.status;
+    final before = List<Map<String, dynamic>>.of(original.reading.messages);
+    final statusBefore = original.runtime.execution;
+    final serverHistoryBefore = host
+        .history('a', 'original')
+        .map(Map<String, dynamic>.of)
+        .toList();
     host.submitError = JsonRpcError(
       'prompt.submit',
       'Session busy',
@@ -82,16 +108,25 @@ void main() {
 
     final accepted = await controller.editSavedPrompt(
       original,
-      original.messages.first,
+      original.reading.messages.first,
       'Rejected correction',
     );
 
     expect(accepted, isFalse);
-    expect(original.messages, before);
-    expect(original.draft, 'Keep this draft');
-    expect(original.queuedPrompts.single.text, 'Keep this queued message');
-    expect(original.queuePaused, isTrue);
-    expect(original.status, statusBefore);
+    expect(original.reading.messages, before);
+    expect(original.composer.observation.text, 'Keep this draft');
+    expect(
+      original.composer.observation.queue.single.text,
+      'Keep this queued message',
+    );
+    expect(original.composer.observation.paused, isTrue);
+    expect(original.runtime.execution, statusBefore);
+    expect(host.history('a', 'original'), serverHistoryBefore);
+    expect(
+      host.calls.where((call) => call.$1 == 'prompt.submit'),
+      hasLength(1),
+    );
+    expect(original.runtime.reconnecting, isFalse);
   });
 
   test('lost edit acknowledgement is not reported as success', () async {
@@ -100,14 +135,14 @@ void main() {
 
     final accepted = await controller.editSavedPrompt(
       original,
-      original.messages.first,
+      original.reading.messages.first,
       'Possibly delivered correction',
     );
 
     expect(accepted, isFalse);
-    expect(original.status, ProfileTurnStatus.reconnecting);
-    expect(original.draft, 'Keep this unrelated draft');
-    expect(original.error, contains('uncertain'));
+    expect(original.runtime.reconnecting, isTrue);
+    expect(original.composer.observation.text, 'Keep this unrelated draft');
+    expect(original.runtime.error, contains('uncertain'));
   });
 
   for (final failure in [
@@ -128,25 +163,27 @@ void main() {
       'edit reconciles accepted history after ${failure.reason ?? failure.code}',
       () async {
         await controller.updateDraft(original, 'Unrelated draft');
-        original.queuedPrompts.add(
-          QueuedPromptDraft(text: 'Keep queued followup'),
+        await restoreComposerFixture(
+          chat: original,
+          preferences: controller.preferences,
+          appendQueued: [QueuedPromptDraft(text: 'Keep queued followup')],
         );
         host.submitError = failure;
         host.submitErrorAfterAcceptance = true;
 
         final accepted = await controller.editSavedPrompt(
           original,
-          original.messages.first,
+          original.reading.messages.first,
           'Delivered correction',
         );
 
         expect(accepted, isFalse);
-        expect(original.status, ProfileTurnStatus.reconnecting);
-        expect(original.error, contains('uncertain'));
-        expect(original.messages.map(answerMessageText), [
+        expect(original.runtime.reconnecting, isTrue);
+        expect(original.runtime.error, contains('uncertain'));
+        expect(original.reading.messages.map(answerMessageText), [
           'Delivered correction',
         ]);
-        expect(original.queuePaused, isTrue);
+        expect(original.composer.observation.paused, isTrue);
 
         host.resumeDelay = Completer<void>();
         final recovery = controller.reconnect(original.key.workspace);
@@ -154,14 +191,17 @@ void main() {
         host.resumeDelay!.complete();
         await recovery;
 
-        expect(original.messages.map(answerMessageText), [
+        expect(original.reading.messages.map(answerMessageText), [
           'Delivered correction',
           'New answer 0',
         ]);
-        expect(original.draft, 'New draft during recovery');
-        expect(original.queuedPrompts.single.text, 'Keep queued followup');
-        expect(original.queuePaused, isTrue);
-        expect(original.status, ProfileTurnStatus.completed);
+        expect(original.composer.observation.text, 'New draft during recovery');
+        expect(
+          original.composer.observation.queue.single.text,
+          'Keep queued followup',
+        );
+        expect(original.composer.observation.paused, isTrue);
+        expect(original.runtime.execution, ChatExecution.completed);
         expect(
           host.calls.where((call) => call.$1 == 'prompt.submit'),
           hasLength(1),
@@ -173,7 +213,10 @@ void main() {
   test('fork sends once after the latest saved answer', () async {
     await controller.updateDraft(original, 'Continue in a fork');
 
-    final child = await controller.forkPrompt(original, original.draft);
+    final child = await controller.forkPrompt(
+      original,
+      original.composer.observation.text,
+    );
 
     expect(child, isNotNull);
     final forked = child!;
@@ -183,12 +226,12 @@ void main() {
       'count': 4,
     });
     expect(host.calls.lastWhere((call) => call.$1 == 'prompt.submit').$2, {
-      'session_id': forked.runtimeId,
+      'session_id': forked.runtime.runtimeId,
       'profile': 'a',
       'text': 'Continue in a fork',
     });
-    expect(original.draft, isEmpty);
-    expect(forked.status, ProfileTurnStatus.running);
+    expect(original.composer.observation.text, isEmpty);
+    expect(forked.runtime.execution, ChatExecution.running);
   });
 
   test('failed fork send leaves the source draft intact', () async {
@@ -199,13 +242,16 @@ void main() {
       code: 4009,
     );
 
-    final child = await controller.forkPrompt(original, original.draft);
+    final child = await controller.forkPrompt(
+      original,
+      original.composer.observation.text,
+    );
 
     expect(child, isNotNull);
     final forked = child!;
-    expect(original.draft, 'Do not lose this');
-    expect(forked.status, ProfileTurnStatus.reconnecting);
-    expect(original.error, contains('Check the child chat'));
+    expect(original.composer.observation.text, 'Do not lose this');
+    expect(forked.runtime.reconnecting, isTrue);
+    expect(original.runtime.error, contains('Check the child chat'));
     expect(
       host.calls.where((call) => call.$1 == 'prompt.submit'),
       hasLength(1),
@@ -263,7 +309,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Replace and resend'));
     await tester.runAsync(() async {
-      for (var i = 0; i < 100 && original.changingAnswer; i++) {
+      for (var i = 0; i < 100 && original.runtime.changingAnswer; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
     });
@@ -319,7 +365,7 @@ void main() {
           host.calls.where((call) => call.$1 == 'prompt.submit'),
           hasLength(1),
         );
-        expect(original.changingAnswer, isTrue);
+        expect(original.runtime.changingAnswer, isTrue);
         expect(tester.widget<TextFormField>(field).enabled, isFalse);
         await tester.tapAt(const Offset(8, 8));
         await tester.binding.handlePopRoute();
@@ -333,7 +379,7 @@ void main() {
           findsOneWidget,
         );
         host.submitDelay!.complete();
-        for (var i = 0; i < 100 && original.changingAnswer; i++) {
+        for (var i = 0; i < 100 && original.runtime.changingAnswer; i++) {
           await tester.pump(const Duration(milliseconds: 1));
           await tester.runAsync(
             () => Future<void>.delayed(const Duration(milliseconds: 1)),
@@ -341,7 +387,7 @@ void main() {
         }
         // Accepted work keeps its live progress animation running. Render the
         // completed editor transition without waiting for that turn to finish.
-        expect(original.changingAnswer, isFalse);
+        expect(original.runtime.changingAnswer, isFalse);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
         expect(
@@ -392,7 +438,11 @@ void main() {
     expect(host.calls.where((call) => call.$1 == 'session.branch'), isEmpty);
     await gesture.up();
     await tester.runAsync(() async {
-      for (var i = 0; i < 100 && original.draft.isNotEmpty; i++) {
+      for (
+        var i = 0;
+        i < 100 && original.composer.observation.text.isNotEmpty;
+        i++
+      ) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
     });
@@ -405,7 +455,7 @@ void main() {
       host.calls.where((call) => call.$1 == 'prompt.submit'),
       hasLength(1),
     );
-    expect(original.draft, isEmpty);
+    expect(original.composer.observation.text, isEmpty);
     await tester.pumpWidget(const SizedBox());
   });
 }

@@ -5,8 +5,6 @@
 /// instead of per screen. See `docs/DESIGN_SYSTEM.md` for the Studio charter.
 library;
 
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -17,14 +15,12 @@ abstract final class WingSpacing {
   static const double md = 12;
   static const double lg = 16;
   static const double xl = 24;
-  static const double xxl = 32;
 }
 
 /// Corner radii, growing from small controls to full sheets.
 abstract final class WingRadius {
   static const double sm = 6;
   static const double md = 8;
-  static const double lg = 10;
   static const double xl = 12;
 
   static const BorderRadius control = BorderRadius.all(Radius.circular(sm));
@@ -38,27 +34,8 @@ abstract final class WingRadius {
 abstract final class WingMotion {
   static const Duration fast = Duration(milliseconds: 120);
   static const Duration standard = Duration(milliseconds: 200);
-  static const Duration emphasized = Duration(milliseconds: 320);
 
   static const Curve curve = Curves.easeOutCubic;
-}
-
-/// Semantic state of a chat, task, or activity item.
-enum WingStatus {
-  /// Work is actively progressing.
-  running,
-
-  /// Wing cannot continue without the user (approval, clarify, secret).
-  blocked,
-
-  /// Work ended in an error.
-  failed,
-
-  /// Work ended successfully.
-  completed,
-
-  /// Nothing is happening.
-  idle,
 }
 
 /// The Wing typography ramp.
@@ -216,21 +193,6 @@ class WingTokens extends ThemeExtension<WingTokens> {
     final theme = Theme.of(context);
     return theme.extension<WingTokens>() ??
         WingTokens.forBrightness(theme.brightness);
-  }
-
-  Color colorForStatus(WingStatus status) {
-    switch (status) {
-      case WingStatus.running:
-        return running;
-      case WingStatus.blocked:
-        return blocked;
-      case WingStatus.failed:
-        return danger;
-      case WingStatus.completed:
-        return success;
-      case WingStatus.idle:
-        return muted;
-    }
   }
 
   @override
@@ -667,28 +629,4 @@ ThemeData wingTheme(Brightness brightness, {Color? accent}) {
     ),
     extensions: <ThemeExtension<dynamic>>[tokens],
   );
-}
-
-/// WCAG 2.1 relative luminance contrast ratio between two opaque colors.
-///
-/// Exposed so accessibility expectations live in tests rather than in review
-/// opinions: body text must clear 4.5:1 and secondary text 3:1.
-double contrastRatio(Color foreground, Color background) {
-  final a = _relativeLuminance(foreground);
-  final b = _relativeLuminance(background);
-  final lighter = math.max(a, b);
-  final darker = math.min(a, b);
-  return (lighter + 0.05) / (darker + 0.05);
-}
-
-double _relativeLuminance(Color color) {
-  double channel(double value) {
-    return value <= 0.03928
-        ? value / 12.92
-        : math.pow((value + 0.055) / 1.055, 2.4).toDouble();
-  }
-
-  return 0.2126 * channel(color.r) +
-      0.7152 * channel(color.g) +
-      0.0722 * channel(color.b);
 }

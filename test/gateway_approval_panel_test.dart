@@ -1,3 +1,6 @@
+import 'support/composer_fixture.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -44,24 +47,34 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         SharedPreferences.setMockInitialValues({});
+        final preferences = await SharedPreferences.getInstance();
+        final appPreferences = AppPreferences(preferences);
+        addTearDown(appPreferences.dispose);
         final host = Host();
         late ProfileWorkspaceController controller;
         await tester.runAsync(() async {
           controller = ProfileWorkspaceController(
             connectionIdentity: 'fixture',
-            connection: SavedConnection(
-              id: 'host',
-              label: 'Home',
-              host: 'localhost',
-              port: 1,
-              apiKey: '',
+            access: ConnectionAccess(
+              connection: SavedConnection(
+                id: 'host',
+                label: 'Home',
+                host: 'localhost',
+                port: 1,
+                apiKey: '',
+              ),
+              dashboardOAuth: null,
             ),
-            preferences: await SharedPreferences.getInstance(),
+            preferences: preferences,
+            appPreferences: appPreferences,
             gatewayFactory: host.gateway,
           );
           await controller.initialize();
-          final chat = await controller.createChat();
-          chat.title = 'Review source verification';
+          final chat = await controller.createChat(canDispatch: () => true);
+          emitChatEvent(controller, chat, 'session.title', {
+            'session_id': chat.key.sessionId,
+            'title': 'Review source verification',
+          });
           final records = List.generate(
             80,
             (i) => "records.append({'source': $i, 'verified': True})",

@@ -1,3 +1,7 @@
+import 'package:wing/core/services/voice_preferences_session.dart';
+import 'package:wing/core/services/android_voice.dart';
+import 'package:wing/core/models/app_preferences.dart';
+import 'package:wing/core/services/app_preferences.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -42,10 +46,9 @@ Future<void> _captureFrame(WidgetTester tester, String name) async {
 
 Future<void> _show(
   WidgetTester tester,
-  SharedPreferences preferences, {
+  AppPreferences appPreferences, {
   Brightness brightness = Brightness.light,
   double scale = 1,
-  VoidCallback? onChanged,
 }) async {
   await tester.pumpWidget(
     RepaintBoundary(
@@ -62,8 +65,14 @@ Future<void> _show(
         home: Scaffold(
           appBar: AppBar(title: const Text('App settings')),
           body: AppSettingsContent(
-            preferences: preferences,
-            onChanged: onChanged ?? () {},
+            preferences: appPreferences,
+            createVoiceSession: () => VoicePreferencesSession(
+              preferences: appPreferences,
+              device: AndroidVoice.instance,
+              hermesProfileLabel: null,
+              openHermesSettings: null,
+            ),
+            onChanged: () {},
             enableNotifications: () async {},
           ),
         ),
@@ -108,7 +117,9 @@ void main() {
     tester,
   ) async {
     final preferences = await SharedPreferences.getInstance();
-    await _show(tester, preferences);
+    final appPreferences = AppPreferences(preferences);
+    addTearDown(appPreferences.dispose);
+    await _show(tester, appPreferences);
     await tester.ensureVisible(find.text('Buy me a coffee'));
     await tester.pumpAndSettle();
     expect(find.text('Support Wing'), findsOneWidget);
@@ -132,8 +143,28 @@ void main() {
     'saved theme and accent update the preview and survive reopening',
     (tester) async {
       final preferences = await SharedPreferences.getInstance();
-      var changes = 0;
-      await _show(tester, preferences, onChanged: () => changes++);
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
+      final confirmedAppearance =
+          <(AppThemePreference?, AppAccentPreference?)>[];
+      var previous = (
+        appPreferences.current.values.theme,
+        appPreferences.current.values.accent,
+      );
+      void observeAppearance() {
+        final next = (
+          appPreferences.current.values.theme,
+          appPreferences.current.values.accent,
+        );
+        if (next != previous) {
+          confirmedAppearance.add(next);
+          previous = next;
+        }
+      }
+
+      appPreferences.state.addListener(observeAppearance);
+      addTearDown(() => appPreferences.state.removeListener(observeAppearance));
+      await _show(tester, appPreferences);
       await tester.ensureVisible(find.byKey(const ValueKey('theme-dark')));
       await tester.tap(find.byKey(const ValueKey('theme-dark')));
       await tester.pumpAndSettle();
@@ -149,10 +180,16 @@ void main() {
         WorkspaceAccent.iris.dark,
       );
       expect(preferences.getString('theme_mode'), 'dark');
-      expect(preferences.getString(WorkspaceAccent.preferenceKey), 'iris');
-      expect(changes, 2);
+      expect(
+        preferences.getString(AppPreferenceField.accent.storageKey),
+        'iris',
+      );
+      expect(confirmedAppearance, [
+        (AppThemePreference.dark, AppAccentPreference.teal),
+        (AppThemePreference.dark, AppAccentPreference.iris),
+      ]);
       await tester.pumpWidget(const SizedBox());
-      await _show(tester, preferences);
+      await _show(tester, appPreferences);
       expect(
         tester
             .widget<ChoiceChip>(find.byKey(const ValueKey('theme-dark')))
@@ -179,7 +216,14 @@ void main() {
         addTearDown(tester.view.reset);
         addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
         final preferences = await SharedPreferences.getInstance();
-        await _show(tester, preferences, brightness: brightness, scale: scale);
+        final appPreferences = AppPreferences(preferences);
+        addTearDown(appPreferences.dispose);
+        await _show(
+          tester,
+          appPreferences,
+          brightness: brightness,
+          scale: scale,
+        );
         await _captureFrame(tester, '${brightness.name}-$scale-appearance');
         expect(tester.takeException(), isNull);
         await tester.ensureVisible(find.text('Text size'));

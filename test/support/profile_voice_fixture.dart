@@ -1,5 +1,5 @@
+import 'package:wing/core/models/settings_edit.dart';
 import 'dart:async';
-import 'package:wing/core/services/administration_repository.dart';
 import 'administration_fixture.dart';
 
 class ProfileVoiceFixture extends AdministrationFixture {
@@ -57,46 +57,71 @@ class ProfileVoiceFixture extends AdministrationFixture {
         }
         return {
           'ok': true,
+          'name': 'tts',
           'provider': body!['provider'],
           if (body['provider'] == 'Nous Subscription' && !nousReady)
             'needs_nous_auth': true,
         };
       }
+      final active = switch (setting(
+        configs[query['profile']]!,
+        'tts.provider',
+      )) {
+        'edge' => 'Edge',
+        'nous' => 'Nous Subscription',
+        'openai' => 'OpenAI TTS',
+        'elevenlabs' => 'ElevenLabs',
+        _ => '',
+      };
+      final rows = <Map<String, dynamic>>[
+        {'name': 'Edge', 'tts_provider': 'edge', 'status': 'ready'},
+        // Stock Hermes exposes two routes for the same OpenAI engine.
+        {
+          'name': 'Nous Subscription',
+          'tts_provider': 'openai',
+          'requires_nous_auth': true,
+          'status': nousReady ? 'ready' : 'needs_auth',
+        },
+        {
+          'name': 'OpenAI TTS',
+          'tts_provider': 'openai',
+          'requires_nous_auth': false,
+          'status': 'ready',
+          'env_vars': [
+            {
+              'key': 'VOICE_TOOLS_OPENAI_KEY',
+              'prompt': 'OpenAI API key',
+              'is_set': true,
+            },
+          ],
+        },
+        {
+          'name': 'ElevenLabs',
+          'tts_provider': 'elevenlabs',
+          'status': elevenLabsReady ? 'ready' : 'needs_keys',
+          'env_vars': [
+            {
+              'key': 'ELEVENLABS_API_KEY',
+              'prompt': 'API key',
+              'is_set': elevenLabsReady,
+            },
+          ],
+        },
+      ];
       return {
+        'name': 'tts',
+        'has_category': true,
+        'active_provider': active,
         'providers': [
-          {'name': 'Edge', 'tts_provider': 'edge', 'status': 'ready'},
-          // Stock Hermes exposes two routes for the same OpenAI engine.
-          {
-            'name': 'Nous Subscription',
-            'tts_provider': 'openai',
-            'requires_nous_auth': true,
-            'status': nousReady ? 'ready' : 'needs_auth',
-          },
-          {
-            'name': 'OpenAI TTS',
-            'tts_provider': 'openai',
-            'requires_nous_auth': false,
-            'status': 'ready',
-            'env_vars': [
-              {
-                'key': 'VOICE_TOOLS_OPENAI_KEY',
-                'prompt': 'OpenAI API key',
-                'is_set': true,
-              },
-            ],
-          },
-          {
-            'name': 'ElevenLabs',
-            'tts_provider': 'elevenlabs',
-            'status': elevenLabsReady ? 'ready' : 'needs_keys',
-            'env_vars': [
-              {
-                'key': 'ELEVENLABS_API_KEY',
-                'prompt': 'API key',
-                'is_set': elevenLabsReady,
-              },
-            ],
-          },
+          for (final row in rows)
+            {
+              ...row,
+              'badge': '',
+              'tag': '',
+              'is_active': row['name'] == active,
+              'requires_nous_auth': row['requires_nous_auth'] == true,
+              'env_vars': row['env_vars'] ?? <Map<String, dynamic>>[],
+            },
         ],
       };
     }

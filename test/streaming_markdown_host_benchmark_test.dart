@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:wing/core/widgets/block_reusing_markdown_body.dart';
 import 'package:wing/core/widgets/markdown_code_block.dart';
+import 'package:wing/core/widgets/source_code_block.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 
 import '../tools/performance/streaming_replay_fixture.dart';
@@ -100,7 +101,7 @@ void main() {
       final original = debugOnRebuildDirtyWidget;
       debugOnRebuildDirtyWidget = (element, builtOnce) {
         if (element.widget is BlockReusingMarkdownBody) bodyBuilds++;
-        if (element.widget case MarkdownCodeBlock(code: final code)) {
+        if (element.widget case SourceCodeBlock(code: final code)) {
           codeBuilds++;
           if (initialCode.contains(code)) unchangedCodeBuilds++;
         }

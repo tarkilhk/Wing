@@ -1,3 +1,7 @@
+import 'package:wing/core/models/transcript_timeline.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/models/local_transcript_message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,7 +12,6 @@ import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/widgets/profile_review_notice_card.dart';
-import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
@@ -58,12 +61,17 @@ void main() {
   late _ReviewFixture fixture;
   late SharedPreferences preferences;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
 
   Future<ProfileWorkspaceController> makeController() async {
     final next = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'review-notices',
       preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: fixture.gateway,
     );
     await next.initialize();
@@ -73,11 +81,15 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     fixture = _ReviewFixture()..messageCount = 0;
     controller = await makeController();
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   testWidgets(
     'review stays before later messages instead of following the chat',
@@ -85,23 +97,22 @@ void main() {
       final scope = controller.current!.scope;
       await controller.openSession(ProfileSessionKey(scope, 'chat-0'));
       final chat = controller.current!.chat!;
-      fixture.event('personal', chat.runtimeId, {
+      fixture.event('personal', chat.runtime.runtimeId, {
         'text': '💾 Self-improvement review: Changes await approval.',
         'timestamp': 401.625,
       });
-      expect(chat.messages.single['role'], 'system');
-      expect(chat.messages.single['timestamp'], 401.625);
+      expect(chat.reading.messages.single['role'], 'system');
+      expect(chat.reading.messages.single['timestamp'], 401.625);
       await tester.pumpWidget(
         MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
       );
       await tester.pumpAndSettle();
       expect(find.text('Hermes review'), findsOneWidget);
-      chat.messages.add({
-        'id': 1,
-        'role': 'user',
-        'content': 'Continue the conversation',
-      });
-      fixture.event('personal', chat.runtimeId, const {});
+      chat.reading.installSavedHistory([
+        ...chat.reading.messages,
+        {'id': 1, 'role': 'user', 'content': 'Continue the conversation'},
+      ]);
+      fixture.event('personal', chat.runtime.runtimeId, const {});
       await tester.pumpAndSettle();
 
       expect(find.text('Hermes review'), findsNothing);
@@ -142,7 +153,7 @@ void main() {
     final owner = controller.current!.chat!;
     await controller.openSession(ProfileSessionKey(scope, 'chat-1'));
 
-    fixture.event('personal', owner.runtimeId, {
+    fixture.event('personal', owner.runtime.runtimeId, {
       'text': 'Two changes need a closer look.',
     });
 
@@ -175,24 +186,26 @@ void main() {
       await controller.openSession(ProfileSessionKey(scope, 'chat-0'));
       final chat = controller.current!.chat!;
 
-      fixture.event('personal', chat.runtimeId, const {});
-      fixture.event('personal', chat.runtimeId, {'text': '   '});
-      fixture.event('personal', chat.runtimeId, {'text': 7});
-      fixture.event('personal', chat.runtimeId, {
+      fixture.event('personal', chat.runtime.runtimeId, const {});
+      fixture.event('personal', chat.runtime.runtimeId, {'text': '   '});
+      fixture.event('personal', chat.runtime.runtimeId, {'text': 7});
+      fixture.event('personal', chat.runtime.runtimeId, {
         'text': ['review'],
       });
-      fixture.event('personal', chat.runtimeId, {
+      fixture.event('personal', chat.runtime.runtimeId, {
         'text': {'summary': 'review'},
       });
-      fixture.event('personal', chat.runtimeId, {'text': 'Review 0'});
+      fixture.event('personal', chat.runtime.runtimeId, {'text': 'Review 0'});
       for (var i = 0; i <= 20; i++) {
-        fixture.event('personal', chat.runtimeId, {'text': 'Review $i'});
+        fixture.event('personal', chat.runtime.runtimeId, {
+          'text': 'Review $i',
+        });
       }
 
       expect(chat.reviewNotices, hasLength(20));
       expect(chat.reviewNotices.first.text, 'Review 1');
       expect(chat.reviewNotices.last.text, 'Review 20');
-      expect(chat.messages.where(isLocalReviewMessage), hasLength(20));
+      expect(chat.reading.messages.where(isLocalReviewMessage), hasLength(20));
     },
   );
 
@@ -203,41 +216,51 @@ void main() {
       final scope = controller.current!.scope;
       await controller.openSession(ProfileSessionKey(scope, 'chat-0'));
       final chat = controller.current!.chat!;
-      final offset = chat.nextHistoryOffset;
-      fixture.event('personal', chat.runtimeId, {'text': 'First review'});
-      fixture.event('personal', chat.runtimeId, {'text': 'Second review'});
+      final offset = chat.reading.nextHistoryOffset;
+      fixture.event('personal', chat.runtime.runtimeId, {
+        'text': 'First review',
+      });
+      fixture.event('personal', chat.runtime.runtimeId, {
+        'text': 'Second review',
+      });
       fixture.messageCount = 222;
       await controller.refreshHistory(chat);
 
-      final first = chat.messages.indexWhere(
+      final first = chat.reading.messages.indexWhere(
         (row) => reviewMessageText(row) == 'First review',
       );
-      expect(chat.messages[first - 1]['id'], 220);
-      expect(reviewMessageText(chat.messages[first + 1]), 'Second review');
-      expect(chat.messages[first + 2]['id'], 221);
-      expect(chat.nextHistoryOffset, offset! + 2);
-      while (chat.nextHistoryOffset != null) {
-        final before = chat.nextHistoryOffset;
+      expect(chat.reading.messages[first - 1]['id'], 220);
+      expect(
+        reviewMessageText(chat.reading.messages[first + 1]),
+        'Second review',
+      );
+      expect(chat.reading.messages[first + 2]['id'], 221);
+      expect(chat.reading.nextHistoryOffset, offset! + 2);
+      while (chat.reading.nextHistoryOffset != null) {
+        final before = chat.reading.nextHistoryOffset;
         await controller.loadOlderMessages(chat);
-        expect(chat.historyError, isNull);
-        expect(chat.nextHistoryOffset, isNot(before));
+        expect(chat.reading.historyError, isNull);
+        expect(chat.reading.nextHistoryOffset, isNot(before));
       }
-      expect(chat.messages.where((row) => row['id'] is int), hasLength(222));
-      expect(chat.messages.where(isLocalReviewMessage), hasLength(2));
-      expect(chat.messages.first['id'], 1);
+      expect(
+        chat.reading.messages.where((row) => row['id'] is int),
+        hasLength(222),
+      );
+      expect(chat.reading.messages.where(isLocalReviewMessage), hasLength(2));
+      expect(chat.reading.messages.first['id'], 1);
     },
   );
 
   test(
     'reviews join tool activity without swallowing ordinary system text',
     () {
-      final sections = groupTranscriptSections([
+      final sections = TranscriptTimeline.project([
         {'id': 1, 'role': 'tool', 'content': 'Skill updated'},
         {'id': 2, 'role': 'system', 'content': 'review:Skill update details'},
         {'id': 3, 'role': 'tool', 'content': 'Verified'},
         {'id': 4, 'role': 'system', 'content': 'Ordinary notice'},
         {'id': 5, 'role': 'assistant', 'content': 'review:Quoted example'},
-      ]);
+      ], presentationId: (_) => Object()).sections;
       expect(sections, hasLength(3));
       expect(sections.first.isActivity, isTrue);
       expect(sections.first.messages, hasLength(3));
@@ -317,18 +340,22 @@ void main() {
       final scope = controller.current!.scope;
       await controller.openSession(ProfileSessionKey(scope, 'chat-0'));
       final chat = controller.current!.chat!;
-      fixture.event('personal', chat.runtimeId, {'text': 'Transient review'});
+      fixture.event('personal', chat.runtime.runtimeId, {
+        'text': 'Transient review',
+      });
 
       await controller.reconnect(scope);
       expect(chat.reviewNotices.single.text, 'Transient review');
-      expect(chat.messages.where(isLocalReviewMessage), hasLength(1));
+      expect(chat.reading.messages.where(isLocalReviewMessage), hasLength(1));
 
       fixture.runtimeOverrides['chat-0'] = 'chat-0-replaced-runtime';
       await controller.reconnect(scope);
       expect(chat.reviewNotices, isEmpty);
-      expect(chat.messages.where(isLocalReviewMessage), isEmpty);
+      expect(chat.reading.messages.where(isLocalReviewMessage), isEmpty);
 
-      fixture.event('personal', chat.runtimeId, {'text': 'Another review'});
+      fixture.event('personal', chat.runtime.runtimeId, {
+        'text': 'Another review',
+      });
       controller.dispose();
       controller = await makeController();
       await controller.openSession(ProfileSessionKey(scope, 'chat-0'));

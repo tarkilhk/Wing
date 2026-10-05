@@ -283,7 +283,7 @@ class BackendUpdateController extends ChangeNotifier {
       return;
     }
     String? outcome;
-    if ((exactAction || sameProcessExit) && pid != null) {
+    if (pid != null) {
       final receipt = await _readReceipt(generation);
       if (!_currentStatus(generation)) return;
       if (receipt?.pid == pid) outcome = receipt?.outcome;

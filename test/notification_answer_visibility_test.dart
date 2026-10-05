@@ -1,3 +1,7 @@
+import 'package:wing/core/models/transcript_timeline.dart';
+import 'dart:async';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,16 +14,24 @@ import 'profile_workspace_controller_test.dart' show Host;
 
 void main() {
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileChat chat;
+  late Host host;
   late List<String> reads;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     reads = [];
-    final host = Host();
+    host = Host();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'notification-reader',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
       notificationResultFor: (_) => const NotificationFocus('answer', 'latest'),
       onNotificationRead: (_, id) async {
@@ -27,18 +39,21 @@ void main() {
       },
     );
     await controller.initialize();
-    chat = await controller.createChat();
+    chat = await controller.createChat(canDispatch: () => true);
     controller.setRouteVisibility(controller, true);
-    chat.messages = [
+    chat.reading.installSavedHistory([
       for (var i = 1; i <= 40; i++)
         {
           'id': i,
           'role': i.isEven ? 'assistant' : 'user',
           'content': 'Message $i',
         },
-    ];
+    ]);
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
   Future<void> mount(
     WidgetTester tester, {
     List<Widget> tail = const [],
@@ -49,9 +64,17 @@ void main() {
           body: ProfileTranscript(
             chat: chat,
             controller: controller,
+            onLoadOlder: () => controller.loadOlderMessages(chat),
             tail: tail,
-            messageBuilder: (row, {required bool streaming}) =>
-                SizedBox(height: 120, child: Text(row['content'] as String)),
+            timeline: TranscriptTimeline.project(
+              [...chat.reading.messages, ?chat.reading.streamingMessage],
+              presentationId: chat.reading.messagePresentationId,
+              liveMessageIndex: chat.reading.streamingMessage == null
+                  ? null
+                  : chat.reading.messages.length,
+            ),
+            messageBuilder: (row) =>
+                SizedBox(height: 120, child: Text(row.message.text)),
           ),
         ),
       ),
@@ -59,10 +82,29 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  test('captured notification reveal cannot clear a newer target', () {
+    const first = NotificationFocus('answer', 'first');
+    const next = NotificationFocus('answer', 'next');
+    chat.reading.revealNotification(first);
+    final captured = chat.reading.notificationFocusGeneration;
+    chat.reading.revealNotification(next);
+    expect(chat.reading.releaseNotificationFocus(first, captured), isFalse);
+    expect(chat.reading.notificationFocus, next);
+    expect(
+      chat.reading.releaseNotificationFocus(
+        next,
+        chat.reading.notificationFocusGeneration,
+      ),
+      isTrue,
+    );
+    expect(chat.reading.notificationFocus, isNull);
+    expect(reads, isEmpty);
+  });
+
   testWidgets(
     'opening older messages does not clear until latest answer is visible',
     (tester) async {
-      chat.historyScrollOffset = 1800;
+      chat.reading.recordScrollOffset(1800);
       await mount(tester);
       expect(reads, isEmpty);
       tester
@@ -92,12 +134,13 @@ void main() {
   testWidgets('a target without a message ID opens the latest answer', (
     tester,
   ) async {
-    chat.historyScrollOffset = 1800;
-    chat.notificationFocus = const NotificationFocus('answer', 'latest');
-    chat.notificationFocusGeneration++;
+    chat.reading.recordScrollOffset(1800);
+    chat.reading.revealNotification(
+      const NotificationFocus('answer', 'latest'),
+    );
     await mount(tester);
     expect(reads, ['answer:latest']);
-    expect(chat.notificationFocus, isNull);
+    expect(chat.reading.notificationFocus, isNull);
   });
 
   testWidgets('background route and failed history cannot mark answer read', (
@@ -107,7 +150,11 @@ void main() {
     await mount(tester);
     expect(reads, isEmpty);
     controller.setRouteVisibility(controller, true);
-    chat.historyError = 'Unavailable';
+    host.heldHistoryDelay = Completer<void>()..complete();
+    host.heldHistoryStarted = Completer<void>();
+    host.heldHistoryFailure = StateError('Unavailable');
+    await controller.refreshHistory(chat);
+    expect(chat.reading.historyError, isNotNull);
     await mount(tester);
     expect(reads, isEmpty);
   });
@@ -125,13 +172,13 @@ void main() {
           AppLifecycleState.resumed,
         ),
       );
-      chat.messages = [
+      chat.reading.installSavedHistory([
         {
           'id': 1,
           'role': 'assistant',
           'content': 'The unread result is ready.',
         },
-      ];
+      ]);
       await tester.pumpWidget(
         MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
       );

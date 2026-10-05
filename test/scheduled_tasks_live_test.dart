@@ -1,4 +1,6 @@
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wing/core/models/scheduled_task_edit.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/scheduled_tasks_repository.dart';
@@ -20,13 +22,16 @@ void main() {
       );
       final status = ServerConnectionStatus('Disposable scheduling acceptance');
       final server = AdministrationRepository.forConnection(
-        SavedConnection(
-          id: 'disposable-scheduled-acceptance',
-          label: status.label,
-          host: '127.0.0.1',
-          port: port,
-          dashboardPortOverride: port,
-          apiKey: '',
+        ConnectionAccess(
+          connection: SavedConnection(
+            id: 'disposable-scheduled-acceptance',
+            label: status.label,
+            host: '127.0.0.1',
+            port: port,
+            dashboardPortOverride: port,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
         ),
         'local-disposable-only',
         connectionStatus: status,
@@ -49,11 +54,16 @@ void main() {
         expect(job.paused, true);
         expect(job.schedule['kind'], 'cron');
         expect(job.schedule['expr'], '0 9 * * 1-5');
-        job = await repo.update(job.id, {
-          'name': 'Wing edited acceptance',
-          'model': null,
-          'provider': null,
-        });
+        job = await repo.update(
+          TaskEditIntent(
+            baseline: job,
+            values: {
+              'name': 'Wing edited acceptance',
+              'model': null,
+              'provider': null,
+            },
+          ),
+        );
         expect(job.name, 'Wing edited acceptance');
         expect(job.text('model'), '');
         job = await repo.action(job.id, 'resume');

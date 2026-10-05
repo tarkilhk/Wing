@@ -255,11 +255,24 @@ class ProfileBrowserFixture {
       }
       if (method == 'session.resume' || method == 'session.create') {
         return {
-          'session_id': 'runtime',
-          'stored_session_id': 'new-chat',
+          'session_id': method == 'session.create'
+              ? 'runtime'
+              : (liveSessions[scope.profileName] ?? [])
+                        .where(
+                          (row) => row['session_key'] == params['session_id'],
+                        )
+                        .firstOrNull?['id'] ??
+                    'runtime-${params['session_id']}',
+          'stored_session_id': method == 'session.create'
+              ? 'new-chat'
+              : params['session_id'],
           'messages': [],
           'info': {
             'profile_name': scope.profileName,
+            if (method == 'session.resume')
+              'source': sessions(scope.profileName)
+                  .where((row) => row['id'] == params['session_id'])
+                  .firstOrNull?['source'],
             if (method == 'session.create') 'cwd': params['cwd'] ?? '/default',
           },
         };

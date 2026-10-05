@@ -1,3 +1,4 @@
+import 'package:wing/core/models/settings_edit.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -6,10 +7,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_speech_synthesis_page.dart';
-import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/voice_sample.dart';
 import 'package:wing/core/widgets/studio_select.dart';
-import 'package:wing/core/screens/administration/admin_tool_setup_page.dart';
+import 'package:wing/core/screens/administration/admin_voice_routes.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'support/profile_voice_fixture.dart';
@@ -40,7 +40,7 @@ void main() {
     ProfileVoiceFixture f,
     VoiceDeviceFixture device, {
     Brightness brightness = Brightness.light,
-    WorkspaceAccent accent = WorkspaceAccent.mint,
+    WorkspaceAccent accent = WorkspaceAccent.teal,
     double scale = 1,
   }) async {
     await tester.pumpWidget(
@@ -56,8 +56,8 @@ void main() {
               size: tester.view.physicalSize / tester.view.devicePixelRatio,
               textScaler: TextScaler.linear(scale),
             ),
-            child: AdminSpeechSynthesisPage(
-              profile: f.server.profile('personal'),
+            child: profileSpeechSynthesisPage(
+              f.server.profile('personal'),
               device: device,
             ),
           ),
@@ -263,10 +263,12 @@ void main() {
     tester,
   ) async {
     final f = ProfileVoiceFixture();
+    final device = VoiceDeviceFixture();
+    addTearDown(device.stream.close);
     await tester.pumpWidget(
       MaterialApp(
         theme: wingTheme(Brightness.light),
-        home: AdminVoicePage(profile: f.server.profile('personal')),
+        home: profileVoicePage(f.server.profile('personal'), device: device),
       ),
     );
     await tester.pumpAndSettle();
@@ -456,7 +458,9 @@ void main() {
         .onChanged!('ElevenLabs');
     await tester.pumpAndSettle();
     expect(
-      find.textContaining('Provider selection could not be confirmed'),
+      find.textContaining(
+        'Provider selection saved, but current settings differ',
+      ),
       findsOneWidget,
     );
     expect(

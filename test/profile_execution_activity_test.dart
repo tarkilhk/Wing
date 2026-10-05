@@ -1,3 +1,6 @@
+import 'package:wing/core/models/transcript_timeline.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/gateway_activity.dart';
@@ -12,6 +15,7 @@ import 'profile_workspace_controller_test.dart' show Host;
 void main() {
   late Host host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileChat chat;
 
   setUp(() async {
@@ -23,23 +27,32 @@ void main() {
         {'id': 'one', 'content': 'Inspect contract', 'status': 'in_progress'},
       ],
     };
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
       connectionIdentity: 'execution-test-host',
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Host',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Host',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
-    chat = await controller.createChat();
+    chat = await controller.createChat(canDispatch: () => true);
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   test('hydrates todos and rejects an older live revision', () {
     expect(chat.todoRevision, 2);
@@ -52,7 +65,8 @@ void main() {
         {'id': 'old', 'content': 'Stale task', 'status': 'pending'},
       ],
     });
-    expect(chat.todos.single.id, 'one');
+    expect(chat.todos.single.content, 'Inspect contract');
+    expect(chat.todos.single.status, GatewayTodoStatus.inProgress);
 
     host.event('a', 'todo.updated', {
       'revision': 3,
@@ -72,9 +86,9 @@ void main() {
     'upserts live tool events and authoritative refresh removes completion',
     () async {
       host.event('a', 'tool.generating', {'name': 'search_files'});
-      expect(chat.tool, 'search_files');
+      expect(chat.runtime.tool, 'search_files');
       expect(
-        chat.toolActivities.single.phase,
+        chat.runtime.toolActivities.single.phase,
         GatewayToolActivityPhase.generating,
       );
 
@@ -84,13 +98,8 @@ void main() {
         'args': {'query': 'gateway'},
         'context': 'Workspace',
       });
-      host.event('a', 'tool.progress', {
-        'tool_id': 'tool-1',
-        'name': 'search_files',
-        'preview': 'Scanning',
-      });
-      expect(chat.toolActivities, hasLength(1));
-      expect(chat.toolActivities.single.detail, 'Scanning');
+      expect(chat.runtime.toolActivities, hasLength(1));
+      expect(chat.runtime.toolActivities.single.detail, 'Workspace');
 
       host.event('a', 'tool.complete', {
         'tool_id': 'tool-1',
@@ -98,14 +107,14 @@ void main() {
         'result': {'matches': 2},
         'duration_s': 1.5,
       });
-      final completed = chat.toolActivities.single;
+      final completed = chat.runtime.toolActivities.single;
       expect(completed.phase, GatewayToolActivityPhase.completed);
       expect(completed.arguments, '{"query":"gateway"}');
       expect(completed.result, '{"matches":2}');
       expect(completed.statusLabel, 'Completed in 1.5 s');
 
       await controller.refreshHistory(chat);
-      expect(chat.toolActivities, isEmpty);
+      expect(chat.runtime.toolActivities, isEmpty);
     },
   );
 
@@ -114,19 +123,18 @@ void main() {
     () async {
       host.event('a', 'reasoning.delta', {'text': 'Check the '});
       host.event('a', 'reasoning.delta', {'text': 'contract.'});
-      expect(chat.reasoning, 'Check the contract.');
+      expect(chat.runtime.reasoning, 'Check the contract.');
       host.event('a', 'reasoning.available', {
         'text': 'Verified reasoning.',
         'verbose': true,
       });
-      expect(chat.reasoning, 'Verified reasoning.');
-      expect(chat.reasoningVerbose, isTrue);
+      expect(chat.runtime.reasoning, 'Verified reasoning.');
 
       await controller.switchProfile('b');
-      final other = await controller.createChat();
+      final other = await controller.createChat(canDispatch: () => true);
       host.event('a', 'reasoning.delta', {'text': ' Owner A'});
-      expect(chat.reasoning, 'Verified reasoning. Owner A');
-      expect(other.reasoning, isEmpty);
+      expect(chat.runtime.reasoning, 'Verified reasoning. Owner A');
+      expect(other.runtime.reasoning, isEmpty);
     },
   );
 
@@ -149,7 +157,6 @@ void main() {
               const ProfileTodoPanel(
                 todos: [
                   GatewayTodo(
-                    id: 'one',
                     content: 'Inspect contract',
                     status: GatewayTodoStatus.completed,
                   ),
@@ -227,16 +234,17 @@ void main() {
 
   test('reads verified historical reasoning fields', () {
     expect(
-      profileMessageReasoning({
-        'reasoning_content': 'Stored reasoning',
-        'content': 'Answer',
-      }),
+      TranscriptTimeline.project([
+        {'reasoning_content': 'Stored reasoning', 'content': 'Answer'},
+      ], presentationId: (_) => Object()).entries.single.reasoning,
       'Stored reasoning',
     );
     expect(
-      profileMessageReasoning({
-        'reasoning_details': {'hidden': true},
-      }),
+      TranscriptTimeline.project([
+        {
+          'reasoning_details': {'hidden': true},
+        },
+      ], presentationId: (_) => Object()).entries.single.reasoning,
       '',
     );
   });

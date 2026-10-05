@@ -1,6 +1,8 @@
+import 'support/composer_fixture.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,31 +16,36 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({});
     final host = ProfileActionsFixture();
+    final preferences = await SharedPreferences.getInstance();
+    final appPreferences = AppPreferences(preferences);
+    addTearDown(appPreferences.dispose);
     final controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'combined-activity',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     addTearDown(controller.dispose);
     await controller.initialize();
-    final chat = await controller.createChat();
-    chat.messages.addAll([
-      {'id': 1, 'role': 'user', 'content': 'Continue searching'},
-      for (var id = 2; id <= 68; id++)
-        {
-          'id': id,
-          'role': 'tool',
-          'tool_name': 'Search',
-          'content': 'Result $id',
-        },
+    final chat = await controller.createChat(canDispatch: () => true);
+    chat.reading.installSavedHistory([
+      ...chat.reading.messages,
+      ...[
+        {'id': 1, 'role': 'user', 'content': 'Continue searching'},
+        for (var id = 2; id <= 68; id++)
+          {
+            'id': id,
+            'role': 'tool',
+            'tool_name': 'Search',
+            'content': 'Result $id',
+          },
+      ],
     ]);
-    chat.toolActivities.add(
-      const GatewayToolActivity(
-        name: 'terminal',
-        phase: GatewayToolActivityPhase.running,
-      ),
-    );
+    emitChatEvent(controller, chat, 'tool.start', {'name': 'terminal'});
     await tester.pumpWidget(
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );

@@ -46,8 +46,7 @@ class BackendUpdateCheck {
       canApply: value['can_apply'] is bool ? value['can_apply'] as bool : null,
       commits: List.unmodifiable([
         if (value['commits'] case final List rows)
-          for (final row in rows.take(20))
-            ?BackendUpdateCommit.fromJson(row),
+          for (final row in rows.take(20)) ?BackendUpdateCommit.fromJson(row),
       ]),
     );
   }
@@ -92,13 +91,8 @@ class BackendUpdateCommit {
 class BackendUpdateReceipt {
   final String outcome;
   final int pid;
-  final String finishedAt;
 
-  const BackendUpdateReceipt({
-    required this.outcome,
-    required this.pid,
-    required this.finishedAt,
-  });
+  const BackendUpdateReceipt({required this.outcome, required this.pid});
 
   static BackendUpdateReceipt? fromJson(dynamic value) {
     if (value is! Map ||
@@ -112,11 +106,7 @@ class BackendUpdateReceipt {
     final pid = value['pid'] as int;
     return outcome.isEmpty || pid <= 0 || DateTime.tryParse(finishedAt) == null
         ? null
-        : BackendUpdateReceipt(
-            outcome: outcome,
-            pid: pid,
-            finishedAt: finishedAt,
-          );
+        : BackendUpdateReceipt(outcome: outcome, pid: pid);
   }
 }
 

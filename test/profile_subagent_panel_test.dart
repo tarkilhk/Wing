@@ -1,6 +1,8 @@
+import 'package:wing/core/services/profile_supervision_session.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wing/core/models/gateway_insight.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/profile_gateway.dart';
@@ -10,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
+import 'support/composer_fixture.dart' show emitChatEvent;
 
 class _SubagentFixture extends ProfileActionsFixture {
   int listCalls = 0;
@@ -76,22 +79,35 @@ class _SubagentFixture extends ProfileActionsFixture {
 void main() {
   late _SubagentFixture fixture;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileChat chat;
+  late ProfileSupervisionSession supervision;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     fixture = _SubagentFixture();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'subagent-panel',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: fixture.gateway,
     );
     await controller.initialize();
-    chat = await controller.createChat();
+    chat = await controller.createChat(canDispatch: () => true);
+    supervision = ProfileSupervisionSession(controller: controller, chat: chat);
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    supervision.dispose();
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   Future<void> showPanel(WidgetTester tester) async {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -111,8 +127,7 @@ void main() {
           body: ListView(
             children: [
               ProfileSubagentPanel(
-                controller: controller,
-                chat: chat,
+                session: supervision,
                 initiallyExpanded: true,
               ),
             ],
@@ -137,21 +152,19 @@ void main() {
     tester,
   ) async {
     fixture.emptyList = true;
-    chat.subagents = [
-      GatewaySubagentActivity.fromGatewayEvent('subagent.complete', {
-        'subagent_id': 'failed',
-        'goal': 'Timed out research',
-        'status': 'timeout',
-      })!,
-      GatewaySubagentActivity.fromGatewayEvent('subagent.start', {
-        'subagent_id': 'one',
-        'goal': 'Research one',
-      })!,
-      GatewaySubagentActivity.fromGatewayEvent('subagent.start', {
-        'subagent_id': 'two',
-        'goal': 'Research two',
-      })!,
-    ];
+    emitChatEvent(controller, chat, 'subagent.complete', {
+      'subagent_id': 'failed',
+      'goal': 'Timed out research',
+      'status': 'timeout',
+    });
+    emitChatEvent(controller, chat, 'subagent.start', {
+      'subagent_id': 'one',
+      'goal': 'Research one',
+    });
+    emitChatEvent(controller, chat, 'subagent.start', {
+      'subagent_id': 'two',
+      'goal': 'Research two',
+    });
     await showPanel(tester);
     expect(chat.subagents.map((item) => item.id), ['failed', 'one', 'two']);
     expect(find.text('Research one'), findsOneWidget);
@@ -163,18 +176,15 @@ void main() {
     'detail shows received activity when the server has no transcript',
     (tester) async {
       fixture.tailAvailable = false;
-      chat.subagents = [
-        GatewaySubagentActivity.fromGatewayEvent('subagent.start', {
-          'subagent_id': 'child-1',
-          'goal': 'Inspect the release',
-        })!.merge(
-          GatewaySubagentActivity.fromGatewayEvent('subagent.tool', {
-            'subagent_id': 'child-1',
-            'tool_name': 'read_file',
-            'tool_preview': 'Checking android/app/build.gradle.kts',
-          })!,
-        ),
-      ];
+      emitChatEvent(controller, chat, 'subagent.start', {
+        'subagent_id': 'child-1',
+        'goal': 'Inspect the release',
+      });
+      emitChatEvent(controller, chat, 'subagent.tool', {
+        'subagent_id': 'child-1',
+        'tool_name': 'read_file',
+        'tool_preview': 'Checking android/app/build.gradle.kts',
+      });
       await openDetails(tester);
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
@@ -247,7 +257,7 @@ void main() {
     final steer = fixture.requests.lastWhere(
       (call) => call.$1 == 'subagent.steer',
     );
-    expect(steer.$2['session_id'], chat.runtimeId);
+    expect(steer.$2['session_id'], chat.runtime.runtimeId);
     expect(steer.$2['subagent_id'], 'child-1');
     expect(steer.$2['text'], 'Check the Android path');
 
@@ -258,14 +268,12 @@ void main() {
   testWidgets(
     'populated event roster refreshes authoritative steering capability',
     (tester) async {
-      chat.subagents = [
-        GatewaySubagentActivity.fromGatewayEvent('subagent.start', {
-          'subagent_id': 'child-1',
-          'goal': 'Inspect the release',
-          'status': 'running',
-          'model': 'test-model',
-        })!,
-      ];
+      emitChatEvent(controller, chat, 'subagent.start', {
+        'subagent_id': 'child-1',
+        'goal': 'Inspect the release',
+        'status': 'running',
+        'model': 'test-model',
+      });
       expect(chat.subagents.single.acceptingSteer, isFalse);
 
       await showPanel(tester);

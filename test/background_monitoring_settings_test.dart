@@ -1,3 +1,7 @@
+import 'package:wing/core/services/voice_preferences_session.dart';
+import 'package:wing/core/services/android_voice.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -17,6 +21,8 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       PackageInfo.setMockInitialValues(
         appName: 'Wing',
         packageName: 'com.tarkilhk.wing',
@@ -26,15 +32,19 @@ void main() {
       );
       final host = NotificationCoverageHost();
       final controller = ProfileWorkspaceController(
-        connection: SavedConnection(
-          id: 'host',
-          label: 'Host',
-          host: 'localhost',
-          port: 1,
-          apiKey: '',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'host',
+            label: 'Host',
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
         ),
         connectionIdentity: 'monitoring-settings',
         preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: host.gateway,
       );
       await controller.initialize();
@@ -80,6 +90,8 @@ void main() {
         addTearDown(tester.view.resetDevicePixelRatio);
         SharedPreferences.setMockInitialValues({});
         final preferences = await SharedPreferences.getInstance();
+        final appPreferences = AppPreferences(preferences);
+        addTearDown(appPreferences.dispose);
         PackageInfo.setMockInitialValues(
           appName: 'Wing',
           packageName: 'com.tarkilhk.wing',
@@ -104,7 +116,13 @@ void main() {
             ),
             home: Scaffold(
               body: AppSettingsContent(
-                preferences: preferences,
+                preferences: appPreferences,
+                createVoiceSession: () => VoicePreferencesSession(
+                  preferences: appPreferences,
+                  device: AndroidVoice.instance,
+                  hermesProfileLabel: null,
+                  openHermesSettings: null,
+                ),
                 onChanged: () => changes++,
                 enableNotifications: () async {},
                 backgroundMonitoringState: state,

@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -29,21 +31,28 @@ void main() {
           ..warning =
               'slash command /handoff unavailable — name taken by built-in; use /skill handoff; '
               'slash command /plan unavailable — name taken by built-in; use /skill plan';
+        final fixturePreferences = await SharedPreferences.getInstance();
+        final appPreferences = AppPreferences(fixturePreferences);
+        addTearDown(appPreferences.dispose);
         final controller = ProfileWorkspaceController(
+          appPreferences: appPreferences,
           connectionIdentity: 'native-slash-completion',
-          connection: SavedConnection(
-            id: 'native-slash-completion',
-            label: 'Completion QA',
-            host: 'unused',
-            port: 1,
-            apiKey: '',
+          access: ConnectionAccess(
+            connection: SavedConnection(
+              id: 'native-slash-completion',
+              label: 'Completion QA',
+              host: 'unused',
+              port: 1,
+              apiKey: '',
+            ),
+            dashboardOAuth: null,
           ),
-          preferences: await SharedPreferences.getInstance(),
+          preferences: fixturePreferences,
           gatewayFactory: host.gateway,
         );
         addTearDown(controller.dispose);
         await controller.initialize();
-        final chat = await controller.createChat();
+        final chat = await controller.createChat(canDispatch: () => true);
         await tester.pumpWidget(
           RepaintBoundary(
             key: captureKey,
@@ -95,7 +104,7 @@ void main() {
         await reveal(approval);
         await tester.tap(approval.hitTestable());
         await frames();
-        expect(chat.draft, '/approvals ');
+        expect(chat.composer.observation.text, '/approvals ');
 
         final failed = find
             .text('Could not load commands. Tap to retry.')
@@ -121,7 +130,7 @@ void main() {
           host.commandCalls
               .singleWhere((call) => call.$1 == 'complete.slash')
               .$2,
-          {'session_id': chat.runtimeId, 'text': '/approvals '},
+          {'session_id': chat.runtime.runtimeId, 'text': '/approvals '},
         );
         expect(
           host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
@@ -130,7 +139,7 @@ void main() {
         await reveal(find.text('smart'));
         await tester.tap(find.text('smart').hitTestable());
         await frames();
-        expect(chat.draft, '/approvals smart ');
+        expect(chat.composer.observation.text, '/approvals smart ');
         expect(
           host.commandCalls.where((call) => call.$1 == 'command.dispatch'),
           isEmpty,

@@ -75,8 +75,6 @@ class BackgroundMonitoringService : Service() {
             } else {
                 startForeground(notificationId, notification)
             }
-            // The foreground service owns exactly one monitoring card.
-            manager.cancel(summaryId)
             if (wakeLock == null) {
                 wakeLock = getSystemService(PowerManager::class.java)
                     .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:hermes-monitoring")
@@ -97,7 +95,6 @@ class BackgroundMonitoringService : Service() {
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
         stopForeground(STOP_FOREGROUND_REMOVE)
-        getSystemService(NotificationManager::class.java).cancel(summaryId)
         MonitoringRuntime.serviceDestroyed()
         super.onDestroy()
     }
@@ -107,6 +104,5 @@ class BackgroundMonitoringService : Service() {
             private set
         private const val channelId = "hermes_monitoring"
         private const val notificationId = 214601
-        private const val summaryId = 214602
     }
 }

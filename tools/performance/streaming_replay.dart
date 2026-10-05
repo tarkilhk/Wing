@@ -1,6 +1,7 @@
 // Profile-only synthetic fixture; no app startup, settings, storage or backend.
 // flutter build apk --profile --dart-define=WING_PERF_INSTRUMENTATION=true -t tools/performance/streaming_replay.dart
 // ext.wingPerf.replay returns after a bounded replay and frame-batch drain.
+import 'package:wing/core/models/transcript_message.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
@@ -425,7 +426,10 @@ class _ReplayState extends State<_Replay> with WidgetsBindingObserver {
                 builder: (_, data, _) => ProfileMessage(
                   key: _message,
                   streaming: true,
-                  message: {'role': 'assistant', 'content': data},
+                  message: TranscriptMessage.fromRow({
+                    'role': 'assistant',
+                    'content': data,
+                  }),
                 ),
               ),
             ),

@@ -56,7 +56,6 @@ void main() {
         );
         expect(cost.isApiEquivalent, isFalse);
         expect(cost.amount, reported);
-        expect(cost.price, isNull);
       }
     }
     expect(
@@ -154,7 +153,9 @@ void main() {
         expect(price.input, greaterThan(0));
         expect(price.cachedInput, lessThan(price.input));
         expect(price.output, greaterThan(0));
-        expect(price.source.path, endsWith('/$id'));
+        final metadata = (jsonDecode(json)['models'] as Map)[id] as Map;
+        expect(Uri.parse(metadata['source'] as String).path, endsWith('/$id'));
+        expect(DateTime.tryParse(metadata['verified_on'] as String), isNotNull);
       }
       expect(catalogue.priceFor('gpt-6-astra'), isNotNull);
       expect(catalogue.priceFor('gpt-5.6-sol'), isNotNull);

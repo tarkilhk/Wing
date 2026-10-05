@@ -1,3 +1,6 @@
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
@@ -54,24 +57,33 @@ class _RecentsFixture extends ProfileBrowserFixture {
 void main() {
   late _RecentsFixture fixture;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late SharedPreferences preferences;
 
   ProfileWorkspaceController makeController({String identity = 'recents'}) =>
       ProfileWorkspaceController(
-        connection: identityTestConnection(),
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
         connectionIdentity: identity,
         preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: fixture.gateway,
       );
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     fixture = _RecentsFixture();
     controller = makeController();
     await controller.initialize();
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   test(
     'loads every recent page across profiles, including archived chats',
@@ -159,7 +171,7 @@ void main() {
   test(
     'empty chats and fresh heartbeats do not count as recent messages',
     () async {
-      await controller.createChat();
+      await controller.createChat(canDispatch: () => true);
       await controller.refreshRecents();
       expect(controller.recentChats(), hasLength(107));
       expect(
@@ -174,13 +186,12 @@ void main() {
   test(
     'new local messages appear without opening or visit timestamps',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       expect(controller.recentChats(), isEmpty);
-      chat.messages.add({
-        'role': 'user',
-        'content': 'Sent message',
-        'timestamp': fixture.now,
-      });
+      chat.reading.installSavedHistory([
+        ...chat.reading.messages,
+        {'role': 'user', 'content': 'Sent message', 'timestamp': fixture.now},
+      ]);
       expect(controller.recentChats().single.key, chat.key);
       expect(
         controller.recentChats(

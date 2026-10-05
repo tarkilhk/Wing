@@ -1,43 +1,44 @@
+import 'core/services/shared_draft_session.dart';
+import 'core/services/android_voice.dart';
+import 'core/services/voice_preferences_session.dart';
 import 'core/widgets/notification_approval_review.dart';
 import 'core/screens/administration/admin_widgets.dart' show adminToolbarHeight;
 import 'core/widgets/server_connection_label.dart';
 import 'core/widgets/connection_icon_picker.dart';
 import 'core/services/network_availability.dart';
 import 'core/screens/connection_setup_screen.dart';
+import 'core/services/connection_setup_session.dart';
+import 'core/services/connection_setup_probe.dart';
+import 'core/services/hermes_cloud.dart';
 import 'core/widgets/studio_error.dart';
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart'
-    show ValueListenable, defaultTargetPlatform, kIsWeb;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart' show SystemNavigator;
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'core/services/application_startup.dart';
 import 'core/services/android_launch_intent_service.dart';
 import 'core/services/android_share_intent_service.dart';
-import 'core/services/config_backup.dart';
+import 'core/models/config_backup_operation.dart';
+import 'core/services/backup_session.dart';
 import 'core/services/config_backup_io.dart';
 import 'core/services/config_backup_service.dart';
 import 'core/services/connection_manager.dart';
-import 'core/services/composer_draft_store.dart';
-import 'core/services/ws_client.dart';
-import 'core/services/text_size_preference.dart';
+import 'core/services/app_preferences.dart';
+import 'core/theme/app_preferences_rendering.dart';
 import 'core/screens/profile_workspace_screen.dart';
 import 'core/screens/shared_draft_review.dart';
 import 'core/services/profile_workspace_controller.dart';
 import 'core/services/profile_connection_identity.dart';
 import 'core/services/profile_workspace_registry.dart';
+import 'core/services/workspace_entry_session.dart';
 import 'core/services/profile_gateway.dart';
 import 'core/models/hermes_profile.dart';
-import 'core/services/turn_notification_service.dart';
 import 'core/services/microphone_permission.dart';
 import 'core/services/background_monitoring_service.dart';
 import 'core/services/notification_delivery_ledger.dart';
 import 'core/services/native_notification_sink.dart';
 import 'core/services/chat_notification_coordinator.dart';
-import 'core/models/chat_notification_content.dart';
-import 'core/models/notification_focus.dart';
-import 'core/models/gateway_approval.dart';
 import 'core/theme/wing_theme.dart';
 import 'core/theme/profile_workspace_theme.dart';
 import 'core/widgets/app_drawer.dart';
@@ -48,14 +49,14 @@ import 'core/widgets/config_backup_actions.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final prefs = await SharedPreferences.getInstance();
-  final connManager = await ConnectionManager.create(prefs);
+  final dependencies = await createApplicationDependencies();
   final shareIntents = AndroidShareIntentService();
   final launchIntents = AndroidLaunchIntentService();
   await Future.wait([shareIntents.initialize(), launchIntents.initialize()]);
   runApp(
     WingApp(
-      connManager: connManager,
+      connManager: dependencies.connectionManager,
+      appPreferences: dependencies.appPreferences,
       shareIntents: shareIntents,
       launchIntents: launchIntents,
     ),
@@ -64,6 +65,9 @@ void main() async {
 
 class WingApp extends StatefulWidget {
   final ConnectionManager connManager;
+
+  /// The app owns this one injected preference owner for its full lifetime.
+  final AppPreferences appPreferences;
   final AndroidShareIntentService? shareIntents;
   final AndroidLaunchIntentService? launchIntents;
   final Future<void>? startupExternalNavigationReady;
@@ -74,6 +78,7 @@ class WingApp extends StatefulWidget {
   gatewayFactory;
   const WingApp({
     required this.connManager,
+    required this.appPreferences,
     this.shareIntents,
     this.launchIntents,
     this.startupExternalNavigationReady,
@@ -84,39 +89,9 @@ class WingApp extends StatefulWidget {
 
   @override
   State<WingApp> createState() => WingAppState();
-
-  static ThemeMode getThemeMode(SharedPreferences prefs) {
-    final stored = prefs.getString('theme_mode') ?? 'system';
-    switch (stored) {
-      case 'dark':
-        return ThemeMode.dark;
-      case 'light':
-        return ThemeMode.light;
-      default:
-        return ThemeMode.system;
-    }
-  }
-
-  static Future<void> setThemeMode(
-    SharedPreferences prefs,
-    ThemeMode mode,
-  ) async {
-    final value = mode == ThemeMode.dark
-        ? 'dark'
-        : mode == ThemeMode.light
-        ? 'light'
-        : 'system';
-    await prefs.setString('theme_mode', value);
-  }
-
-  static TextSizePreference getTextSizePreference(SharedPreferences prefs) {
-    return TextSizePreferenceStore(prefs).read();
-  }
 }
 
 class WingAppState extends State<WingApp> with WidgetsBindingObserver {
-  static const _notificationPermissionRequestedKey =
-      'notification_permission_requested';
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _homeKey = GlobalKey<HomeScreenState>();
   final _notificationRoutes =
@@ -124,96 +99,31 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         ProfileWorkspaceController,
         ({Route<void> route, GlobalKey<ProfileWorkspaceScreenState> screenKey})
       >{};
+  late final AppPreferences _appPreferences;
   late final ProfileWorkspaceRegistry _profileControllers;
   late final NativeNotificationSink _profileNotifications;
   late final ChatNotificationCoordinator _chatNotices;
-  Timer? _notificationPoll;
-  bool _pollingNotifications = false;
-  late final NotificationDeliveryLedger _notificationDeliveries;
   late final Future<void> _notificationsReady;
   late final BackgroundMonitoringService _backgroundMonitoring;
-  ProfileSessionKey? _pendingNotificationKey;
-  NotificationFocus? _pendingNotificationFocus;
-  Future<void>? _pendingNotificationOpen;
-  int _notificationOpenGeneration = 0;
   String? _deferredShareId;
   bool _disposed = false;
-  ProfileWorkspaceController? _openingNotificationController;
   final _networkAvailability = NetworkAvailability();
 
   Future<ProfileWorkspaceController> profileController(
     SavedConnection connection,
   ) async {
-    // Home and incoming share routes can hold an older metadata snapshot after
-    // settings edits or config restore. Resolve the current secure credentials.
-    final current = (await widget.connManager.loadConnectionsWithSecrets())
-        .where((c) => c.id == connection.id)
-        .firstOrNull;
-    if (current == null) throw StateError('The connection is unavailable');
-    return _profileControllers.forConnection(current);
-  }
-
-  Future<void> enableProfileNotifications() async {
-    await _notificationsReady;
-    final granted = await _profileNotifications.requestPermission();
-    if (granted == false) {
-      throw StateError('Notifications are disabled in Android settings.');
-    }
-    await _profileNotifications.show(
-      const TurnNotification(
-        id: 214600,
-        title: 'Wing notification test',
-        body: 'Local alerts are working on this device.',
-        payload: '',
-        channel: TurnNotificationService.turnChannel,
-      ),
+    return _profileControllers.forSavedConnection(
+      widget.connManager,
+      connection.id,
+      canUse: () => !_disposed,
     );
-    unawaited(_syncBackgroundMonitoring());
   }
 
-  Future<void> openProfileNotification(String payload) async {
-    if (payload.isEmpty) return; // Test alerts have no conversation target.
-    final ProfileSessionKey key;
-    NotificationFocus? focus;
-    try {
-      final data = jsonDecode(payload) as Map<String, dynamic>;
-      key = ProfileSessionKey.fromJson(data);
-      if (data['focus'] is Map) {
-        focus = NotificationFocus.fromJson(
-          Map<String, dynamic>.from(data['focus']),
-        );
-      }
-    } catch (_) {
-      _notificationOpenGeneration++;
-      _openingNotificationController?.cancelNotificationOpen();
-      _pendingNotificationKey = null;
-      _pendingNotificationOpen = null;
-      _showNotificationOpenError();
-      return;
-    }
-    _deferPendingShareForNotification();
+  Future<void> enableProfileNotifications() =>
+      _chatNotices.enableNotifications();
 
-    final pending = _pendingNotificationOpen;
-    if (_pendingNotificationKey == key &&
-        _pendingNotificationFocus == focus &&
-        pending != null) {
-      return pending;
-    }
-
-    final generation = ++_notificationOpenGeneration;
-    final opening = _openProfileNotificationTarget(key, generation, focus);
-    _pendingNotificationKey = key;
-    _pendingNotificationFocus = focus;
-    _pendingNotificationOpen = opening;
-    try {
-      await opening;
-    } finally {
-      if (identical(_pendingNotificationOpen, opening)) {
-        _pendingNotificationKey = null;
-        _pendingNotificationOpen = null;
-      }
-    }
-  }
+  Future<void> openProfileNotification(String payload) =>
+      _chatNotices.openPayload(payload);
 
   void _deferPendingShareForNotification() {
     final pendingShareId = widget.shareIntents?.pendingShare.value?.id;
@@ -222,93 +132,78 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     _homeKey.currentState?.deferPendingShareAutoOpen(pendingShareId);
   }
 
-  bool _isCurrentNotificationOpen(int generation) =>
-      mounted && generation == _notificationOpenGeneration;
-
-  Future<void> _openProfileNotificationTarget(
-    ProfileSessionKey key,
-    int generation,
-    NotificationFocus? focus,
-  ) async {
-    try {
-      final connection = (await widget.connManager.loadConnectionsWithSecrets())
-          .where((c) => c.id == key.workspace.connectionId)
-          .firstOrNull;
-      if (!_isCurrentNotificationOpen(generation)) return;
-      if (connection == null) {
-        throw StateError('The original connection is unavailable');
+  Future<void> _showNotificationChat(NotificationChatRoute request) async {
+    if (!mounted || !request.current) return;
+    final controller = request.controller;
+    final previous = request.previousController;
+    if (previous != null && previous != controller) {
+      final previousRoute = _notificationRoutes.remove(previous)?.route;
+      if (previousRoute != null && previousRoute.isActive) {
+        _navigatorKey.currentState?.removeRoute(previousRoute);
       }
-      final controller = await _profileControllers.forSession(connection, key);
-      if (!_isCurrentNotificationOpen(generation)) return;
-      final previous = _openingNotificationController;
-      if (previous != null && previous != controller) {
-        previous.cancelNotificationOpen();
-        final previousRoute = _notificationRoutes.remove(previous)?.route;
-        if (previousRoute != null && previousRoute.isActive) {
-          _navigatorKey.currentState?.removeRoute(previousRoute);
-        }
-      }
-      _openingNotificationController = controller;
-      final opening = controller.openNotification(
-        key,
-        isCurrent: () => _isCurrentNotificationOpen(generation),
-      );
-      final targetChat = controller.findNotificationChat(key);
-      if (targetChat != null) {
-        targetChat.notificationFocus = focus;
-        targetChat.notificationFocusGeneration++;
-        _restoreNotificationReadTarget(targetChat);
-      }
-      final navigator = _navigatorKey.currentState;
-      if (navigator == null) {
-        throw StateError('Notification navigation is unavailable');
-      }
-      final existingRoute = _notificationRoutes[controller];
-      if (existingRoute != null && existingRoute.route.isCurrent) {
-        existingRoute.screenKey.currentState?.showNotificationChat();
-        await opening;
-        return;
-      }
-      // An administration editor may guard its route against popping while
-      // unsaved changes remain. Open the chat above it instead of removing it.
-      final screenKey = GlobalKey<ProfileWorkspaceScreenState>();
-      final route = MaterialPageRoute<void>(
-        builder: (_) => ProfileWorkspaceScreen(
-          key: screenKey,
-          controller: controller,
-          enableNotifications: enableProfileNotifications,
-          backgroundMonitoringState: _backgroundMonitoring.state,
-          openMonitoringBatterySettings:
-              _backgroundMonitoring.openBatterySettings,
-          onConnections: openConnections,
-          configurationActions: (context, onRestored) => _homeKey.currentState!
-              .buildConfigurationActions(context, onRestored),
-          savedConnections: widget.connManager.getConnections,
-          onSelectConnection: (connection, destination) async {
-            await _homeKey.currentState?.selectWorkspaceConnection(
-              connection,
-              destination,
-            );
-          },
-          onPreferencesChanged: refreshPreferences,
-        ),
-      );
-      _notificationRoutes[controller] = (route: route, screenKey: screenKey);
-      unawaited(
-        route.popped.then((_) {
-          if (identical(_notificationRoutes[controller]?.route, route)) {
-            _notificationRoutes.remove(controller);
-            controller.cancelNotificationOpen();
-          }
-        }),
-      );
-      navigator.push(route);
-      await opening;
-    } catch (_) {
-      if (!_isCurrentNotificationOpen(generation)) return;
-      // Malformed or removed targets cannot be rerouted to a default profile.
-      _showNotificationOpenError();
     }
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) {
+      throw StateError('Notification navigation is unavailable');
+    }
+    final existingRoute = _notificationRoutes[controller];
+    if (existingRoute != null && existingRoute.route.isCurrent) {
+      existingRoute.screenKey.currentState?.showNotificationChat();
+      return;
+    }
+    // An administration editor may guard its route against popping while
+    // unsaved changes remain. Open the chat above it instead of removing it.
+    final screenKey = GlobalKey<ProfileWorkspaceScreenState>();
+    final route = MaterialPageRoute<void>(
+      builder: (_) => ProfileWorkspaceScreen(
+        key: screenKey,
+        controller: controller,
+        enableNotifications: enableProfileNotifications,
+        backgroundMonitoringState: _backgroundMonitoring.state,
+        openMonitoringBatterySettings:
+            _backgroundMonitoring.openBatterySettings,
+        onConnections: openConnections,
+        configurationActions: (context, onRestored) => _homeKey.currentState!
+            .buildConfigurationActions(context, onRestored),
+        savedConnections: widget.connManager.getConnections,
+        onSelectConnection: (connection, destination) async {
+          await _homeKey.currentState?.selectWorkspaceConnection(
+            connection,
+            destination,
+          );
+        },
+        onPreferencesChanged: refreshPreferences,
+      ),
+    );
+    _notificationRoutes[controller] = (route: route, screenKey: screenKey);
+    unawaited(
+      route.popped.then((_) {
+        if (identical(_notificationRoutes[controller]?.route, route)) {
+          _notificationRoutes.remove(controller);
+          request.closed();
+        }
+      }),
+    );
+    navigator.push(route);
+  }
+
+  Future<void> _reviewNotificationApproval(
+    NotificationApprovalReviewIntent review,
+  ) async {
+    final context = _navigatorKey.currentContext;
+    if (context == null || !context.mounted || !review.pending) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => NotificationApprovalReview(
+        request: review.request,
+        choice: review.choice,
+        changes: review.changes,
+        offline: () => review.offline,
+        pending: () => review.pending,
+        submit: review.submit,
+      ),
+    );
   }
 
   void _showNotificationOpenError() {
@@ -328,18 +223,17 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _appPreferences = widget.appPreferences;
     _profileNotifications = NativeNotificationSink(
-      onInteraction: _notificationInteraction,
+      onInteraction: (value) => _chatNotices.receiveInteraction(value),
     );
     _chatNotices = ChatNotificationCoordinator(
       widget.connManager.prefs,
       _profileNotifications,
-    );
-    _notificationDeliveries = NotificationDeliveryLedger(
-      widget.connManager.prefs,
+      appPreferences: _appPreferences,
     );
     _backgroundMonitoring = BackgroundMonitoringService(
-      preferences: widget.connManager.prefs,
+      preferences: _appPreferences,
       hasActiveChats: () => _profileControllers.hasActiveChats,
       summary: () => _profileControllers.monitoringSummary,
       notificationsEnabled: _profileNotifications.notificationsEnabled,
@@ -349,11 +243,11 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         _profileNotifications.initialize().catchError((Object _) {});
     unawaited(
       WidgetsBinding.instance.endOfFrame.then((_) async {
-        await _requestStartupNotificationPermission();
-        if (mounted) {
-          await requestStartupMicrophonePermission(widget.connManager.prefs);
-        }
-        await _syncBackgroundMonitoring();
+        if (!mounted) return;
+        await _chatNotices.requestStartupPermission();
+        if (!mounted) return;
+        await requestStartupMicrophonePermission(widget.connManager.prefs);
+        if (mounted) await _chatNotices.syncMonitoring();
       }),
     );
     _profileControllers =
@@ -361,332 +255,51 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         ProfileWorkspaceRegistry(
           identities: ProfileConnectionIdentity(),
           create: (connection, identity) => ProfileWorkspaceController(
-            connection: connection,
+            access: widget.connManager.accessFor(connection),
             connectionIdentity: identity,
             preferences: widget.connManager.prefs,
+            appPreferences: _appPreferences,
             gatewayFactory: widget.gatewayFactory == null
                 ? null
                 : (scope) => widget.gatewayFactory!(connection, scope),
-            onAttention: _receiveProfileNotice,
-            onNotificationInputs: (snapshot) async {
-              await _notificationsReady;
-              await _chatNotices.inputs(
-                chat: jsonEncode(snapshot.key.toJson()),
-                title: snapshot.title,
-                scope:
-                    '${snapshot.connectionLabel} / ${snapshot.key.workspace.profileName}',
-                inputs: snapshot.inputs,
-                alert: snapshot.alert,
-              );
-            },
-            notificationResultFor: (key) {
-              final result = _chatNotices.resultFor(jsonEncode(key.toJson()));
-              return result == null
-                  ? null
-                  : NotificationFocus.fromJson(
-                      Map<String, dynamic>.from(result['focus']),
-                    );
-            },
-            onNotificationRead: (key, identity) =>
-                _chatNotices.read(jsonEncode(key.toJson()), identity),
+            onAttention: _chatNotices.receiveNotice,
+            onNotificationInputs: _chatNotices.receiveInputs,
+            notificationResultFor: _chatNotices.focusFor,
+            onNotificationRead: _chatNotices.readTarget,
           ),
         );
-    unawaited(_restoreChatNotifications().catchError((Object _) {}));
-    _profileControllers.addListener(_monitoringActivityChanged);
-    _backgroundMonitoring.state.addListener(_monitoringStateChanged);
+    _chatNotices.bindApplication(
+      manager: widget.connManager,
+      registry: _profileControllers,
+      native: _profileNotifications,
+      deliveries: NotificationDeliveryLedger(widget.connManager.prefs),
+      ready: _notificationsReady,
+      monitoring: _backgroundMonitoring,
+      showChat: _showNotificationChat,
+      reviewApproval: _reviewNotificationApproval,
+      deferShare: _deferPendingShareForNotification,
+      showOpenError: _showNotificationOpenError,
+      beforeNavigation: () => WidgetsBinding.instance.endOfFrame,
+    );
+    _appPreferences.state.addListener(_preferencesChanged);
     _networkAvailability.start(
       _profileControllers.recoverConnections,
       _profileControllers.networkUnavailable,
     );
   }
 
-  Future<void> _restoreChatNotifications() async {
-    await _notificationsReady;
-    final connections = await widget.connManager.loadConnectionsWithSecrets();
-    final identities = <String, String>{};
-    for (final connection in connections) {
-      identities[connection.id] = await _profileControllers.identities.resolve(
-        connection,
-      );
-    }
-    if (!mounted) return;
-    await _chatNotices.restore(
-      owns: (chat) {
-        try {
-          final key = ProfileSessionKey.fromJson(
-            jsonDecode(chat) as Map<String, dynamic>,
-          );
-          return identities[key.workspace.connectionId] ==
-              key.workspace.connectionIdentity;
-        } on Object {
-          return false;
-        }
-      },
-    );
-  }
-
-  Future<void> _receiveProfileNotice(ProfileNotification notice) async {
-    if (notice.content.category == ChatNotificationCategory.inputNeeded) {
-      final owner = _profileControllers.controllers
-          .where((c) => c.owns(notice.key))
-          .firstOrNull;
-      final chat = owner?.findNotificationChat(notice.key);
-      if (chat != null &&
-          (chat.approval != null ||
-              chat.pendingQuestion != null ||
-              chat.sensitivePrompt != null)) {
-        return;
-      }
-    }
-    await _notificationsReady;
-    final eventId = notice.eventId;
-    if (eventId != null && !await _notificationDeliveries.claim(eventId)) {
-      return;
-    }
-    try {
-      await _chatNotices.result(
-        chat: jsonEncode(notice.key.toJson()),
-        title: notice.title,
-        scope:
-            '${notice.connectionLabel} / ${notice.key.workspace.profileName}',
-        focus:
-            notice.focus ??
-            NotificationFocus(
-              'status',
-              eventId ?? DateTime.now().microsecondsSinceEpoch.toString(),
-            ),
-        content: notice.content,
-        alert: notice.alert,
-      );
-    } catch (_) {
-      if (eventId != null) await _notificationDeliveries.release(eventId);
-      rethrow;
-    }
-  }
-
-  void _restoreNotificationReadTarget(ProfileChat chat) {
-    final result = _chatNotices.resultFor(jsonEncode(chat.key.toJson()));
-    if (result != null && chat.notificationReadTarget == null) {
-      chat.notificationReadTarget = NotificationFocus.fromJson(
-        Map<String, dynamic>.from(result['focus']),
-      );
-    }
-  }
-
-  Future<void> _notificationInteraction(Map<String, dynamic> data) async {
-    try {
-      if (data['dismiss'] == true) {
-        if (data['chat'] is String && data['revision'] is String) {
-          await _chatNotices.dismissed(
-            data['chat'] as String,
-            data['revision'] as String,
-          );
-        }
-        return;
-      }
-      final payload = data['payload'] as String? ?? '';
-      if (payload.isEmpty) return;
-      final value = jsonDecode(payload) as Map<String, dynamic>;
-      final key = ProfileSessionKey.fromJson(value);
-      final choice = data['choice'] as String? ?? '';
-      if (choice.isEmpty) {
-        await WidgetsBinding.instance.endOfFrame;
-        await openProfileNotification(payload);
-        return;
-      }
-      final focus = NotificationFocus.fromJson(
-        Map<String, dynamic>.from(value['focus']),
-      );
-      if (focus.kind != 'approval' ||
-          !{'once', 'session', 'always', 'deny'}.contains(choice)) {
-        return;
-      }
-      final connection = (await widget.connManager.loadConnectionsWithSecrets())
-          .where((c) => c.id == key.workspace.connectionId)
-          .firstOrNull;
-      if (connection == null) {
-        _showNotificationOpenError();
-        return;
-      }
-      final owner = await _profileControllers.forSession(connection, key);
-      ProfileChat? chat;
-      try {
-        chat = await owner.loadNotificationApproval(key);
-      } catch (_) {
-        await _notificationActionStatus(
-          'Approval could not be loaded. Reconnect and tap the notification again.',
-        );
-        return;
-      }
-      if (chat == null) return;
-      final current = _chatNotices.inputFor(jsonEncode(key.toJson()));
-      if (current != null && current.focus.identity != focus.identity) {
-        await _notificationActionStatus('This approval is no longer pending.');
-        return;
-      }
-      final request = chat.approval;
-      if (request == null || request['request_id'] != focus.id) {
-        await _notificationActionStatus('This approval is no longer pending.');
-        return;
-      }
-      final mustReview =
-          choice != 'deny' &&
-          (data['review'] == true ||
-              !(widget.connManager.prefs.getBool(notificationPreviewsKey) ??
-                  true) ||
-              choice == 'always' ||
-              data['command'] !=
-                  GatewayApprovalRequest.fromEventData(request).command.trim());
-      if (mustReview) {
-        final context = _navigatorKey.currentContext;
-        if (context == null || !context.mounted) return;
-        final approval = GatewayApprovalRequest.fromEventData(request);
-        final target = chat;
-        await showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => NotificationApprovalReview(
-            request: approval,
-            choice: choice,
-            changes: owner,
-            offline: () =>
-                target.offlineSnapshot ||
-                target.status == ProfileTurnStatus.reconnecting,
-            pending: () => target.approval?['request_id'] == focus.id,
-            submit: () => owner.approveNotification(
-              target,
-              choice,
-              requestId: focus.id,
-              command: approval.command.trim(),
-            ),
-          ),
-        );
-        return;
-      }
-      await owner.approveNotification(
-        chat,
-        choice,
-        requestId: focus.id,
-        command: data['command'] as String,
-      );
-    } catch (_) {
-      // The controller retains the exact request and exposes unconfirmed status.
-      // An intent is never saved as an authorization to retry on reconnect.
-      if (data['choice'] is String && (data['choice'] as String).isNotEmpty) {
-        await _notificationActionStatus(
-          'Decision not confirmed. Review or retry the notification.',
-        );
-      }
-    } finally {
-      if (data['choice'] is String &&
-          (data['choice'] as String).isNotEmpty &&
-          data['review'] != true) {
-        try {
-          await NativeNotificationSink.channel.invokeMethod<void>(
-            'finishDirectAction',
-            data['notification_id'],
-          );
-        } catch (_) {
-          // The action may already have lost its Android host.
-        }
-      }
-    }
-  }
-
-  Future<void> _notificationActionStatus(String message) async {
-    try {
-      await NativeNotificationSink.channel.invokeMethod<void>(
-        'actionStatus',
-        message,
-      );
-    } catch (_) {
-      // The request and notification still retain their decision state.
-    }
-  }
-
-  void _monitoringStateChanged() {
-    final active =
-        _backgroundMonitoring.state.value == BackgroundMonitoringState.active ||
-        _backgroundMonitoring.state.value ==
-            BackgroundMonitoringState.batteryRestricted;
-    if (!active) {
-      _notificationPoll?.cancel();
-      _notificationPoll = null;
-      return;
-    }
-    _notificationPoll ??= Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => unawaited(_reconcileNotices()),
-    );
-  }
-
-  Future<void> _reconcileNotices() async {
-    if (_pollingNotifications || _disposed) return;
-    _pollingNotifications = true;
-    try {
-      final keys = _chatNotices.chatsWithNotices
-          .map(
-            (v) => ProfileSessionKey.fromJson(
-              jsonDecode(v) as Map<String, dynamic>,
-            ),
-          )
-          .toSet();
-      for (final owner in _profileControllers.controllers) {
-        await owner.reconcileNotificationRequests(
-          keys.where(owner.owns).toSet(),
-        );
-      }
-    } finally {
-      _pollingNotifications = false;
-    }
-  }
-
-  void _monitoringActivityChanged() {
-    for (final owner in _profileControllers.controllers) {
-      for (final chat in owner.notificationChats) {
-        _restoreNotificationReadTarget(chat);
-      }
-    }
-    unawaited(_syncBackgroundMonitoring());
+  void _preferencesChanged() {
+    if (mounted) setState(() {});
   }
 
   void refreshPreferences() {
-    if (mounted) setState(() {});
-    unawaited(_syncBackgroundMonitoring());
-    unawaited(_chatNotices.refreshPreferences());
-  }
-
-  Future<void> _requestStartupNotificationPermission() async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
-    final prefs = widget.connManager.prefs;
-    if (prefs.getBool(_notificationPermissionRequestedKey) == true) return;
-    try {
-      await _notificationsReady;
-      if (!mounted) return;
-      final enabled = await _profileNotifications.notificationsEnabled();
-      if (!mounted) return;
-      if (enabled != true) {
-        await _profileNotifications.requestPermission();
-      }
-      // Remember both acceptance and denial; further requests are user-driven
-      // through App settings. A platform failure remains retryable next launch.
-      await prefs.setBool(_notificationPermissionRequestedKey, true);
-    } catch (_) {
-      // Notification setup must not prevent the app from opening.
-    }
-  }
-
-  Future<void> _syncBackgroundMonitoring() async {
-    if (_disposed) return;
-    await _notificationsReady;
-    if (!_disposed) await _backgroundMonitoring.sync();
+    unawaited(_appPreferences.reload().catchError((Object _) {}));
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      unawaited(_syncBackgroundMonitoring());
-      unawaited(_reconcileNotices());
+      unawaited(_chatNotices.applicationResumed());
     }
   }
 
@@ -695,46 +308,110 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     _navigatorKey.currentState?.popUntil((route) => route.isFirst);
   }
 
-  Future<void> setTextSizePreference(TextSizePreference preference) async {
-    await TextSizePreferenceStore(widget.connManager.prefs).save(preference);
-    if (mounted) setState(() {});
+  void _openPreferenceRepair() {
+    _navigatorKey.currentState?.push<void>(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('App settings')),
+          body: AppSettingsContent(
+            preferences: _appPreferences,
+            createVoiceSession: () => VoicePreferencesSession(
+              preferences: _appPreferences,
+              device: AndroidVoice.instance,
+              hermesProfileLabel: null,
+              openHermesSettings: null,
+            ),
+            onChanged: refreshPreferences,
+            enableNotifications: enableProfileNotifications,
+            backgroundMonitoringState: _backgroundMonitoring.state,
+            openMonitoringBatterySettings:
+                _backgroundMonitoring.openBatterySettings,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final preferences = _appPreferences.current;
     return MaterialApp(
       navigatorKey: _navigatorKey,
       title: 'Wing',
-      themeMode: WingApp.getThemeMode(widget.connManager.prefs),
+      themeMode: preferences.values.theme?.themeMode ?? ThemeMode.system,
       theme: profileWorkspaceTheme(
         wingTheme(Brightness.light),
-        accent: WorkspaceAccent.fromName(
-          widget.connManager.prefs.getString(WorkspaceAccent.preferenceKey),
-        ),
+        accent: preferences.values.accent?.appearance ?? WorkspaceAccent.teal,
       ),
       darkTheme: profileWorkspaceTheme(
         wingTheme(Brightness.dark),
-        accent: WorkspaceAccent.fromName(
-          widget.connManager.prefs.getString(WorkspaceAccent.preferenceKey),
-        ),
+        accent: preferences.values.accent?.appearance ?? WorkspaceAccent.teal,
       ),
       builder: (context, child) {
         final systemMediaQuery = MediaQuery.of(context);
-        final preference = WingApp.getTextSizePreference(
-          widget.connManager.prefs,
-        );
+        final preference = preferences.values.textSize;
         return MediaQuery(
           data: systemMediaQuery.copyWith(
-            textScaler: preference.applyTo(systemMediaQuery.textScaler),
+            textScaler: preference == null
+                ? systemMediaQuery.textScaler
+                : preference.applyTo(systemMediaQuery.textScaler),
           ),
-          child: child!,
+          child: Column(
+            children: [
+              if (preferences.needsAppearanceRepair)
+                Material(
+                  child: SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Saved appearance settings need repair. Temporary appearance is shown.',
+                            ),
+                          ),
+                          TextButton(
+                            key: const ValueKey('app-preference-repair'),
+                            onPressed: _openPreferenceRepair,
+                            child: const Text('Repair'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              Expanded(child: child!),
+            ],
+          ),
         );
       },
       home: HomeScreen(
         key: _homeKey,
-        profileController: profileController,
+        createEntrySession: () => WorkspaceEntrySession(
+          connectionManager: widget.connManager,
+          appPreferences: _appPreferences,
+          registry: _profileControllers,
+          launchIntents: widget.launchIntents,
+        ),
+        createSharedDraftSession: (entry) => SharedDraftSession(
+          connectionManager: widget.connManager,
+          entrySession: entry,
+          shareIntents: widget.shareIntents,
+        ),
         enableProfileNotifications: enableProfileNotifications,
         connManager: widget.connManager,
+        appPreferences: _appPreferences,
+        createBackupSession: () => BackupSession(
+          configuration: ConfigBackupService(
+            connectionManager: widget.connManager,
+            appPreferences: _appPreferences,
+          ),
+          io: ConfigBackupIo(),
+        ),
         onPreferencesChanged: refreshPreferences,
         onConfigurationChanged: () {
           unawaited(
@@ -742,7 +419,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
               widget.connManager.getConnections(),
             ),
           );
-          unawaited(_syncBackgroundMonitoring());
+          if (mounted) unawaited(_chatNotices.syncMonitoring());
         },
         backgroundMonitoringState: _backgroundMonitoring.state,
         openMonitoringBatterySettings:
@@ -760,20 +437,22 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
     _networkAvailability.dispose();
-    _profileControllers.removeListener(_monitoringActivityChanged);
-    _notificationPoll?.cancel();
-    _backgroundMonitoring.state.removeListener(_monitoringStateChanged);
+    _chatNotices.closeApplication();
     _backgroundMonitoring.dispose();
     _profileControllers.dispose();
+    _appPreferences.state.removeListener(_preferencesChanged);
+    _appPreferences.dispose();
     super.dispose();
   }
 }
 
 class HomeScreen extends StatefulWidget {
-  final FutureOr<ProfileWorkspaceController> Function(SavedConnection)?
-  profileController;
+  final WorkspaceEntrySession Function() createEntrySession;
+  final SharedDraftSession Function(WorkspaceEntrySession)
+  createSharedDraftSession;
   final Future<void> Function()? enableProfileNotifications;
   final ConnectionManager connManager;
+  final AppPreferences appPreferences;
   final VoidCallback? onPreferencesChanged;
   final VoidCallback? onConfigurationChanged;
   final ValueListenable<BackgroundMonitoringState>? backgroundMonitoringState;
@@ -782,20 +461,14 @@ class HomeScreen extends StatefulWidget {
   final AndroidLaunchIntentService? launchIntents;
   final Future<void>? startupExternalNavigationReady;
   final String? deferredShareId;
-  final Future<String> Function(String passphrase)? exportBackup;
-  final Future<String?> Function(String contents)? deliverBackup;
-  final Future<String?> Function()? pickBackupFile;
-  final Future<ConfigImportResult> Function(
-    String contents,
-    String passphrase,
-    ConfigImportMode mode,
-  )?
-  importBackup;
+  final BackupSession Function() createBackupSession;
 
   const HomeScreen({
-    this.profileController,
+    required this.createEntrySession,
+    required this.createSharedDraftSession,
     this.enableProfileNotifications,
     required this.connManager,
+    required this.appPreferences,
     this.onPreferencesChanged,
     this.onConfigurationChanged,
     this.backgroundMonitoringState,
@@ -804,10 +477,7 @@ class HomeScreen extends StatefulWidget {
     this.launchIntents,
     this.startupExternalNavigationReady,
     this.deferredShareId,
-    this.exportBackup,
-    this.deliverBackup,
-    this.pickBackupFile,
-    this.importBackup,
+    required this.createBackupSession,
     super.key,
   });
 
@@ -818,17 +488,14 @@ class HomeScreen extends StatefulWidget {
 class HomeScreenState extends State<HomeScreen> {
   List<SavedConnection> _connections = [];
   final _scaffoldKey = GlobalKey<ScaffoldState>();
-  bool _autoNavigated = false;
   bool _opening = false;
-  bool _exportingBackup = false;
-  int _settingsRevision = 0;
-  bool _reviewingShare = false;
-  bool _discardingShare = false;
+  late final BackupSession _backupSession;
+  late final WorkspaceEntrySession _entrySession;
+  late final SharedDraftSession _sharedDraft;
   bool _settingUpConnection = false;
-  bool _startupExternalNavigationReady = false;
-  String? _deferredShareId;
+
   AppDestination _destination = AppDestination.connections;
-  static const String _lastConnectionKey = 'last_connection_id';
+  String? _shownEntryError;
 
   void _refresh() {
     final connections = widget.connManager.getConnections();
@@ -856,9 +523,6 @@ class HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() => _destination = AppDestination.connections);
   }
 
-  ConfigBackupIo get _backupIo =>
-      ConfigBackupIo(connectionManager: widget.connManager);
-
   Widget buildConfigurationActions(
     BuildContext context, [
     VoidCallback? onRestored,
@@ -868,35 +532,19 @@ class HomeScreenState extends State<HomeScreen> {
   );
 
   Future<void> _showBackupConfig(BuildContext context) async {
-    if (_exportingBackup) return;
-    setState(() => _exportingBackup = true);
+    final attempt = _backupSession.beginExport();
+    if (attempt == null) return;
     try {
-      final choice = await showModalBottomSheet<ExportPassphraseChoice>(
+      final choice = await showModalBottomSheet<BackupExportIntent>(
         context: context,
         isScrollControlled: true,
         builder: (_) => const ExportPassphraseSheet(),
       );
       if (choice == null || !mounted || !context.mounted) return;
-
-      final exporter = widget.exportBackup ?? _backupIo.exportBackup;
-      final deliver = widget.deliverBackup ?? _backupIo.deliverExport;
-      final contents = await exporter(choice.passphrase);
-      if (!mounted || !context.mounted) return;
-      final destination = await deliver(contents);
-      if (!mounted || !context.mounted || destination == null) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Backup exported — $destination')));
-    } catch (error) {
-      if (!mounted || !context.mounted) return;
-      final message = error is ConfigBackupException
-          ? error.message
-          : 'The backup could not be exported.';
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: StudioError(message)));
+      await _backupSession.export(attempt, choice);
+      if (mounted && context.mounted) _showBackupOutcome(context);
     } finally {
-      if (mounted) setState(() => _exportingBackup = false);
+      _backupSession.cancel(attempt);
     }
   }
 
@@ -904,196 +552,181 @@ class HomeScreenState extends State<HomeScreen> {
     BuildContext context, {
     VoidCallback? onRestored,
   }) async {
-    String? contents;
-    try {
-      contents =
-          await (widget.pickBackupFile?.call() ?? _backupIo.pickBackupFile());
-    } catch (error) {
-      if (!mounted || !context.mounted) return;
-      _showRestoreError(context, error);
+    final offer = await _backupSession.prepareImport();
+    if (offer == null) {
+      if (mounted && context.mounted) _showBackupOutcome(context);
       return;
     }
-    if (contents == null || !mounted || !context.mounted) return;
-
-    final choice = await showModalBottomSheet<ImportChoice>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => const ImportOptionsSheet(),
-    );
-    if (choice == null || !mounted || !context.mounted) return;
-
     try {
-      final importer = widget.importBackup ?? _backupIo.importBackup;
-      final result = await importer(contents, choice.passphrase, choice.mode);
       if (!mounted || !context.mounted) return;
-      setState(() => _settingsRevision++);
-      _refresh();
-      widget.onPreferencesChanged?.call();
-      onRestored?.call();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(result.summary)));
-    } catch (error) {
+      final choice = await showModalBottomSheet<BackupImportIntent>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => const ImportOptionsSheet(),
+      );
+      if (choice == null || !mounted || !context.mounted) return;
+      final result = await _backupSession.restore(offer, choice);
       if (!mounted || !context.mounted) return;
-      _showRestoreError(context, error);
+      if (result != null) {
+        _refresh();
+        onRestored?.call();
+      }
+      _showBackupOutcome(context);
+    } finally {
+      _backupSession.cancel(offer);
     }
   }
 
-  void _showRestoreError(BuildContext context, Object error) {
-    final message = error is ConfigBackupException
-        ? error.message
-        : 'The backup could not be restored.';
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: StudioError(message)));
+  void _showBackupOutcome(BuildContext context) {
+    final state = _backupSession.presentation.value;
+    final message = state.error ?? state.notice;
+    if (message == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: state.error == null ? Text(message) : StudioError(message),
+      ),
+    );
   }
 
   @override
   void initState() {
     super.initState();
-    _deferredShareId = widget.deferredShareId;
+    _backupSession = widget.createBackupSession();
+    _entrySession = widget.createEntrySession();
+    _entrySession.addListener(_entryChanged);
+    _sharedDraft = widget.createSharedDraftSession(_entrySession);
+    _sharedDraft.addListener(_shareChanged);
+    _sharedDraft.start(
+      startupReady: widget.startupExternalNavigationReady,
+      deferredShareId: widget.deferredShareId,
+    );
     _refresh();
-    widget.shareIntents?.pendingShare.addListener(_onSharedText);
-    widget.shareIntents?.intakeError.addListener(_onShareError);
     widget.launchIntents?.pendingAction.addListener(_onLauncherAction);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _onShareError();
+      _presentShareNotice();
       _onLauncherAction();
+      _presentEntryError();
     });
-    final ready = widget.startupExternalNavigationReady;
-    if (ready == null) {
-      _startupExternalNavigationReady = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _onSharedText());
-    } else {
-      unawaited(_enableStartupExternalNavigation(ready));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onSharedText());
+  }
+
+  void deferPendingShareAutoOpen(String id) => _sharedDraft.deferAutoReview(id);
+
+  void _entryChanged() {
+    if (!mounted) return;
+    setState(() {});
+    final error = _entrySession.state.error;
+    if (error == null) _shownEntryError = null;
+    if (error != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _presentEntryError());
     }
   }
 
-  Future<void> _enableStartupExternalNavigation(Future<void> ready) async {
-    await ready;
+  void _presentEntryError() {
     if (!mounted) return;
-    _startupExternalNavigationReady = true;
-    _onSharedText();
+    final error = _entrySession.state.error;
+    if (error == null || error == _shownEntryError) return;
+    _shownEntryError = error;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: StudioError(error)));
   }
 
-  void deferPendingShareAutoOpen(String id) {
-    _deferredShareId = id;
+  SavedConnection? _connectionForExternalAction() =>
+      _entrySession.externalConnection();
+
+  void _shareChanged() {
+    if (!mounted) return;
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _presentShareNotice();
+      _onSharedText();
+    });
   }
 
-  SavedConnection? _connectionForExternalAction() {
-    final lastId = widget.connManager.prefs.getString(_lastConnectionKey);
-    final preferred = _connections
-        .where((connection) => connection.id == lastId)
-        .firstOrNull;
-    return preferred ?? (_connections.length == 1 ? _connections.single : null);
+  void _presentShareNotice() {
+    if (!mounted) return;
+    final notice = _sharedDraft.takeNotice();
+    if (notice == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: notice.error
+            ? StudioError(notice.message)
+            : Text(notice.message),
+      ),
+    );
   }
 
   void _onSharedText() => _openSharedText(explicit: false);
-
   void _reviewPendingShare() => _openSharedText(explicit: true);
-
   void _openSharedText({required bool explicit}) {
     if (!mounted) return;
-    setState(() {});
-    final payload = widget.shareIntents?.pendingShare.value;
-    if (payload == null ||
-        !_startupExternalNavigationReady ||
-        (!explicit && payload.id == _deferredShareId) ||
-        _reviewingShare ||
-        _settingUpConnection ||
-        _discardingShare ||
-        _connections.isEmpty) {
-      return;
-    }
-    _autoNavigated = true;
-    unawaited(_reviewIncomingShare());
+    final offer = _sharedDraft.claim(
+      explicit: explicit,
+      presentationBlocked: _settingUpConnection || _opening,
+    );
+    if (offer != null) unawaited(_reviewIncomingShare(offer));
   }
 
-  void _onShareError() {
-    final message = widget.shareIntents?.intakeError.value;
-    if (!mounted || message == null) return;
-    widget.shareIntents?.intakeError.value = null;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: StudioError(message)));
-  }
+  Future<void> _discardIncomingShare() => _sharedDraft.discard();
 
-  Future<void> _discardIncomingShare() async {
-    final service = widget.shareIntents;
-    final payload = service?.pendingShare.value;
-    if (service == null || payload == null || _discardingShare) return;
-    setState(() => _discardingShare = true);
-    final discarded = await service.acknowledgeShare(payload);
-    if (!mounted) return;
-    setState(() => _discardingShare = false);
-    if (!discarded) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: StudioError(
-            'The shared content could not be discarded. Please try again.',
-          ),
-        ),
-      );
-    } else {
-      _onSharedText();
-    }
-  }
-
-  Future<void> _reviewIncomingShare() async {
-    final payload = widget.shareIntents?.pendingShare.value;
-    if (payload == null || _reviewingShare) return;
-    _reviewingShare = true;
+  Future<void> _reviewIncomingShare(SharedDraftOffer offer) async {
     try {
-      final originalConnection = _connections
-          .where((connection) => connection.id == payload.target?['connection'])
-          .firstOrNull;
       final connection =
-          originalConnection ??
-          (_connections.length == 1
-              ? _connections.single
-              : await showModalBottomSheet<SavedConnection>(
-                  context: context,
-                  showDragHandle: true,
-                  builder: (context) => SafeArea(
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: [
-                        const ListTile(
-                          title: Text(
-                            'Choose a Hermes instance for this shared draft',
-                          ),
-                        ),
-                        for (final connection in _connections)
-                          ListTile(
-                            horizontalTitleGap: 0,
-                            leading: _serverIndicator(connection),
-                            title: Text(connection.label),
-                            onTap: () => Navigator.pop(context, connection),
-                          ),
-                      ],
+          offer.preferredConnection ??
+          await showModalBottomSheet<SavedConnection>(
+            context: context,
+            showDragHandle: true,
+            builder: (context) => SafeArea(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  const ListTile(
+                    title: Text(
+                      'Choose a Hermes instance for this shared draft',
                     ),
                   ),
-                ));
-      if (connection != null && mounted) {
-        await _navigateToWorkspace(connection, sharedPayload: payload);
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: StudioError(
-              'The shared draft could not be opened. It is still available to review.',
+                  for (final connection in offer.connections)
+                    ListTile(
+                      horizontalTitleGap: 0,
+                      leading: _serverIndicator(connection),
+                      title: Text(connection.label),
+                      onTap: () => Navigator.pop(context, connection),
+                    ),
+                ],
+              ),
             ),
-          ),
+          );
+      if (connection == null || !mounted) return;
+      final needsReview = await _sharedDraft.prepare(
+        offer,
+        connection,
+        reviewDestination: null,
+      );
+      if (!mounted) return;
+      if (needsReview &&
+          !await reviewSharedDraft(
+            context,
+            session: _sharedDraft,
+            offer: offer,
+          )) {
+        return;
+      }
+      if (!mounted) return;
+      final navigation = _sharedDraft.navigation(offer);
+      if (navigation != null) {
+        await _navigateToWorkspace(
+          navigation.entry.controller.connection,
+          incomingSharedDraft: navigation,
         );
       }
+    } catch (_) {
+      // The owner retains intake and publishes the workflow outcome.
+      if (mounted) _presentShareNotice();
     } finally {
-      _reviewingShare = false;
-      if (mounted) {
-        setState(() {});
-        final next = widget.shareIntents?.pendingShare.value;
-        if (next != null && !identical(next, payload)) _onSharedText();
-      }
+      _sharedDraft.finish(offer);
+      if (mounted) _presentShareNotice();
     }
   }
 
@@ -1105,14 +738,17 @@ class HomeScreenState extends State<HomeScreen> {
     }
     final connection = _connectionForExternalAction();
     if (connection == null) return;
-    _autoNavigated = true;
+    _entrySession.suppressStartupRestore();
     _navigateToWorkspace(connection);
   }
 
   @override
   void dispose() {
-    widget.shareIntents?.pendingShare.removeListener(_onSharedText);
-    widget.shareIntents?.intakeError.removeListener(_onShareError);
+    _sharedDraft.removeListener(_shareChanged);
+    _sharedDraft.dispose();
+    _entrySession.removeListener(_entryChanged);
+    _entrySession.dispose();
+    _backupSession.close();
     widget.launchIntents?.pendingAction.removeListener(_onLauncherAction);
     super.dispose();
   }
@@ -1120,132 +756,36 @@ class HomeScreenState extends State<HomeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_autoNavigated && _connections.isNotEmpty) {
-      _autoNavigated = true;
-      _maybeAutoNavigate();
+    final connection = _entrySession.startupConnection(
+      hasPendingShare: _sharedDraft.state.hasPending,
+    );
+    if (connection != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _navigateToWorkspace(connection);
+      });
     }
-  }
-
-  void _maybeAutoNavigate() {
-    // The share listener owns this route so the regular last-connection
-    // auto-navigation cannot stack a second Workspace above the shared draft.
-    if (widget.shareIntents?.pendingShare.value != null ||
-        widget.launchIntents?.pendingAction.value != null) {
-      return;
-    }
-    final lastId = widget.connManager.prefs.getString(_lastConnectionKey);
-    if (lastId == null) return;
-    final conn = _connections.where((c) => c.id == lastId).firstOrNull;
-    if (conn == null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _navigateToWorkspace(conn);
-    });
   }
 
   Future<void> _navigateToWorkspace(
     SavedConnection conn, {
     AppDestination destination = AppDestination.chats,
-    AndroidSharePayload? sharedPayload,
+    SharedDraftNavigation? incomingSharedDraft,
     bool replaceWorkspace = false,
   }) async {
-    if (_opening || (_reviewingShare && sharedPayload == null)) return;
-    setState(() => _opening = true);
-    final ProfileWorkspaceController controller;
-    try {
-      controller = await widget.profileController!(conn);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: StudioError(
-              'Connection ownership could not be verified securely.',
-            ),
-          ),
-        );
-      }
+    if (_opening ||
+        _entrySession.state.opening ||
+        (_sharedDraft.state.reviewing && incomingSharedDraft == null)) {
       return;
-    } finally {
-      if (mounted) setState(() => _opening = false);
     }
+    final plan =
+        incomingSharedDraft?.entry ?? await _entrySession.prepare(conn);
     if (!mounted) return;
-    widget.connManager.prefs.setString(_lastConnectionKey, conn.id);
-    if (sharedPayload != null) {
-      if (controller.discovery == null) await controller.initialize();
-      ProfileChat? initialChat;
-      ({ProfileSessionKey key, ComposerDraftSnapshot draft})? recoverableDraft;
-      ProfileSessionKey? verifiedTarget;
-      final target = sharedPayload.target;
-      if (target != null) {
-        try {
-          final key = ProfileSessionKey.fromJson(target);
-          if (controller.owns(key) &&
-              controller.discovery?.named(key.workspace.profileName) != null) {
-            verifiedTarget = key;
-            await controller.navigateProfile(key.workspace.profileName);
-            final opened = await controller.openSession(
-              key,
-              recoverExpiredDraft: true,
-            );
-            if (opened != null && identical(controller.current?.chat, opened)) {
-              initialChat = opened;
-            }
-          }
-        } catch (error) {
-          // Keep the photo available for explicit destination selection.
-          if (error is JsonRpcError &&
-              error.method == 'session.resume' &&
-              error.code == 4007 &&
-              error.message.trim().toLowerCase() == 'session not found' &&
-              verifiedTarget != null &&
-              controller.current?.chats.containsKey(verifiedTarget.sessionId) ==
-                  false) {
-            final draft = await controller.savedDraft(verifiedTarget);
-            if (draft != null) {
-              recoverableDraft = (key: verifiedTarget, draft: draft);
-            }
-          }
-        }
-      }
-      final profile = controller.current?.scope.profileName;
-      if (profile == null) {
-        throw StateError('No profile is available for this shared draft.');
-      }
-      if (initialChat == null) await controller.navigateProfile(profile);
-      if (!mounted) return;
-      if (initialChat != null) {
-        // Camera already chose its destination when launched from the composer.
-        // Save the attachment before acknowledging its native intake copy.
-        await controller.stageSharedDraft(initialChat, sharedPayload);
-      } else {
-        final applied = await reviewSharedDraft(
-          context,
-          controller,
-          sharedPayload,
-          recoverableDraft: recoverableDraft,
-          destinationNotice: target != null
-              ? 'The original chat could not be reopened. Choose a destination below.'
-              : null,
-        );
-        if (!applied) return;
-      }
-      if (!mounted) return;
-      final acknowledged = await widget.shareIntents!.acknowledgeShare(
-        sharedPayload,
-      );
-      if (!mounted) return;
-      if (!acknowledged) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: StudioError(
-              'Content was added to the draft, but the incoming share could not be cleared. Discard it from Home to avoid adding it twice.',
-            ),
-          ),
-        );
-      }
-    }
-    final launchAction = sharedPayload == null
-        ? widget.launchIntents?.takePendingAction()
+    if (plan == null || !_entrySession.isCurrent(plan)) return;
+    final controller = plan.controller;
+    final launchAction = incomingSharedDraft == null
+        ? _entrySession.takeLaunchAction(plan)
         : null;
+    if (!_entrySession.isCurrent(plan)) return;
     final initialQuickChat = launchAction == AndroidLaunchAction.quickChat;
     if (launchAction != null || replaceWorkspace) {
       final departingRoutes = <Future<dynamic>>[];
@@ -1258,9 +798,9 @@ class HomeScreenState extends State<HomeScreen> {
       // Let the previous screen release the shared controller before the new
       // screen claims its visibility and search focus.
       await Future.wait(departingRoutes);
-      if (!mounted) return;
+      if (!mounted || !_entrySession.isCurrent(plan)) return;
       setState(() => _opening = false);
-    } else if (sharedPayload?.target != null) {
+    } else if (incomingSharedDraft?.returnToHome == true) {
       Navigator.of(context).popUntil((route) => route.isFirst);
     }
     Navigator.push(
@@ -1281,7 +821,8 @@ class HomeScreenState extends State<HomeScreen> {
             AndroidLaunchAction.activity => AppDestination.activity,
             AndroidLaunchAction.quickChat ||
             AndroidLaunchAction.searchChats => AppDestination.chats,
-            null => sharedPayload != null ? AppDestination.chats : destination,
+            null =>
+              incomingSharedDraft != null ? AppDestination.chats : destination,
           },
           onConnections: () {
             if (mounted) {
@@ -1310,63 +851,69 @@ class HomeScreenState extends State<HomeScreen> {
     final saved = await Navigator.of(context).push<SavedConnection>(
       MaterialPageRoute(
         builder: (_) => ConnectionSetupScreen(
-          initialConnection: existing,
-          savedConnections: widget.connManager.getConnections(),
-          onSaveIcon: existing == null
-              ? null
-              : (icon) => _saveConnectionIcon(existing, icon),
-          onSave: (candidate) async {
-            if (existing == null) {
-              return widget.connManager.saveConnection(
+          createSession: () => ConnectionSetupSession(
+            initialAccess: existing == null
+                ? null
+                : widget.connManager.accessFor(existing),
+            cloud: HermesCloud(),
+            createProbe: DashboardConnectionProbe.new,
+            savedConnections: widget.connManager.getConnections,
+            onSaveIcon: existing == null
+                ? null
+                : (icon) => _saveConnectionIcon(existing, icon),
+            onSave: (candidate) async {
+              if (existing == null) {
+                return widget.connManager.saveConnection(
+                  candidate.label,
+                  candidate.baseUrl,
+                  candidate.port,
+                  '',
+                  icon: candidate.icon,
+                  dashboardPrefix: candidate.dashboardPrefix,
+                  dashboardProxied: candidate.dashboardProxied,
+                  desktopGatewayUrl: candidate.desktopGatewayUrl,
+                  dashboardPort: candidate.dashboardPort,
+                  dashboardUsername: candidate.dashboardUsername,
+                  dashboardPassword: candidate.dashboardPassword,
+                  dashboardGrant: candidate.dashboardGrant,
+                  cloudInstanceId: candidate.cloudInstanceId,
+                  cloudOrganization: candidate.cloudOrganization,
+                  gatewayHeaders: candidate.gatewayHeaders,
+                );
+              }
+              await widget.connManager.updateConnection(
+                existing.id,
                 candidate.label,
                 candidate.baseUrl,
                 candidate.port,
                 '',
                 icon: candidate.icon,
-                dashboardPrefix: candidate.dashboardPrefix,
+                gatewayPrefix: '',
+                dashboardPrefix: candidate.dashboardPrefix ?? '',
                 dashboardProxied: candidate.dashboardProxied,
-                desktopGatewayUrl: candidate.desktopGatewayUrl,
+                desktopGatewayUrl: candidate.desktopGatewayUrl ?? '',
                 dashboardPort: candidate.dashboardPort,
-                dashboardUsername: candidate.dashboardUsername,
-                dashboardPassword: candidate.dashboardPassword,
-                dashboardOAuth: candidate.dashboardOAuth,
+                dashboardUsername: candidate.dashboardUsername ?? '',
+                dashboardPassword: candidate.dashboardPassword ?? '',
+                dashboardGrant: candidate.dashboardGrant,
                 cloudInstanceId: candidate.cloudInstanceId,
                 cloudOrganization: candidate.cloudOrganization,
                 gatewayHeaders: candidate.gatewayHeaders,
               );
-            }
-            await widget.connManager.updateConnection(
-              existing.id,
-              candidate.label,
-              candidate.baseUrl,
-              candidate.port,
-              '',
-              icon: candidate.icon,
-              gatewayPrefix: '',
-              dashboardPrefix: candidate.dashboardPrefix ?? '',
-              dashboardProxied: candidate.dashboardProxied,
-              desktopGatewayUrl: candidate.desktopGatewayUrl ?? '',
-              dashboardPort: candidate.dashboardPort,
-              dashboardUsername: candidate.dashboardUsername ?? '',
-              dashboardPassword: candidate.dashboardPassword ?? '',
-              dashboardOAuth: candidate.dashboardOAuth,
-              cloudInstanceId: candidate.cloudInstanceId,
-              cloudOrganization: candidate.cloudOrganization,
-              gatewayHeaders: candidate.gatewayHeaders,
-            );
-            return widget.connManager.getConnections().firstWhere(
-              (c) => c.id == existing.id,
-            );
-          },
+              return widget.connManager.getConnections().firstWhere(
+                (c) => c.id == existing.id,
+              );
+            },
+          ),
         ),
       ),
     );
     _settingUpConnection = false;
     if (!mounted) return;
     if (saved != null) {
-      _autoNavigated = true;
+      _entrySession.suppressStartupRestore();
       _refresh();
-      if (existing == null && widget.profileController != null) {
+      if (existing == null) {
         await _navigateToWorkspace(saved);
       }
     }
@@ -1396,12 +943,10 @@ class HomeScreenState extends State<HomeScreen> {
   Widget _serverIndicator(SavedConnection connection) =>
       FutureBuilder<ProfileWorkspaceController>(
         key: ValueKey(connection),
-        future: widget.profileController == null
-            ? null
-            : _connectionOwners.putIfAbsent(
-                connection,
-                () async => await widget.profileController!(connection),
-              ),
+        future: _connectionOwners.putIfAbsent(
+          connection,
+          () => _entrySession.controllerFor(connection),
+        ),
         builder: (context, snapshot) => ServerConnectionIndicator(
           label: connection.label,
           icon: connection.icon,
@@ -1454,7 +999,9 @@ class HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        onTap: _opening ? null : () => _navigateToWorkspace(conn),
+        onTap: _opening || _entrySession.state.opening
+            ? null
+            : () => _navigateToWorkspace(conn),
       ),
     );
   }
@@ -1489,18 +1036,19 @@ class HomeScreenState extends State<HomeScreen> {
         key: _scaffoldKey,
         drawer: FutureBuilder<ProfileWorkspaceController>(
           key: ValueKey(connection),
-          future: connection == null || widget.profileController == null
+          future: connection == null
               ? null
               : _connectionOwners.putIfAbsent(
                   connection,
-                  () async => await widget.profileController!(connection),
+                  () => _entrySession.controllerFor(connection),
                 ),
           builder: (context, snapshot) => AppDrawer(
             selected: _destination,
-            connection: connection,
+            access: connection == null
+                ? null
+                : widget.connManager.accessFor(connection),
             connectionStatus: snapshot.data?.connectionStatus,
-            hasConnection:
-                connection != null && widget.profileController != null,
+            hasConnection: connection != null,
             onSelected: _selectDestination,
           ),
         ),
@@ -1523,8 +1071,13 @@ class HomeScreenState extends State<HomeScreen> {
         ),
         body: _destination == AppDestination.settings
             ? AppSettingsContent(
-                key: ValueKey(_settingsRevision),
-                preferences: widget.connManager.prefs,
+                preferences: widget.appPreferences,
+                createVoiceSession: () => VoicePreferencesSession(
+                  preferences: widget.appPreferences,
+                  device: AndroidVoice.instance,
+                  hermesProfileLabel: null,
+                  openHermesSettings: null,
+                ),
                 enableNotifications: widget.enableProfileNotifications,
                 backgroundMonitoringState: widget.backgroundMonitoringState,
                 openMonitoringBatterySettings:
@@ -1536,8 +1089,9 @@ class HomeScreenState extends State<HomeScreen> {
               )
             : Column(
                 children: [
-                  if (_opening) const LinearProgressIndicator(),
-                  if (widget.shareIntents?.pendingShare.value != null)
+                  if (_opening || _entrySession.state.opening)
+                    const LinearProgressIndicator(),
+                  if (_sharedDraft.state.hasPending)
                     ListTile(
                       title: const Text('Shared draft ready'),
                       subtitle: Column(
@@ -1547,16 +1101,15 @@ class HomeScreenState extends State<HomeScreen> {
                           Wrap(
                             children: [
                               TextButton(
-                                onPressed:
-                                    _reviewingShare ||
-                                        _discardingShare ||
-                                        _connections.isEmpty
+                                onPressed: !_sharedDraft.state.canReview
                                     ? null
                                     : _reviewPendingShare,
                                 child: const Text('Review'),
                               ),
                               TextButton(
-                                onPressed: _reviewingShare || _discardingShare
+                                onPressed:
+                                    _sharedDraft.state.reviewing ||
+                                        _sharedDraft.state.discarding
                                     ? null
                                     : _discardIncomingShare,
                                 child: const Text('Discard'),

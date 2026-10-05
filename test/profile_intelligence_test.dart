@@ -1,3 +1,8 @@
+import 'support/composer_fixture.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/models/chat_intelligence.dart';
+import 'package:wing/core/models/model_choice.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -5,8 +10,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
-import 'package:wing/core/widgets/chat_intelligence_picker.dart';
-import 'package:wing/core/widgets/model_chooser.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_intelligence_fixture.dart';
 
@@ -14,16 +17,21 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late ProfileIntelligenceFixture host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late SharedPreferences prefs;
   Future<ProfileWorkspaceController> open() async {
     final c = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'picker-test',
       preferences: prefs,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await c.initialize();
-    await c.createChat();
+    await c.createChat(canDispatch: () => true);
     return c;
   }
 
@@ -34,10 +42,14 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(prefs);
     host = ProfileIntelligenceFixture();
     controller = await open();
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   test(
     'selection writes the session and reopen uses server settings',
@@ -66,11 +78,11 @@ void main() {
       final restored = reopened.current!.chat!;
       expect(restored.model, 'gpt-6-astra');
       expect(restored.reasoningEffort, 'high');
-      restored.draft = 'Verify settings';
+      restored.composer.editText('Verify settings');
       await reopened.send(restored);
       expect(host.writes, hasLength(2));
       await reopened.switchProfile('work');
-      final other = await reopened.createChat();
+      final other = await reopened.createChat(canDispatch: () => true);
       expect(other.model, 'gpt-6-astra');
       expect(other.reasoningEffort, 'high');
     },
@@ -122,15 +134,20 @@ void main() {
           confirmModelChange: (_) async {
             switch (staleChange) {
               case 'runtime':
-                chat.runtimeId = 'replacement';
+                host.resumedRuntimeId = 'replacement';
+                await controller.reconnect(chat.key.workspace);
               case 'model':
-                chat.model = 'gpt-5.4-mini';
+                emitChatEvent(controller, chat, 'session.info', {
+                  'model': 'gpt-5.4-mini',
+                });
               case 'provider':
-                chat.provider = 'other-provider';
+                emitChatEvent(controller, chat, 'session.info', {
+                  'provider': 'other-provider',
+                });
               case 'profile':
                 await controller.switchProfile('work');
               case 'busy':
-                chat.status = ProfileTurnStatus.running;
+                emitChatEvent(controller, chat, 'message.start');
             }
             return true;
           },
@@ -197,9 +214,9 @@ void main() {
       ),
       throwsStateError,
     );
-    chat.draft = 'Keep this draft';
+    chat.composer.editText('Keep this draft');
     await controller.send(chat);
-    expect(chat.draft, 'Keep this draft');
+    expect(chat.composer.observation.text, 'Keep this draft');
     expect(host.writes, hasLength(1));
     decision.complete(false);
     await applying;

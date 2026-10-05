@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,17 +37,23 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final fixture = _LeaseFixture();
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: identityTestConnection(),
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
         connectionIdentity: 'route-lease',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: fixture.gateway,
       );
       addTearDown(controller.dispose);
       await controller.initialize();
-      final original = await controller.createChat();
+      final original = await controller.createChat(canDispatch: () => true);
       // Make the protected chat unambiguously oldest, even on a fast fixture.
-      original.lastActive = 1;
       final navigator = GlobalKey<NavigatorState>();
       await tester.pumpWidget(
         MaterialApp(
@@ -81,7 +89,7 @@ void main() {
         i < ProfileWorkspaceController.settledChatLimit + 2;
         i++
       ) {
-        await controller.createChat();
+        await controller.createChat(canDispatch: () => true);
       }
       await tester.pumpAndSettle();
       controller.pruneSettledState();

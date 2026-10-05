@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_timeline.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -30,12 +31,10 @@ void main() {
               children: [
                 ProfileToolActivitySection(
                   key: activityKey,
-                  groups: [
-                    [
-                      {'role': 'tool', 'content': 'First result'},
-                      {'role': 'tool', 'content': 'Second result'},
-                    ],
-                  ],
+                  section: TranscriptTimeline.project([
+                    {'role': 'tool', 'content': 'First result'},
+                    {'role': 'tool', 'content': 'Second result'},
+                  ], presentationId: (_) => Object()).sections.single,
                 ),
                 const ProfileReasoningDisclosure(
                   key: thoughtKey,

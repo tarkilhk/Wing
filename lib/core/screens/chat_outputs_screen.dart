@@ -1,23 +1,14 @@
 import '../widgets/studio_error.dart';
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../models/chat_output.dart';
-import '../services/android_file_delivery_service.dart';
+import '../services/chat_outputs_session.dart';
 import '../services/file_open_error_message.dart';
-import '../services/media_preview_service.dart';
-import '../services/profile_gateway.dart';
 import '../services/remote_files_client.dart';
-import '../services/remote_file_saver.dart';
-import '../services/web_preview.dart';
 import '../widgets/chat_image_preview.dart';
 import '../widgets/read_recovery.dart';
-import '../services/workspace_connection_failure.dart';
 import '../widgets/markdown_code_block.dart';
 import '../widgets/markdown_message_content.dart';
 import '../widgets/web_output_preview.dart';
@@ -28,23 +19,13 @@ enum _FileAction { share, save, open, play }
 
 class ChatOutputsScreen extends StatefulWidget {
   final String chatTitle;
-  final Future<ProfileHistoryPage> Function(int offset) loadHistory;
-  final Future<RemoteFileDownload> Function(String path) download;
-  final Future<RemoteTextPreview> Function(String path) readText;
-  final Future<void> Function(RemoteFileDownload)? deliver;
-  final AndroidFileDeliveryService fileDelivery;
-  final MediaPreviewService mediaPreview;
+  final ChatOutputsSession Function() createSession;
   final ChatOutput? initialOutput;
 
   const ChatOutputsScreen({
     super.key,
     required this.chatTitle,
-    required this.loadHistory,
-    required this.download,
-    required this.readText,
-    this.deliver,
-    this.fileDelivery = const AndroidFileDeliveryService(),
-    this.mediaPreview = const MediaPreviewService(),
+    required this.createSession,
     this.initialOutput,
   });
 
@@ -53,19 +34,16 @@ class ChatOutputsScreen extends StatefulWidget {
 }
 
 class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
-  final _outputs = <String, ChatOutput>{};
-  int? _nextOffset = 0;
-  bool _loading = false;
-  String? _loadError;
+  late final ChatOutputsSession _session;
+  ChatOutputsObservation get _observation => _session.observation;
   String? _initialError;
   bool _initialOpening = false;
-  bool _retryRefresh = false;
-  bool _retryable = false;
   bool _working = false;
 
   @override
   void initState() {
     super.initState();
+    _session = widget.createSession()..addListener(_changed);
     final initialOutput = widget.initialOutput;
     if (initialOutput == null) {
       _load();
@@ -109,47 +87,18 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
     );
   }
 
-  Future<void> _load({bool refresh = false}) async {
-    if (_loading || !refresh && _nextOffset == null) return;
-    final offset = refresh ? 0 : _nextOffset!;
-    setState(() {
-      _loading = true;
-      _loadError = null;
-      _retryable = false;
-    });
-    try {
-      final page = await widget.loadHistory(offset);
-      if (!mounted) return;
-      final outputs = extractChatOutputs(page.rows.reversed);
-      setState(() {
-        if (refresh) _outputs.clear();
-        for (final output in outputs) {
-          _outputs.putIfAbsent(output.target, () => output);
-        }
-        _nextOffset = page.nextOffset;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _retryable = isTemporaryWorkspaceFailure(error);
-        _retryRefresh = refresh;
-        _loadError = _outputs.isEmpty
-            ? "Couldn't load this chat's files and links. Check the Hermes connection, then try again."
-            : "Couldn't load more outputs. Your current results are still here. Check the Hermes connection, then try again.";
-      });
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+  void _changed() {
+    if (mounted) setState(() {});
   }
 
-  Future<void> _share(RemoteFileDownload download) async {
-    if (widget.deliver != null) return widget.deliver!(download);
-    final directory = await (await getTemporaryDirectory()).createTemp(
-      'hermes-output-',
-    );
-    final file = File('${directory.path}/${download.filename}');
-    await file.writeAsBytes(download.bytes, flush: true);
-    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+  Future<void> _load({bool refresh = false}) => _session.load(refresh: refresh);
+  Future<void> _share(RemoteFileDownload file) => _session.share(file);
+
+  @override
+  void dispose() {
+    _session.removeListener(_changed);
+    _session.dispose();
+    super.dispose();
   }
 
   Future<void> _run(
@@ -175,49 +124,21 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
     }
   }
 
-  Future<void> _openLink(String target) async {
-    final uri = externalWebLink(target);
-    if (uri == null || !await openWebPreview(uri)) {
-      throw StateError('Could not open link');
-    }
-  }
+  Future<void> _openLink(String target) => _session.openLink(target);
 
   Future<void> _preview(ChatOutput output) async {
+    final prepared = await _session.prepare(output);
+    if (!mounted) return;
     final path = output.path;
-    if (output.kind == ChatOutputKind.image) {
-      RemoteFileDownload? download;
-      Uri? uri;
-      if (path == null &&
-          !output.url!.startsWith('data:image/') &&
-          _isSvgName(output.label, output.url!)) {
-        return _openLink(output.url!);
-      }
-      if (path != null) {
-        download = await widget.download(path);
-      } else if (output.url!.startsWith('data:image/')) {
-        final data = UriData.parse(output.url!);
-        final extension =
-            const {
-              'image/png': 'png',
-              'image/jpeg': 'jpg',
-              'image/gif': 'gif',
-              'image/webp': 'webp',
-              'image/svg+xml': 'svg',
-            }[data.mimeType] ??
-            'img';
-        download = RemoteFileDownload(
-          filename: 'image.$extension',
-          bytes: data.contentAsBytes(),
-        );
-      } else {
-        uri = externalWebLink(output.url!);
-        if (uri == null) throw StateError('Invalid image link');
-      }
-      if (!mounted) return;
-      final imageFile = download;
-      if (imageFile != null &&
-          _isSvgName(imageFile.filename, path ?? output.url ?? '')) {
-        final source = utf8.decode(imageFile.bytes);
+    if (prepared.kind == OutputPreviewKind.external) {
+      return _openLink(output.url!);
+    }
+    if (prepared.kind == OutputPreviewKind.image ||
+        prepared.kind == OutputPreviewKind.svg) {
+      final imageFile = prepared.file;
+      final uri = prepared.uri;
+      if (prepared.kind == OutputPreviewKind.svg) {
+        final source = prepared.svgSource!;
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (previewContext) => WebOutputPreview(
@@ -227,7 +148,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
               actionLabel: 'Save or share',
               onAction: () async {
                 try {
-                  await _share(imageFile);
+                  await _share(imageFile!);
                 } catch (error) {
                   if (previewContext.mounted) _error(previewContext, error);
                 }
@@ -262,30 +183,14 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
       );
       return;
     }
-    if (path == null) return _openLink(output.url!);
-    // Known HTML files need the full download, not a text-preview request with
-    // its own truncation and source-size restrictions.
-    if (_hasHtmlExtension(path) || _hasHtmlExtension(output.label)) {
-      return _previewHtml(output, path);
+    if (prepared.kind == OutputPreviewKind.html) {
+      return _previewHtml(output, path!);
     }
-    final preview = await widget.readText(path);
-    if (!mounted) return;
-    if (_isHtmlPreview(output, preview)) {
-      return _previewHtml(output, path);
-    }
-    final canOpen = widget.fileDelivery.supportsType(
-      output.label,
-      mimeType: preview.mimeType,
-    );
-    final canPlay = widget.mediaPreview.supportsType(
-      output.label,
-      mimeType: preview.mimeType,
-    );
-    final isPdf =
-        preview.mimeType.split(';').first.trim().toLowerCase() ==
-            'application/pdf' ||
-        output.label.toLowerCase().endsWith('.pdf');
-    final isMarkdown = _isMarkdownPreview(output, preview);
+    final preview = prepared.text!;
+    final canOpen = prepared.canOpen;
+    final canPlay = prepared.canPlay;
+    final isPdf = prepared.isPdf;
+    final isMarkdown = prepared.isMarkdown;
     var delivering = false;
     var showMarkdownSource = false;
     await Navigator.of(context).push(
@@ -296,20 +201,20 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
               if (!mounted || delivering) return;
               setPreviewState(() => delivering = true);
               try {
-                final file = await widget.download(path);
+                final file = await _session.download(path!);
                 if (!mounted || !previewContext.mounted) return;
                 switch (action) {
                   case _FileAction.share:
                     await _share(file);
                   case _FileAction.save:
-                    final saved = await saveRemoteFile(file);
+                    final saved = await _session.save(file);
                     if (saved && previewContext.mounted) {
                       ScaffoldMessenger.of(previewContext).showSnackBar(
                         const SnackBar(content: Text('File saved')),
                       );
                     }
                   case _FileAction.open:
-                    final opened = await widget.fileDelivery.openInApp(
+                    final opened = await _session.open(
                       file,
                       mimeType: preview.mimeType,
                     );
@@ -324,7 +229,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                     }
                   case _FileAction.play:
                     final theme = Theme.of(previewContext);
-                    final opened = await widget.mediaPreview.open(
+                    final opened = await _session.play(
                       file,
                       title: output.label,
                       mimeType: preview.mimeType,
@@ -431,9 +336,10 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                         initialFragment: output.fragment,
                         onOpenRemoteFile: _preview,
                         loadImage: (path) async =>
-                            (await widget.download(path)).bytes,
-                        onDownloadRemoteFile: (output) async =>
-                            saveRemoteFile(await widget.download(output.path!)),
+                            (await _session.download(path)).bytes,
+                        onDownloadRemoteFile: (output) async => _session.save(
+                          await _session.download(output.path!),
+                        ),
                       )
                     else
                       MarkdownCodeBlock(
@@ -455,7 +361,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                                   MaterialPageRoute<void>(
                                     builder: (_) => PdfPreviewScreen(
                                       title: output.label,
-                                      download: () => widget.download(path),
+                                      download: () => _session.download(path!),
                                     ),
                                   ),
                                 );
@@ -503,7 +409,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
       MaterialPageRoute<void>(
         builder: (_) => HtmlPreviewScreen(
           title: output.label,
-          download: () => widget.download(path),
+          download: () => _session.download(path),
           share: _share,
         ),
       ),
@@ -513,8 +419,11 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
   @override
   Widget build(BuildContext context) => ReadRecovery(
     shouldRetry: () =>
-        widget.initialOutput == null && !_working && !_loading && _retryable,
-    retry: () => _load(refresh: _retryRefresh),
+        widget.initialOutput == null &&
+        !_working &&
+        !_observation.loading &&
+        _observation.retryable,
+    retry: () => _load(refresh: _observation.retryRefresh),
     child: _buildContent(context),
   );
 
@@ -550,7 +459,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
         ),
       );
     }
-    final outputs = _outputs.values.toList();
+    final outputs = _observation.outputs;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -562,29 +471,31 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
           IconButton(
             tooltip: 'Refresh outputs',
             icon: const Icon(Icons.refresh),
-            onPressed: _working || _loading ? null : () => _load(refresh: true),
+            onPressed: _working || _observation.loading
+                ? null
+                : () => _load(refresh: true),
           ),
         ],
       ),
       body: Column(
         children: [
-          if (_working || _loading && outputs.isNotEmpty)
+          if (_working || _observation.loading && outputs.isNotEmpty)
             const LinearProgressIndicator(),
           const Padding(
             padding: EdgeInsets.all(16),
             child: Text('Open a file or link shared in this chat.'),
           ),
           Expanded(
-            child: _loading && outputs.isEmpty
+            child: _observation.loading && outputs.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : outputs.isEmpty
                 ? Center(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(24),
-                      child: _loadError != null
-                          ? StudioError(_loadError!)
+                      child: _observation.error != null
+                          ? StudioError(_observation.error!)
                           : Text(
-                              (_nextOffset == null
+                              (!_observation.hasMore
                                   ? 'No files or links found in this chat.'
                                   : 'No outputs found in the recent part of this chat. Load older outputs to look further back.'),
                             ),
@@ -626,7 +537,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                                     ? null
                                     : () => _run(
                                         () async => _share(
-                                          await widget.download(output.path!),
+                                          await _session.download(output.path!),
                                         ),
                                       ),
                               ),
@@ -634,7 +545,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                     },
                   ),
           ),
-          if (!_loading || outputs.isNotEmpty)
+          if (!_observation.loading || outputs.isNotEmpty)
             SafeArea(
               top: false,
               child: Padding(
@@ -643,29 +554,31 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (outputs.isNotEmpty &&
-                        (_loadError != null || _nextOffset != null))
-                      _loadError != null
-                          ? StudioError(_loadError!)
+                        (_observation.error != null || _observation.hasMore))
+                      _observation.error != null
+                          ? StudioError(_observation.error!)
                           : Text(
                               'Recent outputs shown. Load older outputs to look further back.',
                             ),
-                    if (_loadError != null)
+                    if (_observation.error != null)
                       TextButton(
-                        onPressed: _working || _loading
+                        onPressed: _working || _observation.loading
                             ? null
-                            : () => _load(refresh: _retryRefresh),
+                            : () => _load(refresh: _observation.retryRefresh),
                         child: const Text('Try again'),
                       )
-                    else if (_nextOffset != null)
+                    else if (_observation.hasMore)
                       TextButton(
-                        onPressed: _working || _loading ? null : () => _load(),
+                        onPressed: _working || _observation.loading
+                            ? null
+                            : () => _load(),
                         child: Text(
-                          _loading
+                          _observation.loading
                               ? 'Loading older outputs…'
                               : 'Load older outputs',
                         ),
                       ),
-                    if (_loadError != null && outputs.isEmpty)
+                    if (_observation.error != null && outputs.isEmpty)
                       TextButton(
                         onPressed: () => Navigator.of(context).maybePop(),
                         child: const Text('Back to chat'),
@@ -679,39 +592,3 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
     );
   }
 }
-
-bool _isMarkdownPreview(ChatOutput output, RemoteTextPreview preview) {
-  if (preview.binary) return false;
-  final language = preview.language.trim().toLowerCase();
-  final mimeType = preview.mimeType.split(';').first.trim().toLowerCase();
-  final label = output.label.toLowerCase();
-  final path = preview.path.toLowerCase();
-  return language == 'markdown' ||
-      language == 'md' ||
-      mimeType == 'text/markdown' ||
-      label.endsWith('.md') ||
-      label.endsWith('.markdown') ||
-      path.endsWith('.md') ||
-      path.endsWith('.markdown');
-}
-
-bool _isHtmlPreview(ChatOutput output, RemoteTextPreview preview) {
-  if (preview.binary) return false;
-  final mimeType = preview.mimeType.split(';').first.trim().toLowerCase();
-  final label = output.label.toLowerCase();
-  final path = preview.path.toLowerCase();
-  return mimeType == 'text/html' ||
-      label.endsWith('.html') ||
-      label.endsWith('.htm') ||
-      path.endsWith('.html') ||
-      path.endsWith('.htm');
-}
-
-bool _hasHtmlExtension(String name) {
-  final lower = name.toLowerCase();
-  return lower.endsWith('.html') || lower.endsWith('.htm');
-}
-
-bool _isSvgName(String filename, String target) =>
-    filename.toLowerCase().endsWith('.svg') ||
-    Uri.tryParse(target)?.path.toLowerCase().endsWith('.svg') == true;

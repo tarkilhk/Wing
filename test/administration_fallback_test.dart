@@ -5,16 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wing/core/screens/administration/admin_defaults_page.dart';
+import 'package:wing/core/screens/administration/admin_fallback_page.dart';
 import 'package:wing/core/theme/wing_theme.dart';
-import 'package:wing/core/widgets/model_chooser.dart';
 
 import 'support/administration_fixture.dart';
 
-// Desktop contract inspected 2026-09-19 at upstream Hermes main
-// 21642218445e213b02ea7158f71214022645c9c6:
-// apps/desktop/src/app/settings/fallback-models-field.tsx normalizes strings,
-// retains incomplete local rows, and emits only complete pairs on edits.
+// Current stock canonical fallback routes preserve all routing fields.
+// Legacy strings/coercion are deliberately removed per the clean-breaking policy.
 const _entry = {
   'provider': 'example',
   'model': 'backup-model',
@@ -25,10 +22,7 @@ const _entry = {
 Future<void> _open(WidgetTester tester, AdministrationFixture fixture) async {
   await tester.pumpWidget(
     MaterialApp(
-      home: AdminFallbackPage(
-        profile: fixture.server.profile('default'),
-        choices: const [ModelChoice(provider: 'example', model: 'second')],
-      ),
+      home: AdminFallbackPage(profile: fixture.server.profile('default')),
     ),
   );
   await tester.pumpAndSettle();
@@ -55,66 +49,29 @@ Future<void> _selectSecond(WidgetTester tester, String action) async {
 }
 
 void main() {
-  for (final invalid in <Object?>[null, 42, false, {}]) {
-    testWidgets('incomplete ${invalid.runtimeType} is an editable draft', (
-      tester,
-    ) async {
-      final fixture = AdministrationFixture();
-      fixture.configs['default']!['fallback_providers'] = [invalid, _entry];
-      await _open(tester, fixture);
-      expect(find.text('Choose model'), findsOneWidget);
-      expect(find.text('backup-model'), findsOneWidget);
-      expect(find.textContaining('Could not load'), findsNothing);
-      expect(find.text('Invalid fallback entry'), findsNothing);
-      expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
-      await tester.tap(find.text('Choose model'));
-      await tester.pumpAndSettle();
-      await _selectSecond(tester, 'Save fallback');
-      expect(fixture.configs['default']!['fallback_providers'], [
-        {'provider': 'example', 'model': 'second'},
-        _entry,
-      ]);
-    });
+  for (final invalid in <Object?>[
+    null,
+    42,
+    false,
+    {},
+    'example/legacy-model',
+  ]) {
+    testWidgets(
+      'malformed ${invalid.runtimeType} is visible and never rewritten',
+      (tester) async {
+        final fixture = AdministrationFixture();
+        fixture.configs['default']!['fallback_providers'] = [invalid, _entry];
+        await _open(tester, fixture);
+        expect(find.textContaining('Could not load'), findsOneWidget);
+        expect(find.text('Add fallback'), findsNothing);
+        expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
+        expect(fixture.configs['default']!['fallback_providers'], [
+          invalid,
+          _entry,
+        ]);
+      },
+    );
   }
-
-  testWidgets(
-    'desktop strings normalize and incomplete drafts survive saves locally',
-    (tester) async {
-      final fixture = AdministrationFixture();
-      fixture.configs['default']!['fallback_providers'] = [
-        'example/team/model',
-        'model-only',
-        null,
-        _entry,
-      ];
-      await _open(tester, fixture);
-      expect(find.text('team/model'), findsOneWidget);
-      expect(find.text('model-only'), findsOneWidget);
-      expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
-      await tester.tap(find.text('Add fallback'));
-      await tester.pumpAndSettle();
-      await _selectSecond(tester, 'Add fallback');
-      expect(fixture.configs['default']!['fallback_providers'], [
-        {'provider': 'example', 'model': 'team/model'},
-        _entry,
-        {'provider': 'example', 'model': 'second'},
-      ]);
-      expect(find.text('model-only'), findsOneWidget);
-      expect(find.text('Choose model'), findsOneWidget);
-      await _manage(tester, 4, 'Move up');
-      expect(fixture.configs['default']!['fallback_providers'], [
-        {'provider': 'example', 'model': 'team/model'},
-        _entry,
-        {'provider': 'example', 'model': 'second'},
-      ]);
-      await _manage(tester, 1, 'Remove');
-      expect(fixture.configs['default']!['fallback_providers'], [
-        _entry,
-        {'provider': 'example', 'model': 'second'},
-      ]);
-      expect(find.textContaining('changed elsewhere'), findsNothing);
-    },
-  );
 
   testWidgets('editing a row preserves its routing fields', (tester) async {
     final fixture = AdministrationFixture();
@@ -128,16 +85,17 @@ void main() {
     ]);
   });
 
-  testWidgets('changes to incomplete raw data still block saving', (
+  testWidgets('malformed external configuration blocks a valid pending edit', (
     tester,
   ) async {
     final fixture = AdministrationFixture();
-    fixture.configs['default']!['fallback_providers'] = [null, _entry];
+    fixture.configs['default']!['fallback_providers'] = [_entry];
     await _open(tester, fixture);
     fixture.configs['default']!['fallback_providers'] = [false, _entry];
-    await _manage(tester, 2, 'Remove');
-    expect(find.textContaining('changed elsewhere'), findsOneWidget);
+    await _manage(tester, 1, 'Remove');
+    expect(find.textContaining('could not be confirmed'), findsOneWidget);
     expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
+    expect(fixture.configs['default']!['fallback_providers'], [false, _entry]);
   });
 
   testWidgets(
@@ -201,7 +159,10 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         final fixture = AdministrationFixture('Claw');
-        fixture.configs['default']!['fallback_providers'] = [null, _entry];
+        fixture.configs['default']!['fallback_providers'] = [
+          {..._entry, 'model': 'first-model'},
+          _entry,
+        ];
         await tester.pumpWidget(
           MaterialApp(
             theme: wingTheme(brightness),
@@ -215,14 +176,13 @@ void main() {
               key: const ValueKey('capture'),
               child: AdminFallbackPage(
                 profile: fixture.server.profile('default'),
-                choices: const [],
               ),
             ),
           ),
         );
         await tester.pumpAndSettle();
-        await tester.scrollUntilVisible(find.text('Choose model'), 100);
-        expect(find.text('Choose model'), findsOneWidget);
+        await tester.scrollUntilVisible(find.text('first-model'), 100);
+        expect(find.text('first-model'), findsOneWidget);
         await tester.scrollUntilVisible(
           find.byTooltip('Manage fallback 1'),
           100,
@@ -264,21 +224,21 @@ void main() {
     'example/model',
     42,
   ]) {
-    testWidgets('non-list ${value.runtimeType} opens empty like desktop', (
-      tester,
-    ) async {
-      final fixture = AdministrationFixture();
-      fixture.configs['default']!['fallback_providers'] = value;
-      await _open(tester, fixture);
-      expect(find.text('No fallback models configured.'), findsOneWidget);
-      expect(find.text('Add fallback'), findsOneWidget);
-      expect(find.textContaining('Could not load'), findsNothing);
-      expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
-    });
+    testWidgets(
+      'non-list ${value.runtimeType} is reported without overwriting',
+      (tester) async {
+        final fixture = AdministrationFixture();
+        fixture.configs['default']!['fallback_providers'] = value;
+        await _open(tester, fixture);
+        expect(find.text('No fallback models configured.'), findsNothing);
+        expect(find.text('Add fallback'), findsNothing);
+        expect(find.textContaining('Could not load'), findsOneWidget);
+        expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
+      },
+    );
   }
 
   for (final value in [
-    null,
     <Object?>[],
     [_entry],
   ]) {

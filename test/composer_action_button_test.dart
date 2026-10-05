@@ -11,7 +11,7 @@ void main() {
 
   Future<void> show(
     WidgetTester tester, {
-    ComposerAction primary = ComposerAction.steer,
+    ComposerAction? primary = ComposerAction.steer,
     String? steerReason,
     double scale = 1,
     bool reduceMotion = false,
@@ -63,6 +63,23 @@ void main() {
     expect(selected, isEmpty);
     return gesture;
   }
+
+  testWidgets('no configured primary requires a named choice before dispatch', (
+    tester,
+  ) async {
+    await show(tester, primary: null);
+    await tester.tap(find.byTooltip('Choose chat action'));
+    await tester.pumpAndSettle();
+    expect(selected, isEmpty);
+    expect(
+      find.byKey(const ValueKey('composer-keyboard-stop')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('composer-keyboard-stop')));
+    await tester.pumpAndSettle();
+    expect(selected, [ComposerAction.stop]);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('tap uses the configured primary without a popup', (
     tester,

@@ -21,7 +21,6 @@ Widget panel(
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(12),
         child: GatewayClarifyDialog(
-          inline: true,
           number: 1,
           total: 2,
           request: GatewayClarifyRequest(
