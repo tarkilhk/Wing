@@ -82,14 +82,15 @@ held-provider intake/camera-recreation journeys pass. Their private receipts rec
 source bindings, retained build hashes and any unaffected-source reuse. Native voice now separates media
 pause from foreground retirement: a permission dialog cannot cancel its own
 request through `onPause`. A separate Kotlin linter protects that boundary and
-its actual original counterexample; the existing device fixture retains the
-denial, grant and Home assertions.
+its actual original counterexample. The installed offline voice driver now passes
+denial, retry/grant, Home cancellation, AAC capture/cancellation, playback
+decoding/interruption and five installed offline TTS samples, with empty voice
+caches after both suites. Earlier VM-load and OS-ANR failures remain preserved.
+Speech intelligibility, live providers and physical-phone performance retain
+their separate human/device/server acceptance scope.
 
 ## Remaining acceptance
 
-- Finish installed voice denial/grant/background/transfer acceptance. Two attempts
-  lost the Flutter VM connection before assertions; source/JVM/linter checks do
-  not replace this device result.
 - Run matched profile-mode physical-phone resource/performance checks and normal
   and restricted battery/network behavior on an authorized QA phone.
 - Run applicable stock runtime journeys against an authorized owned QA profile/chat

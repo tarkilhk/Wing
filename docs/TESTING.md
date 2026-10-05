@@ -282,7 +282,12 @@ persistence and failed saves, profile-scoped authentication, stale callbacks,
 permissions, draft insertion without sending, read-aloud prose, and cancellation.
 For automated offline emulator acceptance, run
 `python3 scripts/test_native_voice.py --device <emulator-id> --output build/native-voice-review`.
-Install the development package first. The driver rejects physical devices,
+Install the development package first. After a cold boot, verify that the
+launcher responds and Android has no crash/ANR dialog before starting a build.
+`sys.boot_completed=1` alone does not establish responsive UI while Android
+startup work is settling. Recover an unhealthy disposable emulator before
+rerunning; retain the failed result and keep the driver's ANR checks intact.
+The driver rejects physical devices,
 resets only that package's microphone permission flags, handles the actual
 Android deny/grant dialogs and Home cancellation, then runs native recording,
 playback and installed offline TTS tests sequentially. It records capabilities,
