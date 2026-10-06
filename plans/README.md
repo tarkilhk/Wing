@@ -134,6 +134,23 @@ not latest-deployed acceptance, concurrent typing, input-to-present latency or
 energy savings. Do not repeat this completed question or create another QA
 session without a concrete new requirement.
 
+One instrumented profile-mode resource capture also completed against real Claw
+after the user's backend upgrade, reusing the owned chat and verified Luna/low.
+It retains CPU samples, memory/process/thermal endpoints, raw Flutter frame
+timings and the complete response/render observations. Streaming and completed
+frame groups are recorded separately. The observer remained active during the
+resource window, so its CPU measurements do not establish production idle CPU,
+battery savings or a matched before/after improvement. Raw measurements remain
+private. The original QA APK was restored in place, its version and saved system
+settings verified, and the measurement tunnel removed. The owned test draft was
+re-entered, but its final character count was not verified. Active native
+monitoring/wake-lock observations were not captured in this interval. Do not
+repeat this captured workload without an observed issue.
+The isolated background fixture's interrupted setup remains inconclusive: no
+timed policy arm or quiet interval ran, and its package was removed before the
+real capture. That attempt does not establish a production service failure or
+close restricted-policy acceptance.
+
 - Run matched profile-mode physical-phone resource/performance checks and normal
   and restricted battery/network behavior on an authorized QA phone.
 - Run applicable stock runtime journeys against an authorized owned QA profile/chat
@@ -142,10 +159,12 @@ session without a concrete new requirement.
   previous inspected stock revision found no change to the used configuration,
   session, prompt or dashboard-auth contracts; it does not establish the entire
   deployed-to-latest API delta. Source review is not deployed acceptance.
-  The separate deployment proposal is ready: latest stock would automatically
-  migrate selected Home Assistant toolsets to its official plugin. Either that
-  migration or explicit removal of the affected selections needs the user's
-  decision before upgrading. No server or profile change has been made.
+  The user handled the backend upgrade separately. Its clean checkout matched
+  observed upstream main at `93cbf617c7007286a249cc00506c012933fb537c`, and the
+  existing real-workload journey completed after that upgrade. The running
+  launcher's source binding was not rechecked after the upgrade; backend
+  investigation stopped at the user's request. Keep that limit explicit.
+  No server or profile change has been made by this cleanup program.
 
 No additional production migration or confirmed deletion lead remains open in
 this reviewed inventory. An actual final finding still requires a bounded fix,
