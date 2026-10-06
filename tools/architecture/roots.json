@@ -11876,6 +11876,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "tools/agent_skills/maintain-feature-architecture/SKILL.md",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "tools/architecture/README.md",
       "area": "tools",
       "provenance": "intentional-untracked"

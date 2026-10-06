@@ -1,8 +1,11 @@
 # Architecture guards
 
-These are phase-0 migration guards, not a claim that Wing already satisfies the
-target architecture. Eleven independent Dart rules share one parsed input snapshot in
-the aggregate runner. No rule changes source, manifests or its migration baseline.
+These independent guards protect the architecture established by the completed
+cleanup. The aggregate runner shares a parsed input snapshot for its registered
+rules; additional commands below protect their own scopes. No rule changes
+source, manifests or the empty migration baseline. Use
+[maintain-feature-architecture](../agent_skills/maintain-feature-architecture/SKILL.md)
+to maintain ownership records alongside feature changes.
 
 From the application checkout:
 
@@ -192,7 +195,7 @@ rolling out the new rule. Semantic fixture execution is separate test setup cost
 
 ## Migration baseline
 
-`baseline.json` contains exact initial inspected violations. Keys comprise rule
+`baseline.json` is empty after cleanup. Its migration format uses keys comprising rule
 ID, relative file and semantic subject. Line numbers are diagnostics, not keys;
 formatting does not create a new exemption. Repeated import/type occurrences
 have distinct ordinal subjects, so adding another existing bad pattern fails.

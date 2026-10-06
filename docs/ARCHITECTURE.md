@@ -1,10 +1,21 @@
 # Wing architecture and ownership map
 
-This document maps the current application owners and their interface boundaries. The clean-architecture program and verification contracts live in `plans/001-clean-architecture-program.md` and `plans/001-clean-architecture-verification.md`. Scope: this Wing checkout, current upstream unmodified Hermes, client-only changes. This map does not certify whole-program, native/render or exhaustive dead-code completion.
+This is the maintained map of application owners and their interface boundaries.
+Scope: this Wing checkout, current upstream unmodified Hermes, client-only changes.
+The completed cleanup's acceptance record lives in [plans/README.md](../plans/README.md).
+For feature work and ownership changes, follow
+[maintain-feature-architecture](../tools/agent_skills/maintain-feature-architecture/SKILL.md).
 
 ## Find the owner before changing behavior
 
-`tools/architecture/roles.json` assigns authored `lib/` Dart files their actual role, feature and real Dart library. Current counts come from the generated role map and architecture report. `profile_workspace_notifications.dart` and other declared controller parts belong to their owning library. `plans/001-feature-inventory.md` reconciles the original 134 views to 143 current screens/widgets/themes/rendering helpers/main, with source hashes, explicit owners and individual migration/retention dispositions. Its current coverage verifies all 143 source hashes; role-map additions and other outstanding gates remain explicit. No file is exempted as composition. Imported Foundation notifiers, Unicode helpers, rendering platform views and route leases are classified by purpose.
+`tools/architecture/roles.json` assigns authored `lib/` Dart files their actual
+role, feature and real Dart library. `profile_workspace_notifications.dart` and
+other declared controller parts belong to their owning library. Use this map and
+the live role/root manifests to locate current responsibilities.
+`plans/001-feature-inventory.md` preserves the completed cleanup's hash-bound
+review snapshot; its counts and hashes describe that revision. Imported
+Foundation notifiers, Unicode helpers, rendering platform views and route leases
+are classified by purpose; composition does not exempt a whole library.
 
 For an integration change, inspect latest stock upstream and record its SHA first. A test fixture, sibling prototype or old deployed server is not the API specification. Use canonical `WorkspaceScope`/`ProfileSessionKey`; never silently change shared profile preferences to simulate an unsaved preview. Clean replacements update every caller and remove the old seam. Persisted format changes and any compatibility behavior require the user's explicit approval.
 
@@ -97,6 +108,11 @@ The checked-in iOS AppDelegate/SceneDelegate/Info.plist/storyboards/project/test
 
 `plans/001-dead-code-inventory.md` records candidate closures and evidence, retention/deferred decisions and exact recheck/removal gates. All current lib files are transitively imported from lib/main.dart in the preliminary file graph; that does **not** establish member liveness. Removal includes exclusive tests, flags/branches/exports/helper/dependencies/resources, while preserving independent supported entry points. No aliases/shims or archived replacement files are accepted as removal.
 
-## Scope and completion
+## Ongoing maintenance
 
-Phase 0 delivers a complete file/feature/current-owner/runtime-root map and finite structural migration baseline. It does not certify exhaustive resolved-symbol dead-member removal or native/live/phone acceptance. Those are subsequent program gates. Update manifests alongside accepted migrations; new or deleted authored files cannot remain unclassified/stale. Re-evaluate candidate status after deleting a closure; a formerly live helper or dependency can become orphaned. Preserve behavior with focused deterministic interface tests and actual native/stock/phone journeys from the verification plan; never retain a historical test count by keeping obsolete implementation-only tests.
+Keep this map current when responsibilities or interfaces change. The
+[maintenance skill](../tools/agent_skills/maintain-feature-architecture/SKILL.md)
+defines which records and checks a change needs. Its review asks whether the map
+locates the actual owner, callers and relevant regression check. The completed
+program's snapshots retain their source bindings; they are historical evidence,
+not a requirement to rerun the cleanup for every feature.

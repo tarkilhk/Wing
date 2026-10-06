@@ -1,8 +1,23 @@
 # Complete feature and view ownership inventory
 
-Current source inventory: **1,504 authored files, 358 production Dart files, 348 Dart libraries and 143 views**. All 358 production files have completed source ownership/root/locality/dead-code review; every view row below records its exact current SHA. The role manifest includes all current parts and their containing libraries. There are 809 protected retired declaration identities and 68 required Dart commands. These source counts and reviews do not certify runtime acceptance.
+This is the completed cleanup's audit snapshot, with production source bound to
+`8af0db73b446f2c0d12f9e31afb08a870a4e5a11`. For ongoing work, maintain
+[ARCHITECTURE.md](../docs/ARCHITECTURE.md) and the live role/root manifests using
+[maintain-feature-architecture](../tools/agent_skills/maintain-feature-architecture/SKILL.md).
+The hashes, counts and milestone records below describe the accepted cleanup;
+ordinary feature changes do not refresh this whole audit.
 
-The final declaration query resolved without analysis errors and its last dead-wrapper cascade has been removed. Current composed whole-host, analysis, production guards, APK build, native source/JVM/proof, product-mode instrumentation and pinned Chromium gates are accepted. Matched phone performance and current-stock runtime acceptance remain open. Installed offline voice, monitoring, seven file/photo/share cases and held-provider/camera-recreation journeys pass on the disposable emulator with explicit source/build/scope bindings. Completed rendered inspection covers affected controls at normal and enlarged text in both themes; it does not establish installed-device acceptance. Use [roles.json](../tools/architecture/roles.json) for file roles and [ARCHITECTURE.md](../docs/ARCHITECTURE.md) to find canonical owners. Views render typed observations and forward commands; local text, focus, selection, scroll, animation, geometry, route composition and explicit owner lifetimes retain their reviewed UI purpose. No whole-library composition exemption applies.
+Cleanup source inventory: **1,504 authored files, 358 production Dart files, 348 Dart libraries and 143 views**. All 358 production files completed source ownership/root/locality/dead-code review; every view row below records its audited SHA. The role manifest included all parts and their containing libraries. There were 809 protected retired declaration identities and 68 required Dart commands. These source counts and reviews do not themselves certify runtime acceptance.
+
+The final declaration query resolved without analysis errors and its last
+dead-wrapper cascade was removed. The accepted local, native/render, phone and
+current-stock runtime scopes and their limitations are recorded in
+[plans/README.md](README.md). Use [roles.json](../tools/architecture/roles.json)
+for live file roles and [ARCHITECTURE.md](../docs/ARCHITECTURE.md) to find canonical
+owners. Views render typed observations and forward commands; local text, focus,
+selection, scroll, animation, geometry, route composition and explicit owner
+lifetimes retain their reviewed UI purpose. No whole-library composition exemption
+applies.
 
 The JSON block is the current source coverage and owner map (schema 1). All 143 source hashes match the fixed receipt; ten rows changed since the preceding inventory. Eight changed final partition rows and the two additional previously stale view rows are listed separately in the current reconciliation. Full source review and exact accepted delta supplements support those rows. Hash equality carries forward reviewed evidence; it is not liveness proof. These SHA values bind the cleanup audit snapshot. Future responsibility/interface changes update the relevant architecture and role records; ordinary UI edits do not require a global audit SHA-map update.
 

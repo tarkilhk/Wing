@@ -44,28 +44,37 @@ Run tests and Android builds sequentially. Do not remove another process's locks
 | `lib/main.dart` | App wiring, connections and notification navigation |
 | `lib/core/screens/profile_workspace_screen.dart` | Conversation UI and composer |
 | `lib/core/screens/profile_workspace_browser.dart` | Profiles, projects, chats and Activity |
-| `lib/core/services/profile_workspace_controller.dart` | Ownership, commands, drafts and recovery |
+| `lib/core/services/profile_workspace_controller.dart` | Canonical workspace commands, transport and lifetime admission |
 | `lib/core/services/profile_gateway.dart` | Scoped HTTP and RPC operations |
 | `lib/core/services/attachment_draft_service.dart` | Attachment preparation and upload |
 | `android/app/src/main/kotlin/` | Android sharing, clipboard and native viewers |
 
-Conversation search, project membership, Recents and drafts belong to
-`ProfileWorkspaceController` and its scoped `ProfileGateway`. Test-only saved
-message inspection lives under `integration_test/support/`; it does not define
-the production renderer. Check `lib/main.dart` and supported integration or
-performance entry points before adding another implementation of an existing flow.
+Use [the architecture map](docs/ARCHITECTURE.md) for current feature ownership:
+`ComposerSession` owns unsent work and ordered persistence, `TranscriptReading`
+owns history and paging, and `ChatRuntime` owns execution, recovery and pending
+input. Browser and supervision sessions borrow canonical observations; workspace
+mutations use captured commands. Test-only saved message inspection lives under
+`integration_test/support/`; it does not define the production renderer. Check
+`lib/main.dart` and supported integration or performance entry points before
+adding another implementation of an existing flow.
 
 ## Changes and checks
+
+For feature work, behavior fixes, refactoring and deletion, follow the
+[feature-maintenance skill](tools/agent_skills/maintain-feature-architecture/SKILL.md).
+Update affected ownership, contracts and manifests alongside the code. Historical
+cleanup snapshots remain in `plans/`; current ownership lives in the architecture
+map and live role/root manifests.
 
 Read [AGENTS.md](AGENTS.md) before UI changes. Use [the design system](docs/DESIGN_SYSTEM.md) and its shared light/dark tokens. Administration changes also require [the ownership handoff](docs/design/2026-09-14-administration-handoff.md).
 
 Keep connection/profile/chat ownership intact. Preserve newer composer text during asynchronous operations. Hermes remains authoritative for saved conversation state. Do not introduce backend patches or infer server support from a fixture. Prefer a regression test at the failing behavior's real boundary for reliability changes.
 
 The [architecture contracts](tools/architecture/README.md) define independently
-runnable guards and their fixtures. The temporary architecture baseline may only
-shrink: remove an entry when its violation is fixed. PR checks compare it with the
-preceding baseline and reject new exceptions or stale entries. Both quality and
-release workflows require the architecture and offline QA gates as hard failures.
+runnable guards and their fixtures. The architecture migration baseline is empty.
+PR checks compare it with the preceding baseline and reject new exceptions or
+stale entries. Both quality and release workflows require the architecture and
+offline QA gates as hard failures.
 
 Run analysis and relevant tests, then the full suite before a release. Tests under `integration_test/` and opt-in live tests may create chats, change profile settings or use providers. Read each test's environment flags and cleanup behavior before running it against an explicitly authorized server. Ordinary `flutter test` does not replace device or live-server acceptance.
 

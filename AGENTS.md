@@ -15,10 +15,11 @@ agents work independently. Keep this purpose in view throughout each task.
 - For parallel work, assign explicit module/file ownership and integrate bounded
   handoffs before starting dependent changes.
 
-Before changing ownership, read [the architecture map](docs/ARCHITECTURE.md).
-For the active cleanup program, follow [the implementation plan](plans/001-clean-architecture-program.md)
-and its completion criteria. Report progress as accepted responsibility moves,
-removed code and remaining obligations.
+For feature work, behavior fixes, refactoring or deletion, read and follow
+[maintain-feature-architecture](tools/agent_skills/maintain-feature-architecture/SKILL.md).
+It routes ownership decisions, documentation updates and applicable checks.
+The completed cleanup's evidence lives in [plans/README.md](plans/README.md);
+use the maintained [architecture map](docs/ARCHITECTURE.md) for new work.
 
 # Hermes deployment constraint
 
