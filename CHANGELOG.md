@@ -4,6 +4,9 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Outline the continuous selected analytics date span, including days with zero
+  usage, instead of leaving holes between recorded days.
+
 - Apply Once, Session and Deny directly from command notifications without a
   second approval prompt. Keep Always behind review, and show Review and Deny
   when the command is truncated. Reload cold or cached chats before deciding,

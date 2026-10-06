@@ -166,11 +166,10 @@ class _UsageCalendarState extends State<UsageCalendar> {
     // A newer/retained period can extend past the separately loaded year's
     // dates. Keep those dates reachable without presenting period counts as
     // year-wide counts or clipping them to the year snapshot.
-    final bounds = [
-      year.first.date,
-      year.last.date,
+    final period = [
       for (final id in widget.periodDates) DateTime.parse('${id}T00:00:00Z'),
     ]..sort();
+    final bounds = [year.first.date, year.last.date, ...period]..sort();
     final yearById = {for (final day in year) day.id: day};
     final days = [
       for (
@@ -201,7 +200,11 @@ class _UsageCalendarState extends State<UsageCalendar> {
     );
     final tokens = WingTokens.of(context);
     final locale = MaterialLocalizations.of(context);
-    bool inRange(UsageDay day) => widget.periodDates.contains(day.id);
+    // Surround the whole returned date span, including days with no usage.
+    bool inRange(UsageDay day) =>
+        period.isNotEmpty &&
+        !day.date.isBefore(period.first) &&
+        !day.date.isAfter(period.last);
 
     Widget cell(UsageDay day) {
       final count = day.tokens.total;
@@ -224,7 +227,7 @@ class _UsageCalendarState extends State<UsageCalendar> {
                 ? 'no returned year data'
                 : count == null
                 ? 'tokens unavailable'
-                : '${locale.formatDecimal(count)} tokens'}${inRange(day) ? ', returned for selected period' : ''}',
+                : '${locale.formatDecimal(count)} tokens'}${inRange(day) ? ', in selected period' : ''}',
         button: !day.isPlaceholder,
         selected: selected,
         child: Tooltip(

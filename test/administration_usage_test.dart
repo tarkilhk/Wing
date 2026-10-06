@@ -493,6 +493,28 @@ void main() {
       testWidgets('usage renders ${brightness.name} at $scale text', (
         tester,
       ) async {
+        final today = DateTime.now().toUtc();
+        fixture.override = (_, path, query, _) async {
+          if (path == 'analytics/usage') {
+            final days = int.parse(query['days']!);
+            return {
+              'daily': [
+                for (var i = 0; i < days && i < 90; i++)
+                  if (i % 7 != 2 && i % 7 != 4)
+                    {
+                      'day': today
+                          .subtract(Duration(days: i))
+                          .toIso8601String()
+                          .substring(0, 10),
+                      'input_tokens': i % 13 == 3 ? 0 : 12000 + i * 1000,
+                      'cache_read_tokens': 0,
+                      'output_tokens': 0,
+                    },
+              ],
+            };
+          }
+          return {'models': rows, 'period_days': int.parse(query['days']!)};
+        };
         await show(tester, brightness: brightness, scale: scale);
         await snapshot(tester, '${brightness.name}-$scale-summary');
         await reveal(tester, find.byType(UsageAreaChart));
@@ -509,8 +531,8 @@ void main() {
         await tap(tester, find.text('365D'));
         await reveal(tester, find.byKey(const ValueKey('usage-activity-grid')));
         await snapshot(tester, '${brightness.name}-$scale-year');
-        final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
-        await tap(tester, find.byKey(ValueKey('usage-day-$today')));
+        final todayId = today.toIso8601String().substring(0, 10);
+        await tap(tester, find.byKey(ValueKey('usage-day-$todayId')));
         await snapshot(tester, '${brightness.name}-$scale-day-tooltip');
         await tap(tester, find.text('Selected period'));
         await tap(tester, find.text('gpt-6-astra'));

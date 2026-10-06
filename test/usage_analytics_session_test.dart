@@ -1,13 +1,127 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/usage_analytics.dart';
 import 'package:wing/core/services/usage_analytics.dart';
 import 'package:wing/core/services/usage_analytics_session.dart';
+import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/server_connection_status.dart';
 
 import 'support/administration_fixture.dart';
 
 void main() {
+  for (final (name, ages, expected) in [
+    (
+      '30, 90 and 365 day totals remain distinct through real HTTP',
+      [10, 60, 180],
+      [(30, 1000, 1), (90, 7000, 2), (365, 25000, 3)],
+    ),
+    (
+      'recent-only history has equal totals across correctly requested ranges',
+      [10],
+      [(30, 1000, 1), (90, 1000, 1), (365, 1000, 1)],
+    ),
+  ]) {
+    test(name, () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final requests = <Uri>[];
+      final now = DateTime.utc(2026, 10, 7, 12);
+      final records = [
+        for (final age in ages)
+          (date: now.subtract(Duration(days: age)), tokens: age * 100),
+      ];
+      final subscription = server.listen((request) async {
+        requests.add(request.uri);
+        final days = int.parse(request.uri.queryParameters['days'] ?? '30');
+        final selected = records.where(
+          (record) => record.date.isAfter(now.subtract(Duration(days: days))),
+        );
+        final tokens = selected.fold(0, (sum, record) => sum + record.tokens);
+        Map<String, dynamic> counts(int tokens) => {
+          'input_tokens': tokens,
+          'cache_read_tokens': 0,
+          'output_tokens': 0,
+        };
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode({
+            'period_days': days,
+            if (request.uri.path == '/api/analytics/models')
+              'models': [
+                {
+                  'model': 'example',
+                  'provider': 'example',
+                  'estimated_cost': tokens / 1000,
+                  ...counts(tokens),
+                },
+              ]
+            else
+              'daily': [
+                for (final record in selected)
+                  {
+                    'day': record.date.toIso8601String().substring(0, 10),
+                    ...counts(record.tokens),
+                  },
+              ],
+          }),
+        );
+        await request.response.close();
+      });
+      final status = ServerConnectionStatus('Test');
+      final repository = AdministrationRepository.forConnection(
+        ConnectionAccess(
+          connection: SavedConnection(
+            id: 'analytics',
+            label: 'Test',
+            host: '127.0.0.1',
+            port: server.port,
+            dashboardPortOverride: server.port,
+            dashboardProxied: true,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
+        ),
+        'analytics-http',
+        connectionStatus: status,
+      );
+      final owner = UsageAnalyticsSession(
+        UsageAnalyticsReader(repository.profile('butler'), now: () => now),
+      );
+      addTearDown(() async {
+        owner.dispose();
+        repository.close();
+        status.dispose();
+        await server.close(force: true);
+        await subscription.cancel();
+      });
+      await owner.load();
+      for (final (days, tokens, dates) in expected) {
+        await owner.selectPeriod(days);
+        expect(owner.state.data!.models!.tokens.total, tokens);
+        expect(owner.state.data!.models!.costs.total, tokens / 1000);
+        expect(owner.state.data!.daily!.reportedDates, hasLength(dates));
+      }
+      expect(
+        requests.every((uri) => uri.queryParameters['profile'] == 'butler'),
+        isTrue,
+      );
+      expect(
+        requests
+            .where((uri) => uri.path == '/api/analytics/models')
+            .map((uri) => uri.queryParameters['days']),
+        ['7', '30', '90', '365'],
+      );
+      final count = requests.length;
+      await owner.selectPeriod(30);
+      expect(owner.state.data!.models!.tokens.total, 1000);
+      expect(requests, hasLength(count));
+    });
+  }
+
   test(
     'held previous period cannot replace the currently selected period',
     () async {

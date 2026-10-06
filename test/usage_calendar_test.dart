@@ -5,6 +5,82 @@ import 'package:wing/core/screens/administration/usage_charts.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 
 void main() {
+  testWidgets('range outline includes reported and missing zero-usage days', (
+    tester,
+  ) async {
+    final daily = UsageDaily.fromJson({
+      'daily': [
+        for (final (date, count) in [
+          ('2026-09-14', 10),
+          ('2026-09-15', 20),
+          ('2026-09-16', 0),
+          ('2026-09-18', 30),
+          ('2026-09-19', 40),
+        ])
+          {
+            'day': date,
+            'input_tokens': count,
+            'cache_read_tokens': 0,
+            'output_tokens': 0,
+          },
+      ],
+    }, period: 365);
+    Future<void> show(Set<String> dates) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: UsageCalendar(
+              daily: daily,
+              periodDates: dates,
+              selected: null,
+              onSelected: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    CustomPainter rangePainter() => tester
+        .widget<CustomPaint>(
+          find.descendant(
+            of: find.byKey(const ValueKey('usage-year-band')),
+            matching: find.byType(CustomPaint),
+          ),
+        )
+        .painter!;
+    await show({'2026-09-15', '2026-09-18'});
+    final sparse = rangePainter();
+    for (final id in ['2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18']) {
+      final label = tester
+          .widget<Semantics>(find.byKey(ValueKey(id)))
+          .properties
+          .label!;
+      expect(label, contains('selected period'), reason: id);
+      if (id == '2026-09-16' || id == '2026-09-17') {
+        expect(label, contains('0 tokens'));
+      }
+    }
+    for (final id in ['2026-09-14', '2026-09-19']) {
+      expect(
+        tester.widget<Semantics>(find.byKey(ValueKey(id))).properties.label,
+        isNot(contains('selected period')),
+      );
+    }
+    await show({'2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18'});
+    expect(rangePainter().shouldRepaint(sparse), isFalse);
+    await show({});
+    expect(
+      tester
+          .widget<Semantics>(find.byKey(const ValueKey('2026-09-16')))
+          .properties
+          .label,
+      isNot(contains('selected period')),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'server date placeholders differ from verified zero and retained period dates remain reachable',
     (tester) async {

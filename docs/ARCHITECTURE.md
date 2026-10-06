@@ -47,7 +47,7 @@ Each row names the existing authoritative owner and the UI's responsibility. Dee
 | administration-memory | RetainedMemoryCatalogSession graph/query/filter/read recovery; RetainedMemoryDetailSession captured node identity and read lifetime; pure retained-memory values | Views render typed cards/details and retain query input and expansion geometry; memory configuration uses SettingsEditSession |
 | administration-skills-tools | ProfileSkillsSession library/Hub/provenance/detail/editor leases, baseline/conflict/commands/ACK/readback; ProfileToolSetupSession readiness/catalog/provider/model edit policy | Skills/Hub/editor/preview/tool views render typed observations. Focus, search input and dialogs stay UI; issued tool editor retirement revokes unsent work |
 | scheduled-tasks | ScheduledTasksRepository captured stock reads/writes; ScheduledTasksController retained snapshot/journal/busy/uncertainty; ScheduledTaskEditSession schedule/body/baseline/review/preflight; ScheduledTaskDetailSession detail polling and observations | Views retain input controllers, filters, formatting, confirmations and routes. Commands preserve immutable task/profile capture; stock cron owner hints do not provide atomic fencing |
-| usage-analytics | UsageAnalyticsSession period/cache/partial recovery/lifetime; UsageAnalyticsReader stock pricing/usage I/O and year reads | Views render copied readonly observations; charts, calendar and visual filters stay presentation |
+| usage-analytics | UsageAnalyticsSession period/cache/partial recovery/lifetime; UsageAnalyticsReader stock pricing/usage I/O and year reads, forwarding each selected rolling window | Views render copied readonly observations; charts, calendar and visual filters stay presentation. The calendar browses a year and outlines the continuous selected date span, including zero-usage gaps; period totals can match when all recorded usage falls within the shortest selected window |
 | versions-updates | VersionsController and BackendUpdateController scoped observations/commands; installed-app PackageInfo metadata | Cards/routes render typed backend facts and retain confirmation. Installed-app metadata loading and fixed release-link navigation remain bounded presentation |
 | app-preferences-backup | AppPreferences saved theme/accent/default action/text size/profile selection/color/browser/voice choices; BackupSession captured file/passphrase workflow; ConfigBackupCodec/Service/IO format/validation/adapters; ConnectionManager secure persistence | Settings/backup views render typed controls/outcomes and retain choice/passphrase dialogs. Durable owners commit configuration; storage formats change only with explicit approval |
 | privacy | Bundled PRIVACY.md | PrivacyPolicyScreen loads the bundled presentation asset and renders Markdown/links; no business forwarding owner is needed |
@@ -56,6 +56,18 @@ Each row names the existing authoritative owner and the UI's responsibility. Dee
 | performance-tooling | CompletionDiagnostics/PerformanceInstrumentation; opt-in performance/QA mains and release instrumentation guard | Retain supported replay/trace/render analysis entry points; no production instrumentation in release. Tools/tests must have explicit roots |
 
 ## Interface and direction contracts
+
+Analytics forwards the selected `days` and captured `profile` to both stock
+aggregate endpoints. Upstream main
+[`ee2ed10ef554640ea6fdfb01c319e1a2fcd24823`](https://github.com/NousResearch/hermes-agent/blob/ee2ed10ef554640ea6fdfb01c319e1a2fcd24823/hermes_cli/web_routers/analytics.py),
+inspected October 7, 2026, filters by session start within rolling `days * 86400`
+seconds. `test/usage_analytics_session_test.dart` exercises the real HTTP boundary
+with history spanning three windows and with recent-only history; it verifies
+tokens, costs, returned dates, profile capture and period-cache reuse. Equality
+depends on returned data, so behavioral coverage protects this property.
+`test/usage_calendar_test.dart` protects the continuous outline across zero-usage
+gaps, its date bounds and accessibility labels; the existing dashboard captures
+exercise sparse history in both themes at normal and enlarged text sizes.
 
 The application flow is intent → owned command → immutable observation → rendering. ProfileWorkspaceController, ProfileWorkspaceData and ProfileChat retain private canonical storage and expose readonly observations and explicit commands. Published collections protect nested values; canonical discovery and rows retain their admitted identities. Extracted sessions borrow those facts instead of sharing mutable bags or creating a second writable cache. Actual runtime composition captures the canonical key/runtime identity; open/create owns registry installation. Use existing ChangeNotifier/Listenable and constructor injection. Small pure rules are functions/value types; I/O seams earn interfaces when production adapters and behavioral fakes differ.
 
