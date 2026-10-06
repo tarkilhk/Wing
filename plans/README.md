@@ -154,12 +154,13 @@ The subsequent real-Claw background attempt also stopped during chat-selection
 setup, before any request or policy mutation. Its quiet window did not run.
 The original QA APK was restored, the original policy retained, and the tunnel
 removed. The user directed attention back to the maintainability purpose after
-the setup took too long. Leave this acceptance item unverified; do not interpret
-the automation failure as a product defect or start another generic investigation.
+the setup took too long. That attempt provided no acceptance evidence. The
+resumed checks below close active-work acceptance; the earlier automation failure
+does not establish a product defect.
 
-- Complete the remaining physical-phone background acceptance: real active work
-  under normal and restricted policy, completion and recovery, native monitoring
-  service/notification/wake-lock release, and a ten-minute no-work quiet interval.
+- Complete the ten-minute no-work background quiet interval, deferred by the user.
+  The real active-work checks under normal and restricted policy, completion and
+  recovery, and native monitoring service/notification/wake-lock release passed.
   Reuse the accepted matched replay, typing and real streaming/resource evidence;
   do not repeat those captures without a concrete new finding.
 
@@ -171,20 +172,24 @@ the user's confirmation, rather than an independent post-upgrade launcher check.
 No further backend investigation or deployment is needed for this item. No server
 or profile change has been made by this cleanup program.
 
-The user authorized the two active-work background checks and deferred the
-ten-minute quiet interval. The bounded phone setup found the existing owned QA
-chat through an exact search, but the observer still reported no selected chat
-and rejected adoption. No model request or restriction change was made. The
-attempt stopped and the original QA APK and background policy were restored;
-the measurement tunnel is absent. Both active-work checks remain unverified.
-Retain this as an automation blocker, rather than a failed background-work check.
-One corrected attempt addressed a mismatch between displayed screenshot
-coordinates and actual phone resolution. The phone returned to ChatGPT during
-setup, so no owned-chat adoption or request occurred. The user then supplied a
-two-minute Wi-Fi deadline. Device work stopped; the original QA APK restoration
-timed out and its final installed version remains unverified. No background
-restriction was changed. Resolve this QA-package restoration item when the phone
-is reachable, before another device check; do not describe cleanup as complete.
+On the resumed phone connection, both authorized active-work checks passed
+against the fixed production source `8af0db73b446f2c0d12f9e31afb08a870a4e5a11`.
+Each dispatched one real Luna/low turn in the existing owned QA chat, completed
+while Wing was backgrounded, and released the native monitoring service,
+notification and wake lock after completion. The restricted arm explicitly used
+`RUN_ANY_IN_BACKGROUND=ignore`; it does not establish forced deep Doze or every
+OEM/network policy. Android no longer reported the service as foreground during
+the restricted background interval, but the service, monitoring notification and
+wake lock remained present until completion, then disappeared. Normal-policy
+notification publication was observed after the initial sample; the raw initial
+negative result is retained in private evidence.
+
+Reopening showed the complete answer and completion marker with the Luna/low
+route unchanged. The original QA APK was restored in place and its version,
+original default background policy, and measurement-tunnel removal were verified.
+Earlier setup/restoration uncertainty is resolved. Only the user-deferred quiet
+interval remains; do not repeat the two accepted active-work checks without a
+concrete finding. Raw observations, screenshots and receipts remain private.
 
 No additional production migration or confirmed deletion lead remains open in
 this reviewed inventory. An actual final finding still requires a bounded fix,
