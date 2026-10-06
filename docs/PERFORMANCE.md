@@ -4,6 +4,15 @@ Measure the phone and Wing separately. A hot device can make Wing slow even
 when another process supplies most of the sustained load. CPU use identifies
 work; it does not measure an app's share of battery discharge.
 
+Choose a concrete question before recording. Synthetic input can isolate a
+regression such as draft edits rebuilding the transcript; it does not establish
+ordinary product performance. Stop repeating a workload once that question is
+answered. Use representative saved history, rich live responses, draft editing,
+navigation and background recovery for real-use acceptance. An authorized live
+run must use an owned QA chat and an explicitly verified model/reasoning route,
+without changing existing chats or server defaults. Investigate a measured
+failure or significant cost rather than expanding a generic benchmark suite.
+
 ## Measurement builds
 
 Custom performance measurements are disabled by default. Explicitly enable them
