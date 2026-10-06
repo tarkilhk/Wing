@@ -120,26 +120,32 @@ unavailable, so frame timing is not reported as input-to-present latency.
 Phone probes are separate opt-in
 roots; production owners and views are unchanged.
 
-The first live-claw setup created one owned QA session but its prepare operation
-failed before any model turn. A subsequent bounded phone attempt reused that
-session: native navigation reached the owned chat, and the observer confirmed the
-Luna route and actual low reasoning through the workspace owner. No model request,
-streaming capture or draft edit was dispatched before the automation time limit;
-the workflow remains unexecuted. This is a setup limitation, not evidence of a
-provider or backend failure, and does not establish live-workflow acceptance.
-The original QA APK was restored in place; installed version and unchanged
-device settings were verified. App data and profile defaults were preserved.
-Reuse the same owned session for one representative workflow; do not create
-another or repeat synthetic typing or generic soak runs. Investigate only an
-observed failure or significant cost.
+The representative real-claw phone workflow now passes: the same owned QA
+session was reused, Luna and actual low reasoning were verified through the
+workspace owner, and one request completed with its final response rendered.
+The completion sentinel was independently visible in retained screenshots; the
+observer's mounted-sentinel flag was false and remains recorded separately.
+One native unsent draft entered after completion survived reopening the chat
+and Android Home/return. Capture stopped before navigation. The original QA APK
+was restored in place, with its version and unchanged device settings verified;
+app data and profile defaults were preserved. Earlier setup failures remain in
+private evidence. This covers real-use behavior on the existing deployment,
+not latest-deployed acceptance, concurrent typing, input-to-present latency or
+energy savings. Do not repeat this completed question or create another QA
+session without a concrete new requirement.
 
 - Run matched profile-mode physical-phone resource/performance checks and normal
   and restricted battery/network behavior on an authorized QA phone.
 - Run applicable stock runtime journeys against an authorized owned QA profile/chat
   on latest upstream unmodified Hermes. The latest inspected source is
-  `4787e4d56fc8d9265d4c7d3c0fe5accee86b4078`; bounded review found additive
-  model-provider quota fields and no incompatible change in the inspected
-  gateway/auth contracts. Source review is not deployed acceptance.
+  `86bdb75b2bbe3a58291f6b70d74872522614e61d`. The bounded review from the
+  previous inspected stock revision found no change to the used configuration,
+  session, prompt or dashboard-auth contracts; it does not establish the entire
+  deployed-to-latest API delta. Source review is not deployed acceptance.
+  The separate deployment proposal is ready: latest stock would automatically
+  migrate selected Home Assistant toolsets to its official plugin. Either that
+  migration or explicit removal of the affected selections needs the user's
+  decision before upgrading. No server or profile change has been made.
 
 No additional production migration or confirmed deletion lead remains open in
 this reviewed inventory. An actual final finding still requires a bounded fix,
