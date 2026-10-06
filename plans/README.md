@@ -150,6 +150,12 @@ The isolated background fixture's interrupted setup remains inconclusive: no
 timed policy arm or quiet interval ran, and its package was removed before the
 real capture. That attempt does not establish a production service failure or
 close restricted-policy acceptance.
+The subsequent real-Claw background attempt also stopped during chat-selection
+setup, before any request or policy mutation. Its quiet window did not run.
+The original QA APK was restored, the original policy retained, and the tunnel
+removed. The user directed attention back to the maintainability purpose after
+the setup took too long. Leave this acceptance item unverified; do not interpret
+the automation failure as a product defect or start another generic investigation.
 
 - Run matched profile-mode physical-phone resource/performance checks and normal
   and restricted battery/network behavior on an authorized QA phone.
