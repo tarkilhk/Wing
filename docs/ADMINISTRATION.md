@@ -159,6 +159,11 @@ Profile snapshots contain health metadata rather than connector commands,
 environment values or provider secrets. Completed diagnostic details use their
 saved output without issuing another status request. An unfinished restored run
 resumes status reads for its saved action identity without launching a new process.
+If a valid server status no longer identifies that run, its unfinished outcome
+becomes unavailable and the Server spinner stops. The saved output remains
+reviewable; use the diagnostic's play action or Run all diagnostics to start fresh.
+Health does not automatically restart a lost unfinished run. Connection failures
+keep tracking the same run and do not enable a duplicate start.
 
 On Health entry, each completed server diagnostic at least 24 hours old runs
 again automatically; diagnostics with no prior attempt trigger their initial run.

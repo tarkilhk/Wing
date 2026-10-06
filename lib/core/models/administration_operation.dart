@@ -39,6 +39,7 @@ class AdminDiagnosticObservation {
     Map<String, dynamic> status,
     this.checkedAt, {
     this.readError,
+    this.resultUnavailable = false,
   }) : _status = _immutable(status) as Map<String, dynamic> {
     final output = _status['lines'];
     if (output != null &&
@@ -50,6 +51,10 @@ class AdminDiagnosticObservation {
   final Map<String, dynamic> _status;
   final DateTime? checkedAt;
   final String? readError;
+
+  /// A valid stock response no longer identifies this captured run.
+  /// Last confirmed output and completion facts remain available for review.
+  final bool resultUnavailable;
   bool get diagnostic => {'doctor', 'security-audit'}.contains(action.name);
   bool get securityAudit => action.name == 'security-audit';
   bool get auditSummaryUnavailable =>
@@ -85,7 +90,10 @@ class AdminDiagnosticObservation {
           );
   }
 
-  AdministrationOperationOutcome get classification => running == true
+  AdministrationOperationOutcome get classification =>
+      resultUnavailable && !terminal
+      ? AdministrationOperationOutcome.unknown
+      : running == true
       ? AdministrationOperationOutcome.running
       : !terminal
       ? AdministrationOperationOutcome.unknown
@@ -110,8 +118,16 @@ class AdminDiagnosticObservation {
           ? 'Completed · Review results'
           : outcome);
 
-  AdminDiagnosticObservation withReadError(String? error) =>
-      AdminDiagnosticObservation(action, _status, checkedAt, readError: error);
+  AdminDiagnosticObservation withReadError(
+    String? error, {
+    bool? resultUnavailable,
+  }) => AdminDiagnosticObservation(
+    action,
+    _status,
+    checkedAt,
+    readError: error,
+    resultUnavailable: resultUnavailable ?? this.resultUnavailable,
+  );
 }
 
 /// Existing Health persistence shape. It is not an alternate wire protocol.

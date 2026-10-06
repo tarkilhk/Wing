@@ -61,7 +61,9 @@ class AdministrationHealth extends ChangeNotifier {
 
   bool get serverChecking =>
       _starting.isNotEmpty ||
-      diagnostics.values.any((value) => value.running == true);
+      diagnostics.values.any(
+        (value) => value.running == true && !value.resultUnavailable,
+      );
 
   bool get serverCheckIncomplete =>
       diagnosticPaths.any((path) {
@@ -145,7 +147,8 @@ class AdministrationHealth extends ChangeNotifier {
     return canStartDiagnostic(path) &&
         (observation == null
             ? !hasAttemptedDiagnostic(path)
-            : healthSnapshotExpired(observation.checkedAt, _now()));
+            : observation.terminal &&
+                  healthSnapshotExpired(observation.checkedAt, _now()));
   }
 
   Map<String, dynamic> snapshot() => {
@@ -639,8 +642,8 @@ class AdministrationHealth extends ChangeNotifier {
 
   bool canStartDiagnostic(String path) {
     if (_disposed || _starting.contains(path)) return false;
-    final previous = diagnostics[path];
-    return previous == null || previous.terminal;
+    final previous = _operations[path];
+    return previous == null || previous.state.canRunAgain;
   }
 
   Future<bool> startDiagnostic(AdministrationDiagnostic kind) async {

@@ -13,7 +13,8 @@ class AdministrationOperationState {
   final AdminDiagnosticObservation observation;
   final bool loading, retired;
   bool get canRefresh => !retired && !loading;
-  bool get canRunAgain => canRefresh && observation.terminal;
+  bool get canRunAgain =>
+      canRefresh && (observation.terminal || observation.resultUnavailable);
 }
 
 /// The only polling writer for a captured action. Views borrow this owner.
@@ -90,20 +91,27 @@ class AdministrationOperationSession extends ChangeNotifier {
         },
       );
       if (_disposed) return;
-      if (status['pid'] != action.pid) {
-        throw const AdministrationFailure(
-          'This operation’s result is no longer available. Refresh the affected resource.',
-        );
-      }
       if (status['name'] != action.name ||
+          !status.containsKey('pid') ||
+          (status['pid'] != null && status['pid'] is! int) ||
           status['running'] is! bool ||
           (status['exit_code'] != null && status['exit_code'] is! int) ||
           status['lines'] is! List ||
           (status['lines'] as List).any((line) => line is! String) ||
-          status['running'] == true && status['exit_code'] != null) {
+          status['running'] == true &&
+              (status['exit_code'] != null || status['pid'] == null)) {
         throw const AdministrationFailure(
           'The server returned an invalid operation result.',
         );
+      }
+      if (status['pid'] != action.pid) {
+        _observation = _observation.withReadError(
+          _observation.diagnostic
+              ? 'This diagnostic’s result is no longer available. Run it again.'
+              : 'This operation’s result is no longer available. Refresh the affected resource.',
+          resultUnavailable: true,
+        );
+        return;
       }
       _observation = AdminDiagnosticObservation(action, status, _now());
       if (_observation.running == true) {
