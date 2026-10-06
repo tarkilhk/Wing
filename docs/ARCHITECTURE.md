@@ -73,6 +73,13 @@ Connection-retained registry owners outlive routes; route visibility leases dete
 
 The view acquires/releases injected controllers or route leases and forwards lifecycle visibility. The feature owns retry/poll/backoff/expiry policy and cancellation. ProfileSupervisionSession borrows canonical facts across inline/modal panels; issued criterion reviews/editors and detail windows have separate user lifetimes, tail polling and feedback. No second roster/process/control cache is introduced. Dispatch predicates sit next to physical control RPCs; chat-local /stop captures its actual process owner/runtime before each process.kill offer. Full browser refresh resets arrangement before its final publication; failedOnly recovery retains healthy order. A closed workspace preserves prepared delete receipts and drafts for recovery; known-unsent retirement starts only while its owner is alive.
 
+Workspace intelligence reads capture their resource, durable chat key, runtime,
+read generation and intelligence revision. Admission runs before I/O and again
+before decoding or publishing its completion. Newer reads, hydration and
+configuration writes invalidate old captures even when the chat object remains
+the same. The picker observes this owner decision; widget identity checks cannot
+protect owner facts after the write has happened.
+
 Voice distinguishes device-wide saved preferences, profile configuration, microphone/playback sessions and preview leases. Existing input/output controllers fence arbitration and completion with captured target/generation. File transfer distinguishes native intake, app-staged copies, server upload and transient delivery resources. HTML retains original source separately from its render budget. PDF native handles remain leased until admitted decoding settles, including after route retirement; original bytes are released after opening. shareRemoteFile releases undispatched staging failures and Wing Android staging after the native adapter copies to its own cache. OwnedRemoteFiles owns scoped application resources; its raw adapter contains transport only. Native callback/string registrations and resource names are runtime roots even without Dart/static callers. These source contracts do not certify native/device behavior or render performance.
 
 ## Whole-checkout and runtime roots

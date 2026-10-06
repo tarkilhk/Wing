@@ -81,6 +81,8 @@ class ProfileChat {
   bool? _yolo;
   bool _changingIntelligence = false;
   String? _intelligenceRuntime;
+  int _intelligenceReadGeneration = 0;
+  int _intelligenceRevision = 0;
   final execution.ChatRuntime _runtime;
   ChatRuntimeObservation get runtime => _runtime.observation;
   ComposerSession _composer;
@@ -3485,6 +3487,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       final wasPending = _unrestoredPending.remove(oldKey);
       _cancelImagePreparation(chat);
       resource._chats.remove(oldKey.sessionId);
+      chat._intelligenceRevision++;
       chat
         .._key = ProfileSessionKey(resource.scope, newSessionId)
         .._intelligenceRuntime = preserveIntelligence ? newRuntime : null
@@ -4836,6 +4839,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
   void _hydrateIntelligence(ProfileChat chat, Map<String, dynamic> response) {
     final info = response['info'];
     if (info is Map) {
+      if (const [
+        'model',
+        'provider',
+        'reasoning_effort',
+      ].any(info.containsKey)) {
+        chat._intelligenceRevision++;
+      }
       if (!info.containsKey('stored_session_id') ||
           info['stored_session_id'] == chat._key.sessionId) {
         _hydrateTitle(chat, info['title']);
@@ -4857,20 +4867,39 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ({List<ModelChoice> choices, String defaultModel, String? defaultProvider})
   >
   loadIntelligence(ProfileChat chat) async {
-    final gateway = _owned(chat).gateway;
+    final resource = _commandOwner(chat);
+    final gateway = resource.gateway;
+    final key = chat._key;
+    final runtime = chat.runtime.runtimeId;
+    final read = ++chat._intelligenceReadGeneration;
+    final revision = chat._intelligenceRevision;
+    void requireCurrentRead() {
+      if (_closed ||
+          chat._key != key ||
+          !identical(_resources[key.workspace], resource) ||
+          !identical(resource._chats[key.sessionId], chat) ||
+          chat.runtime.runtimeId != runtime ||
+          read != chat._intelligenceReadGeneration ||
+          revision != chat._intelligenceRevision ||
+          chat._changingIntelligence) {
+        throw StateError('Chat changed. Choose the model again.');
+      }
+      _commandOwner(chat);
+    }
+
+    requireCurrentRead();
     final results = await Future.wait([
       gateway.read('model/info'),
       gateway.read('model/options'),
-      gateway.call('config.get', {
-        'session_id': chat.runtime.runtimeId,
-        'key': 'reasoning',
-      }),
+      gateway.call('config.get', {'session_id': runtime, 'key': 'reasoning'}),
     ]);
+    requireCurrentRead();
     final defaults = results[0];
     final choices = ModelChoice.fromOptions(results[1]);
     if (choices.isEmpty) {
       throw StateError('This profile returned no selectable models.');
     }
+    chat._intelligenceRevision++;
     chat._model ??= defaults['model']?.toString();
     chat._provider ??= defaults['provider']?.toString();
     chat._reasoningEffort = WsClient.normalizeReasoningEffort(
@@ -4959,6 +4988,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     chat._model = selection.choice.model;
     chat._provider = selection.choice.provider;
+    chat._intelligenceRevision++;
     try {
       _commandOwner(chat);
       await gateway.call('config.set', {
@@ -4979,6 +5009,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (chat.runtime.runtimeId != runtime) {
       throw StateError('Chat reconnected. Try applying again.');
     }
+    chat._intelligenceRevision++;
     chat._reasoningEffort = selection.reasoningEffort;
     chat._intelligenceRuntime = runtime;
     return true;
@@ -5003,6 +5034,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         'Wait for this chat to be ready before changing its model.',
       );
     }
+    chat._intelligenceRevision++;
     chat._changingIntelligence = true;
     _changed();
     try {
@@ -7258,6 +7290,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (source is String && source.isNotEmpty) chat._source = source;
     final runtime = result['session_id'] as String;
     if (chat.runtime.runtimeId != runtime) {
+      chat._intelligenceRevision++;
       chat._context = null;
       chat._contextGeneration++;
       chat._runtime.finishActivity();

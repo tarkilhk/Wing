@@ -52,6 +52,12 @@ bringing the current authored census to 1,501 files. Production and retirement
 counts remain unchanged. Its synthetic fixture is supported verification code;
 it introduces no additional production deletion lead.
 
+The subsequent intelligence-read freshness fix stays in the existing workspace
+owner and adds one independent linter, its contract and a host fixture file.
+The current authored census is 1,504 files with 68 required Dart commands.
+Production file/view and retirement counts remain unchanged; this bounded delta
+introduces no new owner, compatibility path or unresolved deletion candidate.
+
 ## Historical phase-0 scope and candidate basis
 
 Phase 0 inventory, 3 October 2026. Scope is `/home/dev/projects/hermes-android/hermes-android`, base revision `a5650fa675209b6a782a5adf3f39ff12c53efb4c` plus intentional source/tool/document work. This is a complete **scope/root census and initial candidate map**, not a claim that every resolved member has already been proven live or deleted. The phase0 census below is historical. Phase2 DC01/DC02/DC04–07 deletion is now implemented, with source-bound resolved provenance in [dead_code/README.md](../tools/architecture/dead_code/README.md); behavioral verification is owned by the serialized root runner. The accepted program requires every remaining candidate to receive a final evidence-backed disposition; unresolved candidates block final completion.

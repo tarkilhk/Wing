@@ -37,6 +37,18 @@ For offline streaming and typing, use `tools/performance/workspace_streaming_rep
 as the target. Real model calls require an explicitly owned QA chat and an
 explicitly verified Luna route; preserve connection/profile defaults.
 
+Stock create/resume metadata does not establish reasoning effort. The live
+observer reads it through `ProfileWorkspaceController.loadIntelligence`, which
+uses session-scoped `config.get` with key `reasoning`, and requires `low` before
+adoption or dispatch. This contract was inspected at upstream
+`4787e4d56fc8d9265d4c7d3c0fe5accee86b4078` in
+`tui_gateway/methods_session.py` and `tui_gateway/methods_config.py`.
+Keep remote reasoning interpretation in this existing tested owner; inferring
+it from arbitrary metadata cannot be established by a general static check.
+The `workflow` mode requests a bounded Flutter change plan with a table and
+code examples. Reuse an already-created owned QA chat after an uncertain setup;
+never repeat creation merely because its client-side verification failed.
+
 The replay's `prepareIdle` extension accepts histories of 2 or 50 rows. After
 preparation, `startProbe` and `stopProbe` bracket 200 native draft edits and
 report actual frame timings, transcript setup counts and workspace notifications.
@@ -45,11 +57,13 @@ settled history and zero transcript setup and workspace notifications.
 
 For the offline navigation soak, build the same profile variant targeting
 `tools/performance/workspace_navigation_soak.dart`. Its `ready` and `round`
-extensions use the real workspace with synthetic 50-message chats. Run twenty
-`same` rounds across twenty minutes, then twenty `increasing` rounds across
-twenty minutes. Record settled heap/PSS alongside retained transcript and runtime
-counts. This fixture performs no network I/O and cannot certify socket retention
-or live Hermes delivery. Both offline fixtures keep preferences in memory.
+extensions use the real workspace with synthetic 50-message chats. Use it when
+investigating a specific retention regression. The extended workload supports
+twenty `same` rounds and twenty `increasing` rounds; choose the duration needed
+to distinguish expected cache growth from continuing retention. Record settled
+heap/PSS alongside retained transcript and runtime counts. This fixture performs
+no network I/O and cannot certify socket retention or live Hermes delivery.
+Both offline fixtures keep preferences in memory.
 
 Run parser, worker and rendering tests with measurements enabled:
 
@@ -145,6 +159,12 @@ and after changing one variable. Do not attribute an uncontrolled temperature
 drop or a different typing workload to a code change.
 
 ## Investigation matrix
+
+Select the scenario that answers the measured problem or changed contract.
+This matrix describes available investigations; it is not a command to run
+every workload after every change. Set an observable stopping condition before
+starting, and retain inconclusive evidence rather than repeating blindly.
+Required program acceptance remains governed by its verification contracts.
 
 | Scenario | Duration/workload | Signals and acceptance |
 | --- | --- | --- |

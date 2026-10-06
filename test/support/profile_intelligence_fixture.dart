@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'profile_browser_fixture.dart';
@@ -19,6 +21,10 @@ Confirm only if you intend to switch now.''';
   bool failConfirmedModel = false;
   bool codexAppearsOnRefresh = false;
   final modelOptionReads = <Map<String, String>>[];
+  Completer<void>? configGetStarted;
+  Completer<void>? configGetDelay;
+  String configGetValue = 'high';
+  String resumedReasoningEffort = 'high';
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
@@ -51,7 +57,12 @@ Confirm only if you intend to switch now.''';
         return base.read(path, query);
       },
       rpc: (method, params) async {
-        if (method == 'config.get') return {'value': 'high'};
+        if (method == 'config.get') {
+          final started = configGetStarted;
+          if (started != null && !started.isCompleted) started.complete();
+          await configGetDelay?.future;
+          return {'value': configGetValue};
+        }
         if (method == 'config.set') {
           writes.add(Map.of(params));
           if (params['confirm_expensive_model'] == true && failConfirmedModel) {
@@ -78,7 +89,7 @@ Confirm only if you intend to switch now.''';
               'profile_name': scope.profileName,
               'model': 'gpt-6-astra',
               'provider': 'openai-codex',
-              'reasoning_effort': 'high',
+              'reasoning_effort': resumedReasoningEffort,
             },
           };
         }

@@ -547,6 +547,15 @@
       "status": "supported"
     },
     {
+      "id": "dart-main-test/intelligence_read_admission_guard_test.dart",
+      "kind": "host-test",
+      "path": "test/intelligence_read_admission_guard_test.dart",
+      "selector": "main",
+      "purpose": "Captured intelligence read admission regression prevention",
+      "source": "tools/architecture/rules/intelligence_read_admission.md",
+      "status": "supported"
+    },
+    {
       "id": "dart-main-test/retired_answer_versions_namespace_guard_test.dart",
       "kind": "host-test",
       "path": "test/retired_answer_versions_namespace_guard_test.dart",
@@ -733,6 +742,15 @@
       "selector": "main",
       "purpose": "Supported independent architecture guard CLI",
       "source": "tools/architecture/rules/image_codec_provenance.dart; tools/architecture/README.md",
+      "status": "supported"
+    },
+    {
+      "id": "dart-main-tools/architecture/rules/intelligence_read_admission.dart",
+      "kind": "guard-cli",
+      "path": "tools/architecture/rules/intelligence_read_admission.dart",
+      "selector": "main",
+      "purpose": "Captured intelligence read admission regression prevention",
+      "source": "tools/architecture/rules/intelligence_read_admission.md",
       "status": "supported"
     },
     {
@@ -10328,6 +10346,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/intelligence_read_admission_guard_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/intelligence_sheet_layout_test.dart",
       "area": "test",
       "provenance": "tracked"
@@ -12389,6 +12412,16 @@
     },
     {
       "path": "tools/architecture/rules/image_codec_provenance.dart",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/architecture/rules/intelligence_read_admission.dart",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/architecture/rules/intelligence_read_admission.md",
       "area": "tools",
       "provenance": "intentional-untracked"
     },

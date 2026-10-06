@@ -75,6 +75,7 @@ const independentGuards = [
   'current_tool_events',
   'retired_answer_versions_namespace',
   'resume_durable_identity',
+  'intelligence_read_admission',
   'settings_view_protocol',
   'owned_model_mutation',
   'overview_view_wire',

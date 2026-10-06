@@ -31,7 +31,7 @@ requirements prevent whole-program completion.
 
 ## Accepted architecture and subtraction
 
-The current reviewed source contains 1,501 authored files, 358 production Dart
+The current reviewed source contains 1,504 authored files, 358 production Dart
 files, 348 libraries and 143 views. All production files received full source
 review and explicit reviewed-delta supplements. The architecture map names 29
 responsibility boundaries; the feature inventory has no unexplained view row.
@@ -48,7 +48,7 @@ through views or peer owners.
 
 The finite reviewed deletion inventory has zero confirmed or deferred deletion
 leads, and the migration baseline is empty. The existing retirement guard protects
-809 exact removed identities. There are 67 independently runnable Dart linters,
+809 exact removed identities. There are 68 independently runnable Dart linters,
 with invalid/valid fixtures and mandatory CI enforcement, plus five native guard
 properties and the Python checks. Static checks protect precise properties; held-I/O and event-order
 regressions cover lifetime, durability and uncertainty.
@@ -75,6 +75,18 @@ cases, eight replay-driver checks, nine release-marker checks and both authored
 census and Dart entry-point guards. Production files are unchanged; these checks
 are a scoped supplement to the accepted production run.
 
+The subsequent bounded central-owner review found and fixed a stale intelligence
+read in the existing workspace owner. A held old `config.get` cannot overwrite
+newer hydration or a newer load after reconnect. Thirty focused owner/linter
+cases pass, analysis of the changed Dart files has no issues, the independent
+read-admission linter reports zero findings, and census/main-root coverage passes.
+The mandatory CI-gate fixture checks passed against the unchanged final workflow
+and gate files. The new guard's invalid/valid CLI fixtures prove failure
+propagation; its source and compiled feedback runs stay within the documented
+budgets. This is a bounded reviewed production successor, not a new whole-host
+or whole-device run. The live observer now obtains actual reasoning readback
+from this existing owner instead of assuming create/resume metadata includes it.
+
 Native source/root review, nine native guard/proof commands and 27 JVM controls
 cover the final source, with scoped predecessor reuse where source is unchanged. Sixty-four affected
 normal/enlarged light/dark renders were inspected. These checks do not certify
@@ -99,12 +111,23 @@ their separate human/device/server acceptance scope.
 Matched offline streaming replay has passed on the authorized physical phone.
 This scoped result covers exact synthetic text and native typing during the
 stream; it does not close the remaining typing, retention, background or live
-server gates. Two short-history typing repetitions also passed with zero
-unchanged transcript setup and workspace notifications; the next attempt stopped
-when the QA app lost foreground. The original QA app and device settings were
-restored. Android presentation timestamps were unavailable, so frame timing
-is not reported as input-to-present latency. Phone probes are separate opt-in
+server gates. Three short-history and two long-history typing captures passed
+with zero unchanged transcript setup and workspace notifications. Interrupted
+attempts stopped when the QA app lost foreground. The synthetic ownership
+question is answered; further repetitions are not scheduled. The original QA
+app and device settings were restored. Android presentation timestamps were
+unavailable, so frame timing is not reported as input-to-present latency.
+Phone probes are separate opt-in
 roots; production owners and views are unchanged.
+
+The bounded live-claw setup reached the saved connection but its single prepare
+operation was rejected before any model turn was submitted. Session creation
+was confirmed by a bounded read-only server check; reasoning remains unverified.
+Reuse that owned QA session and verify low reasoning before submission rather
+than creating another. The phone was restored. This attempt does not establish live
+acceptance. Prefer one representative owned-chat workflow over additional
+synthetic typing or generic soak runs, then investigate only an observed failure
+or significant cost.
 
 - Run matched profile-mode physical-phone resource/performance checks and normal
   and restricted battery/network behavior on an authorized QA phone.

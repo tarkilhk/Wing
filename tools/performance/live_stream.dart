@@ -35,6 +35,16 @@ const _prompts = {
       'headings, paragraphs, nested lists, a small Markdown table, ordinary '
       'links to https://example.com and six fenced Dart code examples. '
       'Finish with the exact sentence: Wing mixed QA complete.',
+  'workflow':
+      'Review this Flutter design without tools, files, memories or delegation: '
+      'a workspace owner coordinates chat I/O, a composer owns unsent drafts, '
+      'a reading owner exposes immutable history, and widgets render observations '
+      'and forward commands. Give a practical change plan for adding a model '
+      'picker while preserving these boundaries. Use about 500 words, headings, '
+      'a responsibility table and two short Dart examples. Explain how to keep '
+      'a late settings read from overwriting a reconnected chat and how to protect '
+      'the change with one focused regression. '
+      'Finish with the exact sentence: Wing workflow QA complete.',
 };
 
 Iterable<Element> _walk(Element element) sync* {
@@ -101,8 +111,12 @@ class _Owned {
     return null;
   }
 
-  String get sentinel =>
-      mode == 'mixed' ? 'Wing mixed QA complete.' : 'Wing prose QA complete.';
+  String get sentinel => switch (mode) {
+    'prose' => 'Wing prose QA complete.',
+    'mixed' => 'Wing mixed QA complete.',
+    'workflow' => 'Wing workflow QA complete.',
+    _ => throw StateError('Stage an owned QA workload first'),
+  };
 }
 
 bool _isSelected(_Owned item) {
@@ -378,11 +392,15 @@ void main() {
             );
           }
           stage = 'adopt';
-          if (chat == null ||
-              !knownTitle ||
-              !luna ||
+          if (chat == null || !knownTitle || !luna) {
+            throw StateError('Select a named QA Luna chat');
+          }
+          stage = 'read_reasoning';
+          await controller.loadIntelligence(chat);
+          if (!identical(_controller(), controller) ||
+              !identical(_visibleChat(controller), chat) ||
               chat.reasoningEffort != 'low') {
-            throw StateError('Select a named QA Luna chat with low reasoning');
+            throw StateError('QA chat did not confirm low reasoning');
           }
           var slot = owned.indexWhere((item) => identical(item.chat, chat));
           if (slot < 0) {
@@ -446,11 +464,8 @@ void main() {
               stored.isEmpty ||
               info is! Map ||
               info['model'] != choice.model ||
-              info['provider'] != choice.provider ||
-              info['reasoning_effort'] != 'low') {
-            throw StateError(
-              'Creation did not confirm Luna with low reasoning',
-            );
+              info['provider'] != choice.provider) {
+            throw StateError('Creation did not confirm Luna');
           }
           stage = 'open';
           final chat = await controller.openSession(
@@ -459,9 +474,17 @@ void main() {
           stage = 'verify_resume';
           if (chat == null ||
               chat.model != choice.model ||
-              chat.provider != choice.provider ||
+              chat.provider != choice.provider) {
+            throw StateError('Resume did not confirm Luna');
+          }
+          // Stock create/resume info omits reasoning. The session-scoped
+          // config.get read, owned by the controller, is the actual readback.
+          stage = 'read_reasoning';
+          await controller.loadIntelligence(chat);
+          if (!identical(_controller(), controller) ||
+              !identical(_visibleChat(controller), chat) ||
               chat.reasoningEffort != 'low') {
-            throw StateError('Resume did not confirm Luna with low reasoning');
+            throw StateError('QA chat did not confirm low reasoning');
           }
           final item = _Owned(controller, chat);
           owned.add(item);

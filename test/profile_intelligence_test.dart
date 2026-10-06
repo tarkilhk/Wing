@@ -88,6 +88,80 @@ void main() {
     },
   );
 
+  for (final replacesRuntime in [false, true]) {
+    test('a delayed intelligence read cannot overwrite newer hydration '
+        '(runtime replaced: $replacesRuntime)', () async {
+      final chat = controller.current!.chat!;
+      final configStarted = Completer<void>();
+      final configDelay = Completer<void>();
+      host
+        ..configGetStarted = configStarted
+        ..configGetDelay = configDelay
+        ..resumedRuntimeId = replacesRuntime ? 'replacement-runtime' : null
+        ..resumedReasoningEffort = 'low';
+      var notifications = 0;
+      void countNotifications() => notifications++;
+
+      controller.addListener(countNotifications);
+      addTearDown(() => controller.removeListener(countNotifications));
+      addTearDown(() {
+        if (!configDelay.isCompleted) configDelay.complete();
+      });
+
+      final originalRuntime = chat.runtime.runtimeId;
+      final pendingLoad = controller.loadIntelligence(chat);
+      await configStarted.future;
+      if (replacesRuntime) {
+        await controller.reconnect(chat.key.workspace);
+      } else {
+        emitChatEvent(controller, chat, 'session.info', {
+          'reasoning_effort': 'low',
+        });
+      }
+      expect(
+        chat.runtime.runtimeId,
+        replacesRuntime ? 'replacement-runtime' : originalRuntime,
+      );
+      expect(chat.reasoningEffort, 'low');
+      await Future<void>.delayed(Duration.zero);
+      final notificationsAfterHydration = notifications;
+      configDelay.complete();
+      await expectLater(pendingLoad, throwsA(isA<StateError>()));
+
+      expect(chat.reasoningEffort, 'low');
+      expect(notifications, notificationsAfterHydration);
+    });
+  }
+
+  test('a newer intelligence load supersedes an older held load', () async {
+    final chat = controller.current!.chat!;
+    final configStarted = Completer<void>();
+    final configDelay = Completer<void>();
+    host
+      ..configGetStarted = configStarted
+      ..configGetDelay = configDelay
+      ..configGetValue = 'medium';
+    addTearDown(() {
+      if (!configDelay.isCompleted) configDelay.complete();
+    });
+
+    final olderLoad = controller.loadIntelligence(chat);
+    await configStarted.future;
+    final newerLoad = controller.loadIntelligence(chat);
+    await Future<void>.delayed(Duration.zero);
+    var notifications = 0;
+    void countNotifications() => notifications++;
+
+    controller.addListener(countNotifications);
+    addTearDown(() => controller.removeListener(countNotifications));
+    configDelay.complete();
+    await expectLater(olderLoad, throwsA(isA<StateError>()));
+    await newerLoad;
+
+    expect(chat.reasoningEffort, 'medium');
+    expect(notifications, 1);
+  });
+
   test(
     'declining keeps settings and partial failure preserves confirmed effort',
     () async {

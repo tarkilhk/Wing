@@ -172,6 +172,8 @@ jobs:
         run: dart run tools/architecture/tests/current_tool_events_test.dart
       - name: Check notification resume identity
         run: dart run tools/architecture/rules/resume_durable_identity.dart
+      - name: Check intelligence read admission
+        run: dart run tools/architecture/rules/intelligence_read_admission.dart
 
       - name: Check settings views
         run: dart run tools/architecture/rules/settings_view_protocol.dart

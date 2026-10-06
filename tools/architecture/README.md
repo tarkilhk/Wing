@@ -49,6 +49,7 @@ dart run tools/architecture/rules/profile_discovery_writer.dart
 dart run tools/architecture/rules/saved_prompt_journal_admission.dart
 dart run tools/architecture/rules/retired_answer_versions_namespace.dart
 dart run tools/architecture/rules/resume_durable_identity.dart
+dart run tools/architecture/rules/intelligence_read_admission.dart
 dart run tools/architecture/rules/domain_dependencies.dart
 dart run tools/architecture/rules/business_view_dependencies.dart
 dart run tools/architecture/rules/business_rendering_types.dart
@@ -299,3 +300,8 @@ retain the real Android denial/grant/Home fixture as the lifecycle-order check.
 `ARCH_RETIRED_ANSWER_VERSIONS_NAMESPACE` rejects the exact retired answer-version preference prefix in the canonical workspace library. [Finite literal/part scope](rules/retired_answer_versions_namespace.md). Fixtures: `dart run tools/architecture/tests/retired_answer_versions_namespace_test.dart`.
 
 `ARCH_CURRENT_TOOL_EVENTS` rejects unsupported event spellings and top-level aliases at the canonical tool parser/dispatch seams. [Finite contract](rules/current_tool_events.md). Fixtures: `dart run tools/architecture/tests/current_tool_events_test.dart`.
+
+`ARCH_INTELLIGENCE_READ_ADMISSION` keeps captured read admission directly around
+the canonical workspace's awaited model-settings read. Its [finite contract](rules/intelligence_read_admission.md)
+distinguishes structural placement from the held-I/O freshness regressions.
+Fixtures: `flutter test --no-pub test/intelligence_read_admission_guard_test.dart`.
