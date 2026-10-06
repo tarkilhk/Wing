@@ -157,20 +157,34 @@ removed. The user directed attention back to the maintainability purpose after
 the setup took too long. Leave this acceptance item unverified; do not interpret
 the automation failure as a product defect or start another generic investigation.
 
-- Run matched profile-mode physical-phone resource/performance checks and normal
-  and restricted battery/network behavior on an authorized QA phone.
-- Run applicable stock runtime journeys against an authorized owned QA profile/chat
-  on latest upstream unmodified Hermes. The latest inspected source is
-  `86bdb75b2bbe3a58291f6b70d74872522614e61d`. The bounded review from the
-  previous inspected stock revision found no change to the used configuration,
-  session, prompt or dashboard-auth contracts; it does not establish the entire
-  deployed-to-latest API delta. Source review is not deployed acceptance.
-  The user handled the backend upgrade separately. Its clean checkout matched
-  observed upstream main at `93cbf617c7007286a249cc00506c012933fb537c`, and the
-  existing real-workload journey completed after that upgrade. The running
-  launcher's source binding was not rechecked after the upgrade; backend
-  investigation stopped at the user's request. Keep that limit explicit.
-  No server or profile change has been made by this cleanup program.
+- Complete the remaining physical-phone background acceptance: real active work
+  under normal and restricted policy, completion and recovery, native monitoring
+  service/notification/wake-lock release, and a ten-minute no-work quiet interval.
+  Reuse the accepted matched replay, typing and real streaming/resource evidence;
+  do not repeat those captures without a concrete new finding.
+
+The latest-stock runtime item is accepted using the completed post-upgrade owned
+QA journey and the user's explicit confirmation that Claw is running the latest
+Hermes backend code. The observed clean checkout matched upstream main at
+`93cbf617c7007286a249cc00506c012933fb537c`. Running-source identity is supported by
+the user's confirmation, rather than an independent post-upgrade launcher check.
+No further backend investigation or deployment is needed for this item. No server
+or profile change has been made by this cleanup program.
+
+The user authorized the two active-work background checks and deferred the
+ten-minute quiet interval. The bounded phone setup found the existing owned QA
+chat through an exact search, but the observer still reported no selected chat
+and rejected adoption. No model request or restriction change was made. The
+attempt stopped and the original QA APK and background policy were restored;
+the measurement tunnel is absent. Both active-work checks remain unverified.
+Retain this as an automation blocker, rather than a failed background-work check.
+One corrected attempt addressed a mismatch between displayed screenshot
+coordinates and actual phone resolution. The phone returned to ChatGPT during
+setup, so no owned-chat adoption or request occurred. The user then supplied a
+two-minute Wi-Fi deadline. Device work stopped; the original QA APK restoration
+timed out and its final installed version remains unverified. No background
+restriction was changed. Resolve this QA-package restoration item when the phone
+is reachable, before another device check; do not describe cleanup as complete.
 
 No additional production migration or confirmed deletion lead remains open in
 this reviewed inventory. An actual final finding still requires a bounded fix,
