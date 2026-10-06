@@ -120,14 +120,18 @@ unavailable, so frame timing is not reported as input-to-present latency.
 Phone probes are separate opt-in
 roots; production owners and views are unchanged.
 
-The bounded live-claw setup reached the saved connection but its single prepare
-operation was rejected before any model turn was submitted. Session creation
-was confirmed by a bounded read-only server check; reasoning remains unverified.
-Reuse that owned QA session and verify low reasoning before submission rather
-than creating another. The phone was restored. This attempt does not establish live
-acceptance. Prefer one representative owned-chat workflow over additional
-synthetic typing or generic soak runs, then investigate only an observed failure
-or significant cost.
+The first live-claw setup created one owned QA session but its prepare operation
+failed before any model turn. A subsequent bounded phone attempt reused that
+session: native navigation reached the owned chat, and the observer confirmed the
+Luna route and actual low reasoning through the workspace owner. No model request,
+streaming capture or draft edit was dispatched before the automation time limit;
+the workflow remains unexecuted. This is a setup limitation, not evidence of a
+provider or backend failure, and does not establish live-workflow acceptance.
+The original QA APK was restored in place; installed version and unchanged
+device settings were verified. App data and profile defaults were preserved.
+Reuse the same owned session for one representative workflow; do not create
+another or repeat synthetic typing or generic soak runs. Investigate only an
+observed failure or significant cost.
 
 - Run matched profile-mode physical-phone resource/performance checks and normal
   and restricted battery/network behavior on an authorized QA phone.
