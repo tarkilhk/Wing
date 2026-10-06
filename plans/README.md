@@ -21,13 +21,15 @@ is available to agents by path. The user started this program on 3 October 2026.
 | 3 | Complete task/model/diagnostics owner pilot | DONE |
 | 4 | Every remaining feature migrated or reviewed against the target | DONE |
 | 5 | Conversation facts and lifetimes have explicit owners | DONE |
-| 6 | Native/resource responsiveness and matched phone performance | IN PROGRESS |
+| 6 | Native/resource responsiveness and matched phone performance | DONE |
 | 7 | Whole-checkout finite dead-code/root closure and prevention | DONE |
-| 8 | Independent review and final device/current-stock acceptance | IN PROGRESS |
+| 8 | Independent review and final device/current-stock acceptance | DONE |
 
-Seven original phases are complete; two retain acceptance obligations. Phase
-completion follows the original gates. The remaining device/performance/server
-requirements prevent whole-program completion.
+All nine original phases are complete. The final quiet-device acceptance and QA
+restoration closed the remaining obligations on 6 October 2026. Production
+source is fixed at `8af0db73b446f2c0d12f9e31afb08a870a4e5a11`; subsequent commits
+record acceptance and completion. Closure applies to the agreed finite reviewed
+inventory and verification scopes below.
 
 ## Accepted architecture and subtraction
 
@@ -53,7 +55,7 @@ with invalid/valid fixtures and mandatory CI enforcement, plus five native guard
 properties and the Python checks. Static checks protect precise properties; held-I/O and event-order
 regressions cover lifetime, durability and uncertainty.
 
-The last runtime correction separates `rejectSavedPromptEdit` from
+Conversation rejection handling separates `rejectSavedPromptEdit` from
 `rejectRegeneration`. Physical dispatch does not decide conversation execution:
 a definite edit rejection restores captured execution, while the existing
 regeneration-failure behavior remains explicit. The obsolete ambiguous command
@@ -103,15 +105,15 @@ its actual original counterexample. The installed offline voice driver now passe
 denial, retry/grant, Home cancellation, AAC capture/cancellation, playback
 decoding/interruption and five installed offline TTS samples, with empty voice
 caches after both suites. Earlier VM-load and OS-ANR failures remain preserved.
-Speech intelligibility, live providers and physical-phone performance retain
-their separate human/device/server acceptance scope.
+Those offline checks do not certify speech intelligibility or live providers.
+Physical-phone acceptance is recorded separately below.
 
-## Remaining acceptance
+## Accepted device and runtime verification
 
 Matched offline streaming replay has passed on the authorized physical phone.
 This scoped result covers exact synthetic text and native typing during the
-stream; it does not close the remaining typing, retention, background or live
-server gates. Three short-history and two long-history typing captures passed
+stream; the additional typing, background and live-runtime scopes are recorded
+separately. Three short-history and two long-history typing captures passed
 with zero unchanged transcript setup and workspace notifications. Interrupted
 attempts stopped when the QA app lost foreground. The synthetic ownership
 question is answered; further repetitions are not scheduled. The original QA
@@ -158,11 +160,10 @@ the setup took too long. That attempt provided no acceptance evidence. The
 resumed checks below close active-work acceptance; the earlier automation failure
 does not establish a product defect.
 
-- Complete the ten-minute no-work background quiet interval, deferred by the user.
-  The real active-work checks under normal and restricted policy, completion and
-  recovery, and native monitoring service/notification/wake-lock release passed.
-  Reuse the accepted matched replay, typing and real streaming/resource evidence;
-  do not repeat those captures without a concrete new finding.
+The real active-work checks under normal and restricted policy, completion and
+recovery, native monitoring release, and the ten-minute no-work quiet interval
+passed. Reuse the accepted matched replay, typing and real streaming/resource
+evidence; do not repeat those captures without a concrete new finding.
 
 The latest-stock runtime item is accepted using the completed post-upgrade owned
 QA journey and the user's explicit confirmation that Claw is running the latest
@@ -187,12 +188,24 @@ negative result is retained in private evidence.
 Reopening showed the complete answer and completion marker with the Luna/low
 route unchanged. The original QA APK was restored in place and its version,
 original default background policy, and measurement-tunnel removal were verified.
-Earlier setup/restoration uncertainty is resolved. Only the user-deferred quiet
-interval remains; do not repeat the two accepted active-work checks without a
-concrete finding. Raw observations, screenshots and receipts remain private.
+Earlier setup/restoration uncertainty is resolved. Do not repeat the two accepted
+active-work checks without a concrete finding. Raw observations, screenshots and
+receipts remain private.
 
-No additional production migration or confirmed deletion lead remains open in
-this reviewed inventory. An actual final finding still requires a bounded fix,
+The final quiet check used the same production source with a private passive
+timer wrapper. It preserved the production periodic timer callbacks and recorded
+their creation, active state and ticks without device queries during the full
+ten-minute interval. Android's screen history recorded no screen-on transition;
+native monitoring resources were absent at both endpoints. After the user
+unlocked the phone, the same retained probe generation showed zero notification
+polling timers created, zero active and zero ticks. The initial background RPC
+timeout and Format-2 history interpretation are retained in the private evidence;
+the interval was not repeated. This checks unnecessary monitoring and polling,
+not battery savings or every OEM policy. The original QA APK, default background
+policy and measurement-tunnel cleanup were verified after restoration.
+
+No goal acceptance obligation, production migration or confirmed deletion lead
+remains open in this reviewed inventory. A future material finding requires a bounded fix,
 prevention decision and affected verification. Do not start another generic
 cleanup framework or repeat unaffected tests to increase totals.
 

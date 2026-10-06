@@ -1,6 +1,6 @@
 # Make Wing straightforward to change
 
-Planning date: 3 October 2026. Planned against Wing commit `a5650fa675209b6a782a5adf3f39ff12c53efb4c`. Status: **ACTIVE; goal started by the user on 3 October 2026**. Priority: architecture first. Effort: a sustained, multi-batch program; the full UI and member inventory in phase 0 determines the remaining work. Risk: high around conversation ownership, moderate elsewhere.
+Planning date: 3 October 2026. Planned against Wing commit `a5650fa675209b6a782a5adf3f39ff12c53efb4c`. Status: **COMPLETE; started by the user on 3 October and accepted on 6 October 2026**. Final production source: `8af0db73b446f2c0d12f9e31afb08a870a4e5a11`. See [the closure index](README.md) for accepted scopes and evidence bindings. Priority: architecture first. The original plan and completion criteria below are retained as the execution contract.
 
 ## Outcome
 
@@ -228,8 +228,9 @@ All of these must hold:
 - Existing supported behavior, stock scope, uncertainty/durability, retention and Studio interaction contracts pass the final fixed-revision host/build/native checks and applicable device/current-stock acceptance.
 - Three change-locality examples and fresh architecture/dead-code/concurrency review pass without unresolved material findings. Documentation describes the resulting owners and how to change/test each feature.
 
-Proposed goal, ready for later creation:
+Goal adopted by the user:
 
 > Refactor the Wing application checkout into the ownership architecture in `plans/001-clean-architecture-program.md`: remove business workflows from every production view, give each domain fact one writer, remove all confirmed dead code across the fully reviewed checkout with zero unresolved reachability candidates, resolve the 18 review items and newly discovered material defects, and create tested CI-enforced prevention guards for every incorrect pattern where feasible. Complete only when the architecture baseline is empty, dependency/ownership and behavior checks pass, three change-locality examples pass independent review, and applicable native/device/latest-unmodified-Hermes acceptance has fixed-revision evidence. Preserve supported behavior and unrelated user changes; obtain decisions for compatibility, data-loss or unsupported-stock requirements and authorization for external side effects. Follow the plan's small-batch loop and report unavailable acceptance prerequisites honestly.
 
-The user authorized execution after reviewing this document; the goal is now active. Track accepted batches and remaining prerequisites in `plans/README.md`.
+The user authorized execution after reviewing this document. The goal is complete;
+accepted batches, final verification and scope limits are recorded in `plans/README.md`.
