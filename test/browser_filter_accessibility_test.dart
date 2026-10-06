@@ -171,6 +171,54 @@ void main() {
     });
   }
 
+  void expectSelectedPadding(WidgetTester tester, String filter) {
+    final control = find.byKey(ValueKey('chat-filter-${filter.toLowerCase()}'));
+    final selectedColor = Theme.of(
+      tester.element(control),
+    ).colorScheme.primaryContainer;
+    final surface = find.descendant(
+      of: control,
+      matching: find.byWidgetPredicate(
+        (widget) => switch (widget) {
+          ColoredBox(:final color) => color == selectedColor,
+          DecoratedBox(decoration: BoxDecoration(:final color)) =>
+            color == selectedColor,
+          _ => false,
+        },
+      ),
+    );
+    // Rendered geometry depends on constraints, fonts and text scaling; a
+    // source linter cannot establish the accent's spacing or action position.
+    final accent = tester.getRect(surface);
+    final label = tester.getRect(find.text('$filter 1'));
+    expect(label.left - accent.left, greaterThanOrEqualTo(8));
+    expect(accent.right - label.right, greaterThanOrEqualTo(8));
+    expect(label.top - accent.top, greaterThanOrEqualTo(6));
+    expect(accent.bottom - label.bottom, greaterThanOrEqualTo(6));
+    final target = tester.getRect(control);
+    expect(accent.top - target.top, greaterThanOrEqualTo(8));
+    expect(target.bottom - accent.bottom, greaterThanOrEqualTo(8));
+  }
+
+  void expectCenteredFilters(WidgetTester tester, double width) {
+    final rows = <double, Rect>{};
+    for (final filter in ['status', 'profile', 'project']) {
+      final rect = tester.getRect(find.byKey(ValueKey('chat-filter-$filter')));
+      rows.update(
+        rect.center.dy,
+        (row) => row.expandToInclude(rect),
+        ifAbsent: () => rect,
+      );
+    }
+    for (final row in rows.values) {
+      expect(
+        row.center.dx,
+        closeTo(width / 2, .01),
+        reason: 'Each row of filter controls is centered in the bar',
+      );
+    }
+  }
+
   for (final brightness in Brightness.values) {
     for (final (width, scale) in [(390.0, 1.0), (390.0, 2.0), (320.0, 2.0)]) {
       testWidgets(
@@ -182,6 +230,7 @@ void main() {
             scale: scale,
             width: width,
           );
+          expectCenteredFilters(tester, width);
           await capture(
             tester,
             '${brightness.name}-${scale}x${width == 390 ? '' : '-320'}',
@@ -246,10 +295,37 @@ void main() {
           final clearTarget = tester.getRect(clear);
           expect(clearTarget.width, greaterThanOrEqualTo(48));
           expect(clearTarget.height, greaterThanOrEqualTo(48));
+          expect(
+            clearTarget.right,
+            closeTo(width - 16, .01),
+            reason: 'Clear filters stays at the right page gutter',
+          );
+          expectSelectedPadding(tester, 'Status');
+          expectCenteredFilters(tester, width);
+          await capture(
+            tester,
+            '${brightness.name}-${scale}x-${width.toInt()}-selected',
+          );
           await tester.tap(clear);
           await tester.pumpAndSettle();
           expect(find.text('Status 1'), findsNothing);
           expect(find.text('Status'), findsOneWidget);
+          await tester.tap(find.byKey(const ValueKey('chat-filter-profile')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('chat-menu-work')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Done'));
+          await tester.pumpAndSettle();
+          expectSelectedPadding(tester, 'Profile');
+          expectCenteredFilters(tester, width);
+          expect(tester.getRect(clear).right, closeTo(width - 16, .01));
+          await capture(
+            tester,
+            '${brightness.name}-${scale}x-${width.toInt()}-profile-selected',
+          );
+          await tester.tap(clear);
+          await tester.pumpAndSettle();
+          expect(find.text('Profile 1'), findsNothing);
           expect(host.updates, isEmpty);
           expect(tester.takeException(), isNull);
         },

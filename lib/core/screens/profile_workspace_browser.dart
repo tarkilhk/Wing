@@ -205,28 +205,36 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
         child: ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: ColoredBox(
-              color: selected.isEmpty
-                  ? Colors.transparent
-                  : Theme.of(context).colorScheme.primaryContainer,
-              child: Center(
-                widthFactor: 1,
-                heightFactor: 1,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      selected.isEmpty ? label : '$label ${selected.length}',
-                      style: const TextStyle(fontSize: 11),
-                      maxLines: 1,
-                      softWrap: false,
-                      textAlign: TextAlign.center,
-                    ),
-                    if (MediaQuery.textScalerOf(context).scale(12) < 18)
-                      const Icon(Icons.expand_more, size: 14),
-                  ],
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: selected.isEmpty
+                    ? Colors.transparent
+                    : Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: WingRadius.control,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Center(
+                  widthFactor: 1,
+                  heightFactor: 1,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          selected.isEmpty
+                              ? label
+                              : '$label ${selected.length}',
+                          style: const TextStyle(fontSize: 11),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      if (MediaQuery.textScalerOf(context).scale(12) < 18)
+                        const Icon(Icons.expand_more, size: 14),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -244,8 +252,8 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
           Positioned(
             left: 0,
             right: 0,
-            top: 5,
-            bottom: 5,
+            top: 4,
+            bottom: 4,
             child: DecoratedBox(
               decoration: BoxDecoration(
                 border: Border.all(color: WingTokens.of(context).border),
@@ -253,22 +261,25 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
               ),
             ),
           ),
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 4,
+          Row(
             children: [
               const SizedBox(
-                width: 27,
+                width: 48,
                 height: 48,
-                child: Padding(
-                  padding: EdgeInsets.only(left: 6, right: 2),
-                  child: Icon(Icons.filter_alt_outlined, size: 19),
+                child: Icon(Icons.filter_alt_outlined, size: 19),
+              ),
+              Expanded(
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
+                  children: [
+                    _filterControl('Status', _statuses),
+                    _filterControl('Profile', _profiles),
+                    _filterControl('Project', _projects),
+                  ],
                 ),
               ),
-              _filterControl('Status', _statuses),
-              _filterControl('Profile', _profiles),
-              _filterControl('Project', _projects),
               SizedBox(
                 width: 48,
                 height: 48,
