@@ -5907,6 +5907,18 @@
       "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml; tools/architecture/native_voice/README.md",
       "status": "supported",
       "selector": "script-entry"
+    },
+    {
+      "id": "performance-workspace_navigation_soak",
+      "kind": "alternate-dart-main",
+      "path": "tools/performance/workspace_navigation_soak.dart",
+      "selector": [
+        "main",
+        "WING_PERF_INSTRUMENTATION"
+      ],
+      "purpose": "Profile-only offline20-chat same/increasing-set retention probe; real workspace owner/view, bounded fixture logs and numeric counters",
+      "source": "docs/PERFORMANCE.md; tools/performance/workspace_navigation_soak.dart",
+      "status": "supported"
     }
   ],
   "files": [
@@ -13216,6 +13228,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "tools/performance/workspace_navigation_soak.dart",
+      "area": "tools",
+      "provenance": "tracked"
+    },
+    {
       "path": "tools/performance/workspace_streaming_replay.dart",
       "area": "tools",
       "provenance": "tracked"
@@ -13886,6 +13903,7 @@
         "tools/performance/chat_frames.dart",
         "tools/performance/live_stream.dart",
         "tools/performance/streaming_replay.dart",
+        "tools/performance/workspace_navigation_soak.dart",
         "tools/performance/workspace_streaming_replay.dart"
       ],
       "status": "retain",
@@ -14207,6 +14225,7 @@
         "test/workspace_snapshot_controller_work_test.dart",
         "test/workspace_snapshot_limits_test.dart",
         "test/workspace_snapshot_work_budget_test.dart",
+        "tools/performance/workspace_navigation_soak.dart",
         "tools/performance/workspace_streaming_replay.dart"
       ],
       "status": "retain",

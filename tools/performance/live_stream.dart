@@ -279,6 +279,7 @@ void main() {
     return {
       'selected': selected,
       'luna': RegExp(r'^gpt-\d+\.\d+-luna$').hasMatch(item.chat.model ?? ''),
+      'reasoningEffort': item.chat.reasoningEffort,
       'busy': item.chat.runtime.blocksTurnAdmission,
       'status': item.chat.runtime.execution.name,
       'sourceCharacters': item.chat.reading.streaming.length,
@@ -371,13 +372,17 @@ void main() {
                 'luna': luna,
                 'model': chat?.model,
                 'provider': chat?.provider,
+                'reasoningEffort': chat?.reasoningEffort,
                 'composerBoundsPx': _composerBounds(),
               }),
             );
           }
           stage = 'adopt';
-          if (chat == null || !knownTitle || !luna) {
-            throw StateError('Select a named QA Luna chat');
+          if (chat == null ||
+              !knownTitle ||
+              !luna ||
+              chat.reasoningEffort != 'low') {
+            throw StateError('Select a named QA Luna chat with low reasoning');
           }
           var slot = owned.indexWhere((item) => identical(item.chat, chat));
           if (slot < 0) {
@@ -441,8 +446,11 @@ void main() {
               stored.isEmpty ||
               info is! Map ||
               info['model'] != choice.model ||
-              info['provider'] != choice.provider) {
-            throw StateError('Creation did not confirm Luna');
+              info['provider'] != choice.provider ||
+              info['reasoning_effort'] != 'low') {
+            throw StateError(
+              'Creation did not confirm Luna with low reasoning',
+            );
           }
           stage = 'open';
           final chat = await controller.openSession(
@@ -451,8 +459,9 @@ void main() {
           stage = 'verify_resume';
           if (chat == null ||
               chat.model != choice.model ||
-              chat.provider != choice.provider) {
-            throw StateError('Resume did not confirm Luna');
+              chat.provider != choice.provider ||
+              chat.reasoningEffort != 'low') {
+            throw StateError('Resume did not confirm Luna with low reasoning');
           }
           final item = _Owned(controller, chat);
           owned.add(item);
@@ -489,8 +498,11 @@ void main() {
               item.chat.composer.observation.displayedText.isNotEmpty ||
               item.chat.composer.observation.attachments.isNotEmpty ||
               item.chat.composer.observation.queue.isNotEmpty ||
-              !RegExp(r'^gpt-\d+\.\d+-luna$').hasMatch(item.chat.model ?? '')) {
-            throw StateError('Owned Luna chat must be selected and empty');
+              !RegExp(r'^gpt-\d+\.\d+-luna$').hasMatch(item.chat.model ?? '') ||
+              item.chat.reasoningEffort != 'low') {
+            throw StateError(
+              'Owned Luna chat with low reasoning must be selected and empty',
+            );
           }
           await item.controller.updateDraft(item.chat, prompt);
           if (!_isSelected(item)) {

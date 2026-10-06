@@ -2,7 +2,7 @@
 
 ## Current source and root disposition
 
-The final cleanup audit snapshot contains **1,500 authored files, 358 production
+The accepted production cleanup audit snapshot contains **1,500 authored files, 358 production
 Dart files, 348 libraries and 143 views**, covering 96,058 production lines.
 Ownership migrations and the fresh full-source/root review are complete for this
 snapshot. There are 809 exact retirement entries, 67 independent required Dart
@@ -32,7 +32,7 @@ closure do not establish that every possible runtime branch is reachable.
 **Source/root/prevention closure is accepted (phase 7).** Current analysis,
 production guards, composed 464-file host coverage, ordinary APK build,
 product-mode instrumentation and pinned Chromium checks pass. Native source/root
-review, eight guard/proof commands and 27 JVM controls bind the unchanged native
+review, nine guard/proof commands and 27 JVM controls bind the unchanged native
 source; affected normal/enlarged light/dark renders were inspected. These gates
 close the finite reviewed removals. Seven original phases are complete.
 
@@ -46,6 +46,11 @@ and role records; ordinary UI edits do not require global audit SHA-map changes.
 The sections below retain historical candidate evidence, milestone counts and
 then-pending obligations. The current disposition above supersedes their status
 notes; the removal method remains guidance for future bounded closures.
+
+The subsequent physical-phone probes add one explicit opt-in navigation root,
+bringing the current authored census to 1,501 files. Production and retirement
+counts remain unchanged. Its synthetic fixture is supported verification code;
+it introduces no additional production deletion lead.
 
 ## Historical phase-0 scope and candidate basis
 

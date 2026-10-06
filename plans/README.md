@@ -31,7 +31,7 @@ requirements prevent whole-program completion.
 
 ## Accepted architecture and subtraction
 
-The current reviewed source contains 1,500 authored files, 358 production Dart
+The current reviewed source contains 1,501 authored files, 358 production Dart
 files, 348 libraries and 143 views. All production files received full source
 review and explicit reviewed-delta supplements. The architecture map names 29
 responsibility boundaries; the feature inventory has no unexplained view row.
@@ -62,13 +62,18 @@ regressions protect the semantic distinction.
 
 ## Accepted local verification
 
-Current analysis, all mandatory production architecture commands, ordinary Android
+Accepted production analysis, all mandatory architecture commands, ordinary Android
 APK build, product-mode instrumentation and pinned Chromium renderer isolation
 pass. Composed host coverage spans all 464 default test files: 3,833 unique actual
 passes, 17 documented skips and no remaining failure. This is completed file
 coverage plus the final affected-file rerun, not one uninterrupted green runner.
 The failed predecessor and erroneous nonexistent-file command remain recorded
 and are excluded from accepted totals.
+
+The subsequent phone-probe batch passed focused analysis, eight Dart fixture
+cases, eight replay-driver checks, nine release-marker checks and both authored
+census and Dart entry-point guards. Production files are unchanged; these checks
+are a scoped supplement to the accepted production run.
 
 Native source/root review, nine native guard/proof commands and 27 JVM controls
 cover the final source, with scoped predecessor reuse where source is unchanged. Sixty-four affected
@@ -91,12 +96,23 @@ their separate human/device/server acceptance scope.
 
 ## Remaining acceptance
 
+Matched offline streaming replay has passed on the authorized physical phone.
+This scoped result covers exact synthetic text and native typing during the
+stream; it does not close the remaining typing, retention, background or live
+server gates. Two short-history typing repetitions also passed with zero
+unchanged transcript setup and workspace notifications; the next attempt stopped
+when the QA app lost foreground. The original QA app and device settings were
+restored. Android presentation timestamps were unavailable, so frame timing
+is not reported as input-to-present latency. Phone probes are separate opt-in
+roots; production owners and views are unchanged.
+
 - Run matched profile-mode physical-phone resource/performance checks and normal
   and restricted battery/network behavior on an authorized QA phone.
 - Run applicable stock runtime journeys against an authorized owned QA profile/chat
   on latest upstream unmodified Hermes. The latest inspected source is
-  `e473f5a9c976a0b5bc292aa415dae28c638a47c3`; its gateway/router contracts match
-  the preceding inspected revision. Source review is not deployed acceptance.
+  `4787e4d56fc8d9265d4c7d3c0fe5accee86b4078`; bounded review found additive
+  model-provider quota fields and no incompatible change in the inspected
+  gateway/auth contracts. Source review is not deployed acceptance.
 
 No additional production migration or confirmed deletion lead remains open in
 this reviewed inventory. An actual final finding still requires a bounded fix,

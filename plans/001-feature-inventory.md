@@ -1,6 +1,6 @@
 # Complete feature and view ownership inventory
 
-Current fixed-source inventory: **1,500 authored files, 358 production Dart files, 348 Dart libraries and 143 views**. All 358 production files have completed source ownership/root/locality/dead-code review; every view row below records its exact current SHA. The role manifest includes all current parts and their containing libraries. There are 809 protected retired declaration identities and 67 required Dart commands. These source counts and reviews do not certify runtime acceptance.
+Current source inventory: **1,501 authored files, 358 production Dart files, 348 Dart libraries and 143 views**. All 358 production files have completed source ownership/root/locality/dead-code review; every view row below records its exact current SHA. The role manifest includes all current parts and their containing libraries. There are 809 protected retired declaration identities and 67 required Dart commands. These source counts and reviews do not certify runtime acceptance.
 
 The final declaration query resolved without analysis errors and its last dead-wrapper cascade has been removed. Current composed whole-host, analysis, production guards, APK build, native source/JVM/proof, product-mode instrumentation and pinned Chromium gates are accepted. Matched phone performance and current-stock runtime acceptance remain open. Installed offline voice, monitoring, seven file/photo/share cases and held-provider/camera-recreation journeys pass on the disposable emulator with explicit source/build/scope bindings. Completed rendered inspection covers affected controls at normal and enlarged text in both themes; it does not establish installed-device acceptance. Use [roles.json](../tools/architecture/roles.json) for file roles and [ARCHITECTURE.md](../docs/ARCHITECTURE.md) to find canonical owners. Views render typed observations and forward commands; local text, focus, selection, scroll, animation, geometry, route composition and explicit owner lifetimes retain their reviewed UI purpose. No whole-library composition exemption applies.
 
@@ -24,7 +24,7 @@ Current row responsibility and source-review fields take precedence over histori
     "declared_role_files": 358,
     "declared_role_libraries": 348,
     "production_source_files_reviewed": 358,
-    "authored_files": 1500,
+    "authored_files": 1501,
     "retired_declaration_identities": 809,
     "required_dart_commands": 67,
     "native_guard_proof_commands": 9

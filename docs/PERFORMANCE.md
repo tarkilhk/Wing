@@ -28,6 +28,20 @@ For offline streaming and typing, use `tools/performance/workspace_streaming_rep
 as the target. Real model calls require an explicitly owned QA chat and an
 explicitly verified Luna route; preserve connection/profile defaults.
 
+The replay's `prepareIdle` extension accepts histories of 2 or 50 rows. After
+preparation, `startProbe` and `stopProbe` bracket 200 native draft edits and
+report actual frame timings, transcript setup counts and workspace notifications.
+Require enabled diagnostics, exact expected draft, unchanged geometry/focus,
+settled history and zero transcript setup and workspace notifications.
+
+For the offline navigation soak, build the same profile variant targeting
+`tools/performance/workspace_navigation_soak.dart`. Its `ready` and `round`
+extensions use the real workspace with synthetic 50-message chats. Run twenty
+`same` rounds across twenty minutes, then twenty `increasing` rounds across
+twenty minutes. Record settled heap/PSS alongside retained transcript and runtime
+counts. This fixture performs no network I/O and cannot certify socket retention
+or live Hermes delivery. Both offline fixtures keep preferences in memory.
+
 Run parser, worker and rendering tests with measurements enabled:
 
 ```sh
