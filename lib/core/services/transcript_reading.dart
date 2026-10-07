@@ -542,6 +542,9 @@ final class TranscriptReading {
     }
     try {
       final historyRead = _gateway.history(sessionId, runtimeId: runtimeId);
+      // The REST transcript omits durations. Recover actual completion receipts
+      // alongside the page, including calls completed while Wing was detached.
+      final toolRead = _readCompletedTools(runtimeId);
       if (CompletionDiagnostics.enabled) {
         CompletionDiagnostics.finish(
           'controller.history_setup_sync',
@@ -550,6 +553,14 @@ final class TranscriptReading {
       }
       final page = await historyRead;
       if (!valid()) return false;
+      final tools = await toolRead;
+      if (!valid()) return false;
+      for (final activity in tools) {
+        // A live completion arriving during the read remains authoritative.
+        if (_observedTools[activity.toolId]?.durationSeconds == null) {
+          observeTool(activity);
+        }
+      }
       final historyApplyStarted = CompletionDiagnostics.enabled
           ? CompletionDiagnostics.start()
           : 0;
@@ -612,6 +623,17 @@ final class TranscriptReading {
         _historyLoading = false;
         if (canPublish()) onChanged();
       }
+    }
+  }
+
+  Future<List<GatewayToolActivity>> _readCompletedTools(
+    String runtimeId,
+  ) async {
+    try {
+      return await _gateway.completedToolActivities(runtimeId);
+    } catch (_) {
+      // Timing enrichment is optional; a failed read cannot hide saved messages.
+      return const [];
     }
   }
 

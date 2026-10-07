@@ -4,6 +4,8 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Recover measured tool-call durations missed while disconnected when loading chat history.
+
 - Make tool activity rows compact and remove expansion arrows from saved agents
   that have no output to show.
 
