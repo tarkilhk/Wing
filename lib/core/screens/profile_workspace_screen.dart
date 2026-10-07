@@ -1584,7 +1584,16 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                         ).textTheme.labelMedium,
                                       ),
                                     ),
-                                    ContextRing(occupancy: chat.context),
+                                    ContextRing(
+                                      key: ValueKey(('context-ring', chat.key)),
+                                      occupancy: chat.context,
+                                      compressions: chat.contextCompressions,
+                                      loading: chat.contextLoading,
+                                      error: chat.contextError,
+                                      onRefresh: () => unawaited(
+                                        controller.refreshContext(chat),
+                                      ),
+                                    ),
                                     TextButton(
                                       onPressed:
                                           chat.composer.observation.saving ||
@@ -1890,7 +1899,16 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                               }
                                             }),
                                     ),
-                                    ContextRing(occupancy: chat.context),
+                                    ContextRing(
+                                      key: ValueKey(('context-ring', chat.key)),
+                                      occupancy: chat.context,
+                                      compressions: chat.contextCompressions,
+                                      loading: chat.contextLoading,
+                                      error: chat.contextError,
+                                      onRefresh: () => unawaited(
+                                        controller.refreshContext(chat),
+                                      ),
+                                    ),
                                     Expanded(
                                       child: Align(
                                         alignment: Alignment.centerRight,

@@ -67,6 +67,9 @@ part 'profile_workspace_deleted_drafts.dart';
 class ProfileChat {
   ContextOccupancy? _context;
   int _contextGeneration = 0;
+  int? _contextCompressions;
+  bool _contextLoading = false;
+  String? _contextError;
   ProfileSessionKey _key;
   String _title;
   String _source;
@@ -126,6 +129,9 @@ class ProfileChat {
 
   // Canonical facts are written only by this containing workspace library.
   ContextOccupancy? get context => _context;
+  int? get contextCompressions => _contextCompressions;
+  bool get contextLoading => _contextLoading;
+  String? get contextError => _contextError;
   ProfileSessionKey get key => _key;
   String get title => _title;
   String get source => _source;
@@ -2292,10 +2298,17 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   Future<void> refreshContext(ProfileChat chat) async {
-    final gateway = _owned(chat).gateway;
+    if (_closed || chat.runtime.blocksTurnAdmission) return;
+    final resource = _owned(chat);
+    final key = chat._key;
+    final gateway = resource.gateway;
     final runtime = chat.runtime.runtimeId;
     final generation = ++chat._contextGeneration;
+    chat._contextLoading = true;
+    chat._contextError = null;
+    _changed();
     ContextOccupancy? value;
+    String? error;
     try {
       value = ContextOccupancy.fromJson(
         await gateway.call('session.context_breakdown', {
@@ -2303,14 +2316,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }),
       );
     } catch (_) {
-      // Unsupported/unavailable context is unknown, not an empty context window.
+      error = 'Couldn’t load the context breakdown.';
     }
     if (_closed ||
+        chat._key != key ||
+        !identical(resource._chats[key.sessionId], chat) ||
         chat.runtime.runtimeId != runtime ||
         chat._contextGeneration != generation) {
       return;
     }
     chat._context = value;
+    chat._contextLoading = false;
+    chat._contextError = error;
     _changed();
   }
 
@@ -2815,9 +2832,26 @@ class ProfileWorkspaceController extends ChangeNotifier {
       'The session changed, but its continuation was not accepted. Check this chat and refresh session controls before trying again.';
 
   void _updateContext(ProfileChat chat, Map usage) {
-    if (!usage.keys.any((key) => key.toString().startsWith('context_'))) return;
+    final compressions = usage['compressions'];
+    final compressionChanged =
+        compressions is int &&
+        compressions >= 0 &&
+        chat._contextCompressions != null &&
+        chat._contextCompressions != compressions;
+    if (compressions is int && compressions >= 0) {
+      chat._contextCompressions = compressions;
+    }
+    if (compressionChanged) _invalidateContextDetails(chat);
+    if (!usage.keys.any((key) => key.toString().startsWith('context_'))) {
+      if (compressionChanged && !chat.runtime.blocksTurnAdmission) {
+        unawaited(refreshContext(chat));
+      }
+      return;
+    }
     final previous = chat._context;
     chat._contextGeneration++;
+    chat._contextLoading = false;
+    chat._contextError = null;
     chat._context = ContextOccupancy.fromJson({
       if (previous != null) ...{
         'context_used': previous.used,
@@ -2827,6 +2861,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
       },
       ...Map<String, dynamic>.from(usage),
     });
+    if (compressionChanged && !chat.runtime.blocksTurnAdmission) {
+      unawaited(refreshContext(chat));
+    }
+  }
+
+  void _invalidateContextDetails(ProfileChat chat) {
+    chat._contextGeneration++;
+    chat._context = chat._context?.withoutCategories();
+    chat._contextLoading = false;
+    chat._contextError = null;
   }
 
   Future<void> loadOlderMessages(ProfileChat chat) async {
@@ -5046,6 +5090,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       );
       if (!applied) return false;
       chat._context = null;
+      _invalidateContextDetails(chat);
       unawaited(refreshContext(chat));
       return true;
     } finally {
@@ -5635,8 +5680,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
       return false;
     }
     if (commandPrompt == null) {
+      _invalidateContextDetails(chat);
       chat._runtime.beginTurn(submitting: true);
     } else {
+      _invalidateContextDetails(chat);
       chat._runtime.beginCommandPrompt(commandPrompt);
     }
     chat.reading.cancelReads();
@@ -6287,6 +6334,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           _updateContext(chat, event.data['usage'] as Map);
         }
       case 'message.start':
+        _invalidateContextDetails(chat);
         if (!chat.runtime.executionActive) {
           chat._runtime.beginTurn(submitting: false);
           chat.reading.cancelReads();
@@ -7297,6 +7345,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat._intelligenceRevision++;
       chat._context = null;
       chat._contextGeneration++;
+      chat._contextCompressions = null;
+      chat._contextLoading = false;
+      chat._contextError = null;
       chat._runtime.finishActivity();
       chat._reviewNotices.clear();
       chat.reading.retireRuntimeNotices();
@@ -7325,6 +7376,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat._sideQuestionDeliveries.clear();
     }
     chat._runtime.installResume(result);
+    final usage = (result['info'] as Map?)?['usage'];
+    if (usage is Map) _updateContext(chat, usage);
     chat._notificationInputsQuiet = true;
     _hydrateIntelligence(chat, result);
     _applyTodoSnapshot(chat, result['todo_state']);

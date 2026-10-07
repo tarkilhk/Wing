@@ -17,7 +17,7 @@
   exact analyzed image; Raw details retains selectable, copyable inputs and output.
   Live elapsed counters start only from a backend tool start; saved timing appears
   only when available. See [tool activity](TOOL_ACTIVITY.md).
-- **Stay oriented.** See the selected model, context usage and current work. Switch models with a clear confirmation when Hermes warns about the change.
+- **Stay oriented.** See the selected model, context percentage inside its ring and current work. Tap the ring for a compact breakdown of used/max tokens, estimated context categories and available compression count. Switch models with a clear confirmation when Hermes warns about the change.
 
 ## Keep work moving
 

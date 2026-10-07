@@ -174,4 +174,102 @@ void main() {
       expect(chat.context?.percent, 25);
     },
   );
+  test(
+    'composition is chat-owned and live usage invalidates its estimate',
+    () async {
+      breakdownResponse = {
+        ...snapshot,
+        'categories': [
+          {'id': 'conversation', 'label': 'Conversation', 'tokens': 200},
+        ],
+      };
+      final a = await controller.createChat(canDispatch: () => true);
+      await controller.refreshContext(a);
+      await controller.switchProfile('b');
+      final b = await controller.createChat(canDispatch: () => true);
+      await controller.refreshContext(b);
+      host.event('a', 'session.usage', {
+        'usage': {
+          'context_used': 750,
+          'context_percent': 75,
+          'compressions': 2,
+        },
+      });
+      expect(a.context!.used, 750);
+      expect(a.context!.categories, isEmpty);
+      expect(a.contextCompressions, 2);
+      expect(b.context!.categories.single.tokens, 200);
+      expect(b.contextCompressions, isNull);
+    },
+  );
+
+  test('late idle composition and loading cannot survive a new turn', () async {
+    final chat = await controller.createChat(canDispatch: () => true);
+    await controller.refreshContext(chat);
+    pending = Completer();
+    final refresh = controller.refreshContext(chat);
+    expect(chat.contextLoading, isTrue);
+    host.event('a', 'message.start', {});
+    expect(chat.contextLoading, isFalse);
+    pending!.complete({
+      ...snapshot,
+      'categories': [
+        {'id': 'conversation', 'label': 'Conversation', 'tokens': 200},
+      ],
+    });
+    await refresh;
+    expect(chat.context!.categories, isEmpty);
+    expect(chat.contextLoading, isFalse);
+  });
+
+  test('compression-only usage clears and refetches the composition', () async {
+    final chat = await controller.createChat(canDispatch: () => true);
+    host.event('a', 'session.usage', {
+      'usage': {'compressions': 0},
+    });
+    breakdownResponse = {
+      ...snapshot,
+      'categories': [
+        {'id': 'conversation', 'label': 'Conversation', 'tokens': 200},
+      ],
+    };
+    await controller.refreshContext(chat);
+    final before = host.calls
+        .where((call) => call.$2 == 'session.context_breakdown')
+        .length;
+    breakdownResponse = {
+      ...snapshot,
+      'categories': [
+        {'id': 'conversation', 'label': 'Conversation', 'tokens': 40},
+      ],
+    };
+    host.event('a', 'session.usage', {
+      'usage': {'compressions': 1},
+    });
+    expect(chat.context!.categories, isEmpty);
+    expect(chat.contextLoading, isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(chat.context!.categories.single.tokens, 40);
+    expect(chat.contextCompressions, 1);
+    expect(
+      host.calls.where((call) => call.$2 == 'session.context_breakdown'),
+      hasLength(before + 1),
+    );
+  });
+
+  test('failed composition read has an explicit retry state', () async {
+    final chat = await controller.createChat(canDispatch: () => true);
+    pending = Completer();
+    final refresh = controller.refreshContext(chat);
+    expect(chat.contextLoading, isTrue);
+    pending!.completeError(StateError('fixture failure'));
+    await refresh;
+    expect(chat.contextLoading, isFalse);
+    expect(chat.context, isNull);
+    expect(chat.contextError, 'Couldn’t load the context breakdown.');
+    pending = null;
+    await controller.refreshContext(chat);
+    expect(chat.contextError, isNull);
+    expect(chat.context!.used, 250);
+  });
 }
