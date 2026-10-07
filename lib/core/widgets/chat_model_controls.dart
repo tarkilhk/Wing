@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import '../models/chat_intelligence.dart';
 import '../presentation/chat_model_labels.dart';
 import '../theme/wing_theme.dart';
@@ -236,6 +238,298 @@ class ChatFastControl extends StatelessWidget {
                   style: tokens.typography.label,
                 ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Matches Send's held-pointer gesture: preview while sliding, commit on lift.
+/// The picker keeps its separate tap menu; this compact face belongs to composer.
+class ChatReasoningScrubControl extends StatefulWidget {
+  const ChatReasoningScrubControl({
+    required this.effort,
+    required this.canDisable,
+    required this.onChanged,
+    super.key,
+  });
+  final String effort;
+  final bool canDisable;
+  final ValueChanged<String>? onChanged;
+  @override
+  State<ChatReasoningScrubControl> createState() =>
+      _ChatReasoningScrubControlState();
+}
+
+class _ChatReasoningScrubControlState extends State<ChatReasoningScrubControl>
+    with WidgetsBindingObserver {
+  final _anchorKey = GlobalKey();
+  OverlayEntry? _overlay;
+  Rect _anchor = Rect.zero;
+  Rect _choices = Rect.zero;
+  String? _selected;
+  int _revision = 0;
+
+  List<String> get _efforts => [
+    for (final value in _shortEfforts.keys)
+      if (widget.canDisable || value != 'none') value,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didUpdateWidget(ChatReasoningScrubControl oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.effort != widget.effort ||
+        oldWidget.canDisable != widget.canDisable ||
+        (oldWidget.onChanged == null) != (widget.onChanged == null)) {
+      _close();
+    }
+  }
+
+  @override
+  void didChangeMetrics() => _close();
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _close();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _close();
+    super.dispose();
+  }
+
+  void _close() {
+    _revision++;
+    _overlay?.remove();
+    _overlay?.dispose();
+    _overlay = null;
+    _selected = null;
+  }
+
+  Future<void> _keyboardMenu() async {
+    if (widget.onChanged == null) return;
+    _close();
+    final revision = _revision;
+    final overlayBox =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final box = _anchorKey.currentContext!.findRenderObject()! as RenderBox;
+    final anchor =
+        box.localToGlobal(Offset.zero, ancestor: overlayBox) & box.size;
+    final value = await showMenu<String>(
+      context: context,
+      requestFocus: true,
+      semanticLabel: 'Reasoning level',
+      position: RelativeRect.fromRect(anchor, Offset.zero & overlayBox.size),
+      items: [
+        for (final effort in _efforts)
+          PopupMenuItem(
+            value: effort,
+            child: Text(chatReasoningEffortLabel(effort)),
+          ),
+      ],
+    );
+    if (mounted &&
+        revision == _revision &&
+        value != null &&
+        _efforts.contains(value)) {
+      widget.onChanged?.call(value);
+    }
+  }
+
+  void _open(LongPressStartDetails _) {
+    if (_overlay != null || widget.onChanged == null) return;
+    final overlay = Overlay.of(context);
+    final overlayBox = overlay.context.findRenderObject()! as RenderBox;
+    final box = _anchorKey.currentContext!.findRenderObject()! as RenderBox;
+    _anchor = box.localToGlobal(Offset.zero, ancestor: overlayBox) & box.size;
+    final scale = MediaQuery.textScalerOf(context).scale(1);
+    final width = math.min(
+      scale > 1.3 ? 88.0 : 64.0,
+      overlayBox.size.width - 16,
+    );
+    final left = (_anchor.center.dx - width / 2).clamp(
+      8.0,
+      math.max(8.0, overlayBox.size.width - width - 8),
+    );
+    final bottom = _anchor.top - 8;
+    final height = math.min(
+      _efforts.length * 32.0 * scale,
+      bottom - MediaQuery.paddingOf(context).top - 8,
+    );
+    if (height <= 0) return;
+    _choices = Rect.fromLTWH(left.toDouble(), bottom - height, width, height);
+    _selected = widget.effort;
+    _overlay = OverlayEntry(
+      builder: (_) =>
+          InheritedTheme.captureAll(context, Builder(builder: _buildSelector)),
+    );
+    overlay.insert(_overlay!);
+    HapticFeedback.selectionClick();
+  }
+
+  Widget _buildSelector(BuildContext context) {
+    final tokens = WingTokens.of(context);
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          Positioned(
+            left: _choices.left,
+            top: _choices.top,
+            width: _choices.width,
+            height: _choices.height,
+            child: Material(
+              key: const Key('composer-reasoning-selector'),
+              color: tokens.raised,
+              shape: RoundedRectangleBorder(
+                borderRadius: WingRadius.control,
+                side: BorderSide(color: tokens.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final effort in _efforts)
+                    Expanded(
+                      child: Container(
+                        key: Key('composer-reasoning-choice-$effort'),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: _selected == effort
+                              ? tokens.accent.withValues(alpha: .12)
+                              : Colors.transparent,
+                          borderRadius: WingRadius.control,
+                        ),
+                        child: Text(
+                          _shortEfforts[effort]!,
+                          style: tokens.typography.label.copyWith(
+                            color: _selected == effort
+                                ? tokens.accent
+                                : tokens.onSurface,
+                          ),
+                          semanticsLabel: chatReasoningEffortLabel(effort),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _move(LongPressMoveUpdateDetails details) {
+    if (_overlay == null) return;
+    final overlayBox =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final point = overlayBox.globalToLocal(details.globalPosition);
+    String? next;
+    if (_choices.contains(point)) {
+      final index =
+          ((point.dy - _choices.top) / _choices.height * _efforts.length)
+              .floor()
+              .clamp(0, _efforts.length - 1);
+      next = _efforts[index];
+    } else if (Rect.fromLTRB(
+      _anchor.left - 8,
+      _choices.bottom,
+      _anchor.right + 8,
+      _anchor.bottom + 8,
+    ).contains(point)) {
+      next = widget.effort;
+    }
+    if (_selected != next) {
+      _selected = next;
+      _overlay!.markNeedsBuild();
+      HapticFeedback.selectionClick();
+    }
+  }
+
+  void _release(LongPressEndDetails _) {
+    final selected = _selected;
+    _close();
+    if (selected != null &&
+        selected != widget.effort &&
+        _efforts.contains(selected)) {
+      widget.onChanged?.call(selected);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = WingTokens.of(context);
+    return Semantics(
+      button: true,
+      label: 'Reasoning ${chatReasoningEffortLabel(widget.effort)}',
+      hint:
+          'Hold, slide to a level, then release. Slide away to cancel. Keyboard: Down arrow opens levels.',
+      onLongPress: widget.onChanged == null ? null : _keyboardMenu,
+      customSemanticsActions: {
+        if (widget.onChanged != null)
+          for (final effort in _efforts)
+            CustomSemanticsAction(
+              label: chatReasoningEffortLabel(effort),
+            ): () =>
+                widget.onChanged?.call(effort),
+      },
+      child: Focus(
+        canRequestFocus: widget.onChanged != null,
+        skipTraversal: widget.onChanged == null,
+        onKeyEvent: (_, event) {
+          if (widget.onChanged != null &&
+              event is KeyDownEvent &&
+              [
+                LogicalKeyboardKey.arrowDown,
+                LogicalKeyboardKey.contextMenu,
+                LogicalKeyboardKey.enter,
+                LogicalKeyboardKey.space,
+              ].contains(event.logicalKey)) {
+            _keyboardMenu();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: GestureDetector(
+          key: const Key('composer-reasoning-control'),
+          behavior: HitTestBehavior.opaque,
+          onLongPressStart: widget.onChanged == null ? null : _open,
+          onLongPressMoveUpdate: _move,
+          onLongPressEnd: _release,
+          onLongPressCancel: _close,
+          child: ExcludeSemantics(
+            child: SizedBox(
+              key: _anchorKey,
+              height: 32,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox.square(
+                      dimension: 14,
+                      child: CircuitBrainIcon(color: tokens.muted),
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      compactChatReasoningLabel(widget.effort),
+                      style: tokens.typography.label.copyWith(
+                        fontSize: 12,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),

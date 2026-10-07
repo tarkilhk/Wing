@@ -15,6 +15,21 @@ String chatReasoningEffortLabel(String effort) {
   return chatReasoningEffortLabels[normalized] ?? effort;
 }
 
+/// Passive composer badge; full effort names remain in accessibility text.
+String compactChatReasoningLabel(String effort) =>
+    switch (effort.trim().toLowerCase()) {
+      'none' => 'O',
+      'minimal' => 'Min',
+      'low' => 'L',
+      'medium' => 'Med',
+      'high' => 'H',
+      'xhigh' => 'X',
+      'max' => 'Max',
+      'ultra' => 'U',
+      'default' || '' => 'D',
+      _ => effort.trim().substring(0, 1).toUpperCase(),
+    };
+
 /// Shortens common model IDs for the composer without changing the value sent
 /// to Hermes. The full ID remains visible in the picker and context header.
 String compactChatModelLabel(String model) {

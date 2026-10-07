@@ -73,10 +73,11 @@ A missing saved route remains an uncertainty notice rather than another model.
 `model_chooser_test.dart` guards long catalogs, duplicate IDs, selection semantics
 and cross-provider browsing; the real workspace reopening regression lives in
 `profile_intelligence_test.dart`. Runtime selection and visibility require
-behavioral checks; source linting cannot establish them.
+behavioral checks; source linting cannot establish them. The composer layout regression also requires 32dp normal-text controls: model opens the picker, lightning toggles immediately, and reasoning applies only after a held slide is released. Ordinary reasoning taps and cancelled held gestures do not write; changing chats retires the selector. Disabled and keyboard paths are guarded by `chat_intelligence_picker_test.dart`.
 
-The chat owner reads reasoning and fast for the captured live session. Its
-composer shortcuts and picker Apply use the same admitted write path. Picker
+The chat owner reads reasoning and fast for the captured live session. The
+composer model button opens the picker; its small lightning toggle and held
+reasoning selector use the same admitted write path as picker Apply. Picker
 changes are drafts; Close discards them. Model confirmation remains before any
 subsequent setting write. A partial save retains acknowledged fields and retries
 unconfirmed settings without repeating the model change. Fast requires the stock

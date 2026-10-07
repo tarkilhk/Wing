@@ -598,6 +598,32 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('changing chats retires held reasoning without a write', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    final held = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('composer-reasoning-control'))),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    await held.moveTo(
+      tester.getCenter(find.byKey(const Key('composer-reasoning-choice-low'))),
+    );
+    await tester.pump();
+    final previous = controller.current!.chat!.key;
+    await controller.createChat(canDispatch: () => true);
+    expect(controller.current!.chat!.key, isNot(previous));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('composer-reasoning-selector')), findsNothing);
+    await held.up();
+    await tester.pumpAndSettle();
+    expect(host.writes, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final brightness in Brightness.values) {
     for (final (size, scale) in [
       (const Size(390, 844), 1.0),
@@ -627,15 +653,29 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        for (final key in [
-          'chat-intelligence-button',
-          'chat-reasoning-control',
-          'chat-fast-control',
-        ]) {
-          expect(find.byKey(Key(key)).hitTestable(), findsOneWidget);
+        final indicator = find.byKey(const Key('chat-intelligence-button'));
+        expect(indicator.hitTestable(), findsOneWidget);
+        expect(find.byKey(const Key('chat-reasoning-control')), findsNothing);
+        expect(find.byKey(const Key('chat-fast-control')), findsNothing);
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('composer-reasoning-control')),
+            matching: find.text('H'),
+          ),
+          findsOneWidget,
+        );
+        final thinking = find.byKey(const Key('composer-reasoning-control'));
+        final lightning = find.byKey(const Key('composer-fast-control'));
+        expect(thinking.hitTestable(), findsOneWidget);
+        expect(lightning.hitTestable(), findsOneWidget);
+        if (scale == 1) {
+          for (final control in [indicator, thinking, lightning]) {
+            expect(tester.getSize(control).height, lessThanOrEqualTo(32));
+          }
         }
         expect(tester.takeException(), isNull);
-        if (capture) {
+        Future<void> screenshot(String suffix) async {
+          if (!capture) return;
           await tester.runAsync(() async {
             final image = await tester
                 .renderObject<RenderRepaintBoundary>(find.byKey(frame))
@@ -644,15 +684,60 @@ void main() {
               format: ui.ImageByteFormat.png,
             );
             await File(
-              'build/model-composer-${brightness.name}-${size.width.toInt()}-${scale == 2 ? 'large' : 'normal'}.png',
+              'build/model-composer-${brightness.name}-${size.width.toInt()}-${scale == 2 ? 'large' : 'normal'}$suffix.png',
             ).writeAsBytes(bytes!.buffer.asUint8List());
             image.dispose();
           });
         }
+
+        await screenshot('');
+        await tester.tap(thinking);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('composer-reasoning-selector')),
+          findsNothing,
+        );
+        expect(host.writes, isEmpty);
+        final cancel = await tester.startGesture(tester.getCenter(thinking));
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(
+          find.byKey(const Key('composer-reasoning-selector')),
+          findsOneWidget,
+        );
+        await cancel.moveTo(const Offset(2, 2));
+        await cancel.up();
+        await tester.pumpAndSettle();
+        expect(host.writes, isEmpty);
+        final held = await tester.startGesture(tester.getCenter(thinking));
+        await tester.pump(const Duration(milliseconds: 600));
+        await held.moveTo(
+          tester.getCenter(
+            find.byKey(const Key('composer-reasoning-choice-low')),
+          ),
+        );
+        await tester.pump();
+        expect(host.writes, isEmpty);
+        await screenshot('-reasoning');
+        await held.up();
+        await tester.pumpAndSettle();
+        expect(host.writes.single['key'], 'reasoning');
+        expect(host.writes.single['value'], 'low');
+        expect(controller.current!.chat!.reasoningEffort, 'low');
+        await tester.tap(lightning);
+        await tester.pumpAndSettle();
+        expect(host.writes, hasLength(2));
+        expect(host.writes.last['key'], 'fast');
+        expect(host.writes.last['value'], 'fast');
+        await tester.tap(indicator);
+        await tester.pumpAndSettle();
+        expect(find.text('Models'), findsOneWidget);
         await tester.tap(find.byKey(const Key('chat-fast-control')));
         await tester.pumpAndSettle();
-        expect(host.writes.single['key'], 'fast');
-        expect(host.writes.single['value'], 'fast');
+        expect(host.writes, hasLength(2));
+        await tester.tap(find.byTooltip('Close'));
+        await tester.pumpAndSettle();
+        expect(host.writes, hasLength(2));
+        expect(controller.current!.chat!.fastMode, ChatFastMode.fast);
       });
     }
   }

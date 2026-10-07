@@ -13,6 +13,7 @@ Switching to gpt-5.6-sol makes the next reply re-read all of it uncached (provid
 
 Threshold: model.switch_context_confirm_tokens (currently 100,000; 0 disables this check).
 Confirm only if you intend to switch now.''';
+  int _createdSessions = 0;
   final writes = <Map<String, dynamic>>[];
   void Function(Map<String, dynamic>)? onAcceptedWrite;
   String? resumedRuntimeId;
@@ -111,8 +112,13 @@ Confirm only if you intend to switch now.''';
         }
         final result = await base.call(method, params);
         if (method == 'session.resume' || method == 'session.create') {
+          if (method == 'session.create') _createdSessions++;
           return {
             ...result,
+            if (method == 'session.create' && _createdSessions > 1) ...{
+              'session_id': 'runtime-$_createdSessions',
+              'stored_session_id': 'new-chat-$_createdSessions',
+            },
             if (method == 'session.resume' && resumedRuntimeId != null)
               'session_id': resumedRuntimeId,
             'info': {

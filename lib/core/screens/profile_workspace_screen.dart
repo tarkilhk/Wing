@@ -1919,6 +1919,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                       child: Align(
                                         alignment: Alignment.centerRight,
                                         child: ChatIntelligenceButton(
+                                          key: ValueKey((
+                                            'chat-intelligence',
+                                            chat.key,
+                                          )),
                                           model: chat.model ?? 'Model',
                                           observation: controller
                                               .modelObservation(chat),

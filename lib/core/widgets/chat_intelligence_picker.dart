@@ -7,6 +7,7 @@ import 'chat_model_controls.dart';
 import 'model_chooser.dart';
 import 'studio_error.dart';
 
+/// Small inline model, held reasoning selector and fast toggle for the chat.
 class ChatIntelligenceButton extends StatelessWidget {
   const ChatIntelligenceButton({
     required this.model,
@@ -27,70 +28,104 @@ class ChatIntelligenceButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final ValueChanged<String>? onReasoningChanged;
   final ValueChanged<ChatFastMode>? onFastChanged;
+
   @override
   Widget build(BuildContext context) {
     final tokens = WingTokens.of(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final controls = [
-          if (observation?.controls?.reasoning == true && fastMode != null)
-            ChatReasoningControl(
-              effort: reasoningEffort,
-              canDisable: observation!.controls!.canDisableReasoning,
-              onChanged: onPressed == null ? null : onReasoningChanged,
+    final reasoning = observation?.controls?.reasoning == true;
+    final fast = observation?.controls?.fast == true && fastMode != null;
+    final buttonStyle = TextButton.styleFrom(
+      minimumSize: const Size(24, 32),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.standard,
+      foregroundColor: tokens.muted,
+      textStyle: tokens.typography.label.copyWith(fontSize: 12, height: 1.25),
+    );
+    final modelButton = Tooltip(
+      message: 'Model $model',
+      child: TextButton(
+        key: const Key('chat-intelligence-button'),
+        onPressed: onPressed,
+        style: buttonStyle,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (loading)
+              const SizedBox.square(
+                dimension: 14,
+                child: CircularProgressIndicator(strokeWidth: 1.5),
+              )
+            else
+              const Icon(Icons.memory_rounded, size: 14),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                compactChatModelLabel(model),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          if (observation?.controls?.fast == true && fastMode != null)
-            ChatFastControl(
-              mode: fastMode!,
-              onChanged: onPressed == null ? null : onFastChanged,
-            ),
-        ];
-        final modelButton = TextButton(
-          key: const Key('chat-intelligence-button'),
-          onPressed: onPressed,
-          style: TextButton.styleFrom(
-            minimumSize: const Size(48, 48),
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            foregroundColor: tokens.onSurface,
-            textStyle: tokens.typography.label,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (loading)
-                const SizedBox.square(
-                  dimension: 12,
-                  child: CircularProgressIndicator(strokeWidth: 1.5),
-                ),
-              if (loading) const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  compactChatModelLabel(model),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          ],
+        ),
+      ),
+    );
+    final controls = <Widget>[
+      if (reasoning) ...[
+        const SizedBox(width: 4),
+        ChatReasoningScrubControl(
+          effort: reasoningEffort,
+          canDisable: observation!.controls!.canDisableReasoning,
+          onChanged: onPressed == null ? null : onReasoningChanged,
+        ),
+      ],
+      if (fast) ...[
+        const SizedBox(width: 4),
+        Tooltip(
+          message: 'Fast: ${fastMode!.enabled ? 'On' : 'Off'}',
+          child: Semantics(
+            toggled: fastMode!.enabled,
+            label: 'Fast mode',
+            child: TextButton(
+              key: const Key('composer-fast-control'),
+              onPressed: onPressed == null || onFastChanged == null
+                  ? null
+                  : () => onFastChanged!(
+                      fastMode!.enabled
+                          ? ChatFastMode.normal
+                          : ChatFastMode.fast,
+                    ),
+              style: buttonStyle.copyWith(
+                foregroundColor: WidgetStatePropertyAll(
+                  fastMode!.enabled ? tokens.accent : tokens.muted,
                 ),
               ),
-              const Icon(Icons.keyboard_arrow_down_rounded, size: 16),
-            ],
+              child: Icon(
+                fastMode!.enabled ? Icons.bolt : Icons.bolt_outlined,
+                size: 14,
+              ),
+            ),
           ),
-        );
-        if (constraints.maxWidth < controls.length * 48 + 64 &&
-            controls.isNotEmpty) {
+        ),
+      ],
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (MediaQuery.textScalerOf(context).scale(1) > 1.3 &&
+            constraints.maxWidth < 200) {
           return Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               modelButton,
-              Wrap(alignment: WrapAlignment.end, children: controls),
+              Row(mainAxisSize: MainAxisSize.min, children: controls),
             ],
           );
         }
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Flexible(
-              child: Tooltip(message: 'Model $model', child: modelButton),
-            ),
+            Flexible(child: modelButton),
             ...controls,
           ],
         );

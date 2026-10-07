@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
+import 'package:wing/core/widgets/chat_model_controls.dart';
 import 'package:wing/core/models/chat_intelligence.dart';
 import 'package:wing/core/models/model_choice.dart';
 import 'package:wing/core/models/model_catalog.dart';
@@ -66,6 +68,102 @@ void main() {
   test('composer formatting leaves route identity intact', () {
     expect(compactChatModelLabel('openai/gpt-5.6-sol'), '5.6 Sol');
     expect(catalogModelLabel('gpt-6-astra'), 'GPT-6 Astra');
+  });
+
+  test('composer reasoning badges stay short', () {
+    const expected = {
+      'none': 'O',
+      'minimal': 'Min',
+      'low': 'L',
+      'medium': 'Med',
+      'high': 'H',
+      'xhigh': 'X',
+      'max': 'Max',
+      'ultra': 'U',
+      'default': 'D',
+      '': 'D',
+    };
+    for (final entry in expected.entries) {
+      expect(compactChatReasoningLabel(entry.key), entry.value);
+    }
+  });
+
+  testWidgets(
+    'held reasoning retires when disabled; unavailable Off stays absent',
+    (tester) async {
+      final writes = <String>[];
+      Future<void> render(bool enabled) => tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomCenter,
+              child: ChatReasoningScrubControl(
+                effort: 'high',
+                canDisable: false,
+                onChanged: enabled ? writes.add : null,
+              ),
+            ),
+          ),
+        ),
+      );
+      await render(true);
+      final control = find.byKey(const Key('composer-reasoning-control'));
+      final held = await tester.startGesture(tester.getCenter(control));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(
+        find.byKey(const Key('composer-reasoning-selector')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('composer-reasoning-choice-none')),
+        findsNothing,
+      );
+      await held.moveTo(
+        tester.getCenter(
+          find.byKey(const Key('composer-reasoning-choice-low')),
+        ),
+      );
+      await render(false);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('composer-reasoning-selector')),
+        findsNothing,
+      );
+      await held.up();
+      await tester.pumpAndSettle();
+      expect(writes, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('held reasoning has a keyboard selection path', (tester) async {
+    final writes = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: ChatReasoningScrubControl(
+              effort: 'high',
+              canDisable: false,
+              onChanged: writes.add,
+            ),
+          ),
+        ),
+      ),
+    );
+    final control = find.byKey(const Key('composer-reasoning-control'));
+    FocusScope.of(tester.element(control)).nextFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(find.text('Off'), findsNothing);
+    await tester.tap(find.text('Medium'));
+    await tester.pumpAndSettle();
+    expect(writes, ['medium']);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('one ledger stages all settings, then applies once', (
