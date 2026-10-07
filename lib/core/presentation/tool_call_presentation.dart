@@ -12,6 +12,7 @@ final class ToolCallPresentation {
     required this.name,
     required this.title,
     required this.target,
+    required this.subtitle,
     required this.status,
     required this.outcome,
     required this.details,
@@ -42,11 +43,12 @@ final class ToolCallPresentation {
   final double? durationSeconds;
   final Duration? startedAt;
 
-  /// Normal completion is expected; only active work and exceptions need a line.
+  /// One compact input fact; raw targets and inputs remain unmodified.
+  final String subtitle;
+
+  /// Exceptions replace the input subtitle; normal completion adds no notice.
   String? get notice => switch (outcome) {
-    ToolCallOutcome.running ||
-    ToolCallOutcome.warning ||
-    ToolCallOutcome.error => status,
+    ToolCallOutcome.warning || ToolCallOutcome.error => status,
     _ => null,
   };
 
@@ -255,6 +257,7 @@ final class ToolCallPresentation {
       summary: summary,
       title: title,
       target: target == null ? null : _oneLine(target),
+      subtitle: _inputDetail(name, args, data, labels, context),
       status: status,
       outcome: outcome,
       details: List.unmodifiable(details),
@@ -269,6 +272,104 @@ final class ToolCallPresentation {
       startedAt: completed ? null : startedAt,
     );
   }
+}
+
+String _inputDetail(
+  String name,
+  Map args,
+  Map data,
+  List<ToolCallLabel> labels,
+  String? context,
+) {
+  String display(String value) {
+    final text = _oneLine(value);
+    if (text.startsWith('data:')) return 'Attached image';
+    return text.replaceFirst(RegExp(r'^https?://', caseSensitive: false), '');
+  }
+
+  String? list(Object? value) {
+    if (value is! List) return null;
+    final values = value
+        .whereType<String>()
+        .where((s) => s.trim().isNotEmpty)
+        .map(display);
+    return values.isEmpty ? null : values.join(' · ');
+  }
+
+  if (labels.isNotEmpty && labels.first.preview.trim().isNotEmpty) {
+    return display(labels.first.preview);
+  }
+  final code = _firstText(args, const ['code']);
+  if (name == 'browser_exec' && code != null) {
+    // Only literal input URLs are summarized. Never evaluate code or borrow a
+    // URL from another call; scripts may use entirely different browser tabs.
+    final literals = RegExp(r'''(["'])(.*?)\1''').allMatches(code);
+    for (final literal in literals) {
+      final url = RegExp(
+        r'''https?://[^\s"'<>`\\]+''',
+      ).firstMatch(literal.group(2)!)?.group(0);
+      if (url != null && !url.contains('{') && !url.contains('}')) {
+        return display(url);
+      }
+    }
+    final first = code.trim().split('\n').first.trim();
+    if (first.startsWith('#') && first.substring(1).trim().isNotEmpty) {
+      return _oneLine(first.substring(1));
+    }
+    return _oneLine(code);
+  }
+  if (name == 'search_files') {
+    final pattern = _firstText(args, const ['pattern', 'query']);
+    final path = _firstText(args, const ['path']);
+    if (pattern != null || path != null) {
+      return [?pattern, ?path].map(display).join(' · ');
+    }
+  }
+  if (args['tasks'] case final List tasks
+      when name == 'delegate_task' && tasks.isNotEmpty) {
+    final goal = tasks.first is Map
+        ? _firstText(tasks.first as Map, const ['goal'])
+        : null;
+    return '${tasks.length} ${tasks.length == 1 ? 'task' : 'tasks'}${goal == null ? '' : ' · ${_oneLine(goal)}'}';
+  }
+  if (name == 'delegate_task' && data['goals'] is List) {
+    final goals = (data['goals'] as List)
+        .whereType<String>()
+        .where((goal) => goal.trim().isNotEmpty)
+        .toList();
+    if (goals.isNotEmpty) {
+      return '${goals.length} ${goals.length == 1 ? 'task' : 'tasks'} · ${_oneLine(goals.first)}';
+    }
+  }
+  final target =
+      _firstText(args, const [
+        'image_url',
+        'url',
+        'file_path',
+        'path',
+        'query',
+        'pattern',
+        'command',
+        'name',
+        'goal',
+        'prompt',
+        'ref',
+        'selector',
+        'text',
+        'code',
+        'subagent_id',
+      ]) ??
+      list(args['urls']) ??
+      list(args['names']);
+  final action = _firstText(args, const ['action']);
+  if (action != null) {
+    return [_humanize(action), if (target != null) display(target)].join(' · ');
+  }
+  if (target != null) return display(target);
+  if (context != null && context.trim().isNotEmpty) return display(context);
+  final deliveredTarget = _firstText(data, const ['url', 'file_path', 'path']);
+  if (deliveredTarget != null) return display(deliveredTarget);
+  return 'No input details supplied';
 }
 
 /// Decode delivered JSON for presentation, preserving raw output at its source.

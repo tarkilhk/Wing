@@ -49,30 +49,29 @@ class ProfileToolCall extends StatelessWidget {
       lines: [
         Text(
           call.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
             height: 1.3,
           ),
         ),
-        if (call.target case final target?)
-          Text(
-            target.startsWith('data:') ? 'Attached image' : target,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 12, height: 1.5, color: colors.muted),
+        Text(
+          call.notice ?? call.subtitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 12,
+            height: 1.5,
+            color: call.notice == null ? colors.muted : statusColor,
           ),
-        if (call.notice case final notice?)
-          Text(
-            notice,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 12, height: 1.5, color: statusColor),
-          ),
+        ),
       ],
       time: ActivityTime(
         durationSeconds: call.durationSeconds,
         startedAt: call.startedAt,
+        showUnavailable: true,
       ),
       // Backend identity survives the live-to-history handoff. Explicit
       // notification focus still opens independently of stored disclosure.
@@ -83,6 +82,8 @@ class ProfileToolCall extends StatelessWidget {
         }
       },
       details: [
+        SelectableText('Action: ${call.title}'),
+        const SizedBox(height: 8),
         if (call.target case final target?) ...[
           SelectableText(
             target.startsWith('data:') ? 'Attached image' : target,

@@ -212,8 +212,33 @@ void main() {
       expect(find.text('Succeeded'), findsNothing);
       expect(find.text('Already loaded'), findsNothing);
       expect(find.text('700 ms'), findsOneWidget);
+      expect(find.text('—'), findsNWidgets(3));
     },
   );
+
+  testWidgets('unknown tool timing is explicit and never reads a clock', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ActivityTime(
+            showUnavailable: true,
+            clock: () => throw StateError('No backend start'),
+            wallClock: () => throw StateError('No backend start'),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('—'), findsOneWidget);
+    expect(
+      find.byTooltip('No backend timing available for this call'),
+      findsOneWidget,
+    );
+    await tester.pump(const Duration(seconds: 5));
+    expect(find.text('—'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'backend epoch counters tick, clamp clock skew and end on backend duration',

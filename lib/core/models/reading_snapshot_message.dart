@@ -7,7 +7,7 @@ import 'user_message_content.dart';
 /// it has selected the worker path, rather than walking it on the UI isolate.
 Map<String, dynamic> captureReadingSnapshotMessage(Map<String, dynamic> row) =>
     {
-      for (final key in const [
+      for (final key in [
         'id',
         'row_id',
         'role',
@@ -18,6 +18,15 @@ Map<String, dynamic> captureReadingSnapshotMessage(Map<String, dynamic> row) =>
         '_todo_snapshot_synthetic',
         'display_kind',
         'display_content',
+        if (row['role'] == 'tool') ...[
+          'tool_call_id',
+          'tool_name',
+          'args',
+          'context',
+          'summary',
+          'labels',
+          'duration_s',
+        ],
       ])
         if (row.containsKey(key)) key: row[key],
       if (row['display_metadata'] case final Map metadata)
@@ -82,6 +91,32 @@ Map<String, dynamic> projectReadingSnapshotMessage(Map row) {
       ))
         attachment.toReadingJson(),
     ];
+  }
+  if (result['role'] == 'tool') {
+    for (final key in ['tool_call_id', 'tool_name', 'context', 'summary']) {
+      final value = row[key];
+      if (value is String && value.trim().isNotEmpty) result[key] = value;
+    }
+    final seconds = row['duration_s'];
+    if (seconds is num && seconds.isFinite && seconds >= 0) {
+      result['duration_s'] = seconds;
+    }
+    final args = row['args'];
+    if (args is String) result['args'] = args;
+    if (args is Map) result['args'] = jsonEncode(args);
+    if (row['labels'] case final List labels) {
+      result['labels'] = [
+        for (final label in labels)
+          if (label is Map &&
+              label['text'] is String &&
+              label['name'] is String)
+            {
+              'text': label['text'],
+              'name': label['name'],
+              if (label['preview'] is String) 'preview': label['preview'],
+            },
+      ];
+    }
   }
   return result;
 }

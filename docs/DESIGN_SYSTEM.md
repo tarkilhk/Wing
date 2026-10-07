@@ -246,7 +246,12 @@ to Chats, conversations, Activity, Administration, Health and administration
 drill-downs.
 
 Tool and saved-agent headers use `CompactActivityRow`: zero vertical padding,
-no minimum height and no gaps between rows. Keep any expanded-detail spacing
+no minimum height and no gaps between rows. The owner’s 8 October tool refinement
+uses exactly two single-line text rows: action, then one useful input detail (or
+an exception). Ellipsize both at the available width, including enlarged text;
+full titles and inputs remain readable on expansion. URLs in the subtitle omit
+the HTTP(S) prefix. Timing remains beside the title, with a dash when backend
+timing is unavailable. Saved-agent goals retain their wrapping. Keep any expanded-detail spacing
 inside the detail content. The [density guard](../tools/architecture/rules/activity_density.md)
 and rendered activity-tab tests enforce this exception without banning padding
 in settings, forms or action controls.

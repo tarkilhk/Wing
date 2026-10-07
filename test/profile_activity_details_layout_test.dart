@@ -46,16 +46,41 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             {
               'id': index + 1,
               'role': 'tool',
-              'tool_name': index == 0
-                  ? 'skill_view'
-                  : index == 3
-                  ? 'booking_search'
-                  : 'browser_exec',
-              'args': index == 0
-                  ? {'name': 'business-trip-policy-research'}
-                  : null,
+              'tool_name': switch (index) {
+                0 => 'skill_view',
+                3 => 'booking_search',
+                4 => 'desktop_preview',
+                5 => 'tool_get',
+                6 => 'search_files',
+                7 => 'read_file',
+                8 => 'web_extract',
+                _ => 'browser_exec',
+              },
+              'args': switch (index) {
+                0 => {'name': 'business-trip-policy-research'},
+                1 => {
+                  'code':
+                      'open("https://example.org/rentals/conditions/mileage")',
+                },
+                4 => {'action': 'open', 'url': 'https://example.org/map'},
+                5 => {
+                  'names': ['desktop_preview', 'drive_preview'],
+                },
+                6 => {'pattern': 'mileage', 'path': 'trip/sources.json'},
+                7 => {'path': 'trip/items.json'},
+                8 => {
+                  'urls': ['https://example.org/rentals/conditions'],
+                },
+                9 => {
+                  'code':
+                      '# Inspect the permitted travel area\nprint(get_state())',
+                },
+                _ => null,
+              },
               'content': index == 2 ? '{"exit_code":1}' : 'Page read',
               if (index == 2 || index == 3) 'duration_s': 23,
+              if (index != 2 && index != 3 && index != 9)
+                'duration_s': (index + 1) * 0.012,
               if (index == 3)
                 'labels': [
                   {'text': wrappedLabelText, 'name': 'booking_search'},
@@ -122,7 +147,23 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         expect(wrappedLabel, findsOneWidget);
         expect(
           tester.getSize(wrappedLabel).height,
-          greaterThan(tester.getSize(find.text('Browser exec').first).height),
+          tester.getSize(find.text('Browser exec').first).height,
+        );
+        final headers = tester.widgetList<CompactActivityRow>(
+          find.byType(CompactActivityRow),
+        );
+        expect(headers, hasLength(rows.length));
+        for (final header in headers) {
+          expect(header.lines, hasLength(2));
+          expect(header.lines.every((line) => line.maxLines == 1), isTrue);
+          expect(header.lines.last.data!.trim(), isNotEmpty);
+        }
+        final heights = toolRows
+            .map((row) => tester.getSize(row).height)
+            .toList();
+        expect(
+          heights.every((height) => (height - heights.first).abs() < 0.01),
+          isTrue,
         );
         if (capture != null) {
           await capture(tester, 'compact-tools-${brightness.name}-$scale');

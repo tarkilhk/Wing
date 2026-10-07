@@ -19,6 +19,93 @@ ToolCallPresentation completed(
 );
 
 void main() {
+  test('every tool has a useful one-line input detail', () {
+    final cases = <(String, Map<String, dynamic>, String)>[
+      (
+        'browser_exec',
+        {'code': 'open("https://example.org/rentals")'},
+        'example.org/rentals',
+      ),
+      (
+        'browser_exec',
+        {'code': 'cli("open https://example.org/rentals")'},
+        'example.org/rentals',
+      ),
+      (
+        'browser_exec',
+        {
+          'code':
+              '# Read mileage; see https://example.org/docs\nprint(get_state())',
+        },
+        'Read mileage; see https://example.org/docs',
+      ),
+      (
+        'browser_exec',
+        {'code': '# Inspect rental mileage\nprint(get_state())'},
+        'Inspect rental mileage',
+      ),
+      ('browser_exec', {'code': 'print(get_state())'}, 'print(get_state())'),
+      (
+        'desktop_preview',
+        {'action': 'open', 'url': 'https://example.org/map'},
+        'Open · example.org/map',
+      ),
+      (
+        'drive_preview',
+        {'action': 'click', 'ref': 'button-12'},
+        'Click · button-12',
+      ),
+      (
+        'tool_get',
+        {
+          'names': ['desktop_preview', 'drive_preview'],
+        },
+        'desktop_preview · drive_preview',
+      ),
+      (
+        'search_files',
+        {'pattern': 'mileage', 'path': 'trip/sources'},
+        'mileage · trip/sources',
+      ),
+      ('read_file', {'path': 'trip/items.json'}, 'trip/items.json'),
+      ('skill_view', {'name': 'hermes-agent'}, 'hermes-agent'),
+      (
+        'delegate_task',
+        {
+          'tasks': [
+            {'goal': 'Check mileage'},
+            {'goal': 'Check prices'},
+          ],
+        },
+        '2 tasks · Check mileage',
+      ),
+      (
+        'web_extract',
+        {
+          'urls': ['https://example.org/faq'],
+        },
+        'example.org/faq',
+      ),
+      ('new_tool', {}, 'No input details supplied'),
+    ];
+    for (final (name, args, expected) in cases) {
+      final call = completed(name, {'ok': true}, args: args);
+      expect(call.subtitle, expected, reason: name);
+      expect(call.subtitle, isNot(contains('\n')));
+    }
+    expect(
+      completed('delegate_task', {
+        'goals': ['Check mileage', 'Check prices'],
+      }).subtitle,
+      '2 tasks · Check mileage',
+    );
+    expect(
+      completed('browser_snapshot', {
+        'url': 'https://example.org/rentals',
+      }).subtitle,
+      'example.org/rentals',
+    );
+  });
   test('skill batch operations show their facts instead of empty Results', () {
     const raw =
         '{"success":true,"operations_applied":1,"results":['

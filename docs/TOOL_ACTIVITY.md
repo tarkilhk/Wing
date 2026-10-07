@@ -27,15 +27,21 @@ automatic/manual regression was proven red before implementation. Run
 `flutter test --no-pub test/profile_activity_status_test.dart`.
 
 Open Activity in a conversation, then Tools. Every backend call has an individual
-action row: a readable title, delivered target, exception notice and any available
-duration. Expand a row to read its result. Vision calls show their exact
+action row: a single-line action title, one single-line input detail and timing.
+URLs omit the HTTP(S) prefix in the subtitle; complete inputs remain in details.
+Warnings and failures replace the input subtitle with a one-line exception.
+Missing backend timing is shown as a dash with an explanatory tooltip. Expand a
+row to read its result. Vision calls show their exact
 `image_url` input using the existing bounded image preview and full-screen viewer,
 followed by the question and returned analysis. Raw details exposes selectable,
 copyable tool identity, inputs and output without client payload truncation.
 Normal completion, success and unchanged-skill status add no header notice.
-Running work, warnings and failures remain visible.
-Tool headers have zero vertical padding and no minimum row height or inter-row
-spacing. They grow only for their text, including enlarged text; 16 dp icons and
+Pending action titles and approximate live counters identify running work;
+warnings and failures remain visible without adding a third header line.
+Tool headers have exactly two single-line text rows, zero vertical padding and
+no minimum row height or inter-row spacing. Both lines ellipsize at the available
+width and grow with text scaling. Full titles and inputs are available expanded;
+16 dp icons and
 rotating arrows fit the compact text rows.
 Tasks, Agents, Work and Thinking retain their selection;
 approvals and questions remain outside tool disclosures.
@@ -70,7 +76,49 @@ backend patches, plugins or custom endpoints. Sources are upstream
 - Stock saved history does not normally persist tool durations. The reading owner
   retains up to 256 received call observations per chat and enriches matching
   actual saved rows with delivered inputs, labels and final durations. It never
-  invents transcript rows. After restarting, absent backend timing stays absent.
+  invents transcript rows. The existing bounded reading cache now retains tool
+  identity, readable input metadata and received final durations. On restoring
+  the cache, `TranscriptReading` retains measured durations across authoritative
+  refresh only when both the durable row ID and tool call ID match. Fresh
+  backend durations take precedence, including zero. Cached rows never start
+  timers or regain execution authority. Cache limits still apply (60 recent
+  rows per chat, ten recent chats per profile); timing never received or already
+  pruned cannot be recovered from stock history.
+
+## Timing retention and uniform tool headers, 8 October 2026
+
+Verified current unmodified upstream main
+[`7dab93b06e2bb3757dc18229169efcee1b5b47a3`](https://github.com/NousResearch/hermes-agent/commit/7dab93b06e2bb3757dc18229169efcee1b5b47a3):
+`tui_gateway/tool_progress.py` still emits `duration_s` on completion and no
+backend start timestamp; ordinary saved session rows still omit this timing.
+The client regression reproduced a received 1.25-second duration becoming absent
+at reading-cache encoding. The typed cache projection now preserves this passive
+fact, and refresh retains it by exact durable-row/call identity. No timestamp
+subtraction or locally invented completion time fills missing historical timing.
+
+`ToolCallPresentation` owns the one-line input detail. Supplied label previews
+win. Browser scripts use a literal input URL, leading step comment or code
+preview; no script is evaluated and no URL is borrowed from another call.
+File tools show paths, file searches show pattern and path, preview tools show
+action and target, tool discovery shows requested names, and delegations show
+task count and first goal. Other tools use their delivered query, command,
+image, prompt, reference, selector or context. If none is supplied, the subtitle
+says so. Stock schemas inspected include `tools/browser_use_cli.py`,
+`tools/preview_tool.py`, `tools/drive_preview_tool.py`, `tools/tool_search.py`,
+`tools/tool_labels.py` and `agent/display.py`. When input metadata is unavailable,
+an explicitly delivered result URL/path or delegation goal supplies the detail.
+
+Behavioral guards cover the actual receipt → history → cache encode → restore →
+refresh → timeline path in `test/profile_execution_activity_test.dart`, including
+row/call mismatch rejection and fresh zero-duration precedence.
+`test/reading_snapshot_message_test.dart` checks typed metadata and excludes
+runtime fields and invalid timing. `test/profile_tool_call_test.dart` checks
+explicit unknown timing without reading a clock. The presentation cases in
+`test/tool_call_presentation_test.dart` and rendered tab cases in
+`test/profile_activity_details_layout_test.dart` enforce meaningful second lines,
+equal collapsed heights, one-line truncation and zero padding in both themes at
+normal and doubled text. These are behavioral properties: static analysis cannot
+establish which timing was delivered or the rendered height of actual text.
 
 ## Labels and ownership
 
@@ -144,8 +192,8 @@ defines its finite scope and legitimate detail spacing.
 `test/profile_activity_details_layout_test.dart` measures zero vertical header
 padding and inter-row gaps through the real saved-history section and tool
 group wrappers, including automatically discovered activity tabs, in both themes at
-normal and enlarged text, including wrapped labels, exception lines, targets
-and delivered durations. The height budget uses the tallest parallel content
+normal and enlarged text, including long ellipsized tool labels, exception subtitles, targets
+and delivered durations. Saved-agent goals continue to wrap. The height budget uses the tallest parallel content
 column, so a timing label cannot hide added padding. The timer itself must fit
 its text without vertical padding and align with the top of the row. It also rejects empty
 saved-agent disclosures, including whitespace-only output, while requiring real
@@ -254,8 +302,9 @@ Verified latest unmodified upstream main
 on 7 October 2026: `tools/todo_tool.py`, `tools/delegate_tool_dispatch.py`,
 `tools/delegate_tool_child_run.py`, `tui_gateway/methods_subagents.py`,
 `tui_gateway/tool_progress.py` and the saved session APIs. Ordinary saved tool
-rows still do not contain duration: a missing time after app restart is a
-backend history limitation, not reconstructed from message timestamps.
+rows still do not contain duration. Received durations survive within the client
+reading-cache bounds described above; other missing times remain a backend
+history limitation and are never reconstructed from message timestamps.
 
 `test/profile_combined_activity_test.dart` reproduces/restores both historical
 tabs through the real timeline and widget path. `test/saved_activity_test.dart`

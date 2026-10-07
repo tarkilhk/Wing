@@ -8,6 +8,10 @@ import 'package:wing/core/models/gateway_todo.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/transcript_reading.dart';
+import 'package:wing/core/services/workspace_snapshot_store.dart';
+import 'package:wing/core/models/transcript_reading.dart';
+import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -54,6 +58,144 @@ void main() {
     controller.dispose();
     appPreferences.dispose();
   });
+
+  test(
+    'received durations survive cached reading and authoritative refresh',
+    () async {
+      host.event('a', 'tool.complete', {
+        'tool_id': 'measured',
+        'name': 'browser_exec',
+        'args': {'code': 'open("https://example.org/rentals")'},
+        'result': {'stdout': 'Rental terms'},
+        'duration_s': 1.25,
+      });
+      host.historyMessages = [
+        {
+          'id': 21,
+          'role': 'tool',
+          'tool_call_id': 'measured',
+          'content': 'Rental terms',
+        },
+        {
+          'id': 22,
+          'role': 'tool',
+          'tool_call_id': 'unmeasured',
+          'content': 'Other terms',
+        },
+      ];
+      await controller.refreshHistory(chat);
+      expect(chat.reading.messages.first['duration_s'], 1.25);
+      final store = WorkspaceSnapshotStore(
+        await SharedPreferences.getInstance(),
+        'tool-timing',
+      );
+      await store.write({
+        'profiles': [
+          {
+            'chats': [
+              {'messages': chat.reading.captureSnapshot().messages},
+            ],
+          },
+        ],
+      });
+      final rows = (store.read()['profiles'][0]['chats'][0]['messages'] as List)
+          .map((row) => Map<String, dynamic>.from(row as Map))
+          .toList();
+      final restored = TranscriptReading(
+        gateway: host.gateway(chat.key.workspace),
+      );
+      addTearDown(restored.dispose);
+      restored.installSnapshot(
+        TranscriptReadingSnapshot(messages: rows, historySessionId: 'same'),
+      );
+      expect(restored.messages.first['duration_s'], 1.25);
+      expect(restored.messages.first['args'], contains('example.org/rentals'));
+      restored.installSavedPage(
+        ProfileHistoryPage(
+          'same',
+          host.historyMessages!,
+          0,
+          500,
+          isComplete: true,
+        ),
+      );
+      final timeline = TranscriptTimeline.project(
+        restored.messages,
+        presentationId: restored.messagePresentationId,
+      );
+      expect(timeline.entries.first.tool!.durationSeconds, 1.25);
+      expect(timeline.entries.first.tool!.callId, 'measured');
+      expect(timeline.entries.last.tool!.durationSeconds, isNull);
+      restored.installSavedPage(
+        ProfileHistoryPage(
+          'same',
+          [
+            // Same call text/ID with a different durable row is not the same result.
+            {
+              'id': 31,
+              'role': 'tool',
+              'tool_call_id': 'measured',
+              'content': 'Rental terms',
+            },
+            {
+              'id': 21,
+              'role': 'tool',
+              'tool_call_id': 'other-call',
+              'content': 'Rental terms',
+            },
+          ],
+          0,
+          500,
+          isComplete: true,
+        ),
+      );
+      expect(
+        restored.messages.every((row) => row['duration_s'] == null),
+        isTrue,
+      );
+      restored.installSavedPage(
+        ProfileHistoryPage(
+          'same',
+          [
+            {
+              'id': 21,
+              'role': 'tool',
+              'tool_call_id': 'measured',
+              'content': 'Rental terms',
+            },
+          ],
+          0,
+          500,
+          isComplete: true,
+        ),
+      );
+      restored.observeTool(
+        GatewayToolActivity.fromGatewayEvent('tool.complete', {
+          'tool_id': 'measured',
+          'name': 'browser_exec',
+          'duration_s': 0,
+          'result': 'Rental terms',
+        })!,
+      );
+      expect(
+        restored.messages.singleWhere((row) => row['id'] == 21)['duration_s'],
+        0,
+      );
+      restored.installSavedPage(
+        ProfileHistoryPage(
+          'same',
+          host.historyMessages!,
+          0,
+          500,
+          isComplete: true,
+        ),
+      );
+      expect(
+        restored.messages.singleWhere((row) => row['id'] == 21)['duration_s'],
+        0,
+      );
+    },
+  );
 
   test('hydrates todos and rejects an older live revision', () {
     expect(chat.todoRevision, 2);

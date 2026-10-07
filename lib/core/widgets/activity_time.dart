@@ -14,6 +14,7 @@ class ActivityTime extends StatefulWidget {
     this.startedAt,
     this.backendStartedAt,
     this.subject = 'Tool',
+    this.showUnavailable = false,
     this.clock = toolActivityNow,
     this.wallClock = DateTime.now,
   });
@@ -23,6 +24,7 @@ class ActivityTime extends StatefulWidget {
   /// Backend Unix timestamp in seconds, never a locally invented start.
   final double? backendStartedAt;
   final String subject;
+  final bool showUnavailable;
   final Duration Function() clock;
   final DateTime Function() wallClock;
 
@@ -85,26 +87,34 @@ class _ActivityTimeState extends State<ActivityTime>
     final finalTime = widget.durationSeconds;
     final start = widget.startedAt;
     final backendStart = widget.backendStartedAt;
-    if (finalTime == null && start == null && backendStart == null) {
+    final unavailable =
+        finalTime == null && start == null && backendStart == null;
+    if (unavailable && !widget.showUnavailable) {
       return const SizedBox.shrink();
     }
-    final elapsed =
-        finalTime ??
-        (backendStart != null
-                ? widget.wallClock().microsecondsSinceEpoch / 1000000 -
-                      backendStart
-                : (widget.clock() - start!).inMilliseconds / 1000)
-            .clamp(0.0, double.infinity);
-    final text =
-        '${finalTime == null ? '≈ ' : ''}${formatToolDuration(elapsed)}';
+    final elapsed = unavailable
+        ? 0.0
+        : finalTime ??
+              (backendStart != null
+                      ? widget.wallClock().microsecondsSinceEpoch / 1000000 -
+                            backendStart
+                      : (widget.clock() - start!).inMilliseconds / 1000)
+                  .clamp(0.0, double.infinity);
+    final text = unavailable
+        ? '—'
+        : '${finalTime == null ? '≈ ' : ''}${formatToolDuration(elapsed)}';
     return Tooltip(
-      message: finalTime == null
+      message: unavailable
+          ? 'No backend timing available for this call'
+          : finalTime == null
           ? backendStart != null
                 ? 'Approximate elapsed time from backend start; phone and server clocks may differ'
                 : 'Approximate time since backend tool start was received'
           : 'Backend duration',
       child: Semantics(
-        label: finalTime == null
+        label: unavailable
+            ? '${widget.subject} duration unavailable'
+            : finalTime == null
             ? '${widget.subject} running; approximate elapsed time'
             : 'Backend duration $text',
         child: ExcludeSemantics(

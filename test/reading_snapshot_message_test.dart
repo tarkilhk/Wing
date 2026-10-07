@@ -19,6 +19,58 @@ void main() {
             as Map,
       );
 
+  test(
+    'tool reading facts survive without timestamps or execution authority',
+    () {
+      final saved = roundtrip({
+        'id': 21,
+        'role': 'tool',
+        'content': 'Rental terms',
+        'tool_call_id': 'measured',
+        'tool_name': 'browser_exec',
+        'duration_s': 1.25,
+        'args': {'code': 'open("https://example.org/rentals")'},
+        'labels': [
+          {
+            'text': 'Open rentals',
+            'name': 'browser_exec',
+            'preview': 'example.org/rentals',
+            'credentials': 'excluded',
+          },
+        ],
+        'started_at': 10,
+        'phase': 'running',
+        'runtime_id': 'excluded',
+      });
+      expect(saved['duration_s'], 1.25);
+      expect(saved['tool_call_id'], 'measured');
+      expect(saved['tool_name'], 'browser_exec');
+      expect(jsonDecode(saved['args']), {
+        'code': 'open("https://example.org/rentals")',
+      });
+      expect(jsonEncode(saved), isNot(contains('excluded')));
+      expect(saved.containsKey('started_at'), isFalse);
+      expect(saved.containsKey('phase'), isFalse);
+      for (final seconds in [-1, double.nan, double.infinity, '1.25']) {
+        expect(
+          roundtrip({
+            'role': 'tool',
+            'duration_s': seconds,
+          }).containsKey('duration_s'),
+          isFalse,
+        );
+      }
+      expect(
+        roundtrip({
+          'role': 'assistant',
+          'duration_s': 1.25,
+          'tool_call_id': 'bad',
+        }).containsKey('duration_s'),
+        isFalse,
+      );
+    },
+  );
+
   test('hidden and synthetic rows remain hidden without runtime fields', () {
     for (final marker in [
       {'display_kind': 'hidden'},

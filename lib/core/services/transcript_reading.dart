@@ -34,6 +34,9 @@ final class TranscriptReading {
   final _messagePresentations = Expando<Object>();
   final _ownedRows = Expando<bool>();
   final _observedTools = <String, GatewayToolActivity>{};
+  // Passive measured facts from this chat's bounded reading cache. Both the
+  // durable row and backend call must match; reopening cannot start a timer.
+  final _cachedToolDurations = <(Object, String), double>{};
 
   /// Retains actual backend receipts for matching saved rows, never creates a
   /// history row or gives a saved output execution authority.
@@ -68,7 +71,7 @@ final class TranscriptReading {
       if (row['tool_name'] == null) 'tool_name': activity.name,
       if (row['args'] == null && activity.arguments != null)
         'args': activity.arguments,
-      if (row['duration_s'] == null && activity.durationSeconds != null)
+      if (activity.durationSeconds != null)
         'duration_s': activity.durationSeconds,
       if (row['context'] == null && activity.context != null)
         'context': activity.context,
@@ -154,6 +157,7 @@ final class TranscriptReading {
   void dispose() {
     _closed = true;
     _observedTools.clear();
+    _cachedToolDurations.clear();
     cancelReads();
   }
 
@@ -254,6 +258,21 @@ final class TranscriptReading {
   void installSnapshot(TranscriptReadingSnapshot snapshot) {
     if (_closed) return;
     cancelReads();
+    _cachedToolDurations.clear();
+    for (final row in snapshot.messages) {
+      final id = row['id'];
+      final callId = row['tool_call_id'];
+      final seconds = row['duration_s'];
+      if (row['role'] == 'tool' &&
+          (id is int || id is String) &&
+          callId is String &&
+          callId.isNotEmpty &&
+          seconds is num &&
+          seconds.isFinite &&
+          seconds >= 0) {
+        _cachedToolDurations[(id as Object, callId)] = seconds.toDouble();
+      }
+    }
     installSavedHistory(snapshot.messages);
     _historySessionId = snapshot.historySessionId;
     _nextHistoryOffset = null;
@@ -655,6 +674,14 @@ final class TranscriptReading {
         ? _observedTools[source['tool_call_id']]
         : null;
     if (receipt != null) source = _withToolReceipt(source, receipt);
+    if (source['role'] == 'tool' && source['duration_s'] == null) {
+      final id = source['id'];
+      final callId = source['tool_call_id'];
+      final seconds = id != null && callId is String
+          ? _cachedToolDurations[(id, callId)]
+          : null;
+      if (seconds != null) source = {...source, 'duration_s': seconds};
+    }
     final row = Map<String, dynamic>.unmodifiable({
       for (final entry in source.entries) entry.key: _freezeValue(entry.value),
     });
