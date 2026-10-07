@@ -226,6 +226,16 @@
       "feature": "outputs-and-viewers",
       "library": "lib/core/models/media_reference.dart"
     },
+    "lib/core/models/model_catalog.dart": {
+      "role": "domain",
+      "feature": "model-selection",
+      "library": "lib/core/models/model_catalog.dart"
+    },
+    "lib/core/models/model_catalog_details.dart": {
+      "role": "domain",
+      "feature": "model-selection",
+      "library": "lib/core/models/model_catalog_details.dart"
+    },
     "lib/core/models/model_choice.dart": {
       "role": "domain",
       "feature": "model-selection",
@@ -455,6 +465,11 @@
       "role": "presentation",
       "feature": "attachments-and-sharing",
       "library": "lib/core/presentation/attachment_preview_image.dart"
+    },
+    "lib/core/presentation/chat_model_labels.dart": {
+      "role": "presentation",
+      "feature": "model-selection",
+      "library": "lib/core/presentation/chat_model_labels.dart"
     },
     "lib/core/presentation/desktop_tool_labels.dart": {
       "role": "presentation",
@@ -1141,6 +1156,11 @@
       "feature": "profile-identity",
       "library": "lib/core/services/profile_identity_repository.dart"
     },
+    "lib/core/services/profile_model_catalog.dart": {
+      "role": "application",
+      "feature": "model-selection",
+      "library": "lib/core/services/profile_model_catalog.dart"
+    },
     "lib/core/services/profile_model_defaults_session.dart": {
       "role": "application",
       "feature": "model-selection",
@@ -1476,6 +1496,11 @@
       "feature": "model-selection",
       "library": "lib/core/widgets/chat_model_confirmation.dart"
     },
+    "lib/core/widgets/chat_model_controls.dart": {
+      "role": "view",
+      "feature": "model-selection",
+      "library": "lib/core/widgets/chat_model_controls.dart"
+    },
     "lib/core/widgets/chat_profile_bar.dart": {
       "role": "view",
       "feature": "profiles",
@@ -1590,6 +1615,11 @@
       "role": "view",
       "feature": "markdown",
       "library": "lib/core/widgets/markdown_message_content.dart"
+    },
+    "lib/core/widgets/model_card.dart": {
+      "role": "view",
+      "feature": "model-selection",
+      "library": "lib/core/widgets/model_card.dart"
     },
     "lib/core/widgets/model_chooser.dart": {
       "role": "view",

@@ -534,7 +534,10 @@ void main() {
     );
     await tester.pump();
     expect(find.text('Nous'), findsWidgets);
-    expect(find.text('OpenAI subscription'), findsNothing);
+    expect(
+      find.byKey(const Key('profile-model-provider-openai-codex')),
+      findsNothing,
+    );
 
     await tester.enterText(
       find.byKey(const Key('profile-model-search')),
@@ -572,8 +575,6 @@ void main() {
     fixture.configured = false;
     await open(tester);
 
-    await tester.tap(find.text('OpenAI subscription'));
-    await tester.pumpAndSettle();
     await selectAstra(tester);
     expect(
       tester

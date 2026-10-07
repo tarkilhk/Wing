@@ -1,3 +1,4 @@
+import 'profile_model_catalog.dart';
 import 'connection_access.dart';
 import 'dart:async';
 import 'dart:io';
@@ -44,6 +45,32 @@ typedef AdministrationMutation =
 /// One connection, independent of the currently selected workspace.
 /// Profile views capture an explicit canonical scope.
 class AdministrationRepository {
+  final _modelCatalogs = <String, ProfileModelCatalog>{};
+  ProfileModelCatalog _modelCatalog(String name) {
+    if (_closed) {
+      throw StateError('Administration connection is closed');
+    }
+    return _modelCatalogs.putIfAbsent(
+      name,
+      () => ProfileModelCatalog(
+        scope: profile(name).scope,
+        read: ({required refresh, required explicitOnly}) =>
+            read('model/options', {
+              'profile': name,
+              if (refresh) 'refresh': '1',
+              if (explicitOnly) 'explicit_only': '1',
+            }),
+      ),
+    );
+  }
+
+  void _closeModelCatalogs() {
+    for (final owner in _modelCatalogs.values) {
+      owner.close();
+    }
+    _modelCatalogs.clear();
+  }
+
   final String connectionId;
   final String connectionIdentity;
   final String connectionLabel;
@@ -202,6 +229,7 @@ class AdministrationRepository {
     _closing = true;
     if (_leases == 0 && !_closed) {
       _closed = true;
+      _closeModelCatalogs();
       _close();
     }
   }
@@ -305,6 +333,7 @@ class ProfileAdministration {
     profileName: name,
   );
   ProfileGateway get gateway => server.gateway(name);
+  ProfileModelCatalog get modelCatalog => server._modelCatalog(name);
 
   Future<Map<String, dynamic>> read(
     String endpoint, [

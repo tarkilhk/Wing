@@ -1,3 +1,4 @@
+import 'package:wing/core/models/model_catalog.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -120,9 +121,9 @@ void main() {
         if (profile.isNotEmpty) {
           expect(await controller.switchProfile(profile), isTrue);
         }
-        final options = ModelChoice.fromOptions(
+        final options = ModelCatalog.fromOptions(
           await controller.current!.gateway.read('model/options'),
-        );
+        ).choices;
         luna = options.firstWhere((choice) => choice.model == 'gpt-5.6-luna');
         final chat = await controller.createChat(canDispatch: () => true);
         runtime = chat.runtime.runtimeId;

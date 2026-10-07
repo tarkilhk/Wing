@@ -37,10 +37,8 @@ const _diagnosticsCommands = {
 };
 const _repositoryCallbacks = {'request', 'settingsWrite', 'ownedMutation'};
 const _parserOwners = {
-  'lib/core/models/model_choice.dart': [
-    ('ModelChoice', 'fromOptions'),
-    ('ConfiguredModel', 'fromInfo'),
-  ],
+  'lib/core/models/model_catalog.dart': [('ModelCatalog', 'fromOptions')],
+  'lib/core/models/model_choice.dart': [('ConfiguredModel', 'fromInfo')],
   'lib/core/models/fallback_model.dart': [('FallbackModel', 'fromConfig')],
   'lib/core/models/profile_model_defaults.dart': [
     ('HelperModelAssignment', 'fromResponse'),

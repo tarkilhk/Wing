@@ -1,3 +1,5 @@
+import 'model_catalog_details.dart';
+
 /// The canonical stock model/info observation. Empty strings represent an
 /// unconfigured model or an automatic provider; they are not guessed routes.
 class ConfiguredModel {
@@ -28,6 +30,9 @@ class ModelChoice {
   final String? providerLabel;
   final String? displayName;
   final String? detail;
+  final ModelPrices? prices;
+  final ModelControls? controls;
+  final ModelProvider? providerInfo;
 
   const ModelChoice({
     required this.provider,
@@ -35,7 +40,18 @@ class ModelChoice {
     this.providerLabel,
     this.displayName,
     this.detail,
+    this.prices,
+    this.controls,
+    this.providerInfo,
   });
+
+  /// A manually entered ID is one identifier, never gateway command syntax.
+  static bool isValidEnteredId(String value) {
+    final id = value.trim();
+    return id.isNotEmpty &&
+        !id.startsWith('-') &&
+        !RegExp(r'''[\s'"]''').hasMatch(id);
+  }
 
   String get routeLabel => providerLabel?.trim().isNotEmpty == true
       ? providerLabel!.trim()
@@ -43,39 +59,6 @@ class ModelChoice {
 
   String get label =>
       displayName?.trim().isNotEmpty == true ? displayName!.trim() : model;
-
-  /// Stock model-options rows use slug/name and a list of string model IDs.
-  static List<ModelChoice> fromOptions(Map<String, dynamic> response) {
-    final providers = response['providers'];
-    if (providers is! List) {
-      throw const FormatException('Expected a list of provider records');
-    }
-    final choices = <ModelChoice>[];
-    for (final row in providers) {
-      if (row is! Map ||
-          row['slug'] is! String ||
-          (row['slug'] as String).trim().isEmpty ||
-          row['name'] is! String ||
-          row['models'] is! List) {
-        throw const FormatException('Expected a model-options provider record');
-      }
-      final slug = (row['slug'] as String).trim();
-      final label = (row['name'] as String).trim();
-      for (final value in row['models'] as List) {
-        if (value is! String || value.trim().isEmpty) {
-          throw const FormatException('Expected a nonempty string model ID');
-        }
-        choices.add(
-          ModelChoice(
-            provider: slug,
-            model: value.trim(),
-            providerLabel: label.isEmpty ? null : label,
-          ),
-        );
-      }
-    }
-    return choices;
-  }
 }
 
 enum ModelSpecialChoice { automatic, profileDefault }

@@ -1,3 +1,4 @@
+import 'package:wing/core/models/model_catalog.dart';
 import 'package:wing/core/models/chat_intelligence.dart';
 import 'package:wing/core/models/model_choice.dart';
 import 'dart:async';
@@ -81,6 +82,8 @@ class ProfileChat {
   String? _model;
   String? _provider;
   String? _reasoningEffort;
+  ChatFastMode? _fastMode;
+  bool _reasoningUnconfirmed = false;
   bool? _yolo;
   bool _changingIntelligence = false;
   String? _intelligenceRuntime;
@@ -143,6 +146,7 @@ class ProfileChat {
   String? get model => _model;
   String? get provider => _provider;
   String? get reasoningEffort => _reasoningEffort;
+  ChatFastMode? get fastMode => _fastMode;
   bool? get yolo => _yolo;
   bool get changingIntelligence => _changingIntelligence;
   String? get intelligenceRuntime => _intelligenceRuntime;
@@ -3057,6 +3061,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ).._replaceableUnsubmittedRuntime = true;
     resource._chats[id] = chat;
     _hydrateIntelligence(chat, response);
+    unawaited(_observeModelControls(chat));
     _applyTodoSnapshot(chat, response['todo_state']);
     await _restoreDraft(chat);
     if (initialDraft != null) await updateDraft(chat, initialDraft);
@@ -3502,6 +3507,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
             'key': 'reasoning',
             'value': chat._reasoningEffort!,
           });
+        }
+      }
+      if (preserveIntelligence && chat._fastMode != null) {
+        final fastResult = await resource.gateway.call('config.set', {
+          'session_id': newRuntime,
+          'key': 'fast',
+          'value': chat._fastMode!.name,
+        });
+        if (ChatFastMode.fromValue(fastResult['value']) != chat._fastMode) {
+          throw StateError(
+            'Fast mode could not be restored for the replacement chat.',
+          );
         }
       }
       if (chat._yolo != null) {
@@ -4907,6 +4924,50 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (title is String && title.trim().isNotEmpty) chat._title = title.trim();
   }
 
+  ModelChoice? modelObservation(ProfileChat chat) {
+    final catalog = _owned(chat).gateway.modelCatalog.snapshot;
+    return catalog?.choice(chat.provider ?? '', chat.model ?? '');
+  }
+
+  Future<void> _observeModelControls(ProfileChat chat) async {
+    final resource = _owned(chat);
+    final runtime = chat.runtime.runtimeId;
+    final revision = chat._intelligenceRevision;
+    final read = chat._intelligenceReadGeneration;
+    try {
+      final results = await Future.wait<Object>([
+        resource.gateway.modelCatalog.load(),
+        resource.gateway.call('config.get', {
+          'session_id': runtime,
+          'key': 'fast',
+        }),
+        resource.gateway.call('config.get', {
+          'session_id': runtime,
+          'key': 'reasoning',
+        }),
+      ]);
+      if (_closed ||
+          chat.runtime.runtimeId != runtime ||
+          chat._intelligenceRevision != revision ||
+          chat._intelligenceReadGeneration != read ||
+          chat._changingIntelligence ||
+          !identical(_resources[chat.key.workspace], resource)) {
+        return;
+      }
+      chat._fastMode = ChatFastMode.fromValue(
+        (results[1] as Map<String, dynamic>)['value'],
+      );
+      chat._reasoningEffort = WsClient.normalizeReasoningEffort(
+        (results[2] as Map<String, dynamic>)['value'],
+      );
+      chat._reasoningUnconfirmed = false;
+      chat._intelligenceRevision++;
+      _changed();
+    } catch (_) {
+      // Optional controls wait for a successful read. Opening the picker can retry.
+    }
+  }
+
   /// Reads and writes always use this chat's immutable profile owner and live ID.
   Future<
     ({List<ModelChoice> choices, String defaultModel, String? defaultProvider})
@@ -4933,14 +4994,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
 
     requireCurrentRead();
-    final results = await Future.wait([
+    final results = await Future.wait<Object>([
       gateway.read('model/info'),
-      gateway.read('model/options'),
+      gateway.modelCatalog.load(),
       gateway.call('config.get', {'session_id': runtime, 'key': 'reasoning'}),
+      gateway.call('config.get', {'session_id': runtime, 'key': 'fast'}),
     ]);
     requireCurrentRead();
-    final defaults = results[0];
-    final choices = ModelChoice.fromOptions(results[1]);
+    final defaults = results[0] as Map<String, dynamic>;
+    final choices = (results[1] as ModelCatalog).choices;
     if (choices.isEmpty) {
       throw StateError('This profile returned no selectable models.');
     }
@@ -4948,7 +5010,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat._model ??= defaults['model']?.toString();
     chat._provider ??= defaults['provider']?.toString();
     chat._reasoningEffort = WsClient.normalizeReasoningEffort(
-      results[2]['value'],
+      (results[2] as Map<String, dynamic>)['value'],
+    );
+    chat._reasoningUnconfirmed = false;
+    chat._fastMode = ChatFastMode.fromValue(
+      (results[3] as Map<String, dynamic>)['value'],
     );
     _changed();
     return (
@@ -4960,9 +5026,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   Future<List<ModelChoice>> refreshModelChoices(ProfileChat chat) async {
     final gateway = _owned(chat).gateway;
-    final response = await gateway.read('model/options', {'refresh': '1'});
+    final catalog = await gateway.modelCatalog.load(refresh: true);
     _owned(chat);
-    return ModelChoice.fromOptions(response);
+    _changed();
+    return catalog.choices;
   }
 
   Future<bool> _writeIntelligence(
@@ -4977,14 +5044,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final runtime = chat.runtime.runtimeId;
     final previousModel = chat._model;
     final previousProvider = chat._provider;
-    void requireCurrentSelection() {
+    final previousEffort = chat._reasoningEffort;
+    void requireCurrentSelection({bool allowAppliedModel = false}) {
       _commandOwner(chat);
       if (_closed ||
           switching ||
           _current?.chat != chat ||
           chat.runtime.runtimeId != runtime ||
-          chat._model != previousModel ||
-          chat._provider != previousProvider ||
+          !((chat._model == previousModel &&
+                  chat._provider == previousProvider) ||
+              (allowAppliedModel &&
+                  chat._model == selection.choice.model &&
+                  chat._provider == selection.choice.provider)) ||
           chat.runtime.blocksTurnAdmission ||
           chat.runtime.opening ||
           chat.runtime.commandRunning ||
@@ -5008,6 +5079,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
       };
       _commandOwner(chat);
       var result = await gateway.call('config.set', params);
+      requireCurrentSelection(
+        allowAppliedModel: result['confirm_required'] != true,
+      );
       if (result['confirm_required'] == true) {
         requireCurrentSelection();
         final message = result['confirm_message']?.toString().trim() ?? '';
@@ -5023,6 +5097,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
           ...params,
           'confirm_expensive_model': true,
         });
+        requireCurrentSelection(
+          allowAppliedModel: result['confirm_required'] != true,
+        );
         if (result['confirm_required'] == true) {
           throw StateError('Hermes did not accept the confirmed model change.');
         }
@@ -5034,28 +5111,74 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat._model = selection.choice.model;
     chat._provider = selection.choice.provider;
     chat._intelligenceRevision++;
-    try {
+    void requireAppliedRoute() {
       _commandOwner(chat);
-      await gateway.call('config.set', {
-        'session_id': runtime,
-        'key': 'reasoning',
-        'value': selection.reasoningEffort,
-      });
-    } catch (_) {
-      if (previousModel != selection.choice.model ||
-          previousProvider != selection.choice.provider) {
+      if (_closed ||
+          switching ||
+          _current?.chat != chat ||
+          chat.runtime.runtimeId != runtime ||
+          chat.model != selection.choice.model ||
+          chat.provider != selection.choice.provider) {
+        throw StateError('Chat changed. Choose the model again.');
+      }
+    }
+
+    final modelChanged =
+        previousModel != selection.choice.model ||
+        previousProvider != selection.choice.provider;
+    if (modelChanged ||
+        chat._reasoningEffort != selection.reasoningEffort ||
+        chat._reasoningUnconfirmed) {
+      try {
+        requireAppliedRoute();
+        chat._reasoningUnconfirmed = true;
+        await gateway.call('config.set', {
+          'session_id': runtime,
+          'key': 'reasoning',
+          'value': selection.reasoningEffort,
+        });
+        requireAppliedRoute();
+        chat._reasoningUnconfirmed = false;
+        chat._reasoningEffort = selection.reasoningEffort;
+        chat._intelligenceRevision++;
+      } catch (_) {
+        if (modelChanged) {
+          throw StateError(
+            'The model changed, but reasoning could not be confirmed. Your choice is still here; Apply again to retry reasoning.',
+          );
+        }
+        rethrow;
+      }
+    }
+    if (chat._fastMode != selection.fastMode) {
+      try {
+        requireAppliedRoute();
+        final fastResult = await gateway.call('config.set', {
+          'session_id': runtime,
+          'key': 'fast',
+          'value': selection.fastMode.name,
+        });
+        if (chat.runtime.runtimeId != runtime) {
+          throw StateError('Chat reconnected. Try applying again.');
+        }
+        requireAppliedRoute();
+        chat._fastMode = ChatFastMode.fromValue(fastResult['value']);
+        if (chat._fastMode != selection.fastMode) {
+          throw StateError('Hermes did not accept fast mode.');
+        }
+        chat._intelligenceRevision++;
+      } catch (_) {
+        final updated = [
+          if (modelChanged) 'model',
+          if (previousEffort != chat._reasoningEffort) 'reasoning',
+        ];
         throw StateError(
-          'The model changed, but reasoning could not be confirmed. '
-          'Your choice is still here; Apply again to retry reasoning.',
+          updated.isEmpty
+              ? 'Fast mode could not be confirmed. Try again.'
+              : 'The ${updated.join(' and ')} changed, but fast mode could not be confirmed. Apply again to retry fast mode.',
         );
       }
-      rethrow;
     }
-    if (chat.runtime.runtimeId != runtime) {
-      throw StateError('Chat reconnected. Try applying again.');
-    }
-    chat._intelligenceRevision++;
-    chat._reasoningEffort = selection.reasoningEffort;
     chat._intelligenceRuntime = runtime;
     return true;
   }
@@ -7380,6 +7503,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (usage is Map) _updateContext(chat, usage);
     chat._notificationInputsQuiet = true;
     _hydrateIntelligence(chat, result);
+    chat._fastMode = null;
+    unawaited(_observeModelControls(chat));
     _applyTodoSnapshot(chat, result['todo_state']);
     final inflight = result['inflight'] as Map?;
     chat.reading.updateStreaming(inflight?['assistant']?.toString() ?? '');

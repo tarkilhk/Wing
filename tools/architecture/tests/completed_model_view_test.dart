@@ -63,8 +63,10 @@ class ProfileDiagnosticsController {
       'lib/core/services/diagnostics_barrel.dart':
           "export 'profile_diagnostics_controller.dart';\n",
       'lib/core/models/model_choice.dart': '''
-class ModelChoice { static void fromOptions(Map<String, dynamic> response) {} }
 class ConfiguredModel { static void fromInfo(Map<String, dynamic> response) {} }
+''',
+      'lib/core/models/model_catalog.dart': '''
+class ModelCatalog { static void fromOptions(Map<String, dynamic> response) {} }
 ''',
       'lib/core/models/fallback_model.dart': '''
 class FallbackModel {
@@ -103,8 +105,8 @@ class ModelProviderAccess { static void fromResponse(Map<String, dynamic> respon
       '${gateway}void f(ProfileGateway gateway) { final request = gateway.read; request("model/info"); }',
       "import '../services/gateway_barrel.dart' as api;\n"
           'typedef Link = api.ProfileGateway; void f(Link gateway) { gateway.read("model/info"); }',
-      "import '../models/model_choice.dart' as model;\n"
-          'void f(Map<String, dynamic> value) { final parse = model.ModelChoice.fromOptions; parse(value); }',
+      "import '../models/model_catalog.dart' as model;\n"
+          'void f(Map<String, dynamic> value) { final parse = model.ModelCatalog.fromOptions; parse(value); }',
       "import '../models/fallback_model.dart' as model;\n"
           'void f(Map<String, dynamic> value) { final parse = model.FallbackModel.fromConfig; parse(value); }',
       "import '../models/model_choice.dart' as model;\n"

@@ -54,7 +54,7 @@ aliases, cascades, prefixes, barrel exports and typedefs. Typed Dart
 `Function.call` is an intrinsic invocation with no member declaration; the guard
 accepts that intrinsic while still inspecting the target for forbidden captures.
 
-The same owner-boundary property includes `ModelChoice.fromOptions`, `ConfiguredModel.fromInfo`,
+The same owner-boundary property includes `ModelCatalog.fromOptions`, `ConfiguredModel.fromInfo`,
 `FallbackModel.fromConfig`, `HelperModelAssignment.fromResponse`,
 `ModelDefaultsObservation.fromResponses`, `ModelProviderAccess.fromResponse` and literal
 stock model field indexing on core `Map<String, dynamic>` / `Map<String, Object?>`

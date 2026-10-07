@@ -1,3 +1,4 @@
+import 'package:wing/core/models/model_catalog.dart';
 import 'model_choice.dart';
 import 'provider_access.dart';
 
@@ -122,33 +123,24 @@ class ModelDefaultsObservation {
 
   static ModelDefaultsObservation fromResponses(
     Map<String, dynamic> info,
-    Map<String, dynamic> options,
+    ModelCatalog catalog,
     Map<String, dynamic> auxiliary,
   ) {
     final model = ConfiguredModel.fromInfo(info);
-    final choices = ModelChoice.fromOptions(options);
-    final providers = options['providers'] as List;
-    final provider = providers
-        .whereType<Map>()
-        .where((row) => row['slug'] == model.provider)
-        .firstOrNull;
-    final rawCapabilities = provider?['capabilities'];
-    final rawModel = rawCapabilities is Map
-        ? rawCapabilities[model.model]
-        : null;
-    final capabilities = rawModel is Map ? rawModel : const {};
+    final choices = catalog.choices;
+    final controls = catalog.choice(model.provider, model.model)?.controls;
     return ModelDefaultsObservation(
       model: model,
       choices: choices,
       helpers: HelperModelAssignment.fromResponse(auxiliary),
       settings: [
-        if (capabilities['reasoning'] == true)
+        if (controls?.reasoning == true)
           ModelDefaultSetting(
             ModelDefaultSettingKind.reasoning,
             'agent.reasoning_effort',
             [
               '',
-              'none',
+              if (controls?.canDisableReasoning == true) 'none',
               'minimal',
               'low',
               'medium',
@@ -158,7 +150,7 @@ class ModelDefaultsObservation {
               'ultra',
             ],
           ),
-        if (capabilities['fast'] == true)
+        if (controls?.fast == true)
           ModelDefaultSetting(
             ModelDefaultSettingKind.serviceTier,
             'agent.service_tier',

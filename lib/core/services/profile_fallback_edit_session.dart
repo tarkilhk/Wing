@@ -82,12 +82,10 @@ class ProfileFallbackEditSession extends ChangeNotifier {
     if (_disposed) throw StateError('Fallback edit is closed');
     final generation = _generation;
     try {
-      final choices = ModelChoice.fromOptions(
-        await profile.read('model/options', {
-          'explicit_only': '1',
-          if (refresh) 'refresh': '1',
-        }),
-      );
+      final choices = (await profile.modelCatalog.load(
+        explicitOnly: true,
+        refresh: refresh,
+      )).choices;
       if (!_owns(generation)) throw StateError('Fallback edit was superseded');
       return List.unmodifiable(choices);
     } catch (_) {

@@ -1,3 +1,8 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -15,6 +20,20 @@ import 'support/profile_intelligence_fixture.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  const capture = bool.fromEnvironment('CAPTURE_INTELLIGENCE');
+  setUpAll(() async {
+    if (!capture) return;
+    for (final entry in {
+      'Roboto': 'build/studio-roboto.ttf',
+      'Ahem': 'build/studio-roboto.ttf',
+      'MaterialIcons': 'build/studio-icons.otf',
+    }.entries) {
+      final bytes = File(entry.value).readAsBytesSync();
+      await (FontLoader(
+        entry.key,
+      )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
+    }
+  });
   late ProfileIntelligenceFixture host;
   late ProfileWorkspaceController controller;
   late AppPreferences appPreferences;
@@ -38,6 +57,7 @@ void main() {
   const selection = ChatIntelligenceSelection(
     choice: ModelChoice(provider: 'openai-codex', model: 'gpt-5.6-sol'),
     reasoningEffort: 'xhigh',
+    fastMode: ChatFastMode.normal,
   );
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -191,6 +211,99 @@ void main() {
     },
   );
 
+  test(
+    'model info emitted before its acknowledgement is accepted for the owned route',
+    () async {
+      final chat = controller.current!.chat!;
+      host.onAcceptedWrite = (params) {
+        if (params['key'] == 'model') {
+          emitChatEvent(controller, chat, 'session.info', {
+            'model': selection.choice.model,
+            'provider': selection.choice.provider,
+          });
+        }
+      };
+      expect(
+        await controller.setIntelligence(
+          chat,
+          selection,
+          confirmModelChange: (_) async => true,
+        ),
+        isTrue,
+      );
+      expect(chat.model, selection.choice.model);
+      expect(chat.reasoningEffort, selection.reasoningEffort);
+    },
+  );
+
+  test(
+    'fast changes are session owned; a failed fast save retries only fast',
+    () async {
+      final chat = controller.current!.chat!;
+      await controller.loadIntelligence(chat);
+      final chosen = ChatIntelligenceSelection(
+        choice: selection.choice,
+        reasoningEffort: selection.reasoningEffort,
+        fastMode: ChatFastMode.fast,
+      );
+      host.failFast = true;
+      await expectLater(
+        controller.setIntelligence(
+          chat,
+          chosen,
+          confirmModelChange: (_) async => true,
+        ),
+        throwsStateError,
+      );
+      expect(chat.model, selection.choice.model);
+      expect(chat.reasoningEffort, 'xhigh');
+      expect(chat.fastMode, ChatFastMode.normal);
+      expect(host.writes.map((w) => w['key']), ['model', 'reasoning', 'fast']);
+      host.failFast = false;
+      await controller.setIntelligence(
+        chat,
+        chosen,
+        confirmModelChange: (_) async => fail('Unexpected confirmation'),
+      );
+      expect(host.writes.map((w) => w['key']), [
+        'model',
+        'reasoning',
+        'fast',
+        'fast',
+      ]);
+      expect(host.writes.last['session_id'], 'runtime');
+      expect(host.writes.last['profile'], 'personal');
+      expect(chat.fastMode, ChatFastMode.fast);
+    },
+  );
+  test('ultrafast survives an unchanged Apply; Off writes normal', () async {
+    host.fastMode = 'ultrafast';
+    final chat = controller.current!.chat!;
+    final options = await controller.loadIntelligence(chat);
+    final current = options.choices.first;
+    await controller.setIntelligence(
+      chat,
+      ChatIntelligenceSelection(
+        choice: current,
+        reasoningEffort: chat.reasoningEffort!,
+        fastMode: chat.fastMode!,
+      ),
+      confirmModelChange: (_) async => true,
+    );
+    expect(host.writes, isEmpty);
+    await controller.setIntelligence(
+      chat,
+      ChatIntelligenceSelection(
+        choice: current,
+        reasoningEffort: chat.reasoningEffort!,
+        fastMode: ChatFastMode.normal,
+      ),
+      confirmModelChange: (_) async => true,
+    );
+    expect(host.writes.single['key'], 'fast');
+    expect(host.writes.single['value'], 'normal');
+  });
+
   for (final staleChange in [
     'runtime',
     'model',
@@ -310,8 +423,6 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('chat-intelligence-button')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('choose-chat-model')));
-      await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('model-search')), 'sol');
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('model-openai-codex-gpt-5.6-sol')));
@@ -361,8 +472,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('chat-intelligence-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('choose-chat-model')));
-    await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('model-search')), 'sol');
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('model-openai-codex-gpt-5.6-sol')));
@@ -371,7 +480,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('model changed, but reasoning'), findsOneWidget);
-    expect(find.text('Intelligence'), findsOneWidget);
+    expect(find.text('Models'), findsOneWidget);
     expect(host.writes, hasLength(2));
     host.failReasoning = false;
     await tester.tap(find.text('Apply'));
@@ -394,20 +503,19 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('chat-intelligence-button')));
       await tester.pumpAndSettle();
-      expect(find.text('Intelligence'), findsOneWidget);
-      await tester.ensureVisible(find.byKey(const Key('choose-chat-model')));
-      await tester.tap(find.byKey(const Key('choose-chat-model')));
-      await tester.pumpAndSettle();
+      expect(find.text('Models'), findsOneWidget);
       await tester.enterText(find.byKey(const Key('model-search')), 'sol');
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('model-openai-codex-gpt-5.6-sol')));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byKey(const Key('reasoning-xhigh')));
+      await tester.tap(find.byKey(const Key('chat-reasoning-control')).last);
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('reasoning-xhigh')));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Apply'));
       await tester.pumpAndSettle();
       expect(find.text('5.6 Sol'), findsOneWidget);
-      expect(find.text('Extra High'), findsOneWidget);
+      expect(controller.current!.chat!.reasoningEffort, 'xhigh');
       expect(host.writes, hasLength(2));
       expect(tester.takeException(), isNull);
     },
@@ -426,19 +534,17 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('chat-intelligence-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('choose-chat-model')));
-    await tester.pumpAndSettle();
     expect(find.text('OpenAI subscription'), findsNothing);
 
     await tester.tap(find.byKey(const Key('refresh-chat-models')));
     await tester.pumpAndSettle();
 
-    expect(host.modelOptionReads, [
-      {'profile': 'personal'},
-      {'profile': 'personal', 'refresh': '1'},
-    ]);
-    expect(find.text('OpenAI subscription'), findsOneWidget);
-    expect(find.text('Models updated. Still missing a model?'), findsOneWidget);
+    expect(
+      host.modelOptionReads.every((q) => q['profile'] == 'personal'),
+      isTrue,
+    );
+    expect(host.modelOptionReads.last, {'profile': 'personal', 'refresh': '1'});
+    expect(find.text('OpenAI subscription'), findsWidgets);
     expect(
       find.byKey(const Key('review-model-provider-access')),
       findsOneWidget,
@@ -449,4 +555,62 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+  for (final brightness in Brightness.values) {
+    for (final (size, scale) in [
+      (const Size(390, 844), 1.0),
+      (const Size(320, 640), 2.0),
+    ]) {
+      testWidgets('composer controls fit $brightness $size at text $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        const frame = Key('composer-preview');
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: frame,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        for (final key in [
+          'chat-intelligence-button',
+          'chat-reasoning-control',
+          'chat-fast-control',
+        ]) {
+          expect(find.byKey(Key(key)).hitTestable(), findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+        if (capture) {
+          await tester.runAsync(() async {
+            final image = await tester
+                .renderObject<RenderRepaintBoundary>(find.byKey(frame))
+                .toImage();
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            await File(
+              'build/model-composer-${brightness.name}-${size.width.toInt()}-${scale == 2 ? 'large' : 'normal'}.png',
+            ).writeAsBytes(bytes!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
+        await tester.tap(find.byKey(const Key('chat-fast-control')));
+        await tester.pumpAndSettle();
+        expect(host.writes.single['key'], 'fast');
+        expect(host.writes.single['value'], 'fast');
+      });
+    }
+  }
 }

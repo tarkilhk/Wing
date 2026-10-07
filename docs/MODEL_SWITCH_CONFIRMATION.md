@@ -4,7 +4,7 @@ When Hermes requires confirmation for a chat model change, Wing shows the
 server's warning in a dialog with **Cancel** and **Switch model**. The warning
 scrolls independently of the actions, including at enlarged text sizes with
 keyboard insets. Cancel, Android Back and tapping outside keep the existing
-model and reasoning. Approval applies the selected model first, then reasoning.
+model, reasoning and fast mode. Approval applies the selected model first, then unconfirmed settings. See [model catalog and subscription ownership](MODEL_CATALOG.md).
 
 The dialog follows Studio's shared theme and control tokens. An inline warning
 with actions was considered, but would compete with the transcript and composer;

@@ -1,5 +1,5 @@
+import 'package:wing/core/models/model_catalog.dart';
 import 'package:wing/core/services/connection_access.dart';
-import 'package:wing/core/models/model_choice.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -174,9 +174,9 @@ void main() {
       );
       addTearDown(gateway.close);
       await gateway.requireProfile();
-      final options = ModelChoice.fromOptions(
+      final options = ModelCatalog.fromOptions(
         await gateway.read('model/options'),
-      );
+      ).choices;
       final requestedProvider = environment['WING_PHONE_LUNA_PROVIDER'];
       final matches = options
           .where(

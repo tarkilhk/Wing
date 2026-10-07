@@ -1,3 +1,4 @@
+import 'profile_model_catalog.dart';
 import 'connection_access.dart';
 // Named transport seams keep request functions injectable.
 // ignore_for_file: prefer_initializing_formals
@@ -123,6 +124,13 @@ class ProfileGatewayConnection {
 /// this immutable scope. There is no unscoped or experimental-recovery fallback.
 class ProfileGateway {
   final WorkspaceScope scope;
+  late final modelCatalog = ProfileModelCatalog(
+    scope: scope,
+    read: ({required refresh, required explicitOnly}) => read('model/options', {
+      if (refresh) 'refresh': '1',
+      if (explicitOnly) 'explicit_only': '1',
+    }),
+  );
   final ScopedGet _getRequest;
   final ScopedRpc _rpcRequest;
   Future<Map<String, dynamic>> _rpc(
@@ -431,6 +439,7 @@ class ProfileGateway {
   }
 
   void close() {
+    modelCatalog.close();
     _close();
     if (reportsLiveChat) connectionStatus?.forgetLive(scope.profileName);
   }

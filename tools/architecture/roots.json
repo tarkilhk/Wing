@@ -4,7 +4,7 @@
     "root": ".",
     "revision": "a5650fa675209b6a782a5adf3f39ff12c53efb4c",
     "tracked_count": 903,
-    "intentional_untracked_count": 594,
+    "intentional_untracked_count": 602,
     "exclude": [
       ".git/**",
       "build/**",
@@ -5964,6 +5964,15 @@
       "source": "docs/TOOL_ACTIVITY.md",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "host-test-profile-model-catalog",
+      "kind": "host-test",
+      "path": "test/profile_model_catalog_test.dart",
+      "selector": "main",
+      "purpose": "Profile catalog concurrency, lifetime, policy isolation and account usage fidelity",
+      "source": "docs/MODEL_CATALOG.md",
+      "status": "supported"
     }
   ],
   "files": [
@@ -6621,6 +6630,11 @@
       "path": "docs/MCP_CONNECTORS.md",
       "area": "docs",
       "provenance": "tracked"
+    },
+    {
+      "path": "docs/MODEL_CATALOG.md",
+      "area": "docs",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "docs/MODEL_SWITCH_CONFIRMATION.md",
@@ -7528,6 +7542,16 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/models/model_catalog.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/models/model_catalog_details.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/models/model_choice.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -7754,6 +7778,11 @@
     },
     {
       "path": "lib/core/presentation/attachment_preview_image.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/chat_model_labels.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
     },
@@ -8453,6 +8482,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/services/profile_model_catalog.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/profile_model_defaults_session.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -8788,6 +8822,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/widgets/chat_model_controls.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/widgets/chat_profile_bar.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -8901,6 +8940,11 @@
       "path": "lib/core/widgets/markdown_message_content.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/model_card.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/widgets/model_chooser.dart",
@@ -10886,6 +10930,11 @@
       "path": "test/profile_message_presentation_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/profile_model_catalog_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/profile_model_defaults_session_test.dart",

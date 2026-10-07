@@ -1,3 +1,4 @@
+import '../models/chat_intelligence.dart';
 import '../services/profile_supervision_session.dart';
 import '../widgets/deleted_chat_recovery_notice.dart';
 import '../services/chat_browser_data.dart';
@@ -1754,6 +1755,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                   );
                                 },
                                 decoration: InputDecoration(
+                                  suffixIcon:
+                                      chat.composer.observation.editingEntry ==
+                                          null
+                                      ? _dictationButton(chat)
+                                      : null,
                                   isDense: true,
                                   hintMaxLines: 1,
                                   hintText:
@@ -1914,6 +1920,21 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                         alignment: Alignment.centerRight,
                                         child: ChatIntelligenceButton(
                                           model: chat.model ?? 'Model',
+                                          observation: controller
+                                              .modelObservation(chat),
+                                          fastMode: chat.fastMode,
+                                          onReasoningChanged: (effort) => _run(
+                                            () => _changeModelControls(
+                                              chat,
+                                              reasoning: effort,
+                                            ),
+                                          ),
+                                          onFastChanged: (mode) => _run(
+                                            () => _changeModelControls(
+                                              chat,
+                                              fast: mode,
+                                            ),
+                                          ),
                                           reasoningEffort:
                                               chat.reasoningEffort ?? 'default',
                                           loading:
@@ -1941,18 +1962,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                 ),
                                         ),
                                       ),
-                                    ),
-                                    IconButton(
-                                      tooltip: 'Dictate message',
-                                      icon: const Icon(Icons.mic_none),
-                                      onPressed:
-                                          _voiceInput.canDictate(
-                                            controller.canDictate(chat),
-                                          )
-                                          ? () => _run(
-                                              () => _requestDictation(chat),
-                                            )
-                                          : null,
                                     ),
                                     const SizedBox(width: 8),
                                     _composerActionButton(chat),
@@ -2006,6 +2015,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         choices: options.choices,
         initialChoice: initial,
         initialReasoningEffort: chat.reasoningEffort ?? 'medium',
+        initialFastMode: chat.fastMode!,
         defaultModel: options.defaultModel,
         defaultProvider: options.defaultProvider,
         profileName: chat.key.workspace.profileName,
@@ -2031,6 +2041,28 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     } finally {
       if (mounted) setState(() => _loadingIntelligence = null);
     }
+  }
+
+  Future<void> _changeModelControls(
+    ProfileChat chat, {
+    String? reasoning,
+    ChatFastMode? fast,
+  }) async {
+    final choice = controller.modelObservation(chat);
+    final mode = chat.fastMode;
+    final effort = chat.reasoningEffort;
+    if (choice == null || mode == null || effort == null) return;
+    await controller.setIntelligence(
+      chat,
+      ChatIntelligenceSelection(
+        choice: choice,
+        reasoningEffort: reasoning ?? effort,
+        fastMode: fast ?? mode,
+      ),
+      confirmModelChange: (message) async => mounted
+          ? showChatModelConfirmation(context, message: message)
+          : false,
+    );
   }
 
   bool _canForkDraft(ProfileChat chat) => chat.composer.actions().canFork;
@@ -2071,6 +2103,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           }),
         );
   }
+
+  Widget _dictationButton(ProfileChat chat) => IconButton(
+    tooltip: 'Dictate message',
+    icon: const Icon(Icons.mic_none),
+    onPressed: _voiceInput.canDictate(controller.canDictate(chat))
+        ? () => _run(() => _requestDictation(chat))
+        : null,
+  );
 
   Widget _composerActionButton(ProfileChat chat) => ComposerActionButton(
     key: ValueKey(chat.key),

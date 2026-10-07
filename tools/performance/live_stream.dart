@@ -1,3 +1,4 @@
+import 'package:wing/core/models/model_catalog.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 // Profile-only full-app observer. Mutations target explicitly named QA chats,
 // created here or manually created and adopted after selecting Luna.
@@ -19,7 +20,6 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/completion_diagnostics.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
-import 'package:wing/core/models/model_choice.dart';
 import 'package:wing/main.dart' as app;
 
 const _prompts = {
@@ -421,9 +421,9 @@ void main() {
           final resource = controller.current!;
           stage = 'read_options';
           final choices =
-              ModelChoice.fromOptions(
+              ModelCatalog.fromOptions(
                     await resource.gateway.read('model/options'),
-                  )
+                  ).choices
                   .where(
                     (c) =>
                         RegExp(r'^gpt-\d+\.\d+-luna$').hasMatch(c.model) &&

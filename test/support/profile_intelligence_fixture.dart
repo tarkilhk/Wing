@@ -14,8 +14,11 @@ Switching to gpt-5.6-sol makes the next reply re-read all of it uncached (provid
 Threshold: model.switch_context_confirm_tokens (currently 100,000; 0 disables this check).
 Confirm only if you intend to switch now.''';
   final writes = <Map<String, dynamic>>[];
+  void Function(Map<String, dynamic>)? onAcceptedWrite;
   String? resumedRuntimeId;
   bool failReasoning = false;
+  bool failFast = false;
+  String fastMode = 'normal';
   bool confirmModel = false;
   bool repeatConfirmation = false;
   bool failConfirmedModel = false;
@@ -44,6 +47,14 @@ Confirm only if you intend to switch now.''';
                   'slug': 'openai-codex',
                   'name': 'OpenAI subscription',
                   'models': ['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.4-mini'],
+                  'capabilities': {
+                    for (final model in [
+                      'gpt-6-astra',
+                      'gpt-5.6-sol',
+                      'gpt-5.4-mini',
+                    ])
+                      model: {'reasoning': true, 'fast': true},
+                  },
                 },
               if (codexAppearsOnRefresh && query['refresh'] != '1')
                 {
@@ -58,6 +69,7 @@ Confirm only if you intend to switch now.''';
       },
       rpc: (method, params) async {
         if (method == 'config.get') {
+          if (params['key'] == 'fast') return {'value': fastMode};
           final started = configGetStarted;
           if (started != null && !started.isCompleted) started.complete();
           await configGetDelay?.future;
@@ -74,10 +86,15 @@ Confirm only if you intend to switch now.''';
                   repeatConfirmation)) {
             return {'confirm_required': true, 'confirm_message': modelWarning};
           }
+          if (params['key'] == 'fast') {
+            if (failFast) throw StateError('Fast rejected');
+            fastMode = params['value'] as String;
+          }
           if (params['key'] == 'reasoning' && failReasoning) {
             throw StateError('Reasoning rejected');
           }
-          return {'status': 'ok'};
+          onAcceptedWrite?.call(params);
+          return {'status': 'ok', 'value': params['value']};
         }
         final result = await base.call(method, params);
         if (method == 'session.resume' || method == 'session.create') {

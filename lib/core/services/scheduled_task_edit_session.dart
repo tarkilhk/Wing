@@ -364,12 +364,10 @@ class ScheduledTaskEditSession extends ChangeNotifier {
           if (_disposed || _loads[catalog] != generation) return;
           _targets = List.unmodifiable(result);
         case TaskEditCatalog.models:
-          final result = ModelChoice.fromOptions(
-            await controller.repository.profile.read('model/options', {
-              'explicit_only': '1',
-              if (refresh) 'refresh': '1',
-            }),
-          );
+          final result = (await controller.repository.profile.modelCatalog.load(
+            explicitOnly: true,
+            refresh: refresh,
+          )).choices;
           if (_disposed || _loads[catalog] != generation) return;
           _models = List.unmodifiable(result);
         case TaskEditCatalog.blueprints:

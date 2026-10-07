@@ -1,3 +1,4 @@
+import 'package:wing/core/models/model_catalog.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/model_choice.dart';
@@ -173,15 +174,15 @@ class ProfileModelDefaultsSession extends ChangeNotifier {
     _error = null;
     _changed();
     try {
-      final values = await Future.wait([
+      final values = await Future.wait<Object>([
         profile.read('model/info'),
-        profile.read('model/options', {'explicit_only': '1'}),
+        profile.modelCatalog.load(explicitOnly: true, supersede: true),
         profile.read('model/auxiliary'),
       ]);
       final observation = ModelDefaultsObservation.fromResponses(
-        values[0],
-        values[1],
-        values[2],
+        values[0] as Map<String, dynamic>,
+        values[1] as ModelCatalog,
+        values[2] as Map<String, dynamic>,
       );
       if (_disposed || generation != _reads || _busy) return;
       if (_observation?.model.provider != observation.model.provider) {
@@ -233,12 +234,10 @@ class ProfileModelDefaultsSession extends ChangeNotifier {
   Future<List<ModelChoice>> catalog({bool refresh = false}) async {
     if (_disposed) throw StateError('Model defaults are closed');
     final generation = ++_catalogReads, commands = _commands, reads = _reads;
-    final choices = ModelChoice.fromOptions(
-      await profile.read('model/options', {
-        'explicit_only': '1',
-        if (refresh) 'refresh': '1',
-      }),
-    );
+    final choices = (await profile.modelCatalog.load(
+      explicitOnly: true,
+      refresh: refresh,
+    )).choices;
     if (_disposed ||
         generation != _catalogReads ||
         commands != _commands ||
@@ -442,9 +441,9 @@ class ProfileModelDefaultsSession extends ChangeNotifier {
 
   Future<void> _preflight(_HelperIntent intent, int generation) async {
     if (intent.selection.choice case final choice?) {
-      final choices = ModelChoice.fromOptions(
-        await profile.read('model/options', {'explicit_only': '1'}),
-      );
+      final choices = (await profile.modelCatalog.load(
+        explicitOnly: true,
+      )).choices;
       if (!_owns(generation)) throw StateError('Helper edit retired');
       _observation = _observation?.withChoices(choices);
       if (!choices.any(

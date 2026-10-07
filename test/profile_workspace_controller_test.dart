@@ -214,6 +214,7 @@ class Host {
       },
       rpc: (method, params) async {
         calls.add((name, method, params));
+        if (method == 'config.set') return {'value': params['value']};
         if (method == 'session.active_list') {
           await activeListDelay?.future;
           return {'sessions': notificationActiveSessions};
@@ -901,6 +902,7 @@ void main() {
             model: 'chosen-model',
           ),
           reasoningEffort: 'low',
+          fastMode: ChatFastMode.normal,
         ),
         confirmModelChange: (_) async => true,
       );

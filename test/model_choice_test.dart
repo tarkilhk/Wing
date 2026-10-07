@@ -1,11 +1,37 @@
+import 'package:wing/core/models/model_catalog.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/model_choice.dart';
+import 'package:wing/core/models/chat_intelligence.dart';
 
 void main() {
+  test('route changes retain only the supplied fast tier', () {
+    final routes = ModelCatalog.fromOptions({
+      'providers': [
+        {
+          'slug': 'route',
+          'name': 'Route',
+          'models': ['ultra', 'fast', 'normal'],
+          'capabilities': {
+            'ultra': {'fast': true, 'ultrafast': true},
+            'fast': {'fast': true},
+            'normal': {'fast': false},
+          },
+        },
+      ],
+    }).choices;
+    final draft = ChatIntelligenceSelection(
+      choice: routes[0],
+      reasoningEffort: 'high',
+      fastMode: ChatFastMode.ultrafast,
+    );
+    expect(draft.withChoice(routes[0]).fastMode, ChatFastMode.ultrafast);
+    expect(draft.withChoice(routes[1]).fastMode, ChatFastMode.fast);
+    expect(draft.withChoice(routes[2]).fastMode, ChatFastMode.normal);
+  });
   test(
     'current catalog rows preserve provider identity and string model IDs',
     () {
-      final choices = ModelChoice.fromOptions({
+      final choices = ModelCatalog.fromOptions({
         'providers': [
           {
             'slug': 'built-in',
@@ -29,7 +55,7 @@ void main() {
           },
           {'slug': 'unconfigured', 'name': 'Not configured', 'models': []},
         ],
-      });
+      }).choices;
       expect(choices.map((choice) => choice.provider), [
         'built-in',
         'custom:office',
@@ -125,9 +151,9 @@ void main() {
     ];
     for (final row in rows) {
       expect(
-        () => ModelChoice.fromOptions({
+        () => ModelCatalog.fromOptions({
           'providers': [row],
-        }),
+        }).choices,
         throwsFormatException,
       );
     }
@@ -137,7 +163,7 @@ void main() {
       [true],
     ]) {
       expect(
-        () => ModelChoice.fromOptions({'providers': value}),
+        () => ModelCatalog.fromOptions({'providers': value}).choices,
         throwsFormatException,
       );
     }

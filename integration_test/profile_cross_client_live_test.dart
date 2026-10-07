@@ -99,6 +99,7 @@ void main() {
         originalSelection = ChatIntelligenceSelection(
           choice: originalChoice.first,
           reasoningEffort: originalReasoning!,
+          fastMode: first.current!.chat!.fastMode!,
         );
         final differentModels = firstOptions.choices.where(
           (choice) =>
@@ -117,6 +118,7 @@ void main() {
         final changed = ChatIntelligenceSelection(
           choice: differentModels.first,
           reasoningEffort: changedReasoning,
+          fastMode: originalSelection.fastMode,
         );
 
         final originalRows = await first.current!.gateway.sessions();

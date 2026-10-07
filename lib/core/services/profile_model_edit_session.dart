@@ -1,3 +1,4 @@
+import 'package:wing/core/models/model_catalog.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/model_choice.dart';
@@ -98,13 +99,15 @@ class ProfileModelEditSession extends ChangeNotifier {
     _notice = null;
     _changed();
     try {
-      final values = await Future.wait([
+      final values = await Future.wait<Object>([
         _gateway.read('model/info'),
-        _gateway.read('model/options', {'explicit_only': '1'}),
+        _gateway.modelCatalog.load(explicitOnly: true, supersede: true),
       ]);
-      final observation = ConfiguredModel.fromInfo(values[0]);
+      final observation = ConfiguredModel.fromInfo(
+        values[0] as Map<String, dynamic>,
+      );
       final current = observation.choice;
-      final choices = ModelChoice.fromOptions(values[1]);
+      final choices = (values[1] as ModelCatalog).choices;
       if (!_owns(generation)) return;
       _choices = List.unmodifiable(choices);
       if (!preservePending || _openingModel == null) {
@@ -245,12 +248,10 @@ class ProfileModelEditSession extends ChangeNotifier {
     if (_loading) throw StateError('Model edit is still loading');
     final generation = _generation;
     final catalogGeneration = ++_catalogGeneration;
-    final choices = ModelChoice.fromOptions(
-      await _gateway.read('model/options', {
-        'explicit_only': '1',
-        'refresh': '1',
-      }),
-    );
+    final choices = (await _gateway.modelCatalog.load(
+      explicitOnly: true,
+      refresh: true,
+    )).choices;
     if (!_owns(generation) || catalogGeneration != _catalogGeneration) {
       throw StateError('Model edit is closed or superseded');
     }

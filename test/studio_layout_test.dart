@@ -1,3 +1,4 @@
+import 'package:wing/core/models/chat_intelligence.dart';
 import 'support/color_contrast.dart';
 import 'package:wing/core/models/app_preferences.dart';
 import 'package:wing/core/services/shared_draft_session.dart';
@@ -784,6 +785,7 @@ void main() {
                   ModelChoice(provider: 'anthropic', model: 'claude-opus'),
                 ],
                 initialChoice: choice,
+                initialFastMode: ChatFastMode.normal,
                 initialReasoningEffort: 'high',
                 defaultModel: choice.model,
                 profileName: 'personal',
