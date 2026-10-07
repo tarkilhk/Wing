@@ -67,7 +67,7 @@ class AdminDiagnosticObservation {
     (_status['lines'] as List? ?? const []).cast<String>(),
   );
   bool get terminal => running == false && exitCode != null;
-  bool get failed => terminal && exitCode != 0;
+  bool get failed => classification == AdministrationOperationOutcome.failed;
   DoctorDiagnostic? get diagnosis {
     final parsed = action.name == 'doctor' && running == false
         ? DoctorDiagnostic.fromLines(lines)
@@ -103,11 +103,14 @@ class AdminDiagnosticObservation {
       ? audit == null
             ? AdministrationOperationOutcome.unknown
             : AdministrationOperationOutcome.findings
+      : action.name == 'doctor' && exitCode == 1 && diagnosis?.hasIssues == true
+      ? AdministrationOperationOutcome.findings
       : AdministrationOperationOutcome.failed;
   String get outcome => switch (classification) {
     AdministrationOperationOutcome.running => 'Running',
     AdministrationOperationOutcome.completed => 'Completed',
-    AdministrationOperationOutcome.findings => 'Review audit findings',
+    AdministrationOperationOutcome.findings =>
+      securityAudit ? 'Review audit findings' : 'Review Doctor findings',
     AdministrationOperationOutcome.failed => 'Failed',
     AdministrationOperationOutcome.unknown => 'Outcome unavailable',
   };

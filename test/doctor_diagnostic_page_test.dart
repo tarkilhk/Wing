@@ -105,7 +105,7 @@ void main() {
             'name': 'doctor',
             'pid': 7,
             'running': false,
-            'exit_code': 0,
+            'exit_code': 1,
             'lines': lines,
           };
         };
@@ -141,6 +141,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.text('3 issues found'), findsOneWidget);
+        expect(find.text('Failed'), findsNothing);
         expect(find.text('Ask Hermes'), findsNWidgets(3));
         expect(find.text(lines.join('\n')), findsNothing);
         expect(find.text('Completed'), findsNothing);

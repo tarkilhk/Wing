@@ -96,7 +96,9 @@ a refresh icon beside its heading, four stable rows (Model access, Tool setup, C
 Scheduled tasks). There is no global health verdict. Server diagnostics run on first entry and retain their separate progress and results.
 
 In diagnostic details, an unfinished or uncertain run shows its status-read time
-as “Last updated”; “Checked” appears only after confirmed completion.
+as “Last updated”; “Checked” appears only after confirmed completion. Doctor’s
+complete findings report is a completed check requiring attention; its stock
+exit code 1 does not by itself mean the diagnostic failed.
 
 Health owns its profile observations, so opening Administration first is unnecessary.
 Opening Health or selecting a profile reuses that profile’s saved results for 24 hours.

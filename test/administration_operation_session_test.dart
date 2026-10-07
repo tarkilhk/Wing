@@ -61,6 +61,61 @@ void main() {
     },
   );
 
+  testWidgets(
+    'a recovered Doctor poll clears the read error and reports findings',
+    (tester) async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      var offline = false;
+      var running = true;
+      fixture.override = (_, _, _, _) async {
+        if (offline) throw const SocketException('Offline');
+        return {
+          'name': 'doctor',
+          'pid': 7,
+          'running': running,
+          'exit_code': running ? null : 1,
+          'lines': running
+              ? ['Confirmed progress']
+              : [
+                  '=== doctor started 2026-10-07 08:28:00 ===',
+                  '─' * 60,
+                  'Found 1 issue(s) to address:',
+                  '1. state.db is large — enable sessions.auto_prune in config.yaml',
+                ],
+        };
+      };
+      final operation = AdministrationOperationSession(
+        fixture.server,
+        const AdministrationAction('doctor', 7),
+      );
+      addTearDown(operation.dispose);
+      await operation.refresh();
+      offline = true;
+      final refresh = operation.refresh();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+      await refresh;
+      expect(operation.state.observation.readError, isNotNull);
+      expect(operation.state.canRunAgain, isFalse);
+      offline = false;
+      running = false;
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      final observation = operation.state.observation;
+      expect(observation.readError, isNull);
+      expect(observation.terminal, isTrue);
+      expect(observation.failed, isFalse);
+      expect(
+        observation.classification,
+        AdministrationOperationOutcome.findings,
+      );
+      expect(observation.summaryLabel, '1 issue found');
+      expect(operation.state.canRunAgain, isTrue);
+      expect(fixture.requests.every((request) => request.$1 == 'GET'), isTrue);
+    },
+  );
+
   for (final invalid in [
     {'name': 'security-audit', 'pid': 8},
     {'pid': '8'},
