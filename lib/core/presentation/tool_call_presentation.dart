@@ -42,6 +42,14 @@ final class ToolCallPresentation {
   final double? durationSeconds;
   final Duration? startedAt;
 
+  /// Normal completion is expected; only active work and exceptions need a line.
+  String? get notice => switch (outcome) {
+    ToolCallOutcome.running ||
+    ToolCallOutcome.warning ||
+    ToolCallOutcome.error => status,
+    _ => null,
+  };
+
   /// Shared desktop captions for a tool name delivered by Hermes.
   static String titleFor(String name, {required bool completed}) {
     final catalog = desktopToolLabels[name];
@@ -87,8 +95,8 @@ final class ToolCallPresentation {
     String? context,
     String? summary,
   }) {
-    final input = _decode(arguments);
-    final output = _decode(result);
+    final input = decodeToolPayload(arguments);
+    final output = decodeToolPayload(result);
     final args = input is Map ? input : const {};
     final data = output is Map ? output : const {};
     final title = labels.isNotEmpty
@@ -251,7 +259,8 @@ final class ToolCallPresentation {
   }
 }
 
-Object? _decode(String? raw) {
+/// Decode delivered JSON for presentation, preserving raw output at its source.
+Object? decodeToolPayload(String? raw) {
   if (raw == null) return null;
   var text = raw.trim();
   // Stock Hermes wraps external output with a security preamble. Preserve the

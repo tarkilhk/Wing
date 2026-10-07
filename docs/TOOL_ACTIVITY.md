@@ -1,12 +1,14 @@
 # Readable tool activity
 
 Open Activity in a conversation, then Tools. Every backend call has an individual
-action row: a readable title, delivered target, explicit outcome and any available
+action row: a readable title, delivered target, exception notice and any available
 duration. Expand a row to read its result. Vision calls show their exact
 `image_url` input using the existing bounded image preview and full-screen viewer,
 followed by the question and returned analysis. Raw details exposes selectable,
 copyable tool identity, inputs and output without client payload truncation.
-Tasks, Agents, Work and Thinking retain their existing visibility and selection;
+Normal completion, success and unchanged-skill status add no header notice.
+Running work, warnings and failures remain visible.
+Tasks, Agents, Work and Thinking retain their selection;
 approvals and questions remain outside tool disclosures.
 
 ## Stock backend contract
@@ -130,3 +132,42 @@ These are behavioral checks: static source rules cannot establish rendered
 reachability, timer lifetime or asynchronous terminal ordering. Inspect both
 production tabs and the detail sheet at 360 dp and 200% text in both themes;
 private capture artifacts remain under ignored `build/` or outside the repository.
+
+## Restoring Activity from saved chats
+
+Opening a chat reads its active `subagent.list` roster without requiring the
+Agents tab to be visible first. Its existing scoped read admission prevents
+late results from adopting agents into another runtime.
+
+Every saved Activity section now projects its own full todo snapshot and
+`delegate_task` results. The last delivered `{revision, todos}` snapshot in
+that section wins, including an empty list. Task order, parent links and states
+come from that payload, never from the present-day chat's task list.
+Synchronous child results join their `task_index` to the exact parent call's
+input task. Saved goals, model calls, summaries, errors and nonnegative
+`duration_seconds` are inspectable. Background dispatch results expose the
+reported goals and inline results; a historical dispatch is labelled as a past
+dispatch, never as presently running. No timer starts on history restore.
+Existing current-runtime tabs take precedence when sharing the latest section.
+
+Saved child results are passive values with no invented subagent ID or control
+capability. Expand a saved row to inspect output; steering and interruption
+remain exclusive to verified current-runtime agents. The original tool result
+remains available under Tools, including any fields not summarized in Agents.
+Async completion notices retain their existing expandable result display;
+stock notice metadata does not supply a structured per-child roster.
+
+Verified latest unmodified upstream main
+[`503a6b60e5357228d26196e606099e0ac79b7fdf`](https://github.com/NousResearch/hermes-agent/commit/503a6b60e5357228d26196e606099e0ac79b7fdf)
+on 7 October 2026: `tools/todo_tool.py`, `tools/delegate_tool_dispatch.py`,
+`tools/delegate_tool_child_run.py`, `tui_gateway/methods_subagents.py`,
+`tui_gateway/tool_progress.py` and the saved session APIs. Ordinary saved tool
+rows still do not contain duration: a missing time after app restart is a
+backend history limitation, not reconstructed from message timestamps.
+
+`test/profile_combined_activity_test.dart` reproduces/restores both historical
+tabs through the real timeline and widget path. `test/saved_activity_test.dart`
+guards snapshot clearing, exact child-index joins, background dispatch and
+malformed/unrelated payloads. `test/profile_subagents_test.dart` verifies roster
+discovery on opening a saved chat. Exception-only tool headers retain delivered
+timing in `test/profile_tool_call_test.dart`.

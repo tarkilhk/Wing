@@ -404,3 +404,5 @@ monitoring shutdown using synthetic data. Remove its owned ADB forward and stop
 the QA fixture after the run, including on failure.
 
 For manual checks against stock Hermes, generate supported notification events one scenario at a time. Record backend outcomes separately from observations on the phone.
+
+Activity history regression: run `flutter test --no-pub test/saved_activity_test.dart test/profile_combined_activity_test.dart test/profile_tool_call_test.dart test/profile_subagents_test.dart`. Check restored Tasks/Agents, exact child-index input joins, empty task snapshots, background dispatch, roster discovery on reopen, exception-only tool headers and delivered timing. Inspect saved rows at 360 dp in both themes and 200% text; saved agents never offer steering or interruption.

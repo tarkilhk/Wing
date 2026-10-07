@@ -16,6 +16,64 @@ import 'package:wing/core/widgets/profile_execution_activity.dart';
 
 void main() {
   testWidgets(
+    'completed tool rows show exceptions only and retain delivered durations',
+    (tester) async {
+      final calls = [
+        ToolCallPresentation.live(
+          GatewayToolActivity.fromGatewayEvent('tool.complete', {
+            'tool_id': 'skill',
+            'name': 'skill_view',
+            'result': {'success': true, 'status': 'unchanged'},
+          })!,
+        ),
+        ToolCallPresentation.live(
+          GatewayToolActivity.fromGatewayEvent('tool.complete', {
+            'tool_id': 'search',
+            'name': 'search_files',
+            'result': {'matches': 2},
+            'duration_s': .7,
+          })!,
+        ),
+        ToolCallPresentation.live(
+          GatewayToolActivity.fromGatewayEvent('tool.complete', {
+            'tool_id': 'vision',
+            'name': 'vision_analyze',
+            'result': {'success': true, 'analysis': 'Area confirmed'},
+          })!,
+        ),
+        ToolCallPresentation.live(
+          GatewayToolActivity.fromGatewayEvent('tool.complete', {
+            'tool_id': 'page',
+            'name': 'web_extract',
+            'result': {
+              'results': [
+                {
+                  'title': '404 Page Not Found',
+                  'content': '404 Page Not Found',
+                },
+              ],
+            },
+          })!,
+        ),
+      ];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [for (final call in calls) ProfileToolCall(call: call)],
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Returned a 404 page'), findsOneWidget);
+      expect(find.text('Completed'), findsNothing);
+      expect(find.text('Succeeded'), findsNothing);
+      expect(find.text('Already loaded'), findsNothing);
+      expect(find.text('700 ms'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'backend epoch counters tick, clamp clock skew and end on backend duration',
     (tester) async {
       var now = DateTime.fromMillisecondsSinceEpoch(1002000);

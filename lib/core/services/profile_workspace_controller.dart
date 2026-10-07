@@ -3294,6 +3294,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _changed();
     if (_current?.chat == chat) {
       unawaited(refreshSessionControl(chat));
+      unawaited(refreshSubagents(chat));
       unawaited(_loadChatProject(resource, chat));
       await refreshHistory(chat, propagateFailure: propagateHistoryFailure);
       chat._runtime.recovered();

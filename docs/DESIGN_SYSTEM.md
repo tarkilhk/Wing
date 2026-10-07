@@ -262,11 +262,14 @@ Keep the existing Activity disclosure, tool counts, Tools/Tasks/Agents/Work tabs
 
 The owner-approved readable activity change replaces generic tool-result group
 headers and the extra Current tools disclosure with individual action rows in
-Tools. Each compact row carries an action title, target, explicit outcome and
+Tools. Each compact row carries an action title, target, exception notice and
 right-aligned duration when supplied. Actual backend starts permit approximate
 receipt-based counters. Expanded details show relevant content, including the
 exact analyzed image, followed by selectable/copyable Raw details. Use semantic
-status colors with text, never infer success from completion. Preserve category
+status colors with text for running work and exceptions. Completed/success/
+unchanged notices stay out of ordinary tool headers. Restore saved Tasks and
+Agents from delivered history, with passive output disclosures for past agents.
+Preserve category
 selection, guide and anchored expansion. Contract: [tool activity](TOOL_ACTIVITY.md).
 
 Task status icons follow upstream desktop: a green filled-circle tick for

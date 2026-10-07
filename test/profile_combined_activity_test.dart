@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'helpers/pump_markdown_widget.dart';
+import 'package:wing/core/models/transcript_timeline.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -11,6 +15,106 @@ import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
 
 void main() {
+  for (final category in ['tasks', 'agents']) {
+    testWidgets('saved history restores the $category activity tab', (
+      tester,
+    ) async {
+      final name = category == 'tasks' ? 'todo_list' : 'delegate_task';
+      final arguments = category == 'tasks'
+          ? <String, dynamic>{}
+          : {
+              'tasks': [
+                {'goal': 'Inspect the saved delegation'},
+              ],
+            };
+      final result = category == 'tasks'
+          ? {
+              'revision': 2,
+              'todos': [
+                {
+                  'id': 'one',
+                  'content': 'Inspect the saved task',
+                  'status': 'completed',
+                },
+              ],
+            }
+          : {
+              'results': [
+                {
+                  'task_index': 0,
+                  'status': 'completed',
+                  'summary': 'Inspection complete',
+                  'duration_seconds': 42.5,
+                  'model': 'test-model',
+                  'api_calls': 3,
+                },
+              ],
+              'total_duration_seconds': 43,
+            };
+      final rows = <Map<String, dynamic>>[
+        {
+          'id': 1,
+          'role': 'assistant',
+          'content': '',
+          'tool_calls': [
+            {
+              'id': 'call',
+              'type': 'function',
+              'function': {'name': name, 'arguments': jsonEncode(arguments)},
+            },
+          ],
+        },
+        {
+          'id': 2,
+          'role': 'tool',
+          'tool_call_id': 'call',
+          'content': jsonEncode(result),
+        },
+      ];
+      final timeline = TranscriptTimeline.project(
+        rows,
+        presentationId: (row) => row['id']!,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ListView(
+              children: [
+                ProfileToolActivitySection(section: timeline.sections.single),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Activity'));
+      await tester.pumpAndSettle();
+      final tab = find.byKey(ValueKey(('activity-tab', category)));
+      expect(tab, findsOneWidget);
+      await tester.tap(tab);
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          category == 'tasks'
+              ? 'Inspect the saved task'
+              : 'Inspect the saved delegation',
+        ),
+        findsOneWidget,
+      );
+      if (category == 'agents') {
+        expect(find.text('43 s'), findsOneWidget);
+        await tester.tap(find.text('Inspect the saved delegation'));
+        await tester.pumpAndSettle();
+        await tester.settleMarkdown();
+        expect(
+          find.text('Inspection complete', findRichText: true),
+          findsOneWidget,
+        );
+        expect(find.text('Steer'), findsNothing);
+        expect(find.text('Interrupt'), findsNothing);
+      }
+    });
+  }
+
   testWidgets('saved tool calls and current work share one Activity', (
     tester,
   ) async {

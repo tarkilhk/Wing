@@ -2,6 +2,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import '../presentation/tool_call_presentation.dart';
+import '../presentation/saved_activity.dart';
+import 'profile_execution_activity.dart';
+import 'profile_saved_agents.dart';
 import 'profile_tool_call.dart';
 import 'profile_activity_tabs.dart';
 import '../models/transcript_message.dart';
@@ -100,8 +103,26 @@ class ProfileToolActivitySection extends StatelessWidget {
     final expanded =
         expandedMessageId != null &&
         section.containsMessage(expandedMessageId!);
+    final saved = SavedActivity(
+      section.groups.expand((group) => group.toolResults),
+    );
+    final supplied = tabs.map((tab) => tab.id).toSet();
     return ProfileActivitySection(
-      tabs: tabs,
+      tabs: [
+        ...tabs,
+        if (saved.todos.isNotEmpty && !supplied.contains('tasks'))
+          ProfileActivityTab(
+            id: 'tasks',
+            label: 'Tasks ${saved.todos.length}',
+            child: ProfileTodoPanel(todos: saved.todos, embedded: true),
+          ),
+        if (saved.agents.isNotEmpty && !supplied.contains('agents'))
+          ProfileActivityTab(
+            id: 'agents',
+            label: 'Agents ${saved.agents.length}',
+            child: ProfileSavedAgents(agents: saved.agents),
+          ),
+      ],
       thinking: thinking,
       toolCount: total,
       initiallyExpanded: expanded,

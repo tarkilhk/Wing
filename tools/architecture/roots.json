@@ -7763,6 +7763,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/presentation/saved_activity.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/presentation/tool_call_presentation.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -8971,6 +8976,11 @@
       "path": "lib/core/widgets/profile_review_notice_card.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/profile_saved_agents.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/widgets/profile_selector.dart",
@@ -11349,6 +11359,11 @@
     },
     {
       "path": "test/row_actions_view_dependency_guard_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/saved_activity_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },

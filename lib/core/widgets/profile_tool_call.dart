@@ -93,16 +93,17 @@ class ProfileToolCall extends StatelessWidget {
                         color: colors.muted,
                       ),
                     ),
-                  Text(
-                    call.status,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      height: 1.5,
-                      color: statusColor,
+                  if (call.notice case final notice?)
+                    Text(
+                      notice,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.5,
+                        color: statusColor,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),

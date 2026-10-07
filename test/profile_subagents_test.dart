@@ -100,6 +100,26 @@ void main() {
     appPreferences.dispose();
   });
 
+  test('opening a saved chat discovers its active agent roster', () async {
+    host.listResponse = {
+      'subagents': [
+        {
+          'subagent_id': 'existing-child',
+          'goal': 'Already working',
+          'status': 'running',
+          'started_at': 123.0,
+        },
+      ],
+    };
+    await controller.openSession(chat.key);
+    await Future<void>.delayed(Duration.zero);
+    expect(chat.subagents.single.id, 'existing-child');
+    expect(
+      host.calls.where((call) => call.$2 == 'subagent.list'),
+      hasLength(1),
+    );
+  });
+
   test('events merge sparse updates and normalize terminal status', () {
     host.event('a', 'subagent.start', {
       'subagent_id': 'child',
