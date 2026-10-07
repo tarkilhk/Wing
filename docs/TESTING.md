@@ -85,6 +85,7 @@ It navigates the real app but does not send messages or modify settings.
 | Voice | `test/voice_*_test.dart`, `test/profile_voice*_test.dart`, `test/hermes_voice_test.dart`, `test/microphone_permission_test.dart`, `test/startup_notification_permission_test.dart`, `integration_test/voice_*_test.dart`; [profile voice checks](PROFILE_VOICE.md#verification) |
 | Context occupancy and composition | `test/context_ring_test.dart`, `test/profile_context_usage_test.dart`; render with `--dart-define=CONTEXT_RING_REVIEW=true` and the existing `build/studio-roboto.ttf` / `build/studio-icons.otf` review fonts. Captures and ring coordinates go to ignored `build/context-ring-review/` for pixel inspection |
 | Design renders | `test/studio_layout_test.dart`, `test/studio_controls_test.dart`, `test/studio_layout_regressions_test.dart`, `test/administration_navigation_test.dart` |
+| Host resources and reusable alert inputs | `test/host_resources_session_test.dart`, `test/host_thresholds_test.dart`, `test/host_health_view_test.dart`; render with `CAPTURE_HOST_HEALTH=true` and `CAPTURE_FONT_DIR=<Flutter SDK>/bin/cache/artifacts/material_fonts` into ignored `build/host-health/` |
 
 Read a driver's environment flags, mutations and cleanup before running it. Use disposable profiles/chats and owned fixtures on an authorized server. Live tests may invoke models, modify profile settings or start host tools. Restore changed values and independently verify cleanup; a green assertion that records `backend_limited` is not successful feature acceptance.
 

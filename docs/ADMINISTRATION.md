@@ -5,7 +5,7 @@ Wing puts everyday profile settings, server checks and usage in three clear plac
 | Go to | Use it for |
 | --- | --- |
 | **Administration** | Models, identity, skills, provider access, MCP connectors and scheduled tasks for the selected profile. |
-| **Hermes health** | Server diagnostics and checks for the selected profile. |
+| **Hermes health** | Host resources, server diagnostics and checks for the selected profile. |
 | **Hermes analytics** | Activity, token usage and estimated costs. |
 
 Open these destinations from Wing's navigation drawer. The connection name and status open connection details; the server version opens Versions & updates. The rest of this guide records the exact controls and server boundaries for contributors.
@@ -82,7 +82,8 @@ including after restarting the app. Detailed result pages retain their own times
 The health-result cache uses the v2 schema for these section records and count-based
 summaries; older cached Health snapshots are not restored. Other app data is unchanged.
 
-Health has two groups. Server owns Doctor, security audit and Logs. Its refresh icon
+Health has three groups in order: Host, Server, Profile. Host is described below.
+Server owns Doctor, security audit and Logs. Its refresh icon
 starts Doctor and security audit together, without opening their details or a
 confirmation dialog. It is disabled while either diagnostic is starting, running
 or has an uncertain completion. Each operation retains its own result; a failed
@@ -243,6 +244,78 @@ The header dropdown offers profiles only; chart toggle icons precede their title
 and partial coverage is stated.
 Logs keeps server source, severity, submitted text search, a 100-line limit and
 explicit empty/error states.
+
+## Host resources
+
+Open Hermes health to see Host, then Server, then Profile. Host displays the
+connected machine's identity, compact CPU/memory/disk meters, boot uptime and
+load averages. Tap the machine row for available memory, free disk space and
+API-process details. The Host refresh icon reads resources only; it has one
+spinner, with no extra loading bar. The Server icon still runs diagnostics.
+
+Verified on 7 October 2026 against stock upstream
+[`05eecbcd972c8737ebc7722ea08aab47fb538043`](https://github.com/NousResearch/hermes-agent/commit/05eecbcd972c8737ebc7722ea08aab47fb538043):
+`hermes_cli/web_routers/status.py`, `gateway/memory_status.py` and
+`gateway/disk_status.py`. `GET /api/system/stats` supplies host identity and
+optional CPU usage, memory/disk bytes and percentages, load, boot uptime and
+API-process data. Disk describes the Hermes data volume; process memory is not
+the sum of all agents or gateways. A missing or malformed optional probe stays
+unavailable. `GET /api/status` independently supplies advisory pressure, which
+does not establish service availability. Memory pressure has its own heartbeat
+sample time and becomes unknown after 150 seconds; disk pressure is sampled live.
+No backend changes or older-server endpoint alternatives are required.
+
+`ProfileWorkspaceController.hostResources()` returns one connection-owned
+`HostResourcesSession`, shared by Health and other consumers. Its immutable
+`HostResourcesState` exposes separate `HostReading<HostSystemStats>` and
+`HostReading<HostPressureStatus>` values, receipt times and read errors. Failed
+refreshes retain the prior value and time, while `isCurrent` rejects error,
+stale and future-dated readings. The two endpoints complete independently;
+pressure failure does not suppress newly read usage metrics. Concurrent refreshes
+coalesce into one pair of reads. No resource data is persisted into the existing
+24-hour diagnostic cache.
+
+`watch(interval: ..., active: ...)` expresses each consumer's demand. Health
+uses 15 seconds and pauses its watch off-screen and outside the foreground.
+All active watches share the shortest requested cadence; closing or pausing one
+does not stop another. With no active watches there is no poll. Refresh on
+activation reuses any already pending read. Owners and in-flight reads retain
+the captured connection adapter; retirement prevents late publication and new
+dispatch. Consumers close their watches and remove their listeners. The workspace
+retires the host owner before its shared administration adapter.
+
+Future alerts reuse this observation through pure `HostThresholdPolicy`, without
+UI imports, extra endpoint reads or embedded notification behavior. Callers choose
+thresholds and the maximum age (30 seconds by default), then evaluate the stats
+reading with an explicit clock. For example:
+
+```dart
+final policy = HostThresholdPolicy([
+  HostThreshold(HostMetric.cpuPercent, 80),
+  HostThreshold(HostMetric.memoryUsedPercent, 85),
+  HostThreshold(HostMetric.diskUsedPercent, 90),
+  HostThreshold(HostMetric.loadOneMinutePerCpu, 1),
+]);
+final results = policy.evaluate(resources.state.stats, now: DateTime.now());
+```
+
+These example limits are not app defaults. Percent metrics use 0–100; load
+uses the selected 1/5/15-minute average divided by logical CPU count, where 1
+means one runnable unit per CPU. Each result is above, within or unknown.
+Only a value strictly above the limit is above; equality stays within. Missing
+CPU count makes normalized load unknown. Missing, expired, failed or future
+readings cannot clear an alert as healthy. Alert delivery, persistence and
+incident deduplication remain the consuming workflow's responsibility; this
+feature does not enable background notifications or save alert settings.
+
+`test/host_resources_session_test.dart` covers shared demand, independent endpoint
+outcomes, immutability, captured identity and retirement. `test/host_thresholds_test.dart`
+covers units, limits, freshness and unknown coverage. `test/host_health_view_test.dart`
+checks the compact view, independent resource refresh, a single loading indicator,
+visibility/background behavior, details and phone layouts in both themes at
+normal and 200% text. Render with `CAPTURE_HOST_HEALTH=true` and `CAPTURE_FONT_DIR`
+pointing to the Flutter SDK's `bin/cache/artifacts/material_fonts`; captures live
+in ignored `build/host-health/`.
 
 ## Current controls
 

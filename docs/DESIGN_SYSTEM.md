@@ -196,8 +196,9 @@ Use quiet separators before Hermes instances and Hermes administration, without
 section headings. Hermes instances is the saved-server collection; use Add
 instance, Edit instance and Instance name in its setup flow. Removing an instance
 removes its saved connection, not the deployed server. Hermes analytics opens the
-existing usage dashboard directly, with a profile-only scope picker. Health ends
-with its Server and Profile checks and has no Usage row.
+existing usage dashboard directly, with a profile-only scope picker. Health has
+no Usage row. Its order is Host, Server, Profile, as specified in the Health
+refinement below.
 
 Keep hamburger navigation and projects scoped inside Chats. Use compact connection/profile text below the page title. Search stays below this scope. Projects, pins and recents use full-width rows, grouped where helpful, with thin separators.
 
@@ -220,6 +221,19 @@ menu and applies to the list; preserve existing scope, persistence and paging.
 On 15 September 2026, the owner replaced the full-width New chat shelf with a 56 dp floating button at the bottom right. Use the outlined pen-on-a-square icon (`WingIcons.newChat`, Lucide `square-pen`), with a New chat tooltip and accessibility label. The owner's 18 September selection supersedes the earlier plus and standalone pencil: every New chat action, including project menus and the Android New Quick Chat shortcut, uses this same icon. Use the shared action corners and accent colors, subtle elevation and 16 dp edge spacing above the system gesture area. Extend the chat list through the space released by the shelf, with enough trailing scroll padding to move the final row above the button. Respect keyboard and system insets. The same browser control retains its New project action and plus icon in All projects.
 
 Use 16 dp page gutters, a 4 dp spacing grid, 6 dp action corners, 8 dp group/composer corners, 24-28 sp page titles, 16 sp body text and 12-13 sp metadata. Primary action paint can be about 40 dp high inside a minimum 48 dp touch area. Text scaling must allow rows and controls to grow. Keep established compact activity density; improve touch areas without adding visible card padding.
+
+The owner's 7 October density refinement makes compact spacing a requirement
+throughout Studio. Avoid generous empty space, oversized card padding, tall
+passive rows and separate lines for facts that fit together legibly. Use 8–12 dp
+group insets, 4–8 dp between related facts and 12–16 dp between sections as the
+starting point. Prefer aligned label/value/meter rows and short metadata lines
+over spreading the same observation across several padded blocks. Keep one
+timestamp at its owning section and remove repeated headings and captions.
+Passive observations do not need the height of interactive controls. Preserve
+48 dp action targets, readable typography and full values; at narrow widths or
+enlarged text, wrap and grow the content rather than shrinking it or clipping it.
+Whitespace must support grouping, reading or action reachability. Review the
+actual phone layout for unnecessary vertical gaps in both themes.
 
 On 18 September 2026, the owner split the shared screen header into two targets:
 the connection icon and LED open the existing status/retry sheet, while the name
@@ -396,6 +410,23 @@ configuration and usage bars describe reported costs, never inferred activity.
 
 The owner-approved 18 September Health revision replaces the combined verdict
 with Server and Profile groups on the standalone Hermes health destination.
+The owner's 7 October server-resource design refinement adds a separate Host
+group before Server, followed by Profile. Host owns machine identity, compact
+CPU/memory/disk meters, uptime and load context. Its refresh reads resources;
+Server refresh still runs diagnostics, and Profile refresh still checks the
+selected profile. Host uses one section-owned observation time and a compact
+group with inline label/value/meter rows and subordinate machine facts. Use
+Studio surfaces, corners and accents; resource warning colors require actual
+reported pressure. The supplied reference establishes density and hierarchy,
+not a replacement palette or component system. The owner accepted the compact
+inline design and requested a single loading animation: keep the Host refresh
+spinner and omit the separate linear loading bar. Preserve the compact layout
+while optional readings are unavailable, and wrap values at enlarged text.
+The [Host resources contract](ADMINISTRATION.md#host-resources) records the
+reusable connection-owned loader and independent alert-threshold evaluation.
+The accepted exploration is archived on local branch
+`prototype/server-health-studio` at `6b5484b`, under
+`plans/prototypes/server-health-studio`; its fixtures remain synthetic.
 Server rows own Doctor, audit and Logs. The owner-approved 19 September update
 removes the runtime-profile label. The Server refresh icon is labelled
 Run all diagnostics and shows the same progress spinner as Profile while running.

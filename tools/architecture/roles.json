@@ -216,6 +216,16 @@
       "feature": "profiles",
       "library": "lib/core/models/hermes_profile.dart"
     },
+    "lib/core/models/host_resources.dart": {
+      "role": "domain",
+      "feature": "host-resources",
+      "library": "lib/core/models/host_resources.dart"
+    },
+    "lib/core/models/host_thresholds.dart": {
+      "role": "domain",
+      "feature": "host-resources",
+      "library": "lib/core/models/host_thresholds.dart"
+    },
     "lib/core/models/local_transcript_message.dart": {
       "role": "domain",
       "feature": "conversation",
@@ -520,6 +530,11 @@
       "role": "view",
       "feature": "administration-health",
       "library": "lib/core/screens/administration/admin_health_section.dart"
+    },
+    "lib/core/screens/administration/admin_host_health.dart": {
+      "role": "view",
+      "feature": "host-resources",
+      "library": "lib/core/screens/administration/admin_host_health.dart"
     },
     "lib/core/screens/administration/admin_identity_page.dart": {
       "role": "view",
@@ -1030,6 +1045,11 @@
       "role": "data",
       "feature": "voice",
       "library": "lib/core/services/hermes_voice.dart"
+    },
+    "lib/core/services/host_resources_session.dart": {
+      "role": "application",
+      "feature": "host-resources",
+      "library": "lib/core/services/host_resources_session.dart"
     },
     "lib/core/services/image_clipboard.dart": {
       "role": "platform",

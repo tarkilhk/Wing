@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'administration_health_session.dart';
+import 'host_resources_session.dart';
 import 'administration_repository.dart';
 import 'app_preferences.dart';
 import 'profile_colors_session.dart';
@@ -404,6 +405,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     connectionIdentity: connectionIdentity,
   );
   AdministrationHealthSession? _healthSession;
+  HostResourcesSession? _hostResources;
+
+  /// One host-data owner per captured connection, shared by all surfaces.
+  HostResourcesSession hostResources({AdministrationRepository? repository}) =>
+      _hostResources ??= HostResourcesSession(
+        healthSession(repository: repository).server,
+      );
   AdministrationHealthSession healthSession({
     AdministrationRepository? repository,
   }) => _healthSession ??= AdministrationHealthSession(
@@ -7690,6 +7698,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _browserChanges.dispose();
     _browserMutations.dispose();
     _deletedDraftCleanupPresentation.dispose();
+    _hostResources?.dispose();
     _healthSession?.dispose();
     _notificationRetry?.cancel();
     unawaited(_saveReadingSnapshot());

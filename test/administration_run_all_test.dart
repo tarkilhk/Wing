@@ -1,3 +1,5 @@
+import 'package:wing/core/services/host_resources_session.dart';
+import 'support/host_resources_fixture.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -51,12 +53,16 @@ void main() {
       testWidgets('run all ${brightness.name} at $scale', (tester) async {
         final fixture = AdministrationFixture();
         final health = AdministrationHealth(fixture.server);
+        final host = HostResourcesSession(fixture.server);
+        addTearDown(host.dispose);
         addTearDown(health.dispose);
         addTearDown(fixture.server.close);
         final starts = Completer<void>();
         var doctorRunning = true;
         var auditRunning = true;
         fixture.override = (method, path, query, body) async {
+          if (path == 'system/stats') return hostStatsPayload();
+          if (path == 'status') return hostPressurePayload();
           if (path.startsWith('ops/')) {
             await starts.future;
             return {'ok': true, 'name': path.substring(4), 'pid': 7};
@@ -95,6 +101,7 @@ void main() {
               appBar: AppBar(title: const Text('Hermes health')),
               body: AdminHealthContent(
                 health: health,
+                hostResources: host,
                 accessChecks: () => null,
                 onReviewAccess: null,
                 profile: fixture.server.profile('default'),
@@ -109,6 +116,8 @@ void main() {
         final runAll = find.byWidgetPredicate(
           (w) => w is IconButton && w.tooltip == 'Run all diagnostics',
         );
+        await tester.scrollUntilVisible(runAll, 200);
+        await tester.pumpAndSettle();
         bool enabled() => tester.widget<IconButton>(runAll).onPressed != null;
         expect(enabled(), isTrue);
         expect(
@@ -117,7 +126,13 @@ void main() {
         );
         expect(find.byTooltip('Refresh health'), findsNothing);
         expect(find.textContaining('Runtime profile'), findsNothing);
-        expect(fixture.requests, isEmpty);
+        expect(
+          fixture.requests.map((r) => r.$2),
+          unorderedEquals(['system/stats', 'status']),
+        );
+        fixture.requests.clear();
+        await tester.ensureVisible(runAll);
+        await tester.pumpAndSettle();
         await snapshot(tester, '${brightness.name}-$scale-idle');
         await tester.tap(runAll);
         await tester.pump();
@@ -198,9 +213,13 @@ void main() {
   ) async {
     final fixture = AdministrationFixture();
     final health = AdministrationHealth(fixture.server);
+    final host = HostResourcesSession(fixture.server);
+    addTearDown(host.dispose);
     addTearDown(health.dispose);
     addTearDown(fixture.server.close);
     fixture.override = (method, path, query, body) async => switch (path) {
+      'system/stats' => hostStatsPayload(),
+      'status' => hostPressurePayload(),
       'ops/doctor' => throw StateError('Doctor unavailable'),
       'ops/security-audit' => {'ok': true, 'name': 'security-audit', 'pid': 8},
       'actions/security-audit/status' => {
@@ -220,6 +239,7 @@ void main() {
         home: Scaffold(
           body: AdminHealthContent(
             health: health,
+            hostResources: host,
             accessChecks: () => null,
             onReviewAccess: null,
             profile: null,
@@ -229,6 +249,8 @@ void main() {
         ),
       ),
     );
+    await tester.ensureVisible(find.byTooltip('Run all diagnostics'));
+    await tester.pumpAndSettle();
     await tester.tap(
       find.byWidgetPredicate(
         (w) => w is IconButton && w.tooltip == 'Run all diagnostics',

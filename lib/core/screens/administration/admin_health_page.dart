@@ -9,6 +9,8 @@ import '../../widgets/profile_diagnostics_panel.dart';
 import '../../services/profile_diagnostics_controller.dart';
 import 'admin_widgets.dart';
 import 'admin_runtime_health.dart';
+import 'admin_host_health.dart';
+import '../../services/host_resources_session.dart';
 import 'admin_health_section.dart';
 import 'admin_providers_page.dart';
 import 'admin_connector_routes.dart';
@@ -28,6 +30,7 @@ Color administrationHealthColor(
 
 class AdminHealthContent extends StatelessWidget {
   final AdministrationHealth health;
+  final HostResourcesSession hostResources;
   final String? persistenceError;
   final ProfileAdministration? profile;
   final ProfileDiagnosticsController? Function() accessChecks;
@@ -46,6 +49,7 @@ class AdminHealthContent extends StatelessWidget {
   const AdminHealthContent({
     super.key,
     required this.health,
+    required this.hostResources,
     this.persistenceError,
     required this.profile,
     required this.onRefresh,
@@ -71,12 +75,14 @@ class AdminHealthContent extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
           if (persistenceError case final message?) AdminNotice.error(message),
+          AdminHostHealth(resources: hostResources),
+          const SizedBox(height: 16),
           AdminRuntimeHealth(
             health: health,
             chatController: chatController,
             onOpenSession: onOpenSession,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           AdminHealthSectionHeading(
             title: 'Profile',
             checkedAt: profileCheckedAt,

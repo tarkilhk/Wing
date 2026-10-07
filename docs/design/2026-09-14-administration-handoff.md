@@ -15,6 +15,7 @@ This is the ownership contract for Administration: a Profile root, a separate He
 | Profile / Behavior | Supported execution limits, approval policy, basic compression, reach/recovery policy and backend voice defaults |
 | Profile / Manage profiles | Collection lifecycle; compact pill after the last profile, scrolling with the profile selector |
 | Global menu / Connection and Server version | Icon, connection name and LED open connection details; server version opens Versions & updates and checks upstream availability. Client version remains in App settings. |
+| Health / Host | Connected machine identity, CPU/memory/disk observations, uptime and load; independent resource refresh |
 | Health / Server | Bounded logs, Doctor/security audit, Run all diagnostics and action results |
 | Health / Profile | Scoped readiness; recovery links to the owning editor |
 | Global menu / Hermes analytics | Profile-scoped usage, tokens, estimated costs and history |
@@ -30,6 +31,16 @@ readable instructions and reachable actions. Do not expand this change into
 restyling the other administration destinations.
 
 Keep the connection visible on Profile and Health. Health uses the shared header for profile selection. Server writes must not appear profile-scoped. Android appearance, notifications, dictation/playback and composer preferences stay in App settings.
+
+The owner's 7 October design refinement orders Health as Host, Server, Profile.
+The new Host group is a compact read-only machine-resource surface using the
+[Studio density requirement](../DESIGN_SYSTEM.md#layout-and-controls). Its
+observation time and resource refresh are independent of diagnostic completion
+and profile checks. The supplied host-card reference guides packing and inline
+meters; Studio tokens and controls continue to own appearance. The accepted
+implementation keeps only the refresh spinner while loading. Other consumers
+reuse its captured loader and typed readings; future alerts evaluate their own
+limits through a pure policy. See [Host resources](../ADMINISTRATION.md#host-resources).
 
 ## Account and runtime identity
 

@@ -199,7 +199,13 @@ class _HermesAdministrationContentState
     if (_refreshingHealth) return;
     setState(() => _refreshingHealth = true);
     try {
-      await Future.wait([widget.controller.refresh(), _refreshHealthProfile()]);
+      await Future.wait([
+        widget.controller.refresh(),
+        _refreshHealthProfile(),
+        widget.controller
+            .hostResources(repository: widget.repository)
+            .refresh(),
+      ]);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -733,6 +739,9 @@ class _HermesAdministrationContentState
         ]),
         builder: (context, _) => AdminHealthContent(
           health: _healthSession.health,
+          hostResources: widget.controller.hostResources(
+            repository: widget.repository,
+          ),
           persistenceError: _healthSession.persistenceError,
           profile: _profile,
           chatController: widget.controller,

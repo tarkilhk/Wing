@@ -1,3 +1,4 @@
+import 'support/host_resources_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
@@ -135,6 +136,8 @@ class _Fixture {
         throw StateError('Unavailable');
       }
       return switch (path) {
+        'system/stats' => hostStatsPayload(),
+        'status' => hostPressurePayload(),
         'profiles' => {
           'profiles': [
             for (final p in _profiles)
@@ -307,6 +310,7 @@ void main({
     await tester.pumpAndSettle();
     expect(find.text('Credentials missing'), findsOneWidget);
     await tester.ensureVisible(find.text('Fix access'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Fix access'));
     await tester.pumpAndSettle();
     expect(find.text('Profile access'), findsOneWidget);
@@ -345,6 +349,7 @@ void main({
       );
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Fix access'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Fix access'));
       await tester.pumpAndSettle();
       expect(find.text('Claw / client-work'), findsOneWidget);
@@ -390,6 +395,7 @@ void main({
     );
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Fix access'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Fix access'));
     await tester.pumpAndSettle();
     final oldCheck = Completer<Map<String, dynamic>>();
@@ -753,7 +759,7 @@ void main({
             );
             await tester.pumpAndSettle();
             expect(find.byType(HermesHealthContent), findsOneWidget);
-            expect(find.text('Server'), findsOneWidget);
+            expect(find.text('Host'), findsOneWidget);
             expect(
               fixture.requests,
               containsAll([
@@ -826,9 +832,11 @@ void main({
             await tester.drag(vertical, const Offset(0, -700));
             await tester.pumpAndSettle();
             await snapshot(tester, '$name-health-lower');
+            await tester.drag(vertical, const Offset(0, 5000));
+            await tester.pumpAndSettle();
             await tester.scrollUntilVisible(
               find.text('Model access'),
-              -250,
+              200,
               scrollable: vertical,
             );
             await tester.pumpAndSettle();

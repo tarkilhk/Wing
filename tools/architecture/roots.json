@@ -7569,6 +7569,16 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/models/host_resources.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/models/host_thresholds.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
       "path": "lib/core/models/local_transcript_message.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -7870,6 +7880,11 @@
     },
     {
       "path": "lib/core/screens/administration/admin_health_section.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/screens/administration/admin_host_health.dart",
       "area": "lib",
       "provenance": "tracked"
     },
@@ -8385,6 +8400,11 @@
     },
     {
       "path": "lib/core/services/hermes_voice.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/services/host_resources_session.dart",
       "area": "lib",
       "provenance": "tracked"
     },
@@ -10479,6 +10499,21 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/host_health_view_test.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
+      "path": "test/host_resources_session_test.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
+      "path": "test/host_thresholds_test.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
       "path": "test/html_preview_screen_test.dart",
       "area": "test",
       "provenance": "tracked"
@@ -11745,6 +11780,11 @@
     },
     {
       "path": "test/support/gateway_application_requests.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
+      "path": "test/support/host_resources_fixture.dart",
       "area": "test",
       "provenance": "tracked"
     },
