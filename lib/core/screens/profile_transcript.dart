@@ -270,7 +270,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   void _updateJump() {
     if (!mounted || !_scroll.hasClients) return;
     _scheduleNoticeVisibility();
-    final distance = _scroll.offset;
+    final distance = _scroll.offset.abs();
     if (distance <= 24) _hasNewContent = false;
     final attention = widget.chat.runtime.needsInput;
     _jumpLabel.value =
@@ -308,7 +308,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final atBottom =
         !_scroll.hasExpansionAnchor &&
         (_jumping ||
-            (_scroll.offset <= 0.5 &&
+            (_scroll.offset.abs() <= 0.5 &&
                 !_scroll.position.isScrollingNotifier.value));
     final newest = widget.timeline.entries
         .where((entry) => !entry.streaming)
@@ -364,7 +364,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final atBottom =
         !_scroll.hasExpansionAnchor &&
         (_jumping ||
-            (_scroll.offset <= 0.5 &&
+            (_scroll.offset.abs() <= 0.5 &&
                 !_scroll.position.isScrollingNotifier.value));
     GlobalKey? anchor;
     double? top;

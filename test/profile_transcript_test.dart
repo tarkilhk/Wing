@@ -1,6 +1,7 @@
 import 'package:wing/core/services/chat_runtime.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'package:wing/core/models/transcript_reading.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
@@ -15,6 +16,8 @@ import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
 import 'package:wing/core/widgets/profile_activity_tabs.dart';
 import 'package:wing/core/widgets/profile_message.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/widgets/playful_portrait.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
@@ -80,7 +83,11 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     appPreferences.dispose();
   });
 
-  Future<void> show(WidgetTester tester) async {
+  Future<void> show(
+    WidgetTester tester, {
+    Brightness brightness = Brightness.light,
+    double scale = 1,
+  }) async {
     if (tester.binding is AutomatedTestWidgetsFlutterBinding) {
       tester.view.physicalSize = const Size(360, 760);
       tester.view.devicePixelRatio = 1;
@@ -88,10 +95,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     }
     await tester.pumpWidget(
       MaterialApp(
+        theme: profileWorkspaceTheme(wingTheme(brightness)),
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(disableAnimations: reducedMotion),
+          data: MediaQuery.of(context).copyWith(
+            disableAnimations: reducedMotion,
+            textScaler: TextScaler.linear(scale),
+          ),
           child: child!,
         ),
         home: Scaffold(
@@ -708,6 +717,125 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(find.text('Output 1'), findsOneWidget);
     expect(find.text('Output 4'), findsNothing);
   });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final laterContent in [0.0, 2200.0]) {
+        testWidgets(
+          'switching a long saved Tools section to Agents keeps content visible '
+          '${brightness.name} $scale later=$laterContent',
+          (tester) async {
+            loadOlder = () async {};
+            tailHeight = laterContent;
+            chat.reading.installSnapshot(
+              TranscriptReadingSnapshot(
+                historySessionId: chat.reading.historySessionId,
+                messages: [
+                  {
+                    'id': 1,
+                    'role': 'assistant',
+                    'content': '',
+                    'tool_calls': [
+                      {
+                        'id': 'delegate',
+                        'function': {
+                          'name': 'delegate_task',
+                          'arguments': jsonEncode({
+                            'tasks': [
+                              {'goal': 'Inspect transport'},
+                            ],
+                          }),
+                        },
+                      },
+                    ],
+                  },
+                  for (var id = 2; id < 54; id++)
+                    {
+                      'id': id,
+                      'role': 'tool',
+                      'tool_name': 'read_file',
+                      'content': 'File $id',
+                    },
+                  {
+                    'id': 54,
+                    'role': 'tool',
+                    'tool_call_id': 'delegate',
+                    'content': jsonEncode({
+                      'results': [
+                        {
+                          'task_index': 0,
+                          'status': 'completed',
+                          'summary': 'Inspection complete',
+                          'duration_seconds': 12,
+                        },
+                      ],
+                    }),
+                  },
+                  row(55),
+                ],
+              ),
+            );
+            await show(tester, brightness: brightness, scale: scale);
+            if (laterContent > 0) {
+              tester.widget<ListView>(list).controller!.jumpTo(laterContent);
+              await tester.pumpAndSettle();
+            }
+            await tester.tap(find.text('Activity'));
+            await tester.pumpAndSettle();
+            final agents = find.byKey(
+              const ValueKey(('activity-tab', 'agents')),
+            );
+            final tools = find.byKey(const ValueKey(('activity-tab', 'tools')));
+            await Scrollable.ensureVisible(
+              tester.element(agents),
+              alignment: 0.2,
+            );
+            await tester.pumpAndSettle();
+            final scroll = tester.widget<ListView>(list).controller!;
+            scroll.jumpTo(scroll.offset + 100 - tester.getTopLeft(agents).dy);
+            await tester.pumpAndSettle();
+            final before = tester.getTopLeft(agents).dy;
+            for (var attempt = 0; attempt < 2; attempt++) {
+              await tester.tap(agents);
+              for (var frame = 0; frame < 20; frame++) {
+                await tester.pump(const Duration(milliseconds: 16));
+                expect(tester.getTopLeft(agents).dy, closeTo(before, 1));
+                expect(
+                  find.text('Inspect transport').hitTestable(),
+                  findsOneWidget,
+                );
+                expect(tester.takeException(), isNull);
+              }
+              await tester.pumpAndSettle();
+              if (attempt == 0) {
+                await tester.tap(tools);
+                await tester.pumpAndSettle();
+                expect(tester.getTopLeft(agents).dy, closeTo(before, 1));
+              }
+            }
+            // Parent rebuilds must preserve the negative/bounded reading
+            // position as well as the selected saved-agent page.
+            await rebuildPresentation(tester);
+            expect(tester.getTopLeft(agents).dy, closeTo(before, 1));
+            expect(
+              find.text('Inspect transport').hitTestable(),
+              findsOneWidget,
+            );
+            await capture?.call(
+              tester,
+              'agents-${brightness.name}-$scale-later-$laterContent',
+            );
+            expect(jump.hitTestable(), findsOneWidget);
+            await tester.tap(jump);
+            await tester.pumpAndSettle();
+            expect(scroll.position.minScrollExtent, 0);
+            expect(scroll.offset, 0);
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
+  }
 
   testWidgets('expanding long tool output keeps its header in place', (
     tester,

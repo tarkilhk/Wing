@@ -88,12 +88,16 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
 
   final ExpansionScrollController controller;
   double _expansionScrollExtent = 0;
+  double _expansionMinScrollExtent = 0;
 
   @override
   void jumpTo(double value) {
     controller.preserveReaderAnchor(null);
     controller.releaseExpansionAnchor();
-    if (value <= 0) _expansionScrollExtent = 0;
+    if (value <= 0) {
+      _expansionScrollExtent = 0;
+      _expansionMinScrollExtent = 0;
+    }
     super.jumpTo(value);
   }
 
@@ -105,7 +109,10 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
   }) {
     controller.preserveReaderAnchor(null);
     controller.releaseExpansionAnchor();
-    if (to <= 0) _expansionScrollExtent = 0;
+    if (to <= 0) {
+      _expansionScrollExtent = 0;
+      _expansionMinScrollExtent = 0;
+    }
     return super.animateTo(to, duration: duration, curve: curve);
   }
 
@@ -137,27 +144,30 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
       // Content coordinates exclude user movement. The anchor also includes
       // disclosure growth, so do not apply that height correction a second time.
       final movement = reader!.leadingOffset - controller._readerTop;
-      final target = (pixels + movement).clamp(
-        minScrollExtent,
-        double.infinity,
-      );
-      _expansionScrollExtent = target > maxScrollExtent ? target : 0;
+      final target = pixels + movement;
+      _expansionMinScrollExtent = target < minScrollExtent ? target : 0;
+      _expansionScrollExtent = target > 0 ? target : 0;
       if ((target - pixels).abs() > 0.01) {
         correctBy(target - pixels);
         return false;
       }
     } else if (axisDirection == AxisDirection.up && delta.abs() > 0.01) {
-      final target = (pixels + delta).clamp(minScrollExtent, double.infinity);
-      // Short conversations also need room below the header. Their natural
-      // content extent can still be zero while a disclosure grows on screen.
-      _expansionScrollExtent = target > maxScrollExtent ? target : 0;
+      final target = pixels + delta;
+      // A large panel can shrink past the natural bottom of a reversed list.
+      // Retain room below it so the tab/header stays at the tapped position.
+      _expansionMinScrollExtent = target < minScrollExtent ? target : 0;
+      // Lazy sliver estimates can change on the next layout pass. Retain the
+      // corrected position even when the first estimate appears to contain it.
+      _expansionScrollExtent = target > 0 ? target : 0;
       if ((target - pixels).abs() > 0.01) {
         correctPixels(target);
         return false;
       }
     }
     return super.applyContentDimensions(
-      minScrollExtent,
+      minScrollExtent < _expansionMinScrollExtent
+          ? minScrollExtent
+          : _expansionMinScrollExtent,
       maxScrollExtent > _expansionScrollExtent
           ? maxScrollExtent
           : _expansionScrollExtent,

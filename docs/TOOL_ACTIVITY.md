@@ -83,6 +83,14 @@ lifetime. `test/profile_execution_activity_test.dart` guards receipt enrichment
 across authoritative history refresh and rejects enrichment of unrelated IDs.
 Existing tab, disclosure and transcript tests cover retained selection, focus,
 scroll anchoring, expansion across added rows and separation from answers.
+The transcript scroll controller retains both ends of the corrected scroll range
+across lazy-list layout estimates. Switching a long Tools section to a short
+Agents section holds the tapped tab and its content in view, including when the
+new height would otherwise cross the natural bottom boundary. Explicit navigation
+to Latest clears that temporary range. `test/profile_transcript_test.dart` checks
+every transition frame, repeated switches, long following content, both themes
+and enlarged text. This is a behavioral guard: static analysis cannot establish
+sliver height estimates or painted tab position.
 
 Inspect production widgets at 360 dp with ordinary and enlarged text in both
 themes, including expanded vision and raw details. Store captures under ignored
