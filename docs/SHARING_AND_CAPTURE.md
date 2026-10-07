@@ -16,17 +16,18 @@ If clearing an incoming share fails after its conversation draft was saved, the 
 
 Photos and Files feed the same attachment path. Images receive the existing sanitization and file limits.
 
-JPEG preflight reads bounded inline SHORT or LONG orientation values (0 means
-unspecified; 1–8 carry the usual transforms). Samsung screenshot SEF trailers
-after JPEG EOI must have a bounded `SEFH`/`SEFT` directory and in-range entries.
-Their bytes share the existing 256 KiB metadata budget and are stripped, along
-with EXIF, before codec parsing. Unknown or malformed trailers remain rejected.
-The directory layout is cross-checked against
-[ExifTool's Samsung parser](https://github.com/exiftool/exiftool/blob/master/lib/Image/ExifTool/Samsung.pm).
-The synthetic Samsung screenshot and malformed-trailer regressions in
-`test/attachment_image_worker_test.dart` protect acceptance, unchanged dimensions,
-metadata removal and the metadata/range limits. Container-dependent behavior
-requires these behavioral guards rather than a source-pattern linter.
+Image preflight removes private metadata before codec parsing. Discarded JPEG,
+PNG and WebP metadata has no separate size cap within the 64 MiB input limit.
+All bytes after JPEG EOI are discarded without parsing vendor directories,
+including Samsung screenshot capture trailers. Optional orientation is applied
+only when its direct inline SHORT or LONG value can be read safely (0 means
+unspecified; 1–8 carry the usual transforms). Malformed orientation is discarded
+and the pixels keep their stored orientation. Decoder allocation limits, the
+retained PNG palette/color-chunk budget and the 25 MiB output limit still apply.
+The worker regressions in `test/attachment_image_worker_test.dart` protect large
+discarded metadata, arbitrary appended data, optional orientation, metadata
+removal and decoded dimensions. Container-dependent behavior requires these
+behavioral guards rather than a source-pattern linter.
 
 Composer actions display `AttachmentDraftException.message` from local preparation
 or validation, preserving the rejection reason instead of presenting it as a

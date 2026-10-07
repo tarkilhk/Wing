@@ -10,7 +10,9 @@ const maxAttachmentImagePixels = 16 * 1024 * 1024;
 const maxAttachmentImageSide = 16384;
 const maxAttachmentImageFrames = 16;
 const maxAttachmentImageDecodedBytes = 64 * 1024 * 1024;
-const maxAttachmentImageMetadataBytes = 256 * 1024;
+// PNG chunks retained for palette/color decoding still need an allocation cap.
+// Metadata removed before decoding is bounded only by the input file limit.
+const maxAttachmentImageRetainedPngBytes = 256 * 1024;
 const maxAttachmentImageRecords = 4096;
 const maxAttachmentImageChargedBytes = 256 * 1024 * 1024;
 
@@ -129,7 +131,7 @@ AttachmentImageInspection inspectAttachmentImage(Uint8List bytes) {
 }
 
 AttachmentImageInspection _jpeg(Uint8List b) {
-  var p = 2, records = 0, metadata = 0;
+  var p = 2, records = 0;
   int? width, height;
   var coefficientBytes = 0, coefficientBlocks = 0, tableBytes = 0;
   var ended = false;
@@ -155,8 +157,6 @@ AttachmentImageInspection _jpeg(Uint8List b) {
     if (length < 2 || length > b.length - p) _invalid();
     final end = p + length;
     if ((marker >= 224 && marker <= 239) || marker == 254) {
-      metadata += length;
-      if (metadata > maxAttachmentImageMetadataBytes) _invalid();
       // JFIF/Adobe carry decode color-space hints; every other APP/comment is
       // stripped before the codec, so EXIF cannot allocate arbitrary IFD chains.
       if (marker != 224 && marker != 238) {
@@ -274,9 +274,8 @@ AttachmentImageInspection _jpeg(Uint8List b) {
   }
   if (!ended || width == null || height == null) _invalid();
   if (p != b.length) {
-    metadata += b.length - p;
-    if (metadata > maxAttachmentImageMetadataBytes) _invalid();
-    _checkSamsungJpegTrailer(b, p, records);
+    // Nothing after the first EOI contributes pixels. Discard it without
+    // interpreting vendor capture directories or other appended metadata.
     discardedMetadata.add((p, b.length));
   }
   final decode =
@@ -297,31 +296,6 @@ AttachmentImageInspection _jpeg(Uint8List b) {
     orientation: orientation,
     discardedMetadata: discardedMetadata,
   );
-}
-
-/// Samsung screenshots append a little-endian SEF directory after JPEG EOI.
-/// Validate only bounded ranges; the private capture payload is never decoded.
-void _checkSamsungJpegTrailer(Uint8List bytes, int start, int records) {
-  final end = bytes.length;
-  if (end - start < 20 || _tag(bytes, end - 4) != 'SEFT') _invalid();
-  final size = _le32(bytes, end - 8);
-  if (size < 12 || size > end - start - 8) _invalid();
-  final directory = end - 8 - size;
-  if (_tag(bytes, directory) != 'SEFH') _invalid();
-  final count = _le32(bytes, directory + 8);
-  if (count < 1 ||
-      count > maxAttachmentImageRecords - records ||
-      size != 12 + count * 12) {
-    _invalid();
-  }
-  for (var i = 0; i < count; i++) {
-    final entry = directory + 12 + i * 12;
-    final offset = _le32(bytes, entry + 4);
-    final length = _le32(bytes, entry + 8);
-    if (offset > directory - start || length < 8 || length > offset) {
-      _invalid();
-    }
-  }
 }
 
 class _InflatedCounter implements Sink<List<int>> {
@@ -375,7 +349,13 @@ void _checkInflation(Uint8List b, List<(int, int)> ranges, int expected) {
 }
 
 AttachmentImageInspection _png(Uint8List b) {
-  var p = 8, records = 0, metadata = 0, w = 0, h = 0, bits = 0, channels = 0;
+  var p = 8,
+      records = 0,
+      retainedBytes = 0,
+      w = 0,
+      h = 0,
+      bits = 0,
+      channels = 0;
   var interlace = 0, declaredFrames = 1, frameW = 0, frameH = 0;
   var seenHeader = false, ended = false, seenData = false, frameControls = 0;
   var hasAnimation = false, idatClosed = false;
@@ -475,9 +455,10 @@ AttachmentImageInspection _png(Uint8List b) {
       default:
         if (const {'tEXt', 'zTXt', 'iTXt', 'iCCP', 'eXIf'}.contains(tag)) {
           discardedMetadata.add((p, end + 4));
+        } else {
+          retainedBytes += size;
+          if (retainedBytes > maxAttachmentImageRetainedPngBytes) _invalid();
         }
-        metadata += size;
-        if (metadata > maxAttachmentImageMetadataBytes) _invalid();
     }
     p = end + 4;
     if (ended) break;
@@ -506,7 +487,7 @@ AttachmentImageInspection _png(Uint8List b) {
 
 AttachmentImageInspection _webp(Uint8List b) {
   if (_le32(b, 4) != b.length - 8) _invalid();
-  var p = 12, records = 0, metadata = 0, w = 0, h = 0, frames = 0;
+  var p = 12, records = 0, w = 0, h = 0, frames = 0;
   var orientation = 1;
   final discardedMetadata = <(int, int)>[];
   void bitstream(String tag, int data, int end, int expectedW, int expectedH) {
@@ -583,8 +564,6 @@ AttachmentImageInspection _webp(Uint8List b) {
       case 'XMP ':
         discardedMetadata.add((p, end + (size & 1)));
         if (tag == 'EXIF') orientation = _tiffOrientation(b, data, end);
-        metadata += size;
-        if (metadata > maxAttachmentImageMetadataBytes) _invalid();
       case 'ANIM':
         if (size != 6) _invalid();
       default:
@@ -610,33 +589,32 @@ AttachmentImageInspection _webp(Uint8List b) {
 }
 
 int _tiffOrientation(Uint8List bytes, int start, int end) {
-  if (end - start < 8) _invalid('The image orientation metadata is malformed.');
+  // Optional metadata never reaches the codec. Use a transform only when its
+  // direct inline value can be read safely; damaged metadata leaves pixels as-is.
+  if (end - start < 8) return 1;
   final little = bytes[start] == 73 && bytes[start + 1] == 73;
-  if (!little && !(bytes[start] == 77 && bytes[start + 1] == 77)) _invalid();
+  if (!little && !(bytes[start] == 77 && bytes[start + 1] == 77)) return 1;
   final data = ByteData.sublistView(bytes, start, end);
   final endian = little ? Endian.little : Endian.big;
-  if (data.getUint16(2, endian) != 42) _invalid();
+  if (data.getUint16(2, endian) != 42) return 1;
   final offset = data.getUint32(4, endian);
   if (offset == 0) return 1;
-  if (offset > data.lengthInBytes - 2) _invalid();
+  if (offset > data.lengthInBytes - 2) return 1;
   final count = data.getUint16(offset, endian);
-  if (count > maxAttachmentImageRecords ||
-      count > (data.lengthInBytes - offset - 2) ~/ 12) {
-    _invalid();
-  }
+  if (count > (data.lengthInBytes - offset - 2) ~/ 12) return 1;
   for (var i = 0; i < count; i++) {
     final p = offset + 2 + i * 12;
     if (data.getUint16(p, endian) != 0x112) continue;
     final type = data.getUint16(p + 2, endian);
     if ((type != 3 && type != 4) || data.getUint32(p + 4, endian) != 1) {
-      _invalid();
+      return 1;
     }
     final orientation = type == 3
         ? data.getUint16(p + 8, endian)
         : data.getUint32(p + 8, endian);
     // Samsung screenshots store an inline LONG zero (unspecified orientation).
     // The worker applies only actual orientation transforms, then strips EXIF.
-    if (orientation > 8) _invalid();
+    if (orientation > 8) return 1;
     return orientation;
   }
   return 1;

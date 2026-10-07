@@ -222,29 +222,90 @@ void main() {
     },
   );
 
-  test('JPEG rejects unknown or out-of-bounds trailers', () {
-    final jpeg = image_lib.encodeJpg(image_lib.Image(width: 3, height: 2));
-    final badDirectory = _samsungTrailer();
-    ByteData.sublistView(
-      badDirectory,
-    ).setUint32(badDirectory.length - 8, 0xffffffff, Endian.little);
-    final badOffset = _samsungTrailer();
-    ByteData.sublistView(
-      badOffset,
-    ).setUint32(badOffset.length - 16, 0xffffffff, Endian.little);
-    for (final trailer in [
-      ascii.encode('unknown trailer'),
-      badDirectory,
-      badOffset,
-      [
-        ...List<int>.filled(maxAttachmentImageMetadataBytes, 0),
-        ..._samsungTrailer(),
+  test(
+    'JPEG discards appended data without parsing vendor directories',
+    () async {
+      final jpeg = image_lib.encodeJpg(image_lib.Image(width: 3, height: 2));
+      final badDirectory = _samsungTrailer();
+      ByteData.sublistView(
+        badDirectory,
+      ).setUint32(badDirectory.length - 8, 0xffffffff, Endian.little);
+      final badOffset = _samsungTrailer();
+      ByteData.sublistView(
+        badOffset,
+      ).setUint32(badOffset.length - 16, 0xffffffff, Endian.little);
+      for (final trailer in [
+        ascii.encode('unknown trailer'),
+        badDirectory,
+        badOffset,
+        [...List<int>.filled(300 * 1024, 0), ..._samsungTrailer()],
+      ]) {
+        final bytes = Uint8List.fromList([...jpeg, ...trailer]);
+        expect(
+          attachmentImageCodecSource(bytes, inspectAttachmentImage(bytes)),
+          jpeg,
+        );
+        final result = await AttachmentImageWorker.shared
+            .prepareBytes(bytes, maxOutputBytes: maxAttachmentImageOutputBytes)
+            .result;
+        final decoded = image_lib.decodeJpg(result.bytes)!;
+        expect((decoded.width, decoded.height), (3, 2));
+      }
+    },
+  );
+
+  test('discarded metadata has no separate 256 KiB cap', () async {
+    final jpeg = image_lib.encodeJpg(image_lib.Image(width: 2, height: 2));
+    final app = List<int>.filled(60 * 1024, 42);
+    final jpegWithMetadata = Uint8List.fromList([
+      ...jpeg.take(2),
+      for (var i = 0; i < 6; i++) ...[
+        255,
+        226,
+        (app.length + 2) >> 8,
+        (app.length + 2) & 255,
+        ...app,
       ],
+      ...jpeg.skip(2),
+    ]);
+    final png = _png(1, 1, [0, 255, 0, 0, 255]);
+    final pngWithMetadata = Uint8List.fromList([
+      ...png.take(33),
+      ..._chunk('tEXt', List<int>.filled(300 * 1024, 42)),
+      ...png.skip(33),
+    ]);
+    final webp = base64Decode(
+      'UklGRh4AAABXRUJQVlA4TBEAAAAvAUAAAAdQiirUo/+BiOh/AAA=',
+    );
+    final webpWithMetadata = Uint8List.fromList([
+      ...webp,
+      ...ascii.encode('XMP '),
+      ..._littleWord(300 * 1024),
+      ...List<int>.filled(300 * 1024, 42),
+    ]);
+    ByteData.sublistView(
+      webpWithMetadata,
+    ).setUint32(4, webpWithMetadata.length - 8, Endian.little);
+    for (final (original, bytes) in [
+      (jpeg, jpegWithMetadata),
+      (png, pngWithMetadata),
+      (webp, webpWithMetadata),
     ]) {
+      final inspection = inspectAttachmentImage(bytes);
+      expect(attachmentImageCodecSource(bytes, inspection), original);
+      final result = await AttachmentImageWorker.shared
+          .prepareBytes(bytes, maxOutputBytes: maxAttachmentImageOutputBytes)
+          .result;
+      final decoded = result.isJpeg
+          ? image_lib.decodeJpg(result.bytes)!
+          : image_lib.decodePng(result.bytes)!;
       expect(
-        () => inspectAttachmentImage(Uint8List.fromList([...jpeg, ...trailer])),
-        throwsA(isA<AttachmentImageException>()),
+        (decoded.width, decoded.height),
+        (inspection.width, inspection.height),
       );
+      expect(decoded.exif.isEmpty, isTrue);
+      expect(decoded.iccProfile, isNull);
+      expect(decoded.textData == null || decoded.textData!.isEmpty, isTrue);
     }
   });
 
@@ -631,8 +692,8 @@ void main() {
   );
 
   test(
-    'malformed out-of-range TIFF orientation directory fails before decoding',
-    () {
+    'malformed optional orientation is stripped without rejecting pixels',
+    () async {
       final jpeg = image_lib.encodeJpg(image_lib.Image(width: 2, height: 2));
       final payload = [
         ...ascii.encode('Exif'),
@@ -657,10 +718,15 @@ void main() {
         ...payload,
         ...jpeg.sublist(2),
       ]);
-      expect(
-        () => inspectAttachmentImage(bytes),
-        throwsA(isA<AttachmentImageException>()),
-      );
+      final inspection = inspectAttachmentImage(bytes);
+      expect(inspection.orientation, 1);
+      expect(attachmentImageCodecSource(bytes, inspection), jpeg);
+      final result = await AttachmentImageWorker.shared
+          .prepareBytes(bytes, maxOutputBytes: maxAttachmentImageOutputBytes)
+          .result;
+      final decoded = image_lib.decodeJpg(result.bytes)!;
+      expect((decoded.width, decoded.height), (2, 2));
+      expect(decoded.exif.isEmpty, isTrue);
     },
   );
   test(
