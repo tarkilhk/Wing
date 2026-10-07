@@ -24,7 +24,7 @@
 ## Keep work moving
 
 - **Choose your model.** Browse a compact provider-filtered list and open model cards for supplied prices and account usage. The small brain control selects reasoning; lightning toggles fast mode where available. In the composer, tap the short model name to open the picker, tap lightning to toggle fast, or hold thinking, slide to a level and release to apply; slide away to cancel. Picker changes wait for Apply.
-- **Choose what happens next.** Send a new message, steer active work, queue a follow-up or stop it. Edit a queued item before it sends. Drafts and staged files survive navigation and restart.
+- **Choose what happens next.** Send a new message, steer active work, queue a follow-up or stop it. An empty composer shows Stop while work is running; start typing to restore the send arrow and your usual held-action order. Hold, slide and release to choose another action. Edit a queued item before it sends. Drafts and staged files survive navigation and restart.
 - **Explore another direction.** Edit a saved message, regenerate an answer or branch into a separate conversation. Your Hermes server keeps the authoritative history.
 - **Follow delegated work.** In Activity → Tasks, read full task text with explicit status and subtask indentation. In Agents, see each goal, current activity and available timing; tap for live output, backend details and supported controls. Saved task and delegation results restore these tabs in past chats; historical agents expose output and delivered durations without live controls.
 - **Respond from your phone.** Review supported approvals and questions, inspect subagents and goals, and use local notifications for replies and requests while Wing is running.

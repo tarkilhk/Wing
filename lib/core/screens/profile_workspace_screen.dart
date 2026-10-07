@@ -2118,14 +2118,25 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         : null,
   );
 
-  Widget _composerActionButton(ProfileChat chat) => ComposerActionButton(
-    key: ValueKey(chat.key),
-    primary: chat.composer.actions().prefersRunningAction
+  Widget _composerActionButton(ProfileChat chat) {
+    final actions = chat.composer.actions();
+    final primary = actions.prefersStopAction
+        ? ComposerAction.stop
+        : actions.prefersRunningAction
         ? controller.appPreferences.current.preferredRunningAction
-        : ComposerAction.send,
-    unavailable: _composerActionLabels(chat),
-    onSelected: (action) => _performComposerAction(chat, action),
-  );
+        : ComposerAction.send;
+    return ComposerActionButton(
+      key: ValueKey(chat.key),
+      primary: primary,
+      resting: actions.prefersStopAction
+          ? ComposerAction.stop
+          : primary == null
+          ? null
+          : ComposerAction.send,
+      unavailable: _composerActionLabels(chat),
+      onSelected: (action) => _performComposerAction(chat, action),
+    );
+  }
 
   Future<void> _performComposerAction(
     ProfileChat chat,

@@ -22,6 +22,7 @@ import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
 import 'package:wing/core/models/composer_action.dart';
 import 'package:wing/core/widgets/composer_action_button.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 
 class _ComposerActionsFixture extends ProfileActionsFixture {
   Map<String, dynamic> steerResult = {'status': 'queued'};
@@ -102,6 +103,7 @@ void main() {
   Future<ProfileChat> show(
     WidgetTester tester, {
     double scale = 1,
+    Brightness brightness = Brightness.light,
     ChatExecution status = ChatExecution.idle,
     String draft = '',
     List<String> queued = const [],
@@ -131,8 +133,8 @@ void main() {
       await tester.runAsync(() async {
         const fonts = String.fromEnvironment('CAPTURE_FONT_DIR');
         for (final font in {
-          'Roboto': 'roboto-regular.ttf',
-          'MaterialIcons': 'materialicons-regular.otf',
+          'Roboto': 'Roboto-Regular.ttf',
+          'MaterialIcons': 'MaterialIcons-Regular.otf',
         }.entries) {
           final loader = FontLoader(font.key)
             ..addFont(
@@ -149,13 +151,7 @@ void main() {
         key: const ValueKey('composer-preview'),
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
-          theme: const bool.fromEnvironment('CAPTURE_COMPOSER')
-              ? ThemeData.dark().copyWith(
-                  textTheme: ThemeData.dark().textTheme.apply(
-                    fontFamily: 'Roboto',
-                  ),
-                )
-              : null,
+          theme: wingTheme(brightness),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(
               context,
@@ -168,6 +164,184 @@ void main() {
     );
     await pumpFrames(tester);
     return chat;
+  }
+
+  Future<void> capture(WidgetTester tester, String name) async {
+    if (!const bool.fromEnvironment('CAPTURE_COMPOSER')) return;
+    final previousShadows = debugDisableShadows;
+    void repaintShadows() {
+      for (final renderObject in tester.allRenderObjects) {
+        if (renderObject is RenderPhysicalModel ||
+            renderObject is RenderPhysicalShape) {
+          renderObject.markNeedsPaint();
+        }
+      }
+    }
+
+    debugDisableShadows = false;
+    repaintShadows();
+    await tester.pump();
+    try {
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(const ValueKey('composer-preview')),
+      );
+      await tester.runAsync(() async {
+        final image = await boundary.toImage(pixelRatio: 1);
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        await Directory('build/composer-transitions').create(recursive: true);
+        await File(
+          'build/composer-transitions/$name.png',
+        ).writeAsBytes(bytes!.buffer.asUint8List());
+        image.dispose();
+      });
+    } finally {
+      debugDisableShadows = previousShadows;
+      repaintShadows();
+      await tester.pump();
+    }
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('running Stop restores draft order at $brightness / $scale', (
+        tester,
+      ) async {
+        final chat = await show(
+          tester,
+          brightness: brightness,
+          scale: scale,
+          status: ChatExecution.running,
+        );
+        tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+        await pumpFrames(tester);
+        final name = '${brightness.name}-$scale';
+        expect(chat.composer.actions().prefersStopAction, isTrue);
+        expect(
+          find.byKey(const ValueKey('composer-button-icon-stop')),
+          findsOneWidget,
+        );
+        await capture(tester, '$name-stop');
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byTooltip('Stop')),
+        );
+        await tester.pump(const Duration(milliseconds: 800));
+        expect(
+          find.byKey(const ValueKey('composer-action-selector')),
+          findsNothing,
+        );
+        await gesture.cancel();
+        await tester.enterText(
+          find.byKey(const Key('profile-message-composer')),
+          ' ',
+        );
+        await tester.pump();
+        expect(chat.composer.actions().prefersStopAction, isFalse);
+        expect(
+          tester
+              .widget<ComposerActionButton>(find.byType(ComposerActionButton))
+              .primary,
+          ComposerAction.steer,
+        );
+        await tester.enterText(
+          find.byKey(const Key('profile-message-composer')),
+          'Next idea',
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 110));
+        await capture(tester, '$name-typing-transition');
+        await pumpFrames(tester);
+        expect(
+          find.byKey(const ValueKey('composer-button-icon-send')),
+          findsOneWidget,
+        );
+        await capture(tester, '$name-typing');
+        final typing = await tester.startGesture(
+          tester.getCenter(find.byTooltip('Steer')),
+        );
+        await tester.pump(const Duration(milliseconds: 800));
+        await pumpFrames(tester, count: 3);
+        expect(
+          tester
+              .getTopLeft(find.byKey(const ValueKey('composer-choice-steer')))
+              .dy,
+          greaterThan(
+            tester
+                .getTopLeft(find.byKey(const ValueKey('composer-choice-stop')))
+                .dy,
+          ),
+        );
+        await capture(tester, '$name-typing-column');
+        await typing.cancel();
+        emitChatEvent(controller, chat, 'turn.end', {'status': 'completed'});
+        await pumpFrames(tester);
+        expect(chat.composer.actions().prefersStopAction, isFalse);
+        expect(find.byTooltip('Send'), findsOneWidget);
+        expect(chat.composer.observation.text, 'Next idea');
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  testWidgets('Send becomes a tappable Stop before a reply arrives', (
+    tester,
+  ) async {
+    final chat = await show(tester, draft: 'Start working');
+    controller.connectionStatus.accessAvailable();
+    controller.connectionStatus.liveChanged(
+      chat.key.workspace.profileName,
+      true,
+    );
+    await pumpFrames(tester);
+    await tester.tap(find.byTooltip('Send'));
+    await tester.runAsync(() async {
+      await chat.composer.admittedWrites;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await pumpFrames(tester);
+    expect(
+      fixture.calls.where((call) => call.$2 == 'prompt.submit'),
+      hasLength(1),
+      reason:
+          '${chat.composer.observation.error}; ${chat.runtime.error}; '
+          '${chat.composer.observation.queue.length} queued; '
+          '${controller.connectionStatus.description}',
+    );
+    expect(chat.composer.actions().prefersStopAction, isTrue);
+    expect(
+      find.byKey(const ValueKey('composer-button-icon-stop')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byTooltip('Stop'));
+    await pumpFrames(tester);
+    expect(
+      fixture.calls.where((call) => call.$2 == 'session.interrupt'),
+      hasLength(1),
+    );
+  });
+
+  for (final action in [ComposerAction.queue, ComposerAction.stop]) {
+    testWidgets(
+      'typing restores configured ${action.name} after automatic Stop',
+      (tester) async {
+        await appPreferences.setRunningAction(action);
+        await show(tester, status: ChatExecution.running);
+        expect(
+          find.byKey(const ValueKey('composer-button-icon-stop')),
+          findsOneWidget,
+        );
+        await tester.enterText(
+          find.byKey(const Key('profile-message-composer')),
+          'Follow up',
+        );
+        await pumpFrames(tester);
+        final button = tester.widget<ComposerActionButton>(
+          find.byType(ComposerActionButton),
+        );
+        expect(button.primary, action);
+        expect(button.resting, ComposerAction.send);
+        expect(appPreferences.current.preferredRunningAction, action);
+      },
+    );
   }
 
   testWidgets('long press edits in the composer and reveals delete', (

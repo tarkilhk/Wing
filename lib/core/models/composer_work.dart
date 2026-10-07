@@ -189,6 +189,7 @@ final class ComposerActions {
     required this.canSaveQueueEdit,
     required this.canSteerQueueEdit,
     required this.prefersRunningAction,
+    required this.prefersStopAction,
     required this.hasMessageActions,
     required Iterable<ComposerAction> offered,
     required this.canResumeQueue,
@@ -203,6 +204,7 @@ final class ComposerActions {
   final bool canSaveQueueEdit;
   final bool canSteerQueueEdit;
   final bool prefersRunningAction;
+  final bool prefersStopAction;
   final bool hasMessageActions;
   final Set<ComposerAction> offered;
   final bool canResumeQueue;

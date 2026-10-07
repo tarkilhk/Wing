@@ -405,6 +405,11 @@ class ComposerSession {
     return ComposerActions(
       reasons,
       canFork: canFork,
+      prefersStopAction:
+          runtime.connected &&
+          runtime.working &&
+          _text.isEmpty &&
+          _files.isEmpty,
       prefersRunningAction:
           runtime.working &&
           _submissions.isEmpty &&
