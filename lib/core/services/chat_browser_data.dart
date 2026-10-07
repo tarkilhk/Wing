@@ -31,6 +31,7 @@ class BrowserFilterChoice {
     required this.selected,
     required this.intent,
     this.status,
+    this.project,
   });
   final String id;
   final String label;
@@ -38,6 +39,7 @@ class BrowserFilterChoice {
   final bool selected;
   final BrowserPreferenceIntent intent;
   final ChatListStatus? status;
+  final BrowserProject? project;
 }
 
 final class ChatBrowserProjection {
@@ -273,6 +275,7 @@ final class ChatBrowserData extends ChangeNotifier {
       String label,
       BrowserChoiceDecoration decoration, {
       ChatListStatus? status,
+      BrowserProject? project,
     }) => BrowserFilterChoice(
       id: id,
       label: label,
@@ -280,6 +283,7 @@ final class ChatBrowserData extends ChangeNotifier {
       selected: selected.contains(id),
       intent: BrowserPreferenceIntent.toggle(filter, id),
       status: status,
+      project: project,
     );
     switch (filter) {
       case BrowserFilter.status:
@@ -314,31 +318,29 @@ final class ChatBrowserData extends ChangeNotifier {
           }
         }
         final projects =
-            <(String, String, BrowserChoiceDecoration)>[
+            <BrowserFilterChoice>[
               for (final profile in _controller.discovery?.profiles ?? []) ...[
-                (
+                choice(
                   '${profile.name}/home',
                   '< ${profile.name} >',
                   BrowserChoiceDecoration.home,
                 ),
                 for (final project in _projectRows(profile.name))
                   if (project['isNoProject'] != true)
-                    (
+                    choice(
                       '${profile.name}/${project['id']}',
                       '${project['name']} · ${profile.label}',
                       BrowserChoiceDecoration.project,
+                      project: BrowserProject.fromWire(project),
                     ),
               ],
             ]..sort((a, b) {
-              final recent = (recency[b.$1] ?? 0).compareTo(recency[a.$1] ?? 0);
+              final recent = (recency[b.id] ?? 0).compareTo(recency[a.id] ?? 0);
               return recent != 0
                   ? recent
-                  : a.$2.toLowerCase().compareTo(b.$2.toLowerCase());
+                  : a.label.toLowerCase().compareTo(b.label.toLowerCase());
             });
-        return [
-          for (final project in projects)
-            choice(project.$1, project.$2, project.$3),
-        ];
+        return projects;
     }
   }
 

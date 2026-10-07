@@ -72,6 +72,7 @@ void main() {
     required double scale,
     double width = 390,
     bool repair = false,
+    bool projectAppearance = false,
   }) async {
     SharedPreferences.setMockInitialValues({
       if (repair)
@@ -80,6 +81,12 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     owner = AppPreferences(preferences);
     host = BrowserMutationsFixture();
+    if (projectAppearance) {
+      host.projectChanges['work/work-project'] = {
+        'icon': 'star-full',
+        'color': 'hsl(60 68% 58%)',
+      };
+    }
     controller = ProfileWorkspaceController(
       access: ConnectionAccess(
         connection: SavedConnection(
@@ -200,27 +207,93 @@ void main() {
     expect(target.bottom - accent.bottom, greaterThanOrEqualTo(8));
   }
 
-  void expectCenteredFilters(WidgetTester tester, double width) {
-    final rows = <double, Rect>{};
+  void expectDistributedFilters(WidgetTester tester, double width) {
+    final rows = <double, List<Rect>>{};
     for (final filter in ['status', 'profile', 'project']) {
       final rect = tester.getRect(find.byKey(ValueKey('chat-filter-$filter')));
-      rows.update(
-        rect.center.dy,
-        (row) => row.expandToInclude(rect),
-        ifAbsent: () => rect,
-      );
+      rows.putIfAbsent(rect.center.dy, () => []).add(rect);
     }
     for (final row in rows.values) {
-      expect(
-        row.center.dx,
-        closeTo(width / 2, .01),
-        reason: 'Each row of filter controls is centered in the bar',
-      );
+      final slotWidth = (width - 32 - 96) / row.length;
+      for (var index = 0; index < row.length; index++) {
+        expect(
+          row[index].center.dx,
+          closeTo(16 + 48 + slotWidth * (index + .5), .01),
+          reason: 'Filters are equally distributed between the icon slots',
+        );
+        expect(row[index].width, closeTo(row.first.width, .01));
+      }
     }
   }
 
   for (final brightness in Brightness.values) {
-    for (final (width, scale) in [(390.0, 1.0), (390.0, 2.0), (320.0, 2.0)]) {
+    testWidgets(
+      'project filter preserves saved appearance ${brightness.name}',
+      (tester) async {
+        await showBrowser(
+          tester,
+          brightness: brightness,
+          scale: 1,
+          projectAppearance: true,
+        );
+        await tester.tap(find.byKey(const ValueKey('chat-profile-work')));
+        await tester.pumpAndSettle();
+        final headingIcon = tester.widget<Icon>(
+          find.byIcon(Icons.star_outline),
+        );
+        await tester.tap(find.byKey(const ValueKey('chat-filter-project')));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('chat-menu-search')),
+          'work',
+        );
+        await tester.pumpAndSettle();
+        final project = find.byKey(
+          const ValueKey('chat-menu-work/work-project'),
+        );
+        expect(project.hitTestable(), findsOneWidget);
+        final menuIcon = find.descendant(
+          of: project,
+          matching: find.byIcon(Icons.star_outline),
+        );
+        expect(menuIcon, findsOneWidget);
+        expect(tester.widget<Icon>(menuIcon).color, headingIcon.color);
+        expect(
+          find.descendant(
+            of: project,
+            matching: find.byIcon(Icons.folder_outlined),
+          ),
+          findsNothing,
+        );
+        final home = find.byKey(const ValueKey('chat-menu-work/home'));
+        expect(
+          find.descendant(
+            of: home,
+            matching: find.byIcon(Icons.category_outlined),
+          ),
+          findsOneWidget,
+        );
+        await capture(tester, '${brightness.name}-project-icons');
+        await tester.tap(project);
+        await tester.pumpAndSettle();
+        // Selecting an option keeps its project glyph and color.
+        expect(menuIcon, findsOneWidget);
+        expect(tester.widget<Icon>(menuIcon).color, headingIcon.color);
+        await tester.tap(find.text('Done'));
+        await tester.pumpAndSettle();
+        expect(find.text('Project 1'), findsOneWidget);
+        expectSelectedPadding(tester, 'Project');
+        expectDistributedFilters(tester, 390);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    for (final (width, scale) in [
+      (390.0, 1.0),
+      (320.0, 1.0),
+      (390.0, 2.0),
+      (320.0, 2.0),
+    ]) {
       testWidgets(
         'all browser filters remain legible and reachable ${brightness.name} ${scale}x at${width.toInt()}',
         (tester) async {
@@ -230,7 +303,7 @@ void main() {
             scale: scale,
             width: width,
           );
-          expectCenteredFilters(tester, width);
+          expectDistributedFilters(tester, width);
           await capture(
             tester,
             '${brightness.name}-${scale}x${width == 390 ? '' : '-320'}',
@@ -301,7 +374,7 @@ void main() {
             reason: 'Clear filters stays at the right page gutter',
           );
           expectSelectedPadding(tester, 'Status');
-          expectCenteredFilters(tester, width);
+          expectDistributedFilters(tester, width);
           await capture(
             tester,
             '${brightness.name}-${scale}x-${width.toInt()}-selected',
@@ -317,7 +390,7 @@ void main() {
           await tester.tap(find.text('Done'));
           await tester.pumpAndSettle();
           expectSelectedPadding(tester, 'Profile');
-          expectCenteredFilters(tester, width);
+          expectDistributedFilters(tester, width);
           expect(tester.getRect(clear).right, closeTo(width - 16, .01));
           await capture(
             tester,

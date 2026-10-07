@@ -170,8 +170,10 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
               BrowserChoiceDecoration.profile => const Icon(
                 Icons.person_outline,
               ),
-              BrowserChoiceDecoration.project => const Icon(
-                Icons.folder_outlined,
+              BrowserChoiceDecoration.project => projectAvatar(
+                context,
+                choice.project!,
+                size: 20,
               ),
               BrowserChoiceDecoration.home => const Icon(
                 Icons.category_outlined,
@@ -243,6 +245,29 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
       ),
     ),
   );
+
+  Widget _filterControls() => LayoutBuilder(
+    builder: (context, constraints) {
+      final controls = [
+        _filterControl('Status', _statuses),
+        _filterControl('Profile', _profiles),
+        _filterControl('Project', _projects),
+      ];
+      // Three 80 dp slots keep labels, chevrons and accent padding readable.
+      if (constraints.maxWidth < 240 ||
+          MediaQuery.textScalerOf(context).scale(16) > 20) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: controls,
+        );
+      }
+      return Row(
+        children: [for (final control in controls) Expanded(child: control)],
+      );
+    },
+  );
+
   Widget _filters() => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 16),
     child: SizedBox(
@@ -268,18 +293,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
                 height: 48,
                 child: Icon(Icons.filter_alt_outlined, size: 19),
               ),
-              Expanded(
-                child: Wrap(
-                  alignment: WrapAlignment.center,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 4,
-                  children: [
-                    _filterControl('Status', _statuses),
-                    _filterControl('Profile', _profiles),
-                    _filterControl('Project', _projects),
-                  ],
-                ),
-              ),
+              Expanded(child: _filterControls()),
               SizedBox(
                 width: 48,
                 height: 48,

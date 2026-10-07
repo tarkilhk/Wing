@@ -23,9 +23,12 @@ Projects section, Recents, separators, and the header's duplicated filters.
 Use the compact Status / Profile / Project row, five colored status dots and
 a continuous grouped list with three-chat previews.
 Selected filters use a rounded accent inset from the bar, with padding inside
-the tint. Center Status / Profile / Project as a group in the bar, keeping
-equal-width icon slots at both ends and Clear all filters fixed at the right
-gutter. At enlarged text sizes, keep each wrapped row of filters centered.
+the tint. Distribute Status / Profile / Project in equal-width slots between
+equal-width icon slots at both ends, centering each label in its slot. Keep
+Clear all filters fixed at the right gutter. On narrow screens and at enlarged
+text sizes, stack the filters with equal full-width targets and centered labels.
+Project filter choices use the same saved project icon and color as their list
+headings. Profile home groups retain their outlined mixed-shapes icon.
 The owner’s 20 September
 update uses “Show more” to reveal ten additional chats in that group per tap;
 the action disappears when every matching chat in the group is visible.
