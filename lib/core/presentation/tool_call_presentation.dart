@@ -165,7 +165,7 @@ final class ToolCallPresentation {
         'scale_note',
       ]) {
         final value = output[key];
-        if (value is String && value.isNotEmpty) {
+        if (value is String && value.trim().isNotEmpty) {
           details.add(
             _detail(
               _humanize(key),
@@ -181,7 +181,10 @@ final class ToolCallPresentation {
       }
       if (output['content'] case final List parts) {
         for (final part in parts) {
-          if (part is Map && part['type'] == 'text' && part['text'] is String) {
+          if (part is Map &&
+              part['type'] == 'text' &&
+              part['text'] is String &&
+              (part['text'] as String).trim().isNotEmpty) {
             details.add(_detail('Result', part['text'] as String));
           }
         }
@@ -198,7 +201,7 @@ final class ToolCallPresentation {
         for (final source in sources) {
           if (source is! Map) continue;
           final sourceTitle =
-              _firstText(source, const ['title', 'url']) ?? 'Result';
+              _firstText(source, const ['title', 'url', 'name']) ?? 'Result';
           final content = _firstText(source, const [
             'content',
             'snippet',
@@ -206,14 +209,23 @@ final class ToolCallPresentation {
             'text',
           ]);
           final url = _firstText(source, const ['url']);
-          details.add(_detail(sourceTitle, _sourceText(url, content)));
+          // Results also contain structured operation receipts, not just web
+          // sources. Render their delivered scalar facts rather than an empty
+          // source block. Unprojected nested data stays available in raw details.
+          final text = url != null || content != null
+              ? _sourceText(url, content)
+              : _scalarFacts(source, heading: sourceTitle);
+          if (text.trim().isNotEmpty) {
+            details.add(_detail(sourceTitle, text));
+          }
         }
       }
       // Generic structured tools retain scalar facts without exposing JSON as
       // their default content. Nested structures remain in full raw details.
       if (details.isEmpty) {
         for (final entry in output.entries) {
-          if (entry.value is String ||
+          if ((entry.value is String &&
+                  (entry.value as String).trim().isNotEmpty) ||
               entry.value is num ||
               entry.value is bool) {
             details.add(
@@ -222,7 +234,7 @@ final class ToolCallPresentation {
           }
         }
       }
-    } else if (output is String && output.isNotEmpty) {
+    } else if (output is String && output.trim().isNotEmpty) {
       details.add(
         _detail(
           'Result',
@@ -294,6 +306,25 @@ String? _listTarget(Object? value) => value is List && value.isNotEmpty
     ? value.whereType<String>().join(' · ')
     : null;
 String _oneLine(String text) => text.replaceAll(RegExp(r'\s+'), ' ').trim();
+String _scalarFacts(Map data, {required String heading}) {
+  final facts = [
+    for (final entry in data.entries)
+      if ((entry.value is String &&
+              (entry.value as String).trim().isNotEmpty) ||
+          entry.value is num ||
+          entry.value is bool)
+        entry,
+  ];
+  final body = facts.where(
+    (entry) =>
+        !((entry.key == 'name' || entry.key == 'title') &&
+            entry.value == heading),
+  );
+  return (body.isEmpty ? facts : body)
+      .map((entry) => '${_humanize(entry.key.toString())}: ${entry.value}')
+      .join('\n');
+}
+
 String _sourceText(String? url, String? content) {
   final uri = url == null ? null : Uri.tryParse(url);
   final source =

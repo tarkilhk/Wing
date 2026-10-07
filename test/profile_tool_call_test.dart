@@ -1,4 +1,9 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -15,6 +20,143 @@ import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
 
 void main() {
+  const capture = bool.fromEnvironment('CAPTURE_TOOL_RESULTS');
+  setUpAll(() async {
+    if (!capture) return;
+    const root = String.fromEnvironment('CAPTURE_FONT_DIR');
+    for (final (family, file) in [
+      ('Roboto', 'Roboto-Regular.ttf'),
+      ('MaterialIcons', 'MaterialIcons-Regular.otf'),
+    ]) {
+      await (FontLoader(family)..addFont(
+            File(
+              '$root/$file',
+            ).readAsBytes().then((b) => b.buffer.asByteData()),
+          ))
+          .load();
+    }
+  });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final saved in [false, true]) {
+        testWidgets(
+          'skill batch results in $brightness at $scale saved=$saved',
+          (tester) async {
+            tester.view.physicalSize = const Size(360, 900);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.reset);
+            final raw = jsonEncode({
+              'success': true,
+              'operations_applied': 4,
+              'results': [
+                for (final file in [
+                  null,
+                  'references/accommodation-search-quality.md',
+                  'references/flight-search-quality.md',
+                  'references/trip-preferences.md',
+                ])
+                  {
+                    'name': 'business-trip-policy-research',
+                    'action': 'patch',
+                    'file_path': file,
+                    'success': true,
+                  },
+              ],
+            });
+            final call = saved
+                ? ToolCallPresentation.saved(
+                    TranscriptToolResult.fromRow({
+                      'role': 'tool',
+                      'tool_name': 'skill_manage',
+                      'content': raw,
+                    }),
+                  )
+                : ToolCallPresentation.live(
+                    GatewayToolActivity.fromGatewayEvent('tool.complete', {
+                      'tool_id': 'skill-batch',
+                      'name': 'skill_manage',
+                      'result': raw,
+                    })!,
+                  );
+            String? copied;
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+              SystemChannels.platform,
+              (method) async {
+                if (method.method == 'Clipboard.setData') {
+                  copied = (method.arguments as Map)['text'] as String;
+                }
+                return null;
+              },
+            );
+            addTearDown(
+              () => tester.binding.defaultBinaryMessenger
+                  .setMockMethodCallHandler(SystemChannels.platform, null),
+            );
+            await tester.pumpWidget(
+              MaterialApp(
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: Scaffold(
+                  body: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: RepaintBoundary(
+                      key: const ValueKey('skill-results-capture'),
+                      child: ColoredBox(
+                        color: wingTheme(brightness).scaffoldBackgroundColor,
+                        child: ProfileToolCall(call: call),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+            await tester.tap(find.text('Skill manage'));
+            await tester.pumpAndSettle();
+            expect(find.text('Result'), findsNothing);
+            expect(call.details, hasLength(4));
+            for (final detail in call.details) {
+              expect(find.text(detail.text), findsOneWidget);
+              expect(detail.text, contains('Action: patch'));
+              expect(detail.text, contains('Success: true'));
+              final size = tester.getSize(find.text(detail.text));
+              expect(size.width, greaterThan(0));
+              expect(size.height, greaterThan(0));
+            }
+            if (capture && saved) {
+              final boundary = tester.renderObject<RenderRepaintBoundary>(
+                find.byKey(const ValueKey('skill-results-capture')),
+              );
+              await tester.runAsync(() async {
+                final image = await boundary.toImage();
+                final bytes = await image.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                final file = File(
+                  'build/tool-results/${brightness.name}-$scale.png',
+                );
+                await file.parent.create(recursive: true);
+                await file.writeAsBytes(bytes!.buffer.asUint8List());
+                image.dispose();
+              });
+            }
+            await tester.ensureVisible(find.text('Raw details'));
+            await tester.tap(find.text('Raw details'));
+            await tester.pumpAndSettle();
+            await tester.ensureVisible(find.byTooltip('Copy Output'));
+            await tester.tap(find.byTooltip('Copy Output'));
+            expect(copied, raw);
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
+  }
+
   testWidgets(
     'completed tool rows show exceptions only and retain delivered durations',
     (tester) async {

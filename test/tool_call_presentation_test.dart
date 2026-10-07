@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/gateway_activity.dart';
+import 'package:wing/core/models/transcript_message.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
 import 'package:wing/core/presentation/tool_call_presentation.dart';
 import 'package:wing/core/services/chat_runtime.dart';
@@ -18,6 +19,90 @@ ToolCallPresentation completed(
 );
 
 void main() {
+  test('skill batch operations show their facts instead of empty Results', () {
+    const raw =
+        '{"success":true,"operations_applied":1,"results":['
+        '{"name":"business-trip-policy-research","action":"patch",'
+        '"file_path":"references/accommodation-search-quality.md","success":true}]}';
+    for (final call in [
+      completed('skill_manage', raw),
+      ToolCallPresentation.saved(
+        TranscriptToolResult.fromRow({
+          'role': 'tool',
+          'tool_name': 'skill_manage',
+          'content': raw,
+        }),
+      ),
+    ]) {
+      expect(call.details, hasLength(1));
+      expect(call.details.single.text.trim(), isNotEmpty);
+      expect(call.details.single.label, 'business-trip-policy-research');
+      expect(call.details.single.text, contains('patch'));
+      expect(
+        call.details.single.text,
+        contains('references/accommodation-search-quality.md'),
+      );
+      expect(call.details.single.text, contains('true'));
+      expect(call.result, raw);
+    }
+  });
+
+  test(
+    'result projection skips blank data and preserves meaningful receipts',
+    () {
+      final call = completed('skill_manage', {
+        'success': true,
+        'results': [
+          {
+            'name': 'policy',
+            'action': 'patch',
+            'file_path': null,
+            'success': true,
+          },
+          {
+            'name': 'policy',
+            'action': 'write_file',
+            'success': false,
+            'error': 'Permission denied',
+          },
+          {
+            'content': ' \n ',
+            'metadata': {'unused': true},
+          },
+          {},
+          {
+            'title': 'Policy FAQ',
+            'url': 'https://example.org/faq',
+            'content': 'Choose the hotel that matches the request.',
+          },
+        ],
+      });
+      expect(call.details, hasLength(3));
+      expect(
+        call.details.every((detail) => detail.text.trim().isNotEmpty),
+        isTrue,
+      );
+      expect(call.details[0].text, contains('Action: patch'));
+      expect(call.details[0].text, isNot(contains('null')));
+      expect(call.details[1].text, contains('Success: false'));
+      expect(call.details[1].text, contains('Error: Permission denied'));
+      expect(call.details[2].label, 'Policy FAQ');
+      expect(
+        call.details[2].text,
+        '[Open source](https://example.org/faq)\n\n'
+        'Choose the hotel that matches the request.',
+      );
+      expect(
+        completed('tool_call', {
+          'content': [
+            {'type': 'text', 'text': ' \n '},
+          ],
+        }).details,
+        isEmpty,
+      );
+    },
+  );
+
   test(
     'completion is not evidence of success; actual errors and reuse are readable',
     () {

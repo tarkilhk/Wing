@@ -75,6 +75,30 @@ Image I/O continues through the owning chat's existing attachment loader.
 
 ## Regression and visual verification
 
+Structured `results` entries are not necessarily web sources. Skill-management
+batches supply operation receipts containing `name`, `action`, `file_path` and
+`success`, rather than a URL or snippet. Verified against latest stock upstream
+main [`9241b0c60fd2efcc62b589ecae64d119d846c0dc`](https://github.com/NousResearch/hermes-agent/commit/9241b0c60fd2efcc62b589ecae64d119d846c0dc)
+on 7 October 2026, in `tools/skill_manager_batch.py`,
+`tools/skill_manager_tool.py` and `tui_gateway/tool_progress.py`.
+`ToolCallPresentation` renders each receipt's delivered scalar facts, uses its
+name as the heading and avoids repeating that name in its body. Existing web
+links and excerpts retain their source presentation. Empty/whitespace-only
+result bodies are omitted; nested fields and the exact original result remain
+copyable under Raw details. The same projection serves live and saved calls.
+
+`TOOL_RESULT_CONTENT` is guarded by the skill-batch and blank-result cases in
+`test/tool_call_presentation_test.dart` and `test/profile_tool_call_test.dart`.
+They reproduce the former empty Result headings with the current stock batch
+shape and verify all four receipts, live/saved parity, web content, raw-copy
+fidelity and readable phone layouts in both themes at normal and doubled text.
+This requires behavioral checks: a static source pattern cannot establish which
+fields an actual delivered result contains or whether its rendered body is empty.
+Run `flutter test --no-pub test/tool_call_presentation_test.dart test/profile_tool_call_test.dart`.
+For production-widget captures, add `--dart-define=CAPTURE_TOOL_RESULTS=true`
+and `--dart-define=CAPTURE_FONT_DIR=<Flutter SDK>/bin/cache/artifacts/material_fonts`;
+images are written to ignored `build/tool-results/`.
+
 `test/tool_call_presentation_test.dart` guards completed versus success semantics,
 desktop/connector/unknown titles, raw wrapper preservation, exact saved call
 correlation, no timers for preparation/replay/missed starts, independent parallel
