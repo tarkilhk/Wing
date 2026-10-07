@@ -104,6 +104,7 @@ class ChatRuntime {
   ChatRecovery _recovery = ChatRecovery.ready;
   String? _openingError, _error;
   ChatMainActivity _main = ChatMainActivity.working;
+  bool _compacting = false;
   GatewayToolActivity? _mainTool;
   final _tools = <GatewayToolActivity>[];
   String _reasoning = '';
@@ -144,6 +145,7 @@ class ChatRuntime {
     liveSessionConfirmed: _liveSessionConfirmed,
     openingError: _openingError,
     mainActivity: _main,
+    compacting: _compacting,
     mainToolActivity: _mainTool,
     toolActivities: _tools,
     reasoning: _reasoning,
@@ -294,6 +296,37 @@ class ChatRuntime {
 
   void observeEvent(String type, Map<String, dynamic> data) {
     if (_closed) return;
+    final wasCompacting = _compacting;
+    final compressionStatus =
+        type == 'status.update' &&
+        const {
+          'compacting',
+          'compressing',
+          'compacted',
+          'ready',
+        }.contains(data['kind']);
+    if (compressionStatus) {
+      _compacting =
+          data['kind'] == 'compacting' || data['kind'] == 'compressing';
+    } else if (const {
+          'message.start',
+          'message.delta',
+          'message.interim',
+          'message.complete',
+          'turn.end',
+          'reasoning.delta',
+          'reasoning.available',
+          'tool.start',
+          'tool.generating',
+          'tool.complete',
+          'turn.error',
+          'error',
+        }.contains(type) ||
+        type == 'session.info' && data['running'] == false) {
+      // Retire only on stock completion or evidence that the main work resumed.
+      // Child progress and a running heartbeat do not finish compression.
+      _compacting = false;
+    }
     final relevant = switch (type) {
       'session.info' => const [
         'open_requests',
@@ -330,7 +363,9 @@ class ChatRuntime {
       'error' => true,
       _ => false,
     };
-    if (relevant) _events++;
+    if (relevant || compressionStatus || wasCompacting != _compacting) {
+      _events++;
+    }
   }
 
   ChatRuntimeOperation beginTurn({required bool submitting}) {
@@ -347,6 +382,7 @@ class ChatRuntime {
           ? ChatExecution.submitting
           : ChatExecution.running;
       _main = ChatMainActivity.working;
+      _compacting = false;
       _mainTool = null;
       _tools.clear();
       _reasoning = '';
@@ -435,6 +471,7 @@ class ChatRuntime {
 
   void failTurn(String error) {
     if (!_closed) {
+      _compacting = false;
       _execution = ChatExecution.failed;
       _error = error;
     }
@@ -446,6 +483,7 @@ class ChatRuntime {
     required String? error,
   }) {
     if (_closed) return;
+    _compacting = false;
     _execution = failed
         ? ChatExecution.failed
         : cancelled
@@ -562,8 +600,9 @@ class ChatRuntime {
     if (_closed || data['running'] is! bool) return;
     if (data['running'] == true) {
       _execution = ChatExecution.running;
-    } else if (observation.executionActive) {
-      _execution = ChatExecution.completed;
+    } else {
+      _compacting = false;
+      if (observation.executionActive) _execution = ChatExecution.completed;
     }
   }
 
@@ -650,6 +689,7 @@ class ChatRuntime {
     _resume++;
     _turn++;
     _execution = ChatExecution.idle;
+    _compacting = false;
     _recovery = ChatRecovery.ready;
     _error = null;
     _approvals.clear();
@@ -978,6 +1018,7 @@ class ChatRuntime {
     final changed = runtime != _runtimeId;
     final wasActive = observation.executionActive;
     if (changed) replaceRuntime(runtime);
+    if (result['running'] == false) _compacting = false;
     _resume++;
     _main = ChatMainActivity.working;
     _mainTool = null;

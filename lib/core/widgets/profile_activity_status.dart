@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../models/gateway_activity.dart';
 import '../models/profile_live_activity.dart';
+import '../theme/wing_theme.dart';
 import '../services/profile_workspace_controller.dart';
 import 'activity_shimmer.dart';
 import 'profile_chat_indicator.dart';
@@ -37,9 +38,13 @@ class ProfileActivityStatus extends StatelessWidget {
       default:
         break;
     }
-    if (chat.runtime.commandRunning) return 'Running command…';
     final children = chat.subagents.where((item) => !item.isTerminal).length;
     final childLabel = '$children subagent${children == 1 ? '' : 's'}';
+    if (chat.runtime.compacting) {
+      const summary = 'Summarizing conversation…';
+      return children > 0 ? '$summary · $childLabel active' : summary;
+    }
+    if (chat.runtime.commandRunning) return 'Running command…';
     if (chat.runtime.execution != ChatExecution.running) {
       if (children > 0) return 'Waiting for $childLabel…';
       if (chat.runtime.error != null) return 'History needs attention';
@@ -100,7 +105,15 @@ class ProfileActivityStatus extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
               children: [
-                if (chat.runtime.commandRunning &&
+                if (chat.runtime.compacting &&
+                    !chat.runtime.needsInput &&
+                    !chat.runtime.reconnecting)
+                  Icon(
+                    Icons.compress_rounded,
+                    size: 18,
+                    color: WingTokens.of(context).running,
+                  )
+                else if (chat.runtime.commandRunning &&
                     !chat.runtime.needsInput &&
                     !chat.runtime.reconnecting)
                   SizedBox(
@@ -129,8 +142,10 @@ class ProfileActivityStatus extends StatelessWidget {
                     active: active,
                     child: Text(
                       text,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      maxLines: chat.runtime.compacting ? null : 1,
+                      overflow: chat.runtime.compacting
+                          ? TextOverflow.visible
+                          : TextOverflow.ellipsis,
                       style: Theme.of(
                         context,
                       ).textTheme.labelMedium?.copyWith(color: color),

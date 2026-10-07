@@ -74,6 +74,7 @@ class ChatRuntimeObservation {
     required this.liveSessionConfirmed,
     required this.openingError,
     required this.mainActivity,
+    required this.compacting,
     required this.mainToolActivity,
     required Iterable<GatewayToolActivity> toolActivities,
     required this.reasoning,
@@ -99,6 +100,9 @@ class ChatRuntimeObservation {
   final bool liveSessionConfirmed;
   final String? openingError;
   final ChatMainActivity mainActivity;
+
+  /// A session-scoped phase, independent of a live turn or slash RPC.
+  final bool compacting;
   final GatewayToolActivity? mainToolActivity;
   final Iterable<GatewayToolActivity> toolActivities;
   final String reasoning;
@@ -131,7 +135,7 @@ class ChatRuntimeObservation {
   ProfileLiveActivityState? activity({required bool backgroundWorking}) =>
       needsInput
       ? ProfileLiveActivityState.needsInput
-      : executionActive || reconnecting || backgroundWorking
+      : executionActive || compacting || reconnecting || backgroundWorking
       ? ProfileLiveActivityState.running
       : null;
 }

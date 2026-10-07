@@ -11,11 +11,12 @@ import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/widgets/profile_activity_status.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
 
-void main() {
+void main({Future<void> Function(WidgetTester, String)? capture}) {
   late Host host;
   late ProfileWorkspaceController controller;
   late WorkspaceRuntimeFixture runtimes;
@@ -56,6 +57,154 @@ void main() {
   });
 
   String? label() => ProfileActivityStatus(chat: chat).label;
+
+  test('stock automatic and manual compression show their own activity', () {
+    host.event('a', 'message.start');
+    host.event('a', 'message.delta', {'text': 'Earlier response'});
+    for (final kind in ['compacting', 'compressing']) {
+      host.event('a', 'status.update', {'kind': kind});
+      expect(label(), 'Summarizing conversation…');
+      host.event('a', 'status.update', {'kind': 'process'});
+      expect(label(), 'Summarizing conversation…');
+      host.event('a', 'status.update', {'kind': 'compacted'});
+      expect(label(), 'Writing response…');
+    }
+    runtime.completeTurn(failed: false, cancelled: false, error: null);
+    runtime.beginCommand();
+    host.event('a', 'status.update', {'kind': 'compressing'});
+    expect(label(), 'Summarizing conversation…');
+    runtime.finishCommand();
+    expect(label(), 'Summarizing conversation…');
+    host.event('a', 'status.update', {'kind': 'ready'});
+    expect(label(), isNull);
+  });
+
+  test('compression retires on main progress and terminal evidence', () async {
+    final progress = <String, Map<String, dynamic>>{
+      'message.delta': {'text': 'Resumed'},
+      'message.interim': {},
+      'reasoning.delta': {'text': 'Resumed'},
+      'reasoning.available': {'text': 'Resumed'},
+      'tool.generating': {'name': 'web_search'},
+      'tool.start': {'name': 'web_search', 'tool_id': 'search'},
+      'tool.complete': {'name': 'web_search', 'tool_id': 'search'},
+      'message.start': {},
+      'message.complete': {'text': 'Done'},
+      'turn.end': {},
+      'error': {'message': 'Failed'},
+      'session.info': {'running': false},
+    };
+    for (final event in progress.entries) {
+      host.event('a', 'message.start');
+      host.event('a', 'status.update', {'kind': 'compacting'});
+      expect(chat.runtime.compacting, isTrue);
+      host.event('a', event.key, event.value);
+      expect(chat.runtime.compacting, isFalse, reason: event.key);
+      expect(label(), isNot('Summarizing conversation…'), reason: event.key);
+      await Future<void>.delayed(Duration.zero);
+    }
+  });
+
+  test(
+    'compression belongs to its chat and survives unrelated activity',
+    () async {
+      host.event('a', 'message.start');
+      final read = runtime.captureRead();
+      host.event('a', 'status.update', {'kind': 'compacting'});
+      expect(read.current, isFalse);
+      await controller.switchProfile('b');
+      final other = await controller.createChat(canDispatch: () => true);
+      host.event('b', 'message.start');
+      host.event('b', 'message.delta', {'text': 'Other chat'});
+      expect(other.runtime.compacting, isFalse);
+      host.event('a', 'subagent.start', {'subagent_id': 'child'});
+      host.event('a', 'session.usage', {
+        'usage': {'compressions': 1},
+      });
+      host.event('a', 'session.info', {'running': true});
+      expect(label(), 'Summarizing conversation… · 1 subagent active');
+      host.event('a', 'clarify', {
+        'request_id': 'city',
+        'question': 'Which city?',
+      });
+      expect(label(), 'Waiting for your reply');
+      runtime.beginRecovery();
+      expect(label(), 'Reconnecting… · checking current activity');
+      runtime.recovered();
+      runtime.reconcileOpenRequests(const []);
+      runtime.installResume({'session_id': 'a-runtime', 'running': true});
+      expect(chat.runtime.compacting, isTrue);
+      runtime.installResume({'session_id': 'a-runtime', 'running': false});
+      expect(chat.runtime.compacting, isFalse);
+      host.event('a', 'status.update', {'kind': 'compacting'});
+      runtime.replaceRuntime('replacement');
+      expect(chat.runtime.compacting, isFalse);
+    },
+  );
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('compression fits Studio $brightness at $scale text', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(360, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        host.event('a', 'message.start');
+        host.event('a', 'subagent.start', {'subagent_id': 'child'});
+        host.event('a', 'status.update', {'kind': 'compacting'});
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: const ValueKey('compression-review'),
+            child: MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (_, child) => MediaQuery(
+                data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          ),
+        );
+        for (var i = 0; i < 8; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        final text = find.text('Summarizing conversation… · 1 subagent active');
+        expect(text, findsOneWidget);
+        expect(find.byIcon(Icons.compress_rounded), findsOneWidget);
+        expect(tester.widget<Text>(text).maxLines, isNull);
+        final composer = find.byKey(const ValueKey('conversation-composer'));
+        expect(
+          tester.getBottomLeft(text).dy,
+          lessThanOrEqualTo(tester.getTopLeft(composer).dy),
+        );
+        expect(tester.takeException(), isNull);
+        if (capture != null) await capture(tester, '${brightness.name}-$scale');
+        host.event('a', 'status.update', {'kind': 'compacted'});
+        await tester.pump();
+        expect(text, findsNothing);
+        expect(find.byIcon(Icons.compress_rounded), findsNothing);
+      });
+    }
+  }
+
+  testWidgets('compression remains readable with reduced motion', (
+    tester,
+  ) async {
+    host.event('a', 'status.update', {'kind': 'compressing'});
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: Scaffold(body: ProfileActivityStatus(chat: chat)),
+        ),
+      ),
+    );
+    expect(find.text('Summarizing conversation…'), findsOneWidget);
+    expect(find.byIcon(Icons.compress_rounded), findsOneWidget);
+    expect(find.byType(ShaderMask), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
 
   test(
     'idle and cancelled hide while other status messages remain available',

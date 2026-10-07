@@ -6418,6 +6418,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (chat == null || resource.blocksSession(chat._key.sessionId)) return;
     // Only facts a resume snapshot can replace invalidate its read. Independent
     // usage/control/review observations must not hold execution in recovery.
+    final compactingBefore = chat.runtime.compacting;
     chat._runtime.observeEvent(event.type, event.data);
     final activityBefore = chat.runtime.mainActivity;
     final statusBefore = chat.runtime.execution;
@@ -6605,6 +6606,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _streamChanged(
         chat,
         immediate:
+            chat.runtime.compacting != compactingBefore ||
             chat.runtime.mainActivity != activityBefore ||
             chat.runtime.execution != statusBefore,
       );

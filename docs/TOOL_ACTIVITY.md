@@ -1,5 +1,31 @@
 # Readable tool activity
 
+Conversation compression uses stock `status.update` at inspected upstream main
+`0e21933114c911075782d5744cee5403996d38ae` (8 October 2026).
+`ChatRuntime` owns a per-session compression phase independent of turn execution
+and slash-command lifetime. `compacting` and `compressing` activate it;
+`compacted`, `ready`, resumed main output/tool events, turn completion/errors and
+an explicit `running: false` snapshot retire it. A running heartbeat, usage count
+or child activity cannot retire it. A same-runtime running resume preserves the
+phase; replacing the runtime clears it. Compression events invalidate older
+runtime reads. The controller publishes resumed output immediately so the label
+does not remain behind the streaming throttle.
+
+The existing Studio status row above the composer shows “Summarizing
+conversation…” with an 18 dp compression glyph and the shared text shimmer.
+It wraps at enlarged text and becomes static with reduced motion. Input requests
+and recovery retain priority. No extra transcript card or reserved empty row is
+introduced. The phase is a passive observation; existing turn and command owners
+retain submission admission.
+
+`test/profile_activity_status_test.dart` guards the actual controller-to-status
+path, manual pending command lifetime, session isolation, resume read invalidation,
+terminal/resumed-work ordering, input priority and rendered phone layouts in both
+themes at ordinary and doubled text. These are behavioral guards: a static source
+check cannot establish delivered event order or rendered wrapping. The original
+automatic/manual regression was proven red before implementation. Run
+`flutter test --no-pub test/profile_activity_status_test.dart`.
+
 Open Activity in a conversation, then Tools. Every backend call has an individual
 action row: a readable title, delivered target, exception notice and any available
 duration. Expand a row to read its result. Vision calls show their exact
