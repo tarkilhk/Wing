@@ -249,8 +249,9 @@ explicit empty/error states.
 
 Open Hermes health to see Host, then Server, then Profile. Host displays the
 connected machine's identity, compact CPU/memory/disk meters, boot uptime and
-load averages. Tap the machine row for available memory, free disk space and
-API-process details. The Host refresh icon reads resources only; it has one
+load averages. CPU count and Python version appear only in machine details.
+Tap the machine row for available memory, free disk space and API-process
+details. The Host refresh icon reads resources only; it has one
 spinner, with no extra loading bar. The Server icon still runs diagnostics.
 
 Verified on 7 October 2026 against stock upstream

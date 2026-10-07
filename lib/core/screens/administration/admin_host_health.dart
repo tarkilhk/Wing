@@ -86,7 +86,7 @@ class AdminHostHealth extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Uptime ${_uptime(stats.uptime)} · ${stats.logicalCpus ?? '—'} CPUs · Py ${stats.pythonVersion}',
+                          'Uptime ${_uptime(stats.uptime)}',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         if (stats.load case final load?)
