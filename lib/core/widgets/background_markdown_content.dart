@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import '../utils/expansion_scroll_controller.dart';
+
 import '../services/markdown_parse_worker.dart';
 import '../services/markdown_segments.dart';
 import '../services/completion_diagnostics.dart';
@@ -48,6 +50,7 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
   bool _foreground = true;
   bool _failed = false;
   MarkdownParseWorker? _worker;
+  TranscriptAnchorBox? _loadingRow;
   String? _renderedSource;
   List<MarkdownSegment>? _segments;
 
@@ -267,6 +270,12 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
 
   @override
   Widget build(BuildContext context) {
+    final row = context.findAncestorRenderObjectOfType<TranscriptAnchorBox>();
+    if (!identical(row, _loadingRow)) {
+      _loadingRow?.setContentPending(this, false);
+      _loadingRow = row;
+    }
+    _loadingRow?.setContentPending(this, _segments == null && !_failed);
     final child = _segments == null
         ? const SizedBox.shrink()
         : widget.builder(_renderedSource!, _segments!);
@@ -279,6 +288,15 @@ class BackgroundMarkdownContentState extends State<BackgroundMarkdownContent>
             ],
           )
         : child;
+  }
+
+  @override
+  void deactivate() {
+    // Release before the parent lays out a replacement child. Disposal happens
+    // after layout; a reparented state acquires its new row on the next build.
+    _loadingRow?.setContentPending(this, false);
+    _loadingRow = null;
+    super.deactivate();
   }
 
   @override

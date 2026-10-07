@@ -7,6 +7,7 @@ import 'package:wing/core/services/markdown_parse_worker.dart';
 import 'package:wing/core/services/markdown_segments.dart';
 import 'package:wing/core/services/performance_instrumentation.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
+import 'package:wing/core/utils/expansion_scroll_controller.dart';
 import 'package:wing/core/widgets/studio_error.dart';
 
 MarkdownParseResult _prose(String source) => MarkdownParseResult(
@@ -19,6 +20,50 @@ MarkdownParseResult _prose(String source) => MarkdownParseResult(
 );
 
 void main() {
+  for (final outcome in ['completed', 'failed', 'disposed']) {
+    testWidgets('pending transcript geometry releases when $outcome', (
+      tester,
+    ) async {
+      final job = Completer<MarkdownParseResult>();
+      final row = GlobalKey();
+      Widget host({bool showMessage = true}) => Directionality(
+        textDirection: TextDirection.ltr,
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: TranscriptScrollAnchor(
+            key: row,
+            initialHeight: 240,
+            child: showMessage
+                ? BackgroundMarkdownContent(
+                    data: 'A saved answer',
+                    deliverables: false,
+                    parse: (_) => job.future,
+                    builder: (_, _) => const SizedBox(height: 32),
+                  )
+                : const SizedBox(height: 32),
+          ),
+        ),
+      );
+      await tester.pumpWidget(host());
+      expect(tester.getSize(find.byKey(row)).height, 240);
+      if (outcome == 'disposed') {
+        await tester.pumpWidget(host(showMessage: false));
+        job.complete(_prose('A saved answer'));
+      } else if (outcome == 'failed') {
+        job.completeError(StateError('Injected parse failure'));
+      } else {
+        job.complete(_prose('A saved answer'));
+      }
+      await tester.pump();
+      await tester.pump();
+      expect(tester.getSize(find.byKey(row)).height, lessThan(240));
+      if (outcome != 'failed') {
+        expect(tester.getSize(find.byKey(row)).height, 32);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('grammar changes reparse identical source before rendering', (
     tester,
   ) async {

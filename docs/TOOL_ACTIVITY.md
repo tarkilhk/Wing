@@ -89,7 +89,16 @@ Agents section holds the tapped tab and its content in view, including when the
 new height would otherwise cross the natural bottom boundary. Explicit navigation
 to Latest clears that temporary range. `test/profile_transcript_test.dart` checks
 every transition frame, repeated switches, long following content, both themes
-and enlarged text. This is a behavioral guard: static analysis cannot establish
+and enlarged text. Its answers use the production asynchronous Markdown renderer
+and the test waits for reparsing after each switch. Fixed-height answer stubs
+cannot detect lazy Markdown rows collapsing when they are recreated.
+The transcript retains measured row heights only for its current stable row keys.
+A recreated row keeps its measured height while Markdown is preparing, then uses
+its real content height. The scroll controller also includes measured changes in
+newer rows while a disclosure is anchored, including first-time Markdown growth.
+Sliver-applied corrections are accounted for once. Loading registrations end on
+completion, failure, reparenting or disposal; no rendered content is retained
+outside its normal widget lifetime. This is a behavioral guard: static analysis cannot establish
 sliver height estimates or painted tab position.
 
 Inspect production widgets at 360 dp with ordinary and enlarged text in both

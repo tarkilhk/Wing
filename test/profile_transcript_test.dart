@@ -35,6 +35,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
   Future<void> Function()? loadOlder;
   var tailHeight = 0.0;
   var reducedMotion = false;
+  var realisticMessages = false;
   List<Widget> currentActivity = [];
   List<Widget> extraTail = [];
   final list = find.byKey(const ValueKey('profile-transcript'));
@@ -75,6 +76,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     loadOlder = null;
     tailHeight = 0;
     reducedMotion = false;
+    realisticMessages = false;
     currentActivity = [];
     extraTail = [];
   });
@@ -119,11 +121,13 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                     ? null
                     : chat.reading.messages.length,
               ),
-              messageBuilder: (m) => SizedBox(
-                key: ValueKey('body-${m.message.id}'),
-                height: 60 + ((m.message.id as int?) ?? 0) % 3 * 20,
-                child: Text(m.message.text),
-              ),
+              messageBuilder: (m) => realisticMessages
+                  ? ProfileMessage(message: m.message, streaming: m.streaming)
+                  : SizedBox(
+                      key: ValueKey('body-${m.message.id}'),
+                      height: 60 + ((m.message.id as int?) ?? 0) % 3 * 20,
+                      child: Text(m.message.text),
+                    ),
               currentActivity: currentActivity,
               tail: [
                 if (tailHeight > 0) SizedBox(height: tailHeight),
@@ -726,6 +730,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           '${brightness.name} $scale later=$laterContent',
           (tester) async {
             loadOlder = () async {};
+            realisticMessages = true;
             tailHeight = laterContent;
             chat.reading.installSnapshot(
               TranscriptReadingSnapshot(
@@ -749,7 +754,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                       },
                     ],
                   },
-                  for (var id = 2; id < 54; id++)
+                  for (var id = 2; id < 53; id++)
                     {
                       'id': id,
                       'role': 'tool',
@@ -757,7 +762,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                       'content': 'File $id',
                     },
                   {
-                    'id': 54,
+                    'id': 53,
                     'role': 'tool',
                     'tool_call_id': 'delegate',
                     'content': jsonEncode({
@@ -771,15 +776,34 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                       ],
                     }),
                   },
-                  row(55),
+                  {
+                    'id': 54,
+                    'role': 'assistant',
+                    'content': List.generate(
+                      5,
+                      (i) =>
+                          '## Recommendation $i\n\n**A useful comparison** with several choices. Read the supplier conditions.\n\n| Choice | Cost |\n| --- | --- |\n| First | 42 |\n| Second | 55 |',
+                    ).join('\n\n'),
+                  },
                 ],
               ),
             );
             await show(tester, brightness: brightness, scale: scale);
-            if (laterContent > 0) {
-              tester.widget<ListView>(list).controller!.jumpTo(laterContent);
+            await tester.settleMarkdown();
+            for (
+              var attempt = 0;
+              find.text('Activity').evaluate().isEmpty && attempt < 50;
+              attempt++
+            ) {
+              await tester.drag(list, const Offset(0, 600));
+              await tester.settleMarkdown();
               await tester.pumpAndSettle();
             }
+            await Scrollable.ensureVisible(
+              tester.element(find.text('Activity')),
+              alignment: 0.1,
+            );
+            await tester.pumpAndSettle();
             await tester.tap(find.text('Activity'));
             await tester.pumpAndSettle();
             final agents = find.byKey(
@@ -806,7 +830,9 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                 );
                 expect(tester.takeException(), isNull);
               }
+              await tester.settleMarkdown();
               await tester.pumpAndSettle();
+              expect(tester.getTopLeft(agents).dy, closeTo(before, 1));
               if (attempt == 0) {
                 await tester.tap(tools);
                 await tester.pumpAndSettle();

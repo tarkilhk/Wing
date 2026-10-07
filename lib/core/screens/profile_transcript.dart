@@ -66,6 +66,14 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   final _focusedRow = GlobalKey();
   final _tail = GlobalKey();
   final _rows = <Object, GlobalKey>{};
+  final _rowHeights = <Key, double>{};
+
+  void _recordRowHeight(Key key, TranscriptAnchorBox row, double height) {
+    final previous = _rowHeights[key];
+    _rowHeights[key] = height;
+    if (previous != null) _scroll.recordRowHeightChange(row, height - previous);
+  }
+
   int _layoutGeneration = 0;
   int _gestureGeneration = 0;
   int _revealedNotificationGeneration = -1;
@@ -357,6 +365,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     // A restored pixel offset already includes the old rendered heights.
     // Anchoring initial empty Markdown bodies would add that growth twice.
     if (_restoringMarkdown ||
+        _scroll.hasExpansionAnchor ||
         widget.focusedMessageId != null ||
         !_scroll.hasClients) {
       return;
@@ -442,6 +451,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       if (tailContent.isNotEmpty)
         TranscriptScrollAnchor(
           key: _tail,
+          initialHeight: _rowHeights[_tail] ?? 0,
+          onHeightChanged: (row, height) =>
+              _recordRowHeight(_tail, row, height),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: tailContent,
@@ -496,6 +508,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       keys.add(key);
       usedKeys.add(key);
     }
+    _rowHeights.removeWhere(
+      (key, _) => key != _tail && !usedKeys.contains(key),
+    );
     final indices = <Key, int>{
       if (tail.isNotEmpty) _tail: 0,
       for (var i = 0; i < keys.length; i++) keys[i]: tail.length + i,
@@ -575,6 +590,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                   final row = section.messages.last;
                   return TranscriptScrollAnchor(
                     key: keys[rowIndex],
+                    initialHeight: _rowHeights[keys[rowIndex]] ?? 0,
+                    onHeightChanged: (row, height) =>
+                        _recordRowHeight(keys[rowIndex], row, height),
                     child: section.isActivity
                         ? ProfileToolActivitySection(
                             section: section,

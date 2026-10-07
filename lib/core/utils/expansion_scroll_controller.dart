@@ -46,7 +46,30 @@ class ExpansionScrollController extends ScrollController {
     if (box is! ExpansionAnchorBox || !box.attached || !box.hasSize) return;
     releaseExpansionAnchor();
     _anchor = box;
-    box.onHeightChanged = (delta) => _pendingHeight += delta;
+    if (expansionRow == null) {
+      box.onHeightChanged = (delta) => _pendingHeight += delta;
+    }
+  }
+
+  /// Includes asynchronous height changes in newer rows, even when the
+  /// disclosure itself is outside the current sliver layout pass.
+  void recordRowHeightChange(TranscriptAnchorBox row, double delta) {
+    final anchoredRow = expansionRow;
+    if (!hasExpansionAnchor || anchoredRow == null || delta == 0) return;
+    int? indexOf(RenderObject object) {
+      while (object.parent != null &&
+          object.parent is! RenderSliverMultiBoxAdaptor) {
+        object = object.parent!;
+      }
+      final data = object.parentData;
+      return data is SliverMultiBoxAdaptorParentData ? data.index : null;
+    }
+
+    final index = indexOf(row);
+    final anchorIndex = indexOf(anchoredRow);
+    if (index != null && anchorIndex != null && index <= anchorIndex) {
+      _pendingHeight += delta;
+    }
   }
 
   void releaseExpansionAnchor() {
@@ -89,6 +112,13 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
   final ExpansionScrollController controller;
   double _expansionScrollExtent = 0;
   double _expansionMinScrollExtent = 0;
+
+  @override
+  void correctBy(double correction) {
+    // The sliver has already applied this part of the row-height change.
+    if (controller.hasExpansionAnchor) controller._pendingHeight -= correction;
+    super.correctBy(correction);
+  }
 
   @override
   void jumpTo(double value) {
@@ -179,15 +209,42 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
 /// The measured height is retained by its own render object so the viewport
 /// never reads a descendant's size while laying itself out.
 class TranscriptScrollAnchor extends SingleChildRenderObjectWidget {
-  const TranscriptScrollAnchor({super.key, required super.child});
+  const TranscriptScrollAnchor({
+    super.key,
+    required super.child,
+    this.initialHeight = 0,
+    this.onHeightChanged,
+  });
+
+  final double initialHeight;
+  final void Function(TranscriptAnchorBox row, double height)? onHeightChanged;
 
   @override
   TranscriptAnchorBox createRenderObject(BuildContext context) =>
-      TranscriptAnchorBox();
+      TranscriptAnchorBox(initialHeight)..onHeightChanged = onHeightChanged;
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    TranscriptAnchorBox renderObject,
+  ) {
+    renderObject.onHeightChanged = onHeightChanged;
+  }
 }
 
 class TranscriptAnchorBox extends RenderProxyBox {
-  double _height = 0;
+  TranscriptAnchorBox([this._height = 0]);
+
+  double _height;
+  void Function(TranscriptAnchorBox row, double height)? onHeightChanged;
+  final _pendingContent = <Object>{};
+
+  void setContentPending(Object source, bool pending) {
+    final changed = pending
+        ? _pendingContent.add(source)
+        : _pendingContent.remove(source);
+    if (changed && attached) markNeedsLayout();
+  }
 
   double get leadingOffset {
     RenderObject item = this;
@@ -204,6 +261,12 @@ class TranscriptAnchorBox extends RenderProxyBox {
   @override
   void performLayout() {
     super.performLayout();
+    // A lazy row may be recreated while its Markdown worker is preparing.
+    // Retain its measured geometry until the real content is ready again.
+    if (_pendingContent.isNotEmpty && size.height < _height) {
+      size = constraints.constrain(Size(size.width, _height));
+    }
     _height = size.height;
+    onHeightChanged?.call(this, size.height);
   }
 }

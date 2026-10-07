@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
@@ -9,6 +10,12 @@ import 'package:analyzer/file_system/physical_file_system.dart';
 import 'package:crypto/crypto.dart';
 
 var _storeSequence = 0;
+final _batchNamespace = Object();
+
+/// Share analyzer summaries within one source-linter batch, never rule results.
+/// The analyzer still validates source, dependency and option changes per read.
+Future<T> withSharedAnalysisSummaries<T>(Future<T> Function() action) =>
+    runZoned(action, zoneValues: {_batchNamespace: 'commit-batch'});
 
 /// Standard analyzer summary storage, never rule results. Source, dependency,
 /// language/options and summary-version validation remain analyzer-owned.
@@ -35,7 +42,7 @@ AnalysisContextCollectionImpl semanticContextCollection({
     ),
   );
   final cache = Directory(
-    '$root/.dart_tool/architecture/$cacheNamespace/$binding',
+    '$root/.dart_tool/architecture/${Zone.current[_batchNamespace] ?? cacheNamespace}/$binding',
   );
   cache.createSync(recursive: true);
   // The pinned analyzer ignores collection enabledExperiments when discovering
