@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import '../presentation/tool_call_presentation.dart';
 import '../theme/wing_theme.dart';
 import 'activity_time.dart';
-import 'anchored_expansion_tile.dart';
+import 'compact_activity_row.dart';
 import 'chat_inline_image.dart';
 import 'markdown_message_content.dart';
 import 'profile_transcript_disclosure.dart';
@@ -44,146 +44,110 @@ class ProfileToolCall extends StatelessWidget {
       'read_file' || 'write_file' || 'patch' => Icons.description_outlined,
       _ => Icons.terminal_rounded,
     };
-    return IconTheme.merge(
-      data: const IconThemeData(size: 16),
-      child: ListTileTheme.merge(
-        minVerticalPadding: 0,
-        horizontalTitleGap: 8,
-        child: AnchoredExpansionTile(
-          // Backend identity survives the live-to-history handoff. Explicit
-          // notification focus still opens independently of stored disclosure.
-          initiallyExpanded: initiallyExpanded || remembered == true,
-          onExpansionChanged: (expanded) {
-            if (call.callId != null) {
-              storage?.writeState(context, expanded, identifier: storageId);
-            }
-          },
-          minTileHeight: 0,
-          tilePadding: EdgeInsets.zero,
-          childrenPadding: const EdgeInsets.only(left: 24),
-          shape: const Border(),
-          collapsedShape: const Border(),
-          expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
-          title: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, size: 16, color: colors.muted),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      call.title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        height: 1.3,
-                      ),
-                    ),
-                    if (call.target case final target?)
-                      Text(
-                        target.startsWith('data:') ? 'Attached image' : target,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          height: 1.5,
-                          color: colors.muted,
-                        ),
-                      ),
-                    if (call.notice case final notice?)
-                      Text(
-                        notice,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          height: 1.5,
-                          color: statusColor,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              ActivityTime(
-                durationSeconds: call.durationSeconds,
-                startedAt: call.startedAt,
-              ),
-            ],
+    return CompactActivityRow(
+      icon: icon,
+      lines: [
+        Text(
+          call.title,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            height: 1.3,
           ),
-          children: [
-            if (call.target case final target?) ...[
-              SelectableText(
-                target.startsWith('data:') ? 'Attached image' : target,
-                style: TextStyle(fontSize: 12, color: colors.muted),
+        ),
+        if (call.target case final target?)
+          Text(
+            target.startsWith('data:') ? 'Attached image' : target,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, height: 1.5, color: colors.muted),
+          ),
+        if (call.notice case final notice?)
+          Text(
+            notice,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, height: 1.5, color: statusColor),
+          ),
+      ],
+      time: ActivityTime(
+        durationSeconds: call.durationSeconds,
+        startedAt: call.startedAt,
+      ),
+      // Backend identity survives the live-to-history handoff. Explicit
+      // notification focus still opens independently of stored disclosure.
+      initiallyExpanded: initiallyExpanded || remembered == true,
+      onExpansionChanged: (expanded) {
+        if (call.callId != null) {
+          storage?.writeState(context, expanded, identifier: storageId);
+        }
+      },
+      details: [
+        if (call.target case final target?) ...[
+          SelectableText(
+            target.startsWith('data:') ? 'Attached image' : target,
+            style: TextStyle(fontSize: 12, color: colors.muted),
+          ),
+          const SizedBox(height: 8),
+        ],
+        if (call.imageTarget case final image?) ...[
+          ChatInlineImage(
+            target: image,
+            title: 'Analyzed image',
+            loadImage: loadImage,
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (call.labels.length > 1)
+          for (final label in call.labels.skip(1))
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: SelectableText(
+                '${label.text}${label.preview.isEmpty ? '' : '\n${label.preview}'}',
               ),
-              const SizedBox(height: 8),
-            ],
-            if (call.imageTarget case final image?) ...[
-              ChatInlineImage(
-                target: image,
-                title: 'Analyzed image',
-                loadImage: loadImage,
-              ),
-              const SizedBox(height: 12),
-            ],
-            if (call.labels.length > 1)
-              for (final label in call.labels.skip(1))
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: SelectableText(
-                    '${label.text}${label.preview.isEmpty ? '' : '\n${label.preview}'}',
-                  ),
-                ),
-            for (final detail in call.details) ...[
-              Text(
-                detail.label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: colors.muted,
-                ),
-              ),
-              const SizedBox(height: 4),
-              detail.markdown
-                  ? MarkdownMessageContent(
-                      data: detail.text,
-                      loadImage: loadImage,
-                    )
-                  : SelectableText(
-                      detail.text,
-                      style: const TextStyle(fontSize: 13, height: 1.4),
-                    ),
-              const SizedBox(height: 12),
-            ],
-            ProfileTranscriptDisclosure(
-              label: 'Raw details',
-              icon: Icons.data_object,
-              maintainState: false,
-              children: [
-                _RawToolValue(label: 'Tool', value: call.name),
-                if (call.callId case final id?)
-                  _RawToolValue(label: 'Call ID', value: id),
-                if (call.context case final context?)
-                  _RawToolValue(label: 'Context', value: context),
-                if (call.summary case final summary?)
-                  _RawToolValue(label: 'Summary', value: summary),
-                if (call.durationSeconds case final seconds?)
-                  _RawToolValue(
-                    label: 'Duration (seconds)',
-                    value: seconds.toString(),
-                  ),
-                if (call.arguments case final args?)
-                  _RawToolValue(label: 'Inputs', value: args),
-                if (call.result case final result?)
-                  _RawToolValue(label: 'Output', value: result),
-              ],
             ),
+        for (final detail in call.details) ...[
+          Text(
+            detail.label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: colors.muted,
+            ),
+          ),
+          const SizedBox(height: 4),
+          detail.markdown
+              ? MarkdownMessageContent(data: detail.text, loadImage: loadImage)
+              : SelectableText(
+                  detail.text,
+                  style: const TextStyle(fontSize: 13, height: 1.4),
+                ),
+          const SizedBox(height: 12),
+        ],
+        ProfileTranscriptDisclosure(
+          label: 'Raw details',
+          icon: Icons.data_object,
+          maintainState: false,
+          children: [
+            _RawToolValue(label: 'Tool', value: call.name),
+            if (call.callId case final id?)
+              _RawToolValue(label: 'Call ID', value: id),
+            if (call.context case final context?)
+              _RawToolValue(label: 'Context', value: context),
+            if (call.summary case final summary?)
+              _RawToolValue(label: 'Summary', value: summary),
+            if (call.durationSeconds case final seconds?)
+              _RawToolValue(
+                label: 'Duration (seconds)',
+                value: seconds.toString(),
+              ),
+            if (call.arguments case final args?)
+              _RawToolValue(label: 'Inputs', value: args),
+            if (call.result case final result?)
+              _RawToolValue(label: 'Output', value: result),
           ],
         ),
-      ),
+      ],
     );
   }
 }

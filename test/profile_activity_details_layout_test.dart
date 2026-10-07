@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:ui' show SemanticsAction;
 
 import 'package:wing/core/services/profile_supervision_session.dart';
@@ -8,17 +9,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/gateway_todo.dart';
-import 'package:wing/core/models/transcript_message.dart';
-import 'package:wing/core/presentation/saved_activity.dart';
-import 'package:wing/core/presentation/tool_call_presentation.dart';
+import 'package:wing/core/models/transcript_timeline.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
+import 'package:wing/core/widgets/activity_time.dart';
+import 'package:wing/core/widgets/compact_activity_row.dart';
 import 'package:wing/core/widgets/profile_subagent_panel.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_transcript_disclosure.dart';
 import 'package:wing/core/widgets/profile_saved_agents.dart';
-import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'helpers/pump_markdown_widget.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
@@ -35,26 +35,34 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
         }
-        final calls = [
-          for (var index = 0; index < 10; index++)
-            ToolCallPresentation.saved(
-              TranscriptToolResult.fromRow({
-                'id': index,
-                'role': 'tool',
-                'tool_name': index == 0 ? 'skill_view' : 'browser_exec',
-                'args': index == 0
-                    ? {'name': 'business-trip-policy-research'}
-                    : null,
-                'content': index == 2 ? '{"exit_code":1}' : 'Page read',
-              }),
-            ),
-        ];
+        const wrappedLabelText =
+            'Search Japanese booking sites and compare private-room prices';
         const goal =
             'Search native Japanese accommodation websites, apply the '
             'travel dates, compare the cheapest private rooms and save verified '
             'evidence with total prices and cancellation rules.';
-        final agents = SavedActivity([
-          TranscriptToolResult.fromRow({
+        final rows = <Map<String, dynamic>>[
+          for (var index = 0; index < 10; index++)
+            {
+              'id': index + 1,
+              'role': 'tool',
+              'tool_name': index == 0
+                  ? 'skill_view'
+                  : index == 3
+                  ? 'booking_search'
+                  : 'browser_exec',
+              'args': index == 0
+                  ? {'name': 'business-trip-policy-research'}
+                  : null,
+              'content': index == 2 ? '{"exit_code":1}' : 'Page read',
+              if (index == 2 || index == 3) 'duration_s': 23,
+              if (index == 3)
+                'labels': [
+                  {'text': wrappedLabelText, 'name': 'booking_search'},
+                ],
+            },
+          {
+            'id': 11,
             'role': 'tool',
             'tool_name': 'delegate_task',
             'content': jsonEncode({
@@ -71,11 +79,18 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                   'task_index': 2,
                   'status': 'completed',
                   'summary': 'Verified findings',
+                  'duration_seconds': 12,
+                  'model': 'test-model',
+                  'api_calls': 3,
                 },
               ],
             }),
-          }),
-        ]).agents;
+          },
+        ];
+        final timeline = TranscriptTimeline.project(
+          rows,
+          presentationId: (row) => row['id']!,
+        );
         Future<void> show(Widget child) => tester.pumpWidget(
           MaterialApp(
             theme: wingTheme(brightness),
@@ -94,49 +109,51 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           ),
         );
         await show(
-          Column(
-            children: [
-              for (var index = 0; index < calls.length; index++)
-                ProfileToolCall(
-                  key: ValueKey(('compact-call', index)),
-                  call: calls[index],
-                ),
-            ],
-          ),
+          ProfileToolActivitySection(section: timeline.sections.single),
         );
+        await tester.tap(find.text('Activity'));
         await tester.pumpAndSettle();
-        for (var index = 0; index < calls.length; index++) {
-          final row = find.byKey(ValueKey(('compact-call', index)));
-          final text = find.descendant(of: row, matching: find.byType(Text));
-          final height = text.evaluate().fold<double>(
-            0,
-            (sum, element) =>
-                sum + tester.getSize(find.byWidget(element.widget)).height,
-          );
-          expect(tester.getSize(row).height, lessThanOrEqualTo(height + 0.1));
-          if (index > 0) {
-            expect(
-              tester.getRect(row).top,
-              closeTo(
-                tester
-                    .getRect(find.byKey(ValueKey(('compact-call', index - 1))))
-                    .bottom,
-                0.1,
-              ),
-            );
-          }
-        }
+        final toolRows = [
+          for (var index = 0; index < rows.length; index++)
+            find.byKey(ValueKey<(String, Object?)>(('saved-tool', index + 1))),
+        ];
+        _expectDenseRows(tester, toolRows, 'tools');
+        final wrappedLabel = find.text(wrappedLabelText);
+        expect(wrappedLabel, findsOneWidget);
+        expect(
+          tester.getSize(wrappedLabel).height,
+          greaterThan(tester.getSize(find.text('Browser exec').first).height),
+        );
         if (capture != null) {
           await capture(tester, 'compact-tools-${brightness.name}-$scale');
         }
         await tester.tap(find.text('Read skill'));
         await tester.pumpAndSettle();
         expect(find.text('Raw details'), findsOneWidget);
-        await show(ProfileSavedAgents(agents: agents));
+        await tester.ensureVisible(find.text('Agents 3'));
+        await tester.tap(find.text('Agents 3'));
         await tester.pumpAndSettle();
+        final agentPanel = find.byType(ProfileSavedAgents);
+        final agentRows = find.descendant(
+          of: agentPanel,
+          matching: find.byType(CompactActivityRow),
+        );
+        _expectDenseRows(tester, [
+          for (final element in agentRows.evaluate())
+            find.byWidget(element.widget),
+        ], 'agents');
         // Only delivered, nonblank detail gets a disclosure or tap semantics.
-        expect(find.byType(ExpansionTile), findsOneWidget);
-        expect(find.byIcon(Icons.expand_more), findsOneWidget);
+        expect(
+          find.descendant(of: agentPanel, matching: find.byType(ExpansionTile)),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: agentPanel,
+            matching: find.byIcon(Icons.expand_more),
+          ),
+          findsOneWidget,
+        );
         expect(find.text(goal), findsOneWidget);
         final semantics = tester.ensureSemantics();
         expect(
@@ -301,4 +318,78 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(changes, [true, false]);
     expect(find.text('Agent details'), findsNothing);
   });
+}
+
+// Timing occupies a parallel column: adding its height to the text budget would
+// accidentally allow a timed row to grow padding without failing this check.
+void _expectDenseRows(WidgetTester tester, List<Finder> rows, String page) {
+  final rects = <Rect>[];
+  for (final row in rows) {
+    final text = find.descendant(of: row, matching: find.byType(Text));
+    final mainText = text.evaluate().where((element) {
+      var timing = false;
+      element.visitAncestorElements((ancestor) {
+        if (ancestor.widget is ActivityTime) timing = true;
+        return !timing;
+      });
+      return !timing;
+    }).toList();
+    final rect = tester.getRect(row);
+    var bottom = rect.top;
+    for (final element in mainText) {
+      final textRect = tester.getRect(find.byWidget(element.widget));
+      expect(
+        textRect.top,
+        closeTo(bottom, 0.1),
+        reason: 'No gaps between header text lines',
+      );
+      bottom = textRect.bottom;
+    }
+    final timing = find.descendant(
+      of: row,
+      matching: find.byType(ActivityTime),
+    );
+    final timingText = find.descendant(of: timing, matching: find.byType(Text));
+    final timingHeight = timingText.evaluate().fold<double>(
+      0,
+      (sum, element) =>
+          sum + tester.getSize(find.byWidget(element.widget)).height,
+    );
+    expect(
+      tester.getSize(timing).height,
+      closeTo(timingHeight, 0.1),
+      reason: 'Duration labels have zero vertical padding',
+    );
+    if (timingText.evaluate().isNotEmpty) {
+      expect(tester.getRect(timingText.first).top, closeTo(rect.top, 0.1));
+    }
+    final contentHeight = math.max(
+      16.0,
+      math.max(bottom - rect.top, timingHeight),
+    );
+    expect(
+      rect.height,
+      closeTo(contentHeight, 0.1),
+      reason: 'Header must have zero vertical padding and no minimum height',
+    );
+    if (rects.isNotEmpty) {
+      expect(
+        rect.top,
+        closeTo(rects.last.bottom, 0.1),
+        reason: 'No gaps between activity rows',
+      );
+    }
+    rects.add(rect);
+  }
+  final body = tester.getRect(find.byKey(ValueKey(('activity-page', page))));
+  expect(
+    rects.first.top,
+    closeTo(body.top, 0.1),
+    reason: 'No padding before activity rows',
+  );
+  expect(
+    rects.last.bottom,
+    closeTo(body.bottom, 0.1),
+    reason: 'No padding after activity rows',
+  );
 }

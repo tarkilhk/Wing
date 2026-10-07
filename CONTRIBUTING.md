@@ -11,6 +11,7 @@ From the actual checkout root:
 ```sh
 flutter pub get
 dart run tools/architecture/check_all.dart
+dart run tools/architecture/rules/activity_density.dart
 dart run tools/architecture/rules/required_quality_gates.dart
 dart run tools/architecture/rules/dart_main_roots.dart
 dart run tools/architecture/rules/completed_setup_view.dart

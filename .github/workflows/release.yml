@@ -196,6 +196,10 @@ jobs:
         run: dart run tools/architecture/rules/retired_answer_versions_namespace.dart
       - name: Retired answer versions namespace fixtures
         run: dart run tools/architecture/tests/retired_answer_versions_namespace_test.dart
+      - name: Compact activity density
+        run: dart run tools/architecture/rules/activity_density.dart
+      - name: Compact activity density fixtures
+        run: dart run tools/architecture/tests/activity_density_test.dart
       - name: Current stock tool events
         run: dart run tools/architecture/rules/current_tool_events.dart
       - name: Current stock tool event fixtures

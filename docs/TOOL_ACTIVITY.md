@@ -86,8 +86,18 @@ lifetime. `test/profile_execution_activity_test.dart` guards receipt enrichment
 across authoritative history refresh and rejects enrichment of unrelated IDs.
 Existing tab, disclosure and transcript tests cover retained selection, focus,
 scroll anchoring, expansion across added rows and separation from answers.
-`test/profile_activity_details_layout_test.dart` guards text-sized rows without
-inter-row gaps in both themes at normal and enlarged text. It also rejects empty
+`CompactActivityRow` owns the header geometry for tools and saved agents. Its
+interface accepts text lines, timing and optional details, with no padding or
+minimum-height overrides. `ARCH_ACTIVITY_DENSITY` requires the two header
+builders to construct that canonical row directly; [the rule contract](../tools/architecture/rules/activity_density.md)
+defines its finite scope and legitimate detail spacing.
+`test/profile_activity_details_layout_test.dart` measures zero vertical header
+padding and inter-row gaps through the real saved-history section and tool
+group wrappers, including automatically discovered activity tabs, in both themes at
+normal and enlarged text, including wrapped labels, exception lines, targets
+and delivered durations. The height budget uses the tallest parallel content
+column, so a timing label cannot hide added padding. The timer itself must fit
+its text without vertical padding and align with the top of the row. It also rejects empty
 saved-agent disclosures, including whitespace-only output, while requiring real
 saved output to remain expandable. These are behavioral guards because static
 checks cannot establish actual rendered height or the available payload at

@@ -1536,6 +1536,11 @@
       "feature": "chat-activity",
       "library": "lib/core/widgets/chat_working_border.dart"
     },
+    "lib/core/widgets/compact_activity_row.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/compact_activity_row.dart"
+    },
     "lib/core/widgets/compact_switch.dart": {
       "role": "view",
       "feature": "ui-foundations",

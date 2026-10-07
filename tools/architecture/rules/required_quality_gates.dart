@@ -95,6 +95,7 @@ List<String> checkRequiredQualityGates(Directory root) {
           'profile_discovery_writer',
           'saved_prompt_journal_admission',
           'current_tool_events',
+          'activity_density',
           'retired_answer_versions_namespace',
           'resume_durable_identity',
           'intelligence_read_admission',
@@ -141,6 +142,10 @@ List<String> checkRequiredQualityGates(Directory root) {
         (
           'current-tool-event-fixtures',
           'dart run tools/architecture/tests/current_tool_events_test.dart',
+        ),
+        (
+          'activity-density-fixtures',
+          'dart run tools/architecture/tests/activity_density_test.dart',
         ),
         ('native-share-boundary', _nativeBoundaryCommand),
         ('native-share-fixtures', _nativeFixtureCommand),

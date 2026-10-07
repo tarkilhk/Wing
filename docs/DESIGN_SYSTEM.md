@@ -245,6 +245,12 @@ Use the standard Studio popup surface and selected background tint. This applies
 to Chats, conversations, Activity, Administration, Health and administration
 drill-downs.
 
+Tool and saved-agent headers use `CompactActivityRow`: zero vertical padding,
+no minimum height and no gaps between rows. Keep any expanded-detail spacing
+inside the detail content. The [density guard](../tools/architecture/rules/activity_density.md)
+and rendered activity-tab tests enforce this exception without banning padding
+in settings, forms or action controls.
+
 Use Android's Roboto sans typography explicitly across component themes and monospace for code. Keep the existing compact Activity geometry. Its tabs, badges and disclosures are deliberate density exceptions to the general control dimensions.
 
 ## Selection controls

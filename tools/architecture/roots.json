@@ -6005,6 +6005,33 @@
       "purpose": "Disposable-repository hook, failure propagation and staged/unstaged isolation regressions",
       "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml offline QA discovery",
       "status": "supported"
+    },
+    {
+      "id": "dart-main-test/activity_density_guard_test.dart",
+      "kind": "host-test",
+      "path": "test/activity_density_guard_test.dart",
+      "selector": "main",
+      "purpose": "Compact activity density production and independent density guard checks",
+      "source": "tools/architecture/rules/activity_density.md; tools/architecture/README.md",
+      "status": "supported"
+    },
+    {
+      "id": "dart-main-tools/architecture/rules/activity_density.dart",
+      "kind": "guard-cli",
+      "path": "tools/architecture/rules/activity_density.dart",
+      "selector": "main",
+      "purpose": "Compact activity density canonical header construction guard",
+      "source": "tools/architecture/rules/activity_density.md; tools/architecture/README.md",
+      "status": "supported"
+    },
+    {
+      "id": "dart-main-tools/architecture/tests/activity_density_test.dart",
+      "kind": "guard-fixture-cli",
+      "path": "tools/architecture/tests/activity_density_test.dart",
+      "selector": "main",
+      "purpose": "Compact activity density regression fixtures and CLI exit proof",
+      "source": "tools/architecture/rules/activity_density.md; tools/architecture/README.md",
+      "status": "supported"
     }
   ],
   "files": [
@@ -13692,6 +13719,31 @@
       "path": "tools/qa/wing_perf_client.py",
       "area": "tools",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/compact_activity_row.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/activity_density_guard_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/architecture/rules/activity_density.dart",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/architecture/rules/activity_density.md",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/architecture/tests/activity_density_test.dart",
+      "area": "tools",
+      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {

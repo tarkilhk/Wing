@@ -332,3 +332,20 @@ retain the real Android denial/grant/Home fixture as the lifecycle-order check.
 the canonical workspace's awaited model-settings read. Its [finite contract](rules/intelligence_read_admission.md)
 distinguishes structural placement from the held-I/O freshness regressions.
 Fixtures: `flutter test --no-pub test/intelligence_read_admission_guard_test.dart`.
+
+## Compact activity headers
+
+[ARCH_ACTIVITY_DENSITY](rules/activity_density.md) requires tool and saved-agent
+header builders to return the canonical shared row directly. It resolves
+constructor identity, accepts prefixes/barrels/typedefs, and leaves spacing
+inside expanded details or unrelated controls alone. Rendered tests establish
+actual zero-padding geometry; the linter only protects the construction seam.
+The rule runs in the aggregate and independently in both quality workflows;
+required-gate fixtures reject omissions and swallowed failures.
+
+```sh
+dart run tools/architecture/rules/activity_density.dart --json
+dart run tools/architecture/tests/activity_density_test.dart
+flutter test --no-pub test/activity_density_guard_test.dart \
+  test/profile_activity_details_layout_test.dart
+```

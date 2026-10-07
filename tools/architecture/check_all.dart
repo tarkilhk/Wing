@@ -1,4 +1,5 @@
 import 'cli.dart';
+import 'rules/activity_density.dart' as density;
 import 'model.dart';
 import 'rules/business_rendering_types.dart' as rendering;
 import 'rules/business_view_dependencies.dart' as business;
@@ -13,6 +14,7 @@ import 'rules/image_codec_provenance.dart' as codec_provenance;
 import 'rules/task_view_protocol.dart' as task_protocol;
 
 final allRules = <String, Rule>{
+  density.id: density.check,
   domain.id: domain.check,
   business.id: business.check,
   rendering.id: rendering.check,

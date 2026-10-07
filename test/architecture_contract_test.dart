@@ -10,6 +10,7 @@ import '../tools/architecture/dart_sdk.dart';
 import '../tools/architecture/model.dart';
 import '../tools/architecture/semantic_context.dart';
 import '../tools/architecture/rules/domain_dependencies.dart' as domain;
+import '../tools/architecture/rules/activity_density.dart' as density;
 
 /// Fixture source is tracked as JSON data, then materialized outside ordinary
 /// analyzer/test discovery. The guard parses it through its public input path.
@@ -224,7 +225,30 @@ void main() {
   test(
     'actual aggregate CLI rejects bad source and accepts valid source',
     () async {
-      final workspace = domainFixture("import 'dart:io'; class Value {}");
+      // The aggregate needs every finite protected seam, even when this case
+      // exercises a domain import violation rather than a UI violation.
+      final workspace = FixtureWorkspace({
+        'files': {
+          'lib/value.dart': {
+            'role': 'domain',
+            'source': "import 'dart:io'; class Value {}",
+          },
+          density.rowPath: {
+            'role': 'view',
+            'source': 'class CompactActivityRow {}',
+          },
+          'lib/core/widgets/profile_tool_call.dart': {
+            'role': 'view',
+            'source':
+                "import 'compact_activity_row.dart'; class ProfileToolCall { Object build(Object? context) => CompactActivityRow(); }",
+          },
+          'lib/core/widgets/profile_saved_agents.dart': {
+            'role': 'view',
+            'source':
+                "import 'compact_activity_row.dart'; class ProfileSavedAgents { Object _buildAgent(Object? context) => CompactActivityRow(); }",
+          },
+        },
+      });
       addTearDown(workspace.dispose);
       final command = File('tools/architecture/check_all.dart').absolute.path;
       Future<ProcessResult> invoke() => Process.run('dart', [
@@ -249,6 +273,24 @@ void main() {
       final valid = await invoke();
       expect(valid.exitCode, 0, reason: valid.stderr.toString());
       expect((jsonDecode(valid.stdout as String) as Map)['problems'], isEmpty);
+      final header = File(
+        '${workspace.directory.path}/lib/core/widgets/profile_tool_call.dart',
+      );
+      final compact = header.readAsStringSync();
+      header.writeAsStringSync(
+        "import 'compact_activity_row.dart'; class ProfileToolCall { Object build(Object? context) => Padding(child: CompactActivityRow()); } class Padding { Padding({Object? child}); }",
+      );
+      final padded = await invoke();
+      expect(padded.exitCode, 1, reason: padded.stderr.toString());
+      final problem =
+          ((jsonDecode(padded.stdout as String) as Map)['problems'] as List)
+              .single;
+      expect(problem['id'], density.id);
+      expect(problem['file'], 'lib/core/widgets/profile_tool_call.dart');
+      header.writeAsStringSync(compact);
+      final repaired = await invoke();
+      expect(repaired.exitCode, 0, reason: repaired.stderr.toString());
     },
+    timeout: const Timeout(Duration(minutes: 1)),
   );
 }
