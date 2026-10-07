@@ -4,7 +4,10 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
-- Recover measured tool-call durations missed while disconnected when loading chat history.
+- Retain measured timings independently of the recent-message and recent-chat
+  preview caches, so loading older saved rows can still show received durations.
+- Recover measured tool-call durations missed while disconnected when loading
+  chat history, while their completion events remain in Hermes' event buffer.
 
 - Make tool activity rows compact and remove expansion arrows from saved agents
   that have no output to show.

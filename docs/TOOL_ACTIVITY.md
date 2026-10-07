@@ -83,7 +83,9 @@ backend patches, plugins or custom endpoints. Sources are upstream
   backend durations take precedence, including zero. Cached rows never start
   timers or regain execution authority. Cache limits still apply (60 recent
   rows per chat, ten recent chats per profile); timing never received or already
-  pruned cannot be recovered from stock history alone.
+  pruned cannot be recovered from stock history alone. The independent timing
+  index described below now preserves received saved-row measurements beyond
+  those preview limits.
 
 ## Missed completion recovery, 8 October 2026
 
@@ -121,6 +123,35 @@ checks own the invariant. Run
 Timing is still unavailable when no measured completion remains in the server's
 ring or Wing's bounded reading cache. A server restart clears the ring. This
 client change does not infer execution duration from saved message timestamps.
+
+## Measured timing retention independent of previews, 8 October 2026
+
+Verified current unmodified upstream main
+[`daa9593a03adf0040f49444126b313fcf985c459`](https://github.com/NousResearch/hermes-agent/commit/daa9593a03adf0040f49444126b313fcf985c459).
+`tool.complete` still supplies `duration_s`; ordinary saved history does not
+persist it. Recovery from `session.events.since` is limited to the event ring.
+An older completion evicted from that ring cannot be reconstructed as a measured
+duration from saved message timestamps.
+
+`TranscriptReading` retains every measured saved-row timing independently of
+the 256 full receipt observations and the 60-row preview. Its timing revision
+changes only when an actual measured row/call pair changes. A restored index
+enriches saved rows only by that exact pair; a fresh backend duration, including
+zero, replaces the retained measurement. Timings have no execution authority.
+
+`WorkspaceSnapshotStore` persists these small indices separately for each
+verified connection identity, profile and durable chat ID. The ordinary preview's
+row, chat and byte limits do not prune them. Inputs and outputs remain in the
+bounded preview; the index contains only saved-row identity, backend call ID and
+measured seconds. Changed indices and previews share one ordered write queue;
+larger indices encode off the UI isolate. The controller restores an index on
+every chat admission and writes changed indices for loaded chats independently
+of the ten-chat preview limit. Confirmed local chat-deletion cleanup removes the
+corresponding index after earlier writes.
+
+This retention change preserves available measurements. A measurement already
+absent from both Wing and the server remains unavailable. No server patch,
+profile-setting change, or timestamp-derived measurement is introduced.
 
 ## Timing retention and uniform tool headers, 8 October 2026
 

@@ -499,6 +499,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   bool _profileSelectionRepairRequired = false;
   late final ServerConnectionStatus connectionStatus;
   late final WorkspaceSnapshotStore _snapshots;
+  final _savedToolDurationRevisions = Expando<(ProfileSessionKey, int)>();
   DateTime? _lastSnapshot;
   bool _readingSnapshotDirty = false;
   ProfileSessionKey? _notificationTarget;
@@ -1354,6 +1355,21 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _readingSnapshotDirty = false;
     _lastSnapshot = DateTime.now();
     try {
+      for (final resource in _resources.values.toList()) {
+        for (final chat in resource._chats.values.toList()) {
+          final key = chat._key;
+          if (resource.blocksSession(key.sessionId)) continue;
+          final revision = chat.reading.toolDurationRevision;
+          final saved = (key, revision);
+          if (_savedToolDurationRevisions[chat] == saved) continue;
+          await _snapshots.writeToolDurations(
+            resource.scope.profileName,
+            key.sessionId,
+            chat.reading.captureToolDurations(),
+          );
+          _savedToolDurationRevisions[chat] = saved;
+        }
+      }
       await _snapshots.write({
         'selected': _current?.scope.profileName,
         'profiles': [
@@ -3907,6 +3923,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       );
       await _clearStoredDraft(resource.scope, id);
       await attachments.removeDeletedDraftCleanup(batch);
+      await _snapshots.deleteToolDurations(resource.scope.profileName, id);
       await _deletedDrafts.complete(resource.scope.profileName, id);
       resource._deletedDraftCleanup.remove(id);
       _scheduleRetention();
@@ -4353,9 +4370,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
       parentSessionId: parentSessionId,
       projectId: projectId,
       composer: composer,
-      reading: TranscriptReading(
-        gateway: _resource(key.workspace.profileName).gateway,
-      ),
+      reading:
+          TranscriptReading(
+            gateway: _resource(key.workspace.profileName).gateway,
+          )..restoreToolDurations(
+            _snapshots.readToolDurations(
+              key.workspace.profileName,
+              key.sessionId,
+            ),
+          ),
+    );
+    _savedToolDurationRevisions[chat] = (
+      key,
+      chat.reading.toolDurationRevision,
     );
     return chat;
   }

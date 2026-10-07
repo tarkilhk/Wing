@@ -34,9 +34,49 @@ final class TranscriptReading {
   final _messagePresentations = Expando<Object>();
   final _ownedRows = Expando<bool>();
   final _observedTools = <String, GatewayToolActivity>{};
-  // Passive measured facts from this chat's bounded reading cache. Both the
+  // Passive measured facts from this chat's independent timing index. Both the
   // durable row and backend call must match; reopening cannot start a timer.
   final _cachedToolDurations = <(Object, String), double>{};
+  int _toolDurationRevision = 0;
+
+  int get toolDurationRevision => _toolDurationRevision;
+
+  /// Measured facts are independent of the bounded transcript preview. Both
+  /// saved-row and call identity must match before a restored timing is used.
+  void restoreToolDurations(Iterable<Map<String, dynamic>> rows) {
+    if (_closed) return;
+    for (final row in rows) {
+      _retainToolDuration(row);
+    }
+  }
+
+  List<Map<String, dynamic>> captureToolDurations() => List.unmodifiable([
+    for (final entry in _cachedToolDurations.entries)
+      Map<String, dynamic>.unmodifiable({
+        'id': entry.key.$1,
+        'tool_call_id': entry.key.$2,
+        'duration_s': entry.value,
+      }),
+  ]);
+
+  void _retainToolDuration(Map<String, dynamic> row) {
+    final id = row['id'];
+    final callId = row['tool_call_id'];
+    final seconds = row['duration_s'];
+    if ((id is! int && id is! String) ||
+        callId is! String ||
+        callId.isEmpty ||
+        seconds is! num ||
+        !seconds.isFinite ||
+        seconds < 0) {
+      return;
+    }
+    final key = (id as Object, callId);
+    final measured = seconds.toDouble();
+    if (_cachedToolDurations[key] == measured) return;
+    _cachedToolDurations[key] = measured;
+    _toolDurationRevision++;
+  }
 
   /// Retains actual backend receipts for matching saved rows, never creates a
   /// history row or gives a saved output execution authority.
@@ -258,24 +298,21 @@ final class TranscriptReading {
   void installSnapshot(TranscriptReadingSnapshot snapshot) {
     if (_closed) return;
     cancelReads();
-    _cachedToolDurations.clear();
-    for (final row in snapshot.messages) {
-      final id = row['id'];
-      final callId = row['tool_call_id'];
-      final seconds = row['duration_s'];
-      if (row['role'] == 'tool' &&
-          (id is int || id is String) &&
-          callId is String &&
-          callId.isNotEmpty &&
-          seconds is num &&
-          seconds.isFinite &&
-          seconds >= 0) {
-        _cachedToolDurations[(id as Object, callId)] = seconds.toDouble();
-      }
-    }
-    installSavedHistory(snapshot.messages);
+    // An index write can finish before its preview write. A stale preview must
+    // not replace a newer independently persisted measurement after a restart.
+    installSavedHistory(snapshot.messages.map(_snapshotToolDuration));
     _historySessionId = snapshot.historySessionId;
     _nextHistoryOffset = null;
+  }
+
+  Map<String, dynamic> _snapshotToolDuration(Map<String, dynamic> row) {
+    if (row['role'] != 'tool') return row;
+    final id = row['id'];
+    final callId = row['tool_call_id'];
+    final seconds = id != null && callId is String
+        ? _cachedToolDurations[(id, callId)]
+        : null;
+    return seconds == null ? row : {...row, 'duration_s': seconds};
   }
 
   /// Adopts a saved page through the same paging and presentation policy used
@@ -704,6 +741,7 @@ final class TranscriptReading {
           : null;
       if (seconds != null) source = {...source, 'duration_s': seconds};
     }
+    if (source['role'] == 'tool') _retainToolDuration(source);
     final row = Map<String, dynamic>.unmodifiable({
       for (final entry in source.entries) entry.key: _freezeValue(entry.value),
     });

@@ -15,6 +15,54 @@ class WorkspaceSnapshotStore {
   WorkspaceSnapshotStore(this.preferences, this.identity);
 
   String get _key => 'workspace_reading_v1_$identity';
+
+  String _toolDurationsKey(String profile, String sessionId) =>
+      'workspace_tool_durations_v1_${identity}_${base64Url.encode(utf8.encode(jsonEncode([profile, sessionId])))}';
+
+  /// Small timing records survive transcript and recent-chat cache pruning.
+  /// They contain no result text, input, runtime state or execution authority.
+  List<Map<String, dynamic>> readToolDurations(
+    String profile,
+    String sessionId,
+  ) {
+    final encoded = preferences.getString(
+      _toolDurationsKey(profile, sessionId),
+    );
+    if (encoded == null) return const [];
+    try {
+      final rows = jsonDecode(encoded);
+      if (rows is! List) return const [];
+      return [
+        for (final row in rows.whereType<Map>()) Map<String, dynamic>.from(row),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> writeToolDurations(
+    String profile,
+    String sessionId,
+    List<Map<String, dynamic>> rows,
+  ) => _enqueue(() async {
+    final encoded = _isSmallSnapshot(rows)
+        ? jsonEncode(rows)
+        : await compute(_encodeToolDurations, rows);
+    if (!await preferences.setString(
+      _toolDurationsKey(profile, sessionId),
+      encoded,
+    )) {
+      throw StateError('Tool timings could not be stored.');
+    }
+  });
+
+  Future<void> deleteToolDurations(String profile, String sessionId) =>
+      _enqueue(() async {
+        if (!await preferences.remove(_toolDurationsKey(profile, sessionId))) {
+          throw StateError('Tool timings could not be removed.');
+        }
+      });
+
   Map<String, dynamic> read() {
     try {
       final snapshot = Map<String, dynamic>.from(
@@ -50,7 +98,11 @@ class WorkspaceSnapshotStore {
       await preferences.setString(_key, encoded);
     }
 
-    // A smaller/newer snapshot must not overtake an older background encode.
+    return _enqueue(save);
+  }
+
+  Future<void> _enqueue(Future<void> Function() save) {
+    // A newer snapshot or timing index cannot overtake an older encode.
     final writing = _writeTail == null
         ? save()
         : _writeTail!.then((_) => save());
@@ -61,6 +113,9 @@ class WorkspaceSnapshotStore {
     return writing;
   }
 }
+
+String _encodeToolDurations(List<Map<String, dynamic>> rows) =>
+    jsonEncode(rows);
 
 bool _isSmallSnapshot(Object? value) {
   var budget = 32 * 1024;
