@@ -152,7 +152,7 @@ class _AdminActionPageState extends State<AdminActionPage> {
           if (checkedAt != null && !hasSummary) ...[
             const SizedBox(height: 8),
             Text(
-              'Checked ${TimeOfDay.fromDateTime(checkedAt).format(context)}',
+              '${observation.terminal ? 'Checked' : 'Last updated'} ${TimeOfDay.fromDateTime(checkedAt).format(context)}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],

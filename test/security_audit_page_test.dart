@@ -214,6 +214,10 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text(expected), findsOneWidget);
+      if (name == 'running' || name == 'unknown') {
+        expect(find.textContaining('Last updated '), findsOneWidget);
+        expect(find.textContaining('Checked '), findsNothing);
+      }
       expect(find.text(summary), findsNothing);
       expect(find.text('High · 4'), findsNothing);
       expect(find.text(output.join('\n')), findsNothing);

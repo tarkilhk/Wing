@@ -10,6 +10,8 @@ Diagnostic admission is typed by `AdministrationDiagnostic`. The repository uses
 
 Immutable observations own decoding, output, completion and diagnostic classification. Security-audit exit 1 is a findings outcome only with a verified report; unavailable summaries remain unavailable. `AdminActionPage` renders typed facts and forwards refresh/Ask Hermes commands. It does not retain a raw repository, wire status map or mutable chat. `DoctorFindingDraftSession` captures the workspace before preparing a durable unsent draft; only immutable draft key and prompt are retained for navigation retries. Initial current-route admission and route/operation lifetime fence draft preparation. Route or operation retirement blocks later navigation, while an already admitted draft creation may settle as a saved draft.
 
+`checkedAt` is the last confirmed status-read time, including running observations. Detail views label unfinished or uncertain observations “Last updated” and reserve “Checked” for confirmed terminal outcomes. `test/doctor_diagnostic_page_test.dart` verifies the label transition on completion; `test/security_audit_page_test.dart` covers running and uncertain audit status. This presentation property uses behavioral guards because the label depends on runtime completion facts.
+
 Logs were moved to `admin_logs_page.dart`; that existing workflow remains mixed and is not claimed as migrated. Skill, tool and speech mutations also remain separately inventoried; only their common result lifecycle is migrated here.
 
 ## Prevention

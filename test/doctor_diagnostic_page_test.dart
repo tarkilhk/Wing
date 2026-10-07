@@ -253,34 +253,65 @@ void main() {
     }
   }
 
-  testWidgets('running Doctor does not show a previous run’s summary', (
-    tester,
-  ) async {
-    final fixture = AdministrationFixture();
-    fixture.override = (method, path, query, body) async => {
-      'name': 'doctor',
-      'pid': 7,
-      'running': true,
-      'exit_code': null,
-      'lines': lines,
-    };
-    final operation = fixtureOperation(
-      fixture.server,
-      const AdministrationAction('doctor', 7),
-    );
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AdminActionPage(
-          operation: operation,
-          title: 'Doctor',
-          scope: 'Home server',
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Running'), findsOneWidget);
-    expect(find.text(summary), findsNothing);
-    await tester.pumpWidget(const SizedBox.shrink());
-    operation.dispose();
-  });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'running Doctor uses a status timestamp ${brightness.name} at $scale text',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = AdministrationFixture();
+          var running = true;
+          fixture.override = (method, path, query, body) async => {
+            'name': 'doctor',
+            'pid': 7,
+            'running': running,
+            'exit_code': running ? null : 0,
+            'lines': running ? lines : ['Operation done'],
+          };
+          final operation = fixtureOperation(
+            fixture.server,
+            const AdministrationAction('doctor', 7),
+          );
+          await tester.pumpWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: RepaintBoundary(
+                key: const ValueKey('capture'),
+                child: AdminActionPage(
+                  operation: operation,
+                  title: 'Doctor',
+                  scope: 'Home server',
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Running'), findsOneWidget);
+          expect(find.textContaining('Last updated '), findsOneWidget);
+          expect(find.textContaining('Checked '), findsNothing);
+          expect(find.text(summary), findsNothing);
+          expect(tester.takeException(), isNull);
+          await snapshot(tester, '${brightness.name}-$scale-running');
+          running = false;
+          await operation.refresh();
+          await tester.pumpAndSettle();
+          expect(find.text('Running'), findsNothing);
+          expect(find.textContaining('Last updated '), findsNothing);
+          expect(find.textContaining('Checked '), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+          operation.dispose();
+        },
+      );
+    }
+  }
 }
