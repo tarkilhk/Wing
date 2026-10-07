@@ -204,9 +204,18 @@ runtime. The same cases run on Android through
 The transcript scroll controller retains both ends of the corrected scroll range
 across lazy-list layout estimates. Switching a long Tools section to a short
 Agents section holds the tapped tab and its content in view, including when the
-new height would otherwise cross the natural bottom boundary. Explicit navigation
-to Latest clears that temporary range. `test/profile_transcript_test.dart` checks
-every transition frame, repeated switches, long following content, both themes
+new height would otherwise cross the natural bottom boundary. Collapsing a
+disclosure instead clamps its corrected position to the natural bottom boundary
+and clears any reserved space below the content, during layout before painting.
+Expansion and tab selection explicitly allow that temporary space; collapse does
+not. Explicit navigation to Latest also clears the temporary range.
+`test/profile_transcript_test.dart` checks repeated expand/read/collapse cycles
+for saved and live tool activity without tapping Latest, every collapse animation
+frame, retained parent rebuilds, both themes and enlarged text. This is a
+behavioral guard because static analysis cannot establish the viewport's actual
+content extent or the empty space left after animated height corrections.
+The same test file also checks every tab transition frame, repeated switches,
+long following content, both themes
 and enlarged text. Its answers use the production asynchronous Markdown renderer
 and the test waits for reparsing after each switch. Fixed-height answer stubs
 cannot detect lazy Markdown rows collapsing when they are recreated.

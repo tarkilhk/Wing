@@ -531,7 +531,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         ++_layoutGeneration;
         _cancelMarkdownRestoration();
         _jumping = false;
-        _scroll.anchorExpansion(event.anchor);
+        _scroll.anchorExpansion(
+          event.anchor,
+          allowBottomGap: event.allowBottomGap,
+        );
         return true;
       },
       child: NotificationListener<ScrollMetricsNotification>(

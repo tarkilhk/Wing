@@ -120,7 +120,10 @@ void main() {
           home: Scaffold(
             body: NotificationListener<ExpansionAnchorNotification>(
               onNotification: (event) {
-                scroll.anchorExpansion(event.anchor);
+                scroll.anchorExpansion(
+                  event.anchor,
+                  allowBottomGap: event.allowBottomGap,
+                );
                 return true;
               },
               child: ListView(

@@ -3,9 +3,13 @@ import 'package:flutter/rendering.dart';
 
 /// Lets a reversed transcript hold the disclosure header in place during layout.
 class ExpansionAnchorNotification extends Notification {
-  ExpansionAnchorNotification(this.anchor);
+  ExpansionAnchorNotification(this.anchor, {required this.allowBottomGap});
 
   final BuildContext anchor;
+
+  /// Expansion/tab selection can hold a control above the natural bottom.
+  /// Collapse must remove that reserved space once the content shrinks.
+  final bool allowBottomGap;
 }
 
 class AnchoredExpansionTile extends StatelessWidget {
@@ -58,7 +62,10 @@ class AnchoredExpansionTile extends StatelessWidget {
       collapsedShape: collapsedShape,
       expandedCrossAxisAlignment: expandedCrossAxisAlignment,
       onExpansionChanged: (expanded) {
-        ExpansionAnchorNotification(context).dispatch(context);
+        ExpansionAnchorNotification(
+          context,
+          allowBottomGap: expanded,
+        ).dispatch(context);
         onExpansionChanged?.call(expanded);
       },
       children: children,

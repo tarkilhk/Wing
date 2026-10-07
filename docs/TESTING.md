@@ -171,7 +171,8 @@ flutter test integration_test/backend_acceptance_live_test.dart -d <emulator-id>
 That driver requires the disposable profile/skill/provider setup documented in its source. `remaining_product_live_test.dart` additionally uses an owned empty repository through `QA_APPROVAL_REPO` and the dummy vault page in `integration_test/fixtures/vault/`. Do not point destructive approval fixtures at a real project. Serve the dummy page on loopback only. The stock secret-expiry case takes five minutes; a shorter fixture is not equivalent evidence.
 
 `integration_test/profile_expansion_scroll_test.dart` runs transcript expansion,
-search, pagination/retry, reading anchors and streaming follow/reading regressions
+collapse without leftover bottom gaps, search, pagination/retry, reading anchors
+and streaming follow/reading regressions
 on Android with local gateways. Run it on the disposable emulator with ordinary
 `flutter test --no-pub ... -d <emulator-id> --no-uninstall` flags. It writes PNG captures to the development package's external files directory;
 pull and inspect normal/enlarged text in both themes. Native interaction tests and their captures do not measure frame/input

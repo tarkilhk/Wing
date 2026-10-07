@@ -14,6 +14,7 @@ class ExpansionScrollController extends ScrollController {
   void finishInitialOffsetRestoration() => _restoringInitialOffset = false;
 
   ExpansionAnchorBox? _anchor;
+  bool _allowBottomGap = true;
   double _pendingHeight = 0;
   TranscriptAnchorBox? _readerAnchor;
   TranscriptAnchorBox? Function()? _readerReplacement;
@@ -41,11 +42,12 @@ class ExpansionScrollController extends ScrollController {
     _readerTop = anchor.leadingOffset;
   }
 
-  void anchorExpansion(BuildContext context) {
+  void anchorExpansion(BuildContext context, {required bool allowBottomGap}) {
     final box = context.findRenderObject();
     if (box is! ExpansionAnchorBox || !box.attached || !box.hasSize) return;
     releaseExpansionAnchor();
     _anchor = box;
+    _allowBottomGap = allowBottomGap;
     if (expansionRow == null) {
       box.onHeightChanged = (delta) => _pendingHeight += delta;
     }
@@ -182,7 +184,10 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
         return false;
       }
     } else if (axisDirection == AxisDirection.up && delta.abs() > 0.01) {
-      final target = pixels + delta;
+      final corrected = pixels + delta;
+      final target = controller._allowBottomGap
+          ? corrected
+          : corrected.clamp(minScrollExtent, double.infinity);
       // A large panel can shrink past the natural bottom of a reversed list.
       // Retain room below it so the tab/header stays at the tapped position.
       _expansionMinScrollExtent = target < minScrollExtent ? target : 0;
@@ -191,6 +196,15 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
       _expansionScrollExtent = target > 0 ? target : 0;
       if ((target - pixels).abs() > 0.01) {
         correctPixels(target);
+        return false;
+      }
+    }
+    if (controller.hasExpansionAnchor && !controller._allowBottomGap) {
+      // A closed disclosure no longer needs room below the content. Retire
+      // any range retained by an earlier tab switch, including zero-delta frames.
+      _expansionMinScrollExtent = 0;
+      if (pixels < minScrollExtent) {
+        correctPixels(minScrollExtent);
         return false;
       }
     }

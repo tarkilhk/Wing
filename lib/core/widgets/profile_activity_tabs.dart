@@ -149,6 +149,7 @@ class _ProfileActivityTabsState extends State<ProfileActivityTabs> {
                                   if (anchor != null) {
                                     ExpansionAnchorNotification(
                                       anchor,
+                                      allowBottomGap: true,
                                     ).dispatch(context);
                                   }
                                   setState(() => _activate(tab));

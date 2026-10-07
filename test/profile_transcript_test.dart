@@ -863,6 +863,84 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     }
   }
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final liveTools in [false, true]) {
+        testWidgets('collapsing latest tools removes the expansion gap '
+            '${brightness.name} $scale live=$liveTools', (tester) async {
+          realisticMessages = true;
+          chat.reading.installSnapshot(
+            TranscriptReadingSnapshot(
+              historySessionId: chat.reading.historySessionId,
+              messages: [
+                {
+                  'id': 1,
+                  'role': 'user',
+                  'content': 'Compare the available options.\n\n' * 12,
+                },
+                if (!liveTools)
+                  for (var id = 2; id < 27; id++)
+                    {
+                      'id': id,
+                      'role': 'tool',
+                      'tool_name': 'read_file',
+                      'content': 'Output $id',
+                    },
+              ],
+            ),
+          );
+          if (liveTools) {
+            currentActivity = [
+              ProfileLiveToolActivity(
+                activities: List.generate(
+                  25,
+                  (id) => GatewayToolActivity(
+                    toolId: 'call-$id',
+                    name: 'read_file',
+                    phase: GatewayToolActivityPhase.completed,
+                    arguments: jsonEncode({'path': 'file-$id'}),
+                    result: 'Output $id',
+                  ),
+                ),
+              ),
+            ];
+          }
+          await show(tester, brightness: brightness, scale: scale);
+          await tester.settleMarkdown();
+          final activity = find.text('Activity');
+          final before = tester.getBottomLeft(activity).dy;
+          final scroll = tester.widget<ListView>(list).controller!;
+          for (var attempt = 0; attempt < 2; attempt++) {
+            await tester.tap(activity);
+            await tester.pumpAndSettle();
+            // Read into the expanded tools before returning to their disclosure.
+            await tester.drag(list, const Offset(0, -400));
+            await tester.pumpAndSettle();
+            expect(activity.hitTestable(), findsOneWidget);
+            await tester.tap(activity);
+            for (var frame = 0; frame < 20; frame++) {
+              await tester.pump(const Duration(milliseconds: 16));
+              expect(scroll.position.minScrollExtent, 0);
+            }
+            await tester.pumpAndSettle();
+            await tester.settleMarkdown();
+            expect(scroll.offset, closeTo(0, 1));
+            expect(tester.getBottomLeft(activity).dy, closeTo(before, 1));
+            expect(jump, findsNothing);
+          }
+          await rebuildPresentation(tester);
+          expect(scroll.position.minScrollExtent, 0);
+          expect(scroll.offset, closeTo(0, 1));
+          await capture?.call(
+            tester,
+            'tools-collapsed-${brightness.name}-$scale-live-$liveTools',
+          );
+          expect(tester.takeException(), isNull);
+        });
+      }
+    }
+  }
+
   testWidgets('expanding long tool output keeps its header in place', (
     tester,
   ) async {
