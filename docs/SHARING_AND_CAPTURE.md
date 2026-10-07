@@ -16,6 +16,18 @@ If clearing an incoming share fails after its conversation draft was saved, the 
 
 Photos and Files feed the same attachment path. Images receive the existing sanitization and file limits.
 
+JPEG preflight reads bounded inline SHORT or LONG orientation values (0 means
+unspecified; 1–8 carry the usual transforms). Samsung screenshot SEF trailers
+after JPEG EOI must have a bounded `SEFH`/`SEFT` directory and in-range entries.
+Their bytes share the existing 256 KiB metadata budget and are stripped, along
+with EXIF, before codec parsing. Unknown or malformed trailers remain rejected.
+The directory layout is cross-checked against
+[ExifTool's Samsung parser](https://github.com/exiftool/exiftool/blob/master/lib/Image/ExifTool/Samsung.pm).
+The synthetic Samsung screenshot and malformed-trailer regressions in
+`test/attachment_image_worker_test.dart` protect acceptance, unchanged dimensions,
+metadata removal and the metadata/range limits. Container-dependent behavior
+requires these behavioral guards rather than a source-pattern linter.
+
 Composer actions display `AttachmentDraftException.message` from local preparation
 or validation, preserving the rejection reason instead of presenting it as a
 workspace connection failure. Rejected selection keeps the current draft and does

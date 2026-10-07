@@ -272,7 +272,13 @@ AttachmentImageInspection _jpeg(Uint8List b) {
       }
     }
   }
-  if (!ended || p != b.length || width == null || height == null) _invalid();
+  if (!ended || width == null || height == null) _invalid();
+  if (p != b.length) {
+    metadata += b.length - p;
+    if (metadata > maxAttachmentImageMetadataBytes) _invalid();
+    _checkSamsungJpegTrailer(b, p, records);
+    discardedMetadata.add((p, b.length));
+  }
   final decode =
       b.length +
       coefficientBytes +
@@ -291,6 +297,31 @@ AttachmentImageInspection _jpeg(Uint8List b) {
     orientation: orientation,
     discardedMetadata: discardedMetadata,
   );
+}
+
+/// Samsung screenshots append a little-endian SEF directory after JPEG EOI.
+/// Validate only bounded ranges; the private capture payload is never decoded.
+void _checkSamsungJpegTrailer(Uint8List bytes, int start, int records) {
+  final end = bytes.length;
+  if (end - start < 20 || _tag(bytes, end - 4) != 'SEFT') _invalid();
+  final size = _le32(bytes, end - 8);
+  if (size < 12 || size > end - start - 8) _invalid();
+  final directory = end - 8 - size;
+  if (_tag(bytes, directory) != 'SEFH') _invalid();
+  final count = _le32(bytes, directory + 8);
+  if (count < 1 ||
+      count > maxAttachmentImageRecords - records ||
+      size != 12 + count * 12) {
+    _invalid();
+  }
+  for (var i = 0; i < count; i++) {
+    final entry = directory + 12 + i * 12;
+    final offset = _le32(bytes, entry + 4);
+    final length = _le32(bytes, entry + 8);
+    if (offset > directory - start || length < 8 || length > offset) {
+      _invalid();
+    }
+  }
 }
 
 class _InflatedCounter implements Sink<List<int>> {
@@ -596,12 +627,16 @@ int _tiffOrientation(Uint8List bytes, int start, int end) {
   for (var i = 0; i < count; i++) {
     final p = offset + 2 + i * 12;
     if (data.getUint16(p, endian) != 0x112) continue;
-    if (data.getUint16(p + 2, endian) != 3 ||
-        data.getUint32(p + 4, endian) != 1) {
+    final type = data.getUint16(p + 2, endian);
+    if ((type != 3 && type != 4) || data.getUint32(p + 4, endian) != 1) {
       _invalid();
     }
-    final orientation = data.getUint16(p + 8, endian);
-    if (orientation < 1 || orientation > 8) _invalid();
+    final orientation = type == 3
+        ? data.getUint16(p + 8, endian)
+        : data.getUint32(p + 8, endian);
+    // Samsung screenshots store an inline LONG zero (unspecified orientation).
+    // The worker applies only actual orientation transforms, then strips EXIF.
+    if (orientation > 8) _invalid();
     return orientation;
   }
   return 1;

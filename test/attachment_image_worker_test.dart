@@ -124,6 +124,39 @@ Uint8List cameraJpeg() {
   );
 }
 
+Uint8List _littleWord(int value) =>
+    Uint8List(4)..buffer.asByteData().setUint32(0, value, Endian.little);
+
+Uint8List _samsungTrailer() {
+  final name = ascii.encode('Samsung_Capture_Info');
+  final body = [
+    0,
+    0,
+    0x51,
+    0x0c,
+    ..._littleWord(name.length),
+    ...name,
+    ...ascii.encode('Screenshot'),
+  ];
+  final directory = [
+    ...ascii.encode('SEFH'),
+    ..._littleWord(107),
+    ..._littleWord(1),
+    0,
+    0,
+    0x51,
+    0x0c,
+    ..._littleWord(body.length),
+    ..._littleWord(body.length),
+  ];
+  return Uint8List.fromList([
+    ...body,
+    ...directory,
+    ..._littleWord(directory.length),
+    ...ascii.encode('SEFT'),
+  ]);
+}
+
 void main() {
   test(
     'JPEG rejects dimensions before the decoder can allocate MCU blocks',
@@ -155,6 +188,64 @@ void main() {
     );
     expect((info.width, info.height, info.frames), (32, 16, 1));
     expect(info.chargedBytes, lessThan(maxAttachmentImageChargedBytes));
+  });
+
+  test(
+    'Samsung screenshot JPEG metadata is stripped before decoding',
+    () async {
+      final image = image_lib.Image(width: 3, height: 2);
+      image.exif.imageIfd[0x112] = image_lib.IfdValueLong(0);
+      image.exif.imageIfd[0x010e] = image_lib.IfdValueAscii('private fixture');
+      final jpeg = image_lib.encodeJpg(image);
+      final bytes = Uint8List.fromList([...jpeg, ..._samsungTrailer()]);
+      final inspection = inspectAttachmentImage(bytes);
+      expect(inspection.orientation, 0);
+      final source = attachmentImageCodecSource(bytes, inspection);
+      expect(source.sublist(source.length - 2), [255, 217]);
+      for (final metadata in [
+        'Exif',
+        'private fixture',
+        'Samsung_Capture_Info',
+        'SEFT',
+      ]) {
+        expect(
+          utf8.decode(source, allowMalformed: true),
+          isNot(contains(metadata)),
+        );
+      }
+      final output = await AttachmentImageWorker.shared
+          .prepareBytes(bytes, maxOutputBytes: maxAttachmentImageOutputBytes)
+          .result;
+      final decoded = image_lib.decodeJpg(output.bytes)!;
+      expect((decoded.width, decoded.height), (3, 2));
+      expect(decoded.exif.isEmpty, isTrue);
+    },
+  );
+
+  test('JPEG rejects unknown or out-of-bounds trailers', () {
+    final jpeg = image_lib.encodeJpg(image_lib.Image(width: 3, height: 2));
+    final badDirectory = _samsungTrailer();
+    ByteData.sublistView(
+      badDirectory,
+    ).setUint32(badDirectory.length - 8, 0xffffffff, Endian.little);
+    final badOffset = _samsungTrailer();
+    ByteData.sublistView(
+      badOffset,
+    ).setUint32(badOffset.length - 16, 0xffffffff, Endian.little);
+    for (final trailer in [
+      ascii.encode('unknown trailer'),
+      badDirectory,
+      badOffset,
+      [
+        ...List<int>.filled(maxAttachmentImageMetadataBytes, 0),
+        ..._samsungTrailer(),
+      ],
+    ]) {
+      expect(
+        () => inspectAttachmentImage(Uint8List.fromList([...jpeg, ...trailer])),
+        throwsA(isA<AttachmentImageException>()),
+      );
+    }
   });
 
   test('small PNG dimensions cannot hide excess inflated data', () {
