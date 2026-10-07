@@ -37,6 +37,37 @@ That root contains `flutter`, `jdk-17` and `android-sdk`. The launcher reports S
 
 Run tests and Android builds sequentially. Do not remove another process's locks. Reuse build caches for ordinary iteration, and use a separate workspace for independent work. Existing local changes belong to their author; keep them intact.
 
+## Local commit checks
+
+Enable the tracked hook once per clone:
+
+```sh
+python3 scripts/install_git_hooks.py
+```
+
+If your machine needs a shell file to activate Flutter, Java and the Android
+compiler cache, pass its absolute path with `--toolchain-env`. That path is stored
+only in local Git configuration. The installer preserves an existing hook setup
+by requiring its reconciliation before replacement.
+
+Every commit on every branch then runs the existing Dart and Python/native source
+linters against an isolated checkout of the Git index. Unstaged edits cannot hide
+a staged violation or contaminate a clean staged commit. Dart rules share one VM
+startup; native checks reuse their source/JDK/compiler-bound caches. Missing
+tooling blocks the commit with a setup error. Initialize dependencies with
+`flutter pub get` and the ordinary Android build above before the first check.
+The hook runs source checks; behavior tests and builds remain in CI.
+
+For a manual check of the working tree, run:
+
+```sh
+python3 scripts/check_commit_linters.py
+```
+
+Git hooks are local configuration and can be bypassed by Git. The quality
+workflow also runs on pushes to every branch and on PRs targeting `main`; its
+required-gate linter rejects narrowing the branch trigger or adding path filters.
+
 ## Source paths
 
 | Path | Responsibility |

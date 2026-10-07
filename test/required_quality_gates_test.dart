@@ -24,6 +24,11 @@ const declarationBoundaryCommand =
     'python3 tools/architecture/native_notification/retired_declaration.py';
 const declarationFixtureCommand =
     'python3 tools/architecture/native_notification/prove_declarations.py';
+const allBranchPushTriggers = '''on:
+  push:
+    branches:
+      - '**'
+''';
 const nativeCommands = [
   notificationBoundaryCommand,
   notificationFixtureCommand,
@@ -119,6 +124,55 @@ void main() {
   tearDown(() async => root.delete(recursive: true));
 
   test('normal mandatory QA and architecture gates are accepted', () {
+    expect(checkRequiredQualityGates(root), isEmpty);
+  });
+
+  test('PR quality must run on pushes to every branch without filters', () {
+    for (final triggers in [
+      '''on:
+  push:
+    branches:
+      - main
+''',
+      '''on:
+  pull_request:
+''',
+      '''on:
+  push:
+    paths:
+      - lib/**
+''',
+      '''on:
+  push:
+    paths-ignore:
+      - docs/**
+''',
+      '''on:
+  push:
+    branches:
+      - '**'
+      - '!main'
+''',
+      '''on:
+  push:
+    branches-ignore:
+      - main
+''',
+      '''on:
+  push:
+    branches:
+      - '*'
+''',
+    ]) {
+      _writeWorkflows(root, prTriggers: triggers);
+      expect(
+        checkRequiredQualityGates(root),
+        contains(contains('pr-quality.yml:on:push REQUIRED_QUALITY_GATE:')),
+        reason: triggers,
+      );
+    }
+
+    _writeWorkflows(root, prTriggers: allBranchPushTriggers);
     expect(checkRequiredQualityGates(root), isEmpty);
   });
 
@@ -405,6 +459,7 @@ void main() {
 void _writeWorkflows(
   Directory root, {
   String qa = qaCommand,
+  String prTriggers = allBranchPushTriggers,
   bool softFailure = false,
   bool conditional = false,
   String? jobCondition,
@@ -415,6 +470,7 @@ void _writeWorkflows(
     ('release.yml', 'build'),
   ]) {
     File('${root.path}/.github/workflows/${item.$1}').writeAsStringSync('''
+${item.$1 == 'pr-quality.yml' ? prTriggers : ''}
 jobs:
   ${item.$2}:
     ${jobCondition == null ? '# mandatory job' : 'if: $jobCondition'}

@@ -40,6 +40,12 @@ List<String> checkRequiredQualityGates(Directory root) {
       if (document is! Map || document['jobs'] is! Map) {
         throw const FormatException('Expected workflow jobs.');
       }
+      if (target.$2 == 'quality' && !_allBranchPushes(document['on'])) {
+        failures.add(
+          '${target.$1}:on:push REQUIRED_QUALITY_GATE: '
+          'Run quality checks on pushes to every branch without path filters.',
+        );
+      }
       final job = (document['jobs'] as Map)[target.$2];
       if (job is! Map || job['steps'] is! List) {
         throw FormatException('Expected job ${target.$2} with steps.');
@@ -186,6 +192,21 @@ List<String> checkRequiredQualityGates(Directory root) {
 }
 
 bool _hardFailure(Object? value) => value == null || value == false;
+
+bool _allBranchPushes(Object? events) {
+  if (events is! Map || !events.containsKey('push')) return false;
+  final push = events['push'];
+  if (push == null) return true;
+  if (push is! Map ||
+      ['branches-ignore', 'paths', 'paths-ignore'].any(push.containsKey)) {
+    return false;
+  }
+  final branches = push['branches'];
+  if (branches == null) {
+    return !push.containsKey('tags') && !push.containsKey('tags-ignore');
+  }
+  return branches is List && branches.length == 1 && branches.single == '**';
+}
 
 /// These existing Gradle commands populate the pinned Kotlin compiler cache.
 /// This checks placement, not build success: absent tooling fails the native CLI.

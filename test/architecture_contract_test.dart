@@ -2,10 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:analyzer/dart/analysis/results.dart';
 
 import '../tools/architecture/check_all.dart';
 import '../tools/architecture/cli.dart';
+import '../tools/architecture/dart_sdk.dart';
 import '../tools/architecture/model.dart';
+import '../tools/architecture/semantic_context.dart';
 import '../tools/architecture/rules/domain_dependencies.dart' as domain;
 
 /// Fixture source is tracked as JSON data, then materialized outside ordinary
@@ -165,6 +168,57 @@ void main() {
     final entry = baselineEntry(domain.check(workspace.snapshot).single);
     workspace.writeBaseline([entry, entry]);
     expect(() => readBaseline(workspace.baselinePath), throwsFormatException);
+  });
+
+  test('shared semantic summaries refresh after source changes', () async {
+    final directory = Directory.systemTemp.createTempSync(
+      'wing-semantic-summary-freshness-',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final source = File('${directory.path}/lib/value.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('class Value { int value = 1; }\n');
+    final sdk = dartSdkPath(Directory.current.path);
+
+    Future<List<dynamic>> analyze(String cacheNamespace) async {
+      final contexts = semanticContextCollection(
+        root: directory.path,
+        sdk: sdk,
+        includedPaths: [source.path],
+        cacheNamespace: cacheNamespace,
+      );
+      try {
+        final result = await contexts
+            .contextFor(source.path)
+            .currentSession
+            .getResolvedLibrary(source.path);
+        expect(result, isA<ResolvedLibraryResult>());
+        return (result as ResolvedLibraryResult).units
+            .expand((unit) => unit.diagnostics)
+            .toList();
+      } finally {
+        await contexts.dispose();
+      }
+    }
+
+    await withSharedAnalysisSummaries(() async {
+      final firstDiagnostics = await analyze('first-context-namespace');
+      expect(
+        firstDiagnostics.where(
+          (diagnostic) => diagnostic.diagnosticCode.severity.name == 'ERROR',
+        ),
+        isEmpty,
+      );
+
+      source.writeAsStringSync("class Value { int value = 'bad'; }\n");
+      final changedDiagnostics = await analyze('second-context-namespace');
+      expect(
+        changedDiagnostics.any(
+          (diagnostic) => diagnostic.diagnosticCode.severity.name == 'ERROR',
+        ),
+        isTrue,
+      );
+    });
   });
 
   test(

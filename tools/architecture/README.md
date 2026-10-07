@@ -7,6 +7,12 @@ source, manifests or the empty migration baseline. Use
 [maintain-feature-architecture](../agent_skills/maintain-feature-architecture/SKILL.md)
 to maintain ownership records alongside feature changes.
 
+The tracked pre-commit hook invokes `scripts/check_commit_linters.py --staged`.
+It checks the exact staged tree with the existing rules and leaves source and the
+index untouched. See [local commit checks](../../CONTRIBUTING.md#local-commit-checks)
+for installation. Quality CI runs on all branch pushes; `REQUIRED_QUALITY_GATE`
+also protects that trigger from branch/path filtering.
+
 From the application checkout:
 
 ```sh

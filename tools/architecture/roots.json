@@ -5973,6 +5973,38 @@
       "purpose": "Profile catalog concurrency, lifetime, policy isolation and account usage fidelity",
       "source": "docs/MODEL_CATALOG.md",
       "status": "supported"
+    },
+    {
+      "id": "git-pre-commit",
+      "kind": "git-hook",
+      "path": ".githooks/pre-commit",
+      "purpose": "Check the exact staged tree with the existing source linters before every local commit",
+      "source": "scripts/install_git_hooks.py; CONTRIBUTING.md#local-commit-checks",
+      "status": "supported"
+    },
+    {
+      "id": "tool-commit-linters",
+      "kind": "tool-cli",
+      "path": "scripts/check_commit_linters.py",
+      "purpose": "One-process Dart linter batch and native/Python source checks; --staged isolates the Git index",
+      "source": ".githooks/pre-commit; CONTRIBUTING.md#local-commit-checks",
+      "status": "supported"
+    },
+    {
+      "id": "tool-install-git-hooks",
+      "kind": "tool-cli",
+      "path": "scripts/install_git_hooks.py",
+      "purpose": "Explicit local activation of the tracked commit hook without replacing another hook setup",
+      "source": "AGENTS.md; CONTRIBUTING.md#local-commit-checks",
+      "status": "supported"
+    },
+    {
+      "id": "qa-commit-linters",
+      "kind": "qa-fixture",
+      "path": "tools/qa/test_commit_linters.py",
+      "purpose": "Disposable-repository hook, failure propagation and staged/unstaged isolation regressions",
+      "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml offline QA discovery",
+      "status": "supported"
     }
   ],
   "files": [
@@ -5980,6 +6012,11 @@
       "path": ".gitattributes",
       "area": "root",
       "provenance": "tracked"
+    },
+    {
+      "path": ".githooks/pre-commit",
+      "area": ".githooks",
+      "provenance": "intentional-untracked"
     },
     {
       "path": ".github/FUNDING.yml",
@@ -9397,6 +9434,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "scripts/check_commit_linters.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "scripts/diagram-preview/.gitignore",
       "area": "scripts",
       "provenance": "tracked"
@@ -9420,6 +9462,11 @@
       "path": "scripts/generate-notification-board.py",
       "area": "scripts",
       "provenance": "tracked"
+    },
+    {
+      "path": "scripts/install_git_hooks.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "scripts/invoke-flutter.ps1",
@@ -13533,6 +13580,11 @@
     },
     {
       "path": "tools/qa/test_authored_census.py",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/qa/test_commit_linters.py",
       "area": "tools",
       "provenance": "intentional-untracked"
     },

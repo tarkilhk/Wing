@@ -21,6 +21,10 @@ It routes ownership decisions, documentation updates and applicable checks.
 The completed cleanup's evidence lives in [plans/README.md](plans/README.md);
 use the maintained [architecture map](docs/ARCHITECTURE.md) for new work.
 
+Before committing in a fresh checkout, enable the tracked lint hook using
+`python3 scripts/install_git_hooks.py`. See [local commit checks](CONTRIBUTING.md#local-commit-checks)
+for toolchain setup and staged-snapshot behavior.
+
 # Hermes deployment constraint
 
 Wing targets **the latest upstream, unmodified Hermes**, including changes on
