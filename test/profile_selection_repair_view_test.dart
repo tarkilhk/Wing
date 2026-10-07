@@ -222,9 +222,12 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> chooseWork(WidgetTester tester) async {
+  Future<void> chooseWork(WidgetTester tester, {String? captureName}) async {
     expect(find.byType(ProfileSelector), findsOneWidget);
+    await tester.ensureVisible(_choice('work'));
+    await tester.pumpAndSettle();
     expect(_choice('work').hitTestable(), findsOneWidget);
+    if (captureName != null) await _captureView(tester, captureName);
     final target = tester.getRect(_choice('work'));
     expect(target.width, greaterThanOrEqualTo(48));
     expect(target.height, greaterThanOrEqualTo(48));
@@ -243,7 +246,10 @@ void main() {
             findsOneWidget,
           );
           await _captureView(tester, 'missing-${brightness.name}-${scale}x');
-          await chooseWork(tester);
+          await chooseWork(
+            tester,
+            captureName: 'choices-${brightness.name}-${scale}x',
+          );
           await tester.pumpAndSettle();
           // Observe actual acknowledged platform storage before navigation/UI.
           expect((await platform.getAll())[platform.selectionKey], 'work');

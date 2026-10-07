@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
@@ -9,6 +8,7 @@ import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/type.dart';
 
 import '../model.dart';
+import '../semantic_context.dart';
 import '../dart_sdk.dart';
 
 const id = 'ARCH_COMPLETED_MODEL_VIEW';
@@ -148,9 +148,11 @@ Future<List<Finding>> check(Directory directory, {String? sdkPath}) async {
     if (scan.found) candidates.add(path);
   }
   if (candidates.isEmpty) return [];
-  final contexts = AnalysisContextCollection(
+  final contexts = semanticContextCollection(
+    root: root,
+    cacheNamespace: 'completed-model-view',
     includedPaths: [root],
-    sdkPath: dartSdkPath(root, configured: sdkPath),
+    sdk: dartSdkPath(root, configured: sdkPath),
   );
   final findings = <Finding>[];
   try {

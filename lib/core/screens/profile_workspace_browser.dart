@@ -1013,6 +1013,113 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
     final enabled =
         workspace.scope != null && !workspace.switching && !_pending;
     final groups = _groups;
+    final notices = <Widget>[
+      if (_view.error case final error?)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              StudioError(error),
+              Wrap(
+                children: [
+                  if (_view.validity == BrowserPreferencesValidity.invalid)
+                    TextButton(
+                      onPressed: _view.busy
+                          ? null
+                          : () => _chooseView(
+                              const BrowserPreferenceIntent.reset(),
+                            ),
+                      child: const Text('Reset chat view'),
+                    ),
+                  if (_view.validity == BrowserPreferencesValidity.unverified)
+                    TextButton(
+                      onPressed: _view.busy
+                          ? null
+                          : _data.verifyViewPreferences,
+                      child: const Text('Reload chat view'),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      WorkspaceConnectionStatus(status: widget.connectionStatus),
+      _progress(),
+      if (workspace.visibilityNotice case final notice?)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(notice),
+              Wrap(
+                children: [
+                  TextButton(
+                    onPressed: !workspace.canChooseVisibility
+                        ? null
+                        : () => _run(
+                            () =>
+                                _data.chooseVisibility(SessionVisibility.chats),
+                          ),
+                    child: const Text('Chats only'),
+                  ),
+                  TextButton(
+                    onPressed: !workspace.canChooseVisibility
+                        ? null
+                        : () => _run(
+                            () => _data.chooseVisibility(SessionVisibility.all),
+                          ),
+                    child: const Text('All sessions'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      if (workspace.visibilityError case final error?)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: StudioError(error),
+        ),
+      widget.deletionRecovery,
+      if (_data.readFailure case final failure?)
+        _readFailure(failure, _refresh),
+      if (_data.state.searchError != null)
+        _readFailure(_data.state.searchError!, () => _data.search(_query)),
+      if (workspace.repairRequired)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (workspace.error case final error?) StudioError(error),
+              const SizedBox(height: 8),
+              ProfileSelector(
+                profiles: workspace.profiles,
+                selectedProfile: workspace.scope?.profileName,
+                createColors: widget.createColors,
+                padding: EdgeInsets.zero,
+                onSelected: workspace.repairBusy
+                    ? null
+                    : (name) => unawaited(
+                        _run(() async {
+                          await _data.selectProfile(name);
+                        }),
+                      ),
+              ),
+            ],
+          ),
+        )
+      else if (workspace.error != null)
+        ListTile(
+          title: StudioError(workspace.error!),
+          trailing: TextButton(
+            onPressed: () => _run(_data.retryConnection),
+            child: const Text('Retry'),
+          ),
+        ),
+    ];
     return PopScope(
       canPop: widget.drawer == null && !_archivedOnly,
       onPopInvokedWithResult: (didPop, _) {
@@ -1114,134 +1221,38 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
                 ),
               ),
               _filters(),
-              if (_view.error case final error?)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      StudioError(error),
-                      Wrap(
-                        children: [
-                          if (_view.validity ==
-                              BrowserPreferencesValidity.invalid)
-                            TextButton(
-                              onPressed: _view.busy
-                                  ? null
-                                  : () => _chooseView(
-                                      const BrowserPreferenceIntent.reset(),
-                                    ),
-                              child: const Text('Reset chat view'),
-                            ),
-                          if (_view.validity ==
-                              BrowserPreferencesValidity.unverified)
-                            TextButton(
-                              onPressed: _view.busy
-                                  ? null
-                                  : _data.verifyViewPreferences,
-                              child: const Text('Reload chat view'),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              WorkspaceConnectionStatus(status: widget.connectionStatus),
-              _progress(),
-              if (workspace.visibilityNotice case final notice?)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(notice),
-                      Wrap(
-                        children: [
-                          TextButton(
-                            onPressed: !workspace.canChooseVisibility
-                                ? null
-                                : () => _run(
-                                    () => _data.chooseVisibility(
-                                      SessionVisibility.chats,
-                                    ),
-                                  ),
-                            child: const Text('Chats only'),
-                          ),
-                          TextButton(
-                            onPressed: !workspace.canChooseVisibility
-                                ? null
-                                : () => _run(
-                                    () => _data.chooseVisibility(
-                                      SessionVisibility.all,
-                                    ),
-                                  ),
-                            child: const Text('All sessions'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              if (workspace.visibilityError case final error?)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: StudioError(error),
-                ),
-              widget.deletionRecovery,
-              if (_data.readFailure case final failure?)
-                _readFailure(failure, _refresh),
-              if (_data.state.searchError != null)
-                _readFailure(
-                  _data.state.searchError!,
-                  () => _data.search(_query),
-                ),
-              if (workspace.repairRequired)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (workspace.error case final error?) StudioError(error),
-                      const SizedBox(height: 8),
-                      ProfileSelector(
-                        profiles: workspace.profiles,
-                        selectedProfile: workspace.scope?.profileName,
-                        createColors: widget.createColors,
-                        padding: EdgeInsets.zero,
-                        onSelected: workspace.repairBusy
-                            ? null
-                            : (name) => unawaited(
-                                _run(() async {
-                                  await _data.selectProfile(name);
-                                }),
-                              ),
-                      ),
-                    ],
-                  ),
-                )
-              else if (workspace.error != null)
-                ListTile(
-                  title: StudioError(workspace.error!),
-                  trailing: TextButton(
-                    onPressed: () => _run(_data.retryConnection),
-                    child: const Text('Retry'),
-                  ),
-                ),
+              if (!workspace.repairRequired) ...notices,
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _refresh,
                   child: Builder(
                     builder: (context) {
                       final rows = _tree();
+                      final padding = EdgeInsets.only(
+                        bottom: 88 + MediaQuery.paddingOf(context).bottom,
+                      );
+                      if (workspace.repairRequired) {
+                        return CustomScrollView(
+                          key: ValueKey('chat-list-$_archivedOnly'),
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          slivers: [
+                            SliverToBoxAdapter(
+                              child: Column(children: notices),
+                            ),
+                            SliverPadding(
+                              padding: padding,
+                              sliver: SliverList.builder(
+                                itemCount: rows.length,
+                                itemBuilder: (_, index) => rows[index],
+                              ),
+                            ),
+                          ],
+                        );
+                      }
                       return ListView.builder(
                         key: ValueKey('chat-list-$_archivedOnly'),
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: EdgeInsets.only(
-                          bottom: 88 + MediaQuery.paddingOf(context).bottom,
-                        ),
+                        padding: padding,
                         itemCount: rows.length,
                         itemBuilder: (_, index) => rows[index],
                       );

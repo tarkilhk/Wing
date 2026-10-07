@@ -20,6 +20,24 @@ dart run tools/architecture/check_all.dart
 flutter test --no-pub test/architecture_contract_test.dart
 ```
 
+Resolved guards share the source/SDK/configuration-bound summary helper in
+`semantic_context.dart`, including completed model/setup views and backup
+ownership. Cache entries retain the pinned analyzer's summary keys, reader and
+checksum/version validation; rule verdicts are recomputed. Atomic writes finish
+before `putGet` returns, so disposal and immediate fixture deletion cannot race
+queued cache writes. `test/workspace_entry_key_owner_guard_test.dart` checks that
+completion boundary and runs the real ownership fixture/CLI cleanup path. The
+existing semantic fixture suites still exercise source/dependency mutations,
+corrupt bytes, imports, aliases and source/AOT exits. This is a behavioral
+lifetime property, not a pattern that a source linter can establish.
+
+Multi-CLI fixture timeouts are subprocess watchdogs, separate from the rules'
+recorded quiet-host performance budgets. The saved-prompt admission wrapper uses
+the same two-minute watchdog as other multi-CLI fixtures for its three fresh
+source processes; it retains every diagnostic and 0/1/2 exit assertion. When
+compiler subprocesses compete for CPU, use `flutter test --concurrency=2` for a
+bounded host integration run; this changes scheduling, never assertion coverage.
+
 Each rule also has its own command:
 
 ```sh

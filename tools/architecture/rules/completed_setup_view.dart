@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/analysis/features.dart';
 import 'package:analyzer/dart/analysis/utilities.dart';
@@ -12,6 +11,7 @@ import 'package:analyzer/dart/element/type.dart';
 
 import '../dart_sdk.dart';
 import '../model.dart';
+import '../semantic_context.dart';
 
 const id = 'ARCH_COMPLETED_SETUP_VIEW';
 const completedView = 'lib/core/screens/connection_setup_screen.dart';
@@ -98,9 +98,11 @@ Future<List<Finding>> check(Directory directory, {String? sdkPath}) async {
   final candidates = _Candidates(parsed.unit, namespace);
   parsed.unit.accept(candidates);
   if (!candidates.found) return [];
-  final contexts = AnalysisContextCollection(
+  final contexts = semanticContextCollection(
+    root: root,
+    cacheNamespace: 'completed-setup-view',
     includedPaths: [absolute],
-    sdkPath: sdk,
+    sdk: sdk,
   );
   final findings = <Finding>[];
   try {

@@ -487,7 +487,14 @@ void main() {
     tester,
   ) async {
     await show(tester, destination: AppDestination.health);
-    await tester.ensureVisible(find.text('Connectors'));
+    await tester.scrollUntilVisible(
+      find.text('Connectors'),
+      200,
+      scrollable: find.descendant(
+        of: find.byKey(const PageStorageKey('administration-health-findings')),
+        matching: find.byType(Scrollable),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Connectors'));
     await tester.pumpAndSettle();

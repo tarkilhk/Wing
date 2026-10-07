@@ -563,6 +563,16 @@ void main() {
       expect(find.text('Models and reasoning'), findsOneWidget);
       await navigate(tester, AppDestination.health);
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byTooltip('Refresh profile status'),
+        200,
+        scrollable: find.descendant(
+          of: find.byKey(
+            const PageStorageKey('administration-health-findings'),
+          ),
+          matching: find.byType(Scrollable),
+        ),
+      );
       expect(find.byTooltip('Refresh profile status'), findsOneWidget);
       expect(controller.current!.chat, same(chat));
       await tester.binding.handlePopRoute();

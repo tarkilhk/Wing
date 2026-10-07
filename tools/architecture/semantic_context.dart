@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:analyzer/src/dart/analysis/analysis_context_collection.dart';
+import 'package:analyzer/src/dart/analysis/byte_store.dart';
 import 'package:analyzer/src/dart/analysis/file_byte_store.dart';
 import 'package:analyzer/file_system/overlay_file_system.dart';
 import 'package:analyzer/file_system/physical_file_system.dart';
@@ -69,9 +71,44 @@ AnalysisContextCollectionImpl semanticContextCollection({
     includedPaths: includedPaths,
     resourceProvider: provider,
     sdkPath: sdk,
-    byteStore: FileByteStore(
+    byteStore: SynchronousSummaryByteStore(
       cache.path,
       tempNameSuffix: '$pid-${Isolate.current.hashCode}-${_storeSequence++}',
     ),
   );
+}
+
+/// FileByteStore queues writes beyond context disposal. Fixture roots must be
+/// deletable immediately after disposal, so complete each atomic write here.
+/// The SDK's reader/validator still own the on-disk summary format.
+class SynchronousSummaryByteStore implements ByteStore {
+  SynchronousSummaryByteStore(this.path, {required this.tempNameSuffix})
+    : reader = FileByteStore(path);
+
+  final String path;
+  final String tempNameSuffix;
+  final FileByteStore reader;
+  final validator = FileByteStoreValidator();
+
+  @override
+  Uint8List? get(String key) => reader.get(key);
+
+  @override
+  Uint8List putGet(String key, Uint8List bytes) {
+    // These are the SDK store's accepted sharded keys.
+    if (key.length <= 2 || key[0] == '.' || key[1] == '.') return bytes;
+    final shard = Directory('$path/${key.substring(0, 2)}');
+    shard.createSync(recursive: true);
+    final temporary = File('$path/$key-temp-$tempNameSuffix');
+    try {
+      temporary.writeAsBytesSync(validator.wrapData(bytes));
+      temporary.renameSync('${shard.path}/$key');
+    } finally {
+      if (temporary.existsSync()) temporary.deleteSync();
+    }
+    return bytes;
+  }
+
+  @override
+  void release(Iterable<String> keys) => reader.release(keys);
 }

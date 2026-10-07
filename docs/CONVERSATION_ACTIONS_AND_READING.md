@@ -16,6 +16,8 @@ Edit targets a saved user row by durable identity, verifies fresh history and co
 
 Regenerate replaces the answer in the same chat. Branch/Fork creates a separate chat with an explicit boundary. Ordinary regenerated replacement and fork reopen work through existing APIs; synchronized older alternatives require a server relationship/persistence contract. Do not call invented answer-version methods or recreate a phone-only version database. See [Server chat relationships](SERVER_CHAT_RELATIONSHIPS.md).
 
+Register a server-created child in the canonical chat resource before hydrating it. Hydration observes model controls through that owner; an unregistered child must never be passed to an owner-checked observer. The durable child stays reachable even when copy validation fails. `test/answer_versions_test.dart` and `test/saved_message_actions_test.dart` exercise the real fork, saved-boundary validation and continuation paths; static layout checks cannot establish this ordering.
+
 After compaction, branch validation compares source and child saved REST history using `include_compacted=true`, raw roles/text and expected row counts. The shorter RPC display history is not an adequate copy boundary. If copied history is missing, changed or extra, retain the created child and report the failed validation explicitly rather than hiding the partial outcome.
 
 ## Attachments in history

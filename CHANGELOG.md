@@ -4,6 +4,13 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Make tool activity rows compact and remove expansion arrows from saved agents
+  that have no output to show.
+
+- Restore Fork by registering the new chat before observing its model controls.
+  Keep task status labels accessible and profile repair choices reachable with
+  enlarged text.
+
 - Outline the continuous selected analytics date span, including days with zero
   usage, instead of leaving holes between recorded days.
 

@@ -117,7 +117,7 @@ themes, including expanded vision and raw details. Store captures under ignored
 
 ## Tasks and Agents
 
-The Tasks tab retains backend order and parent indentation. Full task text stays
+The Tasks tab retains backend order and parent indentation. Each status icon owns a separate semantics container so its completed, active, pending or cancelled label remains independently discoverable beside the task text. `test/profile_todo_icons_test.dart` checks these labels and layout in both themes at normal and enlarged text; static checks cannot establish the rendered semantics tree. Full task text stays
 selectable, with a separate Pending, In progress, Completed or Cancelled line.
 Its summary counts each backend state; cancelled tasks are not counted as
 completed. These are passive observations, not editable checkboxes. Stock todos

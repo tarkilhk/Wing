@@ -69,6 +69,6 @@ Actual CLI exit codes are 0 clean, 1 with stable rule/file/line findings, and 2
 invalid input. `--sdk PATH` supplies validated SDK provenance. The host wrapper
 runs both fixture proof and an actual production scan through the validated Dart
 SDK; it never assumes Flutter's executable is Dart. Fixture scratch directories
-remain alive until the supervised child VM terminates, including standard async
-summary writes. Root owns mandatory CI/census integration and feedback budgets;
+remain alive until the supervised child VM terminates. Shared summary writes
+finish before returning and cannot outlive context disposal. Root owns mandatory CI/census integration and feedback budgets;
 first-use and warm-cache timings must be recorded separately on immutable inputs.

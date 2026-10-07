@@ -53,7 +53,7 @@ analyzer's responsibility: the fixture suite proves both the rule's clean verdic
 and the actual SDK's rejection. A clean guard never means the Dart compiles.
 
 Resolved analysis uses `tools/architecture/semantic_context.dart` and the pinned
-analyzer 10.1 implementation's standard FileByteStore. Generated summaries live
+analyzer 10.1 implementation's FileByteStore reader and validator with synchronous atomic summary writes. Generated summaries live
 under `.dart_tool/architecture/profile-colours-view/`; checkout path, SDK
 path/version/library metadata, package configuration and root analysis options
 bind the namespace. Analyzer keys validate current source contents, dependency
@@ -72,8 +72,8 @@ namespace visibility, root options, concurrent stores and corrupted summaries.
 Package-origin part fixtures additionally prove missing namespace INPUT2 and a
 valid adjacent part with actual source/fresh-AOT CLI checks.
 The fixture supervisor retains its private scratch scope until the child VM
-exits, then releases all fixtures; standard asynchronous summary writes cannot
-race per-case recursive directory cleanup. Production cache files stay generated
+exits, then releases all fixtures. The shared store completes writes before
+returning, so per-case recursive cleanup has no pending writer. Production cache files stay generated
 under `.dart_tool`, independent of this test resource lifetime.
 
 Run independently:

@@ -4610,11 +4610,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
         projectId: source._projectId,
         title: result['title']?.toString() ?? '${source.title} branch',
       );
+      // Hydration observes model controls through the canonical chat owner.
+      // Register the durable child before any owner-checked observations.
+      resource._chats[id] = child;
       _hydrate(child, result);
       child.reading.installSavedHistory(
         answerHistoryRows(ProfileGateway.records(result['messages'])),
       );
-      resource._chats[id] = child;
       // Retain the returned child even on validation failure, so it is reachable.
       resource._sessions = _readonlyWorkspaceRows([
         {

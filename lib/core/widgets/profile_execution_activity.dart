@@ -153,6 +153,7 @@ class _TodoStatusIcon extends StatelessWidget {
       GatewayTodoStatus.cancelled => 'Cancelled task',
     };
     return Semantics(
+      container: true,
       label: label,
       child: ExcludeSemantics(
         child: SizedBox.square(
