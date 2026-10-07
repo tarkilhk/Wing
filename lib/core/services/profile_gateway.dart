@@ -8,6 +8,7 @@ import '../models/session_visibility.dart';
 import '../models/deleted_draft_cleanup.dart';
 import '../models/hermes_profile.dart';
 import '../models/answer_versions.dart';
+import '../models/gateway_activity.dart';
 import 'connection_manager.dart';
 import 'profiles_repository.dart';
 import 'ws_client.dart';
@@ -869,6 +870,40 @@ class ProfileGateway {
   }
 
   static const historyPageSize = 50;
+
+  /// Passive completion receipts retained by stock Hermes' bounded event ring.
+  /// Starts and turn/input events never become execution facts through history.
+  Future<List<GatewayToolActivity>> completedToolActivities(
+    String runtimeId,
+  ) async {
+    final snapshot = await call('session.events.since', {
+      'session_id': runtimeId,
+      'last_seen': 0,
+    });
+    final events = snapshot['events'];
+    if (events is! List) throw const FormatException('Missing event replay');
+    final completed = <String, GatewayToolActivity>{};
+    for (final event in events) {
+      if (event is! Map ||
+          event['session_id'] != runtimeId ||
+          event['type'] != 'tool.complete' ||
+          event['payload'] is! Map<String, dynamic>) {
+        continue;
+      }
+      final activity = GatewayToolActivity.fromGatewayEvent(
+        'tool.complete',
+        event['payload'] as Map<String, dynamic>,
+      );
+      final id = activity?.toolId;
+      if (id == null || activity!.durationSeconds == null) continue;
+      // Deduplicate in last-completion order so bounded retention keeps newest
+      // receipts when a replay exceeds the reading owner's observation limit.
+      completed.remove(id);
+      completed[id] = activity;
+    }
+    return List.unmodifiable(completed.values);
+  }
+
   Future<ProfileHistoryPage> history(
     String id, {
     int offset = 0,

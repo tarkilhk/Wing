@@ -2209,14 +2209,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }) async {
     final resource = _owned(chat);
     final key = chat._key;
+    final runtimeId = chat.runtime.runtimeId;
     bool currentRead() =>
         !_closed &&
         chat._key == key &&
+        chat.runtime.runtimeId == runtimeId &&
         identical(resource._chats[key.sessionId], chat) &&
         !resource.blocksSession(key.sessionId);
     final refreshed = await chat.reading.refresh(
       sessionId: key.sessionId,
-      runtimeId: chat.runtime.runtimeId,
+      runtimeId: runtimeId,
       canPublish: currentRead,
       onChanged: () {
         if (!_closed) _changed(browserChat: key);

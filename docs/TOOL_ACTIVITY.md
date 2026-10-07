@@ -83,7 +83,44 @@ backend patches, plugins or custom endpoints. Sources are upstream
   backend durations take precedence, including zero. Cached rows never start
   timers or regain execution authority. Cache limits still apply (60 recent
   rows per chat, ten recent chats per profile); timing never received or already
-  pruned cannot be recovered from stock history.
+  pruned cannot be recovered from stock history alone.
+
+## Missed completion recovery, 8 October 2026
+
+Verified latest unmodified Hermes main
+[`ad12263a5ed43109d3942a8af04d4cef210fa6ae`](https://github.com/NousResearch/hermes-agent/commit/ad12263a5ed43109d3942a8af04d4cef210fa6ae).
+Stock [`session.events.since`](https://github.com/NousResearch/hermes-agent/blob/ad12263a5ed43109d3942a8af04d4cef210fa6ae/tui_gateway/methods_session.py)
+returns retained event objects with `type`, `session_id`, `payload` and `seq`.
+The [`event ring`](https://github.com/NousResearch/hermes-agent/blob/ad12263a5ed43109d3942a8af04d4cef210fa6ae/tui_gateway/event_replay.py)
+is bounded to 512 events and 4 MiB per session, with additional process limits.
+The stock REST history still omits ordinary tool durations.
+
+`ProfileGateway.completedToolActivities` reads the current runtime's retained
+completions from `last_seen: 0`, selects exact matching runtime identities and
+valid measured durations, and deduplicates in last-completion order.
+`TranscriptReading.refresh` reads those receipts alongside the authoritative
+saved page and enriches actual rows by exact tool-call ID. Live measured receipts
+win over a delayed recovery response. The existing 256-receipt bound retains the
+newest recovered completions. The controller rejects reads after runtime
+replacement; the reading generation rejects superseded or retired reads.
+Replayed starts, turn events and pending inputs never enter execution owners.
+Partial replay can still supply a retained measurement for an exact call; it
+cannot establish a complete turn. A failed timing read leaves saved messages
+readable. Recovered durations enter the existing passive reading cache.
+
+`TOOL_TIMING_RECOVERY` is guarded by
+`test/profile_execution_activity_test.dart`: the actual controller/history path
+first reproduced a retained 0.195-second completion becoming unknown, then
+passed with recovery. Cases cover partial replay, wrong runtimes, absent rows,
+invalid and zero timings, duplicate completions, full-ring retention, failed I/O,
+live completion races and retired reads. Static analysis cannot establish which
+events remain in the ring or their asynchronous ordering; these behavioral
+checks own the invariant. Run
+`flutter test --no-pub test/profile_execution_activity_test.dart`.
+
+Timing is still unavailable when no measured completion remains in the server's
+ring or Wing's bounded reading cache. A server restart clears the ring. This
+client change does not infer execution duration from saved message timestamps.
 
 ## Timing retention and uniform tool headers, 8 October 2026
 

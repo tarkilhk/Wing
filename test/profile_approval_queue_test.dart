@@ -337,6 +337,7 @@ void main() {
       host.event('a', 'approval', approval('one'));
       host.notificationActiveSessions = [];
       host.notificationReplay = {'open_requests': []};
+      host.calls.clear();
       await controller.reconcileNotificationRequests({chat.key});
       expect(chat.runtime.approval?.requestId, 'one');
       expect(

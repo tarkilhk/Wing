@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:wing/core/models/transcript_timeline.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -58,6 +60,257 @@ void main() {
     controller.dispose();
     appPreferences.dispose();
   });
+
+  test(
+    'history recovers durations for tool completions missed while away',
+    () async {
+      host.historyMessages = [
+        {
+          'id': 21,
+          'role': 'tool',
+          'tool_call_id': 'missed',
+          'tool_name': 'read_file',
+          'content': 'Booking confirmed',
+        },
+      ];
+      host.notificationReplay = {
+        'events': [
+          {
+            'type': 'tool.complete',
+            'session_id': chat.runtime.runtimeId,
+            'seq': 7,
+            'payload': {
+              'tool_id': 'missed',
+              'name': 'read_file',
+              'args': {'path': 'trip/bookings.json'},
+              'result': 'Booking confirmed',
+              'duration_s': 0.195,
+            },
+          },
+        ],
+        'latest_seq': 7,
+        'count': 1,
+        'truncated': false,
+        'epoch': 'server-process',
+        'open_requests': [],
+      };
+      await controller.refreshHistory(chat);
+      final timeline = TranscriptTimeline.project(
+        chat.reading.messages,
+        presentationId: chat.reading.messagePresentationId,
+      );
+      expect(timeline.entries.single.tool!.durationSeconds, 0.195);
+      expect(
+        timeline.entries.single.tool!.arguments,
+        contains('trip/bookings.json'),
+      );
+      expect(chat.runtime.toolActivities, isEmpty);
+      expect(
+        chat.reading.captureSnapshot().messages.single['duration_s'],
+        0.195,
+      );
+    },
+  );
+
+  test(
+    'partial replay enriches only matching completed calls without reviving work',
+    () async {
+      const ids = ['measured', 'missing', 'zero', 'wrong-runtime', 'running'];
+      host.historyMessages = [
+        for (final (index, id) in ids.indexed)
+          {
+            'id': 21 + index,
+            'role': 'tool',
+            'tool_call_id': id,
+            'tool_name': 'read_file',
+            'content': 'File contents',
+          },
+      ];
+      Map<String, dynamic> event(
+        String id,
+        Object? seconds, {
+        String type = 'tool.complete',
+        String? runtime,
+      }) => {
+        'type': type,
+        'session_id': runtime ?? chat.runtime.runtimeId,
+        'payload': {'tool_id': id, 'name': 'read_file', 'duration_s': seconds},
+      };
+      host.notificationReplay = {
+        'events': [
+          event('measured', 0.1),
+          event('measured', 0.195),
+          event('missing', -1),
+          event('missing', '0.2'),
+          event('zero', 0),
+          event('wrong-runtime', 99, runtime: 'b-runtime'),
+          event('running', 99, type: 'tool.start'),
+          event('not-in-history', 99),
+          {
+            'type': 'turn.end',
+            'session_id': chat.runtime.runtimeId,
+            'payload': {},
+          },
+        ],
+        'truncated': true,
+      };
+      final execution = chat.runtime.execution;
+      await controller.refreshHistory(chat);
+      expect(chat.reading.messages, hasLength(5));
+      expect(chat.reading.messages.map((row) => row['duration_s']).toList(), [
+        0.195,
+        null,
+        0,
+        null,
+        null,
+      ]);
+      expect(chat.runtime.toolActivities, isEmpty);
+      expect(chat.runtime.execution, execution);
+      expect(
+        host.calls.lastWhere((call) => call.$2 == 'session.events.since').$3,
+        {'session_id': chat.runtime.runtimeId, 'last_seen': 0, 'profile': 'a'},
+      );
+    },
+  );
+
+  test(
+    'bounded recovery retains newest durations in a full replay ring',
+    () async {
+      host.historyMessages = [
+        for (final id in [0, 511])
+          {
+            'id': id + 1,
+            'role': 'tool',
+            'tool_call_id': 'call-$id',
+            'content': 'File contents',
+          },
+      ];
+      host.notificationReplay = {
+        'events': [
+          for (var id = 0; id < 512; id++)
+            {
+              'type': 'tool.complete',
+              'session_id': chat.runtime.runtimeId,
+              'payload': {
+                'tool_id': 'call-$id',
+                'name': 'read_file',
+                'duration_s': id / 1000,
+              },
+            },
+        ],
+      };
+      await controller.refreshHistory(chat);
+      expect(chat.reading.messages.first['duration_s'], isNull);
+      expect(chat.reading.messages.last['duration_s'], .511);
+    },
+  );
+
+  test('failed timing recovery keeps saved history readable', () async {
+    host.historyMessages = [
+      {
+        'id': 21,
+        'role': 'tool',
+        'tool_call_id': 'missing',
+        'content': 'File contents',
+      },
+    ];
+    final base = host.gateway(chat.key.workspace);
+    final reading = TranscriptReading(
+      gateway: ProfileGateway(
+        scope: chat.key.workspace,
+        discover: base.discover,
+        get: base.read,
+        rpc: (method, params) async {
+          if (method == 'session.events.since') {
+            throw StateError('Connection lost');
+          }
+          return base.call(method, params);
+        },
+      ),
+    );
+    addTearDown(reading.dispose);
+    expect(
+      await reading.refresh(
+        sessionId: chat.key.sessionId,
+        runtimeId: chat.runtime.runtimeId,
+        canPublish: () => true,
+        onChanged: () {},
+      ),
+      isTrue,
+    );
+    expect(reading.messages.single['content'], 'File contents');
+    expect(reading.messages.single['duration_s'], isNull);
+    expect(reading.historyError, isNull);
+  });
+
+  test(
+    'late timing recovery cannot overwrite live completion or a retired read',
+    () async {
+      for (final retired in [false, true]) {
+        host.historyMessages = [
+          {
+            'id': 21,
+            'role': 'tool',
+            'tool_call_id': 'measured',
+            'content': 'File contents',
+          },
+        ];
+        final held = Completer<Map<String, dynamic>>();
+        final started = Completer<void>();
+        final base = host.gateway(chat.key.workspace);
+        final reading = TranscriptReading(
+          gateway: ProfileGateway(
+            scope: chat.key.workspace,
+            discover: base.discover,
+            get: base.read,
+            rpc: (method, params) async {
+              if (method == 'session.events.since') {
+                started.complete();
+                return held.future;
+              }
+              return base.call(method, params);
+            },
+          ),
+        );
+        addTearDown(reading.dispose);
+        var current = true;
+        final refresh = reading.refresh(
+          sessionId: chat.key.sessionId,
+          runtimeId: chat.runtime.runtimeId,
+          canPublish: () => current,
+          onChanged: () {},
+        );
+        await started.future;
+        reading.observeTool(
+          GatewayToolActivity.fromGatewayEvent('tool.complete', {
+            'tool_id': 'measured',
+            'name': 'read_file',
+            'duration_s': .42,
+          })!,
+        );
+        if (retired) current = false;
+        held.complete({
+          'events': [
+            {
+              'type': 'tool.complete',
+              'session_id': chat.runtime.runtimeId,
+              'payload': {
+                'tool_id': 'measured',
+                'name': 'read_file',
+                'duration_s': .195,
+              },
+            },
+          ],
+        });
+        expect(await refresh, !retired);
+        if (retired) {
+          expect(reading.messages, isEmpty);
+        } else {
+          expect(reading.messages.single['duration_s'], .42);
+        }
+      }
+    },
+  );
 
   test(
     'received durations survive cached reading and authoritative refresh',
