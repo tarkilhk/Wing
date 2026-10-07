@@ -124,6 +124,38 @@ Timing is still unavailable when no measured completion remains in the server's
 ring or Wing's bounded reading cache. A server restart clears the ring. This
 client change does not infer execution duration from saved message timestamps.
 
+## Recovery across runtime replacement, 8 October 2026
+
+Verified current unmodified upstream main
+[`3090ef7731177154ab74aacd80b2f0d7e803dd14`](https://github.com/NousResearch/hermes-agent/commit/3090ef7731177154ab74aacd80b2f0d7e803dd14).
+A cold `session.resume` mints a fresh eight-character UI runtime ID. The saved
+conversation ID and this runtime ID are different identities. Replay buffers
+remain keyed by the original runtime after it is retired; querying only the new
+runtime can return no completions even while older measurements are retained.
+
+Stock `hermes_cli/web_routers/status.py` exposes filtered `GET /api/logs` reads.
+`tui_gateway/prompt_turn.py` emits an explicit `tui prompt accepted` identity
+record containing `ui_session`, `session_key` and `agent_session_id`, without
+prompt content. `ProfileGateway` reads at most 500 matching process GUI log lines
+and accepts only this record's exact saved-session identity. It queries up to 64
+recent associated runtime rings, with at most four concurrent reads, and retains
+the current runtime's completion measurements last. Each failed timing read is
+independent; missing logs cannot discard a current runtime's measured receipts.
+
+Only valid `tool.complete` receipts with the queried runtime's exact identity
+enter `TranscriptReading`. The existing exact tool-call join enriches real saved
+rows, live measured receipts remain authoritative, and generation checks still
+reject superseded reads. Log text, replayed starts, turn state and pending inputs
+are never persisted or adopted as execution authority. Received measurements
+enter the existing independent timing index.
+
+Recovery requires both a retained runtime association and a retained completion.
+Rotated GUI logs, disabled identity logging, evicted rings and server restart can
+make old measurements unavailable. This is bounded recovery through stock APIs,
+not durable backend timing storage or a timestamp estimate. Inspect the actual
+saved message and its measured completions across a cold reopen before claiming
+historical timing recovery; a current-runtime-only replay is insufficient.
+
 ## Measured timing retention independent of previews, 8 October 2026
 
 Verified current unmodified upstream main

@@ -871,37 +871,107 @@ class ProfileGateway {
 
   static const historyPageSize = 50;
 
-  /// Passive completion receipts retained by stock Hermes' bounded event ring.
-  /// Starts and turn/input events never become execution facts through history.
+  /// Passive receipts across this saved chat's retained runtime event rings.
+  /// Cold resume mints a new runtime; the process GUI log names earlier runtimes.
   Future<List<GatewayToolActivity>> completedToolActivities(
+    String runtimeId, {
+    required String sessionId,
+  }) async {
+    final currentRead = _completedRuntimeTools(runtimeId);
+    final runtimes = await _savedToolRuntimes(sessionId);
+    final completed = <String, GatewayToolActivity>{};
+    void retain(Iterable<GatewayToolActivity> activities) {
+      for (final activity in activities) {
+        final id = activity.toolId!;
+        completed.remove(id);
+        completed[id] = activity;
+      }
+    }
+
+    final previous = runtimes.where((id) => id != runtimeId).toList();
+    // Bound simultaneous ring reads. A failed/evicted ring cannot discard
+    // measurements from the other runtimes of the same saved conversation.
+    for (var offset = 0; offset < previous.length; offset += 4) {
+      final pages = await Future.wait(
+        previous.skip(offset).take(4).map(_completedRuntimeTools),
+      );
+      for (final page in pages) {
+        retain(page);
+      }
+    }
+    retain(await currentRead);
+    return List.unmodifiable(completed.values);
+  }
+
+  Future<List<String>> _savedToolRuntimes(String sessionId) async {
+    try {
+      // GUI logging and replay rings belong to the dashboard process. Do not
+      // redirect this read to a named profile's separate agent log directory.
+      final log = await _get('logs', {
+        'file': 'gui',
+        'search': sessionId,
+        'lines': '500',
+      });
+      final lines = log['lines'];
+      if (lines is! List) throw const FormatException('Missing GUI log lines');
+      final accepted = RegExp(
+        r'tui prompt accepted: ui_session=([0-9a-f]{8}) '
+        r'session_key=(\S*) agent_session_id=(\S+) kind=',
+      );
+      final runtimes = <String>{};
+      for (final line in lines.whereType<String>()) {
+        final match = accepted.firstMatch(line);
+        if (match == null ||
+            (match.group(2) != sessionId && match.group(3) != sessionId)) {
+          continue;
+        }
+        final id = match.group(1)!;
+        runtimes.remove(id);
+        runtimes.add(id);
+      }
+      // Stock replay retains at most 64 runtime rings. No log contents enter
+      // the reading cache; only verified identities are used for these reads.
+      return runtimes.toList().reversed.take(64).toList().reversed.toList();
+    } catch (_) {
+      // Log retention/access is independent of the current runtime's replay.
+      return const [];
+    }
+  }
+
+  Future<List<GatewayToolActivity>> _completedRuntimeTools(
     String runtimeId,
   ) async {
-    final snapshot = await call('session.events.since', {
-      'session_id': runtimeId,
-      'last_seen': 0,
-    });
-    final events = snapshot['events'];
-    if (events is! List) throw const FormatException('Missing event replay');
-    final completed = <String, GatewayToolActivity>{};
-    for (final event in events) {
-      if (event is! Map ||
-          event['session_id'] != runtimeId ||
-          event['type'] != 'tool.complete' ||
-          event['payload'] is! Map<String, dynamic>) {
-        continue;
+    try {
+      final snapshot = await call('session.events.since', {
+        'session_id': runtimeId,
+        'last_seen': 0,
+      });
+      final events = snapshot['events'];
+      if (events is! List) throw const FormatException('Missing event replay');
+      final completed = <String, GatewayToolActivity>{};
+      for (final event in events) {
+        if (event is! Map ||
+            event['session_id'] != runtimeId ||
+            event['type'] != 'tool.complete' ||
+            event['payload'] is! Map<String, dynamic>) {
+          continue;
+        }
+        final activity = GatewayToolActivity.fromGatewayEvent(
+          'tool.complete',
+          event['payload'] as Map<String, dynamic>,
+        );
+        final id = activity?.toolId;
+        if (id == null || activity!.durationSeconds == null) continue;
+        // Deduplicate in last-completion order so bounded retention keeps newest
+        // receipts when a replay exceeds the reading owner's observation limit.
+        completed.remove(id);
+        completed[id] = activity;
       }
-      final activity = GatewayToolActivity.fromGatewayEvent(
-        'tool.complete',
-        event['payload'] as Map<String, dynamic>,
-      );
-      final id = activity?.toolId;
-      if (id == null || activity!.durationSeconds == null) continue;
-      // Deduplicate in last-completion order so bounded retention keeps newest
-      // receipts when a replay exceeds the reading owner's observation limit.
-      completed.remove(id);
-      completed[id] = activity;
+      return List.unmodifiable(completed.values);
+    } catch (_) {
+      // A passive timing read cannot make authoritative history unavailable.
+      return const [];
     }
-    return List.unmodifiable(completed.values);
   }
 
   Future<ProfileHistoryPage> history(

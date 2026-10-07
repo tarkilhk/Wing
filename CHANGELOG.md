@@ -4,6 +4,9 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Recover retained tool durations from earlier runtimes when reopening a saved
+  conversation, including after Hermes retires the original runtime.
+
 - Retain measured timings independently of the recent-message and recent-chat
   preview caches, so loading older saved rows can still show received durations.
 - Recover measured tool-call durations missed while disconnected when loading
