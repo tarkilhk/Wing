@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../test/profile_transcript_test.dart' as transcript;
 import '../test/profile_streaming_scroll_test.dart' as streaming;
+import '../test/profile_activity_details_layout_test.dart' as activity;
 
 /// Runs the transcript scroll regressions on Android using only local fixtures.
 /// Run with --no-uninstall on a disposable emulator.
@@ -26,4 +27,5 @@ void main() {
 
   transcript.main(capture: capture);
   streaming.main(captureFrame: capture);
+  activity.main(capture: capture);
 }

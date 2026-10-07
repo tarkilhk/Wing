@@ -8,6 +8,9 @@ followed by the question and returned analysis. Raw details exposes selectable,
 copyable tool identity, inputs and output without client payload truncation.
 Normal completion, success and unchanged-skill status add no header notice.
 Running work, warnings and failures remain visible.
+Tool headers have zero vertical padding and no minimum row height or inter-row
+spacing. They grow only for their text, including enlarged text; 16 dp icons and
+rotating arrows fit the compact text rows.
 Tasks, Agents, Work and Thinking retain their selection;
 approvals and questions remain outside tool disclosures.
 
@@ -83,6 +86,13 @@ lifetime. `test/profile_execution_activity_test.dart` guards receipt enrichment
 across authoritative history refresh and rejects enrichment of unrelated IDs.
 Existing tab, disclosure and transcript tests cover retained selection, focus,
 scroll anchoring, expansion across added rows and separation from answers.
+`test/profile_activity_details_layout_test.dart` guards text-sized rows without
+inter-row gaps in both themes at normal and enlarged text. It also rejects empty
+saved-agent disclosures, including whitespace-only output, while requiring real
+saved output to remain expandable. These are behavioral guards because static
+checks cannot establish actual rendered height or the available payload at
+runtime. The same cases run on Android through
+`integration_test/profile_expansion_scroll_test.dart`.
 The transcript scroll controller retains both ends of the corrected scroll range
 across lazy-list layout estimates. Switching a long Tools section to a short
 Agents section holds the tapped tab and its content in view, including when the
@@ -151,6 +161,11 @@ production tabs and the detail sheet at 360 dp and 200% text in both themes;
 private capture artifacts remain under ignored `build/` or outside the repository.
 
 ## Restoring Activity from saved chats
+
+Saved agents expand only when a nonblank summary or error was delivered.
+Recorded background dispatches without output show the full goal and dispatch
+notice as passive text, without a chevron or expansion action. Saved-agent rows
+share the zero-vertical-padding density of tool headers.
 
 Opening a chat reads its active `subagent.list` roster without requiring the
 Agents tab to be visible first. Its existing scoped read admission prevents

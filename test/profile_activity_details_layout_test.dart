@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:ui' show SemanticsAction;
+
 import 'package:wing/core/services/profile_supervision_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -5,17 +8,160 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/gateway_todo.dart';
+import 'package:wing/core/models/transcript_message.dart';
+import 'package:wing/core/presentation/saved_activity.dart';
+import 'package:wing/core/presentation/tool_call_presentation.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
 import 'package:wing/core/widgets/profile_subagent_panel.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_transcript_disclosure.dart';
+import 'package:wing/core/widgets/profile_saved_agents.dart';
+import 'package:wing/core/widgets/profile_tool_call.dart';
+import 'helpers/pump_markdown_widget.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
 import 'support/composer_fixture.dart' show emitChatEvent;
 
-void main() {
+void main({Future<void> Function(WidgetTester, String)? capture}) {
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('activity rows fit their content in $brightness at $scale', (
+        tester,
+      ) async {
+        if (tester.binding is AutomatedTestWidgetsFlutterBinding) {
+          tester.view.physicalSize = const Size(360, 800);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+        }
+        final calls = [
+          for (var index = 0; index < 10; index++)
+            ToolCallPresentation.saved(
+              TranscriptToolResult.fromRow({
+                'id': index,
+                'role': 'tool',
+                'tool_name': index == 0 ? 'skill_view' : 'browser_exec',
+                'args': index == 0
+                    ? {'name': 'business-trip-policy-research'}
+                    : null,
+                'content': index == 2 ? '{"exit_code":1}' : 'Page read',
+              }),
+            ),
+        ];
+        const goal =
+            'Search native Japanese accommodation websites, apply the '
+            'travel dates, compare the cheapest private rooms and save verified '
+            'evidence with total prices and cancellation rules.';
+        final agents = SavedActivity([
+          TranscriptToolResult.fromRow({
+            'role': 'tool',
+            'tool_name': 'delegate_task',
+            'content': jsonEncode({
+              'status': 'dispatched',
+              'goals': [goal, 'Empty output', 'Read saved findings'],
+              'inline_results': [
+                {
+                  'task_index': 1,
+                  'status': 'completed',
+                  'summary': '  ',
+                  'error': '',
+                },
+                {
+                  'task_index': 2,
+                  'status': 'completed',
+                  'summary': 'Verified findings',
+                },
+              ],
+            }),
+          }),
+        ]).agents;
+        Future<void> show(Widget child) => tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: child,
+              ),
+            ),
+          ),
+        );
+        await show(
+          Column(
+            children: [
+              for (var index = 0; index < calls.length; index++)
+                ProfileToolCall(
+                  key: ValueKey(('compact-call', index)),
+                  call: calls[index],
+                ),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+        for (var index = 0; index < calls.length; index++) {
+          final row = find.byKey(ValueKey(('compact-call', index)));
+          final text = find.descendant(of: row, matching: find.byType(Text));
+          final height = text.evaluate().fold<double>(
+            0,
+            (sum, element) =>
+                sum + tester.getSize(find.byWidget(element.widget)).height,
+          );
+          expect(tester.getSize(row).height, lessThanOrEqualTo(height + 0.1));
+          if (index > 0) {
+            expect(
+              tester.getRect(row).top,
+              closeTo(
+                tester
+                    .getRect(find.byKey(ValueKey(('compact-call', index - 1))))
+                    .bottom,
+                0.1,
+              ),
+            );
+          }
+        }
+        if (capture != null) {
+          await capture(tester, 'compact-tools-${brightness.name}-$scale');
+        }
+        await tester.tap(find.text('Read skill'));
+        await tester.pumpAndSettle();
+        expect(find.text('Raw details'), findsOneWidget);
+        await show(ProfileSavedAgents(agents: agents));
+        await tester.pumpAndSettle();
+        // Only delivered, nonblank detail gets a disclosure or tap semantics.
+        expect(find.byType(ExpansionTile), findsOneWidget);
+        expect(find.byIcon(Icons.expand_more), findsOneWidget);
+        expect(find.text(goal), findsOneWidget);
+        final semantics = tester.ensureSemantics();
+        expect(
+          tester
+              .getSemantics(find.text(goal))
+              .getSemanticsData()
+              .hasAction(SemanticsAction.tap),
+          isFalse,
+        );
+        semantics.dispose();
+        if (capture != null) {
+          await capture(tester, 'compact-agents-${brightness.name}-$scale');
+        }
+        await tester.ensureVisible(find.text('Read saved findings'));
+        await tester.tap(find.text('Read saved findings'));
+        await tester.pumpAndSettle();
+        await tester.settleMarkdown();
+        expect(
+          find.text('Verified findings', findRichText: true),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
   for (final scale in [1.0, 2.0, 3.0]) {
     testWidgets('nested activity headers fit a phone at text scale $scale', (
       tester,

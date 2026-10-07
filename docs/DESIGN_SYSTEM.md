@@ -286,6 +286,15 @@ Agents from delivered history, with passive output disclosures for past agents.
 Preserve category
 selection, guide and anchored expansion. Contract: [tool activity](TOOL_ACTIVITY.md).
 
+The owner's subsequent 7 October refinement requires zero vertical padding in
+tool-call headers and saved-agent rows. Size them to their text, with no minimum
+row height or inter-row gaps; keep icons and disclosure arrows at 16 dp. These
+Activity disclosures are a deliberate exception to standard action heights.
+Preserve target, exception and supplied timing. A saved agent with no nonblank
+summary or error is passive text without an arrow or expansion action; keep its
+full goal readable. Live agent rows opening the control sheet retain their
+existing action dimensions.
+
 Task status icons follow upstream desktop: a green filled-circle tick for
 completed, a spinner for in progress, a muted dashed circle for pending and a
 muted slashed circle for cancelled. Keep the existing 16 dp icon slot and use
