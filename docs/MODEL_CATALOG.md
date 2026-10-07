@@ -64,6 +64,17 @@ advisory; reading them does not rotate credentials or disable routing.
 
 ## Chat writes and verification
 
+Opening the ledger filters to the captured chat's provider and puts its selected
+model first within that provider. Provider plus model ID determines selection;
+profile defaults and the catalog's first provider cannot replace it. The opening
+provider tab stays visible, and All still exposes other routes. Starting search
+uses all providers; explicit filters can narrow it without changing the draft.
+A missing saved route remains an uncertainty notice rather than another model.
+`model_chooser_test.dart` guards long catalogs, duplicate IDs, selection semantics
+and cross-provider browsing; the real workspace reopening regression lives in
+`profile_intelligence_test.dart`. Runtime selection and visibility require
+behavioral checks; source linting cannot establish them.
+
 The chat owner reads reasoning and fast for the captured live session. Its
 composer shortcuts and picker Apply use the same admitted write path. Picker
 changes are drafts; Close discards them. Model confirmation remains before any

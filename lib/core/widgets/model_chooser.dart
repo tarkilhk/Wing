@@ -52,6 +52,7 @@ class ModelChooser extends StatefulWidget {
 
 class _ModelChooserState extends State<ModelChooser> {
   late List<ModelChoice> _choices;
+  late final ModelChoice? _openingChoice;
   final _search = TextEditingController();
   String _query = '';
   String? _provider;
@@ -62,6 +63,26 @@ class _ModelChooserState extends State<ModelChooser> {
   void initState() {
     super.initState();
     _choices = widget.choices;
+    _openingChoice = widget.selected?.choice;
+    _provider = _selectedProvider();
+  }
+
+  String? _selectedProvider() {
+    final provider = widget.selected?.choice?.provider;
+    return widget.groupByProvider &&
+            _choices.any((choice) => choice.provider == provider)
+        ? provider
+        : null;
+  }
+
+  @override
+  void didUpdateWidget(ModelChooser oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_query.isEmpty &&
+        oldWidget.selected?.choice?.provider !=
+            widget.selected?.choice?.provider) {
+      _provider = _selectedProvider();
+    }
   }
 
   @override
@@ -124,99 +145,107 @@ class _ModelChooserState extends State<ModelChooser> {
       child: Row(
         children: [
           Expanded(
-            child: Semantics(
-              selected: selected,
-              inMutuallyExclusiveGroup: true,
-              label: '${choice.label}, ${choice.routeLabel}',
-              child: InkWell(
-                key: Key(
-                  '${widget.keyPrefix}-${choice.provider}-${choice.model}',
-                ),
-                borderRadius: WingRadius.control,
-                onTap: widget.enabled
-                    ? () => widget.onSelected(ModelSelection.model(choice))
-                    : null,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8, top: 8, bottom: 8),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 24,
-                          child: Icon(
-                            selected
-                                ? Icons.check_rounded
-                                : Icons.circle_outlined,
-                            size: selected ? 16 : 10,
-                            color: selected ? tokens.accent : tokens.border,
-                          ),
-                        ),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                label,
-                                style: tokens.typography.body.copyWith(
-                                  fontSize: 14,
-                                  color: selected
-                                      ? tokens.accent
-                                      : tokens.onSurface,
-                                ),
-                              ),
-                              if (selected && widget.selectedStatus != null)
-                                Text(
-                                  widget.selectedStatus!,
-                                  style: tokens.typography.label.copyWith(
-                                    color: tokens.accent,
-                                  ),
-                                ),
-                              if (missing)
-                                Text(
-                                  'Not in the current model list; availability unconfirmed',
-                                  style: tokens.typography.label.copyWith(
-                                    color: tokens.muted,
-                                  ),
-                                ),
-                              if (choice.detail?.isNotEmpty == true)
-                                Text(
-                                  choice.detail!,
-                                  style: tokens.typography.label.copyWith(
-                                    color: tokens.muted,
-                                  ),
-                                ),
-                              if (enlarged && (input != null || output != null))
-                                Text(
-                                  [
-                                    if (input != null) 'In $input',
-                                    if (output != null) 'Out $output',
-                                  ].join(' · '),
-                                  style: tokens.typography.label.copyWith(
-                                    color: tokens.muted,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        if (!enlarged) ...[
-                          for (final price in [
-                            if (showInput) input,
-                            if (showOutput) output,
-                          ])
-                            SizedBox(
-                              width: 48,
-                              child: Text(
-                                price ?? '',
-                                textAlign: TextAlign.right,
-                                style: tokens.typography.label.copyWith(
-                                  color: tokens.muted,
-                                ),
-                              ),
+            child: MergeSemantics(
+              key: Key(
+                '${widget.keyPrefix}-${choice.provider}-${choice.model}',
+              ),
+              child: Semantics(
+                selected: selected,
+                inMutuallyExclusiveGroup: true,
+                label: '${choice.label}, ${choice.routeLabel}',
+                child: InkWell(
+                  borderRadius: WingRadius.control,
+                  onTap: widget.enabled
+                      ? () => widget.onSelected(ModelSelection.model(choice))
+                      : null,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    child: Padding(
+                      padding: const EdgeInsets.only(
+                        left: 8,
+                        top: 4,
+                        bottom: 4,
+                      ),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            child: Icon(
+                              selected
+                                  ? Icons.check_rounded
+                                  : Icons.circle_outlined,
+                              size: selected ? 16 : 10,
+                              color: selected ? tokens.accent : tokens.border,
                             ),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  label,
+                                  style: tokens.typography.body.copyWith(
+                                    fontSize: 13,
+                                    height: 1.25,
+                                    color: selected
+                                        ? tokens.accent
+                                        : tokens.onSurface,
+                                  ),
+                                ),
+                                if (selected && widget.selectedStatus != null)
+                                  Text(
+                                    widget.selectedStatus!,
+                                    style: tokens.typography.label.copyWith(
+                                      color: tokens.accent,
+                                    ),
+                                  ),
+                                if (missing)
+                                  Text(
+                                    'Not in the current model list; availability unconfirmed',
+                                    style: tokens.typography.label.copyWith(
+                                      color: tokens.muted,
+                                    ),
+                                  ),
+                                if (choice.detail?.isNotEmpty == true)
+                                  Text(
+                                    choice.detail!,
+                                    style: tokens.typography.label.copyWith(
+                                      color: tokens.muted,
+                                    ),
+                                  ),
+                                if (enlarged &&
+                                    (input != null || output != null))
+                                  Text(
+                                    [
+                                      if (input != null) 'In $input',
+                                      if (output != null) 'Out $output',
+                                    ].join(' · '),
+                                    style: tokens.typography.label.copyWith(
+                                      color: tokens.muted,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          if (!enlarged) ...[
+                            for (final price in [
+                              if (showInput) input,
+                              if (showOutput) output,
+                            ])
+                              SizedBox(
+                                width: 48,
+                                child: Text(
+                                  price ?? '',
+                                  textAlign: TextAlign.right,
+                                  style: tokens.typography.label.copyWith(
+                                    color: tokens.muted,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -255,11 +284,17 @@ class _ModelChooserState extends State<ModelChooser> {
         )
         .toList();
     final selected = widget.selected?.choice;
-    if (widget.promoteSelected && selected != null) {
+    final promoted = widget.promoteSelected ? selected : _openingChoice;
+    if (promoted != null) {
       final index = filtered.indexWhere(
-        (c) => c.provider == selected.provider && c.model == selected.model,
+        (c) => c.provider == promoted.provider && c.model == promoted.model,
       );
-      if (index > 0) filtered.insert(0, filtered.removeAt(index));
+      final destination = widget.promoteSelected
+          ? 0
+          : filtered.indexWhere((c) => c.provider == promoted.provider);
+      if (index > destination && destination >= 0) {
+        filtered.insert(destination, filtered.removeAt(index));
+      }
     }
     final groups = <String, List<ModelChoice>>{};
     for (final choice in filtered) {
@@ -283,9 +318,17 @@ class _ModelChooserState extends State<ModelChooser> {
         )
         .toList();
     final enlarged = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final providerEntries = providers.entries.toList();
+    final openingProvider = providerEntries.indexWhere(
+      (entry) => entry.key == _openingChoice?.provider,
+    );
+    if (openingProvider > 0) {
+      providerEntries.insert(0, providerEntries.removeAt(openingProvider));
+    }
     return Semantics(
       label: widget.scopeLabel,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -296,22 +339,48 @@ class _ModelChooserState extends State<ModelChooser> {
                     key: Key('${widget.keyPrefix}-search'),
                     enabled: widget.enabled,
                     controller: _search,
+                    style: tokens.typography.body.copyWith(
+                      fontSize: 13,
+                      height: 1.25,
+                    ),
                     decoration: InputDecoration(
                       hintText: 'Search models or providers',
-                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                      hintStyle: tokens.typography.body.copyWith(
+                        fontSize: 13,
+                        height: 1.25,
+                        color: tokens.muted,
+                      ),
+                      constraints: const BoxConstraints(minHeight: 48),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      prefixIconConstraints: const BoxConstraints(
+                        minWidth: 40,
+                        minHeight: 48,
+                      ),
+                      prefixIcon: const Icon(Icons.search_rounded, size: 18),
                       suffixIcon: _query.isEmpty
                           ? null
                           : IconButton(
                               tooltip: 'Clear model search',
                               onPressed: () {
                                 _search.clear();
-                                setState(() => _query = '');
+                                setState(() {
+                                  _query = '';
+                                  _provider = _selectedProvider();
+                                });
                               },
                               icon: const Icon(Icons.close_rounded),
                             ),
                       isDense: true,
                     ),
-                    onChanged: (value) => setState(() => _query = value),
+                    onChanged: (value) => setState(() {
+                      if (_query.trim().isEmpty && value.trim().isNotEmpty) {
+                        _provider = null;
+                      }
+                      _query = value;
+                    }),
                   ),
                 ),
                 if (widget.onRefresh != null)
@@ -340,26 +409,48 @@ class _ModelChooserState extends State<ModelChooser> {
                 children: [
                   for (final entry in [
                     const MapEntry<String?, String>(null, 'All'),
-                    ...providers.entries,
+                    ...providerEntries,
                   ])
                     Padding(
                       padding: const EdgeInsets.only(right: 4),
-                      child: TextButton(
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(48, 48),
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          foregroundColor: _provider == entry.key
-                              ? tokens.accent
-                              : tokens.muted,
-                          backgroundColor: _provider == entry.key
-                              ? tokens.accent.withValues(alpha: .12)
-                              : Colors.transparent,
-                          textStyle: tokens.typography.label,
+                      child: MergeSemantics(
+                        key: Key(
+                          '${widget.keyPrefix}-filter-${entry.key ?? 'all'}',
                         ),
-                        onPressed: widget.enabled
-                            ? () => setState(() => _provider = entry.key)
-                            : null,
-                        child: Text(entry.value),
+                        child: Semantics(
+                          selected: _provider == entry.key,
+                          child: TextButton(
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size(48, 48),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
+                              foregroundColor: _provider == entry.key
+                                  ? tokens.accent
+                                  : tokens.muted,
+                              backgroundColor: _provider == entry.key
+                                  ? tokens.accent.withValues(alpha: .12)
+                                  : Colors.transparent,
+                              textStyle: tokens.typography.label,
+                            ),
+                            onPressed: widget.enabled
+                                ? () => setState(() => _provider = entry.key)
+                                : null,
+                            child: Tooltip(
+                              message: entry.value,
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: enlarged ? 230 : 180,
+                                ),
+                                child: Text(
+                                  entry.value,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                 ],
@@ -381,7 +472,7 @@ class _ModelChooserState extends State<ModelChooser> {
                 child: const Text('Review provider access'),
               ),
             ),
-          Expanded(
+          Flexible(
             child: RadioGroup<ModelSelection>(
               groupValue: widget.selected,
               onChanged: widget.enabled
@@ -390,6 +481,7 @@ class _ModelChooserState extends State<ModelChooser> {
                     }
                   : (_) {},
               child: ListView(
+                shrinkWrap: true,
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                 children: [
                   for (final option in specials)
@@ -405,65 +497,75 @@ class _ModelChooserState extends State<ModelChooser> {
                   if (showMissing) _choice(selected, missing: true),
                   if (widget.groupByProvider)
                     for (final entry in groups.entries) ...[
-                      Padding(
-                        key: Key('${widget.keyPrefix}-provider-${entry.key}'),
-                        padding: const EdgeInsets.only(
-                          left: 8,
-                          top: 8,
-                          bottom: 4,
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                entry.value.first.routeLabel,
-                                style: tokens.typography.label.copyWith(
-                                  color: tokens.muted,
-                                ),
-                              ),
-                            ),
-                            if (!enlarged &&
-                                entry.value.any(
-                                  (c) =>
-                                      c.prices?.input != null ||
-                                      c.prices?.output != null ||
-                                      c.prices?.free == true,
-                                )) ...[
-                              for (final column in [
-                                if (entry.value.any(
-                                  (c) =>
-                                      c.prices?.input != null ||
-                                      c.prices?.free == true,
-                                ))
-                                  'In',
-                                if (entry.value.any(
-                                  (c) =>
-                                      c.prices?.output != null ||
-                                      c.prices?.free == true,
-                                ))
-                                  'Out',
-                              ])
-                                SizedBox(
-                                  width: 48,
-                                  child: Text(
-                                    column,
-                                    textAlign: TextAlign.right,
-                                    style: tokens.typography.label.copyWith(
-                                      color: tokens.muted,
-                                    ),
+                      if (_provider == null ||
+                          entry.value.any(
+                            (c) =>
+                                c.prices?.input != null ||
+                                c.prices?.output != null ||
+                                c.prices?.free == true,
+                          ))
+                        Padding(
+                          key: Key('${widget.keyPrefix}-provider-${entry.key}'),
+                          padding: const EdgeInsets.only(
+                            left: 8,
+                            top: 8,
+                            bottom: 4,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _provider == null
+                                      ? entry.value.first.routeLabel
+                                      : 'Per 1M tokens',
+                                  style: tokens.typography.label.copyWith(
+                                    color: tokens.muted,
                                   ),
                                 ),
+                              ),
+                              if (!enlarged &&
+                                  entry.value.any(
+                                    (c) =>
+                                        c.prices?.input != null ||
+                                        c.prices?.output != null ||
+                                        c.prices?.free == true,
+                                  )) ...[
+                                for (final column in [
+                                  if (entry.value.any(
+                                    (c) =>
+                                        c.prices?.input != null ||
+                                        c.prices?.free == true,
+                                  ))
+                                    'In',
+                                  if (entry.value.any(
+                                    (c) =>
+                                        c.prices?.output != null ||
+                                        c.prices?.free == true,
+                                  ))
+                                    'Out',
+                                ])
+                                  SizedBox(
+                                    width: 48,
+                                    child: Text(
+                                      column,
+                                      textAlign: TextAlign.right,
+                                      style: tokens.typography.label.copyWith(
+                                        color: tokens.muted,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                              const SizedBox(width: 48),
                             ],
-                            const SizedBox(width: 48),
-                          ],
+                          ),
                         ),
-                      ),
-                      if (entry.value.any(
-                        (c) =>
-                            c.prices?.input != null ||
-                            c.prices?.output != null ||
-                            c.prices?.free == true,
-                      ))
+                      if (_provider == null &&
+                          entry.value.any(
+                            (c) =>
+                                c.prices?.input != null ||
+                                c.prices?.output != null ||
+                                c.prices?.free == true,
+                          ))
                         Padding(
                           padding: const EdgeInsets.only(left: 8, bottom: 4),
                           child: Text(

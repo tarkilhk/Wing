@@ -115,7 +115,7 @@ Future<ChatIntelligenceSelection?> showChatIntelligencePicker({
   var reviewAccess = false;
   final selection = await showModalBottomSheet<ChatIntelligenceSelection>(
     context: context,
-    showDragHandle: true,
+    showDragHandle: false,
     isScrollControlled: true,
     useSafeArea: true,
     isDismissible: false,
@@ -262,35 +262,52 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
         padding: EdgeInsets.only(bottom: keyboard),
         child: SafeArea(
           top: false,
-          child: SizedBox(
-            height: (MediaQuery.sizeOf(context).height * .86 - keyboard).clamp(
-              0,
-              720,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: (MediaQuery.sizeOf(context).height * .86 - keyboard)
+                  .clamp(0, 720),
             ),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
+                  child: Stack(
+                    alignment: Alignment.topCenter,
                     children: [
-                      Text('Models', style: tokens.typography.section),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${_choices.length}',
-                        style: tokens.typography.label.copyWith(
-                          color: tokens.muted,
-                        ),
+                      Row(
+                        children: [
+                          Text('Models', style: tokens.typography.section),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${_choices.length}',
+                            style: tokens.typography.label.copyWith(
+                              color: tokens.muted,
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            tooltip: 'Close',
+                            onPressed: _applying ? null : widget.onCancel,
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
                       ),
-                      const Spacer(),
-                      IconButton(
-                        tooltip: 'Close',
-                        onPressed: _applying ? null : widget.onCancel,
-                        icon: const Icon(Icons.close_rounded),
+                      Positioned(
+                        top: 4,
+                        child: Container(
+                          width: 32,
+                          height: 3,
+                          decoration: BoxDecoration(
+                            color: tokens.border,
+                            borderRadius: WingRadius.control,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                Expanded(
+                Flexible(
                   child: ModelChooser(
                     choices: _choices,
                     selected: ModelSelection.model(_selectedChoice),
@@ -329,7 +346,7 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
                   ),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
-                    vertical: 8,
+                    vertical: 4,
                   ),
                   child: OverflowBar(
                     alignment: MainAxisAlignment.spaceBetween,

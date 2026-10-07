@@ -115,6 +115,8 @@ void main() {
     expect(find.text('Context window'), findsNothing);
     await tester.tap(find.byTooltip('Close model card'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('model-filter-all')));
+    await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const Key('model-openrouter-openai/gpt-5.6-sol')),
     );

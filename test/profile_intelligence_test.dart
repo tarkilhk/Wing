@@ -555,6 +555,49 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+  testWidgets(
+    'reopening uses the chat route rather than the profile default or first provider',
+    (tester) async {
+      host.mixedCatalog = true;
+      final chat = controller.current!.chat!;
+      emitChatEvent(controller, chat, 'session.info', {
+        'model': 'gpt-6.1-sol',
+        'provider': 'openai-codex',
+      });
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: ProfileWorkspaceScreen(controller: controller),
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (var opening = 0; opening < 2; opening++) {
+        await tester.tap(find.byKey(const Key('chat-intelligence-button')));
+        await tester.pumpAndSettle();
+        final semantics = tester.ensureSemantics();
+        final tab = find.byKey(const Key('model-filter-openai-codex'));
+        final row = find.byKey(const Key('model-openai-codex-gpt-6.1-sol'));
+        expect(tab.hitTestable(), findsOneWidget);
+        expect(row.hitTestable(), findsOneWidget);
+        expect(tester.getSemantics(tab), isSemantics(isSelected: true));
+        expect(tester.getSemantics(row), isSemantics(isSelected: true));
+        semantics.dispose();
+        expect(
+          find.byKey(const Key('model-openrouter-gpt-6.1-sol')),
+          findsNothing,
+        );
+        await tester.tap(find.text('Apply'));
+        await tester.pumpAndSettle();
+        expect(chat.model, 'gpt-6.1-sol');
+        expect(chat.provider, 'openai-codex');
+        expect(host.writes, isEmpty);
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
   for (final brightness in Brightness.values) {
     for (final (size, scale) in [
       (const Size(390, 844), 1.0),

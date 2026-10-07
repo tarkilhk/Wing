@@ -128,6 +128,23 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         expect(find.text('Apply').hitTestable(), findsOneWidget);
+        expect(
+          tester.getRect(find.text('Models')).top -
+              tester.getRect(find.byType(BottomSheet)).top,
+          lessThanOrEqualTo(20),
+        );
+        if (scale == 1) {
+          if (size.height > size.width) {
+            expect(
+              tester.getSize(find.byType(BottomSheet)).height,
+              lessThan(520),
+            );
+          }
+          expect(
+            tester.getSize(find.byKey(const Key('model-search'))).height,
+            lessThanOrEqualTo(48),
+          );
+        }
         final prefix =
             'build/model-picker-${brightness.name}-${size.width.toInt()}-${scale == 2 ? 'large' : 'normal'}';
         Future<void> screenshot(String suffix) async {

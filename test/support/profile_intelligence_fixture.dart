@@ -23,6 +23,7 @@ Confirm only if you intend to switch now.''';
   bool repeatConfirmation = false;
   bool failConfirmedModel = false;
   bool codexAppearsOnRefresh = false;
+  bool mixedCatalog = false;
   final modelOptionReads = <Map<String, String>>[];
   Completer<void>? configGetStarted;
   Completer<void>? configGetDelay;
@@ -42,16 +43,28 @@ Confirm only if you intend to switch now.''';
           modelOptionReads.add(Map.of(query));
           return {
             'providers': [
+              if (mixedCatalog)
+                {
+                  'slug': 'openrouter',
+                  'name': 'OpenRouter',
+                  'models': ['gpt-6.1-sol', 'anthropic/claude-sonnet-4.6'],
+                },
               if (!codexAppearsOnRefresh || query['refresh'] == '1')
                 {
                   'slug': 'openai-codex',
                   'name': 'OpenAI subscription',
-                  'models': ['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.4-mini'],
+                  'models': [
+                    'gpt-6-astra',
+                    'gpt-5.6-sol',
+                    'gpt-5.4-mini',
+                    if (mixedCatalog) 'gpt-6.1-sol',
+                  ],
                   'capabilities': {
                     for (final model in [
                       'gpt-6-astra',
                       'gpt-5.6-sol',
                       'gpt-5.4-mini',
+                      if (mixedCatalog) 'gpt-6.1-sol',
                     ])
                       model: {'reasoning': true, 'fast': true},
                   },
