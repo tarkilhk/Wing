@@ -22,6 +22,49 @@ class ProfileToolCall extends StatelessWidget {
   final bool initiallyExpanded;
   final Future<Uint8List> Function(String)? loadImage;
 
+  /// Wing's glyph policy uses delivered tool identity, never translated titles.
+  /// Both live and saved calls use this lookup. Provider namespaces can share
+  /// a purpose; an unknown tool gets a neutral glyph rather than a command icon.
+  static IconData iconFor(String name) {
+    if (name.startsWith('hindsight_')) return Icons.psychology_outlined;
+    return _icons[name] ?? Icons.extension_outlined;
+  }
+
+  static const _icons = <String, IconData>{
+    'memory': Icons.psychology_outlined,
+    'terminal': Icons.terminal_rounded,
+    'execute_code': Icons.code_rounded,
+    'browser_exec': Icons.code_rounded,
+    'read_file': Icons.description_outlined,
+    'write_file': Icons.edit_note_outlined,
+    'edit_file': Icons.edit_note_outlined,
+    'patch': Icons.difference_outlined,
+    'list_files': Icons.folder_open_outlined,
+    'search_files': Icons.find_in_page_outlined,
+    'web_search': Icons.search,
+    'web_extract': Icons.language,
+    'browser_navigate': Icons.language,
+    'browser_snapshot': Icons.find_in_page_outlined,
+    'browser_take_screenshot': Icons.photo_camera_outlined,
+    'browser_click': Icons.touch_app_outlined,
+    'browser_fill': Icons.edit_note_outlined,
+    'browser_type': Icons.keyboard_outlined,
+    'desktop_preview': Icons.desktop_windows_outlined,
+    'drive_preview': Icons.cloud_outlined,
+    'skill_view': Icons.menu_book_outlined,
+    'skill_manage': Icons.library_books_outlined,
+    'tool_get': Icons.build_outlined,
+    'tool_search': Icons.manage_search_outlined,
+    'tool_call': Icons.extension_outlined,
+    'image_generate': Icons.image_outlined,
+    'vision_analyze': Icons.image_search_outlined,
+    'todo_list': Icons.playlist_add_check_outlined,
+    'delegate_task': Icons.account_tree_outlined,
+    'cronjob': Icons.calendar_month_outlined,
+    'clarify': Icons.help_outline,
+    'session_search': Icons.manage_search_outlined,
+  };
+
   @override
   Widget build(BuildContext context) {
     final colors = WingTokens.of(context);
@@ -36,16 +79,8 @@ class ProfileToolCall extends StatelessWidget {
       ToolCallOutcome.success => colors.success,
       _ => colors.muted,
     };
-    final icon = switch (call.name) {
-      'vision_analyze' => Icons.image_search_outlined,
-      'web_extract' || 'browser_navigate' => Icons.language,
-      'web_search' || 'search_files' => Icons.search,
-      'skill_view' => Icons.menu_book_outlined,
-      'read_file' || 'write_file' || 'patch' => Icons.description_outlined,
-      _ => Icons.terminal_rounded,
-    };
     return CompactActivityRow(
-      icon: icon,
+      icon: iconFor(call.name),
       lines: [
         Text(
           call.title,

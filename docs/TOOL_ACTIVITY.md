@@ -108,6 +108,33 @@ says so. Stock schemas inspected include `tools/browser_use_cli.py`,
 `tools/tool_labels.py` and `agent/display.py`. When input metadata is unavailable,
 an explicitly delivered result URL/path or delegation goal supplies the detail.
 
+Code calls include their delivered `code` input, and memory retention includes
+its delivered `content` input. Both keep a visible second line even when input
+metadata is missing. `test/profile_tool_call_test.dart` exercises those exact
+calls as live receipts and saved rows at 360 dp, in both themes at ordinary and
+doubled text, including missing inputs and equal collapsed heights.
+
+Wing selects Material icons locally through `ProfileToolCall.iconFor`, using
+the delivered tool name rather than the displayed caption. Its single constant
+lookup maps commands to terminals, scripts to code brackets, file reads to
+documents, edits to edit notes, patches to differences, file searches to a
+document search, browsing to a globe, tasks to a checklist, scheduling to a
+calendar and delegation to a branching tree. The `hindsight_` namespace and
+`memory` use the outlined brain/head glyph. Unknown tools and connector bridges
+use a neutral extension glyph. Adding a tool's icon means adding one lookup
+entry; every live and saved tool row uses the same policy. Captions remain
+separate: the checked-in English catalog comes from Hermes Desktop, and
+connector labels can come from delivered events. Hermes supplies no icon ID.
+
+The icon and subtitle changes use the existing stock `name`/`args` delivery,
+verified at latest upstream main `2943ee6f19a2abd0cc93384db55643469e80dfcb` in
+`tui_gateway/tool_progress.py` and `tools/code_execution_tool.py` on 8 October
+2026. No backend changes are required. The widget regression also checks the
+rendered icon for each activity family and proves that a connector caption does
+not override its underlying tool identity. Static checks cannot establish the
+meaningful subtitle produced from a delivered payload or the rendered glyph;
+these behavioral checks guard those properties.
+
 Behavioral guards cover the actual receipt → history → cache encode → restore →
 refresh → timeline path in `test/profile_execution_activity_test.dart`, including
 row/call mismatch rejection and fresh zero-duration precedence.

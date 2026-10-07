@@ -356,6 +356,7 @@ String _inputDetail(
         'ref',
         'selector',
         'text',
+        'content',
         'code',
         'subagent_id',
       ]) ??

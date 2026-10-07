@@ -70,6 +70,16 @@ void main() {
       ('read_file', {'path': 'trip/items.json'}, 'trip/items.json'),
       ('skill_view', {'name': 'hermes-agent'}, 'hermes-agent'),
       (
+        'execute_code',
+        {'code': '# Compare rental prices\nprint(prices)'},
+        '# Compare rental prices print(prices)',
+      ),
+      (
+        'hindsight_retain',
+        {'content': 'Remember the booking\nand cancellation deadline.'},
+        'Remember the booking and cancellation deadline.',
+      ),
+      (
         'delegate_task',
         {
           'tasks': [

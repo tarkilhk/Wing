@@ -16,6 +16,7 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/chat_inline_image.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/widgets/activity_time.dart';
+import 'package:wing/core/widgets/compact_activity_row.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
 
@@ -36,9 +37,200 @@ void main() {
           .load();
     }
   });
+  testWidgets(
+    'tool icons describe the activity instead of defaulting to commands',
+    (tester) async {
+      final expected = <String, IconData>{
+        'hindsight_retain': Icons.psychology_outlined,
+        'hindsight_recall': Icons.psychology_outlined,
+        'hindsight_reflect': Icons.psychology_outlined,
+        'memory': Icons.psychology_outlined,
+        'execute_code': Icons.code_rounded,
+        'terminal': Icons.terminal_rounded,
+        'read_file': Icons.description_outlined,
+        'write_file': Icons.edit_note_outlined,
+        'edit_file': Icons.edit_note_outlined,
+        'patch': Icons.difference_outlined,
+        'list_files': Icons.folder_open_outlined,
+        'search_files': Icons.find_in_page_outlined,
+        'web_search': Icons.search,
+        'browser_navigate': Icons.language,
+        'browser_click': Icons.touch_app_outlined,
+        'browser_type': Icons.keyboard_outlined,
+        'skill_view': Icons.menu_book_outlined,
+        'image_generate': Icons.image_outlined,
+        'vision_analyze': Icons.image_search_outlined,
+        'todo_list': Icons.playlist_add_check_outlined,
+        'delegate_task': Icons.account_tree_outlined,
+        'cronjob': Icons.calendar_month_outlined,
+        'new_custom_tool': Icons.extension_outlined,
+        // A readable label must not disguise the underlying tool's purpose.
+        'tool_call': Icons.extension_outlined,
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: Column(
+                children: [
+                  for (final name in expected.keys)
+                    ProfileToolCall(
+                      key: ValueKey(name),
+                      call: ToolCallPresentation.live(
+                        GatewayToolActivity.fromGatewayEvent('tool.complete', {
+                          'tool_id': name,
+                          'name': name,
+                          if (name == 'tool_call')
+                            'labels': [
+                              {'text': 'Read file', 'name': 'connector.read'},
+                            ],
+                        })!,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      for (final entry in expected.entries) {
+        final row = tester.widget<CompactActivityRow>(
+          find.descendant(
+            of: find.byKey(ValueKey(entry.key)),
+            matching: find.byType(CompactActivityRow),
+          ),
+        );
+        expect(row.icon, entry.value, reason: entry.key);
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       for (final saved in [false, true]) {
+        testWidgets(
+          'code and memory have visible second lines in $brightness at $scale saved=$saved',
+          (tester) async {
+            tester.view.physicalSize = const Size(360, 900);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.reset);
+            final calls = [
+              for (final (id, name, args) in [
+                (
+                  'code',
+                  'execute_code',
+                  {'code': '# Compare rental prices\nprint(prices)'},
+                ),
+                (
+                  'retain',
+                  'hindsight_retain',
+                  {
+                    'content':
+                        'Remember the booking\nand cancellation deadline.',
+                  },
+                ),
+                ('missing-code', 'execute_code', <String, String>{}),
+                ('missing-retain', 'hindsight_retain', <String, String>{}),
+              ])
+                saved
+                    ? ToolCallPresentation.saved(
+                        TranscriptToolResult.fromRow({
+                          'role': 'tool',
+                          'tool_call_id': id,
+                          'tool_name': name,
+                          'args': args,
+                          'content': '{"success":true}',
+                          'duration_s': 2.1,
+                        }),
+                      )
+                    : ToolCallPresentation.live(
+                        GatewayToolActivity.fromGatewayEvent('tool.complete', {
+                          'tool_id': id,
+                          'name': name,
+                          'args': args,
+                          'result': {'success': true},
+                          'duration_s': 2.1,
+                        })!,
+                      ),
+            ];
+            await tester.pumpWidget(
+              MaterialApp(
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: Scaffold(
+                  body: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: RepaintBoundary(
+                      key: const ValueKey('code-memory-capture'),
+                      child: ColoredBox(
+                        color: wingTheme(brightness).scaffoldBackgroundColor,
+                        child: Column(
+                          children: [
+                            for (final call in calls)
+                              ProfileToolCall(call: call),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+            expect(
+              find.text('# Compare rental prices print(prices)'),
+              findsOneWidget,
+            );
+            expect(
+              find.text('Remember the booking and cancellation deadline.'),
+              findsOneWidget,
+            );
+            expect(find.text('No input details supplied'), findsNWidgets(2));
+            final rows = tester
+                .widgetList<CompactActivityRow>(find.byType(CompactActivityRow))
+                .toList();
+            expect(rows, hasLength(4));
+            final heights = <double>[];
+            for (final row in rows) {
+              expect(row.lines, hasLength(2));
+              final title = find.byWidget(row.lines.first);
+              final subtitle = find.byWidget(row.lines.last);
+              expect(tester.getSize(subtitle).height, greaterThan(0));
+              expect(
+                tester.getTopLeft(subtitle).dy,
+                closeTo(tester.getBottomLeft(title).dy, .01),
+              );
+              heights.add(tester.getSize(find.byWidget(row)).height);
+            }
+            expect(
+              heights.every((height) => (height - heights.first).abs() < .01),
+              isTrue,
+            );
+            if (capture && saved) {
+              final boundary = tester.renderObject<RenderRepaintBoundary>(
+                find.byKey(const ValueKey('code-memory-capture')),
+              );
+              await tester.runAsync(() async {
+                final image = await boundary.toImage();
+                final bytes = await image.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                final file = File(
+                  'build/tool-results/code-memory-${brightness.name}-$scale.png',
+                );
+                await file.parent.create(recursive: true);
+                await file.writeAsBytes(bytes!.buffer.asUint8List());
+                image.dispose();
+              });
+            }
+            expect(tester.takeException(), isNull);
+          },
+        );
         testWidgets(
           'skill batch results in $brightness at $scale saved=$saved',
           (tester) async {
