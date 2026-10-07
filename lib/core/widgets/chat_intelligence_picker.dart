@@ -287,6 +287,12 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
                           ),
                           const Spacer(),
                           IconButton(
+                            style: IconButton.styleFrom(
+                              minimumSize: const Size(36, 36),
+                              padding: EdgeInsets.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.standard,
+                            ),
                             tooltip: 'Close',
                             onPressed: _applying ? null : widget.onCancel,
                             icon: const Icon(Icons.close_rounded),
@@ -375,6 +381,13 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
                                         setState(() => _fastMode = value),
                             ),
                           PopupMenuButton<String>(
+                            style: IconButton.styleFrom(
+                              minimumSize: const Size(36, 36),
+                              padding: EdgeInsets.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.standard,
+                            ),
+                            padding: EdgeInsets.zero,
                             tooltip: 'More model options',
                             enabled: !_applying,
                             icon: const Icon(Icons.more_horiz_rounded),
@@ -399,6 +412,12 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
                         ],
                       ),
                       FilledButton(
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(64, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.standard,
+                        ),
                         onPressed: _applying ? null : _apply,
                         child: Text(_applying ? 'Applying…' : 'Apply'),
                       ),

@@ -142,7 +142,34 @@ void main() {
           }
           expect(
             tester.getSize(find.byKey(const Key('model-search'))).height,
-            lessThanOrEqualTo(48),
+            lessThanOrEqualTo(36),
+          );
+        }
+        if (scale == 1) {
+          final first = find.byKey(const Key('model-openai-codex-gpt-6.1-sol'));
+          final second = find.byKey(
+            const Key('model-openai-codex-gpt-6-astra'),
+          );
+          expect(
+            tester.getRect(second).top - tester.getRect(first).top,
+            lessThanOrEqualTo(36),
+            reason: 'Adjacent model rows must be dense',
+          );
+          expect(
+            tester
+                .getSize(find.byKey(const Key('model-filter-openai-codex')))
+                .height,
+            lessThanOrEqualTo(32),
+          );
+          expect(
+            tester
+                .getSize(find.byKey(const Key('chat-reasoning-control')))
+                .height,
+            lessThanOrEqualTo(36),
+          );
+          expect(
+            tester.getSize(find.byKey(const Key('chat-fast-control'))).height,
+            lessThanOrEqualTo(36),
           );
         }
         final prefix =
@@ -187,5 +214,109 @@ void main() {
         expect(tester.takeException(), isNull);
       });
     }
+  }
+  for (final brightness in Brightness.values) {
+    testWidgets('full Codex list fits without padded rows $brightness', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(412, 832);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final catalog = ModelCatalog.fromOptions({
+        'providers': [
+          {
+            'slug': 'openrouter',
+            'name': 'OpenRouter',
+            'models': ['anthropic/claude-sonnet-4.6'],
+          },
+          {
+            'slug': 'openai-codex',
+            'name': 'ChatGPT or Codex Subscription',
+            'models': [
+              'gpt-6.1-sol',
+              'gpt-6.1-sol-900k',
+              'gpt-6-astra',
+              'gpt-6-astra-900k',
+              'gpt-6-sol',
+              'gpt-6-sol-900k',
+              'gpt-6-luna',
+              'gpt-6-luna-900k',
+              'gpt-5.6-sol',
+              'gpt-5.6-sol-900k',
+              'gpt-5.6-terra',
+              'gpt-5.6-terra-900k',
+              'gpt-5.6-luna',
+              'gpt-5.6-luna-900k',
+            ],
+            'capabilities': {
+              'gpt-6.1-sol': {'reasoning': true, 'fast': true},
+            },
+          },
+        ],
+      }).choices;
+      final active = catalog.firstWhere((c) => c.model == 'gpt-6.1-sol');
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: frame,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: wingTheme(brightness),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => showChatIntelligencePicker(
+                    context: context,
+                    choices: catalog,
+                    initialChoice: active,
+                    initialReasoningEffort: 'high',
+                    initialFastMode: ChatFastMode.normal,
+                    defaultModel: active.model,
+                    profileName: 'Claw',
+                    refreshModels: () async => catalog,
+                    reviewProviderAccess: () async {},
+                    onCommit: (_) async => true,
+                  ),
+                  child: const Text('Open models'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open models'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final first = find.byKey(const Key('model-openai-codex-gpt-6.1-sol'));
+      final last = find.byKey(
+        const Key('model-openai-codex-gpt-5.6-luna-900k'),
+      );
+      expect(first.hitTestable(), findsOneWidget);
+      expect(
+        last.hitTestable(),
+        findsOneWidget,
+        reason: 'All 14 Codex models must fit on a normal phone',
+      );
+      expect(
+        tester.getRect(first).top -
+            tester.getRect(find.byType(BottomSheet)).top,
+        lessThanOrEqualTo(108),
+        reason: 'Header, search and tabs must fit in 108dp',
+      );
+      expect(find.text('Apply').hitTestable(), findsOneWidget);
+      if (capture) {
+        await tester.runAsync(() async {
+          final image = await tester
+              .renderObject<RenderRepaintBoundary>(find.byKey(frame))
+              .toImage();
+          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+          await File(
+            'build/model-picker-${brightness.name}-412-full-list.png',
+          ).writeAsBytes(bytes!.buffer.asUint8List());
+          image.dispose();
+        });
+      }
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+    });
   }
 }

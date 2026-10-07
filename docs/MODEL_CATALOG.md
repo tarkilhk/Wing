@@ -89,6 +89,6 @@ supersession, closure, error retention and per-account fidelity.
 partial reasoning/fast retries, model events arriving before their acknowledgement, and preserving ultrafast.
 `chat_intelligence_picker_test.dart` covers staging, control availability, cards,
 commit locks and cancellation. `intelligence_sheet_layout_test.dart` renders both
-themes at normal, enlarged and landscape sizes. Existing domain/view dependency
+themes at normal, enlarged and landscape sizes. Its density guard measures actual rendered row spacing, search, tabs and shortcut heights, and requires all 14 unpriced Codex choices to fit on a 412dp phone with Apply reachable. This catches inherited Material minimums and tap-target padding; source linting cannot establish the resolved layout. Existing domain/view dependency
 and intelligence read-admission guards protect the structural boundaries;
 behavioral tests establish ordering and uncertainty that import linting cannot.

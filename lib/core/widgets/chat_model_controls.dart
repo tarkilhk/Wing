@@ -43,6 +43,12 @@ class ChatReasoningControl extends StatelessWidget {
     return Builder(
       builder: (anchor) => IconButton(
         key: const Key('chat-reasoning-control'),
+        style: IconButton.styleFrom(
+          minimumSize: const Size(36, 36),
+          padding: const EdgeInsets.all(2),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.standard,
+        ),
         tooltip: 'Reasoning: ${chatReasoningEffortLabel(effort)}',
         onPressed: onChanged == null
             ? null
@@ -202,7 +208,9 @@ class ChatFastControl extends StatelessWidget {
     void toggle() =>
         onChanged?.call(mode.enabled ? ChatFastMode.normal : ChatFastMode.fast);
     final style = TextButton.styleFrom(
-      minimumSize: const Size(48, 48),
+      minimumSize: const Size(36, 36),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.standard,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       foregroundColor: mode.enabled ? tokens.accent : tokens.muted,
       backgroundColor: mode.enabled

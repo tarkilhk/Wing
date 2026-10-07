@@ -159,12 +159,12 @@ class _ModelChooserState extends State<ModelChooser> {
                       ? () => widget.onSelected(ModelSelection.model(choice))
                       : null,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 48),
+                    constraints: const BoxConstraints(minHeight: 36),
                     child: Padding(
                       padding: const EdgeInsets.only(
                         left: 8,
-                        top: 4,
-                        bottom: 4,
+                        top: 2,
+                        bottom: 2,
                       ),
                       child: Row(
                         children: [
@@ -254,6 +254,12 @@ class _ModelChooserState extends State<ModelChooser> {
           ),
           IconButton(
             key: Key('info-${choice.provider}-${choice.model}'),
+            style: IconButton.styleFrom(
+              minimumSize: const Size(36, 36),
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.standard,
+            ),
             tooltip: 'About ${choice.label}',
             onPressed: widget.enabled
                 ? () => showModelCard(context, choice)
@@ -350,19 +356,29 @@ class _ModelChooserState extends State<ModelChooser> {
                         height: 1.25,
                         color: tokens.muted,
                       ),
-                      constraints: const BoxConstraints(minHeight: 48),
+                      constraints: const BoxConstraints(minHeight: 36),
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+                        horizontal: 8,
+                        vertical: 4,
                       ),
                       prefixIconConstraints: const BoxConstraints(
-                        minWidth: 40,
-                        minHeight: 48,
+                        minWidth: 32,
+                        minHeight: 36,
+                      ),
+                      suffixIconConstraints: const BoxConstraints(
+                        minWidth: 36,
+                        minHeight: 36,
                       ),
                       prefixIcon: const Icon(Icons.search_rounded, size: 18),
                       suffixIcon: _query.isEmpty
                           ? null
                           : IconButton(
+                              style: IconButton.styleFrom(
+                                minimumSize: const Size(36, 36),
+                                padding: EdgeInsets.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.standard,
+                              ),
                               tooltip: 'Clear model search',
                               onPressed: () {
                                 _search.clear();
@@ -388,6 +404,12 @@ class _ModelChooserState extends State<ModelChooser> {
                     key:
                         widget.refreshKey ??
                         Key('refresh-${widget.keyPrefix}s'),
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(36, 36),
+                      padding: EdgeInsets.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.standard,
+                    ),
                     tooltip: 'Refresh models',
                     onPressed: widget.enabled && !_refreshing ? _refresh : null,
                     icon: _refreshing
@@ -421,9 +443,11 @@ class _ModelChooserState extends State<ModelChooser> {
                           selected: _provider == entry.key,
                           child: TextButton(
                             style: TextButton.styleFrom(
-                              minimumSize: const Size(48, 48),
+                              minimumSize: const Size(36, 32),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.standard,
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
+                                horizontal: 8,
                               ),
                               foregroundColor: _provider == entry.key
                                   ? tokens.accent
@@ -555,7 +579,7 @@ class _ModelChooserState extends State<ModelChooser> {
                                     ),
                                   ),
                               ],
-                              const SizedBox(width: 48),
+                              const SizedBox(width: 36),
                             ],
                           ),
                         ),
@@ -628,5 +652,5 @@ class _ModelChooserState extends State<ModelChooser> {
   }
 
   double mathFilterHeight(BuildContext context) =>
-      48 + (MediaQuery.textScalerOf(context).scale(12) - 12).clamp(0, 40);
+      32 + (MediaQuery.textScalerOf(context).scale(12) - 12).clamp(0, 40);
 }
