@@ -456,6 +456,16 @@
       "feature": "attachments-and-sharing",
       "library": "lib/core/presentation/attachment_preview_image.dart"
     },
+    "lib/core/presentation/desktop_tool_labels.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/desktop_tool_labels.dart"
+    },
+    "lib/core/presentation/tool_call_presentation.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/tool_call_presentation.dart"
+    },
     "lib/core/screens/administration/admin_connector_routes.dart": {
       "role": "composition",
       "feature": "administration-connectors",
@@ -1381,10 +1391,20 @@
       "feature": "ui-foundations",
       "library": "lib/core/utils/relative_time.dart"
     },
+    "lib/core/utils/tool_activity_clock.dart": {
+      "role": "utility",
+      "feature": "chat-activity",
+      "library": "lib/core/utils/tool_activity_clock.dart"
+    },
     "lib/core/widgets/activity_shimmer.dart": {
       "role": "view",
       "feature": "chat-activity",
       "library": "lib/core/widgets/activity_shimmer.dart"
+    },
+    "lib/core/widgets/activity_time.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/activity_time.dart"
     },
     "lib/core/widgets/admin_model_picker.dart": {
       "role": "view",
@@ -1655,6 +1675,11 @@
       "role": "view",
       "feature": "chat-activity",
       "library": "lib/core/widgets/profile_tool_activity.dart"
+    },
+    "lib/core/widgets/profile_tool_call.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/profile_tool_call.dart"
     },
     "lib/core/widgets/profile_transcript_disclosure.dart": {
       "role": "view",

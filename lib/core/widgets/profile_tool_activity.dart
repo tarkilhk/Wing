@@ -1,4 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import '../presentation/tool_call_presentation.dart';
+import 'profile_tool_call.dart';
 import 'profile_activity_tabs.dart';
 import '../models/transcript_message.dart';
 import '../models/transcript_timeline.dart';
@@ -62,6 +66,7 @@ class ProfileToolActivitySection extends StatelessWidget {
     this.tabs = const [],
     this.thinking,
     this.liveToolCount = 0,
+    this.loadImage,
   });
   final TranscriptTimelineSection section;
   final int? expandedMessageId;
@@ -71,6 +76,7 @@ class ProfileToolActivitySection extends StatelessWidget {
   final List<ProfileActivityTab> tabs;
   final Widget? thinking;
   final int liveToolCount;
+  final Future<Uint8List> Function(String)? loadImage;
 
   @override
   Widget build(BuildContext context) {
@@ -80,12 +86,16 @@ class ProfileToolActivitySection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (section.precedingLatestReview case final preceding?)
-            ProfileToolActivitySection(section: preceding),
+            ProfileToolActivitySection(
+              section: preceding,
+              loadImage: loadImage,
+            ),
           ProfileReviewNoticeRow(text: latestReview),
         ],
       );
     }
     final count = section.toolCount;
+    final total = count + liveToolCount;
     final reviews = section.reviewCount;
     final expanded =
         expandedMessageId != null &&
@@ -93,11 +103,11 @@ class ProfileToolActivitySection extends StatelessWidget {
     return ProfileActivitySection(
       tabs: tabs,
       thinking: thinking,
-      toolCount: count > 0 ? count : liveToolCount,
+      toolCount: total,
       initiallyExpanded: expanded,
       subtitle: Text(
         [
-          if (count > 0) '$count tool ${count == 1 ? 'call' : 'calls'}',
+          if (total > 0) '$total tool ${total == 1 ? 'call' : 'calls'}',
           if (reviews > 0) '$reviews ${reviews == 1 ? 'review' : 'reviews'}',
         ].join(' · '),
       ),
@@ -113,6 +123,7 @@ class ProfileToolActivitySection extends StatelessWidget {
           else
             ProfileToolActivity(
               results: group.toolResults,
+              loadImage: loadImage,
               initiallyExpanded:
                   expandedMessageId != null &&
                   group.containsMessage(expandedMessageId!),
@@ -125,7 +136,8 @@ class ProfileToolActivitySection extends StatelessWidget {
   }
 }
 
-/// Disclosure for contiguous tool results. Never contains approvals or questions.
+/// Contiguous outputs retain their transcript grouping and focus identities;
+/// every call has its own readable disclosure inside the Tools tab.
 class ProfileToolActivity extends StatelessWidget {
   ProfileToolActivity({
     super.key,
@@ -133,72 +145,43 @@ class ProfileToolActivity extends StatelessWidget {
     this.initiallyExpanded = false,
     this.focusedMessageId,
     this.focusedMessageKey,
+    this.loadImage,
   }) : results = List.unmodifiable(results);
   final List<TranscriptToolResult> results;
   final bool initiallyExpanded;
   final int? focusedMessageId;
   final GlobalKey? focusedMessageKey;
+  final Future<Uint8List> Function(String)? loadImage;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final name = results.length == 1
-        ? results.single.name
-        : '${results.length} tool results';
-    return ProfileTranscriptDisclosure(
-      initiallyExpanded: initiallyExpanded,
-      maintainState: false,
-      icon: Icons.terminal_rounded,
-      label: name,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ProfileActivityGuide(
-          inset: 0,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final result in results)
-                Container(
-                  key: focusedMessageId != null && result.id == focusedMessageId
-                      ? focusedMessageKey
-                      : null,
-                  decoration:
-                      focusedMessageId != null && result.id == focusedMessageId
-                      ? BoxDecoration(
-                          color: colors.primaryContainer.withValues(alpha: .45),
-                          border: Border.all(color: colors.primary, width: 2),
-                          borderRadius: BorderRadius.circular(6),
-                        )
-                      : null,
-                  padding: const EdgeInsets.only(top: 4, bottom: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (results.length > 1)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Text(
-                            result.name,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w400,
-                              color: colors.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      SelectableText(
-                        result.text,
-                        style: TextStyle(
-                          fontSize: 13,
-                          height: 1.4,
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
+        for (final result in results)
+          Container(
+            key: focusedMessageId != null && result.id == focusedMessageId
+                ? focusedMessageKey
+                : result.id == null
+                ? null
+                : ValueKey(('saved-tool', result.id)),
+            decoration:
+                focusedMessageId != null && result.id == focusedMessageId
+                ? BoxDecoration(
+                    color: colors.primaryContainer.withValues(alpha: .45),
+                    border: Border.all(color: colors.primary, width: 2),
+                    borderRadius: BorderRadius.circular(6),
+                  )
+                : null,
+            child: ProfileToolCall(
+              call: ToolCallPresentation.saved(result),
+              initiallyExpanded:
+                  initiallyExpanded &&
+                  (focusedMessageId == null || result.id == focusedMessageId),
+              loadImage: loadImage,
+            ),
           ),
-        ),
       ],
     );
   }

@@ -34,7 +34,7 @@ void main() {
       expect(activity.result, 'Large result is intentionally not surfaced');
     });
 
-    test('bounds raw arguments and result payloads', () {
+    test('preserves full delivered arguments and result payloads', () {
       final activity = GatewayToolActivity.fromGatewayEvent('tool.complete', {
         'tool_id': 'tool-1',
         'name': 'read_file',
@@ -43,8 +43,8 @@ void main() {
       })!;
 
       expect(activity.arguments, '{"path":"/tmp/file"}');
-      expect(activity.result, hasLength(12000));
-      expect(activity.result, endsWith('…'));
+      expect(activity.result, hasLength(13000));
+      expect(activity.result, 'x' * 13000);
     });
 
     test('preserves a tool error inside the canonical result', () {

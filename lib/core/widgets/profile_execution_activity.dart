@@ -1,4 +1,8 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
+
+import '../presentation/tool_call_presentation.dart';
+import 'profile_tool_call.dart';
 
 import 'package:flutter/material.dart';
 
@@ -10,62 +14,24 @@ import 'profile_activity_tabs.dart';
 
 class ProfileLiveToolActivity extends StatelessWidget {
   final Iterable<GatewayToolActivity> activities;
+  final Future<Uint8List> Function(String)? loadImage;
 
-  const ProfileLiveToolActivity({super.key, required this.activities});
+  const ProfileLiveToolActivity({
+    super.key,
+    required this.activities,
+    this.loadImage,
+  });
 
   @override
-  Widget build(BuildContext context) => ProfileTranscriptDisclosure(
+  Widget build(BuildContext context) => Column(
     key: const ValueKey('live-tool-activity'),
-    icon: activities.any((activity) => !activity.isTerminal)
-        ? Icons.pending_outlined
-        : Icons.terminal_rounded,
-    label: 'Current tools',
-    summary: Text(
-      activities.any((activity) => !activity.isTerminal)
-          ? '${activities.where((activity) => !activity.isTerminal).length} running'
-          : '${activities.length} tool ${activities.length == 1 ? 'call' : 'calls'}',
-    ),
+    crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       for (final activity in activities)
-        ProfileTranscriptDisclosure(
-          key: ValueKey(('live-tool', activity.toolId ?? activity.name)),
-          maintainState: false,
-          icon: activity.isTerminal
-              ? Icons.flag_outlined
-              : Icons.pending_outlined,
-          label: activity.displayName,
-          summary: Text(activity.statusLabel),
-          children: [
-            ProfileActivityGuide(
-              inset: 0,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (activity.detail case final detail?)
-                    SelectableText(
-                      detail,
-                      style: const TextStyle(fontSize: 13, height: 1.4),
-                    ),
-                  if (activity.arguments case final arguments?) ...[
-                    const SizedBox(height: 8),
-                    const Text('Arguments'),
-                    SelectableText(
-                      arguments,
-                      style: const TextStyle(fontSize: 13, height: 1.4),
-                    ),
-                  ],
-                  if (activity.result case final result?) ...[
-                    const SizedBox(height: 8),
-                    const Text('Result'),
-                    SelectableText(
-                      result,
-                      style: const TextStyle(fontSize: 13, height: 1.4),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
+        ProfileToolCall(
+          key: ValueKey(('live-tool', activity.toolId)),
+          call: ToolCallPresentation.live(activity),
+          loadImage: loadImage,
         ),
     ],
   );
@@ -86,12 +52,34 @@ class ProfileTodoPanel extends StatelessWidget {
     final completed = todos
         .where((todo) => todo.status == GatewayTodoStatus.completed)
         .length;
+    final pending = todos
+        .where((todo) => todo.status == GatewayTodoStatus.pending)
+        .length;
+    final working = todos
+        .where((todo) => todo.status == GatewayTodoStatus.inProgress)
+        .length;
+    final cancelled = todos
+        .where((todo) => todo.status == GatewayTodoStatus.cancelled)
+        .length;
+    final colors = WingTokens.of(context);
     final children = <Widget>[
+      Padding(
+        padding: EdgeInsets.fromLTRB(embedded ? 0 : 12, 0, 0, 8),
+        child: Text(
+          [
+            '$completed of ${todos.length} completed',
+            if (working > 0) '$working in progress',
+            if (pending > 0) '$pending pending',
+            if (cancelled > 0) '$cancelled cancelled',
+          ].join(' · '),
+          style: TextStyle(fontSize: 12, height: 1.5, color: colors.muted),
+        ),
+      ),
       for (final todo in todos)
         ListTile(
           dense: true,
-          minTileHeight: 32,
-          minVerticalPadding: 0,
+          minTileHeight: 48,
+          minVerticalPadding: 6,
           minLeadingWidth: 16,
           horizontalTitleGap: 8,
           contentPadding: EdgeInsets.only(
@@ -104,9 +92,33 @@ class ProfileTodoPanel extends StatelessWidget {
           title: SelectableText(
             todo.content,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 14,
               height: 1.4,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: todo.status == GatewayTodoStatus.inProgress
+                  ? FontWeight.w500
+                  : FontWeight.w400,
+              color:
+                  todo.status == GatewayTodoStatus.completed ||
+                      todo.status == GatewayTodoStatus.cancelled
+                  ? colors.muted
+                  : colors.onSurface,
+            ),
+          ),
+          subtitle: Text(
+            '${todo.parent == null ? '' : 'Subtask · '}${switch (todo.status) {
+              GatewayTodoStatus.pending => 'Pending',
+              GatewayTodoStatus.inProgress => 'In progress',
+              GatewayTodoStatus.completed => 'Completed',
+              GatewayTodoStatus.cancelled => 'Cancelled',
+            }}',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.5,
+              color: todo.status == GatewayTodoStatus.completed
+                  ? colors.success
+                  : todo.status == GatewayTodoStatus.inProgress
+                  ? colors.accent
+                  : colors.muted,
             ),
           ),
         ),
@@ -153,7 +165,7 @@ class _TodoStatusIcon extends StatelessWidget {
               padding: const EdgeInsets.all(1),
               child: CircularProgressIndicator(
                 strokeWidth: 1.5,
-                color: tokens.muted,
+                color: tokens.accent,
                 value: MediaQuery.disableAnimationsOf(context) ? 0.75 : null,
               ),
             ),

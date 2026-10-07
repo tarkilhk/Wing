@@ -3,6 +3,7 @@ import '../models/notification_focus.dart';
 import '../models/transcript_timeline.dart' as timeline_facts;
 import '../widgets/studio_error.dart';
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 import '../services/profile_workspace_controller.dart';
@@ -26,6 +27,7 @@ class ProfileTranscript extends StatefulWidget {
   final List<ProfileActivityTab> activityTabs;
   final Widget? activityThinking;
   final int liveToolCount;
+  final Future<Uint8List> Function(String)? loadImage;
   final timeline_facts.TranscriptTimeline timeline;
   final int? focusedMessageId;
   final VoidCallback? onBackToLatest;
@@ -42,6 +44,7 @@ class ProfileTranscript extends StatefulWidget {
     this.activityTabs = const [],
     this.activityThinking,
     this.liveToolCount = 0,
+    this.loadImage,
     this.focusedMessageId,
     this.onBackToLatest,
     this.notificationAnchors = const {},
@@ -575,6 +578,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                     child: section.isActivity
                         ? ProfileToolActivitySection(
                             section: section,
+                            loadImage: widget.loadImage,
                             showLatestReview:
                                 rowIndex == 0 && chat.reading.streaming.isEmpty,
                             tabs: rowIndex == 0 && joinCurrentActivity
@@ -814,6 +818,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                   if (section.isActivity)
                     ProfileToolActivitySection(
                       section: section,
+                      loadImage: widget.loadImage,
                       expandedMessageId: targetId,
                       focusedMessageKey: _focusedRow,
                     )

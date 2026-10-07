@@ -31,13 +31,40 @@ final class TranscriptTimeline {
     int? liveMessageIndex,
   }) {
     final entries = <TranscriptTimelineEntry>[];
+    // Saved outputs refer to assistant calls by their backend identity. Calls
+    // with no assistant prose must still contribute their inputs.
+    final calls = <String, Map>{};
+    final callLabels = <String, Object?>{};
+    for (final row in rows) {
+      if (row['role'] != 'assistant' || row['tool_calls'] is! List) continue;
+      for (final call in row['tool_calls'] as List) {
+        if (call is Map && call['id'] is String && call['function'] is Map) {
+          calls[call['id'] as String] = call['function'] as Map;
+          final labels = row['tool_call_labels'];
+          if (labels is Map) {
+            callLabels[call['id'] as String] = labels[call['id']];
+          }
+        }
+      }
+    }
     for (var index = 0; index < rows.length; index++) {
       final row = rows[index];
+      final call = row['role'] == 'tool' ? calls[row['tool_call_id']] : null;
+      final readingRow = call == null
+          ? row
+          : <String, dynamic>{
+              ...row,
+              if (row['tool_name'] == null) 'tool_name': call['name'],
+              if (row['args'] == null) 'args': call['arguments'],
+              if (row['labels'] == null &&
+                  callLabels[row['tool_call_id']] != null)
+                'labels': callLabels[row['tool_call_id']],
+            };
       final hidden = isHiddenAnswerMessage(row);
       final streaming = index == liveMessageIndex;
       final sender = streaming ? null : interAgentReplySender(rows, index);
       final savedId = answerMessageId(row);
-      final message = TranscriptMessage.fromRow(row);
+      final message = TranscriptMessage.fromRow(readingRow);
       final branchAnswer =
           row['role'] == 'assistant' &&
           savedId != null &&
@@ -49,7 +76,7 @@ final class TranscriptTimeline {
           presentationId: presentationId(row),
           message: message,
           tool: row['role'] == 'tool'
-              ? message.tool ?? TranscriptToolResult.fromRow(row)
+              ? message.tool ?? TranscriptToolResult.fromRow(readingRow)
               : null,
           reviewText: reviewMessageText(row),
           suppressed: hidden,

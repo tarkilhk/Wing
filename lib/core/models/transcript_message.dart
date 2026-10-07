@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'answer_versions.dart';
+import 'gateway_activity.dart';
 import 'review_notice.dart';
 import 'transcript_notice.dart';
 import 'user_message_content.dart';
@@ -158,11 +161,25 @@ final class TranscriptToolResult {
     required this.id,
     required this.name,
     required this.text,
+    required this.rawResult,
+    this.callId,
+    this.arguments,
+    this.context,
+    this.summary,
+    this.durationSeconds,
+    this.labels = const [],
   });
 
   final Object? id;
   final String name;
   final String text;
+  final String rawResult;
+  final String? callId;
+  final String? arguments;
+  final String? context;
+  final String? summary;
+  final double? durationSeconds;
+  final List<ToolCallLabel> labels;
 
   factory TranscriptToolResult.fromRow(Map<String, dynamic> row) {
     final id = row['id'];
@@ -170,6 +187,22 @@ final class TranscriptToolResult {
       id: id is int || id is String ? id : null,
       name: row['tool_name']?.toString() ?? 'Tool result',
       text: (row['display_content'] ?? row['content'] ?? '').toString(),
+      rawResult: (row['content'] ?? '').toString(),
+      callId: row['tool_call_id'] as String?,
+      context: row['context'] as String?,
+      summary: row['summary'] as String?,
+      arguments: row['args'] == null
+          ? null
+          : row['args'] is String
+          ? row['args'] as String
+          : jsonEncode(row['args']),
+      durationSeconds:
+          row['duration_s'] is num &&
+              (row['duration_s'] as num).isFinite &&
+              (row['duration_s'] as num) >= 0
+          ? (row['duration_s'] as num).toDouble()
+          : null,
+      labels: ToolCallLabel.parse(row['labels']),
     );
   }
 }

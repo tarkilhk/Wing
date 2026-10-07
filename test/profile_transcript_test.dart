@@ -691,11 +691,11 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     await tester.tap(find.text('Activity'));
     await tester.pumpAndSettle();
     await Scrollable.ensureVisible(
-      tester.element(find.text('2 tool results')),
+      tester.element(find.text('Tool 1')),
       alignment: 0.3,
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('2 tool results'));
+    await tester.tap(find.text('Tool 1'));
     await tester.pumpAndSettle();
     expect(find.text('Output 1'), findsOneWidget);
     chat.reading.installSavedHistory([tool(0), ...chat.reading.messages]);
@@ -706,7 +706,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     chat.reading.installSavedHistory(addedTool);
     await rebuildPresentation(tester);
     expect(find.text('Output 1'), findsOneWidget);
-    expect(find.text('Output 4'), findsOneWidget);
+    expect(find.text('Output 4'), findsNothing);
   });
 
   testWidgets('expanding long tool output keeps its header in place', (
@@ -776,10 +776,6 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       extraTail = [ProfileReasoningDisclosure(text: 'Reasoning line\n' * 100)];
       await show(tester);
       await toggleInPlace(tester, find.text('Activity'));
-      final current = find.text('Current tools');
-      await tester.ensureVisible(current);
-      await tester.pumpAndSettle();
-      await toggleInPlace(tester, current);
       final tool = find.text('Delegate task');
       await tester.ensureVisible(tool);
       await tester.pumpAndSettle();
@@ -854,21 +850,21 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     await show(tester);
     expect(find.text('Activity'), findsOneWidget);
     expect(find.text('3 tool calls'), findsOneWidget);
-    expect(find.text('read_file'), findsNothing);
-    expect(find.text('2 tool results'), findsNothing);
+    expect(find.text('Read file'), findsNothing);
+    expect(find.text('Tool 1'), findsNothing);
     expect(find.text('Message 5'), findsOneWidget);
 
     await tester.tap(find.text('Activity'));
     await tester.pumpAndSettle();
-    expect(find.text('read_file'), findsOneWidget);
-    expect(find.text('2 tool results'), findsOneWidget);
+    expect(find.text('Read file'), findsOneWidget);
+    expect(find.text('Patched file'), findsOneWidget);
     expect(find.text('Read output'), findsNothing);
     await Scrollable.ensureVisible(
-      tester.element(find.text('read_file')),
+      tester.element(find.text('Read file')),
       alignment: 0.3,
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('read_file'));
+    await tester.tap(find.text('Read file'));
     await tester.pumpAndSettle();
     expect(find.text('Read output'), findsOneWidget);
     expect(find.text('Patch output'), findsNothing);
@@ -884,7 +880,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     chat.reading.recordScrollOffset(0);
     await show(tester);
     expect(find.text('Activity'), findsOneWidget);
-    expect(find.text('read_file'), findsNothing);
+    expect(find.text('Read file'), findsNothing);
   });
 
   testWidgets('long tool history stays compact and prose separates sections', (

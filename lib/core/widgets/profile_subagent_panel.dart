@@ -1,6 +1,10 @@
 import 'studio_error.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../presentation/tool_call_presentation.dart';
+import '../theme/wing_theme.dart';
+import 'activity_time.dart';
 import 'profile_transcript_disclosure.dart';
 
 import '../models/gateway_insight.dart';
@@ -97,56 +101,10 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
             child: Text('No live subagents for this chat.'),
           ),
         for (final activity in chat.subagents)
-          ListTile(
+          _SubagentRow(
             key: ValueKey(('subagent', chat.key, activity.id)),
-            dense: true,
-            minLeadingWidth: 16,
-            horizontalTitleGap: 8,
-            titleTextStyle: TextStyle(
-              fontSize: 13,
-              height: 1.4,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            subtitleTextStyle: TextStyle(
-              fontSize: 13,
-              height: 1.4,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(
-              chat.unconfirmedSubagentIds.contains(activity.id)
-                  ? Icons.help_outline
-                  : _statusIcon(activity.status),
-              size: 16,
-              color:
-                  !chat.unconfirmedSubagentIds.contains(activity.id) &&
-                      activity.status == GatewaySubagentStatus.failed
-                  ? Theme.of(context).colorScheme.error
-                  : null,
-            ),
-            minTileHeight: 32,
-            minVerticalPadding: 0,
-            title: Wrap(
-              spacing: 8,
-              runSpacing: 2,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(
-                  _goal(activity),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  _activitySubtitle(
-                    activity,
-                    unconfirmed: chat.unconfirmedSubagentIds.contains(
-                      activity.id,
-                    ),
-                  ),
-                ),
-                const Icon(Icons.chevron_right, size: 16),
-              ],
-            ),
+            activity: activity,
+            unconfirmed: chat.unconfirmedSubagentIds.contains(activity.id),
             onTap: () => _openSubagent(activity.id),
           ),
         Align(
@@ -264,7 +222,19 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
                       ),
                     ),
                   const SizedBox(height: 4),
-                  Text(_activitySubtitle(current, unconfirmed: unconfirmed)),
+                  _SubagentStatusLine(
+                    activity: current,
+                    unconfirmed: unconfirmed,
+                  ),
+                  if (_activityText(current) case final text?) ...[
+                    const SizedBox(height: 6),
+                    SelectableText(
+                      text,
+                      style: const TextStyle(fontSize: 13, height: 1.4),
+                    ),
+                  ],
+                  const SizedBox(height: 6),
+                  _SubagentMetadata(activity: current),
                   if (current.acceptingSteer && canControl) ...[
                     const SizedBox(height: 12),
                     TextField(
@@ -383,7 +353,7 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: SelectableText(
-                line,
+                _recentActivityText(line),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
@@ -393,10 +363,7 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
   }
 }
 
-String _activitySubtitle(
-  GatewaySubagentActivity activity, {
-  bool unconfirmed = false,
-}) {
+String _statusLabel(GatewaySubagentActivity activity, bool unconfirmed) {
   final status = switch (activity.status) {
     GatewaySubagentStatus.queued => 'Queued',
     GatewaySubagentStatus.running => 'Running',
@@ -404,25 +371,191 @@ String _activitySubtitle(
     GatewaySubagentStatus.failed => 'Failed',
     GatewaySubagentStatus.interrupted => 'Interrupted',
   };
-  final detail = activity.isTerminal
-      ? activity.detail ?? activity.lastTool ?? activity.model
-      : activity.lastTool ?? activity.detail ?? activity.model;
-  final startedAt = activity.startedAt;
-  final elapsedSeconds = startedAt == null || activity.isTerminal
-      ? null
-      : (DateTime.now().millisecondsSinceEpoch / 1000 - startedAt)
-            .clamp(0, double.maxFinite)
-            .toInt();
-  final elapsed = elapsedSeconds == null
-      ? null
-      : elapsedSeconds < 60
-      ? '${elapsedSeconds}s'
-      : '${elapsedSeconds ~/ 60}m';
-  return [
-    unconfirmed ? 'Last seen ${status.toLowerCase()}' : status,
-    ?elapsed,
-    if (detail != null && detail.isNotEmpty) detail,
-  ].join(' · ');
+  return unconfirmed ? 'Last seen ${status.toLowerCase()}' : status;
+}
+
+String? _activityText(GatewaySubagentActivity activity) {
+  if (activity.isTerminal && activity.detail != null) return activity.detail;
+  if (activity.phase == GatewaySubagentPhase.thinking) return 'Thinking';
+  if (activity.lastTool case final tool?) {
+    final label = ToolCallPresentation.titleFor(
+      tool,
+      completed: activity.isTerminal,
+    );
+    final detail = activity.detail;
+    return detail == null || detail == tool ? label : '$label · $detail';
+  }
+  return activity.detail;
+}
+
+String _recentActivityText(String line) {
+  if (!line.startsWith('Tool: ')) return line;
+  final value = line.substring(6);
+  final split = value.indexOf(' · ');
+  final name = split < 0 ? value : value.substring(0, split);
+  final caption = ToolCallPresentation.titleFor(name, completed: false);
+  return split < 0 ? caption : '$caption${value.substring(split)}';
+}
+
+class _SubagentRow extends StatelessWidget {
+  const _SubagentRow({
+    super.key,
+    required this.activity,
+    required this.unconfirmed,
+    required this.onTap,
+  });
+  final GatewaySubagentActivity activity;
+  final bool unconfirmed;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WingTokens.of(context);
+    final metadata = [
+      ?activity.model,
+      if (activity.toolCount case final count?)
+        '$count ${count == 1 ? 'tool call' : 'tool calls'}',
+    ].join(' · ');
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(vertical: 4),
+      minTileHeight: 48,
+      minLeadingWidth: 16,
+      horizontalTitleGap: 8,
+      leading: Icon(
+        unconfirmed ? Icons.help_outline : _statusIcon(activity.status),
+        size: 16,
+        color: unconfirmed
+            ? colors.muted
+            : activity.status == GatewaySubagentStatus.failed
+            ? colors.danger
+            : activity.status == GatewaySubagentStatus.completed
+            ? colors.success
+            : activity.status == GatewaySubagentStatus.running
+            ? colors.accent
+            : colors.muted,
+      ),
+      title: Text(
+        _goal(activity),
+        // ListTile's inherited title style defaults to one line. Explicitly
+        // allow the bounded backend goal to wrap at accessibility text sizes.
+        maxLines: MediaQuery.textScalerOf(context).scale(14) > 21 ? 99 : 2,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          height: 1.3,
+          color: colors.onSurface,
+        ),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 3),
+          _SubagentStatusLine(activity: activity, unconfirmed: unconfirmed),
+          if (_activityText(activity) case final text?)
+            Text(
+              text,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, height: 1.5, color: colors.muted),
+            ),
+          if (metadata.isNotEmpty)
+            Text(
+              metadata,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, height: 1.5, color: colors.muted),
+            ),
+        ],
+      ),
+      trailing: Icon(Icons.chevron_right, size: 16, color: colors.muted),
+      onTap: onTap,
+    );
+  }
+}
+
+class _SubagentStatusLine extends StatelessWidget {
+  const _SubagentStatusLine({
+    required this.activity,
+    required this.unconfirmed,
+  });
+  final GatewaySubagentActivity activity;
+  final bool unconfirmed;
+  @override
+  Widget build(BuildContext context) {
+    final colors = WingTokens.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Text(
+            _statusLabel(activity, unconfirmed),
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.5,
+              color: unconfirmed
+                  ? colors.muted
+                  : activity.status == GatewaySubagentStatus.failed
+                  ? colors.danger
+                  : activity.status == GatewaySubagentStatus.completed
+                  ? colors.success
+                  : activity.status == GatewaySubagentStatus.running
+                  ? colors.accent
+                  : colors.muted,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        ActivityTime(
+          subject: 'Agent',
+          durationSeconds: activity.isTerminal
+              ? activity.durationSeconds
+              : null,
+          backendStartedAt:
+              !unconfirmed && activity.status == GatewaySubagentStatus.running
+              ? activity.startedAt
+              : null,
+        ),
+      ],
+    );
+  }
+}
+
+class _SubagentMetadata extends StatelessWidget {
+  const _SubagentMetadata({required this.activity});
+  final GatewaySubagentActivity activity;
+  @override
+  Widget build(BuildContext context) {
+    final values = [
+      'Agent ID: ${activity.id}',
+      if (activity.parentId case final value?) 'Parent agent: $value',
+      if (activity.delegationId case final value?) 'Delegation ID: $value',
+      if (activity.model case final value?) 'Model: $value',
+      if (activity.toolCount case final value?) 'Tool calls: $value',
+      if (activity.startedAt case final value?)
+        'Backend start (Unix seconds): $value',
+      if (activity.durationSeconds case final value?)
+        'Backend duration (seconds): $value',
+    ].join('\n');
+    return ProfileTranscriptDisclosure(
+      label: 'Details',
+      icon: Icons.info_outline,
+      children: [
+        SelectableText(
+          values,
+          style: const TextStyle(fontSize: 12, height: 1.5),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () => Clipboard.setData(ClipboardData(text: values)),
+            icon: const Icon(Icons.copy_outlined, size: 16),
+            label: const Text('Copy details'),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 String _goal(GatewaySubagentActivity activity) =>

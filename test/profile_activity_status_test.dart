@@ -265,7 +265,7 @@ void main() {
 
   test('a new submission clears the previous execution phase', () async {
     host.event('a', 'message.start');
-    host.event('a', 'tool.start', {'name': 'web_search'});
+    host.event('a', 'tool.start', {'name': 'web_search', 'tool_id': 'one'});
     runtime.recovered();
     runtime.reconcileOpenRequests(const []);
     runtime.cancelRequest({'id': 'file-server', 'method': 'approval'});
@@ -292,7 +292,7 @@ void main() {
     'reconnect waits for fresh activity instead of reusing old text',
     () async {
       host.event('a', 'message.start');
-      host.event('a', 'tool.start', {'name': 'web_search'});
+      host.event('a', 'tool.start', {'name': 'web_search', 'tool_id': 'one'});
       host.running = true;
       host.inflight = {'assistant': 'Previous partial text', 'streaming': true};
       await controller.reconnect(chat.key.workspace);

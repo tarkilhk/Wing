@@ -6310,7 +6310,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
       case 'tool.generating':
       case 'tool.start':
       case 'tool.complete':
-        chat._runtime.observeTool(event.type, event.data);
+        final activity = chat._runtime.observeTool(event.type, event.data);
+        if (activity != null && event.type != 'tool.generating') {
+          chat.reading.observeTool(activity);
+        }
       case 'todo.updated':
         _applyTodoSnapshot(chat, event.data);
       case 'subagent.spawn_requested':

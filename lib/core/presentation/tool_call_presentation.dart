@@ -1,0 +1,343 @@
+import 'dart:convert';
+
+import '../models/gateway_activity.dart';
+import '../models/transcript_message.dart';
+import 'desktop_tool_labels.dart';
+
+enum ToolCallOutcome { running, completed, success, warning, error }
+
+/// Readable projection of delivered facts. It owns no execution or transport.
+final class ToolCallPresentation {
+  ToolCallPresentation._({
+    required this.name,
+    required this.title,
+    required this.target,
+    required this.status,
+    required this.outcome,
+    required this.details,
+    required this.arguments,
+    required this.result,
+    required this.labels,
+    this.callId,
+    this.context,
+    this.summary,
+    this.imageTarget,
+    this.durationSeconds,
+    this.startedAt,
+  });
+
+  final String name;
+  final String? callId;
+  final String? context;
+  final String? summary;
+  final String title;
+  final String? target;
+  final String status;
+  final ToolCallOutcome outcome;
+  final List<({String label, String text, bool markdown})> details;
+  final String? arguments;
+  final String? result;
+  final List<ToolCallLabel> labels;
+  final String? imageTarget;
+  final double? durationSeconds;
+  final Duration? startedAt;
+
+  /// Shared desktop captions for a tool name delivered by Hermes.
+  static String titleFor(String name, {required bool completed}) {
+    final catalog = desktopToolLabels[name];
+    if (name == 'skill_view') return completed ? 'Read skill' : 'Reading skill';
+    if (catalog != null) return completed ? catalog.done : catalog.pending;
+    return _humanize(name);
+  }
+
+  factory ToolCallPresentation.live(GatewayToolActivity activity) => _project(
+    name: activity.name,
+    callId: activity.toolId,
+    arguments: activity.arguments,
+    result: activity.result,
+    labels: activity.labels,
+    completed: activity.isTerminal,
+    durationSeconds: activity.durationSeconds,
+    startedAt: activity.startedAt,
+    context: activity.context,
+    summary: activity.summary,
+  );
+
+  factory ToolCallPresentation.saved(TranscriptToolResult result) => _project(
+    name: result.name,
+    callId: result.callId,
+    arguments: result.arguments,
+    result: result.rawResult.isEmpty ? result.text : result.rawResult,
+    labels: result.labels,
+    completed: true,
+    durationSeconds: result.durationSeconds,
+    context: result.context,
+    summary: result.summary,
+  );
+
+  static ToolCallPresentation _project({
+    required String name,
+    required String? arguments,
+    required String? result,
+    required List<ToolCallLabel> labels,
+    required bool completed,
+    String? callId,
+    double? durationSeconds,
+    Duration? startedAt,
+    String? context,
+    String? summary,
+  }) {
+    final input = _decode(arguments);
+    final output = _decode(result);
+    final args = input is Map ? input : const {};
+    final data = output is Map ? output : const {};
+    final title = labels.isNotEmpty
+        ? labels.first.text
+        : titleFor(name, completed: completed);
+    final target =
+        _firstText(args, const [
+          'image_url',
+          'url',
+          'file_path',
+          'path',
+          'query',
+          'pattern',
+          'command',
+          'name',
+        ]) ??
+        _listTarget(args['urls']) ??
+        (labels.isNotEmpty ? _nonempty(labels.first.preview) : null);
+    var outcome = completed
+        ? ToolCallOutcome.completed
+        : ToolCallOutcome.running;
+    var status = completed
+        ? (summary == null ? 'Completed' : _oneLine(summary))
+        : 'Running';
+    if (completed) {
+      final error = _firstText(data, const ['error']);
+      final exit = data['exit_code'];
+      if (data['success'] == false ||
+          data['ok'] == false ||
+          data['isError'] == true ||
+          error != null ||
+          data['error'] == true ||
+          (exit is num && exit != 0)) {
+        outcome = ToolCallOutcome.error;
+        status = error == null ? 'Failed' : _oneLine(error);
+        if (exit is num && exit != 0) status = 'Exited with code $exit';
+      } else if (_returned404(data)) {
+        outcome = ToolCallOutcome.warning;
+        status = 'Returned a 404 page';
+      } else if (_firstText(data, const ['fallback_warning'])
+          case final warning?) {
+        outcome = ToolCallOutcome.warning;
+        status = _oneLine(warning);
+      } else if (data['status'] == 'unchanged') {
+        outcome = ToolCallOutcome.completed;
+        status = 'Already loaded';
+      } else if (data['success'] == true || data['ok'] == true) {
+        outcome = ToolCallOutcome.success;
+        status = summary == null ? 'Succeeded' : _oneLine(summary);
+      }
+    }
+    final details = <({String label, String text, bool markdown})>[];
+    if (args['question'] is String) {
+      details.add(_detail('Question', args['question'] as String));
+    }
+    if (output is Map) {
+      for (final key in const [
+        'analysis',
+        'text',
+        'message',
+        'error',
+        'output',
+        'stdout',
+        'stderr',
+        'content',
+        'scale_note',
+      ]) {
+        final value = output[key];
+        if (value is String && value.isNotEmpty) {
+          details.add(
+            _detail(
+              _humanize(key),
+              value,
+              allowMarkdown: !const [
+                'stdout',
+                'stderr',
+                'output',
+              ].contains(key),
+            ),
+          );
+        }
+      }
+      if (output['content'] case final List parts) {
+        for (final part in parts) {
+          if (part is Map && part['type'] == 'text' && part['text'] is String) {
+            details.add(_detail('Result', part['text'] as String));
+          }
+        }
+      }
+      final nested = output['data'];
+      final sources = [
+        if (output['results'] is List) ...output['results'] as List,
+        if (nested is Map) ...[
+          if (nested['results'] is List) ...nested['results'] as List,
+          if (nested['web'] is List) ...nested['web'] as List,
+        ],
+      ];
+      if (sources.isNotEmpty) {
+        for (final source in sources) {
+          if (source is! Map) continue;
+          final sourceTitle =
+              _firstText(source, const ['title', 'url']) ?? 'Result';
+          final content = _firstText(source, const [
+            'content',
+            'snippet',
+            'description',
+            'text',
+          ]);
+          final url = _firstText(source, const ['url']);
+          details.add(_detail(sourceTitle, _sourceText(url, content)));
+        }
+      }
+      // Generic structured tools retain scalar facts without exposing JSON as
+      // their default content. Nested structures remain in full raw details.
+      if (details.isEmpty) {
+        for (final entry in output.entries) {
+          if (entry.value is String ||
+              entry.value is num ||
+              entry.value is bool) {
+            details.add(
+              _detail(_humanize(entry.key.toString()), entry.value.toString()),
+            );
+          }
+        }
+      }
+    } else if (output is String && output.isNotEmpty) {
+      details.add(
+        _detail(
+          'Result',
+          output,
+          allowMarkdown: name != 'terminal' && name != 'execute_code',
+        ),
+      );
+    }
+    if (details.isEmpty && (summary ?? context) != null) {
+      details.add(
+        _detail(summary != null ? 'Summary' : 'Context', (summary ?? context)!),
+      );
+    }
+    return ToolCallPresentation._(
+      name: name,
+      callId: callId,
+      context: context,
+      summary: summary,
+      title: title,
+      target: target == null ? null : _oneLine(target),
+      status: status,
+      outcome: outcome,
+      details: List.unmodifiable(details),
+      arguments: arguments,
+      result: result,
+      labels: labels,
+      // Only show an image explicitly delivered as this vision call's input.
+      imageTarget: name == 'vision_analyze'
+          ? _firstText(args, const ['image_url'])
+          : null,
+      durationSeconds: durationSeconds,
+      startedAt: completed ? null : startedAt,
+    );
+  }
+}
+
+Object? _decode(String? raw) {
+  if (raw == null) return null;
+  var text = raw.trim();
+  // Stock Hermes wraps external output with a security preamble. Preserve the
+  // exact wrapper in raw details; extract only its enclosed data for display.
+  if (text.startsWith('<untrusted_tool_result ') &&
+      text.endsWith('</untrusted_tool_result>')) {
+    final start = RegExp(r'^\s*[{\[]', multiLine: true).firstMatch(text);
+    if (start != null) {
+      text = text
+          .substring(start.start, text.lastIndexOf('</untrusted_tool_result>'))
+          .trim();
+    }
+  }
+  try {
+    return jsonDecode(text);
+  } on FormatException {
+    return raw;
+  }
+}
+
+String? _firstText(Map data, List<String> keys) {
+  for (final key in keys) {
+    final value = data[key];
+    if (value is String && value.trim().isNotEmpty) return value;
+  }
+  return null;
+}
+
+String? _nonempty(String text) => text.trim().isEmpty ? null : text;
+String? _listTarget(Object? value) => value is List && value.isNotEmpty
+    ? value.whereType<String>().join(' · ')
+    : null;
+String _oneLine(String text) => text.replaceAll(RegExp(r'\s+'), ' ').trim();
+String _sourceText(String? url, String? content) {
+  final uri = url == null ? null : Uri.tryParse(url);
+  final source =
+      uri != null &&
+          (uri.scheme == 'https' || uri.scheme == 'http') &&
+          uri.host.isNotEmpty
+      ? '[Open source](${uri.toString().replaceAll('(', '%28').replaceAll(')', '%29')})'
+      : url;
+  return [?source, ?content].join('\n\n');
+}
+
+String _humanize(String text) {
+  final words = text.replaceAll(RegExp(r'[_-]+'), ' ').trim();
+  return words.isEmpty
+      ? 'Tool'
+      : '${words[0].toUpperCase()}${words.substring(1)}';
+}
+
+bool _returned404(Map data) {
+  if (data['status_code'] == 404) return true;
+  final sources = data['results'];
+  if (sources is! List) return false;
+  return sources.any(
+    (source) =>
+        source is Map &&
+        (source['status_code'] == 404 ||
+            RegExp(
+              r'(?:^|[-|:])\s*404(?:\s+error|\s+page\s+not\s+found|\s+not\s+found)?\s*(?:$|[-|:])',
+              caseSensitive: false,
+            ).hasMatch('${source['title'] ?? ''}') ||
+            RegExp(
+              r'^\s*(?:#{1,6}\s*)?404\s+page\s+not\s+found\s*$',
+              caseSensitive: false,
+              multiLine: true,
+            ).hasMatch('${source['content'] ?? ''}')),
+  );
+}
+
+String formatToolDuration(double seconds) {
+  if (seconds < 1) return '${(seconds * 1000).round()} ms';
+  if (seconds < 60) return '${seconds.toStringAsFixed(seconds < 10 ? 1 : 0)} s';
+  final whole = seconds.floor();
+  return '${whole ~/ 60}m ${whole % 60}s';
+}
+
+({String label, String text, bool markdown}) _detail(
+  String label,
+  String text, {
+  bool allowMarkdown = true,
+}) => (
+  label: label,
+  text: text,
+  markdown:
+      allowMarkdown &&
+      RegExp(r'(^|\n)(#{1,6} |[-*] |```)|\[[^\]]+\]\(|\*\*').hasMatch(text),
+);

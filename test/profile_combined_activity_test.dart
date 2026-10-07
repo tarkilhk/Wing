@@ -45,33 +45,36 @@ void main() {
           },
       ],
     ]);
-    emitChatEvent(controller, chat, 'tool.start', {'name': 'terminal'});
+    emitChatEvent(controller, chat, 'tool.start', {
+      'name': 'terminal',
+      'tool_id': 'live',
+    });
     await tester.pumpWidget(
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );
     await tester.pumpAndSettle();
     expect(find.text('Activity'), findsOneWidget);
     expect(find.text('Tool activity'), findsNothing);
-    expect(find.text('67 tool calls'), findsOneWidget);
-    expect(find.text('67 tool results'), findsNothing);
+    expect(find.text('68 tool calls'), findsOneWidget);
+    expect(find.text('Search'), findsNothing);
     await tester.tap(find.text('Activity'));
     await tester.pumpAndSettle();
-    expect(find.text('67 tool results'), findsOneWidget);
-    expect(find.text('Current tools'), findsOneWidget);
-    expect(find.text('Continue searching'), findsOneWidget);
+    expect(find.text('Search'), findsNWidgets(67));
+    expect(find.text('Running command'), findsOneWidget);
+    expect(find.text('Tools 68'), findsOneWidget);
     await tester.enterText(
       find.byKey(const Key('profile-message-composer')),
       'Keep Activity open while typing',
     );
     await tester.pump();
-    expect(find.text('67 tool results'), findsOneWidget);
-    expect(find.text('Current tools'), findsOneWidget);
+    expect(find.text('Search'), findsNWidgets(67));
+    expect(find.text('Running command'), findsOneWidget);
     await Scrollable.ensureVisible(
-      tester.element(find.text('67 tool results')),
+      tester.element(find.text('Search').first),
       alignment: 0.3,
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('67 tool results'));
+    await tester.tap(find.text('Search').first);
     await tester.pumpAndSettle();
     expect(find.text('Result 2'), findsOneWidget);
     expect(tester.takeException(), isNull);

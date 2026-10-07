@@ -73,7 +73,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('skill_view'));
+      await tester.tap(find.text('Read skill'));
       await tester.pumpAndSettle();
       expect(find.text('Saved tool detail'), findsOneWidget);
       await tester.tap(find.text('Tasks 1/4'));

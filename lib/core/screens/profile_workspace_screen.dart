@@ -1296,6 +1296,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         },
       );
     }
+    final savedCallIds = <String>{
+      for (final entry in timeline.entries) ?entry.tool?.callId,
+    };
+    final visibleTools = chat.runtime.toolActivities
+        .where((tool) => !savedCallIds.contains(tool.toolId))
+        .toList(growable: false);
     final focus = _readingFocus(chat);
     return LayoutBuilder(
       builder: (context, constraints) => Column(
@@ -1322,7 +1328,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               onBackToLatest: _readingFocus(chat) == null
                   ? null
                   : () => controller.backToLatest(chat),
-              liveToolCount: chat.runtime.toolActivities.length,
+              liveToolCount: visibleTools.length,
+              loadImage: (path) => _loadAttachmentImage(chat, path),
               currentActivity: [
                 if (chat.runtime.tool != null &&
                     !chat.runtime.toolActivities.any(
@@ -1330,14 +1337,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     ))
                   ProfileTranscriptDisclosure(
                     icon: Icons.terminal_rounded,
-                    label: 'Using ${chat.runtime.tool!}',
-                    children: const [
-                      Text('Running on the connected Hermes host'),
-                    ],
+                    label: 'Preparing ${chat.runtime.tool!}',
+                    children: const [Text('Hermes is preparing the tool call')],
                   ),
-                if (chat.runtime.toolActivities.isNotEmpty)
+                if (visibleTools.isNotEmpty)
                   ProfileLiveToolActivity(
-                    activities: chat.runtime.toolActivities,
+                    activities: visibleTools,
+                    loadImage: (path) => _loadAttachmentImage(chat, path),
                   ),
               ],
               activityTabs: [

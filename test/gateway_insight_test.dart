@@ -59,6 +59,43 @@ void main() {
   });
 
   group('Gateway Desktop activity events', () {
+    test('agent timing uses stock snapshot start and completion duration', () {
+      final started = GatewaySubagentActivity.fromSnapshot({
+        'subagent_id': 'timed',
+        'goal': 'Inspect transport',
+        'status': 'running',
+        'started_at': 1000.25,
+      })!;
+      final complete = GatewaySubagentActivity.fromGatewayEvent(
+        'subagent.complete',
+        {
+          'subagent_id': 'timed',
+          'status': 'completed',
+          'duration_seconds': 2.75,
+        },
+      )!;
+      final finalState = started.merge(complete);
+      expect(finalState.startedAt, 1000.25);
+      expect(finalState.durationSeconds, 2.75);
+      expect(finalState.merge(started).isTerminal, isTrue);
+      expect(finalState.merge(started).durationSeconds, 2.75);
+      for (final invalid in [-1, double.nan, double.infinity, '3']) {
+        expect(
+          GatewaySubagentActivity.fromGatewayEvent('subagent.complete', {
+            'subagent_id': 'invalid',
+            'duration_seconds': invalid,
+          })!.durationSeconds,
+          isNull,
+        );
+        expect(
+          GatewaySubagentActivity.fromSnapshot({
+            'subagent_id': 'invalid',
+            'started_at': invalid,
+          })!.startedAt,
+          isNull,
+        );
+      }
+    });
     test('merges subagent progress into its stable activity', () {
       final started =
           GatewaySubagentActivity.fromGatewayEvent('subagent.start', {

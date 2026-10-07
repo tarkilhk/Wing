@@ -2,10 +2,31 @@ import 'dart:convert';
 
 enum GatewayToolActivityPhase { running, generating, completed }
 
+/// Structured labels supplied by stock Hermes for connector/MCP bridge calls.
+final class ToolCallLabel {
+  const ToolCallLabel({
+    required this.text,
+    required this.name,
+    required this.preview,
+  });
+  final String text;
+  final String name;
+  final String preview;
+
+  static List<ToolCallLabel> parse(Object? value) => List.unmodifiable([
+    if (value is List)
+      for (final row in value)
+        if (row is Map && row['text'] is String && row['name'] is String)
+          ToolCallLabel(
+            text: row['text'] as String,
+            name: row['name'] as String,
+            preview: row['preview'] is String ? row['preview'] as String : '',
+          ),
+  ]);
+}
+
 class GatewayToolActivity {
-  static const _maxNameLength = 120;
   static const _maxDetailLength = 500;
-  static const _maxPayloadLength = 12000;
 
   final String? toolId;
   final String name;
@@ -14,6 +35,12 @@ class GatewayToolActivity {
   final double? durationSeconds;
   final String? arguments;
   final String? result;
+  final String? context;
+  final String? summary;
+  final List<ToolCallLabel> labels;
+
+  /// Monotonic receipt time of a live backend start, never a replay or draft.
+  final Duration? startedAt;
 
   const GatewayToolActivity({
     required this.name,
@@ -23,6 +50,10 @@ class GatewayToolActivity {
     this.durationSeconds,
     this.arguments,
     this.result,
+    this.context,
+    this.summary,
+    this.labels = const [],
+    this.startedAt,
   });
 
   bool get isTerminal => phase == GatewayToolActivityPhase.completed;
@@ -48,8 +79,9 @@ class GatewayToolActivity {
 
   static GatewayToolActivity? fromGatewayEvent(
     String eventType,
-    Map<String, dynamic> data,
-  ) {
+    Map<String, dynamic> data, {
+    Duration? receivedAt,
+  }) {
     final phase = switch (eventType) {
       'tool.start' => GatewayToolActivityPhase.running,
       'tool.generating' => GatewayToolActivityPhase.generating,
@@ -59,8 +91,7 @@ class GatewayToolActivity {
     if (phase == null) return null;
 
     final toolId = _firstText(data, const ['tool_id']);
-    final rawName = _firstText(data, const ['name']) ?? 'tool';
-    final name = _normalizeText(rawName, _maxNameLength) ?? 'tool';
+    final name = _firstText(data, const ['name']) ?? 'tool';
     final durationSeconds = _duration(data['duration_s']);
     final detail = switch (phase) {
       GatewayToolActivityPhase.completed => _normalizeText(
@@ -82,6 +113,10 @@ class GatewayToolActivity {
       durationSeconds: durationSeconds,
       arguments: _payload(data['args']),
       result: _payload(data['result'] ?? data['result_text']),
+      context: _firstText(data, const ['context']),
+      summary: _firstText(data, const ['summary']),
+      labels: ToolCallLabel.parse(data['labels']),
+      startedAt: eventType == 'tool.start' ? receivedAt : null,
     );
   }
 
@@ -94,6 +129,10 @@ class GatewayToolActivity {
       durationSeconds: update.durationSeconds ?? durationSeconds,
       arguments: update.arguments ?? arguments,
       result: update.result ?? result,
+      context: update.context ?? context,
+      summary: update.summary ?? summary,
+      labels: update.labels.isEmpty ? labels : update.labels,
+      startedAt: startedAt ?? update.startedAt,
     );
   }
 
@@ -129,11 +168,7 @@ class GatewayToolActivity {
     } catch (_) {
       text = value.toString();
     }
-    final safe = text.replaceAll('\u0000', '').trim();
-    if (safe.isEmpty) return null;
-    return safe.length <= _maxPayloadLength
-        ? safe
-        : '${safe.substring(0, _maxPayloadLength - 1)}…';
+    return text.isEmpty ? null : text;
   }
 
   static String _formatDuration(double value) {

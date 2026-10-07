@@ -1,4 +1,5 @@
 import '../models/notification_focus.dart';
+import '../models/gateway_activity.dart';
 import '../models/answer_versions.dart';
 import '../models/hermes_profile.dart';
 import '../models/local_transcript_message.dart';
@@ -32,6 +33,59 @@ final class TranscriptReading {
   int _lastInterimTurn = -1;
   final _messagePresentations = Expando<Object>();
   final _ownedRows = Expando<bool>();
+  final _observedTools = <String, GatewayToolActivity>{};
+
+  /// Retains actual backend receipts for matching saved rows, never creates a
+  /// history row or gives a saved output execution authority.
+  void observeTool(GatewayToolActivity activity) {
+    final id = activity.toolId;
+    if (_closed || id == null) return;
+    if (identical(_observedTools[id], activity)) return;
+    _observedTools[id] = activity;
+    if (_observedTools.length > 256) {
+      _observedTools.remove(_observedTools.keys.first);
+    }
+    if (!_messages.any(
+      (row) => row['role'] == 'tool' && row['tool_call_id'] == id,
+    )) {
+      return;
+    }
+    _messages = List.unmodifiable([
+      for (final row in _messages)
+        if (row['role'] == 'tool' && row['tool_call_id'] == id)
+          _freezeRow(_withToolReceipt(row, activity))
+        else
+          row,
+    ]);
+  }
+
+  Map<String, dynamic> _withToolReceipt(
+    Map<String, dynamic> row,
+    GatewayToolActivity activity,
+  ) {
+    final enriched = <String, dynamic>{
+      ...row,
+      if (row['tool_name'] == null) 'tool_name': activity.name,
+      if (row['args'] == null && activity.arguments != null)
+        'args': activity.arguments,
+      if (row['duration_s'] == null && activity.durationSeconds != null)
+        'duration_s': activity.durationSeconds,
+      if (row['context'] == null && activity.context != null)
+        'context': activity.context,
+      if (row['summary'] == null && activity.summary != null)
+        'summary': activity.summary,
+      if (row['content'] == null && activity.result != null)
+        'content': activity.result,
+      if (row['labels'] == null && activity.labels.isNotEmpty)
+        'labels': [
+          for (final label in activity.labels)
+            {'text': label.text, 'name': label.name, 'preview': label.preview},
+        ],
+    };
+    _messagePresentations[enriched] = messagePresentationId(row);
+    return enriched;
+  }
+
   final _confirmedPresentations = <int, Object>{};
   int _commandNoticeSequence = 0;
   NotificationFocus? _notificationFocus;
@@ -99,6 +153,7 @@ final class TranscriptReading {
 
   void dispose() {
     _closed = true;
+    _observedTools.clear();
     cancelReads();
   }
 
@@ -596,6 +651,10 @@ final class TranscriptReading {
   Map<String, dynamic> _freezeRow(Map<String, dynamic> source) {
     // Reuse already-owned immutable rows and their in-memory presentation token.
     if (_ownedRows[source] == true) return source;
+    final receipt = source['role'] == 'tool'
+        ? _observedTools[source['tool_call_id']]
+        : null;
+    if (receipt != null) source = _withToolReceipt(source, receipt);
     final row = Map<String, dynamic>.unmodifiable({
       for (final entry in source.entries) entry.key: _freezeValue(entry.value),
     });

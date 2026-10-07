@@ -148,6 +148,7 @@ GatewaySubagentActivity copySupervisedSubagent(GatewaySubagentActivity value) =>
       taskIndex: value.taskIndex,
       taskCount: value.taskCount,
       startedAt: value.startedAt,
+      durationSeconds: value.durationSeconds,
       toolCount: value.toolCount,
       lastTool: value.lastTool,
       recentActivity: List.unmodifiable(value.recentActivity),

@@ -260,6 +260,15 @@ connection cues, accessible status targets and recovery journeys.
 
 Keep the existing Activity disclosure, tool counts, Tools/Tasks/Agents/Work tabs when available, thinking disclosure, nested tool rows, guide line, selection, expansion state, scroll anchoring and copyable details. Do not add extra outer cards, timeline dots or permanent rows simply because the raster mockup draws them. Use the current component geometry as the baseline and apply color/type/border refinements. Approvals and questions remain outside collapsible tool results.
 
+The owner-approved readable activity change replaces generic tool-result group
+headers and the extra Current tools disclosure with individual action rows in
+Tools. Each compact row carries an action title, target, explicit outcome and
+right-aligned duration when supplied. Actual backend starts permit approximate
+receipt-based counters. Expanded details show relevant content, including the
+exact analyzed image, followed by selectable/copyable Raw details. Use semantic
+status colors with text, never infer success from completion. Preserve category
+selection, guide and anchored expansion. Contract: [tool activity](TOOL_ACTIVITY.md).
+
 Task status icons follow upstream desktop: a green filled-circle tick for
 completed, a spinner for in progress, a muted dashed circle for pending and a
 muted slashed circle for cancelled. Keep the existing 16 dp icon slot and use
@@ -439,3 +448,17 @@ Use [Testing](TESTING.md) for render entry points. Review actual widgets with re
 Use light/dark pairs and enlarged-text examples in verification. Inspect drawer/scope switching, repair/attention states, reading/output details and composer states in the rendered UI. A generated larger-text study does not substitute for layout verification.
 
 Audit every screen, dialog, sheet, menu, form and custom control for legacy styling. Standard widgets must inherit Studio component themes; custom decorations must consume the shared tokens. Keep intentional geometry exceptions for the refined activity/tool presentation and content-specific previews. Record the audit and validation evidence with the implementation. Backend contracts, persistence, state transitions, shortcuts and eligibility rules remain unchanged unless the owner approves a specific behavior change.
+
+## Activity Tasks and Agents refinement, 7 October 2026
+
+The owner requested the other two Activity tabs be made as readable as Tools.
+Keep the existing tabs, selected state, guide, backend order and parent task
+indentation. Tasks use 14 sp selectable content and a separate 12 sp explicit
+status line, with progress/cancellation counts above the list. No editable
+checkboxes or invented task timing. Agents use 14 sp goals, an explicit status
+line with backend-supported timing, readable current activity and quiet
+model/tool-count metadata. A row opens the existing detail sheet with full task,
+output, steer/interrupt controls and a copyable backend Details disclosure.
+Preserve loading, refresh, retry, uncertainty and control eligibility. Use Studio
+semantic tokens and at least 48 dp rows; enlarged text wraps statuses/metadata
+without hiding reachable controls. See [the activity contract](TOOL_ACTIVITY.md).

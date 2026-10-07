@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/models/gateway_todo.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
@@ -87,10 +88,7 @@ void main() {
     () async {
       host.event('a', 'tool.generating', {'name': 'search_files'});
       expect(chat.runtime.tool, 'search_files');
-      expect(
-        chat.runtime.toolActivities.single.phase,
-        GatewayToolActivityPhase.generating,
-      );
+      expect(chat.runtime.toolActivities, isEmpty);
 
       host.event('a', 'tool.start', {
         'tool_id': 'tool-1',
@@ -113,8 +111,29 @@ void main() {
       expect(completed.result, '{"matches":2}');
       expect(completed.statusLabel, 'Completed in 1.5 s');
 
+      host.historyMessages = [
+        {
+          'id': 21,
+          'role': 'tool',
+          'tool_call_id': 'tool-1',
+          'content': '{"matches":2}',
+        },
+        {
+          'id': 22,
+          'role': 'tool',
+          'tool_call_id': 'unrelated',
+          'content': 'other',
+        },
+      ];
       await controller.refreshHistory(chat);
       expect(chat.runtime.toolActivities, isEmpty);
+      final saved = TranscriptTimeline.project(
+        chat.reading.messages,
+        presentationId: chat.reading.messagePresentationId,
+      );
+      expect(saved.entries.first.tool!.durationSeconds, 1.5);
+      expect(saved.entries.first.tool!.arguments, '{"query":"gateway"}');
+      expect(saved.entries.last.tool!.durationSeconds, isNull);
     },
   );
 
@@ -137,6 +156,76 @@ void main() {
       expect(other.runtime.reasoning, isEmpty);
     },
   );
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('task states remain readable in ${brightness.name} at $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(320, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(scale),
+                disableAnimations: true,
+              ),
+              child: child!,
+            ),
+            home: const Scaffold(
+              body: SingleChildScrollView(
+                child: ProfileTodoPanel(
+                  embedded: true,
+                  todos: [
+                    GatewayTodo(
+                      content: 'Inspect the rental conditions',
+                      status: GatewayTodoStatus.completed,
+                    ),
+                    GatewayTodo(
+                      content: 'Check the permitted travel area',
+                      status: GatewayTodoStatus.inProgress,
+                      parent: 'inspect',
+                    ),
+                    GatewayTodo(
+                      content:
+                          'Compare the available pickup locations and opening hours',
+                      status: GatewayTodoStatus.pending,
+                    ),
+                    GatewayTodo(
+                      content: 'Check an alternative supplier',
+                      status: GatewayTodoStatus.cancelled,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            '1 of 4 completed · 1 in progress · 1 pending · 1 cancelled',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Subtask · In progress'), findsOneWidget);
+        expect(find.text('Pending'), findsOneWidget);
+        expect(find.text('Cancelled'), findsOneWidget);
+        expect(find.byType(Checkbox), findsNothing);
+        expect(find.byType(SelectableText), findsNWidgets(4));
+        final texts = tester
+            .widgetList<SelectableText>(find.byType(SelectableText))
+            .map((w) => w.data)
+            .toList();
+        expect(texts.first, 'Inspect the rental conditions');
+        expect(texts.last, 'Check an alternative supplier');
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
 
   testWidgets('renders expandable tool, todo, and reasoning details', (
     tester,
@@ -169,14 +258,15 @@ void main() {
       ),
     );
 
-    expect(find.text('Completed in 400 ms'), findsNothing);
-    await tester.tap(find.text('Current tools'));
+    expect(find.text('400 ms'), findsOneWidget);
+    await tester.tap(find.text('Searched files'));
     await tester.pumpAndSettle();
-    expect(find.text('Completed in 400 ms'), findsOneWidget);
-    await tester.tap(find.text('Search files'));
+    await tester.tap(find.text('Raw details'));
     await tester.pumpAndSettle();
     expect(find.text('{"query":"gateway"}'), findsOneWidget);
     expect(find.text('{"matches":2}'), findsOneWidget);
+    await tester.tap(find.text('Raw details'));
+    await tester.pumpAndSettle();
     expect(find.text('Inspect contract'), findsNothing);
     await tester.tap(find.text('Tasks 1/1'));
     await tester.pumpAndSettle();
@@ -214,21 +304,23 @@ void main() {
         ),
       );
 
-      expect(find.text('Search files'), findsNothing);
+      expect(find.text('Searching files'), findsOneWidget);
+      expect(find.text('Raw details'), findsNothing);
       await tester.enterText(find.byKey(const ValueKey('draft')), 'typing');
       await tester.pump();
-      expect(find.text('Search files'), findsNothing);
+      expect(find.text('Searching files'), findsOneWidget);
+      expect(find.text('Raw details'), findsNothing);
 
-      await tester.tap(find.text('Current tools'));
+      await tester.tap(find.text('Searching files'));
       await tester.pumpAndSettle();
-      expect(find.text('Search files'), findsOneWidget);
+      expect(find.text('Raw details'), findsOneWidget);
 
       await tester.enterText(
         find.byKey(const ValueKey('draft')),
         'typing more',
       );
       await tester.pump();
-      expect(find.text('Search files'), findsOneWidget);
+      expect(find.text('Raw details'), findsOneWidget);
     },
   );
 

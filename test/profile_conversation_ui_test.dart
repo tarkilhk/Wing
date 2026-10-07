@@ -229,9 +229,9 @@ void main() {
     tester,
   ) async {
     await message(tester, '**raw output**\nexit code 0', role: 'tool');
-    expect(find.text('terminal'), findsOneWidget);
+    expect(find.text('Ran command'), findsOneWidget);
     expect(find.textContaining('exit code 0'), findsNothing);
-    await tester.tap(find.text('terminal'));
+    await tester.tap(find.text('Ran command'));
     await tester.pumpAndSettle();
     expect(find.text('**raw output**\nexit code 0'), findsOneWidget);
     expect(find.bySubtype<MarkdownBody>(), findsNothing);

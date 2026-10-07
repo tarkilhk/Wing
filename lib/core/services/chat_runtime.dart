@@ -5,6 +5,7 @@ import '../models/gateway_approval.dart';
 import '../models/gateway_clarify.dart';
 import '../models/gateway_insight.dart';
 import '../models/gateway_sensitive_prompt.dart';
+import '../utils/tool_activity_clock.dart';
 
 class ChatRuntimeRead {
   ChatRuntimeRead._(
@@ -513,25 +514,29 @@ class ChatRuntime {
     if (type == 'reasoning.delta') _main = ChatMainActivity.thinking;
   }
 
-  GatewayToolActivity? observeTool(String type, Map<String, dynamic> data) {
+  GatewayToolActivity? observeTool(
+    String type,
+    Map<String, dynamic> data, {
+    bool live = true,
+    Duration? receivedAt,
+  }) {
     if (_closed) return null;
-    final update = GatewayToolActivity.fromGatewayEvent(type, data);
+    final update = GatewayToolActivity.fromGatewayEvent(
+      type,
+      data,
+      receivedAt: live ? receivedAt ?? toolActivityNow() : null,
+    );
     if (update == null) return null;
-    var index = update.toolId == null
-        ? -1
-        : _tools.indexWhere((a) => a.toolId == update.toolId);
-    if (index < 0 && update.toolId == null) {
-      index = _tools.lastIndexWhere(
-        (a) => a.name == update.name && !a.isTerminal,
-      );
+    // Argument generation announces a name, not a call identity or a start.
+    if (type == 'tool.generating') {
+      _mainTool = update;
+      _main = ChatMainActivity.tool;
+      return update;
     }
-    if (index < 0 && type == 'tool.start') {
-      index = _tools.lastIndexWhere(
-        (a) =>
-            a.toolId == null &&
-            a.name == update.name &&
-            a.phase == GatewayToolActivityPhase.generating,
-      );
+    if (update.toolId == null) return null;
+    final index = _tools.indexWhere((a) => a.toolId == update.toolId);
+    if (index >= 0 && _tools[index].isTerminal && !update.isTerminal) {
+      return _tools[index];
     }
     final merged = index < 0 ? update : _tools[index].merge(update);
     if (index < 0) {

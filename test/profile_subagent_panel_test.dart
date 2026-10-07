@@ -2,6 +2,9 @@ import 'package:wing/core/services/profile_supervision_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/activity_time.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
@@ -22,6 +25,8 @@ class _SubagentFixture extends ProfileActionsFixture {
   bool findInterrupt = false;
   bool emptyList = false;
   bool tailAvailable = true;
+  double? startedAt;
+  List<Map<String, dynamic>>? rows;
   final requests = <(String, Map<String, dynamic>)>[];
 
   @override
@@ -37,17 +42,21 @@ class _SubagentFixture extends ProfileActionsFixture {
           case 'subagent.list':
             listCalls += 1;
             return {
-              'subagents': [
-                if (!emptyList)
-                  {
-                    'subagent_id': 'child-1',
-                    'goal': 'Inspect the release',
-                    'status': 'running',
-                    'model': 'test-model',
-                    'last_tool': 'read_file',
-                    'accepting_steer': true,
-                  },
-              ],
+              'subagents':
+                  rows ??
+                  [
+                    if (!emptyList)
+                      {
+                        'subagent_id': 'child-1',
+                        'goal': 'Inspect the release',
+                        'status': 'running',
+                        'model': 'test-model',
+                        'last_tool': 'read_file',
+                        'accepting_steer': true,
+                        'started_at': startedAt,
+                        'tool_count': 3,
+                      },
+                  ],
               'delegations': const [],
             };
           case 'subagent.tail':
@@ -109,7 +118,11 @@ void main() {
     appPreferences.dispose();
   });
 
-  Future<void> showPanel(WidgetTester tester) async {
+  Future<void> showPanel(
+    WidgetTester tester, {
+    Brightness brightness = Brightness.light,
+    double scale = 1.8,
+  }) async {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump();
     tester.view.physicalSize = const Size(320, 640);
@@ -117,10 +130,11 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MaterialApp(
+        theme: wingTheme(brightness),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(
             context,
-          ).copyWith(textScaler: const TextScaler.linear(1.8)),
+          ).copyWith(textScaler: TextScaler.linear(scale)),
           child: child!,
         ),
         home: Scaffold(
@@ -147,6 +161,140 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
   }
+
+  testWidgets(
+    'agent timing is backend-derived and stops on completion or uncertainty',
+    (tester) async {
+      fixture.startedAt = DateTime.now().millisecondsSinceEpoch / 1000 - 40;
+      await showPanel(tester);
+      expect(find.text('Reading file'), findsOneWidget);
+      expect(find.text('test-model · 3 tool calls'), findsOneWidget);
+      var time = tester.widget<ActivityTime>(find.byType(ActivityTime));
+      expect(time.backendStartedAt, fixture.startedAt);
+      emitChatEvent(controller, chat, 'subagent.complete', {
+        'subagent_id': 'child-1',
+        'status': 'completed',
+        'summary': 'Inspection finished',
+        'duration_seconds': 42.5,
+      });
+      await tester.pump();
+      expect(find.text('Completed'), findsOneWidget);
+      expect(find.text('Inspection finished'), findsOneWidget);
+      time = tester.widget<ActivityTime>(find.byType(ActivityTime));
+      expect(time.backendStartedAt, isNull);
+      expect(time.durationSeconds, 42.5);
+      expect(find.text('43 s'), findsOneWidget);
+      emitChatEvent(controller, chat, 'subagent.start', {
+        'subagent_id': 'uncertain',
+        'goal': 'Check another source',
+        'started_at': fixture.startedAt,
+      });
+      fixture.emptyList = true;
+      await supervision.refreshSubagents();
+      await tester.pump();
+      expect(find.text('Last seen running'), findsOneWidget);
+      expect(
+        tester
+            .widgetList<ActivityTime>(find.byType(ActivityTime))
+            .every((w) => w.backendStartedAt == null),
+        isTrue,
+      );
+    },
+  );
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'agent states and metadata remain readable ${brightness.name} $scale',
+        (tester) async {
+          const longGoal =
+              'Inspect the release candidate and verify the Android transport settings';
+          fixture.rows = [
+            {
+              'subagent_id': 'child-1',
+              'goal': longGoal,
+              'status': 'running',
+              'last_tool': 'read_file',
+              'model': 'test-model',
+              'accepting_steer': true,
+            },
+            {
+              'subagent_id': 'queued',
+              'goal': 'Compare suppliers',
+              'status': 'queued',
+              'started_at': 1000,
+            },
+          ];
+          for (final status in ['completed', 'failed', 'interrupted']) {
+            emitChatEvent(controller, chat, 'subagent.complete', {
+              'subagent_id': status,
+              'goal': 'Research $status',
+              'status': status,
+              'summary': 'Result for $status',
+              'duration_seconds': 1.25,
+            });
+          }
+          await showPanel(tester, brightness: brightness, scale: scale);
+          if (scale == 2) {
+            expect(
+              tester.getSize(find.text(longGoal)).height,
+              greaterThan(2 * 14 * scale * 1.3),
+            );
+          }
+          for (final label in [
+            'Running',
+            'Queued',
+            'Completed',
+            'Failed',
+            'Interrupted',
+          ]) {
+            expect(find.text(label), findsOneWidget);
+          }
+          final queuedRow = find.byKey(
+            ValueKey(('subagent', chat.key, 'queued')),
+          );
+          final queuedTime = tester.widget<ActivityTime>(
+            find.descendant(of: queuedRow, matching: find.byType(ActivityTime)),
+          );
+          expect(queuedTime.backendStartedAt, isNull);
+          expect(queuedTime.durationSeconds, isNull);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'details expose copyable backend metadata beside existing controls',
+    (tester) async {
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await openDetails(tester);
+      await tester.tap(find.text('Details'));
+      await tester.pumpAndSettle();
+      final copy = find.text('Copy details');
+      await tester.ensureVisible(copy);
+      await tester.tap(copy);
+      await tester.pump();
+      expect(copied, 'Agent ID: child-1\nModel: test-model\nTool calls: 3');
+      Navigator.of(tester.element(copy)).pop();
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets('refresh retains two live event children beside a failed child', (
     tester,
@@ -190,11 +338,16 @@ void main() {
       await tester.scrollUntilVisible(
         find.text('Recent activity'),
         160,
-        scrollable: find.byType(Scrollable).last,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView).last,
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       expect(find.text('Recent activity'), findsOneWidget);
       expect(
-        find.textContaining('Checking android/app/build.gradle.kts'),
+        find.textContaining('Checking android/app/build.gradle.kts').last,
         findsOneWidget,
       );
       Navigator.of(tester.element(find.text('Live output'))).pop();
@@ -210,7 +363,12 @@ void main() {
       await tester.scrollUntilVisible(
         find.text('latest child output'),
         160,
-        scrollable: find.byType(Scrollable).last,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView).last,
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       expect(find.text('latest child output'), findsOneWidget);
       fixture.tailAvailable = false;
@@ -231,7 +389,12 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('latest child output'),
       160,
-      scrollable: find.byType(Scrollable).last,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
     expect(find.text('latest child output'), findsOneWidget);
     expect(find.byType(SelectableText), findsWidgets);
@@ -240,7 +403,16 @@ void main() {
 
     tester.view.viewInsets = const FakeViewPadding(bottom: 260);
     await tester.pump();
-    await tester.ensureVisible(find.byType(TextField));
+    await tester.scrollUntilVisible(
+      find.byType(TextField),
+      -160,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.enterText(find.byType(TextField), 'Check the Android path');
     final steerButton = find.widgetWithText(FilledButton, 'Steer');
     await tester.ensureVisible(steerButton);
@@ -252,7 +424,20 @@ void main() {
       find.text('The subagent did not accept that steering.'),
       findsOneWidget,
     );
-    expect(find.text('Check the Android path'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byType(TextField),
+      -160,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'Check the Android path',
+    );
     expect(chat.subagents.single.status.name, 'running');
     final steer = fixture.requests.lastWhere(
       (call) => call.$1 == 'subagent.steer',
@@ -303,7 +488,12 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Could not refresh live output.'),
       160,
-      scrollable: find.byType(Scrollable).last,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
     expect(find.text('Could not refresh live output.'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
@@ -317,7 +507,12 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('latest child output'),
       160,
-      scrollable: find.byType(Scrollable).last,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
     expect(find.text('latest child output'), findsOneWidget);
 

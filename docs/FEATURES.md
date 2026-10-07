@@ -12,12 +12,18 @@
 - **Find the right chat.** Search, pin and group conversations; filter by profile, project or status. Recents shows chats with messages from the last 24 hours alongside ongoing work, with All, Running and Needs input filters.
 - **Keep browsing after changes.** Chat and project actions apply when Hermes confirms them. The list then refreshes in the background, keeping search, token counts and reading position available. Progress and Retry stay above the scrolling list; retrying a refresh does not repeat the action.
 - **Read the whole story.** Follow streamed replies, code, tables, tool activity and available reasoning. Find a message in a chat, open a result, or return to the latest reply.
+- **Understand each action.** Open Activity → Tools for readable call titles,
+  targets, outcomes and available timings. Expand a call for its result or the
+  exact analyzed image; Raw details retains selectable, copyable inputs and output.
+  Live elapsed counters start only from a backend tool start; saved timing appears
+  only when available. See [tool activity](TOOL_ACTIVITY.md).
 - **Stay oriented.** See the selected model, context usage and current work. Switch models with a clear confirmation when Hermes warns about the change.
 
 ## Keep work moving
 
 - **Choose what happens next.** Send a new message, steer active work, queue a follow-up or stop it. Edit a queued item before it sends. Drafts and staged files survive navigation and restart.
 - **Explore another direction.** Edit a saved message, regenerate an answer or branch into a separate conversation. Your Hermes server keeps the authoritative history.
+- **Follow delegated work.** In Activity → Tasks, read full task text with explicit status and subtask indentation. In Agents, see each goal, current activity and available timing; tap for live output, backend details and supported controls.
 - **Respond from your phone.** Review supported approvals and questions, inspect subagents and goals, and use local notifications for replies and requests while Wing is running.
 
 ## Use what is already on your phone

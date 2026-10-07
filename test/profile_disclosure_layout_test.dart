@@ -32,8 +32,18 @@ void main() {
                 ProfileToolActivitySection(
                   key: activityKey,
                   section: TranscriptTimeline.project([
-                    {'role': 'tool', 'content': 'First result'},
-                    {'role': 'tool', 'content': 'Second result'},
+                    {
+                      'id': 1,
+                      'role': 'tool',
+                      'tool_name': 'first_tool',
+                      'content': 'First result',
+                    },
+                    {
+                      'id': 2,
+                      'role': 'tool',
+                      'tool_name': 'second_tool',
+                      'content': 'Second result',
+                    },
                   ], presentationId: (_) => Object()).sections.single,
                 ),
                 const ProfileReasoningDisclosure(
@@ -81,7 +91,10 @@ void main() {
       expect(find.text('Checked the available options.'), findsNothing);
       await tester.tap(find.text('Activity'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('2 tool results'));
+      await tester.tap(find.text('First tool'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Second tool'));
+      await tester.tap(find.text('Second tool'));
       await tester.pumpAndSettle();
       expect(find.text('First result'), findsOneWidget);
       expect(find.text('Second result'), findsOneWidget);

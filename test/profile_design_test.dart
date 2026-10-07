@@ -371,14 +371,17 @@ void main() {
           {'id': 2, 'role': 'assistant', 'content': 'Visible saved reply'},
         ],
       ]);
-      emitChatEvent(controller, chat, 'tool.start', {'name': 'terminal'});
+      emitChatEvent(controller, chat, 'tool.start', {
+        'name': 'terminal',
+        'tool_id': 'live',
+      });
       emitChatEvent(controller, chat, 'reasoning.available', {
         'text': 'Current private reasoning',
       });
 
       await show(tester);
       expect(find.text('Activity'), findsNWidgets(2));
-      expect(find.text('Current tools'), findsNothing);
+      expect(find.text('Running command'), findsNothing);
       expect(find.text('Current private reasoning'), findsNothing);
       expect(find.text('Activity'), findsNWidgets(2));
       expect(find.text('Visible saved reply'), findsOneWidget);
@@ -389,7 +392,7 @@ void main() {
 
       await tester.tap(find.text('Activity').first);
       await tester.pumpAndSettle();
-      expect(find.text('Current tools'), findsOneWidget);
+      expect(find.text('Running command'), findsOneWidget);
       expect(find.text('Thought'), findsOneWidget);
 
       await tester.enterText(
@@ -397,11 +400,11 @@ void main() {
         'Typing must not collapse current activity',
       );
       await tester.pump();
-      expect(find.text('Current tools'), findsOneWidget);
+      expect(find.text('Running command'), findsOneWidget);
 
       await tester.tap(find.text('Activity').first);
       await tester.pumpAndSettle();
-      expect(find.text('Current tools'), findsNothing);
+      expect(find.text('Running command'), findsNothing);
       expect(find.text('Activity'), findsNWidgets(2));
       expect(find.text('Visible saved reply'), findsOneWidget);
     },
@@ -432,16 +435,21 @@ void main() {
       ]);
       await show(tester);
       expect(find.text('Activity'), findsOneWidget);
-      expect(find.text('2 tool results'), findsNothing);
+      expect(find.text('Read'), findsNothing);
       expect(find.text('Private tool detail A'), findsNothing);
       expect(find.text('Here is the answer.'), findsOneWidget);
       await tester.tap(find.text('Activity'));
       await tester.pumpAndSettle();
-      expect(find.text('2 tool results'), findsOneWidget);
+      expect(find.text('Read'), findsOneWidget);
       expect(find.text('Private tool detail A'), findsNothing);
-      await tester.tap(find.text('2 tool results'));
+      await tester.tap(find.text('Read'));
       await tester.pumpAndSettle();
       expect(find.text('Private tool detail A'), findsOneWidget);
+      expect(find.text('Private tool detail B'), findsNothing);
+      await tester.ensureVisible(find.text('Search'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Search'));
+      await tester.pumpAndSettle();
       expect(find.text('Private tool detail B'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },

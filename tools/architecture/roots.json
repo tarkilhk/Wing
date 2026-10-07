@@ -5937,6 +5937,33 @@
       "purpose": "Profile-only offline20-chat same/increasing-set retention probe; real workspace owner/view, bounded fixture logs and numeric counters",
       "source": "docs/PERFORMANCE.md; tools/performance/workspace_navigation_soak.dart",
       "status": "supported"
+    },
+    {
+      "id": "host-test-test/tool_call_presentation_test.dart",
+      "kind": "host-test",
+      "path": "test/tool_call_presentation_test.dart",
+      "purpose": "Readable tool facts, timing and action detail regressions",
+      "source": "docs/TOOL_ACTIVITY.md; test/tool_call_presentation_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/profile_tool_call_test.dart",
+      "kind": "host-test",
+      "path": "test/profile_tool_call_test.dart",
+      "purpose": "Readable tool facts, timing and action detail regressions",
+      "source": "docs/TOOL_ACTIVITY.md; test/profile_tool_call_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "desktop-tool-label-generator",
+      "kind": "tool-script",
+      "path": "tools/generate_tool_labels.py",
+      "purpose": "Refresh built-in action titles from inspected stock Hermes desktop English catalog",
+      "source": "docs/TOOL_ACTIVITY.md",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -6669,6 +6696,11 @@
       "path": "docs/TESTING.md",
       "area": "docs",
       "provenance": "tracked"
+    },
+    {
+      "path": "docs/TOOL_ACTIVITY.md",
+      "area": "docs",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "docs/TRANSCRIPT_DISPLAY_TYPES.md",
@@ -7726,6 +7758,16 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/presentation/desktop_tool_labels.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/tool_call_presentation.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/screens/administration/admin_connector_routes.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -8661,9 +8703,19 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/utils/tool_activity_clock.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/widgets/activity_shimmer.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/activity_time.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/widgets/admin_model_picker.dart",
@@ -8934,6 +8986,11 @@
       "path": "lib/core/widgets/profile_tool_activity.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/profile_tool_call.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/widgets/profile_transcript_disclosure.dart",
@@ -11051,6 +11108,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/profile_tool_call_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/profile_transcript_test.dart",
       "area": "test",
       "provenance": "tracked"
@@ -11664,6 +11726,11 @@
       "path": "test/text_size_preference_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/tool_call_presentation_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/tool_setup_view_dependency_guard_test.dart",
@@ -13234,6 +13301,11 @@
       "path": "tools/fake_gateway/test_fake_gateway.py",
       "area": "tools",
       "provenance": "tracked"
+    },
+    {
+      "path": "tools/generate_tool_labels.py",
+      "area": "tools",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "tools/performance/chat_frames.dart",

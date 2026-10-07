@@ -106,6 +106,7 @@ class GatewaySubagentActivity {
   final int? taskIndex;
   final int? taskCount;
   final double? startedAt;
+  final double? durationSeconds;
   final int? toolCount;
   final String? lastTool;
   final List<String> recentActivity;
@@ -124,6 +125,7 @@ class GatewaySubagentActivity {
     this.taskIndex,
     this.taskCount,
     this.startedAt,
+    this.durationSeconds,
     this.toolCount,
     this.lastTool,
     this.recentActivity = const [],
@@ -163,6 +165,7 @@ class GatewaySubagentActivity {
       taskIndex: next.taskIndex ?? taskIndex,
       taskCount: next.taskCount ?? taskCount,
       startedAt: next.startedAt ?? startedAt,
+      durationSeconds: next.durationSeconds ?? durationSeconds,
       toolCount: next.toolCount ?? toolCount,
       lastTool: next.lastTool ?? lastTool,
       recentActivity: snapshot && recentActivity.isNotEmpty
@@ -242,6 +245,9 @@ class GatewaySubagentActivity {
       taskIndex: _integer(data['task_index']),
       taskCount: _integer(data['task_count']),
       startedAt: _number(data['started_at']),
+      durationSeconds: eventType == 'subagent.complete'
+          ? _number(data['duration_seconds'])
+          : null,
       toolCount: _integer(data['tool_count']),
       lastTool: GatewayNotice.safeLine(
         (data['tool_name'] ?? data['last_tool'])?.toString(),
@@ -316,7 +322,7 @@ class GatewaySubagentActivity {
 
   static int? _integer(dynamic value) => value is num ? value.toInt() : null;
   static double? _number(dynamic value) =>
-      value is num ? value.toDouble() : null;
+      value is num && value.isFinite && value >= 0 ? value.toDouble() : null;
   static String? _opaqueId(dynamic value) =>
       value is String && value.trim().isNotEmpty ? value : null;
 }

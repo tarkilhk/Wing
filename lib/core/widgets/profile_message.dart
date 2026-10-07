@@ -183,7 +183,10 @@ class ProfileMessage extends StatelessWidget {
       );
     }
     if (message.kind == TranscriptMessageKind.tool) {
-      return ProfileToolActivity(results: [message.tool!]);
+      return ProfileToolActivity(
+        results: [message.tool!],
+        loadImage: loadAttachmentImage,
+      );
     }
     final user = role == 'user';
     final timestamp = _timestamp(context);
