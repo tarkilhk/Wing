@@ -7,6 +7,7 @@ import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
@@ -46,6 +47,39 @@ class DelayedAttachmentDraftService extends AttachmentDraftService {
       mediaType: mediaType,
       existingDrafts: existingDrafts,
     );
+  }
+}
+
+final class PhotoFileFixture extends PlatformFile {
+  PhotoFileFixture(this.uri);
+  @override
+  final Uri uri;
+  @override
+  String get name => 'photo.jpg';
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class PhotoPickerFixture extends FilePickerPlatform {
+  PhotoPickerFixture(this.file);
+  final PlatformFile file;
+
+  @override
+  Future<PlatformFile?> pickFile({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    int compressionQuality = 0,
+    AndroidOptions androidOptions = const AndroidOptions(),
+    DarwinOptions darwinOptions = const DarwinOptions(),
+    WindowsOptions windowsOptions = const WindowsOptions(),
+    LinuxOptions linuxOptions = const LinuxOptions(),
+    WebOptions webOptions = const WebOptions(),
+  }) async {
+    expect(type, FileType.image);
+    return file;
   }
 }
 
@@ -2100,6 +2134,54 @@ void main() {
       expect(chat.composer.observation.paused, isTrue);
     },
   );
+
+  testWidgets('photo rejection shows its reason instead of a workspace error', (
+    tester,
+  ) async {
+    final sandbox = Directory.systemTemp.createTempSync('wing-photo-error-');
+    final source = File('${sandbox.path}/photo.jpg')
+      ..writeAsBytesSync([1, 2, 3]);
+    final originalPicker = FilePickerPlatform.instance;
+    FilePickerPlatform.instance = PhotoPickerFixture(
+      PhotoFileFixture(source.uri),
+    );
+    addTearDown(() {
+      FilePickerPlatform.instance = originalPicker;
+      sandbox.deleteSync(recursive: true);
+    });
+    final chat = await controller.createChat(canDispatch: () => true);
+    await controller.updateDraft(chat, 'Keep my text');
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    await tester.tap(find.byTooltip('Attach file'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Photos'));
+    await tester.pump();
+    // Drain real worker I/O and fake widget microtasks with a bounded wait.
+    for (var attempt = 0; attempt < 100; attempt++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+      if (!chat.composer.observation.preparing) break;
+    }
+    expect(chat.composer.observation.preparing, isFalse);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Couldn’t open this workspace'), findsNothing);
+    expect(
+      find.text('Unsupported image format. Choose a JPEG, PNG, or WebP image.'),
+      findsOneWidget,
+    );
+    expect(chat.composer.observation.text, 'Keep my text');
+    expect(chat.composer.observation.attachments, isEmpty);
+    expect(
+      host.calls.where((call) => call.$2 == 'image.attach_bytes'),
+      isEmpty,
+    );
+    expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('send is available while completed history is still loading', (
     tester,

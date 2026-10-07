@@ -9,6 +9,7 @@ import '../models/profile_session_key.dart';
 import 'package:wing/core/models/model_choice.dart';
 import '../models/side_question_delivery.dart';
 import '../services/workspace_connection_failure.dart';
+import '../services/attachment_draft_service.dart';
 import '../widgets/server_connection_label.dart';
 import '../widgets/workspace_picker.dart';
 import '../widgets/workspace_profile_navigation.dart';
@@ -430,6 +431,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       }
       if (mounted) {
         final message = switch (e) {
+          AttachmentDraftException error => error.message,
           StateError error => error.message.toString(),
           FormatException error => error.message,
           _ => workspaceFailureMessage(e),

@@ -48,6 +48,8 @@ WebView acceptance on a disposable emulator.
 
 ## Useful test entry points
 
+For the Chats Project filter, run `flutter test --no-pub test/chat_browser_data_test.dart test/chat_list_target_test.dart`. Select a profile using the header squares or Profile menu, then open Project: only that profile's projects and unassigned-chat group should appear. Multiple selected profiles expose their combined choices; clearing Profile restores all choices. The owner regression checks membership with repeated project IDs across profiles; widget regressions cover switching and clearing in both themes at normal and 200% text. This dynamic membership property uses behavioral checks rather than a source linter.
+
 For ordinary-app startup acceptance, install the normal debug APK on a fresh
 disposable emulator, then deny Notifications and Microphone in Android's actual
 permission dialogs. Confirm the welcome screen and connection setup remain

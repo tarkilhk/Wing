@@ -354,6 +354,73 @@ void main() {
     expect(bar().selectedProfiles, isEmpty);
   });
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'project picker follows profile filter ${brightness.name} $scale',
+        (tester) async {
+          await show(tester, brightness: brightness, scale: scale);
+          final owner = controller.current!.scope;
+          await tester.tap(find.byKey(const ValueKey('chat-profile-work')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('chat-filter-project')));
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('chat-menu-work/p0')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('chat-menu-work/home')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('chat-menu-personal/p0')),
+            findsNothing,
+          );
+          expect(
+            find.byKey(const ValueKey('chat-menu-personal/home')),
+            findsNothing,
+          );
+          await screenshot(
+            tester,
+            '${brightness.name}-$scale-projects-filtered',
+          );
+          await tester.tap(find.text('Done'));
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byKey(const ValueKey('chat-profile-personal')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('chat-filter-project')));
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('chat-menu-personal/p0')),
+            findsOneWidget,
+          );
+          expect(find.byKey(const ValueKey('chat-menu-work/p0')), findsNothing);
+          await tester.tap(find.text('Done'));
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byKey(const ValueKey('chat-profile-personal')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('chat-filter-project')));
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('chat-menu-personal/p0')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('chat-menu-work/p0')),
+            findsOneWidget,
+          );
+          await tester.tap(find.text('Done'));
+          await tester.pumpAndSettle();
+          expect(controller.current!.scope, owner);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   testWidgets(
     'filters are independent, multi-select and clear leaves search intact',
     (tester) async {

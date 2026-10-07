@@ -16,6 +16,15 @@ If clearing an incoming share fails after its conversation draft was saved, the 
 
 Photos and Files feed the same attachment path. Images receive the existing sanitization and file limits.
 
+Composer actions display `AttachmentDraftException.message` from local preparation
+or validation, preserving the rejection reason instead of presenting it as a
+workspace connection failure. Rejected selection keeps the current draft and does
+not upload or submit it. The photo-picker regression in
+`test/profile_workspace_controller_test.dart` exercises the actual picker callback,
+composer preparation and image worker with unsupported bytes. Behavioral coverage
+is required because static checks cannot establish the exception delivered through
+that asynchronous chain or the resulting visible message.
+
 Camera opens the phone's camera application through Android's capture intent. It writes to a single granted URI in private pending-intake storage and adds no camera permission or Flutter dependency. The originating connection identity, profile and chat are captured before launch. On return, the photo is added directly to that chat's draft, including when it is outside the first history page. The chat opens with the photo attached, preserving existing draft text and attachments; Send is still separate. Native intake is acknowledged only after the draft is saved. If attachment preparation or saving fails, the photo stays pending. If ownership changed or the chat cannot be reopened, the photo remains available and review asks for a destination.
 
 The capture descriptor is saved before launch. Successful nonempty output, up to 64 MiB, enters the existing durable intake queue. Cancellation removes only that capture. Recovery checks the descriptor when Hermes resumes, retains completed output and deduplicates by intake ID. URI grants are revoked on return. An active camera reserves queue capacity so another incoming share cannot consume its space.

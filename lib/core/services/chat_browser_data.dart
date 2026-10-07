@@ -308,6 +308,7 @@ final class ChatBrowserData extends ChangeNotifier {
             ),
         ];
       case BrowserFilter.project:
+        final profiles = viewPreferences.display?.profiles ?? const <String>{};
         final recency = <String, num>{};
         for (final entry in _entries.where(
           (entry) => _controller.includesSessionSource(entry.source),
@@ -319,21 +320,22 @@ final class ChatBrowserData extends ChangeNotifier {
         }
         final projects =
             <BrowserFilterChoice>[
-              for (final profile in _controller.discovery?.profiles ?? []) ...[
-                choice(
-                  '${profile.name}/home',
-                  '< ${profile.name} >',
-                  BrowserChoiceDecoration.home,
-                ),
-                for (final project in _projectRows(profile.name))
-                  if (project['isNoProject'] != true)
-                    choice(
-                      '${profile.name}/${project['id']}',
-                      '${project['name']} · ${profile.label}',
-                      BrowserChoiceDecoration.project,
-                      project: BrowserProject.fromWire(project),
-                    ),
-              ],
+              for (final profile in _controller.discovery?.profiles ?? [])
+                if (profiles.isEmpty || profiles.contains(profile.name)) ...[
+                  choice(
+                    '${profile.name}/home',
+                    '< ${profile.name} >',
+                    BrowserChoiceDecoration.home,
+                  ),
+                  for (final project in _projectRows(profile.name))
+                    if (project['isNoProject'] != true)
+                      choice(
+                        '${profile.name}/${project['id']}',
+                        '${project['name']} · ${profile.label}',
+                        BrowserChoiceDecoration.project,
+                        project: BrowserProject.fromWire(project),
+                      ),
+                ],
             ]..sort((a, b) {
               final recent = (recency[b.id] ?? 0).compareTo(recency[a.id] ?? 0);
               return recent != 0

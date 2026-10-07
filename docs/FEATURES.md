@@ -9,7 +9,7 @@
   <img src="screenshots/conversation-dark.png" alt="Wing conversation with streamed reply and tool activity" width="285">
 </p>
 
-- **Find the right chat.** Search, pin and group conversations; filter by profile, project or status. Recents shows chats with messages from the last 24 hours alongside ongoing work, with All, Running and Needs input filters.
+- **Find the right chat.** Search, pin and group conversations; filter by profile, project or status. The Project filter lists projects and unassigned-chat groups belonging to the selected profiles; clear the Profile filter to see all profiles' projects. Recents shows chats with messages from the last 24 hours alongside ongoing work, with All, Running and Needs input filters.
 - **Keep browsing after changes.** Chat and project actions apply when Hermes confirms them. The list then refreshes in the background, keeping search, token counts and reading position available. Progress and Retry stay above the scrolling list; retrying a refresh does not repeat the action.
 - **Read the whole story.** Follow streamed replies, code, tables, tool activity and available reasoning. Find a message in a chat, open a result, or return to the latest reply.
 - **Understand each action.** Open Activity → Tools for readable call titles,

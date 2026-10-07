@@ -181,9 +181,45 @@ void main() {
       expect(status.intent.value, status.status!.name);
       final project = data
           .filterChoices(BrowserFilter.project)
-          .singleWhere((value) => value.id == 'work/home');
+          .singleWhere((value) => value.id == 'personal/home');
       expect(project.decoration, BrowserChoiceDecoration.home);
-      expect(project.label, '< work >');
+      expect(project.label, '< personal >');
+    },
+  );
+
+  test(
+    'project choices follow single, multiple and cleared profile filters',
+    () async {
+      await data.refresh(archivedOnly: false);
+      Set<String> projectIds() => data
+          .filterChoices(BrowserFilter.project)
+          .map((choice) => choice.id)
+          .toSet();
+      final all = projectIds();
+      expect(all.where((id) => id.startsWith('personal/')), isNotEmpty);
+      expect(all.where((id) => id.startsWith('work/')), isNotEmpty);
+
+      await data.chooseView(BrowserPreferenceIntent.exclusiveProfile('work'));
+      expect(projectIds(), all.where((id) => id.startsWith('work/')).toSet());
+      expect(projectIds(), contains('work/home'));
+
+      await data.chooseView(
+        BrowserPreferenceIntent.exclusiveProfile('personal'),
+      );
+      expect(
+        projectIds(),
+        all.where((id) => id.startsWith('personal/')).toSet(),
+      );
+
+      await data.chooseView(
+        BrowserPreferenceIntent.toggle(BrowserFilter.profile, 'work'),
+      );
+      expect(projectIds(), all);
+
+      await data.chooseView(
+        const BrowserPreferenceIntent.clear(BrowserFilter.profile),
+      );
+      expect(projectIds(), all);
     },
   );
 
