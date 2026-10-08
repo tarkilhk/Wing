@@ -93,6 +93,30 @@ WebView acceptance on a disposable emulator.
 
 ## Useful test entry points
 
+`TEST_FIXTURE_ENDPOINT_ROUTING` is guarded by
+`test/chat_browser_mutations_test.dart` and
+`test/profile_workspace_controller_test.dart`. Browser fixtures route GUI-log
+reads independently of held chat-list pages and reject unmodeled endpoints.
+Profile-owned REST reads and every RPC retain their captured profile; timing
+recovery's process GUI-log request must instead carry exactly `file: gui`, the
+saved chat's search identity and `lines: 500`, without a profile override.
+Verified against stock Hermes main
+[`08165d58931841cee713468ae89032af7c57060a`](https://github.com/NousResearch/hermes-agent/commit/08165d58931841cee713468ae89032af7c57060a),
+whose `hermes_cli/web_routers/status.py` resolves an omitted profile to the
+dashboard's log directory. Behavioral checks own this invariant because source
+patterns alone cannot establish which held I/O a fixture awaits or the request
+parameters sent through the actual controller path. Run
+`flutter test --no-pub test/chat_browser_mutations_test.dart test/profile_workspace_controller_test.dart`.
+
+The deletion cases in `test/chat_browser_actions_test.dart` and
+`test/profile_row_actions_test.dart` guard `BROWSER_DELETE_ASYNC_CLEANUP`.
+Confirmed deletion waits for ordered timing-cache writes, including background
+isolate encoding. The widget harness alternates real async work with frame pumps
+until the captured chat's mutation finishes, then settles the confirmation route.
+The original assertions still require deletion and unlocked controls while
+follow-up chat-list reads are held. Static checks cannot establish isolate
+completion or fake-async scheduling; these behavioral cases cover both.
+
 For the Chats Project filter, run `flutter test --no-pub test/chat_browser_data_test.dart test/chat_list_target_test.dart`. Select a profile using the header squares or Profile menu, then open Project: only that profile's projects and unassigned-chat group should appear. Multiple selected profiles expose their combined choices; clearing Profile restores all choices. The owner regression checks membership with repeated project IDs across profiles; widget regressions cover switching and clearing in both themes at normal and 200% text. This dynamic membership property uses behavioral checks rather than a source linter.
 
 For ordinary-app startup acceptance, install the normal debug APK on a fresh

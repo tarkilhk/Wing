@@ -1652,6 +1652,32 @@ void main() {
     },
   );
 
+  test('GUI log reads do not wait for held chat-list pages', () async {
+    final gate = Completer<void>();
+    host.pageDelays[('personal', 0)] = gate;
+    addTearDown(() {
+      if (!gate.isCompleted) gate.complete();
+    });
+    final completed = Completer<void>();
+    final read = host
+        .gateway(controller.current!.scope)
+        .completedToolActivities('runtime', sessionId: 'new-chat')
+        .then((_) => completed.complete());
+    await Future<void>.delayed(Duration.zero);
+    expect(completed.isCompleted, isTrue);
+    await read;
+  });
+
+  test(
+    'unmodeled fixture reads fail instead of returning chat-list data',
+    () async {
+      await expectLater(
+        host.gateway(controller.current!.scope).read('unmodeled-endpoint'),
+        throwsStateError,
+      );
+    },
+  );
+
   test(
     'new chats immediately acquire their confirmed project membership',
     () async {

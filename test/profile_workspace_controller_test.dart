@@ -193,6 +193,7 @@ class Host {
       disconnect: () => disconnectCalls++,
       get: (path, query) async {
         reads.add((path, query));
+        if (path == 'logs') return {'file': 'gui', 'lines': <String>[]};
         await delays[name]?.future;
         if (failures.contains(name)) throw Exception('offline');
         if (path == 'sessions') {
@@ -216,6 +217,9 @@ class Host {
           heldHistoryStarted!.complete();
           await delay.future;
           if (failure != null) throw failure;
+        }
+        if (!path.startsWith('sessions/') || !path.endsWith('/messages')) {
+          throw StateError('Unhandled fixture GET: $path');
         }
         return {
           'session_id': path.split('/')[1],
@@ -1832,34 +1836,48 @@ void main() {
     },
   );
 
-  test('all reads and RPCs carry immutable canonical profile', () async {
-    await controller.createProject('Test', '/a', canDispatch: () => true);
-    final chat = await controller.createChat(canDispatch: () => true);
-    chat.composer.editText('hello');
-    await controller.send(chat);
-    emitChatEvent(controller, chat, 'approval', {
-      'request_id': 'once',
-      'choices': ['once', 'deny'],
-    });
-    await controller.approve(
-      chat,
-      'once',
-      requestId: chat.runtime.approval!.requestId,
-    );
-    await controller.stop(chat);
-    expect(host.calls.every((c) => c.$3['profile'] == c.$1), isTrue);
-    expect(host.reads.every((r) => r.$2['profile'] == 'a'), isTrue);
-    expect(
-      host.calls.map((c) => c.$2),
-      containsAll([
-        'projects.create',
-        'session.create',
-        'prompt.submit',
-        'approval.respond',
-        'session.interrupt',
-      ]),
-    );
-  });
+  test(
+    'profile traffic is scoped and GUI timing logs stay process-wide',
+    () async {
+      await controller.createProject('Test', '/a', canDispatch: () => true);
+      final chat = await controller.createChat(canDispatch: () => true);
+      chat.composer.editText('hello');
+      await controller.send(chat);
+      emitChatEvent(controller, chat, 'approval', {
+        'request_id': 'once',
+        'choices': ['once', 'deny'],
+      });
+      await controller.approve(
+        chat,
+        'once',
+        requestId: chat.runtime.approval!.requestId,
+      );
+      await controller.stop(chat);
+      expect(host.calls.every((c) => c.$3['profile'] == c.$1), isTrue);
+      final profileReads = host.reads.where((r) => r.$1 != 'logs');
+      expect(profileReads, isNotEmpty);
+      expect(profileReads.every((r) => r.$2['profile'] == 'a'), isTrue);
+      final logReads = host.reads.where((r) => r.$1 == 'logs');
+      expect(logReads, isNotEmpty);
+      for (final (_, query) in logReads) {
+        expect(query, {
+          'file': 'gui',
+          'search': chat.key.sessionId,
+          'lines': '500',
+        });
+      }
+      expect(
+        host.calls.map((c) => c.$2),
+        containsAll([
+          'projects.create',
+          'session.create',
+          'prompt.submit',
+          'approval.respond',
+          'session.interrupt',
+        ]),
+      );
+    },
+  );
 
   test(
     'steer preserves ownership and reports accepted or rejected status',

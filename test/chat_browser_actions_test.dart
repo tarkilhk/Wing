@@ -18,6 +18,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 
 import 'support/browser_mutations_fixture.dart';
+import 'support/chat_browser_interactions.dart';
 
 void main() {
   late BrowserMutationsFixture host;
@@ -266,6 +267,13 @@ void main() {
       }
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump();
+      if (action == 'Delete') {
+        await waitForChatDeletionCleanup(
+          tester,
+          controller,
+          ProfileSessionKey(controller.current!.scope, 'newest'),
+        );
+      }
       expect(
         tester
             .widget<FloatingActionButton>(

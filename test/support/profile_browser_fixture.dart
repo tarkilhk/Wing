@@ -135,6 +135,7 @@ class ProfileBrowserFixture {
     ),
     get: (path, query) async {
       reads.add((path, query));
+      if (path == 'logs') return {'file': 'gui', 'lines': <String>[]};
       final offset = int.parse(query['offset'] ?? '0');
       final limit = int.parse(query['limit'] ?? '50');
       if (path.endsWith('/messages')) {
@@ -163,6 +164,9 @@ class ProfileBrowserFixture {
         if (failSearch) throw StateError('Search offline');
         return {'results': rows};
       }
+      if (path != 'sessions') {
+        throw StateError('Unhandled fixture GET: $path');
+      }
       final rows =
           sessions(scope.profileName)
               .where(
@@ -186,14 +190,12 @@ class ProfileBrowserFixture {
         throw StateError('Page offline');
       }
       if (failWork && scope.profileName == 'work') throw StateError('Offline');
-      return path == 'sessions'
-          ? {
-              'sessions': page,
-              'offset': offset,
-              'limit': limit,
-              'total': rows.length,
-            }
-          : {'messages': []};
+      return {
+        'sessions': page,
+        'offset': offset,
+        'limit': limit,
+        'total': rows.length,
+      };
     },
     rpc: (method, params) async {
       calls.add((scope.profileName, method, params));

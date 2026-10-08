@@ -1126,6 +1126,8 @@ void main() {
         matching: find.text('Delete'),
       ),
     );
+    await tester.pump();
+    await waitForChatDeletionCleanup(tester, controller, key());
     await tester.pumpAndSettle();
     expect(host.closes, hasLength(1));
     expect(host.deletes, hasLength(1));
