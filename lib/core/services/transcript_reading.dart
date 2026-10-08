@@ -201,7 +201,9 @@ final class TranscriptReading {
   void dispose() {
     _closed = true;
     _observedTools.clear();
-    _cachedToolDurations.clear();
+    // Retire read/publication authority immediately, but retain passive facts
+    // for the controller's final ordered snapshot. Later chats may be captured
+    // only after earlier index writes finish; disposal cannot erase their batch.
     cancelReads();
   }
 

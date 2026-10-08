@@ -439,6 +439,191 @@ void main() {
     expect(chat.reading.messages.last['duration_s'], .195);
   });
 
+  test(
+    'disposal flushes throttled timings for every chat without pruning old facts',
+    () async {
+      final preferences = await SharedPreferences.getInstance();
+      final connection = controller.connection;
+      controller.dispose();
+      const identity = 'disposal-timing-retention';
+      final store = WorkspaceSnapshotStore(preferences, identity);
+      const oldTiming = {
+        'id': 1,
+        'tool_call_id': 'old-call',
+        'duration_s': 1.25,
+      };
+      for (final profile in ['a', 'b']) {
+        await store.writeToolDurations(profile, '$profile-runtime', [
+          oldTiming,
+        ]);
+      }
+      await store.write({
+        'selected': 'a',
+        'profiles': [
+          for (final profile in ['a', 'b'])
+            {
+              'name': profile,
+              'sessions': [],
+              'projects': [],
+              'chats': [
+                {
+                  'id': '$profile-runtime',
+                  'title': 'Cached $profile chat',
+                  'messages': [
+                    for (var id = 100; id <= 160; id++)
+                      {
+                        'id': id,
+                        'role': id == 160 ? 'tool' : 'assistant',
+                        if (id == 160) 'tool_call_id': '$profile-new-call',
+                        'content': 'Saved output $id',
+                      },
+                  ],
+                },
+              ],
+            },
+        ],
+      });
+      controller = ProfileWorkspaceController(
+        connectionIdentity: identity,
+        access: ConnectionAccess(connection: connection, dashboardOAuth: null),
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: host.gateway,
+      );
+      await controller.initialize();
+      await controller.browserResource('b').gateway.connect();
+      final chats = controller.notificationChats.toList();
+      expect(chats, hasLength(2));
+      controller.showList();
+      for (var i = 0; i < 20; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      for (final profile in ['a', 'b']) {
+        final preview =
+            (store.read()['profiles'] as List)
+                    .where((row) => row['name'] == profile)
+                    .single['chats'][0]['messages']
+                as List;
+        expect(preview, hasLength(60));
+        expect(preview.any((row) => row['id'] == 1), isFalse);
+        host.event(profile, 'tool.complete', {
+          'tool_id': '$profile-new-call',
+          'name': 'read_file',
+          'duration_s': profile == 'a' ? .195 : 0,
+        });
+        // The receipt is within the snapshot throttle; only shutdown can flush.
+        expect(store.readToolDurations(profile, '$profile-runtime'), [
+          oldTiming,
+        ]);
+      }
+      for (final chat in chats) {
+        expect(chat.reading.captureToolDurations(), hasLength(2));
+        expect(
+          chat.reading.messages.last['duration_s'],
+          chat.key.workspace.profileName == 'a' ? .195 : 0,
+        );
+      }
+      var publications = 0;
+      controller.addListener(() => publications++);
+      final revisions = [
+        for (final chat in chats) chat.reading.toolDurationRevision,
+      ];
+      // Keep teardown valid even when a post-disposal regression assertion fails.
+      final retiring = controller;
+      controller = ProfileWorkspaceController(
+        connectionIdentity: 'after-disposal-timing-retention',
+        access: ConnectionAccess(connection: connection, dashboardOAuth: null),
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: host.gateway,
+      );
+      retiring.dispose();
+      // A retained passive index cannot grant a disposed owner new authority.
+      for (final chat in chats) {
+        chat.reading.observeTool(
+          GatewayToolActivity.fromGatewayEvent('tool.complete', {
+            'tool_id': '${chat.key.workspace.profileName}-new-call',
+            'name': 'read_file',
+            'duration_s': 99,
+          })!,
+        );
+      }
+      host.event('a', 'tool.complete', {
+        'tool_id': 'a-new-call',
+        'name': 'read_file',
+        'duration_s': 99,
+      });
+      for (var i = 0; i < 20; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(publications, 0);
+      expect([
+        for (final chat in chats) chat.reading.toolDurationRevision,
+      ], revisions);
+      for (final profile in ['a', 'b']) {
+        expect(store.readToolDurations(profile, '$profile-runtime'), [
+          oldTiming,
+          {
+            'id': 160,
+            'tool_call_id': '$profile-new-call',
+            'duration_s': profile == 'a' ? .195 : 0,
+          },
+        ]);
+      }
+    },
+  );
+
+  test(
+    'confirmed deletion removes retained timing facts before shutdown',
+    () async {
+      final preferences = await SharedPreferences.getInstance();
+      final store = WorkspaceSnapshotStore(preferences, 'execution-test-host');
+      host.historyMessages = [
+        {
+          'id': 21,
+          'role': 'tool',
+          'tool_call_id': 'deleted-call',
+          'content': 'Saved output',
+        },
+      ];
+      host.event('a', 'tool.complete', {
+        'tool_id': 'deleted-call',
+        'name': 'read_file',
+        'duration_s': .4,
+      });
+      await controller.refreshHistory(chat);
+      for (var i = 0; i < 20; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(store.readToolDurations('a', chat.key.sessionId), [
+        {'id': 21, 'tool_call_id': 'deleted-call', 'duration_s': .4},
+      ]);
+      await controller.mutateSession(
+        chat.key,
+        delete: true,
+        canDispatch: () => true,
+      );
+      expect(controller.current!.chats.containsValue(chat), isFalse);
+      expect(store.readToolDurations('a', chat.key.sessionId), isEmpty);
+      final retiring = controller;
+      controller = ProfileWorkspaceController(
+        connectionIdentity: 'after-deleted-timing-retention',
+        access: ConnectionAccess(
+          connection: retiring.connection,
+          dashboardOAuth: null,
+        ),
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: host.gateway,
+      );
+      retiring.dispose();
+      for (var i = 0; i < 20; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(store.readToolDurations('a', chat.key.sessionId), isEmpty);
+    },
+  );
+
   test('failed held timing replay leaves published history intact', () async {
     host.historyMessages = [
       {'id': 21, 'role': 'assistant', 'content': 'Saved answer'},

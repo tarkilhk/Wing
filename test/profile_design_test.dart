@@ -317,6 +317,75 @@ void main() {
     },
   );
 
+  test(
+    'timeline joins saved tools and reasoning without swallowing reviews',
+    () {
+      for (final entry in [
+        ({'role': 'tool', 'content': 'Result'}, true),
+        (
+          {'role': 'assistant', 'content': '', 'reasoning': 'Native text'},
+          true,
+        ),
+        ({'role': 'system', 'content': 'review: Details'}, false),
+        ({'role': 'assistant', 'content': 'Answer'}, false),
+      ]) {
+        final timeline = TranscriptTimeline.project([
+          entry.$1,
+        ], presentationId: (_) => Object());
+        expect(timeline.joinsCurrentActivity, entry.$2, reason: '${entry.$1}');
+      }
+    },
+  );
+
+  for (final activity in ['tool', 'reasoning']) {
+    testWidgets('latest review retains reachable live $activity activity', (
+      tester,
+    ) async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      chat.reading.installSavedHistory([
+        {
+          'id': 1,
+          'role': 'tool',
+          'tool_name': 'Saved read',
+          'content': 'Result',
+        },
+        {'id': 2, 'role': 'system', 'content': 'review: Saved review context'},
+      ]);
+      if (activity == 'tool') {
+        emitChatEvent(controller, chat, 'tool.start', {
+          'name': 'terminal',
+          'tool_id': 'live-after-review',
+        });
+      } else {
+        emitChatEvent(controller, chat, 'reasoning.available', {
+          'text': 'Native reasoning after the saved review',
+        });
+      }
+      await show(tester);
+      expect(find.text('Hermes review'), findsOneWidget);
+      final live = find.byKey(ValueKey(('activity', chat.key)));
+      expect(live, findsOneWidget);
+      await tester.tap(
+        find.descendant(of: live, matching: find.text('Activity')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text(activity == 'tool' ? 'Running command' : 'Reasoning'),
+        findsOneWidget,
+      );
+      if (activity == 'reasoning') {
+        expect(
+          find.text('Native reasoning after the saved review'),
+          findsOneWidget,
+        );
+      }
+      await tester.tap(find.text('Hermes review'));
+      await tester.pumpAndSettle();
+      expect(find.text('Saved review context'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   test('nearby timeline selects nine source rows before hidden grouping', () {
     final source = List<Map<String, dynamic>>.generate(
       15,
@@ -393,7 +462,8 @@ void main() {
       await tester.tap(find.text('Activity').first);
       await tester.pumpAndSettle();
       expect(find.text('Running command'), findsOneWidget);
-      expect(find.text('Thought'), findsOneWidget);
+      expect(find.text('Reasoning'), findsOneWidget);
+      expect(find.text('Current private reasoning'), findsOneWidget);
 
       await tester.enterText(
         find.byKey(const Key('profile-message-composer')),

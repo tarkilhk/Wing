@@ -1104,20 +1104,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           onReadAloud: entry.message.role == 'assistant'
               ? () => _run(() => _requestReadAloud(chat, message))
               : null,
-          actions: savedPrompt
-              ? IconButton(
-                  key: ValueKey('edit-message-${entry.savedMessageId}'),
-                  tooltip: 'Edit message',
-                  constraints: const BoxConstraints.tightFor(
-                    width: 48,
-                    height: 48,
-                  ),
-                  onPressed: controller.canEditSavedPrompt(chat, message)
-                      ? () => _editSavedMessage(chat, message)
-                      : null,
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                )
-              : sharesPreviousActions
+          showEditAction: savedPrompt,
+          onEdit: savedPrompt && controller.canEditSavedPrompt(chat, message)
+              ? () => _editSavedMessage(chat, message)
+              : null,
+          actions: sharesPreviousActions
               ? _answerActions(
                   chat,
                   previous!,

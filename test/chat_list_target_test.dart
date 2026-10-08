@@ -815,6 +815,37 @@ void main() {
     expect(find.text('2.5k'), findsOneWidget);
     expect(tester.widget(list), same(originalList));
   });
+  testWidgets(
+    'unread membership follows a canonical refresh in the mounted list',
+    (tester) async {
+      await show(tester, workspace: true, reducedMotion: true);
+      await select(tester, 'profile', 'personal');
+      await select(tester, 'status', 'unread');
+      final browserState = tester.state(find.byType(ProfileWorkspaceBrowser));
+      final row = find.byKey(const ValueKey('chat-personal-session-0'));
+      expect(row, findsOneWidget);
+
+      fixture.rowUpdates['personal/session-0'] = {'unread': false};
+      await controller.switchProfile('personal');
+      await tester.pumpAndSettle();
+      expect(row, findsNothing);
+      expect(
+        tester.state(find.byType(ProfileWorkspaceBrowser)),
+        same(browserState),
+      );
+
+      fixture.rowUpdates['personal/session-0'] = {'unread': true};
+      await controller.switchProfile('personal');
+      await tester.pumpAndSettle();
+      expect(row, findsOneWidget);
+      expect(
+        tester.state(find.byType(ProfileWorkspaceBrowser)),
+        same(browserState),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('status filter membership follows live row changes', (
     tester,
   ) async {

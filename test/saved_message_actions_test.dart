@@ -18,6 +18,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/models/queued_prompt_draft.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/profile_message.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'answer_versions_test.dart' show AnswerHost;
@@ -434,7 +435,42 @@ void main() {
     final target = tester.getRect(edit);
     expect(target.width, greaterThanOrEqualTo(48));
     expect(target.height, greaterThanOrEqualTo(48));
-    await tester.tapAt(Offset(target.right - 2, target.center.dy));
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    final prompt = find.ancestor(
+      of: edit,
+      matching: find.byType(ProfileMessage),
+    );
+    final copy = find.descendant(
+      of: prompt,
+      matching: find.byTooltip('Copy message'),
+    );
+    final copyTarget = tester.getRect(copy);
+    expect(copyTarget.size, const Size(48, 48));
+    await tester.tapAt(Offset(copyTarget.right - 2, copyTarget.bottom - 2));
+    await tester.pumpAndSettle();
+    expect(copied, 'Follow-up');
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(edit);
+    final visibleTarget = tester.getRect(edit);
+    await tester.tapAt(
+      Offset(visibleTarget.right - 2, visibleTarget.center.dy),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Edit message'), findsOneWidget);

@@ -139,115 +139,91 @@ class _ModelChooserState extends State<ModelChooser> {
     final label = catalogModelLabel(choice.label);
     return Material(
       color: selected
-          ? tokens.accent.withValues(alpha: .12)
+          ? Theme.of(context).colorScheme.primaryContainer
           : Colors.transparent,
       borderRadius: WingRadius.control,
       child: Row(
         children: [
           Expanded(
-            child: MergeSemantics(
+            child: StudioRadioTile<ModelSelection>(
               key: Key(
                 '${widget.keyPrefix}-${choice.provider}-${choice.model}',
               ),
-              child: Semantics(
-                selected: selected,
-                inMutuallyExclusiveGroup: true,
-                label: '${choice.label}, ${choice.routeLabel}',
-                child: InkWell(
-                  borderRadius: WingRadius.control,
-                  onTap: widget.enabled
-                      ? () => widget.onSelected(ModelSelection.model(choice))
-                      : null,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 36),
-                    child: Padding(
-                      padding: const EdgeInsets.only(
-                        left: 8,
-                        top: 2,
-                        bottom: 2,
-                      ),
-                      child: Row(
+              value: ModelSelection.model(choice),
+              enabled: widget.enabled,
+              contentPadding: const EdgeInsets.only(left: 8),
+              minTileHeight: 36,
+              minVerticalPadding: 2,
+              title: Semantics(
+                label: choice.routeLabel,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          SizedBox(
-                            width: 20,
-                            child: Icon(
-                              selected
-                                  ? Icons.check_rounded
-                                  : Icons.circle_outlined,
-                              size: selected ? 16 : 10,
-                              color: selected ? tokens.accent : tokens.border,
+                          Text(
+                            label,
+                            style: tokens.typography.body.copyWith(
+                              fontSize: 13,
+                              height: 1.25,
+                              color: selected
+                                  ? tokens.accent
+                                  : tokens.onSurface,
                             ),
                           ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  label,
-                                  style: tokens.typography.body.copyWith(
-                                    fontSize: 13,
-                                    height: 1.25,
-                                    color: selected
-                                        ? tokens.accent
-                                        : tokens.onSurface,
-                                  ),
-                                ),
-                                if (selected && widget.selectedStatus != null)
-                                  Text(
-                                    widget.selectedStatus!,
-                                    style: tokens.typography.label.copyWith(
-                                      color: tokens.accent,
-                                    ),
-                                  ),
-                                if (missing)
-                                  Text(
-                                    'Not in the current model list; availability unconfirmed',
-                                    style: tokens.typography.label.copyWith(
-                                      color: tokens.muted,
-                                    ),
-                                  ),
-                                if (choice.detail?.isNotEmpty == true)
-                                  Text(
-                                    choice.detail!,
-                                    style: tokens.typography.label.copyWith(
-                                      color: tokens.muted,
-                                    ),
-                                  ),
-                                if (enlarged &&
-                                    (input != null || output != null))
-                                  Text(
-                                    [
-                                      if (input != null) 'In $input',
-                                      if (output != null) 'Out $output',
-                                    ].join(' · '),
-                                    style: tokens.typography.label.copyWith(
-                                      color: tokens.muted,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          if (!enlarged) ...[
-                            for (final price in [
-                              if (showInput) input,
-                              if (showOutput) output,
-                            ])
-                              SizedBox(
-                                width: 48,
-                                child: Text(
-                                  price ?? '',
-                                  textAlign: TextAlign.right,
-                                  style: tokens.typography.label.copyWith(
-                                    color: tokens.muted,
-                                  ),
-                                ),
+                          if (selected && widget.selectedStatus != null)
+                            Text(
+                              widget.selectedStatus!,
+                              style: tokens.typography.label.copyWith(
+                                color: tokens.accent,
                               ),
-                          ],
+                            ),
+                          if (missing)
+                            Text(
+                              'Not in the current model list; availability unconfirmed',
+                              style: tokens.typography.label.copyWith(
+                                color: tokens.muted,
+                              ),
+                            ),
+                          if (choice.detail?.isNotEmpty == true)
+                            Text(
+                              choice.detail!,
+                              style: tokens.typography.label.copyWith(
+                                color: tokens.muted,
+                              ),
+                            ),
+                          if (enlarged && (input != null || output != null))
+                            Text(
+                              [
+                                if (input != null) 'In $input',
+                                if (output != null) 'Out $output',
+                              ].join(' · '),
+                              style: tokens.typography.label.copyWith(
+                                color: tokens.muted,
+                              ),
+                            ),
                         ],
                       ),
                     ),
-                  ),
+                    if (!enlarged) ...[
+                      for (final price in [
+                        if (showInput) input,
+                        if (showOutput) output,
+                      ])
+                        SizedBox(
+                          width: 48,
+                          child: Text(
+                            price ?? '',
+                            textAlign: TextAlign.right,
+                            style: tokens.typography.label.copyWith(
+                              color: tokens.muted,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ],
                 ),
               ),
             ),

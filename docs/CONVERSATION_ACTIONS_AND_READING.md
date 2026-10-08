@@ -15,7 +15,8 @@ The idle action is Send. Busy actions and accessible alternatives follow [Compos
 Edit targets a saved user row by durable identity, verifies fresh history and confirms replacing that turn and later history. It preserves unrelated composer work and pauses queued follow-ups. Internal deliveries must not become editable human prompts.
 
 Use the pencil beside a sent user message. Its controls remain beside the bubble:
-local `HH:mm` above the icon-only Edit then Copy row. Fork and Regenerate remain
+local `HH:mm` at the top and the icon-only Edit then Copy row at the bottom,
+with 4 dp edge insets. Both share the center of the space beside the wider bubble. Fork and Regenerate remain
 answer actions, with no additional edit button. Find's separate history view
 stays read-only. The compact Studio editor has a close control, a scrollable
 message and history-replacement warning, and a fixed resend footer above the
@@ -40,8 +41,11 @@ back to an ordinary send when the saved row cannot be verified.
 keyboard-safe editing in both themes at 320 dp/200% text, unchanged submissions,
 queue preservation, history replacement, refusal and uncertain
 acknowledgements. Static layout checks cannot establish captured-row admission
-or asynchronous ordering. `test/message_timestamp_test.dart` checks the paired
-48 dp icon targets in both themes at normal and enlarged text.
+or asynchronous ordering. `test/message_timestamp_test.dart` checks the
+48 × 48 dp action targets, top/bottom insets and shared horizontal
+centering in both themes at normal and enlarged text, including disabled Edit
+and corner taps on Copy in short messages. The saved-edit suite checks Copy’s
+outer corner in the real workspace transcript before opening Edit.
 The layout regression fails against the original message renderer and passes
 with the revised controls. Rendered text size, geometry and keyboard insets
 require behavioral checks; a source linter cannot establish their reachability.
@@ -61,9 +65,10 @@ Saved user display removes generated expanded attachment context while preservin
 ## Model, context and reading
 
 Messages show a discreet local `HH:mm` timestamp in the existing assistant
-header or above the user's side-by-side Edit and Copy icons beside its bubble.
+header or at the top of the user's side rail, with Edit and Copy at the bottom.
 Long-press the time for its full date and local time; screen readers announce
-the full value. The action targets remain 48 dp and the timestamp has its own
+the full value. All message action targets are 48 × 48 dp,
+and the timestamp has its own
 metadata space; adding a supplied time does not change the bubble geometry.
 Copy still copies only the message.
 Saved history uses the server timestamp. Newly submitted prompts and completed

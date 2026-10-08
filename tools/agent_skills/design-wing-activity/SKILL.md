@@ -13,7 +13,10 @@ rules before choosing a layout.
 
 ## Decide
 
-1. Inspect the affected presentation owner, renderer, backend observations and
+1. Establish [backend API coverage](../../../docs/DESIGN_SYSTEM.md#backend-api-coverage)
+   for every candidate field in production and prototypes. Done when each has a
+   supported API source, exact meaning and scope; omit unsupported observations.
+   Inspect the affected presentation owner, renderer, backend observations and
    real fixtures. State the user's question: what was attempted, what actually
    happened, and what can they use or act on? Read
    [the activity contract](../../../docs/TOOL_ACTIVITY.md) for backend evidence.

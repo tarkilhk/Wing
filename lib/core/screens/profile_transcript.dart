@@ -461,7 +461,15 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
               _recordRowHeight(_tail, row, height),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: tailContent,
+            children: [
+              for (final child in tailContent)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: WingSpacing.lg,
+                  ),
+                  child: child,
+                ),
+            ],
           ),
         ),
     ];
@@ -588,7 +596,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
               controller: _scroll,
               reverse: true,
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              padding: const EdgeInsets.symmetric(vertical: WingSpacing.sm),
               findChildIndexCallback: (key) => indices[key],
               itemCount: tail.length + rows.length + 1,
               itemBuilder: (_, index) {
@@ -602,117 +610,135 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                     initialHeight: _rowHeights[keys[rowIndex]] ?? 0,
                     onHeightChanged: (row, height) =>
                         _recordRowHeight(keys[rowIndex], row, height),
-                    child: section.isActivity
-                        ? ProfileToolActivitySection(
-                            section: section,
-                            loadImage: widget.loadImage,
-                            onOpenResource: widget.onOpenResource,
-                            onShareResource: widget.onShareResource,
-                            showLatestReview:
-                                rowIndex == 0 && chat.reading.streaming.isEmpty,
-                            tabs: rowIndex == 0 && joinCurrentActivity
-                                ? widget.activityTabs
-                                : const [],
-                            liveToolCount: rowIndex == 0 && joinCurrentActivity
-                                ? widget.liveToolCount
-                                : 0,
-                            currentActivity:
-                                rowIndex == 0 && joinCurrentActivity
-                                ? widget.currentActivity
-                                : const [],
-                          )
-                        : widget.messageBuilder(row),
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        left: WingSpacing.lg,
+                        right: !section.isActivity && row.message.role == 'user'
+                            ? 0
+                            : WingSpacing.lg,
+                      ),
+                      child: section.isActivity
+                          ? ProfileToolActivitySection(
+                              section: section,
+                              loadImage: widget.loadImage,
+                              onOpenResource: widget.onOpenResource,
+                              onShareResource: widget.onShareResource,
+                              showLatestReview:
+                                  rowIndex == 0 &&
+                                  chat.reading.streaming.isEmpty,
+                              tabs: rowIndex == 0 && joinCurrentActivity
+                                  ? widget.activityTabs
+                                  : const [],
+                              liveToolCount:
+                                  rowIndex == 0 && joinCurrentActivity
+                                  ? widget.liveToolCount
+                                  : 0,
+                              currentActivity:
+                                  rowIndex == 0 && joinCurrentActivity
+                                  ? widget.currentActivity
+                                  : const [],
+                            )
+                          : widget.messageBuilder(row),
+                    ),
                   );
                 }
                 return KeyedSubtree(
                   key: const ValueKey('history-edge'),
-                  child: showOpening
-                      ? ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minHeight: (constraints.maxHeight - 16).clamp(
-                              0.0,
-                              double.infinity,
-                            ),
-                          ),
-                          child: Center(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 48,
-                                horizontal: 16,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: WingSpacing.lg,
+                    ),
+                    child: showOpening
+                        ? ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: (constraints.maxHeight - 16).clamp(
+                                0.0,
+                                double.infinity,
                               ),
-                              child: ListenableBuilder(
-                                listenable: widget.controller.connectionStatus,
-                                builder: (context, _) {
-                                  final status =
-                                      widget.controller.connectionStatus;
-                                  final waiting =
-                                      status.phase ==
-                                      ServerConnectionPhase.reconnecting;
-                                  return Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        chat.runtime.openingError ??
-                                            (waiting
-                                                ? 'Reconnecting to ${status.label}'
-                                                : 'Waiting for connection'),
-                                        textAlign: TextAlign.center,
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.titleMedium,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        chat.runtime.openingError == null
-                                            ? 'This conversation will open automatically.'
-                                            : 'You can retry or return to your chats.',
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      if (!waiting)
-                                        TextButton(
-                                          onPressed: widget
-                                              .controller
-                                              .resumeConnection,
-                                          child: const Text('Retry connection'),
+                            ),
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 48,
+                                  horizontal: 16,
+                                ),
+                                child: ListenableBuilder(
+                                  listenable:
+                                      widget.controller.connectionStatus,
+                                  builder: (context, _) {
+                                    final status =
+                                        widget.controller.connectionStatus;
+                                    final waiting =
+                                        status.phase ==
+                                        ServerConnectionPhase.reconnecting;
+                                    return Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          chat.runtime.openingError ??
+                                              (waiting
+                                                  ? 'Reconnecting to ${status.label}'
+                                                  : 'Waiting for connection'),
+                                          textAlign: TextAlign.center,
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.titleMedium,
                                         ),
-                                    ],
-                                  );
-                                },
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          chat.runtime.openingError == null
+                                              ? 'This conversation will open automatically.'
+                                              : 'You can retry or return to your chats.',
+                                          textAlign: TextAlign.center,
+                                        ),
+                                        if (!waiting)
+                                          TextButton(
+                                            onPressed: widget
+                                                .controller
+                                                .resumeConnection,
+                                            child: const Text(
+                                              'Retry connection',
+                                            ),
+                                          ),
+                                      ],
+                                    );
+                                  },
+                                ),
                               ),
                             ),
-                          ),
-                        )
-                      : showWelcome
-                      ? ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minHeight: (constraints.maxHeight - 16).clamp(
-                              0.0,
-                              double.infinity,
-                            ),
-                          ),
-                          child: Center(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: WingSpacing.xl,
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const PlayfulPortrait(size: 104),
-                                  const SizedBox(height: WingSpacing.lg),
-                                  Text(
-                                    'Start a conversation',
-                                    textAlign: TextAlign.center,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.titleMedium,
-                                  ),
-                                ],
+                          )
+                        : showWelcome
+                        ? ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: (constraints.maxHeight - 16).clamp(
+                                0.0,
+                                double.infinity,
                               ),
                             ),
-                          ),
-                        )
-                      : _historyEdge(chat),
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: WingSpacing.xl,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const PlayfulPortrait(size: 104),
+                                    const SizedBox(height: WingSpacing.lg),
+                                    Text(
+                                      'Start a conversation',
+                                      textAlign: TextAlign.center,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleMedium,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          )
+                        : _historyEdge(chat),
+                  ),
                 );
               },
             ),
@@ -836,36 +862,47 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
             key: const ValueKey('profile-transcript-search-result'),
             controller: _scroll,
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            padding: const EdgeInsets.symmetric(vertical: WingSpacing.sm),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (final section in sections)
-                  if (section.isActivity)
-                    ProfileToolActivitySection(
-                      section: section,
-                      loadImage: widget.loadImage,
-                      onOpenResource: widget.onOpenResource,
-                      onShareResource: widget.onShareResource,
-                      expandedMessageId: targetId,
-                      focusedMessageKey: _focusedRow,
-                    )
-                  else
-                    Container(
-                      key: section.containsMessage(targetId)
-                          ? _focusedRow
-                          : null,
-                      decoration: section.containsMessage(targetId)
-                          ? BoxDecoration(
-                              border: Border.all(
-                                color: Theme.of(context).colorScheme.primary,
-                                width: 2,
-                              ),
-                              borderRadius: WingRadius.card,
-                            )
-                          : null,
-                      child: widget.messageBuilder(section.messages.last),
+                  Padding(
+                    padding: EdgeInsets.only(
+                      left: WingSpacing.lg,
+                      right:
+                          !section.isActivity &&
+                              section.messages.last.message.role == 'user'
+                          ? 0
+                          : WingSpacing.lg,
                     ),
+                    child: section.isActivity
+                        ? ProfileToolActivitySection(
+                            section: section,
+                            loadImage: widget.loadImage,
+                            onOpenResource: widget.onOpenResource,
+                            onShareResource: widget.onShareResource,
+                            expandedMessageId: targetId,
+                            focusedMessageKey: _focusedRow,
+                          )
+                        : Container(
+                            key: section.containsMessage(targetId)
+                                ? _focusedRow
+                                : null,
+                            decoration: section.containsMessage(targetId)
+                                ? BoxDecoration(
+                                    border: Border.all(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                      width: 2,
+                                    ),
+                                    borderRadius: WingRadius.card,
+                                  )
+                                : null,
+                            child: widget.messageBuilder(section.messages.last),
+                          ),
+                  ),
               ],
             ),
           ),

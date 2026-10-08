@@ -9,11 +9,13 @@ import 'helpers/pump_markdown_widget.dart';
 
 void main() {
   const activityKey = ValueKey('saved-activity');
-  const thoughtKey = ValueKey('saved-thought');
-  final thoughtHeader = find.descendant(
-    of: find.byType(ListTile),
-    matching: find.text('Thought'),
-  );
+  const reasoningKey = ValueKey('saved-reasoning');
+  final reasoningHeader = find
+      .descendant(
+        of: find.byKey(reasoningKey),
+        matching: find.text('Reasoning'),
+      )
+      .first;
 
   Future<void> show(WidgetTester tester, double scale) async {
     tester.view.physicalSize = const Size(360, 800);
@@ -52,7 +54,7 @@ void main() {
                   ], presentationId: (_) => Object()).sections.single,
                 ),
                 const ProfileReasoningDisclosure(
-                  key: thoughtKey,
+                  key: reasoningKey,
                   text: 'Checked the available options.',
                 ),
                 const Text('The follow-up is running.'),
@@ -70,21 +72,35 @@ void main() {
   ) async {
     await show(tester, 1);
     final activity = tester.getRect(find.byKey(activityKey));
-    final thought = tester.getRect(find.byKey(thoughtKey));
+    final reasoning = tester.getRect(find.byKey(reasoningKey));
     expect(activity.height, greaterThanOrEqualTo(28));
-    expect(thought.height, greaterThanOrEqualTo(28));
-    expect(thought.bottom - activity.top, lessThanOrEqualTo(60));
-    expect(thought.top, closeTo(activity.bottom, 0.1));
+    final titleHeight = tester.getSize(reasoningHeader).height;
+    final previewHeight = tester
+        .getSize(find.text('Checked the available options.'))
+        .height;
+    // Native reasoning has two text-sized lines, with no extra row padding.
+    expect(reasoning.height, closeTo(titleHeight + previewHeight, 0.1));
+    expect(reasoning.top, closeTo(activity.bottom, 0.1));
     expect(
       tester.getCenter(find.text('2 tool calls')).dy,
       closeTo(tester.getCenter(find.text('Activity')).dy, 0.1),
     );
     expect(
       tester.getTopLeft(find.text('Activity')).dx,
-      tester.getTopLeft(find.text('Thought')).dx,
+      tester.getTopLeft(reasoningHeader).dx,
     );
     expect(tester.takeException(), isNull);
   });
+
+  final reasoningBody = find.descendant(
+    of: find.byKey(reasoningKey),
+    matching: find.byWidgetPredicate(
+      (widget) =>
+          widget is SelectableText &&
+          (widget.data ?? widget.textSpan?.toPlainText()) ==
+              'Checked the available options.',
+    ),
+  );
 
   for (final scale in [1.0, 2.0, 3.0]) {
     testWidgets('disclosures remain readable and expandable at scale $scale', (
@@ -93,7 +109,9 @@ void main() {
       await show(tester, scale);
       expect(find.text('2 tool calls'), findsOneWidget);
       expect(find.text('First result'), findsNothing);
-      expect(find.text('Checked the available options.'), findsNothing);
+      expect(find.text('Checked the available options.'), findsOneWidget);
+      expect(reasoningBody, findsNothing);
+      expect(find.byTooltip('Copy Reasoning'), findsNothing);
       await tester.tap(find.text('Activity'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('First tool'));
@@ -103,14 +121,17 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('First result'), findsOneWidget);
       expect(find.text('Second result'), findsOneWidget);
-      await tester.ensureVisible(thoughtHeader);
-      await tester.tap(thoughtHeader);
+      await tester.ensureVisible(reasoningHeader);
+      await tester.tap(reasoningHeader);
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
-      expect(find.text('Checked the available options.'), findsOneWidget);
-      await tester.tap(thoughtHeader);
+      expect(reasoningBody, findsOneWidget);
+      expect(find.byTooltip('Copy Reasoning'), findsOneWidget);
+      await tester.tap(reasoningHeader);
       await tester.pumpAndSettle();
-      expect(find.text('Checked the available options.'), findsNothing);
+      expect(find.text('Checked the available options.'), findsOneWidget);
+      expect(reasoningBody, findsNothing);
+      expect(find.byTooltip('Copy Reasoning'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }

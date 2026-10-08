@@ -111,7 +111,10 @@ final class TranscriptTimeline {
   }
 
   bool get joinsCurrentActivity =>
-      !hasLiveMessage && sections.isNotEmpty && sections.last.isActivity;
+      !hasLiveMessage &&
+      sections.isNotEmpty &&
+      sections.last.isActivity &&
+      sections.last.latestReview == null;
 
   /// Post-frame visibility targets consult the current owner's rows, not a
   /// preceding frame's timeline. This returns identity only, never raw content.
@@ -246,7 +249,11 @@ List<TranscriptTimelineGroup> _groupRows(
       flushTools();
       groups.add(TranscriptTimelineGroup._([entry], isReasoning: true));
     }
-    if (entry.emptyAssistant) continue;
+    if (entry.emptyAssistant) {
+      // Invisible assistant rows still separate neighboring tool runs.
+      flushTools();
+      continue;
+    }
     if (entry.message.role == 'tool') {
       tools.add(entry);
     } else {

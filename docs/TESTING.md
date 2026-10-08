@@ -145,6 +145,42 @@ WebView acceptance on a disposable emulator.
 
 ## Useful test entry points
 
+`SAVED_TOOL_RUN_BOUNDARY` is guarded by `test/profile_design_test.dart`:
+invisible empty assistant rows separate neighboring tool runs, while explicitly
+hidden rows retain continuity. Saved tools/reasoning can join live Activity;
+final reviews keep live work and their own detail action reachable. Mounted
+regressions cover both live tools and reasoning after a final review.
+Native reasoning-only rows remain visible through
+the saved projection regressions in `test/profile_execution_activity_test.dart`.
+These checks establish grouping semantics and rendered expansion; source shape
+alone cannot establish which immutable rows a projection publishes.
+
+`CONVERSATION_TIMING_DISPOSAL` is guarded by
+`test/profile_execution_activity_test.dart`: throttled completions in two chats
+survive shutdown alongside older measurements outside the 60-row preview,
+including a received zero duration. Disposed readings reject new receipts and
+publication; confirmed deletion cannot resurrect its timing index. The snapshot
+suites separately cover ordered writes, preview limits and unchanged workspace
+work budgets. Static disposal order alone cannot prove retained revisions or
+what later asynchronous batches persist.
+
+`BROWSER_FILTER_PUBLICATION` is guarded by `test/chat_browser_data_test.dart`
+and `test/chat_list_target_test.dart`. Canonical bulk refreshes publish when a
+row enters or leaves the confirmed Unread/Draft filter or local title/preview
+query; the mounted browser removes and restores the row without replacing its
+State. Stable membership remains a row-only update, with no extra index read or
+list publication. Static ownership guards cannot establish reactive membership
+or observer delivery.
+
+`MODEL_CHOOSER_KEYBOARD` is guarded by `test/model_chooser_test.dart` and the
+shared `test/studio_selection_test.dart`. Arrow keys traverse ordinary and named
+special choices; Tab reaches the separate info action and Space opens it without
+selecting another model. Disabled controls retire focus and reject writes.
+Narrow light/dark layouts retain compact pricing and background-only selection
+at normal and enlarged text. Static construction checks cannot establish focus
+traversal or keyboard event delivery. Existing picker caller suites retain their
+captured edit/persistence behavior.
+
 `TEST_FIXTURE_ENDPOINT_ROUTING` is guarded by
 `test/chat_browser_mutations_test.dart` and
 `test/profile_workspace_controller_test.dart`. Browser fixtures route GUI-log

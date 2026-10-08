@@ -81,6 +81,13 @@ stability. String reasoning fields and readable `reasoning.text`,
 content and signatures cannot become displayed reasoning. Inter-agent reply
 reasoning stays inside its existing reply disclosure.
 
+Invisible empty assistant rows still separate neighboring tool runs; explicitly
+hidden rows preserve tool-run continuity. Live work can join saved tools or
+reasoning, but a final saved review keeps its separate action and cannot absorb
+live Activity. `test/profile_design_test.dart` guards these boundaries,
+latest-review grouping, reachable live tools/reasoning after a review and
+expansion of current native reasoning without collapsing the surrounding section.
+
 Live activity remains above the composer. Interim output seals its current
 reasoning run without dropping the ordered live list. Successful authoritative
 history refresh replaces completed live activity with saved observations;
@@ -258,8 +265,11 @@ bounded preview; the index contains only saved-row identity, backend call ID and
 measured seconds. Changed indices and previews share one ordered write queue;
 larger indices encode off the UI isolate. The controller restores an index on
 every chat admission and writes changed indices for loaded chats independently
-of the ten-chat preview limit. Confirmed local chat-deletion cleanup removes the
-corresponding index after earlier writes.
+of the ten-chat preview limit. Disposal retires receipt/read publication
+immediately while retaining passive measured facts for the final ordered
+snapshot, including chats captured after earlier index writes finish. Confirmed
+local chat-deletion cleanup removes the corresponding index after earlier writes;
+shutdown cannot recreate an index for a deleted chat.
 
 This retention change preserves available measurements. A measurement already
 absent from both Wing and the server remains unavailable. No server patch,

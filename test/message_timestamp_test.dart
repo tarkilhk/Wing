@@ -13,6 +13,7 @@ import 'helpers/pump_markdown_widget.dart';
 
 const _capture = bool.fromEnvironment('STUDIO_REVIEW');
 const _frame = ValueKey('timestamp-frame');
+const _messageFrame = ValueKey('message-frame');
 final _date = DateTime(2026, 9, 15, 14, 7);
 
 void main() {
@@ -39,7 +40,8 @@ void main() {
     Brightness brightness = Brightness.light,
     double scale = 1,
     String content = 'A short message.',
-    Widget? actions,
+    bool showEditAction = false,
+    VoidCallback? onEdit,
   }) async {
     await tester.binding.setSurfaceSize(const Size(320, 640));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -57,15 +59,30 @@ void main() {
           ),
           home: Scaffold(
             body: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: ProfileMessage(
-                  actions: actions,
-                  message: TranscriptMessage.fromRow({
-                    'role': role,
-                    'content': content,
-                    'timestamp': timestamp,
-                  }),
+              child: Builder(
+                builder: (context) => RepaintBoundary(
+                  key: _messageFrame,
+                  child: ColoredBox(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        16,
+                        role == 'user' ? 0 : 16,
+                        16,
+                      ),
+                      child: ProfileMessage(
+                        showEditAction: showEditAction,
+                        onEdit: onEdit,
+                        message: TranscriptMessage.fromRow({
+                          'id': 4,
+                          'role': role,
+                          'content': content,
+                          'timestamp': timestamp,
+                        }),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -89,31 +106,44 @@ void main() {
           timestamp: _date.toUtc().millisecondsSinceEpoch / 1000,
           brightness: brightness,
           scale: scale,
-          content: 'Compare the two proposals and explain the tradeoffs.',
-          actions: IconButton(
-            tooltip: 'Edit message',
-            constraints: const BoxConstraints.tightFor(width: 48, height: 48),
-            onPressed: () => edits++,
-            icon: const Icon(Icons.edit_outlined, size: 18),
-          ),
+          content:
+              'We actually need to wait to know timing of flight of the next day, to see if we should get a hotel close to airport (early morning flight), or if normal city hotel is OK (flight later during the day!)',
+          showEditAction: true,
+          onEdit: () => edits++,
         );
         final copy = tester.getRect(find.byTooltip('Copy message'));
         final edit = tester.getRect(find.byTooltip('Edit message'));
         expect(edit.right, lessThanOrEqualTo(copy.left));
         final time = tester.getRect(find.text('14:07'));
-        final bubble = tester.getRect(find.byType(SelectableText).first);
-        expect(time.bottom, lessThanOrEqualTo(edit.top));
-        expect(bubble.right, lessThanOrEqualTo(edit.left));
-        expect(edit.top, lessThan(bubble.bottom));
-        expect(copy.top, edit.top);
+        final bubble = tester.getRect(
+          find.byKey(
+            const ValueKey<(String, Object?)>(('user-message-bubble', 4)),
+          ),
+        );
+        final editIcon = tester.getRect(find.byIcon(Icons.edit_outlined));
+        final copyIcon = tester.getRect(find.byIcon(Icons.copy_outlined));
+        final iconCenter = (editIcon.center.dx + copyIcon.center.dx) / 2;
+        expect(time.top - bubble.top, closeTo(4, .01));
+        expect(bubble.bottom - editIcon.bottom, closeTo(4, .01));
+        expect(copyIcon.bottom, editIcon.bottom);
+        expect(time.center.dx, closeTo(iconCenter, .01));
+        expect(iconCenter, closeTo((bubble.right + 320) / 2, .01));
+        expect(copy.right, lessThanOrEqualTo(320));
+        expect(editIcon.left, greaterThan(bubble.right));
         expect(edit.size, const Size(48, 48));
+        expect(copy.size, const Size(48, 48));
         expect(find.text('Edit message'), findsNothing);
         expect(find.text('Copy message'), findsNothing);
-        await tester.tap(find.byTooltip('Edit message'));
+        await tester.ensureVisible(find.byTooltip('Edit message'));
+        final visibleEdit = tester.getRect(find.byTooltip('Edit message'));
+        await tester.tapAt(
+          Offset(visibleEdit.right - 2, visibleEdit.bottom - 2),
+        );
+        await tester.pumpAndSettle();
         expect(edits, 1);
         if (_capture) {
           final boundary = tester.renderObject<RenderRepaintBoundary>(
-            find.byKey(_frame),
+            find.byKey(_messageFrame),
           );
           await tester.runAsync(() async {
             final image = await boundary.toImage();
@@ -129,6 +159,64 @@ void main() {
           });
         }
       });
+    }
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        '${brightness.name} short prompt keeps disabled Edit and Copy reachable at $scale',
+        (tester) async {
+          String? copied;
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            (call) async {
+              if (call.method == 'Clipboard.setData') {
+                copied = (call.arguments as Map)['text'] as String;
+              }
+              return null;
+            },
+          );
+          addTearDown(
+            () => tester.binding.defaultBinaryMessenger
+                .setMockMethodCallHandler(SystemChannels.platform, null),
+          );
+          await pump(
+            tester,
+            role: 'user',
+            content: 'Hi',
+            timestamp: _date.millisecondsSinceEpoch / 1000,
+            brightness: brightness,
+            scale: scale,
+            showEditAction: true,
+          );
+          final edit = find.byTooltip('Edit message');
+          final copy = find.byTooltip('Copy message');
+          final editTarget = tester.getRect(edit);
+          final copyTarget = tester.getRect(copy);
+          final body = tester.getRect(find.byType(SelectableText));
+          final time = tester.getRect(find.text('14:07'));
+          expect(
+            tester
+                .widget<IconButton>(
+                  find.byKey(const ValueKey('edit-message-4')),
+                )
+                .onPressed,
+            isNull,
+          );
+          expect(editTarget.size, const Size(48, 48));
+          expect(copyTarget.size, const Size(48, 48));
+          expect(editTarget.right, lessThanOrEqualTo(copyTarget.left));
+          expect(body.right, lessThanOrEqualTo(editTarget.left));
+          expect(time.bottom, lessThanOrEqualTo(copyTarget.top));
+          await tester.tapAt(
+            Offset(copyTarget.right - 2, copyTarget.bottom - 2),
+          );
+          await tester.pumpAndSettle();
+          expect(copied, 'Hi');
+          expect(tester.takeException(), isNull);
+        },
+      );
     }
   }
 

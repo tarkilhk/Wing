@@ -280,10 +280,20 @@ The selection audit covers App settings and composer preferences; Activity filte
 
 ## Conversation preservation
 
-The owner's 9 October message-control refinement keeps controls beside the sent
-user bubble: a quiet local `HH:mm` above one icon-only Edit → Copy row, with
-48 dp targets and full-date accessibility. At enlarged text, release the bubble's
-extra leading inset to keep words readable while the side controls stay in place.
+The owner's 9 October selected slim message rail keeps controls beside the sent
+user bubble, with a wider rectangular bubble and no extra leading inset. Center
+local `HH:mm` above icon-only Edit → Copy across the space from the bubble edge
+to the screen edge. Align the time at the top and the icon pair at the bottom,
+with a small 4 dp inset at both ends. Keep the two icons visually close rather
+than spreading them to the centers of their touch boxes. The selected paired
+controls and standalone Copy use 48 × 48 dp targets. The paired rail reserves
+88 dp including the outer gutter; its targets extend 8 dp into the bubble’s
+12 dp padding without covering message text. Full-date accessibility,
+text scaling, disabled Edit and attachment/copy behavior remain intact. The
+message renderer owns this geometry; the workspace passes edit visibility and
+intent. The transcript gives user rows the trailing viewport gutter so the full
+Copy target receives taps rather than merely painting outside a padded row.
+Other transcript content retains the ordinary 16 dp gutters.
 Keep Fork and Regenerate on answers;
 do not add another Edit there or enable editing in Find's reading window.
 The saved-message editor uses a compact Studio header with icon-only close,
@@ -558,6 +568,27 @@ For Activity work, follow
 [design-wing-activity](../tools/agent_skills/design-wing-activity/SKILL.md).
 This charter is the authoritative presentation policy; the skill supplies the
 executable decision and verification process.
+
+### Backend API coverage
+
+Every product observation in a screen or design prototype must have a supported
+stock Hermes API acquisition path available to Wing. Before displaying a field,
+record its endpoint or received API event/tool receipt, response field, meaning
+and scope. Parse declared metadata from API-returned document content; derive
+totals only from compatible API observations with explicit period and coverage.
+Use actual captured API responses for real-data previews. Build optional widgets
+only for API-supported observations; render them only when useful returned data
+exists. Omit their heading, frame, actions and reserved space together when data
+is absent. Unsupported metrics do not receive placeholder or unavailable cards.
+Required loading/recovery flows retain their existing error handling. Publish a
+populated design preview only after its API samples have been captured.
+
+Stock source inspection establishes API contracts; actual product observations
+come through those APIs. SSH, server filesystem/database reads and internal
+Python calls do not qualify as data-acquisition paths for Wing or its prototypes.
+Finding a real server value does not establish that Wing can obtain it. A warning
+label does not authorize displaying unsupported fields. Keep designs within
+verified stock API capabilities unless the owner explicitly changes that scope.
 
 ### USER-VALUE-FIRST Activity
 

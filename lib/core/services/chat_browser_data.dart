@@ -896,6 +896,7 @@ final class ChatBrowserData extends ChangeNotifier {
     _activityKeys = _controller.browserRuntimeKeys.toSet();
     final next = _readEntries();
     var structural = next.length != _entries.length;
+    var membershipChanged = false;
     final changed = <ProfileSessionKey>{};
     for (final entry in next) {
       final key = entry.sessionKey;
@@ -904,6 +905,11 @@ final class ChatBrowserData extends ChangeNotifier {
         structural = true;
       } else if (!_samePlacement(before, entry)) {
         structural = true;
+      }
+      if (before != null &&
+          _matchesView(before, _projectionQuery) !=
+              _matchesView(entry, _projectionQuery)) {
+        membershipChanged = true;
       }
       if (before == null || !_sameEntry(before, entry)) changed.add(key);
     }
@@ -936,7 +942,9 @@ final class ChatBrowserData extends ChangeNotifier {
     }
     if (_disposed) return false;
     if (changed.isNotEmpty) _rowChanges.value = Set.unmodifiable(changed);
-    return structural;
+    // Row listeners render changed facts, but only this owner publishes the
+    // list arrangement when a refreshed row enters or leaves its filter/query.
+    return structural || membershipChanged;
   }
 
   Map<String, dynamic> _localRow(ProfileChat chat) => {

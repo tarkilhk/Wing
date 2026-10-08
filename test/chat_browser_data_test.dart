@@ -22,10 +22,12 @@ class ReaderFixture extends ProfilePagingFixture {
   bool permanentSearchFailure = false;
   final attempts = <(String, String, String?)>[];
   final omittedRows = <(String, String)>{};
+  final rowUpdates = <(String, String), Map<String, dynamic>>{};
   @override
   List<Map<String, dynamic>> sessions(String profile) => [
     for (final row in super.sessions(profile))
-      if (!omittedRows.contains((profile, row['id'] as String))) row,
+      if (!omittedRows.contains((profile, row['id'] as String)))
+        {...row, ...?rowUpdates[(profile, row['id'] as String)]},
   ];
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
@@ -186,6 +188,111 @@ void main() {
       expect(project.label, '< personal >');
     },
   );
+
+  for (final status in ['unread', 'draft']) {
+    test('canonical refresh publishes $status filter membership', () async {
+      fixture.rowUpdates[('personal', 'chat-0')] = {
+        'unread': status == 'unread',
+        'message_count': status == 'draft' ? 0 : 2,
+      };
+      await data.refresh(archivedOnly: false);
+      await data.chooseView(
+        BrowserPreferenceIntent.toggle(BrowserFilter.status, status),
+      );
+      final before = data.project('');
+      final key = before.entries.single.sessionKey;
+      final published = <List<ChatListEntry>>[];
+      data.addListener(() => published.add(data.project('').entries));
+
+      fixture.rowUpdates[('personal', 'chat-0')] = {
+        'unread': false,
+        'message_count': 2,
+      };
+      await controller.switchProfile('personal');
+
+      expect(
+        data.entries.singleWhere((entry) => entry.sessionKey == key).status,
+        isNot(before.entries.single.status),
+      );
+      expect(data.project('').entries, isEmpty);
+      expect(published, isNotEmpty);
+      expect(published.last, isEmpty);
+
+      fixture.rowUpdates[('personal', 'chat-0')] = {
+        'unread': status == 'unread',
+        'message_count': status == 'draft' ? 0 : 2,
+      };
+      published.clear();
+      await controller.switchProfile('personal');
+      expect(published, isNotEmpty);
+      expect(published.last.map((entry) => entry.sessionKey), [key]);
+    });
+  }
+
+  for (final field in ['title', 'preview']) {
+    test('canonical refresh publishes local $field query membership', () async {
+      fixture.rowUpdates[('personal', 'chat-0')] = {field: 'needle match'};
+      await data.refresh(archivedOnly: false);
+      final key = data.project('needle').entries.single.sessionKey;
+      final published = <List<ChatListEntry>>[];
+      data.addListener(() => published.add(data.project('needle').entries));
+
+      fixture.rowUpdates[('personal', 'chat-0')] = {field: 'different text'};
+      await controller.switchProfile('personal');
+
+      expect(data.entries.any((entry) => entry.sessionKey == key), isTrue);
+      expect(data.project('needle').entries, isEmpty);
+      expect(published, isNotEmpty);
+      expect(published.last, isEmpty);
+    });
+  }
+
+  test('canonical row changes retain a stable filtered arrangement', () async {
+    fixture.rowUpdates[('personal', 'chat-0')] = {
+      'title': 'needle before',
+      'unread': true,
+      'message_count': 2,
+    };
+    await data.refresh(archivedOnly: false);
+    await data.chooseView(
+      BrowserPreferenceIntent.toggle(BrowserFilter.status, 'unread'),
+    );
+    final before = data.project('needle');
+    final key = before.entries.single.sessionKey;
+    final row = data.row(key);
+    var publications = 0;
+    var rowPublications = 0;
+    data.addListener(() => publications++);
+    row.addListener(() => rowPublications++);
+    final indexReads = fixture.reads
+        .where((read) => read.$1 == 'sessions' && read.$2['limit'] == '100')
+        .length;
+
+    fixture.rowUpdates[('personal', 'chat-0')] = {
+      'title': 'needle after',
+      'unread': true,
+      'message_count': 2,
+      'input_tokens': 1234,
+    };
+    await controller.switchProfile('personal');
+
+    expect(data.row(key), same(row));
+    expect(row.value.title, 'needle after');
+    expect(row.value.tokens, 1234);
+    expect(rowPublications, greaterThan(0));
+    expect(publications, 0);
+    expect(
+      data.project('needle').groups.map((group) => group.key),
+      before.groups.map((group) => group.key),
+    );
+    expect(
+      fixture.reads
+          .where((read) => read.$1 == 'sessions' && read.$2['limit'] == '100')
+          .length,
+      indexReads,
+      reason: 'Canonical refresh adds no browser index read',
+    );
+  });
 
   test(
     'project choices follow single, multiple and cleared profile filters',

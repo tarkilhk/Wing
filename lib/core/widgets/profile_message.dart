@@ -23,6 +23,8 @@ class ProfileMessage extends StatelessWidget {
   final VoidCallback? onReadAloud;
   final bool readingAloud;
   final Widget? actions;
+  final bool showEditAction;
+  final VoidCallback? onEdit;
   const ProfileMessage({
     super.key,
     required this.message,
@@ -34,44 +36,139 @@ class ProfileMessage extends StatelessWidget {
     this.onReadAloud,
     this.readingAloud = false,
     this.actions,
+    this.showEditAction = false,
+    this.onEdit,
   });
+
+  Future<void> _copyMessage(BuildContext context, String content) async {
+    await Clipboard.setData(ClipboardData(text: content));
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Message copied')));
+    }
+  }
 
   Widget _copy(BuildContext context, String content) => IconButton(
     tooltip: 'Copy message',
     style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
     icon: const Icon(Icons.copy_outlined, size: 17),
-    onPressed: () async {
-      await Clipboard.setData(ClipboardData(text: content));
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Message copied')));
-      }
-    },
+    onPressed: () => _copyMessage(context, content),
   );
 
-  Widget _userControls(BuildContext context, Widget? timestamp) => SizedBox(
-    width: actions == null ? 48 : 96,
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
+  // Include the 16dp outer gutter. Paired 48dp targets extend 8dp into
+  // the bubble's 12dp padding, keeping their glyphs close without overlapping
+  // targets or covering message text.
+  double get _userRailWidth => showEditAction ? 88 : 48;
+  double get _userBodyInset => _userRailWidth;
+
+  Widget _userAction({
+    Key? key,
+    required String label,
+    required IconData icon,
+    required double iconOffset,
+    required VoidCallback? onPressed,
+  }) {
+    const size = Size(48, 48);
+    return IconButton(
+      key: key,
+      tooltip: label,
+      constraints: BoxConstraints.tight(size),
+      style: IconButton.styleFrom(
+        minimumSize: size,
+        maximumSize: size,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.standard,
+      ),
+      padding: const EdgeInsets.only(bottom: WingSpacing.xs),
+      alignment: Alignment.bottomCenter,
+      onPressed: onPressed,
+      icon: Transform.translate(
+        offset: Offset(iconOffset, 0),
+        child: Icon(icon, size: 18),
+      ),
+    );
+  }
+
+  Widget _userControls(BuildContext context, Widget? timestamp) => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      if (timestamp != null)
+        Positioned(
+          top: WingSpacing.xs,
+          left: 0,
+          right: 0,
+          child: Align(alignment: Alignment.topCenter, child: timestamp),
+        ),
+      Positioned(
+        bottom: 0,
+        right: 0,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (showEditAction)
+              _userAction(
+                key: ValueKey('edit-message-${message.id}'),
+                label: 'Edit message',
+                icon: Icons.edit_outlined,
+                iconOffset: 14,
+                onPressed: onEdit,
+              ),
+            _userAction(
+              label: 'Copy message',
+              icon: Icons.copy_outlined,
+              iconOffset: showEditAction ? -6 : 0,
+              onPressed: () => _copyMessage(context, message.copyText),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  Widget _userBubble(BuildContext context, String content, Widget? timestamp) {
+    final theme = Theme.of(context);
+    return Stack(
+      clipBehavior: Clip.none,
       children: [
-        // The time has its own accessible/full-date target above the actions.
         Padding(
-          padding: const EdgeInsets.only(top: WingSpacing.sm),
-          child: SizedBox(
-            height: MediaQuery.textScalerOf(context).scale(12),
-            child: timestamp == null
-                ? null
-                : FittedBox(fit: BoxFit.scaleDown, child: timestamp),
+          padding: EdgeInsets.only(
+            right: streaming ? WingSpacing.lg : _userBodyInset,
+          ),
+          child: Container(
+            key: ValueKey(('user-message-bubble', message.id)),
+            width: double.infinity,
+            constraints: BoxConstraints(
+              minHeight:
+                  MediaQuery.textScalerOf(context).scale(11) +
+                  48 +
+                  WingSpacing.sm,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer,
+              borderRadius: WingRadius.card,
+            ),
+            child: SelectableText(
+              content,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                height: 1.45,
+                color: theme.colorScheme.onPrimaryContainer,
+              ),
+            ),
           ),
         ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [?actions, _copy(context, message.copyText)],
-        ),
+        if (!streaming)
+          Positioned(
+            top: 0,
+            bottom: 0,
+            right: 0,
+            width: _userRailWidth,
+            child: _userControls(context, timestamp),
+          ),
       ],
-    ),
-  );
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -196,9 +293,6 @@ class ProfileMessage extends StatelessWidget {
     }
     final user = role == 'user';
     final timestamp = _timestamp(context);
-    final bodySize = theme.textTheme.bodyLarge?.fontSize ?? 16;
-    final enlargedText =
-        MediaQuery.textScalerOf(context).scale(bodySize) >= bodySize * 1.5;
     return Padding(
       padding: EdgeInsets.only(bottom: user ? WingSpacing.md : 0),
       child: Column(
@@ -274,58 +368,27 @@ class ProfileMessage extends StatelessWidget {
               ),
             ),
           if (content.isNotEmpty)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: user
-                  ? MainAxisAlignment.end
-                  : MainAxisAlignment.start,
-              children: [
-                Flexible(
-                  child: Container(
-                    margin: EdgeInsets.only(
-                      left: user && !enlargedText ? 28 : 0,
-                    ),
-                    padding: user
-                        ? const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          )
-                        : EdgeInsets.zero,
-                    decoration: user
-                        ? BoxDecoration(
-                            color: theme.colorScheme.primaryContainer,
-                            borderRadius: WingRadius.card,
-                          )
-                        : null,
-                    child: user
-                        ? SelectableText(
-                            content,
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              height: 1.45,
-                              color: theme.colorScheme.onPrimaryContainer,
-                            ),
-                          )
-                        : MarkdownMessageContent(
-                            data: content,
-                            streaming: streaming,
-                            onOpenRemoteFile: onOpenRemoteFile,
-                            onDownloadRemoteFile: onDownloadRemoteFile,
-                            loadImage: loadAttachmentImage,
-                            deliverables: true,
-                          ),
-                  ),
-                ),
-                if (user && !streaming) _userControls(context, timestamp),
-              ],
-            ),
+            if (user)
+              _userBubble(context, content, timestamp)
+            else
+              MarkdownMessageContent(
+                data: content,
+                streaming: streaming,
+                onOpenRemoteFile: onOpenRemoteFile,
+                onDownloadRemoteFile: onDownloadRemoteFile,
+                loadImage: loadAttachmentImage,
+                deliverables: true,
+              ),
           for (final attachment in message.attachments)
             Padding(
               padding: EdgeInsets.only(
-                left: 28,
+                left: user ? 0 : 28,
                 right: streaming
-                    ? 0
-                    : user && actions != null
-                    ? 96
+                    ? user
+                          ? WingSpacing.lg
+                          : 0
+                    : user
+                    ? _userBodyInset
                     : 48,
                 top: 8,
               ),
@@ -336,7 +399,14 @@ class ProfileMessage extends StatelessWidget {
               ),
             ),
           if (user && !streaming && content.isEmpty)
-            _userControls(context, timestamp),
+            SizedBox(
+              width: _userRailWidth,
+              height:
+                  MediaQuery.textScalerOf(context).scale(11) +
+                  48 +
+                  WingSpacing.sm,
+              child: _userControls(context, timestamp),
+            ),
           if (actions != null && !user)
             Align(alignment: Alignment.centerRight, child: actions),
         ],
@@ -364,7 +434,7 @@ class ProfileMessage extends StatelessWidget {
         semanticsLabel: full,
         maxLines: 1,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          fontSize: 12,
+          fontSize: message.role == 'user' ? 11 : 12,
           height: 1,
           fontFeatures: const [FontFeature.tabularFigures()],
           color: Theme.of(context).colorScheme.onSurfaceVariant,
