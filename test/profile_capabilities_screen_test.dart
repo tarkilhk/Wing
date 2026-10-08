@@ -1,3 +1,4 @@
+import 'package:wing/core/services/profile_capabilities_session.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,8 @@ import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/profile_capabilities_screen.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profiles_repository.dart';
+import 'package:wing/core/widgets/tool_activity_details.dart';
+import 'helpers/pump_markdown_widget.dart';
 
 final _scope = WorkspaceScope(connectionId: 'server-a', profileName: 'work');
 const _profiles = ProfileDiscovery(
@@ -23,7 +26,13 @@ ProfileGateway _gateway({
   get: (path, query) => skillsOnly && path == 'tools/toolsets'
       ? Future.value({'data': []})
       : get(path, query),
-  put: put,
+  ownedPut: put == null
+      ? null
+      : (path, body, canDispatch, onDispatched) async {
+          if (!canDispatch()) throw StateError('Retired command');
+          onDispatched();
+          return put(path, body);
+        },
   rpc: (_, _) async => {},
   discover: () async => _profiles,
 );
@@ -36,7 +45,7 @@ Future<void> _show(WidgetTester tester, ProfileGateway gateway) async {
         onLibrary: () {},
         onHub: () {},
         onPlugins: () {},
-        gateway: gateway,
+        createSession: () => ProfileCapabilitiesSession(gateway),
         connectionLabel: 'Server A',
       ),
     ),
@@ -127,26 +136,28 @@ void main() {
             onHub: () {},
             onPlugins: () {},
             connectionLabel: 'Server A',
-            gateway: _gateway(
-              skillsOnly: false,
-              get: (path, _) => path == 'skills'
-                  ? skills.future
-                  : Future.value({
-                      'data': [
-                        {
-                          'name': 'browser',
-                          'label': 'Browser',
-                          'description': 'Browse pages',
-                          'enabled': false,
-                          'configured': false,
-                          'tools': ['browse'],
-                        },
-                      ],
-                    }),
-              put: (_, _) async {
-                writes++;
-                return {};
-              },
+            createSession: () => ProfileCapabilitiesSession(
+              _gateway(
+                skillsOnly: false,
+                get: (path, _) => path == 'skills'
+                    ? skills.future
+                    : Future.value({
+                        'data': [
+                          {
+                            'name': 'browser',
+                            'label': 'Browser',
+                            'description': 'Browse pages',
+                            'enabled': false,
+                            'configured': false,
+                            'tools': ['browse'],
+                          },
+                        ],
+                      }),
+                put: (_, _) async {
+                  writes++;
+                  return {};
+                },
+              ),
             ),
           ),
         ),
@@ -209,6 +220,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Read instructions'));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
+      expect(find.byType(SkillDocumentViewer), findsOneWidget);
       expect(find.text('Read the original sources.'), findsOneWidget);
     },
   );

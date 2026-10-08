@@ -157,4 +157,31 @@ void main() {
     expect(service.rendered, [0, 0]);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'closing during render releases only after the native decode settles',
+    (tester) async {
+      final rendering = Completer<Uint8List>();
+      final entered = Completer<void>();
+      final service = _PdfService()
+        ..rendering = (_) {
+          entered.complete();
+          return rendering.future;
+        };
+      await tester.pumpWidget(
+        _app(
+          service,
+          () async => RemoteFileDownload(filename: 'report.pdf', bytes: [1]),
+        ),
+      );
+      await tester.pump();
+      await entered.future;
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(service.closed, isEmpty);
+      rendering.complete(_png);
+      await tester.pump();
+      expect(service.closed, ['doc']);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

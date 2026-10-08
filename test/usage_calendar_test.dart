@@ -5,6 +5,82 @@ import 'package:wing/core/screens/administration/usage_charts.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 
 void main() {
+  testWidgets('range outline includes reported and missing zero-usage days', (
+    tester,
+  ) async {
+    final daily = UsageDaily.fromJson({
+      'daily': [
+        for (final (date, count) in [
+          ('2026-09-14', 10),
+          ('2026-09-15', 20),
+          ('2026-09-16', 0),
+          ('2026-09-18', 30),
+          ('2026-09-19', 40),
+        ])
+          {
+            'day': date,
+            'input_tokens': count,
+            'cache_read_tokens': 0,
+            'output_tokens': 0,
+          },
+      ],
+    }, period: 365);
+    Future<void> show(Set<String> dates) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: UsageCalendar(
+              daily: daily,
+              periodDates: dates,
+              selected: null,
+              onSelected: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle(const Duration(milliseconds: 250));
+    }
+
+    CustomPainter rangePainter() => tester
+        .widget<CustomPaint>(
+          find.descendant(
+            of: find.byKey(const ValueKey('usage-year-band')),
+            matching: find.byType(CustomPaint),
+          ),
+        )
+        .painter!;
+    await show({'2026-09-15', '2026-09-18'});
+    final sparse = rangePainter();
+    for (final id in ['2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18']) {
+      final label = tester
+          .widget<Semantics>(find.byKey(ValueKey(id)))
+          .properties
+          .label!;
+      expect(label, contains('selected period'), reason: id);
+      if (id == '2026-09-16' || id == '2026-09-17') {
+        expect(label, contains('0 tokens'));
+      }
+    }
+    for (final id in ['2026-09-14', '2026-09-19']) {
+      expect(
+        tester.widget<Semantics>(find.byKey(ValueKey(id))).properties.label,
+        isNot(contains('selected period')),
+      );
+    }
+    await show({'2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18'});
+    expect(rangePainter().shouldRepaint(sparse), isFalse);
+    await show({});
+    expect(
+      tester
+          .widget<Semantics>(find.byKey(const ValueKey('2026-09-16')))
+          .properties
+          .label,
+      isNot(contains('selected period')),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'server date placeholders differ from verified zero and retained period dates remain reachable',
     (tester) async {
@@ -33,7 +109,7 @@ void main() {
         ),
       );
       await tester.tap(find.byKey(const ValueKey('usage-day-2027-01-02')));
-      await tester.pumpAndSettle();
+      await tester.pumpAndSettle(const Duration(milliseconds: 250));
       expect(
         find.textContaining('No returned year data', findRichText: true),
         findsOneWidget,
@@ -41,7 +117,7 @@ void main() {
       expect(find.textContaining('UTC'), findsNothing);
       expect(selected, isEmpty);
       await tester.tap(find.byKey(const ValueKey('usage-day-2027-01-01')));
-      await tester.pumpAndSettle();
+      await tester.pumpAndSettle(const Duration(milliseconds: 250));
       expect(
         find.textContaining('0 tokens', findRichText: true),
         findsOneWidget,
@@ -79,13 +155,13 @@ void main() {
         ),
       );
       await tester.tap(find.byKey(const ValueKey('usage-day-2026-09-17')));
-      await tester.pumpAndSettle();
+      await tester.pumpAndSettle(const Duration(milliseconds: 250));
       expect(
         find.textContaining('0 tokens', findRichText: true),
         findsOneWidget,
       );
       await tester.tap(find.byKey(const ValueKey('usage-day-2026-09-18')));
-      await tester.pumpAndSettle();
+      await tester.pumpAndSettle(const Duration(milliseconds: 250));
       expect(
         find.textContaining('Tokens unavailable', findRichText: true),
         findsOneWidget,
@@ -93,7 +169,7 @@ void main() {
       expect(find.textContaining('0 tokens', findRichText: true), findsNothing);
       expect(selected, ['2026-09-17', '2026-09-18']);
       await tester.tapAt(const Offset(300, 300));
-      await tester.pumpAndSettle();
+      await tester.pumpAndSettle(const Duration(milliseconds: 250));
       expect(
         find.textContaining('Tokens unavailable', findRichText: true),
         findsNothing,
@@ -149,7 +225,7 @@ void main() {
               ),
             ),
           );
-          await tester.pumpAndSettle();
+          await tester.pumpAndSettle(const Duration(milliseconds: 250));
         }
 
         Finder day(String id) => find.byKey(ValueKey('usage-day-$id'));
@@ -182,7 +258,7 @@ void main() {
 
         Future<void> drag(double dx) async {
           await tester.drag(band, Offset(dx, 0));
-          await tester.pumpAndSettle();
+          await tester.pumpAndSettle(const Duration(milliseconds: 250));
         }
 
         expect(band, findsOneWidget);
@@ -217,12 +293,12 @@ void main() {
         await tester.pump();
         expect(label(), isNot(latestLabel));
         await gesture.up();
-        await tester.pumpAndSettle();
+        await tester.pumpAndSettle(const Duration(milliseconds: 250));
         await drag(-400);
         expect(label(), latestLabel);
         if (weekday == 0) {
           await tester.tap(day(daily.days.last.id));
-          await tester.pumpAndSettle();
+          await tester.pumpAndSettle(const Duration(milliseconds: 250));
           expect(
             find.textContaining('0 tokens', findRichText: true),
             findsOneWidget,
@@ -234,7 +310,7 @@ void main() {
           await tester.pump(const Duration(milliseconds: 100));
           expect(position().pixels, greaterThan(releasedAt));
           expect(label(), isNot(releasedLabel));
-          await tester.pumpAndSettle();
+          await tester.pumpAndSettle(const Duration(milliseconds: 250));
           expect(
             find.textContaining('0 tokens', findRichText: true),
             findsNothing,
@@ -242,8 +318,17 @@ void main() {
           await drag(-1000);
         }
         final visited = latest.toSet();
+        // Exhaustively verify date reachability without replaying the gesture
+        // animation at every position. Drag/fling behavior is checked above.
+        final step = position().viewportDimension / 2;
+        expect(step, greaterThan(0));
         while (position().pixels < position().maxScrollExtent) {
-          await drag(200);
+          position().jumpTo(
+            (position().pixels + step)
+                .clamp(0, position().maxScrollExtent)
+                .toDouble(),
+          );
+          await tester.pumpAndSettle(const Duration(milliseconds: 250));
           visited.addAll(visible());
         }
         expect(visited, daily.days.map((d) => d.id).toSet());
@@ -262,9 +347,8 @@ void main() {
               .width,
           closeTo(width, .01),
         );
-        while (position().pixels > 0) {
-          await drag(-200);
-        }
+        position().jumpTo(0);
+        await tester.pumpAndSettle(const Duration(milliseconds: 250));
         expect(visible().last, daily.days.last.id);
         width = 900;
         await show();

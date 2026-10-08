@@ -1,8 +1,12 @@
+import 'package:wing/core/models/chat_runtime.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/models/chat_list_status.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
-import 'package:wing/core/models/chat_list_view.dart';
 import 'package:wing/core/models/profile_live_activity.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
@@ -31,6 +35,9 @@ class NotificationCoverageHost {
   bool historyFails = false;
   Completer<void>? historyDelay;
   bool resumeFails = false;
+  bool liveUnpersistedResume = false;
+  List<Map<String, dynamic>> pendingApprovals = [];
+  final approvalReads = <Map<String, dynamic>>[];
   List<Map<String, dynamic>>? questions;
   Map<String, dynamic> resumeOverrides = {};
   final workingProfiles = <String>{};
@@ -97,7 +104,10 @@ class NotificationCoverageHost {
             return {'sessions': active};
           }
           if (method == 'projects.tree') return {'projects': []};
-          if (method == 'approval.pending') return {'approvals': []};
+          if (method == 'approval.pending') {
+            approvalReads.add(Map.of(params));
+            return {'approvals': pendingApprovals};
+          }
           if (method == 'session.create' || method == 'session.resume') {
             int? resumeCall;
             if (method == 'session.resume') {
@@ -109,10 +119,22 @@ class NotificationCoverageHost {
             final sessionId = method == 'session.create'
                 ? 'loaded'
                 : params['session_id'] as String;
+            if (method == 'session.resume' && liveUnpersistedResume) {
+              // Stock _resume_live_unpersisted has no running/open_requests.
+              return {
+                'session_id': '$sessionId-runtime',
+                'stored_session_id': sessionId,
+                'message_count': 0,
+                'messages': <Map<String, dynamic>>[],
+                'info': {'profile_name': scope.profileName, 'lazy': true},
+              };
+            }
             return {
               'session_id': '$sessionId-runtime',
-              'stored_session_id': sessionId,
-              'session_key': sessionId,
+              if (method == 'session.create')
+                'stored_session_id': sessionId,
+              if (method == 'session.resume')
+                'session_key': sessionId,
               'running':
                   method == 'session.resume' &&
                   workingProfiles.contains(scope.profileName),
@@ -171,6 +193,7 @@ Map<String, dynamic> row(
 void main() {
   late NotificationCoverageHost host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late bool disposed;
   late List<ProfileInputNotification> inputNotices;
   late List<String> previews;
@@ -183,16 +206,22 @@ void main() {
     alerts = [];
     previews = [];
     inputNotices = [];
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Host',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Host',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       connectionIdentity: 'notification-coverage',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
       onNotificationInputs: (snapshot) async => inputNotices.add(snapshot),
       onAttention: (notification) async {
@@ -211,7 +240,89 @@ void main() {
 
   tearDown(() {
     if (!disposed) controller.dispose();
+    appPreferences.dispose();
   });
+
+  test(
+    'resume durable identity validates current stock forms without mutation',
+    () {
+      final gateway = controller.current!.gateway;
+      final info = {'profile_name': 'a'};
+      final base = <String, dynamic>{
+        'session_id': 'outside-runtime',
+        'info': info,
+      };
+      final persisted = Map<String, dynamic>.unmodifiable({
+        ...base,
+        'session_key': 'outside',
+      });
+      final liveUnpersisted = Map<String, dynamic>.unmodifiable({
+        ...base,
+        'stored_session_id': 'outside',
+        'info': {'profile_name': 'a', 'lazy': true},
+      });
+      expect(gateway.resumeDurableId(persisted), 'outside');
+      expect(gateway.resumeDurableId(liveUnpersisted), 'outside');
+      expect(persisted.containsKey('stored_session_id'), isFalse);
+      expect(liveUnpersisted.containsKey('session_key'), isFalse);
+      for (final invalid in <Map<String, dynamic>>[
+        base,
+        {...base, 'session_key': ''},
+        {...base, 'stored_session_id': 42},
+        {...base, 'session_key': 'outside', 'stored_session_id': 'other'},
+        {...base, 'session_key': null, 'stored_session_id': 'outside'},
+      ]) {
+        expect(() => gateway.resumeDurableId(invalid), throwsFormatException);
+      }
+    },
+  );
+
+  test(
+    'cold notification request adopts stock live-unpersisted durable identity',
+    () async {
+      host.liveUnpersistedResume = true;
+      host.pendingApprovals = [
+        {
+          'request_id': 'lazy-approval',
+          'command': 'print(1)',
+          'choices': ['once', 'deny'],
+        },
+      ];
+      final key = ProfileSessionKey(controller.current!.scope, 'outside');
+      final chat = await controller.loadNotificationApproval(key);
+      expect(chat, isNotNull);
+      expect(chat!.key, key);
+      expect(chat.runtime.runtimeId, 'outside-runtime');
+      expect(chat.runtime.approval!.requestId, 'lazy-approval');
+      expect(host.approvalReads, isNotEmpty);
+      expect(
+        host.approvalReads.map((call) => call['session_id']),
+        everyElement('outside-runtime'),
+      );
+      expect(controller.current!.chat, isNull);
+      expect(host.resumeCalls.single['session_id'], 'outside');
+    },
+  );
+
+  test(
+    'minimal live-unpersisted first-request read does not invent input',
+    () async {
+      host.liveUnpersistedResume = true;
+      host.active = [row('outside-runtime', 'outside', 'working')];
+      host.changed();
+      await waitForReads(host, 1);
+      expect(alerts, isEmpty);
+      host.waitingProfiles.add('a');
+      host.active = [row('outside-runtime', 'outside', 'waiting', 2)];
+      host.changed();
+      await waitForReads(host, 2);
+      expect(inputNotices, isEmpty);
+      expect(alerts, isEmpty);
+      expect(controller.notificationChats, isEmpty);
+      expect(controller.current!.chat, isNull);
+      expect(host.resumeCalls.single['omit_messages'], isTrue);
+    },
+  );
 
   test(
     'first unopened batch notification contains its current question and count',
@@ -315,7 +426,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(inputNotices.single.inputs.single.focus.id, 'newer');
     expect(
-      controller.notificationChats.single.pendingQuestion!['request_id'],
+      controller.notificationChats.single.runtime.pendingQuestion!.requestId,
       'newer',
     );
     expect(controller.hasActiveChats, isFalse);
@@ -364,7 +475,7 @@ void main() {
       host.resumeDelays[2]!.complete();
       await opening;
       expect(controller.current!.chat, same(candidate));
-      expect(candidate.pendingQuestion!['request_id'], 'question-a');
+      expect(candidate.runtime.pendingQuestion!.requestId, 'question-a');
     },
   );
 
@@ -394,19 +505,23 @@ void main() {
   }
 
   test('deduplicates loaded event and reconciliation paths', () async {
-    final loaded = await controller.createChat();
-    host.active = [row(loaded.runtimeId, loaded.key.sessionId, 'working')];
+    final loaded = await controller.createChat(canDispatch: () => true);
+    host.active = [
+      row(loaded.runtime.runtimeId, loaded.key.sessionId, 'working'),
+    ];
     host.changed();
     await waitForReads(host, 1);
 
     host.gateways['a']!.onEvent!(
       StreamEvent(
         type: 'clarify',
-        sessionId: loaded.runtimeId,
+        sessionId: loaded.runtime.runtimeId,
         data: const {'request_id': 'q1', 'question': 'Continue?'},
       ),
     );
-    host.active = [row(loaded.runtimeId, loaded.key.sessionId, 'waiting', 2)];
+    host.active = [
+      row(loaded.runtime.runtimeId, loaded.key.sessionId, 'waiting', 2),
+    ];
     host.changed();
     await waitForReads(host, 2);
 
@@ -418,59 +533,69 @@ void main() {
   test(
     'idle snapshot recovers a loaded chat after a missed completion',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'Next question');
       host.gateways['a']!.onEvent!(
         StreamEvent(
           type: 'message.start',
-          sessionId: chat.runtimeId,
+          sessionId: chat.runtime.runtimeId,
           data: const {},
         ),
       );
-      expect(chat.busy, isTrue);
+      expect(chat.runtime.blocksTurnAdmission, isTrue);
       host.history = [
         {'id': 1, 'role': 'assistant', 'content': 'Recovered answer'},
       ];
-      host.active = [row(chat.runtimeId, chat.key.sessionId, 'idle')];
+      host.active = [row(chat.runtime.runtimeId, chat.key.sessionId, 'idle')];
       host.changed();
       await waitForReads(host, 1);
-      expect(chat.busy, isFalse);
-      expect(chat.draft, 'Next question');
+      expect(chat.runtime.blocksTurnAdmission, isFalse);
+      expect(chat.composer.observation.text, 'Next question');
       expect(host.resumeCalls, hasLength(1));
-      expect(chat.messages.single['content'], 'Recovered answer');
+      expect(chat.reading.messages.single['content'], 'Recovered answer');
     },
   );
 
   test(
     'desktop resolution clears loaded question state from the chat list',
     () async {
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       host.gateways['a']!.onEvent!(
         StreamEvent(
           type: 'clarify',
-          sessionId: chat.runtimeId,
+          sessionId: chat.runtime.runtimeId,
           data: const {
             'request_id': 'desktop-question',
             'question': 'Continue?',
           },
         ),
       );
-      host.active = [row(chat.runtimeId, chat.key.sessionId, 'waiting')];
+      host.active = [
+        row(chat.runtime.runtimeId, chat.key.sessionId, 'waiting'),
+      ];
       host.changed();
       await waitForReads(host, 1);
-      expect(chat.pendingQuestion, isNotNull);
-      expect(chatListStatus(const {}, chat: chat), ChatListStatus.needsInput);
+      expect(chat.runtime.pendingQuestion, isNotNull);
+      expect(
+        chatListStatus(const {}, runtime: chat.listObservation),
+        ChatListStatus.needsInput,
+      );
 
       // Desktop answered and finished while this chat was not selected. The
       // global snapshot arrives without request.cancel or message.complete.
-      host.active = [row(chat.runtimeId, chat.key.sessionId, 'idle', 2)];
+      host.active = [
+        row(chat.runtime.runtimeId, chat.key.sessionId, 'idle', 2),
+      ];
       host.changed();
       await waitForReads(host, 2);
-      for (var i = 0; i < 20 && chat.pendingQuestion != null; i++) {
+      for (var i = 0; i < 20 && chat.runtime.pendingQuestion != null; i++) {
         await Future<void>.delayed(Duration.zero);
       }
-      expect(chat.pendingQuestion, isNull);
-      expect(chatListStatus(const {}, chat: chat), ChatListStatus.idle);
+      expect(chat.runtime.pendingQuestion, isNull);
+      expect(
+        chatListStatus(const {}, runtime: chat.listObservation),
+        ChatListStatus.idle,
+      );
       expect(controller.hasActiveChats, isFalse);
     },
   );
@@ -478,8 +603,10 @@ void main() {
   test(
     'desktop completion clears an earlier waiting activity snapshot',
     () async {
-      final chat = await controller.createChat();
-      host.active = [row(chat.runtimeId, chat.key.sessionId, 'waiting')];
+      final chat = await controller.createChat(canDispatch: () => true);
+      host.active = [
+        row(chat.runtime.runtimeId, chat.key.sessionId, 'waiting'),
+      ];
       await controller.refreshActivity();
       expect(
         controller.liveActivity.single.state,
@@ -489,73 +616,75 @@ void main() {
       host.gateways['a']!.onEvent!(
         StreamEvent(
           type: 'message.complete',
-          sessionId: chat.runtimeId,
+          sessionId: chat.runtime.runtimeId,
           data: const {'text': 'Desktop question resolved'},
         ),
       );
-      host.active = [row(chat.runtimeId, chat.key.sessionId, 'idle', 2)];
+      host.active = [
+        row(chat.runtime.runtimeId, chat.key.sessionId, 'idle', 2),
+      ];
       host.changed();
       await waitForReads(host, reads + 1);
-      expect(chat.pendingQuestion, isNull);
-      expect(chat.busy, isFalse);
+      expect(chat.runtime.pendingQuestion, isNull);
+      expect(chat.runtime.blocksTurnAdmission, isFalse);
       expect(controller.liveActivity, isEmpty);
     },
   );
 
   test('a newer question survives a delayed desktop-resolution read', () async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     void question(String id) => host.gateways['a']!.onEvent!(
       StreamEvent(
         type: 'clarify',
-        sessionId: chat.runtimeId,
+        sessionId: chat.runtime.runtimeId,
         data: {'request_id': id, 'question': 'Continue?'},
       ),
     );
     question('old');
     host.resumeDelay = Completer<void>();
-    host.active = [row(chat.runtimeId, chat.key.sessionId, 'idle')];
+    host.active = [row(chat.runtime.runtimeId, chat.key.sessionId, 'idle')];
     host.changed();
     await waitForReads(host, 1);
     expect(host.resumeCalls, hasLength(1));
     question('new');
     host.resumeDelay!.complete();
     await Future<void>.delayed(Duration.zero);
-    expect(chat.pendingQuestion?['request_id'], 'new');
-    expect(chat.status, ProfileTurnStatus.attention);
+    expect(chat.runtime.pendingQuestion?.requestId, 'new');
+    expect(chat.runtime.needsInput, isTrue);
   });
 
   test('failed request refresh preserves the pending question', () async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     host.gateways['a']!.onEvent!(
       StreamEvent(
         type: 'clarify',
-        sessionId: chat.runtimeId,
+        sessionId: chat.runtime.runtimeId,
         data: const {'request_id': 'pending', 'question': 'Continue?'},
       ),
     );
     host.resumeFails = true;
-    host.active = [row(chat.runtimeId, chat.key.sessionId, 'idle')];
+    host.active = [row(chat.runtime.runtimeId, chat.key.sessionId, 'idle')];
     host.changed();
     await waitForReads(host, 1);
-    expect(chat.pendingQuestion?['request_id'], 'pending');
-    expect(chat.status, ProfileTurnStatus.attention);
+    expect(chat.runtime.pendingQuestion?.requestId, 'pending');
+    expect(chat.runtime.needsInput, isTrue);
   });
 
   test('desktop resolution resumes monitoring while work continues', () async {
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     host.gateways['a']!.onEvent!(
       StreamEvent(
         type: 'clarify',
-        sessionId: chat.runtimeId,
+        sessionId: chat.runtime.runtimeId,
         data: const {'request_id': 'pending', 'question': 'Continue?'},
       ),
     );
     host.workingProfiles.add('a');
-    host.active = [row(chat.runtimeId, chat.key.sessionId, 'working')];
+    host.active = [row(chat.runtime.runtimeId, chat.key.sessionId, 'working')];
     host.changed();
     await waitForReads(host, 1);
-    expect(chat.pendingQuestion, isNull);
-    expect(chat.status, ProfileTurnStatus.running);
+    expect(chat.runtime.pendingQuestion, isNull);
+    expect(chat.runtime.execution, ChatExecution.running);
     expect(controller.hasActiveChats, isTrue);
   });
 
@@ -563,15 +692,17 @@ void main() {
     test(
       'activity reconciliation preserves side work or uncertainty: $status',
       () async {
-        final chat = await controller.createChat();
-        host.active = [row(chat.runtimeId, chat.key.sessionId, 'waiting')];
+        final chat = await controller.createChat(canDispatch: () => true);
+        host.active = [
+          row(chat.runtime.runtimeId, chat.key.sessionId, 'waiting'),
+        ];
         await controller.refreshActivity();
         final reads = host.activeReads;
         host.activeFails = status == 'failed';
         host.active = [
           if (status != 'missing')
             {
-              ...row(chat.runtimeId, chat.key.sessionId, status),
+              ...row(chat.runtime.runtimeId, chat.key.sessionId, status),
               'side_tasks_running': 1,
             },
         ];

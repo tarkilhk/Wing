@@ -1,3 +1,6 @@
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -18,6 +21,7 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_connection_identity.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_workspace_registry.dart';
+import 'package:wing/core/services/workspace_snapshot_store.dart';
 import 'package:wing/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,6 +31,7 @@ import 'profile_workspace_controller_test.dart' show Host;
 
 typedef NotificationHarness = ({
   ConnectionManager manager,
+  AppPreferences appPreferences,
   SavedConnection connection,
   String identity,
   Host host,
@@ -34,34 +39,58 @@ typedef NotificationHarness = ({
   ProfileWorkspaceRegistry registry,
 });
 
-Future<NotificationHarness> _harness() async {
+Future<NotificationHarness> _harness({bool restoreCachedChat = false}) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
+  final appPreferences = AppPreferences(preferences);
+  addTearDown(appPreferences.dispose);
   final secrets = MemoryIdentityStore();
   final manager = await ConnectionManager.create(
     preferences,
     credentialStore: secrets,
   );
-  await manager.importConnections([
-    identityTestConnection(),
-  ], replaceExisting: false);
+  await manager.importConnections(
+    [identityTestConnection()],
+    replaceExisting: false,
+    canCommit: () => true,
+  );
   final connection = (await manager.loadConnectionsWithSecrets()).single;
   final identities = ProfileConnectionIdentity(credentialStore: secrets);
   final identity = await identities.resolve(connection);
   final host = Host();
+  if (restoreCachedChat) {
+    await WorkspaceSnapshotStore(preferences, identity).write({
+      'selected': 'a',
+      'profiles': [
+        {
+          'name': 'a',
+          'sessions': [
+            {'id': 'same', 'title': 'Cached chat'},
+          ],
+          'projects': [],
+          'chats': [
+            {'id': 'same', 'title': 'Cached chat', 'messages': []},
+          ],
+        },
+      ],
+    });
+  }
   final registry = ProfileWorkspaceRegistry(
     identities: identities,
     create: (saved, resolvedIdentity) => ProfileWorkspaceController(
-      connection: saved,
+      access: ConnectionAccess(connection: saved, dashboardOAuth: null),
       connectionIdentity: resolvedIdentity,
       preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     ),
   );
+  addTearDown(registry.dispose);
   final controller = await registry.forConnection(connection);
   await controller.initialize();
   return (
     manager: manager,
+    appPreferences: appPreferences,
     connection: connection,
     identity: identity,
     host: host,
@@ -102,6 +131,7 @@ Future<GlobalKey<WingAppState>> _pumpApp(
     WingApp(
       key: key,
       connManager: harness.manager,
+      appPreferences: harness.appPreferences,
       profileControllers: harness.registry,
       shareIntents: shareIntents,
       startupExternalNavigationReady: startupExternalNavigationReady,
@@ -127,6 +157,8 @@ Future<void> _pumpNavigation(WidgetTester tester) async {
   }
 }
 
+const _nativeNotifications = MethodChannel(NativeNotificationSink.channelName);
+
 void main() {
   for (final scenario in [
     'once',
@@ -141,15 +173,14 @@ void main() {
     testWidgets(
       'cold notification action $scenario checks the current request',
       (tester) async {
-        final harness = await _harness();
+        final harness = await _harness(
+          restoreCachedChat: scenario == 'cached-once',
+        );
         harness.host.running = false;
         ProfileChat? cachedChat;
         if (scenario == 'cached-once') {
-          cachedChat = await harness.controller.createChat();
+          cachedChat = harness.controller.browserResource('a').chats['same']!;
           await harness.controller.updateDraft(cachedChat, 'Unsent follow-up');
-          cachedChat
-            ..runtimeId = cachedChat.key.sessionId
-            ..offlineSnapshot = true;
         }
         final request = <String, dynamic>{
           'request_id': 'cold-approval',
@@ -161,7 +192,7 @@ void main() {
         await prefs.setBool('notification_permission_requested', true);
         await prefs.setBool('microphone_permission_requested', true);
         if (scenario == 'deny-hidden') {
-          await prefs.setBool('notification_message_previews', false);
+          await harness.appPreferences.setNotificationPreviews(false);
         }
         final choice = {'changed', 'expired', 'cached-once'}.contains(scenario)
             ? 'once'
@@ -191,9 +222,7 @@ void main() {
         );
         final finished = <dynamic>[];
         final statuses = <dynamic>[];
-        messenger.setMockMethodCallHandler(NativeNotificationSink.channel, (
-          call,
-        ) async {
+        messenger.setMockMethodCallHandler(_nativeNotifications, (call) async {
           if (call.method == 'finishDirectAction') finished.add(call.arguments);
           if (call.method == 'actionStatus') statuses.add(call.arguments);
           return call.method == 'initialize'
@@ -210,10 +239,7 @@ void main() {
         });
         addTearDown(() {
           messenger.setMockMethodCallHandler(plugin, null);
-          messenger.setMockMethodCallHandler(
-            NativeNotificationSink.channel,
-            null,
-          );
+          messenger.setMockMethodCallHandler(_nativeNotifications, null);
         });
         await _pumpApp(tester, harness);
         await tester.pumpAndSettle();
@@ -240,11 +266,17 @@ void main() {
         }
         expect(finished, [42]);
         expect(find.byType(ProfileWorkspaceScreen), findsNothing);
-        expect(harness.controller.current?.chat, cachedChat);
+        expect(harness.controller.current?.chat, isNull);
         if (cachedChat != null) {
-          expect(cachedChat.offlineSnapshot, isFalse);
-          expect(cachedChat.runtimeId, 'a-runtime');
-          expect(cachedChat.draft, 'Unsent follow-up');
+          expect(
+            harness.controller.findNotificationChat(cachedChat.key),
+            same(cachedChat),
+          );
+        }
+        if (cachedChat != null) {
+          expect(cachedChat.runtime.offline, isFalse);
+          expect(cachedChat.runtime.runtimeId, 'a-runtime');
+          expect(cachedChat.composer.observation.text, 'Unsent follow-up');
         }
         await tester.pumpWidget(const SizedBox.shrink());
       },
@@ -265,6 +297,7 @@ void main() {
         final notices = ChatNotificationCoordinator(
           harness.manager.prefs,
           previous,
+          appPreferences: harness.appPreferences,
         );
         await notices.result(
           chat: _payload(harness, 'a'),
@@ -277,9 +310,27 @@ void main() {
           await harness.manager.deleteConnection(harness.connection.id);
         }
         if (state == 'changed credentials') {
-          await harness.manager.updateApiKey(
+          await harness.manager.updateConnection(
             harness.connection.id,
+            harness.connection.label,
+            Uri(
+              scheme: harness.connection.useHttps ? 'https' : 'http',
+              host: harness.connection.host,
+            ).toString(),
+            harness.connection.port,
             'changed-test-key',
+            icon: harness.connection.icon,
+            gatewayPrefix: harness.connection.gatewayPrefix,
+            dashboardPrefix: harness.connection.dashboardPrefix,
+            dashboardProxied: harness.connection.dashboardProxied,
+            desktopGatewayUrl: harness.connection.desktopGatewayUrl,
+            dashboardPort: harness.connection.dashboardPortOverride,
+            dashboardUsername: harness.connection.dashboardUsername,
+            dashboardPassword: harness.connection.dashboardPassword,
+            cloudInstanceId: harness.connection.cloudInstanceId,
+            cloudOrganization: harness.connection.cloudOrganization,
+            dashboardGrant: harness.connection.dashboardGrant,
+            gatewayHeaders: harness.connection.gatewayHeaders,
           );
         }
         final posted = <Map<dynamic, dynamic>>[];
@@ -300,9 +351,7 @@ void main() {
             _ => null,
           },
         );
-        messenger.setMockMethodCallHandler(NativeNotificationSink.channel, (
-          call,
-        ) async {
+        messenger.setMockMethodCallHandler(_nativeNotifications, (call) async {
           if (call.method == 'show') posted.add(call.arguments as Map);
           return call.method == 'initialize'
               ? [
@@ -318,10 +367,7 @@ void main() {
         });
         addTearDown(() {
           messenger.setMockMethodCallHandler(plugin, null);
-          messenger.setMockMethodCallHandler(
-            NativeNotificationSink.channel,
-            null,
-          );
+          messenger.setMockMethodCallHandler(_nativeNotifications, null);
         });
         await _pumpApp(tester, harness);
         await tester.pumpAndSettle();
@@ -553,7 +599,10 @@ void main() {
         harness.controller.current!.chat!.key.sessionId,
         'expired-camera-chat',
       );
-      expect(harness.controller.current!.chat!.draft, pending.text);
+      expect(
+        harness.controller.current!.chat!.composer.observation.text,
+        pending.text,
+      );
       expect(shares.pendingShare.value, isNull);
     },
   );
@@ -680,6 +729,8 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
+    final appPreferences = AppPreferences(preferences);
+    addTearDown(appPreferences.dispose);
     final secrets = MemoryIdentityStore();
     final manager = await ConnectionManager.create(
       preferences,
@@ -694,10 +745,11 @@ void main() {
       dashboardPortOverride: 4321,
       apiKey: 'second-key',
     );
-    await manager.importConnections([
-      firstConnection,
-      secondConnection,
-    ], replaceExisting: false);
+    await manager.importConnections(
+      [firstConnection, secondConnection],
+      replaceExisting: false,
+      canCommit: () => true,
+    );
     final saved = await manager.loadConnectionsWithSecrets();
     final first = saved.singleWhere((item) => item.id == firstConnection.id);
     final second = saved.singleWhere((item) => item.id == secondConnection.id);
@@ -709,20 +761,23 @@ void main() {
     final registry = ProfileWorkspaceRegistry(
       identities: identities,
       create: (connection, identity) => ProfileWorkspaceController(
-        connection: connection,
+        access: manager.accessFor(connection),
         connectionIdentity: identity,
         preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: connection.id == first.id
             ? firstHost.gateway
             : secondHost.gateway,
       ),
     );
+    addTearDown(registry.dispose);
     final secondController = await registry.forConnection(second);
     await secondController.initialize();
     final firstHistory = Completer<void>();
     firstHost.delays['a'] = firstHistory;
     final app = await _pumpApp(tester, (
       manager: manager,
+      appPreferences: appPreferences,
       connection: first,
       identity: firstIdentity,
       host: firstHost,

@@ -1,3 +1,7 @@
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/models/chat_intelligence.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,7 +9,6 @@ import 'package:wing/core/models/backend_update.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/ws_client.dart';
-import 'package:wing/core/widgets/chat_intelligence_picker.dart';
 
 /// Opt-in cross-client checks against a local, disposable Hermes profile.
 ///
@@ -27,11 +30,16 @@ void main() {
     apiKey: '',
   );
 
-  Future<ProfileWorkspaceController> controller(String identity) async {
+  Future<ProfileWorkspaceController> controller(
+    String identity,
+    SharedPreferences preferences,
+    AppPreferences appPreferences,
+  ) async {
     final result = ProfileWorkspaceController(
       connectionIdentity: identity,
-      connection: connection(),
-      preferences: await SharedPreferences.getInstance(),
+      access: ConnectionAccess(connection: connection(), dashboardOAuth: null),
+      preferences: preferences,
+      appPreferences: appPreferences,
     );
     await result.initialize();
     await result.switchProfile('android-qa-a');
@@ -44,8 +52,19 @@ void main() {
     'another client sees session intelligence and read-state changes',
     () async {
       SharedPreferences.setMockInitialValues({});
-      final first = await controller('cross-client-a');
-      final second = await controller('cross-client-b');
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
+      final first = await controller(
+        'cross-client-a',
+        preferences,
+        appPreferences,
+      );
+      final second = await controller(
+        'cross-client-b',
+        preferences,
+        appPreferences,
+      );
       ProfileChat? firstChat;
       final sessionId = suppliedSession;
       ChatIntelligenceSelection? originalSelection;
@@ -80,6 +99,7 @@ void main() {
         originalSelection = ChatIntelligenceSelection(
           choice: originalChoice.first,
           reasoningEffort: originalReasoning!,
+          fastMode: first.current!.chat!.fastMode!,
         );
         final differentModels = firstOptions.choices.where(
           (choice) =>
@@ -98,6 +118,7 @@ void main() {
         final changed = ChatIntelligenceSelection(
           choice: differentModels.first,
           reasoningEffort: changedReasoning,
+          fastMode: originalSelection.fastMode,
         );
 
         final originalRows = await first.current!.gateway.sessions();
@@ -112,7 +133,9 @@ void main() {
           changed,
           confirmModelChange: (message) async => throw StateError(message),
         );
-        await first.current!.gateway.updateSession(sessionId, {'unread': true});
+        await first.current!.gateway.updateSession(sessionId, {
+          'unread': true,
+        }, canDispatch: () => true);
 
         await second.refresh();
         final secondRow = second.current!.sessions.firstWhere(
@@ -148,7 +171,7 @@ void main() {
         if (originalUnread != null) {
           await first.current!.gateway.updateSession(sessionId, {
             'unread': originalUnread,
-          });
+          }, canDispatch: () => true);
         }
         first.dispose();
         second.dispose();
@@ -166,7 +189,14 @@ void main() {
     'backend update eligibility and status are readable without starting one',
     () async {
       SharedPreferences.setMockInitialValues({});
-      final workspace = await controller('update-read-only');
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
+      final workspace = await controller(
+        'update-read-only',
+        preferences,
+        appPreferences,
+      );
       try {
         Map<String, dynamic> checkJson;
         try {

@@ -1,3 +1,6 @@
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'support/chat_browser_interactions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,24 +15,34 @@ import 'support/profile_browser_fixture.dart';
 void main() {
   late ProfileBrowserFixture fixture;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     fixture = _ProjectFilterFixture();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Prestige',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Prestige',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       connectionIdentity: 'settings',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: fixture.gateway,
     );
     await controller.initialize();
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
   Future<void> show(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(460, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -44,7 +57,7 @@ void main() {
   testWidgets(
     'context ring has its own target beside the model inside the composer',
     (tester) async {
-      await controller.createChat();
+      await controller.createChat(canDispatch: () => true);
       await show(tester);
       await tester.pumpAndSettle();
       final composer = tester.getRect(
@@ -74,6 +87,7 @@ void main() {
   ) async {
     final chat = await controller.createChat(
       inProject: controller.current!.projects.first,
+      canDispatch: () => true,
     );
     await show(tester);
     await tester.pumpAndSettle();
@@ -123,7 +137,8 @@ void main() {
   testWidgets('project lookup failure keeps the chat accessible', (
     tester,
   ) async {
-    controller.current!.projectsError = 'Projects unavailable';
+    fixture.failProjects = true;
+    await controller.switchProfile('personal');
     await controller.openSession(
       ProfileSessionKey(controller.current!.scope, 'newest'),
     );

@@ -1,4 +1,9 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:convert';
+import 'dart:async';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/profile_gateway.dart';
 import 'dart:io';
 
 import 'support/gateway_application_requests.dart';
@@ -10,6 +15,86 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 
 void main() {
+  test(
+    'retired captured browser PATCH held at authentication sends zero writes',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final entered = Completer<void>(), release = Completer<void>();
+      var writes = 0;
+      final subscription = server.listen((request) async {
+        Object result;
+        if (request.uri.path == '/auth/password-login') {
+          await request.drain<void>();
+          entered.complete();
+          await release.future;
+          request.response.headers.add(
+            'set-cookie',
+            'hermes_session_at=fixture; Path=/',
+          );
+          result = <String, Object>{};
+        } else if (request.method == 'PATCH') {
+          writes++;
+          result = {'ok': true};
+        } else {
+          result = switch (request.uri.path) {
+            '/api/profiles' => {
+              'profiles': [
+                {'name': 'personal'},
+              ],
+            },
+            '/api/profiles/active' => {
+              'current': 'personal',
+              'active': 'personal',
+            },
+            _ => throw StateError(
+              'Unexpected fixture route: ${request.uri.path}',
+            ),
+          };
+        }
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(jsonEncode(result));
+        await request.response.close();
+      });
+      final connection = SavedConnection(
+        id: 'held',
+        label: 'Fixture',
+        host: '127.0.0.1',
+        port: server.port,
+        dashboardPortOverride: server.port,
+        apiKey: '',
+        dashboardUsername: 'fixture',
+        dashboardPassword: 'fixture',
+      );
+      final gateway = ProfileGateway.forConnection(
+        ConnectionAccess(connection: connection, dashboardOAuth: null),
+        WorkspaceScope(
+          connectionId: 'held',
+          profileName: 'personal',
+          connectionIdentity: 'held-auth',
+        ),
+      );
+      addTearDown(() async {
+        if (!release.isCompleted) release.complete();
+        gateway.close();
+        await subscription.cancel();
+        await server.close(force: true);
+      });
+      var active = true;
+      final pending = gateway.updateSession('chat', {
+        'unread': false,
+      }, canDispatch: () => active);
+      final checked = expectLater(
+        pending,
+        throwsA(isA<DashboardRequestNotSentException>()),
+      );
+      await entered.future.timeout(const Duration(seconds: 5));
+      active = false;
+      release.complete();
+      await checked;
+      expect(writes, 0);
+    },
+  );
+
   test(
     'profile browsing reuses one sign-in without closing the live socket',
     () async {
@@ -86,19 +171,26 @@ void main() {
         await request.response.close();
       });
       SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: SavedConnection(
-          id: 'test',
-          label: 'Fixture',
-          host: '127.0.0.1',
-          port: server.port,
-          dashboardPortOverride: server.port,
-          apiKey: '',
-          dashboardUsername: 'fixture',
-          dashboardPassword: 'fixture',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'test',
+            label: 'Fixture',
+            host: '127.0.0.1',
+            port: server.port,
+            dashboardPortOverride: server.port,
+            apiKey: '',
+            dashboardUsername: 'fixture',
+            dashboardPassword: 'fixture',
+          ),
+          dashboardOAuth: null,
         ),
         connectionIdentity: 'fixture',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
       );
       final browser = ChatBrowserData(controller);
       addTearDown(() async {
@@ -115,9 +207,17 @@ void main() {
       final owner = controller.current;
       for (var i = 0; i < 5; i++) {
         await browser.refresh(archivedOnly: false);
-        expect(browser.errors, isEmpty);
+        expect(
+          browser.state.profiles.values.where(
+            (profile) => profile.error != null,
+          ),
+          isEmpty,
+        );
       }
-      expect(browser.errors, isEmpty);
+      expect(
+        browser.state.profiles.values.where((profile) => profile.error != null),
+        isEmpty,
+      );
       expect(requestedProfiles, containsAll(['personal', 'work']));
       expect(controller.current, same(owner));
       expect(await owner!.gateway.call('session.active_list'), {

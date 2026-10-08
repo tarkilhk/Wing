@@ -78,7 +78,7 @@ class ProfileConnectionIdentity {
         [
           connection.cloudInstanceId,
           connection.cloudOrganization,
-          connection.dashboardOAuth?.id,
+          connection.dashboardGrant?.id,
         ],
       if (connection.gatewayHeaders.isNotEmpty)
         canonicalGatewayHeaders(connection.gatewayHeaders),

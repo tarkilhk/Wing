@@ -1,10 +1,9 @@
-import 'dart:async';
+import '../../models/profile_session_key.dart';
 import 'package:flutter/material.dart';
 
-import '../../services/profile_workspace_controller.dart'
-    show ProfileSessionKey;
 import '../../models/scheduled_task.dart';
 import '../../services/scheduled_tasks_controller.dart';
+import '../../services/scheduled_task_detail_session.dart';
 import '../../widgets/studio_action_label.dart';
 import 'admin_scheduled_task_editor_page.dart';
 import 'admin_widgets.dart';
@@ -29,74 +28,48 @@ class _AdminScheduledTaskDetailPageState
     extends State<AdminScheduledTaskDetailPage>
     with WidgetsBindingObserver {
   ScheduledTasksController get controller => widget.controller;
-  List<TaskRun>? runs;
-  String? runError;
-  bool loading = false, resumed = true, opening = false;
-  int limit = 20, generation = 0;
-  Timer? timer;
+  late final session = ScheduledTaskDetailSession(
+    controller,
+    widget.initial,
+    isVisible: () => mounted && ModalRoute.of(context)?.isCurrent == true,
+    onOpenSession: widget.onOpenSession,
+  );
+  ScheduledTaskDetailState get state => session.state;
+  List<TaskRun>? get runs => state.history;
+  String? get runError => state.error;
+  bool get loading => state.loading;
+  bool get opening => state.opening;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) refresh();
-    });
-    timer = Timer.periodic(const Duration(seconds: 8), (_) {
-      if (resumed &&
-          mounted &&
-          ModalRoute.of(context)?.isCurrent == true &&
-          !loading &&
-          runError == null &&
-          controller.error == null) {
-        refresh();
-      }
+      if (mounted) session.refresh();
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    resumed = state == AppLifecycleState.resumed;
-    if (resumed) refresh();
+    session.resumed(state == AppLifecycleState.resumed);
   }
 
   @override
   void dispose() {
-    timer?.cancel();
-    generation++;
+    session.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  Future<void> refresh() async {
-    final request = ++generation;
-    setState(() {
-      loading = true;
-      runError = null;
-    });
-    await controller.refresh();
-    try {
-      final result = await controller.repository.runs(
-        widget.initial.id,
-        limit: limit,
-      );
-      if (mounted && request == generation) setState(() => runs = result);
-    } catch (e) {
-      if (mounted && request == generation) {
-        setState(() => runError = taskFailure(e));
-      }
-    } finally {
-      if (mounted && request == generation) setState(() => loading = false);
-    }
-  }
+  Future<void> refresh() => session.refresh();
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: controller,
+    listenable: session,
     builder: (context, _) {
-      final task = controller.task(widget.initial.id) ?? widget.initial;
-      final missing =
-          controller.tasks != null && controller.task(task.id) == null;
-      final busy = controller.blocked(task.id);
+      final task = state.task;
+      final missing = state.missing;
+      final toggle = controller.toggleChoice(task);
+      final trigger = controller.actionChoice(task, TaskAction.trigger)!;
       final theme = Theme.of(context);
       return TaskPage(
         title: 'Task details',
@@ -111,7 +84,7 @@ class _AdminScheduledTaskDetailPageState
                 controller.repository.profile,
                 (context, profile) => AdminTaskRoute(
                   profile: profile,
-                  preferences: controller.preferences,
+                  acquireController: controller.acquireLease,
                   title: 'Edit task',
                   taskId: task.id,
                   builder: (controller, selectedTask) =>
@@ -130,34 +103,36 @@ class _AdminScheduledTaskDetailPageState
                 runSpacing: 8,
                 alignment: WrapAlignment.end,
                 children: [
-                  if (task.canPause || task.canResume)
+                  if (toggle != null)
                     OutlinedButton.icon(
-                      onPressed: busy
+                      onPressed: !toggle.enabled
                           ? null
                           : () => performTaskAction(
                               context,
                               controller,
                               task,
-                              task.canResume ? 'resume' : 'pause',
+                              toggle.kind,
                             ),
                       icon: Icon(
-                        task.canResume
+                        toggle.kind == TaskAction.resume
                             ? Icons.play_arrow_rounded
                             : Icons.pause_rounded,
                       ),
-                      label: Text(task.canResume ? 'Resume' : 'Pause'),
+                      label: Text(
+                        toggle.kind == TaskAction.resume ? 'Resume' : 'Pause',
+                      ),
                     ),
                   FilledButton(
-                    onPressed: busy || !task.canRun
+                    onPressed: !trigger.enabled
                         ? null
                         : () => performTaskAction(
                             context,
                             controller,
                             task,
-                            'trigger',
+                            TaskAction.trigger,
                           ),
                     child: StudioActionLabel(
-                      task.enabled ? 'Run now' : 'Resume and run',
+                      trigger.label,
                       busy: controller.busy.contains(task.id),
                     ),
                   ),
@@ -194,15 +169,7 @@ class _AdminScheduledTaskDetailPageState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          !task.knownState ||
-                                  task.state == 'completed' ||
-                                  task.state == 'disabled'
-                              ? task.statusLabel.toUpperCase()
-                              : task.running
-                              ? 'IN PROGRESS'
-                              : task.paused
-                              ? 'ON PAUSE'
-                              : 'NEXT RUN',
+                          task.nextRunHeading,
                           style: TextStyle(
                             fontSize: 12,
                             letterSpacing: 1.2,
@@ -212,17 +179,7 @@ class _AdminScheduledTaskDetailPageState
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          !task.knownState
-                              ? 'Schedule status unavailable'
-                              : task.state == 'completed'
-                              ? 'No further runs'
-                              : task.state == 'disabled'
-                              ? 'Schedule disabled'
-                              : task.running
-                              ? 'Your agent is working'
-                              : !task.enabled
-                              ? 'Ready when you are'
-                              : taskTime(context, task.nextRun),
+                          task.nextRunText ?? taskTime(context, task.nextRun),
                           style: theme.textTheme.headlineSmall?.copyWith(
                             color: theme.colorScheme.primary,
                           ),
@@ -251,13 +208,7 @@ class _AdminScheduledTaskDetailPageState
                 ),
               TaskSection(
                 'Task',
-                child: SelectableText(
-                  task.prompt.isEmpty
-                      ? task.scriptOnly
-                            ? 'Runs a server script without an agent.'
-                            : 'Uses the task’s server-side execution settings.'
-                      : task.prompt,
-                ),
+                child: SelectableText(task.instructionsDisplay),
               ),
               TaskSection(
                 'Details',
@@ -267,20 +218,8 @@ class _AdminScheduledTaskDetailPageState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _fact(
-                          'Results',
-                          task.destinations
-                              .map((d) => d == 'local' ? 'Saved on server' : d)
-                              .join(' · '),
-                        ),
-                        _fact(
-                          'Model',
-                          task.scriptOnly
-                              ? 'No agent'
-                              : task.text('model').isEmpty
-                              ? 'Profile default at run time'
-                              : '${task.text('provider')} / ${task.text('model')}',
-                        ),
+                        _fact('Results', task.destinationsDisplay),
+                        _fact('Model', task.modelDisplay),
                         _fact(
                           'Last run',
                           task.lastRun == null
@@ -289,18 +228,10 @@ class _AdminScheduledTaskDetailPageState
                         ),
                         if (task.text('script').isNotEmpty)
                           _fact('Server script', task.text('script')),
-                        if (task.data['skills'] is List &&
-                            (task.data['skills'] as List).isNotEmpty)
-                          _fact(
-                            'Skills',
-                            (task.data['skills'] as List).join(', '),
-                          ),
-                        if (task.data['context_from'] is List &&
-                            (task.data['context_from'] as List).isNotEmpty)
-                          _fact(
-                            'Context from',
-                            (task.data['context_from'] as List).join(', '),
-                          ),
+                        if (task.skills.isNotEmpty)
+                          _fact('Skills', task.skills.join(', ')),
+                        if (task.contextFrom.isNotEmpty)
+                          _fact('Context from', task.contextFrom.join(', ')),
                       ],
                     ),
                   ),
@@ -339,17 +270,12 @@ class _AdminScheduledTaskDetailPageState
                           ],
                         ),
                       ),
-                    if (runs != null && runs!.length >= limit && limit < 100)
+                    if (state.canShowMore)
                       TextButton(
-                        onPressed: loading
-                            ? null
-                            : () {
-                                limit = 100;
-                                refresh();
-                              },
+                        onPressed: loading ? null : session.showMore,
                         child: const Text('Show more runs'),
                       ),
-                    if (limit == 100 && runs?.length == 100)
+                    if (state.atLimit)
                       const Text('Showing the latest 100 runs.'),
                   ],
                 ),
@@ -399,7 +325,7 @@ class _AdminScheduledTaskDetailPageState
     trailing: run.isConversation
         ? const Icon(Icons.chevron_right, size: 18)
         : null,
-    onTap: run.isConversation && !opening ? () => open(run) : null,
+    onTap: run.isConversation && !opening ? () => session.open(run) : null,
   );
   Widget _fact(String label, String value) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
@@ -412,17 +338,4 @@ class _AdminScheduledTaskDetailPageState
       ],
     ),
   );
-  Future<void> open(TaskRun run) async {
-    if (!run.isConversation) return;
-    setState(() => opening = true);
-    try {
-      await widget.onOpenSession(
-        ProfileSessionKey(controller.repository.profile.scope, run.id),
-      );
-    } catch (e) {
-      if (mounted) adminMessage(context, taskFailure(e), isError: true);
-    } finally {
-      if (mounted) setState(() => opening = false);
-    }
-  }
 }

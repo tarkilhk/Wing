@@ -134,7 +134,6 @@ object ChatNotifications {
                             context.getSystemService(NotificationManager::class.java).cancel(id)
                             result.success(null)
                         }
-                        "cancelAll" -> { check(handles(context).invalidate()); displayed.clear(); NotificationManagerCompat.from(context).cancelAll(); result.success(null) }
                         "channels" -> result.success(channelStates(context))
                         "openChannelSettings" -> {
                             val intent = if (Build.VERSION.SDK_INT >= 26) Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)

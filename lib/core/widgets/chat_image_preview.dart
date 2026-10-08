@@ -1,33 +1,40 @@
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
+import 'resource_filename.dart';
 
 /// Opened only after tapping an image in a conversation.
 class ChatImagePreview extends StatelessWidget {
   final Uri? uri;
   final Uint8List? bytes;
   final String title;
+  final String? resourceTarget;
   final VoidCallback? onOpenExternal;
   final String actionLabel;
+  final IconData actionIcon;
 
   const ChatImagePreview({
     super.key,
     this.uri,
     this.bytes,
     required this.title,
+    this.resourceTarget,
     this.onOpenExternal,
     this.actionLabel = 'Open in browser',
+    this.actionIcon = Icons.open_in_new,
   }) : assert((uri == null) != (bytes == null));
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+    appBar: ResourceViewerAppBar(
+      context: context,
+      title: title,
+      target: resourceTarget,
       actions: [
         if (onOpenExternal != null)
-          IconButton(
-            tooltip: actionLabel,
-            icon: const Icon(Icons.open_in_new),
+          ResourceViewerAction(
+            label: actionLabel,
+            icon: actionIcon,
             onPressed: onOpenExternal,
           ),
       ],
@@ -53,10 +60,10 @@ class ChatImagePreview extends StatelessWidget {
                 const StudioError('This image could not be previewed.'),
                 if (onOpenExternal != null) ...[
                   const SizedBox(height: 12),
-                  OutlinedButton.icon(
+                  ResourceViewerAction(
                     onPressed: onOpenExternal,
-                    icon: const Icon(Icons.open_in_new),
-                    label: Text(actionLabel),
+                    icon: actionIcon,
+                    label: actionLabel,
                   ),
                 ],
               ],

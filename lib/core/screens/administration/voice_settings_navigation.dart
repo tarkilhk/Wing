@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
-import '../../services/connection_manager.dart';
+import '../../services/connection_access.dart';
 import '../../services/server_connection_status.dart';
-import 'admin_tool_setup_page.dart';
+import 'admin_voice_routes.dart';
+import '../../services/android_voice.dart';
 import '../../widgets/server_connection_label.dart';
 
 /// Single integration point for App settings. Capture the owner before routing;
 /// an administration navigation redesign only needs to change this entry point.
 Future<void> openProfileVoiceSettings(
   BuildContext context, {
-  required SavedConnection connection,
+  required ConnectionAccess access,
   required String connectionIdentity,
   required ServerConnectionStatus connectionStatus,
   required String profileName,
 }) async {
   final repository = AdministrationRepository.forConnection(
-    connection,
+    access,
     connectionIdentity,
     connectionStatus: connectionStatus,
   );
@@ -24,9 +25,9 @@ Future<void> openProfileVoiceSettings(
       MaterialPageRoute(
         builder: (_) => ServerConnectionScope(
           status: connectionStatus,
-          child: AdminToolSetupPage(
-            profile: repository.profile(profileName),
-            name: 'tts',
+          child: profileSpeechSynthesisPage(
+            repository.profile(profileName),
+            device: AndroidVoice.instance,
           ),
         ),
       ),

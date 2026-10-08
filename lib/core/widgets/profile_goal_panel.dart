@@ -2,21 +2,21 @@ import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 import 'profile_transcript_disclosure.dart';
+import 'tool_activity_details.dart';
+import '../presentation/tool_activity_details.dart';
 
 import '../models/session_control.dart';
-import '../services/profile_workspace_controller.dart';
+import '../services/profile_supervision_session.dart';
 
 /// Displays the server-owned goal for one captured chat and its supported
 /// controls. The containing screen decides whether an empty panel is shown.
 class ProfileGoalPanel extends StatefulWidget {
-  final ProfileWorkspaceController controller;
-  final ProfileChat chat;
+  final ProfileSupervisionSession session;
   final bool initiallyExpanded;
 
   const ProfileGoalPanel({
     super.key,
-    required this.controller,
-    required this.chat,
+    required this.session,
     this.initiallyExpanded = false,
   });
 
@@ -27,9 +27,13 @@ class ProfileGoalPanel extends StatefulWidget {
 class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
   bool _requested = false;
   final _criterionDraft = TextEditingController();
+  final _editors = <GoalCriterionEditor>{};
 
   @override
   void dispose() {
+    for (final editor in _editors) {
+      editor.dispose();
+    }
     _criterionDraft.dispose();
     super.dispose();
   }
@@ -43,7 +47,11 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
   @override
   void didUpdateWidget(ProfileGoalPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.chat, widget.chat)) {
+    if (!identical(oldWidget.session, widget.session)) {
+      for (final editor in _editors) {
+        editor.dispose();
+      }
+      _editors.clear();
       _requested = false;
       _criterionDraft.clear();
       _requestRefresh();
@@ -56,7 +64,7 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       try {
-        await widget.controller.refreshSessionControl(widget.chat);
+        await widget.session.refreshControl();
       } catch (_) {
         // The controller retains the error for the panel.
       }
@@ -65,7 +73,7 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
 
   Future<void> _refresh() async {
     try {
-      await widget.controller.refreshSessionControl(widget.chat);
+      await widget.session.refreshControl();
     } catch (_) {
       // The controller retains the error for the panel.
     }
@@ -73,50 +81,45 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
 
   Future<void> _run(SessionControlAction action) async {
     try {
-      await widget.controller.controlSession(widget.chat, action);
+      await widget.session.control(action);
     } catch (_) {
       // The controller retains the error and notice for the panel.
     }
   }
 
   Future<void> _addCriterion() async {
-    final controller = widget.controller;
-    final chat = widget.chat;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => _AddCriterionDialog(
-        controller: controller,
-        chat: chat,
-        initialText: _criterionDraft.text,
-        ownsDestination: () =>
-            mounted &&
-            identical(widget.controller, controller) &&
-            identical(widget.chat, chat),
-        onDraftChanged: (value) {
-          if (mounted &&
-              identical(widget.controller, controller) &&
-              identical(widget.chat, chat)) {
-            _criterionDraft.text = value;
-          }
-        },
-        onAccepted: () {
-          if (mounted &&
-              identical(widget.controller, controller) &&
-              identical(widget.chat, chat)) {
-            _criterionDraft.clear();
-          }
-        },
-      ),
-    );
+    final session = widget.session;
+    final editor = session.editCriterion();
+    _editors.add(editor);
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _AddCriterionDialog(
+          session: session,
+          editor: editor,
+          initialText: _criterionDraft.text,
+          onDraftChanged: (value) {
+            if (mounted && identical(widget.session, session)) {
+              _criterionDraft.text = value;
+            }
+          },
+          onAccepted: () {
+            if (mounted && identical(widget.session, session)) {
+              _criterionDraft.clear();
+            }
+          },
+        ),
+      );
+    } finally {
+      editor.dispose();
+      _editors.remove(editor);
+    }
   }
 
   Future<void> _removeCriterion(int index, String text) async {
-    final controller = widget.controller;
-    final chat = widget.chat;
-    final criteria = List<String>.of(
-      chat.sessionControl?.goal?.subgoals ?? const <String>[],
-    );
+    final session = widget.session;
+    final review = session.reviewCriteria(index: index);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -135,32 +138,25 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
         ],
       ),
     );
-    if (confirmed != true ||
-        !mounted ||
-        !identical(widget.controller, controller) ||
-        !identical(widget.chat, chat)) {
+    if (confirmed != true || !mounted || !identical(widget.session, session)) {
       return;
     }
-    if (!_sameCriteria(
-      criteria,
-      chat.sessionControl?.goal?.subgoals ?? const <String>[],
-    )) {
+    if (!review.current) {
       await _showCriteriaChanged();
       return;
     }
-    await controller.controlSession(
-      chat,
-      SessionControlAction.subgoalRemove,
-      args: {'index': index + 1},
-    );
+    final accepted = await session.applyCriteriaReview(review);
+    if (!accepted &&
+        mounted &&
+        identical(widget.session, session) &&
+        !review.current) {
+      await _showCriteriaChanged();
+    }
   }
 
   Future<void> _clearCriteria() async {
-    final controller = widget.controller;
-    final chat = widget.chat;
-    final criteria = List<String>.of(
-      chat.sessionControl?.goal?.subgoals ?? const <String>[],
-    );
+    final session = widget.session;
+    final review = session.reviewCriteria();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -179,20 +175,20 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
         ],
       ),
     );
-    if (confirmed != true ||
-        !mounted ||
-        !identical(widget.controller, controller) ||
-        !identical(widget.chat, chat)) {
+    if (confirmed != true || !mounted || !identical(widget.session, session)) {
       return;
     }
-    if (!_sameCriteria(
-      criteria,
-      chat.sessionControl?.goal?.subgoals ?? const <String>[],
-    )) {
+    if (!review.current) {
       await _showCriteriaChanged();
       return;
     }
-    await controller.controlSession(chat, SessionControlAction.subgoalClear);
+    final accepted = await session.applyCriteriaReview(review);
+    if (!accepted &&
+        mounted &&
+        identical(widget.session, session) &&
+        !review.current) {
+      await _showCriteriaChanged();
+    }
   }
 
   Future<void> _showCriteriaChanged() => showDialog<void>(
@@ -211,19 +207,8 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
     ),
   );
 
-  static bool _sameCriteria(List<String> first, List<String> second) {
-    if (first.length != second.length) {
-      return false;
-    }
-    for (var index = 0; index < first.length; index++) {
-      if (first[index] != second[index]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
   Future<void> _clear() async {
+    final session = widget.session;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -241,19 +226,22 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
         ],
       ),
     );
-    if (confirmed == true && mounted) {
-      await _run(SessionControlAction.goalClear);
+    if (confirmed == true && mounted && identical(widget.session, session)) {
+      await session.control(SessionControlAction.goalClear);
     }
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.controller,
+    listenable: widget.session,
     builder: (context, _) {
-      final chat = widget.chat;
+      final chat = widget.session.state;
       final snapshot = chat.sessionControl;
       final goal = snapshot?.goal;
-      final working = chat.sessionControlLoading || chat.sessionControlWorking;
+      final working =
+          chat.actionBusy ||
+          chat.sessionControlLoading ||
+          chat.sessionControlWorking;
       final error = chat.sessionControlError;
       return ProfileTranscriptDisclosure(
         key: ValueKey(('goal', chat.key)),
@@ -263,16 +251,17 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
         label: 'Goal',
         summary: Text(_summary(goal, chat.sessionControlNotice)),
         loading: chat.sessionControlLoading,
-        childrenPadding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
+        childrenPadding: EdgeInsets.zero,
         children: [
           if (error != null)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(child: StudioError(error)),
-                TextButton(
+                ActivityDetailAction(
+                  label: 'Retry',
+                  icon: Icons.refresh,
                   onPressed: working ? null : _refresh,
-                  child: const Text('Retry'),
                 ),
               ],
             ),
@@ -281,28 +270,44 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
               alignment: Alignment.centerLeft,
               child: Text('Hermes has no active goal for this chat.'),
             ),
-          if (goal != null) _GoalDetails(goal: goal),
           if (goal != null)
-            _CriteriaSection(
-              goal: goal,
-              disabled: working,
-              onAdd: _addCriterion,
-              onRemove: _removeCriterion,
-              onClear: _clearCriteria,
-            ),
-          if (goal != null)
-            _GoalActions(
-              goal: goal,
-              disabled: working,
-              onAction: _run,
-              onClear: _clear,
+            ActivityDetailsCard(
+              children: [
+                _GoalDetails(goal: goal),
+                _CriteriaSection(
+                  goal: goal,
+                  disabled: working,
+                  onAdd: _addCriterion,
+                  onRemove: _removeCriterion,
+                  onClear: _clearCriteria,
+                ),
+                ActivityDetailStatus(
+                  label: goal.status == SessionGoalStatus.done
+                      ? 'Completed'
+                      : _statusLabel(goal.status),
+                  icon: goal.status == SessionGoalStatus.active
+                      ? Icons.timelapse_outlined
+                      : goal.status == SessionGoalStatus.paused
+                      ? Icons.pause_circle_outline
+                      : Icons.check_circle_outline,
+                  contextFacts: ['${goal.turnsUsed}/${goal.maxTurns} turns'],
+                  actions: [
+                    _GoalActions(
+                      actions: chat.goalActions,
+                      disabled: working,
+                      onAction: _run,
+                      onClear: _clear,
+                    ),
+                  ],
+                ),
+              ],
             ),
           Align(
             alignment: Alignment.centerRight,
-            child: TextButton.icon(
+            child: ActivityDetailAction(
               onPressed: working ? null : _refresh,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Refresh'),
+              icon: Icons.refresh,
+              label: 'Refresh',
             ),
           ),
           if (chat.sessionControlNotice case final notice?)
@@ -328,18 +333,16 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
 }
 
 class _AddCriterionDialog extends StatefulWidget {
-  final ProfileWorkspaceController controller;
-  final ProfileChat chat;
+  final ProfileSupervisionSession session;
+  final GoalCriterionEditor editor;
   final String initialText;
-  final bool Function() ownsDestination;
   final ValueChanged<String> onDraftChanged;
   final VoidCallback onAccepted;
 
   const _AddCriterionDialog({
-    required this.controller,
-    required this.chat,
+    required this.session,
+    required this.editor,
     required this.initialText,
-    required this.ownsDestination,
     required this.onDraftChanged,
     required this.onAccepted,
   });
@@ -350,7 +353,6 @@ class _AddCriterionDialog extends StatefulWidget {
 
 class _AddCriterionDialogState extends State<_AddCriterionDialog> {
   late final TextEditingController _draft;
-  String? _error;
 
   @override
   void initState() {
@@ -365,43 +367,24 @@ class _AddCriterionDialogState extends State<_AddCriterionDialog> {
   }
 
   Future<void> _add() async {
-    if (!widget.ownsDestination()) {
-      setState(() {
-        _error = 'This chat changed. Close this dialog and review the goal.';
-      });
-      return;
-    }
-    final accepted = await widget.controller.controlSession(
-      widget.chat,
-      SessionControlAction.subgoalAdd,
-      args: {'text': _draft.text.trim()},
-    );
-    if (!mounted) {
-      return;
-    }
-    if (!widget.ownsDestination()) {
-      setState(() {
-        _error = 'This chat changed. Close this dialog and review the goal.';
-      });
-      return;
-    }
+    final accepted = await widget.editor.submit(_draft.text);
+    if (!mounted) return;
     if (accepted) {
       widget.onAccepted();
       Navigator.pop(context);
-      return;
+    } else {
+      setState(() {});
     }
-    setState(() {
-      _error = 'Criterion could not be added. Review it and try again.';
-    });
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.controller,
+    listenable: widget.session,
     builder: (context, _) {
       final working =
-          widget.chat.sessionControlLoading ||
-          widget.chat.sessionControlWorking;
+          widget.session.state.actionBusy ||
+          widget.session.state.sessionControlLoading ||
+          widget.session.state.sessionControlWorking;
       return PopScope(
         canPop: !working,
         child: AlertDialog(
@@ -418,7 +401,7 @@ class _AddCriterionDialogState extends State<_AddCriterionDialog> {
             decoration: InputDecoration(
               labelText: 'Criterion',
               hintText: 'What must be true before this goal is done?',
-              errorText: _error,
+              errorText: widget.editor.error,
               alignLabelWithHint: true,
               border: const OutlineInputBorder(
                 borderRadius: WingRadius.control,
@@ -435,7 +418,9 @@ class _AddCriterionDialogState extends State<_AddCriterionDialog> {
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: working || _draft.text.trim().isEmpty ? null : _add,
+              onPressed: working || !widget.editor.canSubmit(_draft.text)
+                  ? null
+                  : _add,
               child: const Text('Add'),
             ),
           ],
@@ -451,47 +436,63 @@ class _GoalDetails extends StatelessWidget {
   const _GoalDetails({required this.goal});
 
   @override
-  Widget build(BuildContext context) => ConstrainedBox(
-    constraints: const BoxConstraints(maxHeight: 360),
-    child: SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SelectableText(goal.title),
-          const SizedBox(height: 8),
-          _Field(label: 'Outcome', value: goal.contract.outcome),
-          _Field(label: 'Verification', value: goal.contract.verification),
-          _Field(label: 'Constraints', value: goal.contract.constraints),
-          _Field(label: 'Boundaries', value: goal.contract.boundaries),
-          _Field(label: 'Stop when', value: goal.contract.stopWhen),
-          if (goal.gates.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            const Text(
-              'Verification gates',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            for (final gate in goal.gates)
-              SelectableText(
-                '${gate.command} · ${gate.attempts} attempts · ${gate.maxRetries} retries allowed · ${gate.timeoutSeconds}s timeout · ${gate.lastExitCode == null ? 'not run' : 'exit ${gate.lastExitCode}'}',
-              ),
-          ],
-          if (goal.pausedReason != null)
-            _Field(label: 'Paused', value: goal.pausedReason!),
-          if (goal.lastVerdict != null)
-            _Field(
-              label: 'Last verdict',
-              value: _verdictText(goal.lastVerdict!),
-            ),
-          if (goal.lastReason != null)
-            _Field(label: 'Reason', value: goal.lastReason!),
-          if (goal.waitBarrier != null)
-            _Field(
-              label: 'Waiting',
-              value: _barrierText(context, goal.waitBarrier!),
-            ),
-        ],
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      ActivityDetailSection(
+        block: ToolDetailBlock(
+          label: 'Objective',
+          text: goal.title,
+          copyable: true,
+        ),
       ),
-    ),
+      _Field(label: 'Outcome', value: goal.contract.outcome),
+      _Field(label: 'Verification', value: goal.contract.verification),
+      _Field(label: 'Constraints', value: goal.contract.constraints),
+      _Field(label: 'Boundaries', value: goal.contract.boundaries),
+      _Field(label: 'Stop when', value: goal.contract.stopWhen),
+      for (var index = 0; index < goal.gates.length; index++)
+        ActivityDetailSection(
+          block: ToolDetailBlock(
+            label: 'Verification gate ${index + 1}',
+            role: ToolDetailRole.command,
+            format: ToolDetailFormat.source,
+            text: goal.gates[index].command,
+            copyable: true,
+          ),
+          facts: [
+            '${goal.gates[index].attempts} attempts',
+            '${goal.gates[index].maxRetries} retries allowed',
+            '${goal.gates[index].timeoutSeconds}s timeout',
+            goal.gates[index].lastExitCode == null
+                ? goal.gates[index].attempts == 0
+                      ? 'Not run'
+                      : 'Exit code not supplied'
+                : 'Exit ${goal.gates[index].lastExitCode}',
+          ],
+        ),
+      if (goal.pausedReason case final reason?)
+        _Field(label: 'Paused', value: reason, copyable: false),
+      if (goal.lastReason case final reason?)
+        ActivityDetailSection(
+          block: ToolDetailBlock(
+            label: 'Latest decision',
+            text: reason,
+            copyable: false,
+          ),
+          facts: [
+            if (goal.lastVerdict case final verdict?) _verdictText(verdict),
+          ],
+        )
+      else if (goal.lastVerdict case final verdict?)
+        ActivityDetailFacts(facts: ['Last verdict: ${_verdictText(verdict)}']),
+      if (goal.waitBarrier case final barrier?)
+        ActivityDetailStatus(
+          label: 'Waiting',
+          icon: Icons.schedule_outlined,
+          contextFacts: [_barrierText(context, barrier)],
+        ),
+    ],
   );
 
   String _barrierText(BuildContext context, SessionGoalWaitBarrier barrier) {
@@ -524,26 +525,20 @@ class _GoalDetails extends StatelessWidget {
 class _Field extends StatelessWidget {
   final String label;
   final String value;
+  final bool copyable;
 
-  const _Field({required this.label, required this.value});
+  const _Field({
+    required this.label,
+    required this.value,
+    this.copyable = true,
+  });
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 5),
-    child: value.trim().isEmpty
-        ? const SizedBox.shrink()
-        : SelectableText.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: '$label: ',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                TextSpan(text: value),
-              ],
-            ),
-          ),
-  );
+  Widget build(BuildContext context) => value.trim().isEmpty
+      ? const SizedBox.shrink()
+      : ActivityDetailSection(
+          block: ToolDetailBlock(label: label, text: value, copyable: copyable),
+        );
 }
 
 class _CriteriaSection extends StatelessWidget {
@@ -562,66 +557,56 @@ class _CriteriaSection extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 8),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Criteria (${goal.subgoals.length})',
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
-        Wrap(
-          spacing: 4,
-          runSpacing: 2,
-          children: [
-            TextButton.icon(
-              onPressed: disabled ? null : onAdd,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add criterion'),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      ActivityDetailStatus(
+        label: 'Criteria (${goal.subgoals.length})',
+        icon: Icons.checklist_outlined,
+        actions: [
+          ActivityDetailAction(
+            label: 'Add criterion',
+            icon: Icons.add,
+            onPressed: disabled ? null : onAdd,
+          ),
+          if (goal.subgoals.isNotEmpty)
+            ActivityDetailAction(
+              label: 'Clear criteria',
+              icon: Icons.clear_all,
+              onPressed: disabled ? null : onClear,
             ),
-            if (goal.subgoals.isNotEmpty)
-              TextButton.icon(
-                onPressed: disabled ? null : onClear,
-                icon: const Icon(Icons.clear_all, size: 18),
-                label: const Text('Clear criteria'),
-              ),
+        ],
+      ),
+      for (var index = 0; index < goal.subgoals.length; index++)
+        ActivityDetailSection(
+          copyable: false,
+          viewable: false,
+          block: ToolDetailBlock(
+            label: 'Criterion ${index + 1}',
+            text: goal.subgoals[index],
+          ),
+          actions: [
+            ActivityDetailAction(
+              label: 'Remove criterion ${index + 1}',
+              icon: Icons.close,
+              onPressed: disabled
+                  ? null
+                  : () => onRemove(index, goal.subgoals[index]),
+            ),
           ],
         ),
-        for (var index = 0; index < goal.subgoals.length; index++)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: SelectableText(
-                    '${index + 1}. ${goal.subgoals[index]}',
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: 'Remove criterion ${index + 1}',
-                onPressed: disabled
-                    ? null
-                    : () => onRemove(index, goal.subgoals[index]),
-                icon: const Icon(Icons.close, size: 18),
-              ),
-            ],
-          ),
-      ],
-    ),
+    ],
   );
 }
 
 class _GoalActions extends StatelessWidget {
-  final SessionGoal goal;
+  final List<SessionControlAction> actions;
   final bool disabled;
   final Future<void> Function(SessionControlAction) onAction;
   final Future<void> Function() onClear;
 
   const _GoalActions({
-    required this.goal,
+    required this.actions,
     required this.disabled,
     required this.onAction,
     required this.onClear,
@@ -629,38 +614,37 @@ class _GoalActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Wrap(
-    spacing: 8,
-    runSpacing: 4,
+    spacing: 0,
+    runSpacing: 0,
     children: [
-      if (goal.status == SessionGoalStatus.active)
-        TextButton.icon(
+      if (actions.contains(SessionControlAction.goalPause))
+        ActivityDetailAction(
           onPressed: disabled
               ? null
               : () => onAction(SessionControlAction.goalPause),
-          icon: const Icon(Icons.pause, size: 18),
-          label: const Text('Pause'),
+          icon: Icons.pause,
+          label: 'Pause',
         ),
-      if (goal.status == SessionGoalStatus.paused ||
-          goal.status == SessionGoalStatus.done)
-        TextButton.icon(
+      if (actions.contains(SessionControlAction.goalResume))
+        ActivityDetailAction(
           onPressed: disabled
               ? null
               : () => onAction(SessionControlAction.goalResume),
-          icon: const Icon(Icons.play_arrow, size: 18),
-          label: const Text('Resume'),
+          icon: Icons.play_arrow,
+          label: 'Resume',
         ),
-      if (goal.waitBarrier != null)
-        TextButton.icon(
+      if (actions.contains(SessionControlAction.goalUnwait))
+        ActivityDetailAction(
           onPressed: disabled
               ? null
               : () => onAction(SessionControlAction.goalUnwait),
-          icon: const Icon(Icons.play_circle_outline, size: 18),
-          label: const Text('Resume now'),
+          icon: Icons.play_circle_outline,
+          label: 'Resume now',
         ),
-      TextButton.icon(
+      ActivityDetailAction(
         onPressed: disabled ? null : onClear,
-        icon: const Icon(Icons.delete_outline, size: 18),
-        label: const Text('Clear'),
+        icon: Icons.delete_outline,
+        label: 'Clear',
       ),
     ],
   );

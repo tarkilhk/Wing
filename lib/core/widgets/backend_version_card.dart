@@ -5,19 +5,16 @@ import 'package:flutter/material.dart';
 import '../models/backend_update.dart';
 import '../screens/backend_update_changes_screen.dart';
 import '../services/backend_update_controller.dart';
-import '../services/profile_gateway.dart';
 
 /// Backend identity and host-wide update controls for one captured connection.
 class BackendVersionCard extends StatefulWidget {
-  final ProfileGateway gateway;
   final String? connectionLabel;
-  final BackendUpdateController? updateController;
+  final BackendUpdateController updateController;
 
   const BackendVersionCard({
     super.key,
-    required this.gateway,
     this.connectionLabel,
-    this.updateController,
+    required this.updateController,
   });
 
   @override
@@ -26,14 +23,11 @@ class BackendVersionCard extends StatefulWidget {
 
 class _BackendVersionCardState extends State<BackendVersionCard> {
   late BackendUpdateController _controller;
-  late bool _ownsController;
 
   @override
   void initState() {
     super.initState();
-    _controller =
-        widget.updateController ?? BackendUpdateController(widget.gateway);
-    _ownsController = widget.updateController == null;
+    _controller = widget.updateController;
     _checkOnOpen();
   }
 
@@ -44,21 +38,9 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
       oldWidget.updateController,
       widget.updateController,
     );
-    final internalGatewayChanged =
-        widget.updateController == null &&
-        !identical(oldWidget.gateway, widget.gateway);
-    if (!suppliedControllerChanged && !internalGatewayChanged) {
-      return;
-    }
-    final oldController = _controller;
-    final disposedByCard = _ownsController;
-    _controller =
-        widget.updateController ?? BackendUpdateController(widget.gateway);
-    _ownsController = widget.updateController == null;
+    if (!suppliedControllerChanged) return;
+    _controller = widget.updateController;
     _checkOnOpen();
-    if (disposedByCard) {
-      oldController.dispose();
-    }
   }
 
   void _checkOnOpen() {
@@ -66,23 +48,14 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted &&
           identical(controller, _controller) &&
-          (_ownsController || controller.phase == BackendUpdatePhase.idle)) {
+          controller.phase == BackendUpdatePhase.idle) {
         controller.checkForUpdate();
       }
     });
   }
 
-  @override
-  void dispose() {
-    if (_ownsController) {
-      _controller.dispose();
-    }
-    super.dispose();
-  }
-
   Future<void> _confirmAndStart() async {
     final controller = _controller;
-    final gateway = widget.gateway;
     if (!controller.canStart) {
       return;
     }
@@ -108,10 +81,7 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
         ],
       ),
     );
-    if (confirmed != true ||
-        !mounted ||
-        !identical(controller, _controller) ||
-        !identical(gateway, widget.gateway)) {
+    if (confirmed != true || !mounted || !identical(controller, _controller)) {
       return;
     }
     await controller.startUpdate();

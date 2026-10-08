@@ -1,3 +1,4 @@
+import 'package:wing/core/models/dashboard_oauth_grant.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -6,14 +7,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/config_backup.dart';
 import 'package:wing/core/services/config_backup_io.dart';
 import 'package:wing/core/services/config_backup_service.dart';
+import 'package:wing/core/models/config_backup_operation.dart';
+import 'package:wing/core/models/app_preferences.dart';
+import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_connection_identity.dart';
 import 'package:wing/core/models/session_visibility.dart';
 
 class _Store implements CredentialStore {
   final values = <String, String>{};
-  @override
-  String? readCached(String key) => values[key];
   @override
   Future<String?> read(String key) async => values[key];
   @override
@@ -28,6 +30,7 @@ Future<
     ConnectionManager,
     ProfileConnectionIdentity,
     ConfigBackupService,
+    AppPreferences,
   )
 >
 _device() async {
@@ -36,11 +39,14 @@ _device() async {
   final store = _Store();
   final manager = await ConnectionManager.create(prefs, credentialStore: store);
   final identities = ProfileConnectionIdentity(credentialStore: store);
+  final owner = AppPreferences(prefs);
+  addTearDown(owner.dispose);
   return (
     prefs,
     manager,
     identities,
-    ConfigBackupService(connectionManager: manager, preferences: prefs),
+    ConfigBackupService(connectionManager: manager, appPreferences: owner),
+    owner,
   );
 }
 
@@ -57,8 +63,8 @@ void main() {
   test(
     'known settings reject wrong types and enum values without poisoning reads',
     () async {
-      final (prefs, _, _, service) = await _device();
-      await prefs.setString('theme_mode', 'light');
+      final (prefs, _, _, service, owner) = await _device();
+      await owner.setTheme(AppThemePreference.light);
       final settings = <String, Object>{
         'theme_mode': 42,
         'app_text_size_preference': 1.15,
@@ -74,6 +80,7 @@ void main() {
       final result = await service.import(
         _backup(settings),
         mode: ConfigImportMode.merge,
+        canCommit: () => true,
       );
       expect(result.preferencesApplied, 0);
       expect(result.preferencesSkipped, settings.length);
@@ -88,7 +95,8 @@ void main() {
   test(
     'visibility round trip remaps separate device identities without exporting keys',
     () async {
-      final (sourcePrefs, sourceManager, sourceIds, source) = await _device();
+      final (sourcePrefs, sourceManager, sourceIds, source, sourceOwner) =
+          await _device();
       final connection = await sourceManager.saveConnection(
         'Synthetic',
         'localhost',
@@ -96,9 +104,9 @@ void main() {
         'synthetic-key',
       );
       final sourceIdentity = await sourceIds.resolve(connection);
-      await sourcePrefs.setString(
-        SessionVisibility.preferenceKey(connection.id),
-        'all',
+      await sourceOwner.setConnectionVisibility(
+        connection.id,
+        SessionVisibility.all,
       );
       final encoded = await ConfigBackupCodec.encode(
         await source.export(appVersion: 'synthetic'),
@@ -112,10 +120,12 @@ void main() {
         'all',
       );
 
-      final (targetPrefs, targetManager, targetIds, target) = await _device();
+      final (targetPrefs, targetManager, targetIds, target, _) =
+          await _device();
       final result = await target.import(
         restored,
         mode: ConfigImportMode.merge,
+        canCommit: () => true,
       );
       final targetConnection =
           (await targetManager.loadConnectionsWithSecrets()).single;
@@ -137,7 +147,7 @@ void main() {
   );
 
   test('unowned or invalid portable visibility settings are skipped', () async {
-    final (prefs, _, _, service) = await _device();
+    final (prefs, _, _, service, _) = await _device();
     final result = await service.import(
       _backup({
         'connection_visibility.absent': 'all',
@@ -145,6 +155,7 @@ void main() {
         'theme_mode': 'dark',
       }),
       mode: ConfigImportMode.merge,
+      canCommit: () => true,
     );
     expect(result.preferencesApplied, 1);
     expect(result.preferencesSkipped, 2);
@@ -157,7 +168,7 @@ void main() {
   test(
     'restored cloud visibility survives first sign-in and reauthentication',
     () async {
-      final (prefs, manager, identities, service) = await _device();
+      final (_, manager, identities, service, owner) = await _device();
       final cloud = await manager.saveConnection(
         'Cloud',
         'https://cloud.example',
@@ -174,6 +185,7 @@ void main() {
           preferences: {'connection_visibility.${cloud.id}': 'all'},
         ),
         mode: ConfigImportMode.merge,
+        canCommit: () => true,
       );
       final originalIdentity = await identities.resolve(
         manager.getConnections().single,
@@ -187,7 +199,7 @@ void main() {
           '',
           cloudInstanceId: 'instance',
           cloudOrganization: 'team',
-          dashboardOAuth: DashboardOAuthSession(
+          dashboardGrant: DashboardOAuthGrant(
             id: grant,
             baseUrl: 'https://cloud.example:443',
             accessToken: 'synthetic-access',
@@ -199,12 +211,7 @@ void main() {
           await identities.resolve(manager.getConnections().single),
           isNot(originalIdentity),
         );
-        expect(
-          SessionVisibility.fromStored(
-            prefs.getString(SessionVisibility.preferenceKey(cloud.id)),
-          ),
-          SessionVisibility.all,
-        );
+        expect(owner.visibilityFor(cloud.id).selected, SessionVisibility.all);
         expect((await service.export(appVersion: 'synthetic')).preferences, {
           'connection_visibility.${cloud.id}': 'all',
         });

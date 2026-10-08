@@ -1,13 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wing/core/models/hermes_profile.dart';
-import 'package:wing/core/services/profile_gateway.dart';
-import 'package:wing/core/services/profiles_repository.dart';
+import 'package:wing/core/services/profile_identity_edit_session.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'support/administration_fixture.dart';
 import 'package:wing/core/screens/administration/admin_identity_page.dart';
 
-class _ProfileEditorFixture {
+class _ProfileEditorFixture extends AdministrationFixture {
+  _ProfileEditorFixture(super.id);
   String description = 'Work profile';
   String soul = 'Be precise.';
   bool failConfigure = false;
@@ -17,70 +19,66 @@ class _ProfileEditorFixture {
   int discoveryCalls = 0;
   final calls = <(String, Map<String, dynamic>)>[];
 
-  late final ProfileGateway gateway = ProfileGateway(
-    scope: WorkspaceScope(
-      connectionId: 'central',
-      connectionIdentity: 'editor-test',
-      profileName: 'work',
-    ),
-    get: (_, _) async => {},
-    discover: () async {
+  @override
+  Future<Map<String, dynamic>> send(
+    String method,
+    String path,
+    Map<String, String> query,
+    Map<String, dynamic>? body,
+  ) async {
+    requests.add((method, path, {...query}, body == null ? null : {...body}));
+    if (method == 'GET' && path == 'profiles') {
       discoveryCalls++;
       await discoveryDelay?.future;
-      return const ProfileDiscovery(
-        profiles: [HermesProfile(name: 'work')],
-        currentName: 'work',
-        activeName: 'work',
-      );
-    },
-    rpc: (method, params) async {
-      calls.add((method, params));
-      if (method == 'profiles.describe') {
-        return {
-          'name': 'work',
-          'description': description,
-          'soul': soul,
-          'skills': const [],
-          'toolsets': const [],
-        };
-      }
-      if (method == 'profiles.configure') {
-        if (failConfigure) {
-          throw StateError('private server failure');
-        }
+      return {
+        'profiles': [
+          {'name': 'work', 'path': '/fixture/work'},
+        ],
+      };
+    }
+    if (method == 'GET' && path == 'profiles/active') {
+      return {'current': 'work', 'active': 'work'};
+    }
+    if (method == 'GET' && path == 'files/read') {
+      expect(query, {'path': '/fixture/work/profile.yaml'});
+      final bytes = utf8.encode('description: ${jsonEncode(description)}\n');
+      return {
+        'name': 'profile.yaml',
+        'path': '/fixture/work/profile.yaml',
+        'size': bytes.length,
+        'mime_type': 'application/octet-stream',
+        'data_url':
+            'data:application/octet-stream;base64,${base64Encode(bytes)}',
+      };
+    }
+    if (method == 'GET' && path == 'profiles/work/soul') {
+      return {'content': soul, 'exists': true};
+    }
+    if (method == 'PUT') {
+      calls.add((path, {...body!}));
+      if (failConfigure) throw StateError('private server failure');
+      if (path == 'profiles/work/description') {
         if (rejectDescriptionAndChangeSoul) {
           soul = 'Central update';
-          return {
-            'ok': false,
-            'applied': {'description': false},
-          };
+          throw const DashboardHttpException(403, 'profiles/work/description');
         }
-        if (partial) {
-          if (params['description'] case final String value) {
-            description = value.trim();
-          }
-          return {
-            'ok': false,
-            'applied': {'description': true, 'soul': false},
-          };
-        }
-        if (params['description'] case final String value) {
-          description = value.trim();
-        }
-        if (params['soul'] case final String value) {
-          soul = value;
-        }
+        description = body['description'] as String;
         return {
           'ok': true,
-          'applied': {
-            if (params.containsKey('description')) 'description': true,
-            if (params.containsKey('soul')) 'soul': true,
-          },
+          'description': description,
+          'description_auto': false,
         };
       }
-      return {};
-    },
-  );
+      if (path == 'profiles/work/soul') {
+        if (partial) {
+          throw const DashboardHttpException(403, 'profiles/work/soul');
+        }
+        soul = body['content'] as String;
+        return {'ok': true};
+      }
+    }
+    throw StateError('Unexpected identity request');
+  }
 }
 
 void main() {
@@ -88,7 +86,7 @@ void main() {
   bool? result;
 
   setUp(() {
-    fixture = _ProfileEditorFixture();
+    fixture = _ProfileEditorFixture('Central server');
     result = null;
   });
 
@@ -116,8 +114,9 @@ void main() {
               onPressed: () async {
                 result = await showAdminIdentityEditor(
                   context,
-                  gateway: fixture.gateway,
-                  connectionLabel: 'Central server',
+                  createSession: () => ProfileIdentityEditSession(
+                    fixture.server.profile('work'),
+                  ),
                 );
               },
               child: const Text('Edit'),
@@ -167,14 +166,11 @@ void main() {
     await tapSave(tester);
 
     final write = fixture.calls.singleWhere(
-      (call) => call.$1 == 'profiles.configure',
+      (call) => call.$1.startsWith('profiles/work/'),
     );
-    expect(write.$2, {
-      'name': 'work',
-      'description': '  Mobile work  ',
-      'profile': 'work',
-    });
-    expect(fixture.discoveryCalls, 1);
+    expect(write.$1, 'profiles/work/description');
+    expect(write.$2, {'description': 'Mobile work'});
+    expect(fixture.discoveryCalls, 2);
     expect(fixture.description, 'Mobile work');
     expect(result, isTrue);
   });
@@ -190,7 +186,7 @@ void main() {
 
     expect(find.text('Saved: description.'), findsOneWidget);
     expect(
-      find.text('Not applied: SOUL. Review the fields before trying again.'),
+      find.text('Some fields were not saved. Review them before trying again.'),
       findsOneWidget,
     );
     expect(
@@ -205,8 +201,8 @@ void main() {
       'Keep this exact.\n',
     );
     expect(
-      fixture.calls.where((call) => call.$1 == 'profiles.configure'),
-      hasLength(1),
+      fixture.calls.where((call) => call.$1.startsWith('profiles/work/')),
+      hasLength(2),
     );
     await tester.tap(find.widgetWithText(TextButton, 'Close'));
     await tester.pumpAndSettle();
@@ -227,15 +223,15 @@ void main() {
 
     expect(
       find.text(
-        'The save could not be confirmed. Your edits are still here; review them before trying again.',
+        'The save could not be confirmed. Your edits are still here; check the profile before saving again.',
       ),
       findsOneWidget,
     );
     expect(field('profile-description-field'), findsOneWidget);
     expect(field('profile-soul-field'), findsOneWidget);
     expect(
-      fixture.calls.where((call) => call.$1 == 'profiles.configure'),
-      hasLength(1),
+      fixture.calls.where((call) => call.$1.startsWith('profiles/work/')),
+      hasLength(2),
     );
     expect(result, isNull);
   });
@@ -261,7 +257,7 @@ void main() {
     );
     await tapSave(tester);
     final writes = fixture.calls
-        .where((call) => call.$1 == 'profiles.configure')
+        .where((call) => call.$1.startsWith('profiles/work/'))
         .toList();
     expect(writes, hasLength(2));
     expect(writes.last.$2.containsKey('soul'), isFalse);
@@ -288,8 +284,8 @@ void main() {
     tester,
   ) async {
     final pending = Completer<void>();
-    fixture.discoveryDelay = pending;
     await openEditor(tester);
+    fixture.discoveryDelay = pending;
     await tester.enterText(field('profile-description-field'), 'Captured edit');
     await tapSave(tester, settle: false);
 
@@ -305,7 +301,7 @@ void main() {
     pending.complete();
     await tester.pumpAndSettle();
     expect(
-      fixture.calls.where((call) => call.$1 == 'profiles.configure'),
+      fixture.calls.where((call) => call.$1.startsWith('profiles/work/')),
       hasLength(1),
     );
     expect(result, isTrue);
@@ -315,8 +311,7 @@ void main() {
     tester,
   ) async {
     final pending = Completer<void>();
-    fixture.discoveryDelay = pending;
-    final other = _ProfileEditorFixture();
+    final other = _ProfileEditorFixture('Other server');
     const editorKey = ValueKey('captured-profile-editor');
 
     await tester.pumpWidget(
@@ -324,13 +319,14 @@ void main() {
         home: Scaffold(
           body: AdminIdentityPage(
             key: editorKey,
-            gateway: fixture.gateway,
-            connectionLabel: 'First server',
+            createSession: () =>
+                ProfileIdentityEditSession(fixture.server.profile('work')),
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
+    fixture.discoveryDelay = pending;
     await tester.enterText(field('profile-description-field'), 'First edit');
     await tapSave(tester, settle: false);
 
@@ -339,8 +335,8 @@ void main() {
         home: Scaffold(
           body: AdminIdentityPage(
             key: editorKey,
-            gateway: other.gateway,
-            connectionLabel: 'Other server',
+            createSession: () =>
+                ProfileIdentityEditSession(other.server.profile('work')),
           ),
         ),
       ),
@@ -349,11 +345,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      fixture.calls.where((call) => call.$1 == 'profiles.configure'),
+      fixture.calls.where((call) => call.$1.startsWith('profiles/work/')),
       hasLength(1),
     );
     expect(
-      other.calls.where((call) => call.$1 == 'profiles.configure'),
+      other.calls.where((call) => call.$1.startsWith('profiles/work/')),
       isEmpty,
     );
   });

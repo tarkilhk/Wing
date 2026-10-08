@@ -1,3 +1,4 @@
+import 'package:wing/core/services/profile_tool_setup_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_tool_setup_page.dart';
@@ -21,13 +22,23 @@ void main() {
       }
       if (method == 'PUT') {
         active = body!['provider'] as String;
-        return {'ok': true};
+        return {'ok': true, 'name': 'image_gen', 'provider': active};
       }
       return {
+        'name': 'image_gen',
+        'has_category': true,
         'active_provider': active,
         'providers': [
           for (final name in ['First', 'Second', 'Third'])
-            {'name': name, 'status': 'ready', 'is_active': name == active},
+            {
+              'name': name,
+              'badge': '',
+              'tag': '',
+              'env_vars': [],
+              'requires_nous_auth': false,
+              'status': 'ready',
+              'is_active': name == active,
+            },
         ],
       };
     };
@@ -35,8 +46,11 @@ void main() {
       MaterialApp(
         theme: wingTheme(Brightness.light),
         home: AdminToolSetupPage(
-          profile: fixture.server.profile('personal'),
-          name: 'image_gen',
+          createSession: () => ProfileToolSetupSession(
+            fixture.server.profile('personal'),
+            tool: 'image_gen',
+          ),
+          onCredential: (_, _) async {},
         ),
       ),
     );
@@ -105,12 +119,45 @@ void main() {
         };
       }
       return {
+        'name': 'web',
+        'has_category': true,
+        'active_provider': null,
         'active_search_backend': 'brave',
         'active_extract_backend': 'tavily',
         'providers': [
-          {'name': 'Other', 'web_backend': 'other'},
-          {'name': 'Tavily', 'web_backend': 'tavily'},
-          {'name': 'Brave', 'web_backend': 'brave'},
+          {
+            'name': 'Other',
+            'web_backend': 'other',
+            'badge': '',
+            'tag': '',
+            'env_vars': [],
+            'requires_nous_auth': false,
+            'is_active': false,
+            'status': 'ready',
+            'capabilities': ['search', 'extract'],
+          },
+          {
+            'name': 'Tavily',
+            'web_backend': 'tavily',
+            'badge': '',
+            'tag': '',
+            'env_vars': [],
+            'requires_nous_auth': false,
+            'is_active': false,
+            'status': 'ready',
+            'capabilities': ['search', 'extract'],
+          },
+          {
+            'name': 'Brave',
+            'web_backend': 'brave',
+            'badge': '',
+            'tag': '',
+            'env_vars': [],
+            'requires_nous_auth': false,
+            'is_active': false,
+            'status': 'ready',
+            'capabilities': ['search', 'extract'],
+          },
         ],
       };
     };
@@ -118,8 +165,11 @@ void main() {
       MaterialApp(
         theme: wingTheme(Brightness.dark),
         home: AdminToolSetupPage(
-          profile: fixture.server.profile('personal'),
-          name: 'web',
+          createSession: () => ProfileToolSetupSession(
+            fixture.server.profile('personal'),
+            tool: 'web',
+          ),
+          onCredential: (_, _) async {},
         ),
       ),
     );
@@ -156,21 +206,42 @@ void main() {
         }
         if (method == 'PUT') {
           selected = true;
-          return {'ok': true, 'provider': 'Browser Use'};
+          return {'ok': true, 'name': 'browser', 'provider': 'Browser Use'};
         }
         return {
+          'name': 'browser',
+          'has_category': true,
           'active_provider': 'Local Browser',
           'providers': [
-            {'name': 'Local Browser', 'is_active': true},
-            {'name': 'Browser Use', 'is_active': selected},
+            {
+              'name': 'Local Browser',
+              'is_active': true,
+              'badge': '',
+              'tag': '',
+              'env_vars': [],
+              'requires_nous_auth': false,
+              'status': 'ready',
+            },
+            {
+              'name': 'Browser Use',
+              'is_active': selected,
+              'badge': '',
+              'tag': '',
+              'env_vars': [],
+              'requires_nous_auth': false,
+              'status': 'ready',
+            },
           ],
         };
       };
       await tester.pumpWidget(
         MaterialApp(
           home: AdminToolSetupPage(
-            profile: fixture.server.profile('personal'),
-            name: 'browser',
+            createSession: () => ProfileToolSetupSession(
+              fixture.server.profile('personal'),
+              tool: 'browser',
+            ),
+            onCredential: (_, _) async {},
           ),
         ),
       );
@@ -188,15 +259,30 @@ void main() {
     ) async {
       final fixture = AdministrationFixture();
       fixture.override = (_, _, _, _) async => {
+        'name': tool,
+        'has_category': true,
+        'active_provider': null,
         'providers': [
-          {'name': 'Integration', 'post_setup': 'setup'},
+          {
+            'name': 'Integration',
+            'post_setup': 'setup',
+            'badge': '',
+            'tag': '',
+            'env_vars': [],
+            'requires_nous_auth': false,
+            'is_active': false,
+            'status': 'needs_setup',
+          },
         ],
       };
       await tester.pumpWidget(
         MaterialApp(
           home: AdminToolSetupPage(
-            profile: fixture.server.profile('personal'),
-            name: tool,
+            createSession: () => ProfileToolSetupSession(
+              fixture.server.profile('personal'),
+              tool: tool,
+            ),
+            onCredential: (_, _) async {},
           ),
         ),
       );

@@ -98,3 +98,86 @@ class SlashCatalog {
         .toList();
   }
 }
+
+/// One immutable response for the exact query before the Flutter cursor.
+/// Protocol offsets count Unicode code points; replacement offsets count UTF-16.
+class SlashCompletion {
+  SlashCompletion._(
+    this.query,
+    Iterable<SlashCommand> items,
+    this.replaceFrom,
+    this.warning,
+  ) : items = List.unmodifiable(items);
+
+  final String query;
+  final List<SlashCommand> items;
+  final int replaceFrom;
+  final String warning;
+
+  static bool isQuery(String query) => query.startsWith('/');
+  static bool usesCatalog(String query) => !query.contains(RegExp(r'\s'));
+  bool get showsNoMatches => items.isEmpty && !query.contains(' ');
+
+  factory SlashCompletion.fromCatalog(String query, SlashCatalog catalog) =>
+      SlashCompletion._(query, catalog.search(query), 0, catalog.warning);
+
+  factory SlashCompletion.fromJson(
+    String query,
+    Map<String, dynamic> value, {
+    required String warning,
+  }) {
+    final rows = value['items'];
+    final offset = value['replace_from'];
+    final codePoints = query.runes;
+    if (rows is! List ||
+        offset is! int ||
+        offset < 0 ||
+        offset > codePoints.length) {
+      throw const FormatException('Invalid slash completion');
+    }
+    final items = <SlashCommand>[];
+    for (final row in rows) {
+      if (row is! Map ||
+          row['text'] is! String ||
+          (row['meta'] != null && row['meta'] is! String)) {
+        throw const FormatException('Invalid slash completion item');
+      }
+      items.add(
+        SlashCommand(row['text'] as String, row['meta'] as String? ?? '', ''),
+      );
+    }
+    return SlashCompletion._(
+      query,
+      items,
+      String.fromCharCodes(codePoints.take(offset)).length,
+      warning,
+    );
+  }
+
+  /// Selection applies only to this query and an item issued by this response.
+  /// Cursor extraction is rendering work; insertion and suffix rules live here.
+  SlashCompletionEdit? select(
+    SlashCommand item, {
+    required String text,
+    required int cursor,
+  }) {
+    if (cursor < 0 ||
+        cursor > text.length ||
+        text.substring(0, cursor) != query ||
+        !items.any((issued) => identical(issued, item))) {
+      return null;
+    }
+    final suffix = text.substring(cursor);
+    final insertion = '${item.text}${suffix.startsWith(' ') ? '' : ' '}';
+    return SlashCompletionEdit._(
+      text.replaceRange(replaceFrom, cursor, insertion),
+      replaceFrom + insertion.length,
+    );
+  }
+}
+
+class SlashCompletionEdit {
+  const SlashCompletionEdit._(this.text, this.cursor);
+  final String text;
+  final int cursor;
+}

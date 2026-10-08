@@ -1,3 +1,6 @@
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -30,10 +33,14 @@ void main() {
         dashboardPortOverride: port,
         apiKey: '',
       );
+      final fixturePreferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(fixturePreferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
+        appPreferences: appPreferences,
         connectionIdentity: 'fork-qa-settings',
-        connection: connection,
-        preferences: await SharedPreferences.getInstance(),
+        access: ConnectionAccess(connection: connection, dashboardOAuth: null),
+        preferences: fixturePreferences,
       );
       addTearDown(controller.dispose);
       await controller.initialize();
@@ -74,9 +81,9 @@ void main() {
       );
       final source = resource.chat!;
       final original = jsonEncode(
-        await resource.gateway.fullHistory(source.runtimeId),
+        await resource.gateway.fullHistory(source.runtime.runtimeId),
       );
-      final expected = source.messages
+      final expected = source.reading.messages
           .where((m) => !isHiddenAnswerMessage(m))
           .map(answerMessageText)
           .toList();
@@ -105,7 +112,7 @@ void main() {
       for (final answer in [0, 2, 1]) {
         await controller.openSession(source.key);
         await tester.pumpAndSettle();
-        final selectedRow = source.messages
+        final selectedRow = source.reading.messages
             .where((m) => m['role'] == 'assistant')
             .elementAt(answer);
         final button = find.descendant(
@@ -125,7 +132,7 @@ void main() {
               .first,
         );
         await tester.tap(button);
-        await until(() => !source.changingAnswer);
+        await until(() => !source.runtime.changingAnswer);
         expect(
           find.byType(SnackBar),
           findsNothing,
@@ -135,18 +142,20 @@ void main() {
         expect(child.key, isNot(source.key));
         expect(children.add(child.key.sessionId), isTrue);
         expect(
-          child.messages
+          child.reading.messages
               .where((m) => !isHiddenAnswerMessage(m))
               .map(answerMessageText),
           expected.take((answer + 1) * 2),
         );
         expect(
-          jsonEncode(await resource.gateway.fullHistory(source.runtimeId)),
+          jsonEncode(
+            await resource.gateway.fullHistory(source.runtime.runtimeId),
+          ),
           original,
         );
         // Open via a fresh socket to check what was saved, beyond the UI cache.
         final verifier = ProfileGateway.forConnection(
-          connection,
+          ConnectionAccess(connection: connection, dashboardOAuth: null),
           resource.scope,
         );
         try {
@@ -175,41 +184,52 @@ void main() {
         'What is my test token? Reply with only the token. Do not use tools.',
       );
       await tester.pumpAndSettle();
-      expect(child.draft, contains('What is my test token?'));
+      expect(
+        child.composer.observation.text,
+        contains('What is my test token?'),
+      );
       debugPrint('fork-qa: continuation entered; tapping Send');
       await tester.tap(find.byTooltip('Send'));
       await tester.pump();
-      expect(child.busy, isTrue, reason: 'Send must start the continuation');
-      await until(() => !child.busy);
-      expect(child.error, isNull);
-      expect(child.messages.length, greaterThan(4));
-      final response = answerMessageText(child.messages.last);
+      expect(
+        child.runtime.blocksTurnAdmission,
+        isTrue,
+        reason: 'Send must start the continuation',
+      );
+      await until(() => !child.runtime.blocksTurnAdmission);
+      expect(child.runtime.error, isNull);
+      expect(child.reading.messages.length, greaterThan(4));
+      final response = answerMessageText(child.reading.messages.last);
       expect(response, contains('JADE-42'));
       expect(response, isNot(contains('AMBER-99')));
       expect(find.text('[System: model changed for QA]'), findsNothing);
       expect(
-        jsonEncode(await resource.gateway.fullHistory(source.runtimeId)),
+        jsonEncode(
+          await resource.gateway.fullHistory(source.runtime.runtimeId),
+        ),
         original,
       );
       FocusManager.instance.primaryFocus?.unfocus();
       await screenshot('fork-independent-continuation');
-      final continued = child.messages
+      final continued = child.reading.messages
           .where((m) => !isHiddenAnswerMessage(m))
           .map(answerMessageText)
           .toList();
       final rebranch = find.descendant(
         of: find.byKey(
-          ValueKey('answer-actions-${answerMessageId(child.messages.last)}'),
+          ValueKey(
+            'answer-actions-${answerMessageId(child.reading.messages.last)}',
+          ),
         ),
         matching: find.byTooltip('Branch in new session'),
       );
       await tester.ensureVisible(rebranch);
       await tester.tap(rebranch);
-      await until(() => !child.changingAnswer);
+      await until(() => !child.runtime.changingAnswer);
       expect(find.byType(SnackBar), findsNothing);
       expect(resource.chat!.key, isNot(child.key));
       expect(
-        resource.chat!.messages
+        resource.chat!.reading.messages
             .where((m) => !isHiddenAnswerMessage(m))
             .map(answerMessageText),
         continued,
@@ -217,7 +237,7 @@ void main() {
       await controller.openSession(source.key);
       await tester.pumpAndSettle();
       expect(
-        source.messages
+        source.reading.messages
             .where((m) => !isHiddenAnswerMessage(m))
             .map(answerMessageText),
         expected,

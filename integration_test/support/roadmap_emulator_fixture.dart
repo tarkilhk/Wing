@@ -31,6 +31,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
   final answerHistories = <String, List<Map<String, dynamic>>>{};
   final answerParents = <String, String>{};
   final answerRuntimes = <String, String>{};
+  final resumedRuntimes = <(String, String), String>{};
   String goalStatus = 'active';
   String loopStatus = 'active';
   bool runningProcess = true;
@@ -151,7 +152,11 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
         }
         return base.read(path, query);
       },
-      patch: (path, body) async {
+      ownedPatch: (path, body, canDispatch, onDispatched) async {
+        if (!canDispatch()) {
+          throw DashboardRequestNotSentException(StateError('Menu retired'));
+        }
+        onDispatched();
         if (!path.startsWith('sessions/') || body['unread'] != false) {
           throw StateError('Unexpected journey mutation: $path');
         }
@@ -450,6 +455,13 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
             final response = await base.call(method, params);
             return {
               ...response,
+              if (method == 'session.resume' &&
+                  resumedRuntimes.containsKey((
+                    scope.profileName,
+                    params['session_id'],
+                  )))
+                'session_id':
+                    resumedRuntimes[(scope.profileName, params['session_id'])],
               'info': {
                 'profile_name': scope.profileName,
                 'model': 'gpt-6-astra',
@@ -670,31 +682,20 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
 
 class RoadmapMemoryCredentialStore implements CredentialStore {
   final _values = <String, String>{};
-  final _cache = <String, String>{};
 
   @override
   Future<void> delete(String key) async {
     _values.remove(key);
-    _cache.remove(key);
   }
 
   @override
   Future<String?> read(String key) async {
     final value = _values[key];
-    if (value == null) {
-      _cache.remove(key);
-    } else {
-      _cache[key] = value;
-    }
     return value;
   }
 
   @override
-  String? readCached(String key) => _cache[key];
-
-  @override
   Future<void> write(String key, String value) async {
     _values[key] = value;
-    _cache[key] = value;
   }
 }

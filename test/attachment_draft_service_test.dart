@@ -147,35 +147,6 @@ void main() {
       );
     });
 
-    test('REST is fail-closed for multiple images and generic files', () {
-      final first = fakeDraft(
-        name: 'first.png',
-        byteLength: 10,
-        kind: AttachmentDraftKind.image,
-      );
-      final second = fakeDraft(
-        name: 'second.png',
-        byteLength: 10,
-        kind: AttachmentDraftKind.image,
-      );
-      expect(() => service.validateRestDrafts([first]), returnsNormally);
-      expect(allowsMultipleImageSelection(AttachmentDraftMode.rest), isFalse);
-      expect(
-        allowsMultipleImageSelection(AttachmentDraftMode.remoteGateway),
-        isTrue,
-      );
-      expect(
-        () => service.validateRestDrafts([first, second]),
-        throwsA(isA<AttachmentDraftException>()),
-      );
-      expect(
-        () => service.validateRestDrafts([
-          fakeDraft(name: 'document.pdf', byteLength: 10),
-        ]),
-        throwsA(isA<AttachmentDraftException>()),
-      );
-    });
-
     test(
       'failed preparation retains two images and a document selection',
       () async {
@@ -202,7 +173,6 @@ void main() {
             sourcePath: unsupported.path,
             displayName: 'animation.gif',
             existingDrafts: drafts,
-            mode: AttachmentDraftMode.remoteGateway,
           ),
           throwsA(
             isA<AttachmentDraftException>().having(
@@ -241,7 +211,6 @@ void main() {
             sourcePath: source.path,
             displayName: 'source.png',
             existingDrafts: const [],
-            mode: AttachmentDraftMode.remoteGateway,
           ),
           throwsA(isA<AttachmentDraftException>()),
         );
@@ -259,7 +228,6 @@ void main() {
         sourcePath: source.path,
         displayName: name,
         existingDrafts: const [],
-        mode: AttachmentDraftMode.remoteGateway,
       );
     }
 
@@ -327,13 +295,12 @@ void main() {
 
   group('ordered upload, retry, and cleanup', () {
     test(
-      'reorder changes sequential file.attach order with concurrency one',
+      'supplied attachment order controls sequential upload with concurrency one',
       () async {
         final first = await cachedDraft('first.txt');
         final second = await cachedDraft('second.txt');
         final third = await cachedDraft('third.txt');
-        final drafts = [first, second, third];
-        expect(service.moveDraft(drafts, fromIndex: 2, offset: -1), isTrue);
+        final drafts = [first, third, second];
         expect(drafts.map((draft) => draft.name), [
           'first.txt',
           'third.txt',
@@ -468,11 +435,9 @@ void main() {
         );
         final untouched = await cachedDraft('untouched.txt');
         var attachCalls = 0;
-        var promptSubmitCalls = 0;
-        final coordinator = AttachmentDraftSendCoordinator(service);
 
-        final receipt = await coordinator.retryFailed(
-          draft: failed,
+        final receipts = await service.uploadSequential(
+          drafts: [failed],
           upload: ({required draft, required dataUrl}) async {
             attachCalls++;
             expect(draft, same(failed));
@@ -480,9 +445,8 @@ void main() {
           },
         );
 
-        expect(receipt.refText, '@file:failed.txt');
+        expect(receipts.single.refText, '@file:failed.txt');
         expect(attachCalls, 1);
-        expect(promptSubmitCalls, 0);
         expect(failed.status, AttachmentDraftStatus.attached);
         expect(untouched.status, AttachmentDraftStatus.ready);
         expect(await File(failed.cachedPath).exists(), isFalse);
@@ -490,4 +454,54 @@ void main() {
       },
     );
   });
+  test(
+    'truncated sanitized cache output cannot become an attachment',
+    () async {
+      final truncated = AttachmentDraftService(
+        cacheDirectoryProvider: () async => cache,
+        cacheFileWriter: (file, bytes) async {
+          await file.writeAsBytes(bytes.take(8).toList());
+        },
+      );
+      await expectLater(
+        truncated.prepareImageBytes(
+          bytes: image_lib.encodePng(image_lib.Image(width: 2, height: 2)),
+          displayName: 'image.png',
+          existingDrafts: const [],
+        ),
+        throwsA(isA<AttachmentDraftException>()),
+      );
+      expect(await cache.list().toList(), isEmpty);
+    },
+  );
+
+  test(
+    'cancel after encoding but during cache writing prevents publication',
+    () async {
+      final started = Completer<void>();
+      final finish = Completer<void>();
+      final held = AttachmentDraftService(
+        cacheDirectoryProvider: () async => cache,
+        cacheFileWriter: (file, bytes) async {
+          await file.writeAsBytes(bytes);
+          started.complete();
+          await finish.future;
+        },
+      );
+      final preparing = held.prepareImageBytes(
+        bytes: image_lib.encodePng(image_lib.Image(width: 2, height: 2)),
+        displayName: 'image.png',
+        existingDrafts: const [],
+      );
+      final failure = expectLater(
+        preparing,
+        throwsA(isA<AttachmentDraftException>()),
+      );
+      await started.future;
+      held.cancelImagePreparations();
+      finish.complete();
+      await failure;
+      expect(await cache.list().toList(), isEmpty);
+    },
+  );
 }

@@ -1,3 +1,5 @@
+import 'dashboard_oauth_session.dart';
+import 'connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -20,10 +22,11 @@ abstract interface class ConnectionProbe {
 }
 
 class DashboardConnectionProbe implements ConnectionProbe {
-  DashboardConnectionProbe(this.connection)
-    : _profiles = ProfilesRepository.forConnection(connection);
+  DashboardConnectionProbe(this.access)
+    : _profiles = ProfilesRepository.forConnection(access);
 
-  final SavedConnection connection;
+  final ConnectionAccess access;
+  SavedConnection get connection => access.connection;
   final ProfilesRepository _profiles;
   ProfileGateway? _gateway;
   bool _closed = false;
@@ -35,7 +38,7 @@ class DashboardConnectionProbe implements ConnectionProbe {
   Future<void> connect(HermesProfile profile) async {
     if (_closed) throw StateError('Connection check cancelled');
     final gateway = ProfileGateway.forConnection(
-      connection,
+      access,
       WorkspaceScope(connectionId: connection.id, profileName: profile.name),
     );
     _gateway = gateway;
@@ -64,13 +67,14 @@ class ConnectionSetupProbe extends ChangeNotifier {
     this.deadline = const Duration(seconds: 15),
   });
 
-  final ConnectionProbe Function(SavedConnection) createProbe;
+  final ConnectionProbe Function(ConnectionAccess) createProbe;
   final Duration deadline;
   final statuses = {
     for (final stage in ConnectionCheck.values)
       stage: ConnectionCheckStatus.waiting,
   };
   ConnectionProbe? _probe;
+  ConnectionAccess? _access;
   int _generation = 0;
   bool checking = false;
   ProfileDiscovery? discovery;
@@ -86,15 +90,23 @@ class ConnectionSetupProbe extends ChangeNotifier {
         (status) => status == ConnectionCheckStatus.available,
       );
 
-  Future<void> check(SavedConnection connection) async {
+  SavedConnection get verifiedConnection {
+    if (!verified || _access == null) {
+      throw StateError('This connection is not verified.');
+    }
+    return _access!.persistenceSnapshot;
+  }
+
+  Future<void> check(ConnectionAccess access) async {
     cancel();
+    _access = access;
     final generation = _generation;
     checking = true;
     notifyListeners();
     ConnectionCheck stage = ConnectionCheck.profiles;
     ConnectionProbe? probe;
     try {
-      probe = createProbe(connection);
+      probe = createProbe(access);
       _probe = probe;
       for (stage in ConnectionCheck.values) {
         statuses[stage] = ConnectionCheckStatus.checking;
@@ -168,6 +180,7 @@ class ConnectionSetupProbe extends ChangeNotifier {
     _generation++;
     _probe?.close();
     _probe = null;
+    _access = null;
     checking = false;
     discovery = null;
     error = null;

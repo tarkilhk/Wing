@@ -3,12 +3,8 @@ import '../theme/wing_theme.dart';
 import 'anchored_expansion_tile.dart';
 import 'package:flutter/services.dart';
 
-import '../models/answer_versions.dart';
 import '../models/chat_output.dart';
-import '../models/review_notice.dart';
-import '../models/transcript_notice.dart';
-import '../models/user_message_content.dart';
-import '../services/web_preview.dart';
+import '../models/transcript_message.dart';
 import 'markdown_message_content.dart';
 import 'profile_tool_activity.dart';
 import 'profile_review_notice_card.dart';
@@ -18,72 +14,172 @@ import 'user_message_attachment.dart';
 /// User attachments and explicit assistant deliverables render inline;
 /// server paths are resolved only by the owning chat's loader.
 class ProfileMessage extends StatelessWidget {
-  final Map<String, dynamic> message;
+  final TranscriptMessage message;
   final bool streaming;
   final Future<void> Function(ChatOutput output)? onOpenRemoteFile;
+  final Future<void> Function(ChatOutput output)? onShareRemoteFile;
   final Future<bool> Function(ChatOutput output)? onDownloadRemoteFile;
   final UserAttachmentImageLoader? loadAttachmentImage;
   final VoidCallback? onReadAloud;
   final bool readingAloud;
   final Widget? actions;
+  final bool showEditAction;
+  final VoidCallback? onEdit;
   const ProfileMessage({
     super.key,
     required this.message,
     this.streaming = false,
     this.onOpenRemoteFile,
+    this.onShareRemoteFile,
     this.onDownloadRemoteFile,
     this.loadAttachmentImage,
     this.onReadAloud,
     this.readingAloud = false,
     this.actions,
+    this.showEditAction = false,
+    this.onEdit,
   });
 
-  static Uri? externalLink(String href) => externalWebLink(href);
+  Future<void> _copyMessage(BuildContext context, String content) async {
+    await Clipboard.setData(ClipboardData(text: content));
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Message copied')));
+    }
+  }
 
-  Widget _copy(BuildContext context, String content, {Widget? timestamp}) =>
-      IconButton(
-        tooltip: 'Copy message',
-        style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
-        padding: timestamp == null ? null : EdgeInsets.zero,
-        icon: timestamp == null
-            ? const Icon(Icons.copy_outlined, size: 17)
-            : SizedBox(
-                width: 48,
-                height: 48,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.copy_outlined, size: 17),
-                    const SizedBox(height: 2),
-                    // Keep metadata inside the existing copy target, including
-                    // at enlarged text sizes; the full date remains accessible.
-                    SizedBox(
-                      width: 44,
-                      height: 20,
-                      child: FittedBox(fit: BoxFit.scaleDown, child: timestamp),
-                    ),
-                  ],
-                ),
+  Widget _copy(BuildContext context, String content) => IconButton(
+    tooltip: 'Copy message',
+    style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+    icon: const Icon(Icons.copy_outlined, size: 17),
+    onPressed: () => _copyMessage(context, content),
+  );
+
+  // Include the 16dp outer gutter. Paired 48dp targets extend 8dp into
+  // the bubble's 12dp padding, keeping their glyphs close without overlapping
+  // targets or covering message text.
+  double get _userRailWidth => showEditAction ? 88 : 48;
+  double get _userBodyInset => _userRailWidth;
+
+  Widget _userAction({
+    Key? key,
+    required String label,
+    required IconData icon,
+    required double iconOffset,
+    required VoidCallback? onPressed,
+  }) {
+    const size = Size(48, 48);
+    return IconButton(
+      key: key,
+      tooltip: label,
+      constraints: BoxConstraints.tight(size),
+      style: IconButton.styleFrom(
+        minimumSize: size,
+        maximumSize: size,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.standard,
+      ),
+      padding: const EdgeInsets.only(bottom: WingSpacing.xs),
+      alignment: Alignment.bottomCenter,
+      onPressed: onPressed,
+      icon: Transform.translate(
+        offset: Offset(iconOffset, 0),
+        child: Icon(icon, size: 18),
+      ),
+    );
+  }
+
+  Widget _userControls(BuildContext context, Widget? timestamp) => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      if (timestamp != null)
+        Positioned(
+          top: WingSpacing.xs,
+          left: 0,
+          right: 0,
+          child: Align(alignment: Alignment.topCenter, child: timestamp),
+        ),
+      Positioned(
+        bottom: 0,
+        right: 0,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (showEditAction)
+              _userAction(
+                key: ValueKey('edit-message-${message.id}'),
+                label: 'Edit message',
+                icon: Icons.edit_outlined,
+                iconOffset: 14,
+                onPressed: onEdit,
               ),
-        onPressed: () async {
-          await Clipboard.setData(ClipboardData(text: content));
-          if (context.mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('Message copied')));
-          }
-        },
-      );
+            _userAction(
+              label: 'Copy message',
+              icon: Icons.copy_outlined,
+              iconOffset: showEditAction ? -6 : 0,
+              onPressed: () => _copyMessage(context, message.copyText),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  Widget _userBubble(BuildContext context, String content, Widget? timestamp) {
+    final theme = Theme.of(context);
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(
+            right: streaming ? WingSpacing.lg : _userBodyInset,
+          ),
+          child: Container(
+            key: ValueKey(('user-message-bubble', message.id)),
+            width: double.infinity,
+            constraints: BoxConstraints(
+              minHeight:
+                  MediaQuery.textScalerOf(context).scale(11) +
+                  48 +
+                  WingSpacing.sm,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer,
+              borderRadius: WingRadius.card,
+            ),
+            child: SelectableText(
+              content,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                height: 1.45,
+                color: theme.colorScheme.onPrimaryContainer,
+              ),
+            ),
+          ),
+        ),
+        if (!streaming)
+          Positioned(
+            top: 0,
+            bottom: 0,
+            right: 0,
+            width: _userRailWidth,
+            child: _userControls(context, timestamp),
+          ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (isHiddenAnswerMessage(message)) return const SizedBox.shrink();
+    if (message.kind == TranscriptMessageKind.hidden) {
+      return const SizedBox.shrink();
+    }
     final theme = Theme.of(context);
-    final role = message['role']?.toString() ?? '';
-    final notice = transcriptNoticeText(message);
-    if (notice != null) {
-      final result = transcriptNoticeResult(message);
-      final delivery = transcriptUserDelivery(message);
+    final role = message.role;
+    final notice = message.text;
+    if (message.kind == TranscriptMessageKind.notice) {
+      final result = message.noticeResult;
       final label = Text(
         notice,
         style: theme.textTheme.bodySmall?.copyWith(
@@ -93,18 +189,18 @@ class ProfileMessage extends StatelessWidget {
       final noticeBody = result == null
           ? Center(child: label)
           : _TranscriptNotice(
-              key: ValueKey(('transcript-notice', message['id'])),
+              key: ValueKey(('transcript-notice', message.id)),
               title: label,
-              subtitle: Text(delivery?.disclosure ?? 'View result'),
+              subtitle: Text(message.noticeDisclosure),
               actions: actions,
               children: [
                 Padding(
                   padding: const EdgeInsets.all(12),
-                  child: delivery != null
+                  child: message.noticePlainText
                       ? SelectableText(
                           result,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            fontFamily: delivery.kind == 'process_notification'
+                            fontFamily: message.noticeMonospace
                                 ? 'monospace'
                                 : null,
                           ),
@@ -134,10 +230,10 @@ class ProfileMessage extends StatelessWidget {
               ),
       );
     }
-    final review = reviewMessageText(message);
-    if (review != null) return ProfileReviewNoticeRow(text: review);
-    final steering = steeringMessageText(message);
-    if (steering != null) {
+    if (message.kind == TranscriptMessageKind.review) {
+      return ProfileReviewNoticeRow(text: message.text);
+    }
+    if (message.kind == TranscriptMessageKind.steering) {
       final style = theme.textTheme.bodySmall?.copyWith(
         fontSize: 12,
         color: theme.colorScheme.onSurfaceVariant,
@@ -162,7 +258,7 @@ class ProfileMessage extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text('steered', style: style),
                   Text(' · ', style: style),
-                  Flexible(child: SelectableText(steering, style: style)),
+                  Flexible(child: SelectableText(message.text, style: style)),
                 ],
               ),
             ),
@@ -170,23 +266,10 @@ class ProfileMessage extends StatelessWidget {
         ),
       );
     }
-    final userContent = role == 'user'
-        ? UserMessageContent.fromMessage(message)
-        : null;
-    final content = userContent != null
-        ? userContent.text
-        : (message['display_content'] ?? message['content'] ?? '').toString();
-    if (content.isEmpty && (userContent?.attachments.isEmpty ?? true)) {
-      return const SizedBox.shrink();
-    }
-    if (role == 'system') {
-      final slash = RegExp(r'^slash:(/[^\n]+)\n([\s\S]*)$').firstMatch(content);
-      final command = message['_command'] as String? ?? slash?.group(1)?.trim();
-      final output = slash == null ? content : slash.group(2)!.trim();
-      final multiline = output.contains('\n');
-      final text = command == null
-          ? output
-          : '$command${multiline ? '\n' : ' · '}$output';
+    final content = message.text;
+    if (message.kind == TranscriptMessageKind.system) {
+      final multiline = message.systemMultiline;
+      final text = content;
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
         child: Center(
@@ -200,8 +283,13 @@ class ProfileMessage extends StatelessWidget {
         ),
       );
     }
-    if (role == 'tool') {
-      return ProfileToolActivity(messages: [message]);
+    if (message.kind == TranscriptMessageKind.tool) {
+      return ProfileToolActivity(
+        results: [message.tool!],
+        loadImage: loadAttachmentImage,
+        onOpenResource: onOpenRemoteFile,
+        onShareResource: onShareRemoteFile,
+      );
     }
     final user = role == 'user';
     final timestamp = _timestamp(context);
@@ -280,69 +368,46 @@ class ProfileMessage extends StatelessWidget {
               ),
             ),
           if (content.isNotEmpty)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: user
-                  ? MainAxisAlignment.end
-                  : MainAxisAlignment.start,
-              children: [
-                Flexible(
-                  child: Container(
-                    margin: EdgeInsets.only(left: user ? 28 : 0),
-                    padding: user
-                        ? const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          )
-                        : EdgeInsets.zero,
-                    decoration: user
-                        ? BoxDecoration(
-                            color: theme.colorScheme.primaryContainer,
-                            borderRadius: WingRadius.card,
-                          )
-                        : null,
-                    child: user
-                        ? SelectableText(
-                            content,
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              height: 1.45,
-                              color: theme.colorScheme.onPrimaryContainer,
-                            ),
-                          )
-                        : MarkdownMessageContent(
-                            data: content,
-                            streaming: streaming,
-                            onOpenRemoteFile: onOpenRemoteFile,
-                            onDownloadRemoteFile: onDownloadRemoteFile,
-                            loadImage: loadAttachmentImage,
-                            deliverables: true,
-                          ),
-                  ),
-                ),
-                if (user && !streaming)
-                  _copy(
-                    context,
-                    answerMessageDisplayText(message),
-                    timestamp: timestamp,
-                  ),
-              ],
-            ),
-          if (userContent != null)
-            for (final attachment in userContent.attachments)
-              Padding(
-                padding: EdgeInsets.only(
-                  left: 28,
-                  right: streaming ? 0 : 48,
-                  top: 8,
-                ),
-                child: UserMessageAttachmentTile(
-                  key: ValueKey(attachment.target),
-                  attachment: attachment,
-                  loadImage: loadAttachmentImage,
-                ),
+            if (user)
+              _userBubble(context, content, timestamp)
+            else
+              MarkdownMessageContent(
+                data: content,
+                streaming: streaming,
+                onOpenRemoteFile: onOpenRemoteFile,
+                onDownloadRemoteFile: onDownloadRemoteFile,
+                loadImage: loadAttachmentImage,
+                deliverables: true,
               ),
-          if (user && content.isEmpty && timestamp != null) timestamp,
-          if (actions != null)
+          for (final attachment in message.attachments)
+            Padding(
+              padding: EdgeInsets.only(
+                left: user ? 0 : 28,
+                right: streaming
+                    ? user
+                          ? WingSpacing.lg
+                          : 0
+                    : user
+                    ? _userBodyInset
+                    : 48,
+                top: 8,
+              ),
+              child: UserMessageAttachmentTile(
+                key: ValueKey(attachment.target),
+                attachment: attachment,
+                loadImage: loadAttachmentImage,
+              ),
+            ),
+          if (user && !streaming && content.isEmpty)
+            SizedBox(
+              width: _userRailWidth,
+              height:
+                  MediaQuery.textScalerOf(context).scale(11) +
+                  48 +
+                  WingSpacing.sm,
+              child: _userControls(context, timestamp),
+            ),
+          if (actions != null && !user)
             Align(alignment: Alignment.centerRight, child: actions),
         ],
       ),
@@ -350,12 +415,8 @@ class ProfileMessage extends StatelessWidget {
   }
 
   Widget? _timestamp(BuildContext context) {
-    // The transcript contract uses Unix seconds. Unknown times stay absent.
-    final seconds = message['timestamp'];
-    if (seconds is! num || !seconds.isFinite || seconds.abs() > 8640000000000) {
-      return null;
-    }
-    final date = DateTime.fromMillisecondsSinceEpoch((seconds * 1000).round());
+    final date = message.timestamp;
+    if (date == null) return null;
     final localizations = MaterialLocalizations.of(context);
     final time = TimeOfDay.fromDateTime(date);
     final compact = localizations.formatTimeOfDay(
@@ -373,7 +434,7 @@ class ProfileMessage extends StatelessWidget {
         semanticsLabel: full,
         maxLines: 1,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          fontSize: 12,
+          fontSize: message.role == 'user' ? 11 : 12,
           height: 1,
           fontFeatures: const [FontFeature.tabularFigures()],
           color: Theme.of(context).colorScheme.onSurfaceVariant,

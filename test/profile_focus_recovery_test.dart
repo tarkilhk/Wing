@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -13,23 +15,33 @@ import 'profile_workspace_controller_test.dart' show Host;
 void main() {
   late Host host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileChat chat;
   final navigator = GlobalKey<NavigatorState>();
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     host = Host()..running = false;
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'focus-recovery',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
-    chat = await controller.createChat();
+    chat = await controller.createChat(canDispatch: () => true);
     await controller.updateDraft(chat, 'Keep my draft');
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   Future<void> render(
     WidgetTester tester, {
@@ -73,7 +85,7 @@ void main() {
     await settleRecovery(tester);
     expect(host.connectCalls, calls + 1);
     expect(controller.recovering, isFalse);
-    expect(chat.draft, 'Keep my draft');
+    expect(chat.composer.observation.text, 'Keep my draft');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -94,7 +106,7 @@ void main() {
       for (final seconds in [1, 2, 4, 8, 16]) {
         await tester.pump(Duration(seconds: seconds));
       }
-      expect(controller.current!.retry, isNull);
+      expect(controller.current!.reconnectScheduled, isFalse);
       expect(controller.connectionStatus.liveAvailable('a'), isFalse);
       final calls = host.connectCalls;
       host.connectError = null;
@@ -106,7 +118,7 @@ void main() {
       expect(controller.connectionStatus.liveAvailable('a'), isTrue);
       expect(controller.recovering, isFalse);
       expect(controller.visible, isFalse);
-      expect(chat.draft, 'Keep my draft');
+      expect(chat.composer.observation.text, 'Keep my draft');
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -131,7 +143,7 @@ void main() {
     );
     expect(controller.recovering, isFalse);
     expect(controller.visible, isFalse);
-    expect(chat.draft, 'Keep my draft');
+    expect(chat.composer.observation.text, 'Keep my draft');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -150,7 +162,7 @@ void main() {
     expect(host.connectCalls, calls + 1);
     expect(controller.recovering, isFalse);
     expect(controller.visible, isFalse);
-    expect(chat.draft, 'Keep my draft');
+    expect(chat.composer.observation.text, 'Keep my draft');
     expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -182,7 +194,7 @@ void main() {
     expect(host.connectCalls, calls + 1);
     expect(controller.recovering, isFalse);
     expect(controller.visible, isTrue);
-    expect(chat.draft, 'Keep my draft');
+    expect(chat.composer.observation.text, 'Keep my draft');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -235,7 +247,7 @@ void main() {
     await settleRecovery(tester);
     expect(host.connectCalls, calls + 1);
     expect(controller.recovering, isFalse);
-    expect(chat.draft, 'Keep my draft');
+    expect(chat.composer.observation.text, 'Keep my draft');
     expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
   });

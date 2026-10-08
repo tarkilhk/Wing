@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/hermes_profile.dart';
-import 'package:wing/core/services/profile_color_store.dart';
+import 'package:wing/core/models/profile_colors.dart';
+import 'package:wing/core/services/profile_colors_session.dart';
+import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/theme/profile_colors.dart';
 import 'package:wing/core/widgets/chat_profile_bar.dart';
@@ -13,8 +15,16 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
-    final colors = ProfileColorStore(preferences, 'connection-a');
-    await colors.write('work', 8);
+    final owner = AppPreferences(preferences);
+    addTearDown(owner.dispose);
+    final colors = ProfileColorsSession(
+      preferences: owner,
+      connectionIdentity: 'connection-a',
+    )..updateProfiles(['work']);
+    final picker = colors.beginChoice('work')!;
+    await picker.choose(ProfileColorChoice.blue);
+    picker.dispose();
+    colors.dispose();
     await tester.pumpWidget(
       MaterialApp(
         theme: wingTheme(Brightness.dark),
@@ -22,7 +32,10 @@ void main() {
           body: ChatProfileBar(
             profiles: const [HermesProfile(name: 'work')],
             selectedProfiles: const {},
-            colors: colors,
+            createColors: () => ProfileColorsSession(
+              preferences: owner,
+              connectionIdentity: 'connection-a',
+            ),
             onSelected: (_) {},
           ),
         ),
@@ -57,6 +70,13 @@ void main() {
   testWidgets('five-profile bar scrolls and exposes named selection', (
     tester,
   ) async {
+    SharedPreferences.setMockInitialValues({});
+    final owner = AppPreferences(await SharedPreferences.getInstance());
+    addTearDown(owner.dispose);
+    ProfileColorsSession createColors() => ProfileColorsSession(
+      preferences: owner,
+      connectionIdentity: 'connection-a',
+    );
     final semantics = tester.ensureSemantics();
     String? selected;
     await tester.pumpWidget(
@@ -69,6 +89,7 @@ void main() {
               width: 144,
               child: StatefulBuilder(
                 builder: (context, setState) => ChatProfileBar(
+                  createColors: createColors,
                   profiles: [
                     for (var i = 0; i < 12; i++)
                       HermesProfile(

@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_message.dart';
 import 'helpers/pump_markdown_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -10,16 +11,16 @@ void main() {
     'saved user attachments display the prompt without expanded context',
     (tester) async {
       await tester.pumpMarkdownWidget(
-        const MaterialApp(
+        MaterialApp(
           home: Scaffold(
             body: ProfileMessage(
-              message: {
+              message: TranscriptMessage.fromRow({
                 'role': 'user',
                 'content':
                     '@file:notes.txt\n\nRead the marker.\n\n'
                     '--- Attached Context ---\n\n'
                     '📄 @file:notes.txt\n```\nPRIVATE FILE BODY\n```',
-              },
+              }),
             ),
           ),
         ),
@@ -67,18 +68,18 @@ void main() {
             ),
             child: child!,
           ),
-          home: const Scaffold(
+          home: Scaffold(
             body: SingleChildScrollView(
               padding: EdgeInsets.all(16),
               child: ProfileMessage(
-                message: {
+                message: TranscriptMessage.fromRow({
                   'role': 'assistant',
                   'content':
                       '| Project | Owner | Status | Next step |\n'
                       '| --- | --- | --- | --- |\n'
                       '| Quarterly planning | Product team | In review | Approve the proposal |\n\n'
                       '```text\nA very long line that should scroll horizontally without forcing the conversation wider.\n```',
-                },
+                }),
               ),
             ),
           ),

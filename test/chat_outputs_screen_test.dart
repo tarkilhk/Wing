@@ -1,10 +1,15 @@
+import 'package:wing/core/services/chat_outputs_session.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:wing/core/models/chat_output.dart';
 import 'package:wing/core/screens/chat_outputs_screen.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -13,10 +18,13 @@ import 'package:wing/core/services/android_file_delivery_service.dart';
 import 'package:wing/core/services/media_preview_service.dart';
 import 'package:wing/core/services/pdf_preview_service.dart';
 import 'package:wing/core/services/profile_gateway.dart';
-import 'package:wing/core/widgets/markdown_code_block.dart';
+import 'package:wing/core/widgets/source_code_block.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 import 'package:wing/core/widgets/chat_inline_image.dart';
 import 'package:wing/core/widgets/web_output_preview.dart';
+import 'chat_inline_image_test.dart' show settleImages;
+import 'package:wing/core/widgets/resource_filename.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 
 class _FileDelivery extends AndroidFileDeliveryService {
   final Future<bool> Function(RemoteFileDownload file, String? mimeType) open;
@@ -59,18 +67,20 @@ Widget _screen({
 }) => MaterialApp(
   home: ChatOutputsScreen(
     chatTitle: 'Only this chat',
-    loadHistory: (offset) async => ProfileHistoryPage(
-      'chat',
-      await loadHistory(),
-      offset,
-      500,
-      isComplete: true,
+    createSession: () => ChatOutputsSession(
+      loadHistory: (offset) async => ProfileHistoryPage(
+        'chat',
+        await loadHistory(),
+        offset,
+        500,
+        isComplete: true,
+      ),
+      download: download,
+      readText: readText,
+      deliver: deliver,
+      fileDelivery: fileDelivery,
+      mediaPreview: mediaPreview,
     ),
-    download: download,
-    readText: readText,
-    deliver: deliver,
-    fileDelivery: fileDelivery,
-    mediaPreview: mediaPreview,
   ),
 );
 
@@ -79,12 +89,213 @@ RemoteTextPreview _textPreview(String path) => RemoteTextPreview(
   text: 'void main() {}',
   language: 'dart',
   mimeType: 'text/plain',
-  byteSize: 14,
   binary: false,
   truncated: false,
 );
 
+Finder _viewerAction(String label) => find.byWidgetPredicate(
+  (widget) => widget is ResourceViewerAction && widget.label == label,
+);
+
 void main() {
+  const capture = bool.fromEnvironment('CAPTURE_RESOURCE_VIEWERS');
+  setUpAll(() async {
+    if (!capture) return;
+    const root = String.fromEnvironment('CAPTURE_FONT_DIR');
+    for (final (family, file) in [
+      ('Roboto', 'Roboto-Regular.ttf'),
+      ('MaterialIcons', 'MaterialIcons-Regular.otf'),
+      ('monospace', 'DejaVuSansMono.ttf'),
+    ]) {
+      await (FontLoader(family)..addFont(
+            File(
+              '$root/$file',
+            ).readAsBytes().then((b) => b.buffer.asByteData()),
+          ))
+          .load();
+    }
+  });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('resource document header and sheet ${brightness.name} $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 780);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        const target =
+            '/srv/projects/australia/sources/2026-10-08-perth-return-hotel-flight-gate.md';
+        const source =
+            '# Perth return-night hotel — wait for flight timing\n\nDecision recorded. **Wait for the flight timing** before selecting the hotel.\n\n- Early departure: check airport access.\n- Later departure: confirm transfer time.\n\n## Evidence\n\nKeep the recorded decision separate from assumptions.\n\nFurther details remain available by scrolling.\n\n';
+        String? copied;
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copied = (call.arguments as Map)['text'] as String;
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+        final boundaryKey = GlobalKey();
+        Future<void> captureViewer(String suffix) async {
+          if (!capture) return;
+          await tester.runAsync(() async {
+            final boundary =
+                boundaryKey.currentContext!.findRenderObject()!
+                    as RenderRepaintBoundary;
+            final rendered = await boundary.toImage(pixelRatio: 1);
+            final png = await rendered.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            await File(
+                  'build/resource-viewers/${brightness.name}-${scale.toInt()}$suffix.png',
+                )
+                .create(recursive: true)
+                .then((file) => file.writeAsBytes(png!.buffer.asUint8List()));
+            rendered.dispose();
+          });
+        }
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: RepaintBoundary(key: boundaryKey, child: child),
+            ),
+            home: ChatOutputsScreen(
+              chatTitle: 'Fixture',
+              initialOutput: const ChatOutput(
+                kind: ChatOutputKind.file,
+                path: target,
+                url: null,
+                label: '2026-10-08-perth-return-hotel-flight-gate.md',
+              ),
+              createSession: () => ChatOutputsSession(
+                loadHistory: (offset) async => ProfileHistoryPage(
+                  'fixture',
+                  const [],
+                  offset,
+                  500,
+                  isComplete: true,
+                ),
+                download: (_) async => throw StateError('No fixture download'),
+                readText: (path) async => RemoteTextPreview(
+                  path: target,
+                  text: source,
+                  language: 'markdown',
+                  mimeType: 'text/markdown',
+                  binary: false,
+                  truncated: false,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final name = find.descendant(
+          of: find.byType(ResourceFilename),
+          matching: find.byType(Text),
+        );
+        expect(
+          tester.widget<Text>(name).data,
+          '2026-10-08-perth-return-hotel-flight-gate.md',
+        );
+        expect(tester.widget<Text>(name).maxLines, 1);
+        final toolbarActions = find.byType(ResourceViewerAction);
+        expect(toolbarActions, findsNWidgets(4));
+        for (final action in toolbarActions.evaluate()) {
+          final button = find.byWidget(action.widget);
+          expect(tester.getSize(button), const Size(32, 32));
+          expect(
+            tester
+                .widget<Icon>(
+                  find.descendant(of: button, matching: find.byType(Icon)),
+                )
+                .size,
+            16,
+          );
+        }
+        final sheet = tester.widget<DecoratedBox>(
+          find.byKey(const ValueKey('resource-document-sheet')),
+        );
+        expect(
+          (sheet.decoration as BoxDecoration).border,
+          Border.all(color: WingTokens.forBrightness(brightness).border),
+        );
+        expect(find.byType(MarkdownMessageContent), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await captureViewer('');
+        await tester.tap(find.byTooltip('Show file path').last);
+        await tester.pumpAndSettle();
+        expect(find.text(target), findsOneWidget);
+        await captureViewer('-path');
+        await tester.tapAt(const Offset(300, 700));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Copy content'));
+        await tester.pump();
+        expect(copied, source);
+        await tester.tap(find.byTooltip('Show Raw content'));
+        await tester.pump();
+        expect(find.byType(MarkdownMessageContent), findsNothing);
+        expect(find.text(source), findsOneWidget);
+        await tester.pump();
+        await captureViewer('-raw');
+        await tester.tap(find.byTooltip('Copy content'));
+        await tester.pump();
+        expect(copied, source);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+  testWidgets('downloaded image shares its exact bytes with a share glyph', (
+    tester,
+  ) async {
+    final file = RemoteFileDownload(
+      filename: 'server-photo.png',
+      bytes: img.encodePng(
+        img.Image(width: 4, height: 4)..clear(img.ColorRgb8(10, 30, 40)),
+      ),
+    );
+    RemoteFileDownload? delivered;
+    final downloads = <String>[];
+    await tester.pumpWidget(
+      _screen(
+        loadHistory: () async => [
+          {'role': 'assistant', 'content': 'Saved /srv/original/photo.png'},
+        ],
+        download: (path) async {
+          downloads.add(path);
+          return file;
+        },
+        readText: (_) async => throw StateError('Unexpected text read'),
+        deliver: (value) async => delivered = value,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('photo.png'));
+    await settleImages(tester);
+    final action = tester.widget<ResourceViewerAction>(
+      _viewerAction('Save or share'),
+    );
+    expect(action.icon, Icons.share_outlined);
+    expect(find.text('Save or share'), findsNothing);
+    await tester.tap(find.byTooltip('Save or share'));
+    await tester.pumpAndSettle();
+    expect(downloads, ['/srv/original/photo.png']);
+    expect(delivered, same(file));
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('report appendix resolves beside the document', (tester) async {
     const folder =
         '/home/tarkil/projects/memory-maintenance/reports/monthly-pilot-20260927';
@@ -110,7 +321,6 @@ void main() {
             text: source,
             language: 'markdown',
             mimeType: 'text/markdown',
-            byteSize: source.length,
             binary: false,
             truncated: false,
           );
@@ -127,14 +337,14 @@ void main() {
     expect(find.text('Appendix contents'), findsOneWidget);
     expect(
       tester.getRect(find.text('The six health checks')).top,
-      inInclusiveRange(100, 200),
+      inInclusiveRange(56, 156),
     );
     await tester.tap(find.text('Corrections', findRichText: true));
     await tester.pumpAndSettle();
     expect(reads, ['$folder/report.md', '$folder/details.md']);
     expect(
       tester.getRect(find.text('Exact correction targets')).top,
-      inInclusiveRange(100, 200),
+      inInclusiveRange(56, 156),
     );
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -156,15 +366,17 @@ void main() {
             url: null,
             label: 'report.txt',
           ),
-          loadHistory: (_) async {
-            historyLoads++;
-            throw StateError('history must not load');
-          },
-          readText: (path) async {
-            previewPath = path;
-            return _textPreview(path);
-          },
-          download: (_) async => throw StateError('Unexpected download'),
+          createSession: () => ChatOutputsSession(
+            loadHistory: (_) async {
+              historyLoads++;
+              throw StateError('history must not load');
+            },
+            readText: (path) async {
+              previewPath = path;
+              return _textPreview(path);
+            },
+            download: (_) async => throw StateError('Unexpected download'),
+          ),
         ),
       ),
     );
@@ -172,7 +384,7 @@ void main() {
 
     expect(historyLoads, 0);
     expect(previewPath, '../exports/report.txt');
-    expect(find.byType(MarkdownCodeBlock), findsOneWidget);
+    expect(find.byType(SourceCodeBlock), findsOneWidget);
   });
 
   testWidgets('initial output retries the same unavailable target', (
@@ -189,13 +401,15 @@ void main() {
             url: null,
             label: 'report.txt',
           ),
-          loadHistory: (_) async => throw StateError('Unexpected history'),
-          readText: (path) async {
-            attempts++;
-            if (attempts == 1) throw StateError('gone');
-            return _textPreview(path);
-          },
-          download: (_) async => throw StateError('Unexpected download'),
+          createSession: () => ChatOutputsSession(
+            loadHistory: (_) async => throw StateError('Unexpected history'),
+            readText: (path) async {
+              attempts++;
+              if (attempts == 1) throw StateError('gone');
+              return _textPreview(path);
+            },
+            download: (_) async => throw StateError('Unexpected download'),
+          ),
         ),
       ),
     );
@@ -211,7 +425,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(attempts, 2);
-    expect(find.byType(MarkdownCodeBlock), findsOneWidget);
+    expect(find.byType(SourceCodeBlock), findsOneWidget);
   });
 
   testWidgets('initial output explains an HTTP access denial', (tester) async {
@@ -225,10 +439,12 @@ void main() {
             url: null,
             label: 'report.md',
           ),
-          loadHistory: (_) async => throw StateError('Unexpected history'),
-          readText: (_) async =>
-              throw const DashboardHttpException(403, 'files/read'),
-          download: (_) async => throw StateError('Unexpected download'),
+          createSession: () => ChatOutputsSession(
+            loadHistory: (_) async => throw StateError('Unexpected history'),
+            readText: (_) async =>
+                throw const DashboardHttpException(403, 'files/read'),
+            download: (_) async => throw StateError('Unexpected download'),
+          ),
         ),
       ),
     );
@@ -335,11 +551,13 @@ void main() {
                       url: null,
                       label: 'report.txt',
                     ),
-                    loadHistory: (_) async =>
-                        throw StateError('Unexpected history'),
-                    readText: (_) async => throw StateError('gone'),
-                    download: (_) async =>
-                        throw StateError('Unexpected download'),
+                    createSession: () => ChatOutputsSession(
+                      loadHistory: (_) async =>
+                          throw StateError('Unexpected history'),
+                      readText: (_) async => throw StateError('gone'),
+                      download: (_) async =>
+                          throw StateError('Unexpected download'),
+                    ),
                   ),
                 ),
               ),
@@ -378,11 +596,13 @@ void main() {
                       url: null,
                       label: 'report.txt',
                     ),
-                    loadHistory: (_) async =>
-                        throw StateError('Unexpected history'),
-                    readText: (_) => pending.future,
-                    download: (_) async =>
-                        throw StateError('Unexpected download'),
+                    createSession: () => ChatOutputsSession(
+                      loadHistory: (_) async =>
+                          throw StateError('Unexpected history'),
+                      readText: (_) => pending.future,
+                      download: (_) async =>
+                          throw StateError('Unexpected download'),
+                    ),
                   ),
                 ),
               ),
@@ -403,7 +623,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Open owned output'), findsOneWidget);
-    expect(find.byType(MarkdownCodeBlock), findsNothing);
+    expect(find.byType(SourceCodeBlock), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -439,7 +659,6 @@ void main() {
           text: '',
           language: '',
           mimeType: 'application/pdf',
-          byteSize: 4,
           binary: true,
           truncated: false,
         ),
@@ -456,7 +675,7 @@ void main() {
     await tester.tap(find.text('report.pdf'));
     await tester.pumpAndSettle();
     expect(downloadedPath, isNull);
-    await tester.tap(find.text('Read PDF'));
+    await tester.tap(find.byTooltip('Read PDF'));
     await tester.pumpAndSettle();
     expect(downloadedPath, '/srv/current/report.pdf');
     expect(calls.first.arguments, {
@@ -470,8 +689,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(calls.last.method, 'close');
     expect(calls.last.arguments, {'documentId': 'from-output'});
-    expect(find.text('Open in app'), findsOneWidget);
-    expect(find.text('Save or share'), findsOneWidget);
+    expect(find.byTooltip('Open in app'), findsOneWidget);
+    expect(find.byTooltip('Save or share'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -491,7 +710,6 @@ void main() {
           text: '',
           language: '',
           mimeType: 'application/pdf',
-          byteSize: 4,
           binary: true,
           truncated: false,
         ),
@@ -513,7 +731,7 @@ void main() {
     await tester.tap(find.text('report.pdf'));
     await tester.pumpAndSettle();
     expect(opened, isNull);
-    await tester.tap(find.text('Open in app'));
+    await tester.tap(find.byTooltip('Open in app'));
     await tester.pumpAndSettle();
     expect(path, '/srv/current/report.pdf');
     expect(opened?.filename, 'actual.pdf');
@@ -523,7 +741,7 @@ void main() {
       find.text('No compatible app was found. Use Save or share instead.'),
       findsOneWidget,
     );
-    expect(find.text('Save or share'), findsOneWidget);
+    expect(find.byTooltip('Save or share'), findsOneWidget);
   });
 
   testWidgets('closing preview during download prevents a late app launch', (
@@ -541,7 +759,6 @@ void main() {
           text: '',
           language: '',
           mimeType: 'application/pdf',
-          byteSize: 4,
           binary: true,
           truncated: false,
         ),
@@ -555,13 +772,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('report.pdf'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Open in app'));
+    await tester.tap(find.byTooltip('Open in app'));
     await tester.pump();
     expect(
       tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Open in app'),
-          )
+          .widget<ResourceViewerAction>(_viewerAction('Open in app'))
           .onPressed,
       isNull,
     );
@@ -592,7 +807,6 @@ void main() {
           text: '',
           language: '',
           mimeType: 'video/mp4',
-          byteSize: 3,
           binary: true,
           truncated: false,
         ),
@@ -614,7 +828,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('clip.mp4'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Play media'));
+    await tester.tap(find.byTooltip('Play media'));
     await tester.pumpAndSettle();
 
     expect(downloadedPath, '/srv/current/clip.mp4');
@@ -622,7 +836,7 @@ void main() {
     expect(played?.bytes, orderedEquals([1, 2, 3]));
     expect(title, 'clip.mp4');
     expect(mimeType, 'video/mp4');
-    expect(find.text('Save or share'), findsOneWidget);
+    expect(find.byTooltip('Save or share'), findsOneWidget);
   });
 
   testWidgets('media playback guard blocks duplicates and closed previews', (
@@ -641,7 +855,6 @@ void main() {
           text: '',
           language: '',
           mimeType: 'video/mp4',
-          byteSize: 3,
           binary: true,
           truncated: false,
         ),
@@ -659,7 +872,7 @@ void main() {
     await tester.tap(find.text('clip.mp4'));
     await tester.pumpAndSettle();
     final play = tester
-        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Play media'))
+        .widget<ResourceViewerAction>(_viewerAction('Play media'))
         .onPressed!;
     play();
     play();
@@ -667,7 +880,7 @@ void main() {
     expect(downloads, 1);
     expect(
       tester
-          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Play media'))
+          .widget<ResourceViewerAction>(_viewerAction('Play media'))
           .onPressed,
       isNull,
     );
@@ -732,7 +945,7 @@ void main() {
       await tester.tap(find.byTooltip('Show source'));
       await tester.pumpAndSettle();
       expect(
-        tester.widget<MarkdownCodeBlock>(find.byType(MarkdownCodeBlock)).code,
+        tester.widget<SourceCodeBlock>(find.byType(SourceCodeBlock)).code,
         source,
       );
       await tester.pageBack();
@@ -780,7 +993,6 @@ void main() {
             text: '<p>short preview</p>',
             language: 'html',
             mimeType: 'text/html; charset=utf-8',
-            byteSize: source.length,
             binary: false,
             truncated: true,
           ),
@@ -827,7 +1039,7 @@ void main() {
       await tester.tap(find.byTooltip('Show source'));
       await tester.pumpAndSettle();
       expect(
-        tester.widget<MarkdownCodeBlock>(find.byType(MarkdownCodeBlock)).code,
+        tester.widget<SourceCodeBlock>(find.byType(SourceCodeBlock)).code,
         source,
       );
       expect(find.byTooltip('Show HTML'), findsOneWidget);
@@ -867,7 +1079,6 @@ void main() {
           text: '<p>preview</p>',
           language: 'html',
           mimeType: 'text/html',
-          byteSize: 14,
           binary: false,
           truncated: false,
         ),
@@ -912,7 +1123,6 @@ void main() {
           text: '<p>preview</p>',
           language: 'text',
           mimeType: 'text/plain',
-          byteSize: WebOutputPreview.maxHtmlSourceLength + 1,
           binary: false,
           truncated: true,
         ),
@@ -1002,7 +1212,6 @@ void main() {
             text: source,
             language: 'text',
             mimeType: 'text/plain',
-            byteSize: source.length,
             binary: false,
             truncated: true,
           ),
@@ -1018,21 +1227,29 @@ void main() {
       expect(find.text('Release notes'), findsOneWidget);
       expect(find.text('Hermes'), findsNothing);
       expect(find.byType(ChatInlineImage), findsOneWidget);
+      expect(find.byTooltip('Share file'), findsOneWidget);
+      expect(find.text('Copy content'), findsNothing);
+      expect(find.text('Save or share'), findsNothing);
+      await tester.tap(find.byTooltip('Copy content'));
+      await tester.pump();
+      expect(copied, source);
       expect(
         find.text('Preview shortened by Hermes. Save the file to read it all.'),
         findsOneWidget,
       );
 
-      await tester.tap(find.text('Source'));
+      await tester.tap(find.byTooltip('Show Raw content'));
       await tester.pump();
       expect(find.byType(MarkdownMessageContent), findsNothing);
-      expect(find.byType(MarkdownCodeBlock), findsOneWidget);
-      expect(find.text('Rendered'), findsOneWidget);
-      await tester.tap(find.byTooltip('Copy code'));
+      expect(find.text(source), findsOneWidget);
+      expect(find.byTooltip('Show formatted content'), findsOneWidget);
+      expect(find.byTooltip('Share file'), findsOneWidget);
+      expect(find.text('Save or share'), findsNothing);
+      await tester.tap(find.byTooltip('Copy content'));
       await tester.pump();
       expect(copied, source);
 
-      await tester.tap(find.text('Rendered'));
+      await tester.tap(find.byTooltip('Show formatted content'));
       await tester.pump();
       expect(find.byType(MarkdownMessageContent), findsOneWidget);
     },
@@ -1057,7 +1274,6 @@ void main() {
                 text: source,
                 language: 'markdown',
                 mimeType: 'text/markdown',
-                byteSize: source.length,
                 binary: false,
                 truncated: false,
               );
@@ -1067,7 +1283,6 @@ void main() {
               text: 'Scoped report contents',
               language: 'text',
               mimeType: 'text/plain',
-              byteSize: 22,
               binary: false,
               truncated: false,
             );
@@ -1100,6 +1315,71 @@ void main() {
     },
   );
 
+  testWidgets('Markdown share icon retains pending and retry behavior', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 780);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final firstDownload = Completer<RemoteFileDownload>();
+    var downloads = 0;
+    RemoteFileDownload? delivered;
+    final file = RemoteFileDownload(
+      filename: 'notes.md',
+      bytes: utf8.encode('# Notes'),
+    );
+    await tester.pumpWidget(
+      _screen(
+        loadHistory: () async => [
+          {'role': 'assistant', 'content': 'Saved /srv/notes.md'},
+        ],
+        readText: (path) async => RemoteTextPreview(
+          path: path,
+          text: '# Notes',
+          language: 'markdown',
+          mimeType: 'text/markdown',
+          binary: false,
+          truncated: false,
+        ),
+        download: (path) async {
+          expect(path, '/srv/notes.md');
+          downloads++;
+          return downloads == 1 ? firstDownload.future : file;
+        },
+        deliver: (value) async {
+          delivered = value;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('notes.md'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getRect(find.text('notes.md')).bottom,
+      lessThan(tester.getRect(find.byTooltip('Share file')).top),
+    );
+    final share = find.byTooltip('Share file');
+    IconButton button() => tester.widget<IconButton>(
+      find.ancestor(of: share, matching: find.byType(IconButton)).first,
+    );
+    await tester.tap(share);
+    await tester.pump();
+    expect(button().onPressed, isNull);
+    firstDownload.completeError(StateError('Unavailable'));
+    await tester.pumpAndSettle();
+    expect(button().onPressed, isNotNull);
+    expect(delivered, isNull);
+    await tester.tap(share);
+    await tester.pumpAndSettle();
+    expect(downloads, 2);
+    expect(delivered, same(file));
+    expect(button().onPressed, isNotNull);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'markdown detection accepts language and MIME but excludes binary',
     (tester) async {
@@ -1128,7 +1408,6 @@ void main() {
               text: '# Heading',
               language: current.language,
               mimeType: current.mimeType,
-              byteSize: 9,
               binary: current.binary,
               truncated: false,
             );
@@ -1148,10 +1427,10 @@ void main() {
         await tester.pumpAndSettle();
         if (cases[index].binary) {
           expect(find.byType(MarkdownMessageContent), findsNothing);
-          expect(find.text('Source'), findsNothing);
+          expect(find.byTooltip('Show Raw content'), findsNothing);
         } else {
           expect(find.byType(MarkdownMessageContent), findsOneWidget);
-          expect(find.text('Source'), findsOneWidget);
+          expect(find.byTooltip('Show Raw content'), findsOneWidget);
         }
         await tester.pageBack();
         await tester.pumpAndSettle();
@@ -1241,23 +1520,25 @@ void main() {
           data: const MediaQueryData(textScaler: TextScaler.linear(2)),
           child: ChatOutputsScreen(
             chatTitle: 'Only this chat',
-            loadHistory: (offset) async => ProfileHistoryPage(
-              'chat',
-              [
-                {
-                  'role': 'assistant',
-                  'content': 'Saved /srv/current/very-long-report-name.pdf',
-                },
-              ],
-              offset,
-              500,
-              isComplete: true,
+            createSession: () => ChatOutputsSession(
+              loadHistory: (offset) async => ProfileHistoryPage(
+                'chat',
+                [
+                  {
+                    'role': 'assistant',
+                    'content': 'Saved /srv/current/very-long-report-name.pdf',
+                  },
+                ],
+                offset,
+                500,
+                isComplete: true,
+              ),
+              download: (_) async =>
+                  throw const DashboardResponseTooLargeException(
+                    32 * 1024 * 1024,
+                  ),
+              readText: (_) async => throw StateError('Unexpected preview'),
             ),
-            download: (_) async =>
-                throw const DashboardResponseTooLargeException(
-                  32 * 1024 * 1024,
-                ),
-            readText: (_) async => throw StateError('Unexpected preview'),
           ),
         ),
       ),

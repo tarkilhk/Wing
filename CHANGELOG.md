@@ -4,6 +4,24 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Recover retained tool durations from earlier runtimes when reopening a saved
+  conversation, including after Hermes retires the original runtime.
+
+- Retain measured timings independently of the recent-message and recent-chat
+  preview caches, so loading older saved rows can still show received durations.
+- Recover measured tool-call durations missed while disconnected when loading
+  chat history, while their completion events remain in Hermes' event buffer.
+
+- Make tool activity rows compact and remove expansion arrows from saved agents
+  that have no output to show.
+
+- Restore Fork by registering the new chat before observing its model controls.
+  Keep task status labels accessible and profile repair choices reachable with
+  enlarged text.
+
+- Outline the continuous selected analytics date span, including days with zero
+  usage, instead of leaving holes between recorded days.
+
 - Apply Once, Session and Deny directly from command notifications without a
   second approval prompt. Keep Always behind review, and show Review and Deny
   when the command is truncated. Reload cold or cached chats before deciding,

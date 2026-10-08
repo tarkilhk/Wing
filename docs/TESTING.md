@@ -11,7 +11,104 @@ Keep logs and generated captures under ignored `build/`. Record source revision,
 For CPU attribution, input latency, thermal load and battery investigations, use
 the [performance procedure](PERFORMANCE.md) and its repeatable phone recorder.
 
+## Verification scope and stopping
+
+Choose checks to resolve an identified risk. Before running them, identify the
+changed behavior, affected callers/dependencies, required gates and the condition
+that ends verification. Documentation-only edits need review of wording, links
+and formatting; they do not need runtime test campaigns.
+
+1. During implementation, run focused tests at the changed contract and the
+   applicable source guards. Include affected dependencies when the property
+   crosses files or owners.
+2. At final integration, run a justified broad suite once for the stable tested
+   inputs. Full verification is warranted by changes to checking tools, runners,
+   fixtures or dependencies, substantial changes across application boundaries,
+   or an explicit release/CI requirement. A local production APK build or phone
+   install is not publication and does not itself trigger a full suite.
+3. Record the tested revision or source fingerprint, command/scope, configuration
+   and result. Reuse that evidence while its relevant inputs remain unchanged.
+   A commit, push, equivalent isolated checkout or documentation edit does not
+   invalidate unchanged behavior checks. Verify relevant input differences rather
+   than treating every new commit hash as a reason to repeat everything.
+4. After a failure, diagnose it and rerun the affected test and relevant
+   dependencies. For an isolated timeout, check infrastructure/load separately
+   from product behavior and rerun that test alone or with lower concurrency.
+   A passing isolated rerun closes that uncertainty; it does not invalidate other
+   passing checks or justify another full campaign. Preserve the original failed
+   aggregate result and report the successful focused rerun separately.
+5. Repeat a full suite only when substantial changes invalidate broad evidence,
+   failures indicate a wider problem, or an explicit gate requires a fresh run.
+   Before repeating it, state the concrete trigger and which evidence is no
+   longer usable. A desire for a green aggregate command is not a trigger.
+6. Stop when the planned affected checks pass and required gates are satisfied;
+   report remaining limits without expanding scope automatically. If the user
+   stops testing, terminate the active owned run and start no replacement campaign.
+   Continue other authorized work where its prerequisites are satisfied.
+
+Required published-release and CI gates remain mandatory. A failed or interrupted
+full command is not a passing full run; a focused recovery does not waive a gate
+that explicitly requires one. Ordinary local delivery can use the completed
+checks and their stated limits without manufacturing another release campaign.
+
 ## Continuous checks
+
+After activating the Flutter toolchain, run `python3 scripts/test.py` for routine
+verification. This includes product unit/widget tests, security, recovery,
+ownership, accessibility and work-budget regressions, plus every current-source
+Dart and Python/native linter through `scripts/check_commit_linters.py`.
+Routine linters and host tests run concurrently; both must finish successfully
+for the command to pass.
+The exhaustive tests of the architecture checking tools are retained in the
+explicit `architectureProofSuites` inventory in `tools/testing/test_batches.dart`.
+They run in `python3 scripts/test.py --full`, which executes every discovered
+`test/**/*_test.dart` main once. The two mixed scheduled-task contract suites
+retain all their actual repository/DTO and fixture checks in routine runs.
+New unclassified suites run routinely; they are never silently scheduled away.
+
+| Check | Cadence |
+| --- | --- |
+| Source linters | Every local commit with the hook installed, every branch push/PR, and release |
+| Product host tests | Every routine run and branch push/PR |
+| Complete checker fixtures and source/native/SDK proofs | Nightly, whenever checking tools/runner/fixture/dependency inputs change, and before a published release |
+
+CI uses `--changed-since` with the preceding commit or PR base to select full
+verification when tool inputs change. Unknown or missing history selects the
+full suite. The nightly workflow also supports manual dispatch. Scheduling
+preserves every test but can delay finding a checking-tool regression until the
+next full run; checking the current app source is never deferred.
+
+CI runs the Dart source checks together with
+`python3 scripts/check_commit_linters.py --dart-only`, preserving each rule while
+sharing startup and analysis work. PR checks also bind the aggregate to the
+preceding architecture baseline with `--baseline-reference`. Python source
+checks run explicitly, and native source guards run after Gradle has supplied
+their compiler dependencies. PR host tests use `scripts/test.py --skip-linters`
+because these mandatory workflow steps enforce the linters separately. The
+workflow guard requires the Dart source gate before that host step and Gradle
+setup before each native gate. Local routine verification keeps all linters.
+Python runner tests prove source-check discovery, baseline handling, failure
+propagation and separation of native dependencies; they run in both workflows.
+
+Ordinary suites share generated Flutter
+batches, with separate lanes for pure tests, widget bindings and reviewed
+architecture wrappers. Additional transport fixtures require a source and
+cleanup review before batching. Custom bindings, font loading, special
+performance/cache lifetimes, environment-gated suites and unscoped setup stay
+isolated. Architecture fixture and CLI children retain fresh processes. The runner
+checks the complete selected/scheduled partition and source fingerprints, propagates any test failure,
+and retains its plan, machine events and toolchain metadata in a private
+owner-only temporary directory outside the checkout. During full runs, architecture guard and
+fixture programs are compiled together to a native AOT snapshot from the current
+source once during the timed run. Each selected main executes in a fresh SDK
+native runtime process with its original arguments and diagnostic assertions.
+The runtime stays inside the selected SDK so implicit SDK discovery retains
+its source-run provenance. Native AOT compilation and SDK
+controls retain their original independent subprocesses. Compilation or an
+unknown command fails verification. Generated code is removed after execution.
+`--concurrency=N` controls the shared host worker limit;
+the default is at most eight. Focused checks still use `flutter test --no-pub`
+with their original file paths. Device and live acceptance remain explicit.
 
 PRs and pushes to `main` run Dart analysis, host Flutter tests, a debug Android
 APK build, and native JVM boundary tests. Android checks use Flutter 3.44.0,
@@ -48,6 +145,68 @@ WebView acceptance on a disposable emulator.
 
 ## Useful test entry points
 
+`SAVED_TOOL_RUN_BOUNDARY` is guarded by `test/profile_design_test.dart`:
+invisible empty assistant rows separate neighboring tool runs, while explicitly
+hidden rows retain continuity. Saved tools/reasoning can join live Activity;
+final reviews keep live work and their own detail action reachable. Mounted
+regressions cover both live tools and reasoning after a final review.
+Native reasoning-only rows remain visible through
+the saved projection regressions in `test/profile_execution_activity_test.dart`.
+These checks establish grouping semantics and rendered expansion; source shape
+alone cannot establish which immutable rows a projection publishes.
+
+`CONVERSATION_TIMING_DISPOSAL` is guarded by
+`test/profile_execution_activity_test.dart`: throttled completions in two chats
+survive shutdown alongside older measurements outside the 60-row preview,
+including a received zero duration. Disposed readings reject new receipts and
+publication; confirmed deletion cannot resurrect its timing index. The snapshot
+suites separately cover ordered writes, preview limits and unchanged workspace
+work budgets. Static disposal order alone cannot prove retained revisions or
+what later asynchronous batches persist.
+
+`BROWSER_FILTER_PUBLICATION` is guarded by `test/chat_browser_data_test.dart`
+and `test/chat_list_target_test.dart`. Canonical bulk refreshes publish when a
+row enters or leaves the confirmed Unread/Draft filter or local title/preview
+query; the mounted browser removes and restores the row without replacing its
+State. Stable membership remains a row-only update, with no extra index read or
+list publication. Static ownership guards cannot establish reactive membership
+or observer delivery.
+
+`MODEL_CHOOSER_KEYBOARD` is guarded by `test/model_chooser_test.dart` and the
+shared `test/studio_selection_test.dart`. Arrow keys traverse ordinary and named
+special choices; Tab reaches the separate info action and Space opens it without
+selecting another model. Disabled controls retire focus and reject writes.
+Narrow light/dark layouts retain compact pricing and background-only selection
+at normal and enlarged text. Static construction checks cannot establish focus
+traversal or keyboard event delivery. Existing picker caller suites retain their
+captured edit/persistence behavior.
+
+`TEST_FIXTURE_ENDPOINT_ROUTING` is guarded by
+`test/chat_browser_mutations_test.dart` and
+`test/profile_workspace_controller_test.dart`. Browser fixtures route GUI-log
+reads independently of held chat-list pages and reject unmodeled endpoints.
+Profile-owned REST reads and every RPC retain their captured profile; timing
+recovery's process GUI-log request must instead carry exactly `file: gui`, the
+saved chat's search identity and `lines: 500`, without a profile override.
+Verified against stock Hermes main
+[`08165d58931841cee713468ae89032af7c57060a`](https://github.com/NousResearch/hermes-agent/commit/08165d58931841cee713468ae89032af7c57060a),
+whose `hermes_cli/web_routers/status.py` resolves an omitted profile to the
+dashboard's log directory. Behavioral checks own this invariant because source
+patterns alone cannot establish which held I/O a fixture awaits or the request
+parameters sent through the actual controller path. Run
+`flutter test --no-pub test/chat_browser_mutations_test.dart test/profile_workspace_controller_test.dart`.
+
+The deletion cases in `test/chat_browser_actions_test.dart` and
+`test/profile_row_actions_test.dart` guard `BROWSER_DELETE_ASYNC_CLEANUP`.
+Confirmed deletion waits for ordered timing-cache writes, including background
+isolate encoding. The widget harness alternates real async work with frame pumps
+until the captured chat's mutation finishes, then settles the confirmation route.
+The original assertions still require deletion and unlocked controls while
+follow-up chat-list reads are held. Static checks cannot establish isolate
+completion or fake-async scheduling; these behavioral cases cover both.
+
+For the Chats Project filter, run `flutter test --no-pub test/chat_browser_data_test.dart test/chat_list_target_test.dart`. Select a profile using the header squares or Profile menu, then open Project: only that profile's projects and unassigned-chat group should appear. Multiple selected profiles expose their combined choices; clearing Profile restores all choices. The owner regression checks membership with repeated project IDs across profiles; widget regressions cover switching and clearing in both themes at normal and 200% text. This dynamic membership property uses behavioral checks rather than a source linter.
+
 For ordinary-app startup acceptance, install the normal debug APK on a fresh
 disposable emulator, then deny Notifications and Microphone in Android's actual
 permission dialogs. Confirm the welcome screen and connection setup remain
@@ -83,7 +242,10 @@ It navigates the real app but does not send messages or modify settings.
 | Connection setup | `test/connection_address_test.dart`, `test/connection_setup_probe_test.dart`, `test/connection_setup_transport_test.dart`, `test/connection_setup_screen_test.dart` |
 | Scheduled tasks | `test/scheduled_tasks_*_test.dart`, `integration_test/scheduled_tasks_native_test.dart` |
 | Voice | `test/voice_*_test.dart`, `test/profile_voice*_test.dart`, `test/hermes_voice_test.dart`, `test/microphone_permission_test.dart`, `test/startup_notification_permission_test.dart`, `integration_test/voice_*_test.dart`; [profile voice checks](PROFILE_VOICE.md#verification) |
+| Context occupancy and composition | `test/context_ring_test.dart`, `test/profile_context_usage_test.dart`; render with `--dart-define=CONTEXT_RING_REVIEW=true` and the existing `build/studio-roboto.ttf` / `build/studio-icons.otf` review fonts. Captures and ring coordinates go to ignored `build/context-ring-review/` for pixel inspection |
 | Design renders | `test/studio_layout_test.dart`, `test/studio_controls_test.dart`, `test/studio_layout_regressions_test.dart`, `test/administration_navigation_test.dart` |
+| [Accepted activity family](DESIGN_SYSTEM.md#accepted-activity-detail-family) | `test/activity_family_test.dart` extends real-font review to Tasks, saved/live Agents, Work, goals, reasoning, search, writes and web results (`CAPTURE_ACTIVITY_FAMILY=true`). `test/profile_tool_call_test.dart` compares visible content/icon edges, compact toolbar height, neutral completion footers and retained actions across code/read/edit/vision in both themes at ordinary and enlarged text. Capture with `CAPTURE_TOOL_RESULTS=true` and actual review fonts as described in [tool activity verification](TOOL_ACTIVITY.md#inline-requests-and-receipts); inspect the family together |
+| Host resources and reusable alert inputs | `test/host_resources_session_test.dart`, `test/host_thresholds_test.dart`, `test/host_health_view_test.dart`; render with `CAPTURE_HOST_HEALTH=true` and `CAPTURE_FONT_DIR=<Flutter SDK>/bin/cache/artifacts/material_fonts` into ignored `build/host-health/` |
 
 Read a driver's environment flags, mutations and cleanup before running it. Use disposable profiles/chats and owned fixtures on an authorized server. Live tests may invoke models, modify profile settings or start host tools. Restore changed values and independently verify cleanup; a green assertion that records `backend_limited` is not successful feature acceptance.
 
@@ -167,7 +329,8 @@ flutter test integration_test/backend_acceptance_live_test.dart -d <emulator-id>
 That driver requires the disposable profile/skill/provider setup documented in its source. `remaining_product_live_test.dart` additionally uses an owned empty repository through `QA_APPROVAL_REPO` and the dummy vault page in `integration_test/fixtures/vault/`. Do not point destructive approval fixtures at a real project. Serve the dummy page on loopback only. The stock secret-expiry case takes five minutes; a shorter fixture is not equivalent evidence.
 
 `integration_test/profile_expansion_scroll_test.dart` runs transcript expansion,
-search, pagination/retry, reading anchors and streaming follow/reading regressions
+collapse without leftover bottom gaps, search, pagination/retry, reading anchors
+and streaming follow/reading regressions
 on Android with local gateways. Run it on the disposable emulator with ordinary
 `flutter test --no-pub ... -d <emulator-id> --no-uninstall` flags. It writes PNG captures to the development package's external files directory;
 pull and inspect normal/enlarged text in both themes. Native interaction tests and their captures do not measure frame/input
@@ -282,7 +445,12 @@ persistence and failed saves, profile-scoped authentication, stale callbacks,
 permissions, draft insertion without sending, read-aloud prose, and cancellation.
 For automated offline emulator acceptance, run
 `python3 scripts/test_native_voice.py --device <emulator-id> --output build/native-voice-review`.
-Install the development package first. The driver rejects physical devices,
+Install the development package first. After a cold boot, verify that the
+launcher responds and Android has no crash/ANR dialog before starting a build.
+`sys.boot_completed=1` alone does not establish responsive UI while Android
+startup work is settling. Recover an unhealthy disposable emulator before
+rerunning; retain the failed result and keep the driver's ANR checks intact.
+The driver rejects physical devices,
 resets only that package's microphone permission flags, handles the actual
 Android deny/grant dialogs and Home cancellation, then runs native recording,
 playback and installed offline TTS tests sequentially. It records capabilities,
@@ -399,3 +567,12 @@ monitoring shutdown using synthetic data. Remove its owned ADB forward and stop
 the QA fixture after the run, including on failure.
 
 For manual checks against stock Hermes, generate supported notification events one scenario at a time. Record backend outcomes separately from observations on the phone.
+
+Activity history regression: run `flutter test --no-pub test/saved_activity_test.dart test/profile_combined_activity_test.dart test/profile_tool_call_test.dart test/profile_subagents_test.dart`. Check restored Tasks/Agents, exact child-index input joins, empty task snapshots, background dispatch, roster discovery on reopen, exception-only tool headers and delivered timing. Inspect saved rows at 360 dp in both themes and 200% text; saved agents never offer steering or interruption.
+
+The stock activity catalog in `test/tool_activity_catalog_test.dart` exercises
+all source-shaped variants in `test/fixtures/stock_activity_shapes.json` through
+the actual shared renderer. Capture with `CAPTURE_ACTIVITY_CATALOG=true` and the
+same real font directory; inspect `build/activity-catalog/` with the family
+images. The [field policy](design/activity-field-policy.md) owns each tool's
+selection and action scope; fixtures do not claim live executions.

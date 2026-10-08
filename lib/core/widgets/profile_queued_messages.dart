@@ -1,27 +1,26 @@
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 
-import '../services/profile_workspace_controller.dart';
-import '../models/queued_prompt_draft.dart';
+import '../models/composer_work.dart';
 
 /// Unsent work stays immediately above the composer, outside chat scrolling.
 class ProfileQueuedMessages extends StatelessWidget {
   const ProfileQueuedMessages({
     super.key,
-    required this.chat,
+    required this.work,
     required this.onOpenActions,
     required this.onEdit,
     required this.onDelete,
   });
 
-  final ProfileChat chat;
+  final ComposerObservation work;
   final VoidCallback? onOpenActions;
-  final ValueChanged<QueuedPromptDraft>? onEdit;
-  final ValueChanged<QueuedPromptDraft>? onDelete;
+  final ValueChanged<ComposerQueueObservation>? onEdit;
+  final ValueChanged<ComposerQueueObservation>? onDelete;
 
   @override
   Widget build(BuildContext context) {
-    if (chat.queuedPrompts.isEmpty) return const SizedBox.shrink();
+    if (work.queue.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final style = theme.textTheme.bodySmall?.copyWith(
       fontSize: 12,
@@ -40,20 +39,20 @@ class ProfileQueuedMessages extends StatelessWidget {
             shrinkWrap: true,
             padding: EdgeInsets.zero,
             children: [
-              if (chat.queueMutating || chat.queuePaused)
+              if (work.saving || work.paused)
                 Text(
-                  chat.queueMutating ? 'Saving queue…' : 'Queue paused',
+                  work.saving ? 'Saving queue…' : 'Queue paused',
                   style: style,
                 ),
-              for (final prompt in chat.queuedPrompts)
+              for (final prompt in work.queue)
                 Semantics(
-                  label: identical(prompt, chat.editingQueuedPrompt)
+                  label: identical(prompt.id, work.editing)
                       ? 'Editing queued message'
-                      : chat.queuePaused
+                      : work.paused
                       ? 'Queued message, paused'
                       : 'Queued message',
                   child: Material(
-                    color: identical(prompt, chat.editingQueuedPrompt)
+                    color: identical(prompt.id, work.editing)
                         ? theme.colorScheme.surfaceContainerHighest
                         : Colors.transparent,
                     borderRadius: WingRadius.card,
@@ -91,7 +90,7 @@ class ProfileQueuedMessages extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              if (identical(prompt, chat.editingQueuedPrompt))
+                              if (identical(prompt.id, work.editing))
                                 IconButton(
                                   tooltip: 'Delete queued message',
                                   onPressed: onDelete == null

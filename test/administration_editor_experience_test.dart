@@ -1,3 +1,4 @@
+import 'package:wing/core/models/settings_edit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_settings_page.dart';

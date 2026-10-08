@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/foundation.dart';
+import '../models/profile_session_key.dart';
+import '../models/composer_action.dart';
+import '../models/composer_work.dart';
 import 'package:uuid/uuid.dart';
 import '../services/android_voice.dart';
 import '../services/hermes_voice.dart';
-import '../services/voice_preferences.dart';
+import '../models/voice_processing_settings.dart';
 
 enum VoiceInputPhase { idle, starting, recording, transcribing }
 
@@ -12,59 +15,149 @@ enum VoiceInputPhase { idle, starting, recording, transcribing }
 /// Only a completed transcript edits the draft; cancellation preserves it exactly.
 class VoiceInputController extends ChangeNotifier {
   final VoiceDevice device;
-  final RemoteVoice Function() createRemote;
   late final StreamSubscription<Map<String, dynamic>> _events;
-  VoiceInputPhase phase = VoiceInputPhase.idle;
-  String partial = '';
-  String? error;
-  int seconds = 0;
+  VoiceInputPhase _phase = VoiceInputPhase.idle;
+  String _partial = '';
+  String? _error;
+  int _seconds = 0;
   String? _id;
   bool _disposed = false;
+  int _commandGeneration = 0;
+  int _notificationDepth = 0;
+  ProfileSessionKey? _target;
   RemoteVoice? _remote;
   Timer? _timer;
-  TextEditingValue? _draft;
-  void Function(TextEditingValue)? _onResult;
+  VoiceDraft? _draft;
+  void Function(VoiceDraft)? _onResult;
 
-  VoiceInputController({required this.device, required this.createRemote}) {
+  VoiceInputController({required this.device}) {
     _events = device.events.listen(_event);
   }
-  bool get active => phase != VoiceInputPhase.idle;
+  VoiceInputPhase get phase => _phase;
+  String get partial => _partial;
+  String? get error => _error;
+  int get seconds => _seconds;
+  bool get active => _phase != VoiceInputPhase.idle;
+
   void _notify() {
-    if (!_disposed) notifyListeners();
+    if (_disposed) return;
+    ++_notificationDepth;
+    try {
+      notifyListeners();
+    } finally {
+      --_notificationDepth;
+      if (_disposed && _notificationDepth == 0) super.dispose();
+    }
+  }
+
+  bool canDictate(bool targetAvailable) =>
+      !_disposed && !active && targetAvailable;
+
+  Map<ComposerAction, ComposerUnavailableReason?> composerAvailability(
+    ComposerActions composer,
+  ) => active
+      ? Map.unmodifiable({
+          for (final action in ComposerAction.values)
+            action: ComposerUnavailableReason.dictation,
+        })
+      : composer.unavailable;
+
+  void retainTarget(ProfileSessionKey? target) {
+    if (_target != null && _target != target) {
+      unawaited(cancel().catchError((Object _) {}));
+    }
+  }
+
+  /// Recorder admission and completion use the same captured chat and intent.
+  Future<void> dictate({
+    required ProfileSessionKey target,
+    required VoiceDraft draft,
+    required VoiceInputSettings? Function() settings,
+    required Future<void> Function() stopPlayback,
+    required bool Function(ProfileSessionKey) admitsTarget,
+    required bool Function() admitPresentation,
+    required RemoteVoice Function(ProfileSessionKey) createRemote,
+    required Future<void> Function(String) applyDraft,
+    required void Function(VoiceDraft) onApplied,
+    required void Function(String) onNotice,
+  }) async {
+    if (_disposed || active) return;
+    final generation = ++_commandGeneration;
+    _target = target;
+    bool current() =>
+        !_disposed && generation == _commandGeneration && admitsTarget(target);
+    try {
+      await stopPlayback();
+    } catch (failure) {
+      if (current() && admitPresentation()) {
+        onNotice(voiceFailureMessage(failure));
+      }
+      return;
+    }
+    if (!current() || !admitPresentation()) return;
+    final choice = settings();
+    if (choice == null) {
+      onNotice('Repair voice input settings in App settings before recording.');
+      return;
+    }
+    await start(choice, draft, (result) {
+      Future<void> complete() async {
+        if (!current() || !admitPresentation()) return;
+        try {
+          // The composer's command admits the exact captured text revision
+          // synchronously, before persistence yields. Cursor application is UI.
+          final saving = applyDraft(result.text);
+          if (current() && admitPresentation()) onApplied(result);
+          await saving;
+        } catch (failure) {
+          if (current() && admitPresentation()) {
+            onNotice(voiceFailureMessage(failure));
+          }
+        }
+      }
+
+      unawaited(complete());
+    }, createRemote: () => createRemote(target));
   }
 
   Future<void> start(
-    VoicePreferences settings,
-    TextEditingValue draft,
-    void Function(TextEditingValue) onResult,
-  ) async {
+    VoiceInputSettings settings,
+    VoiceDraft draft,
+    void Function(VoiceDraft) onResult, {
+    required RemoteVoice Function() createRemote,
+  }) async {
     if (_disposed || active) return;
     final id = const Uuid().v4();
     _id = id;
     _draft = draft;
     _onResult = onResult;
-    error = null;
-    partial = '';
-    seconds = 0;
-    phase = VoiceInputPhase.starting;
+    _error = null;
+    _partial = '';
+    _seconds = 0;
+    _phase = VoiceInputPhase.starting;
     _notify();
+    if (_disposed || _id != id) return;
     try {
-      if (settings.input == VoiceProcessing.hermes) _remote = createRemote();
+      if (settings is HermesVoiceInputSettings) _remote = createRemote();
       await device.start(
         id,
         local: _remote == null,
-        language: settings.language,
+        language: switch (settings) {
+          LocalVoiceInputSettings(:final language) => language,
+          HermesVoiceInputSettings() => '',
+        },
       );
       if (_id != id || _disposed) {
         await device.cancel(id);
         return;
       }
-      phase = VoiceInputPhase.recording;
+      _phase = VoiceInputPhase.recording;
       _notify();
+      if (_disposed || _id != id) return;
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-        seconds++;
+        _seconds++;
         _notify();
-        if (seconds >= 120) unawaited(stop());
+        if (_seconds >= 120) unawaited(stop());
       });
     } catch (failure) {
       if (_id == id) _fail(failure);
@@ -82,7 +175,7 @@ class VoiceInputController extends ChangeNotifier {
       return;
     }
     if (event['text'] case final String text) {
-      partial = text;
+      _partial = text;
       if (event['final'] == true) {
         _finish(text);
       } else {
@@ -93,10 +186,11 @@ class VoiceInputController extends ChangeNotifier {
 
   Future<void> stop() async {
     final id = _id;
-    if (id == null || phase != VoiceInputPhase.recording) return;
+    if (id == null || _phase != VoiceInputPhase.recording) return;
     _timer?.cancel();
-    phase = VoiceInputPhase.transcribing;
+    _phase = VoiceInputPhase.transcribing;
     _notify();
+    if (_disposed || _id != id) return;
     try {
       final bytes = await device.stop(id);
       if (_id != id || _disposed) return;
@@ -124,12 +218,14 @@ class VoiceInputController extends ChangeNotifier {
     final result = insertVoiceTranscript(draft, transcript.trim());
     _clear();
     callback?.call(result);
+    _target = null;
     _notify();
   }
 
   void _fail(Object failure) {
     final id = _id;
-    error = voiceFailureMessage(failure);
+    _error = voiceFailureMessage(failure);
+    _target = null;
     _clear();
     _notify();
     if (id != null) unawaited(device.cancel(id).catchError((Object _) {}));
@@ -143,13 +239,15 @@ class VoiceInputController extends ChangeNotifier {
     _remote = null;
     _draft = null;
     _onResult = null;
-    phase = VoiceInputPhase.idle;
-    partial = '';
+    _phase = VoiceInputPhase.idle;
+    _partial = '';
   }
 
   Future<void> cancel() async {
+    _commandGeneration++;
+    _target = null;
     final id = _id;
-    error = null;
+    _error = null;
     _clear();
     _notify();
     if (id != null) await device.cancel(id);
@@ -157,18 +255,21 @@ class VoiceInputController extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
     unawaited(cancel().catchError((Object _) {}));
     unawaited(_events.cancel());
-    super.dispose();
+    if (_notificationDepth == 0) super.dispose();
   }
 }
 
-TextEditingValue insertVoiceTranscript(TextEditingValue draft, String text) {
-  final selection = draft.selection;
-  final valid = selection.isValid && selection.end <= draft.text.length;
-  final start = valid ? selection.start : draft.text.length;
-  final end = valid ? selection.end : draft.text.length;
+VoiceDraft insertVoiceTranscript(VoiceDraft draft, String text) {
+  final valid =
+      draft.selectionStart >= 0 &&
+      draft.selectionEnd >= draft.selectionStart &&
+      draft.selectionEnd <= draft.text.length;
+  final start = valid ? draft.selectionStart : draft.text.length;
+  final end = valid ? draft.selectionEnd : draft.text.length;
   final leading =
       start > 0 &&
           draft.text[start - 1].trim().isNotEmpty &&
@@ -181,11 +282,11 @@ TextEditingValue insertVoiceTranscript(TextEditingValue draft, String text) {
           !'([{'.contains(text[text.length - 1])
       ? ' '
       : '';
-  return TextEditingValue(
+  final cursor = start + leading.length + text.length;
+  return VoiceDraft(
     text: draft.text.replaceRange(start, end, '$leading$text$trailing'),
-    selection: TextSelection.collapsed(
-      offset: start + leading.length + text.length,
-    ),
+    selectionStart: cursor,
+    selectionEnd: cursor,
   );
 }
 

@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -87,13 +89,23 @@ void main() {
           dashboardPortOverride: server.port,
           apiKey: '',
         );
+        final preferences = await SharedPreferences.getInstance();
+        final appPreferences = AppPreferences(preferences);
+        addTearDown(appPreferences.dispose);
         final controller = ProfileWorkspaceController(
-          connection: connection,
+          access: ConnectionAccess(
+            connection: connection,
+            dashboardOAuth: null,
+          ),
           connectionIdentity: 'reply-transport',
-          preferences: await SharedPreferences.getInstance(),
+          preferences: preferences,
+          appPreferences: appPreferences,
           gatewayFactory: (WorkspaceScope scope) {
             final base = host.gateway(scope);
-            final wire = ProfileGateway.forConnection(connection, scope);
+            final wire = ProfileGateway.forConnection(
+              ConnectionAccess(connection: connection, dashboardOAuth: null),
+              scope,
+            );
             final gateway = ProfileGateway(
               scope: scope,
               discover: base.discover,
@@ -118,7 +130,7 @@ void main() {
         );
         addTearDown(controller.dispose);
         await controller.initialize();
-        final chat = await controller.createChat();
+        final chat = await controller.createChat(canDispatch: () => true);
         final socket = await connected.future;
         await advertised.future.timeout(const Duration(seconds: 2));
         socket.add(
@@ -131,7 +143,7 @@ void main() {
                 ? 'secret'
                 : 'clarify',
             'params': {
-              'session_id': chat.runtimeId,
+              'session_id': chat.runtime.runtimeId,
               if (kind == 'approval') ...{
                 'request_id': 'queue-fixture',
                 'command': 'echo fixture',
@@ -159,7 +171,7 @@ void main() {
               'id': 'srq-second',
               'method': 'approval',
               'params': {
-                'session_id': chat.runtimeId,
+                'session_id': chat.runtime.runtimeId,
                 'request_id': 'queue-second',
                 'command': 'echo second',
                 'choices': ['once', 'deny'],
@@ -172,30 +184,33 @@ void main() {
         }
         await delivered.future.timeout(const Duration(seconds: 2));
         if (kind == 'approval') {
-          expect(chat.approval?['request_id'], 'queue-fixture');
+          expect(chat.runtime.approval?.requestId, 'queue-fixture');
           await controller.approve(
             chat,
             'once',
-            requestId: chat.approval!['request_id'] as String,
+            requestId: chat.runtime.approval!.requestId,
           );
-          expect(chat.approval?['request_id'], 'queue-second');
-          expect((chat.approvals.position, chat.approvals.total), (2, 2));
+          expect(chat.runtime.approval?.requestId, 'queue-second');
+          expect(
+            (chat.runtime.approvalPosition, chat.runtime.approvalTotal),
+            (2, 2),
+          );
           await controller.approve(chat, 'deny', requestId: 'queue-second');
-          expect(chat.approval, isNull);
+          expect(chat.runtime.approval, isNull);
         } else if (kind == 'secret') {
           await controller.respondSensitivePrompt(
             chat,
             'dummy-fixture-value',
-            expectedRequest: chat.sensitivePrompt!,
+            expectedRequest: chat.runtime.secureInput!,
           );
-          expect(chat.sensitivePrompt, isNull);
+          expect(chat.runtime.secureInput, isNull);
         } else {
           await controller.clarify(
             chat,
             'Bedroom',
-            expectedRequest: chat.clarification,
+            expectedRequest: chat.runtime.questions,
           );
-          expect(chat.clarification, isNull);
+          expect(chat.runtime.questions, isNull);
         }
         expect(replies, hasLength(kind == 'approval' ? 2 : 1));
         if (kind == 'approval') {

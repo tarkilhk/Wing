@@ -1,3 +1,7 @@
+import 'package:wing/core/models/chat_list_view.dart';
+import 'package:wing/core/services/chat_browser_data.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -14,20 +18,33 @@ import 'support/profile_browser_fixture.dart';
 void main() {
   late _ProjectFixture host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
+  late ChatBrowserData browser;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     host = _ProjectFixture();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'project-actions',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
+    browser = ChatBrowserData(controller);
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    browser.dispose();
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   Future<void> showHarness(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -36,11 +53,22 @@ void main() {
           builder: (context) => Scaffold(
             body: Center(
               child: FilledButton(
-                onPressed: () => showProjectActions(
-                  context,
-                  controller,
-                  controller.current!.projects.single,
-                ),
+                onPressed: () async {
+                  final session = await browser.projectActionsFor(
+                    controller.current!.scope,
+                    BrowserProject.fromWire(
+                      controller.current!.projects.single,
+                    ),
+                  );
+                  if (session == null) return;
+                  try {
+                    if (context.mounted) {
+                      await showProjectActions(context, session);
+                    }
+                  } finally {
+                    session.dispose();
+                  }
+                },
                 child: const Text('Project actions'),
               ),
             ),
@@ -196,14 +224,26 @@ void main() {
         home: Row(
           children: [
             Builder(
-              builder: (context) =>
-                  projectAvatar(context, {'color': '#123456', 'icon': 'repo'}),
+              builder: (context) => projectAvatar(
+                context,
+                const BrowserProject(
+                  id: 'first',
+                  name: '',
+                  color: '#123456',
+                  icon: 'repo',
+                ),
+              ),
             ),
             Builder(
-              builder: (context) => projectAvatar(context, {
-                'color': 'not-a-color',
-                'icon': 'not-an-icon',
-              }),
+              builder: (context) => projectAvatar(
+                context,
+                const BrowserProject(
+                  id: 'second',
+                  name: '',
+                  color: 'not-a-color',
+                  icon: 'not-an-icon',
+                ),
+              ),
             ),
           ],
         ),

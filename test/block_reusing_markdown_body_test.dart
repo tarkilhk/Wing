@@ -1,4 +1,5 @@
 import 'helpers/pump_markdown_widget.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -40,6 +41,53 @@ List<Object> _rendered(WidgetTester tester) => tester
     .toList();
 
 void main() {
+  testWidgets('platform stylesheet follows theme changes for retained prose', (
+    tester,
+  ) async {
+    final key = GlobalKey();
+    for (final (platform, family) in const [
+      (TargetPlatform.iOS, 'cupertino-preview'),
+      (TargetPlatform.android, 'material-preview'),
+      (TargetPlatform.macOS, 'cupertino-preview'),
+    ]) {
+      await tester.pumpMarkdownWidget(
+        MaterialApp(
+          themeAnimationDuration: Duration.zero,
+          theme: ThemeData(
+            platform: platform,
+            textTheme: const TextTheme(
+              bodyMedium: TextStyle(fontFamily: 'material-preview'),
+            ),
+          ),
+          home: CupertinoTheme(
+            data: const CupertinoThemeData(
+              textTheme: CupertinoTextThemeData(
+                textStyle: TextStyle(
+                  fontFamily: 'cupertino-preview',
+                  fontSize: 17,
+                ),
+              ),
+            ),
+            child: Scaffold(
+              body: BlockReusingMarkdownBody(
+                key: key,
+                data: 'Retained prose.',
+                selectable: true,
+                styleSheetTheme: MarkdownStyleSheetBaseTheme.platform,
+              ),
+            ),
+          ),
+        ),
+      );
+      final paragraph = tester.widget<SelectableText>(
+        find.byType(SelectableText),
+      );
+      expect(paragraph.textSpan!.toPlainText(), 'Retained prose.');
+      expect(paragraph.textSpan!.style!.fontFamily, family);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   testWidgets('1200-word message retains closed prose widgets and elements', (
     tester,
   ) async {

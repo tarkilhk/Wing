@@ -1,11 +1,14 @@
+import 'package:wing/core/models/provider_inventory.dart';
+import 'package:wing/core/screens/administration/admin_provider_credentials.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wing/core/screens/administration/admin_connectors_page.dart';
+import 'package:wing/core/screens/administration/admin_connector_routes.dart';
 import 'package:wing/core/screens/administration/admin_defaults_page.dart';
 import 'package:wing/core/screens/administration/admin_profiles_page.dart';
-import 'package:wing/core/screens/administration/admin_providers_page.dart';
 import 'package:wing/core/services/ws_client.dart';
+import 'package:wing/core/services/profiles_management_session.dart';
 import 'support/administration_fixture.dart';
+import 'support/model_defaults_fixture.dart';
 
 Map<String, dynamic> profiles({String display = 'Shared root'}) => {
   'profiles': [
@@ -36,9 +39,7 @@ void main() {
         fixture.rpcOverride = (_, _) async => throw failure;
         await tester.pumpWidget(
           MaterialApp(
-            home: AdminConnectorsPage(
-              profile: fixture.server.profile('personal'),
-            ),
+            home: profileConnectorsPage(fixture.server.profile('personal')),
           ),
         );
         await tester.pumpAndSettle();
@@ -83,7 +84,7 @@ void main() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        home: AdminConnectorsPage(profile: fixture.server.profile('personal')),
+        home: profileConnectorsPage(fixture.server.profile('personal')),
       ),
     );
     await tester.pumpAndSettle();
@@ -122,7 +123,7 @@ void main() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        home: AdminConnectorsPage(profile: fixture.server.profile('personal')),
+        home: profileConnectorsPage(fixture.server.profile('personal')),
       ),
     );
     await tester.pumpAndSettle();
@@ -146,9 +147,7 @@ void main() {
       final fixture = AdministrationFixture();
       await tester.pumpWidget(
         MaterialApp(
-          home: AdminConnectorsPage(
-            profile: fixture.server.profile('personal'),
-          ),
+          home: profileConnectorsPage(fixture.server.profile('personal')),
         ),
       );
       await tester.pumpAndSettle();
@@ -190,18 +189,25 @@ void main() {
           return {
             'session_id': 'owned-session',
             'flow': 'device_code',
+            'verification_url': 'https://example.invalid/sign-in',
+            'expires_in': 900,
             'user_code': 'ABCD',
             'poll_interval': 60,
           };
         }
-        if (method == 'DELETE') return {'ok': true};
+        if (method == 'DELETE') {
+          return {'ok': true, 'session_id': 'owned-session'};
+        }
         throw StateError('Unexpected request');
       };
       Future<void> show(String name) => tester.pumpWidget(
         MaterialApp(
           home: AdminProviderSignIn(
             profile: f.server.profile(name),
-            provider: const {'id': 'provider-a', 'name': 'Provider A'},
+            target: const ProviderSignInTarget(
+              id: 'provider-a',
+              name: 'Provider A',
+            ),
           ),
         ),
       );
@@ -220,7 +226,7 @@ void main() {
       expect(writes.last.$2, 'providers/oauth/sessions/owned-session');
       for (final r in writes) {
         expect(r.$3['profile'], 'personal');
-        expect(r.$4!['profile'], 'personal');
+        if (r.$1 != 'DELETE') expect(r.$4!['profile'], 'personal');
       }
       await tester.pumpWidget(const SizedBox());
     },
@@ -236,6 +242,9 @@ void main() {
         return {
           'session_id': 'pending',
           'flow': 'device_code',
+          'verification_url': 'https://example.invalid/sign-in',
+          'user_code': 'fixture-code',
+          'expires_in': 900,
           'poll_interval': 60,
         };
       }
@@ -245,7 +254,10 @@ void main() {
       MaterialApp(
         home: AdminProviderSignIn(
           profile: f.server.profile('default'),
-          provider: const {'id': 'provider-a', 'name': 'Provider A'},
+          target: const ProviderSignInTarget(
+            id: 'provider-a',
+            name: 'Provider A',
+          ),
         ),
       ),
     );
@@ -271,16 +283,21 @@ void main() {
         if (path == 'mcp/servers') {
           return {
             'servers': [
-              {'name': 'docs', 'enabled': false, 'transport': 'http'},
+              {
+                'name': 'docs',
+                'enabled': false,
+                'transport': 'http',
+                'auth': null,
+                'source': 'config',
+                'plugin': null,
+              },
             ],
           };
         }
         return {'ok': true};
       };
       await tester.pumpWidget(
-        MaterialApp(
-          home: AdminConnectorsPage(profile: f.server.profile('personal')),
-        ),
+        MaterialApp(home: profileConnectorsPage(f.server.profile('personal'))),
       );
       await tester.pumpAndSettle();
       expect(f.requests.where((r) => r.$1 != 'GET'), isEmpty);
@@ -306,15 +323,22 @@ void main() {
         if (path == 'profiles/active') return {'current': 'default'};
         if (method == 'PATCH') {
           display = body!['new_name'] as String;
-          return {'ok': true, 'name': 'default'};
+          return {
+            'ok': true,
+            'name': 'default',
+            'display_name': display,
+            'path': '/fixture/default',
+          };
         }
         throw StateError('Unexpected request');
       };
       await tester.pumpWidget(
         MaterialApp(
           home: AdminProfilesPage(
-            server: f.server,
-            onOpenProfile: (_) async => true,
+            createSession: () => ProfilesManagementSession(
+              server: f.server,
+              openProfile: (_) async => true,
+            ),
           ),
         ),
       );
@@ -351,6 +375,7 @@ void main() {
             'providers': [
               {
                 'slug': 'provider-a',
+                'name': 'Provider A',
                 'models': ['model-a'],
               },
             ],
@@ -359,7 +384,15 @@ void main() {
         if (path == 'model/auxiliary') {
           return {
             'tasks': [
-              {'task': 'vision', 'provider': 'auto', 'model': ''},
+              for (final task in ModelDefaultsFixture.tasks)
+                {
+                  'task': task,
+                  'provider': 'auto',
+                  'model': '',
+                  'base_url': '',
+                  'reasoning_effort': null,
+                  'local_endpoint': false,
+                },
             ],
           };
         }

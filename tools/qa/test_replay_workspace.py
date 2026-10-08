@@ -46,20 +46,53 @@ class ReplayChecks(unittest.TestCase):
         with patch.object(replay, 'adb', return_value=b'mCurrentFocus=Window{other.app/Main}'):
             with self.assertRaises(ValueError): replay.guard(Mock())
 
-    def test_verified_phone_keyboard_accepts_beta_and_rejects_other_imes(self):
-        xml = ('<hierarchy><node class="android.widget.EditText" '
-               'package="com.tarkilhk.wing.perfqa" focused="true" text=""/></hierarchy>').encode()
-        for ime, expected in [(b'com.touchtype.swiftkey.beta/com.touchtype.KeyboardService', True),
-                              (b'other.keyboard/Service', False)]:
-            with self.subTest(ime=ime):
-                def answer(client, *args):
-                    if args[:2] == ('shell', 'settings'): return ime
-                    if args[:2] == ('exec-out', 'cat'): return xml
-                    return b''
-                with patch.object(replay, 'guard'), patch.object(replay, 'adb', side_effect=answer):
-                    if expected: replay.keyboard_preflight(Mock(), 'swiftkey')
-                    else:
-                        with self.assertRaises(ValueError): replay.keyboard_preflight(Mock(), 'swiftkey')
+    def test_keyboard_preflight_requires_ready_empty_focused_composer_and_visible_ime(self):
+        ready = {'prepared': True, 'keyboard': True, 'composerFocused': True, 'draft': ''}
+        def answer(_client, *args):
+            if args[1:3] == ('settings', 'get'):
+                return b'com.touchtype.swiftkey.beta/com.touchtype.KeyboardService'
+            return b'mInputShown=true\n'
+        with patch.object(replay, 'guard'), \
+             patch.object(replay, 'rpc', return_value=ready) as rpc, \
+             patch.object(replay, 'adb', side_effect=answer) as adb:
+            replay.keyboard_preflight(Mock(), 'swiftkey')
+        rpc.assert_called_once()
+        self.assertEqual(adb.call_args.args[1:], ('shell', 'dumpsys', 'input_method'))
+
+    def test_keyboard_preflight_rejects_invalid_ready_states_and_hidden_ime(self):
+        ready = {'prepared': True, 'keyboard': True, 'composerFocused': True, 'draft': ''}
+        invalid_states = [
+            dict(ready, draft='x'),
+            dict(ready, composerFocused=False),
+            dict(ready, prepared=False),
+            dict(ready, keyboard=False),
+        ]
+        for state in invalid_states:
+            def answer(_client, *args):
+                if args[1:3] == ('settings', 'get'):
+                    return b'com.touchtype.swiftkey.beta/com.touchtype.KeyboardService'
+                return b'mInputShown=true\n'
+            with self.subTest(state=state), \
+                 patch.object(replay, 'guard'), \
+                 patch.object(replay, 'rpc', return_value=state), \
+                 patch.object(replay, 'adb', side_effect=answer):
+                with self.assertRaises(ValueError): replay.keyboard_preflight(Mock(), 'swiftkey')
+
+        def hidden_ime(_client, *args):
+            if args[1:3] == ('settings', 'get'):
+                return b'com.touchtype.swiftkey.beta/com.touchtype.KeyboardService'
+            return b'mInputShown=false\n'
+        with patch.object(replay, 'guard'), \
+             patch.object(replay, 'rpc', return_value=ready), \
+             patch.object(replay, 'adb', side_effect=hidden_ime):
+            with self.assertRaises(ValueError): replay.keyboard_preflight(Mock(), 'swiftkey')
+
+    def test_keyboard_preflight_rejects_wrong_phone_ime(self):
+        with patch.object(replay, 'guard'), \
+             patch.object(replay, 'rpc') as rpc, \
+             patch.object(replay, 'adb', return_value=b'other.keyboard/Service'):
+            with self.assertRaises(ValueError): replay.keyboard_preflight(Mock(), 'swiftkey')
+        rpc.assert_not_called()
 
 
 if __name__ == '__main__':

@@ -1,29 +1,66 @@
 import 'package:flutter/material.dart';
 
 import '../models/hermes_profile.dart';
-import '../services/profile_color_store.dart';
+import '../models/profile_colors.dart';
+import '../services/profile_colors_session.dart';
 import '../theme/profile_colors.dart';
 import '../theme/wing_theme.dart';
 
 /// At most five profile squares are visible; additional profiles scroll inside.
-class ChatProfileBar extends StatelessWidget {
+class ChatProfileBar extends StatefulWidget {
   const ChatProfileBar({
     super.key,
     required this.profiles,
     required this.selectedProfiles,
     required this.onSelected,
-    this.colors,
+    required this.createColors,
   });
 
   final List<HermesProfile> profiles;
   final Set<String> selectedProfiles;
   final ValueChanged<String> onSelected;
-  final ProfileColorStore? colors;
+  final ProfileColorsSession Function() createColors;
 
   @override
-  Widget build(BuildContext context) {
+  State<ChatProfileBar> createState() => _ChatProfileBarState();
+}
+
+class _ChatProfileBarState extends State<ChatProfileBar> {
+  late ProfileColorsSession _colors;
+
+  @override
+  void initState() {
+    super.initState();
+    _colors = widget.createColors();
+    _colors.updateProfiles(widget.profiles.map((profile) => profile.name));
+  }
+
+  @override
+  void didUpdateWidget(ChatProfileBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.createColors != oldWidget.createColors) {
+      _colors.dispose();
+      _colors = widget.createColors();
+    }
+    _colors.updateProfiles(widget.profiles.map((profile) => profile.name));
+  }
+
+  @override
+  void dispose() {
+    _colors.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      ValueListenableBuilder<ProfileColorsState>(
+        valueListenable: _colors.state,
+        builder: _build,
+      );
+
+  Widget _build(BuildContext context, ProfileColorsState state, Widget? child) {
     final tokens = WingTokens.of(context);
-    final ordered = [...profiles]..sort(HermesProfile.compareForDisplay);
+    final ordered = [...widget.profiles]..sort(HermesProfile.compareForDisplay);
     return Align(
       alignment: Alignment.centerRight,
       child: SizedBox(
@@ -41,13 +78,15 @@ class ChatProfileBar extends StatelessWidget {
                   for (final profile in ordered)
                     Builder(
                       builder: (context) {
-                        final selected = selectedProfiles.contains(
+                        final selected = widget.selectedProfiles.contains(
                           profile.name,
                         );
-                        final choice = colors?.read(profile.name);
-                        final color = choice == null
-                            ? desktopProfileColor(profile.name) ?? tokens.muted
-                            : desktopProfileSwatches[choice];
+                        final color =
+                            profileChoiceColor(
+                              profile.name,
+                              state.profiles[profile.name]?.displayChoice,
+                            ) ??
+                            tokens.muted;
                         final hint = selected
                             ? 'Clear profile filter'
                             : 'Filter chats by ${profile.label}';
@@ -57,7 +96,7 @@ class ChatProfileBar extends StatelessWidget {
                           label: profile.label,
                           hint: hint,
                           excludeSemantics: true,
-                          onTap: () => onSelected(profile.name),
+                          onTap: () => widget.onSelected(profile.name),
                           child: Tooltip(
                             message: '${profile.label} · $hint',
                             child: TextButton(
@@ -75,7 +114,7 @@ class ChatProfileBar extends StatelessWidget {
                                   borderRadius: WingRadius.control,
                                 ),
                               ),
-                              onPressed: () => onSelected(profile.name),
+                              onPressed: () => widget.onSelected(profile.name),
                               child: Opacity(
                                 opacity: selected ? 1 : .55,
                                 child: Container(

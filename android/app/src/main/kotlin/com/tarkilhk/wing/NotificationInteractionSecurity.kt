@@ -54,7 +54,6 @@ internal class NotificationHandleStore(
     private val read: () -> String?,
     private val write: (String) -> Boolean,
     private val now: () -> Long = System::currentTimeMillis,
-    private val random: () -> String = { UUID.randomUUID().toString() },
 ) {
     companion object {
         const val actionPurpose = "action"
@@ -86,7 +85,7 @@ internal class NotificationHandleStore(
         if (purpose !in setOf(actionPurpose, mainPurpose, dismissPurpose) || NotificationInteractionSchema.parse(value.toString()) == null) return null
         val entries = entries()
         while (entries.size >= maxHandles) entries.removeAt(0)
-        val token = random()
+        val token = UUID.randomUUID().toString()
         val ttl = if (purpose == mainPurpose) 5 * 60 * 1000L else 7 * 24 * 60 * 60 * 1000L
         entries.add(JSONObject().put("token", token).put("purpose", purpose).put("notification", notification)
             .put("expires", now() + ttl).put("value", JSONObject(value.toString())))
@@ -108,8 +107,8 @@ internal class NotificationHandleStore(
         return if (write(JSONArray(entries).toString())) entry.getJSONObject("value") else null
     }
 
-    @Synchronized fun invalidate(notification: Int? = null): Boolean =
-        write(JSONArray(entries().filter { notification != null && it.optInt("notification") != notification }).toString())
+    @Synchronized fun invalidate(notification: Int): Boolean =
+        write(JSONArray(entries().filter { it.optInt("notification") != notification }).toString())
 
     @Synchronized fun replace(notification: Int, payload: String?, revision: String?): Boolean =
         write(JSONArray(entries().filter { entry ->

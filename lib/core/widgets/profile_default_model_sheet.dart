@@ -1,3 +1,4 @@
+import 'package:wing/core/models/model_choice.dart';
 import 'studio_action_label.dart';
 import 'studio_error.dart';
 import 'dart:async';
@@ -5,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/profile_gateway.dart';
+import '../services/profile_model_edit_session.dart';
 import '../theme/wing_theme.dart';
 import 'model_chooser.dart';
 
@@ -42,152 +44,117 @@ class ProfileDefaultModelSheet extends StatefulWidget {
 }
 
 class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
-  late final ProfileGateway _gateway;
-  late final String _profileName;
+  late final ProfileModelEditSession _edit;
   late final String _connectionLabel;
-  List<ModelChoice> _choices = const [];
-  ModelChoice? _saved;
-  ModelChoice? _selected;
-  bool _loading = true;
-  bool _saving = false;
   bool _allowPop = false;
-  String? _error;
-  String? _notice;
 
-  bool get _dirty =>
-      _selected != null &&
-      (_saved == null ||
-          _saved!.provider != _selected!.provider ||
-          _saved!.model != _selected!.model);
+  bool get _dirty => _edit.dirty;
+  bool get _loading => _edit.loading;
+  bool get _saving => _edit.saving;
+  String? get _error => _edit.error;
+  String? get _notice => _edit.notice;
+  String get _profileName => _edit.profileName;
+  List<ModelChoice> get _choices => _edit.choices;
+  ModelChoice? get _selected => _edit.selected;
 
   @override
   void initState() {
     super.initState();
-    _gateway = widget.gateway;
-    _profileName = widget.gateway.scope.profileName;
     _connectionLabel = widget.connectionLabel;
-    unawaited(_load());
+    _edit = ProfileModelEditSession(widget.gateway)..addListener(_changed);
+    unawaited(_edit.load());
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-      _notice = null;
-    });
-    try {
-      final values = await Future.wait([
-        _gateway.read('model/info'),
-        _gateway.read('model/options', {'explicit_only': '1'}),
-      ]);
-      final current = _choiceFrom(values[0]);
-      final choices = ModelChoice.fromOptions(values[1]);
-      final selected = current == null
-          ? const <ModelChoice>[]
-          : choices
-                .where(
-                  (choice) =>
-                      choice.provider == current.provider &&
-                      choice.model == current.model,
-                )
-                .toList();
-      if (!mounted) return;
-      _choices = choices;
-      _saved = selected.firstOrNull ?? current;
-      _selected = _saved;
-    } catch (_) {
-      if (mounted) _error = 'The profile models could not be loaded. Retry.';
-    } finally {
-      if (mounted) setState(() => _loading = false);
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _edit.removeListener(_changed);
+    _edit.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() => _edit.load();
+  Future<List<ModelChoice>> _refreshChoices() => _edit.refreshChoices();
+
+  Future<bool> _confirm(String message) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Confirm model change'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              key: const Key('profile-model-confirm-cancel'),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              key: const Key('profile-model-confirm-accept'),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Confirm'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+
+  Future<void> _reviewChanges() async {
+    final review = await _edit.reviewPending();
+    if (!mounted || review == null) return;
+    final decision = await showDialog<ProfileModelReviewDecision>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Review model change'),
+        scrollable: true,
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Current server model'),
+            Text(review.currentLabel),
+            const SizedBox(height: WingSpacing.md),
+            const Text('Your selection'),
+            Text(review.wantedLabel),
+            const SizedBox(height: WingSpacing.md),
+            const Text(
+              'Keep mine prepares your selection for Save default. Use server replaces your pending choice.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(context, ProfileModelReviewDecision.useServer),
+            child: const Text('Use server'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(context, ProfileModelReviewDecision.keepMine),
+            child: const Text('Keep mine'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (decision == null) {
+      _edit.cancelReview(review);
+    } else {
+      _edit.applyReviewed(review, decision);
     }
   }
-
-  Future<List<ModelChoice>> _refreshChoices() async => ModelChoice.fromOptions(
-    await _gateway.read('model/options', {
-      'explicit_only': '1',
-      'refresh': '1',
-    }),
-  );
 
   Future<void> _save() async {
-    final wanted = _selected;
-    if (_loading || _saving || !_dirty || wanted == null) return;
-    setState(() {
-      _saving = true;
-      _error = null;
-      _notice = null;
-    });
-    try {
-      var result = await _write(wanted);
-      if (result['confirm_required'] == true) {
-        final message = result['confirm_message']?.toString().trim() ?? '';
-        if (!mounted) return;
-        final accepted =
-            await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Confirm model change'),
-                content: Text(
-                  message.isEmpty
-                      ? 'Hermes requires confirmation before using this model.'
-                      : message,
-                ),
-                actions: [
-                  TextButton(
-                    key: const Key('profile-model-confirm-cancel'),
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Cancel'),
-                  ),
-                  FilledButton(
-                    key: const Key('profile-model-confirm-accept'),
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Confirm'),
-                  ),
-                ],
-              ),
-            ) ??
-            false;
-        if (!accepted) {
-          if (mounted) setState(() => _notice = 'Model change cancelled.');
-          return;
-        }
-        result = await _write(wanted, confirmed: true);
-      }
-      if (result['confirm_required'] == true || result['ok'] != true) {
-        throw StateError(
-          result['confirm_message']?.toString() ?? 'Model was not changed.',
-        );
-      }
-      final authoritative = _choiceFrom(await _gateway.read('model/info'));
-      if (authoritative == null ||
-          authoritative.provider != wanted.provider ||
-          authoritative.model != wanted.model) {
-        throw StateError('Model readback did not match');
-      }
-      if (!mounted) return;
-      _allowPop = true;
-      Navigator.pop(context, true);
-    } catch (_) {
-      if (mounted) {
-        _error =
-            'The model change could not be confirmed. Review the selection and try again.';
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  Future<Map<String, dynamic>> _write(
-    ModelChoice wanted, {
-    bool confirmed = false,
-  }) async {
-    await _gateway.requireProfile();
-    return _gateway.post('model/set', {
-      'scope': 'main',
-      'provider': wanted.provider,
-      'model': wanted.model,
-      if (confirmed) 'confirm_expensive_model': true,
-    });
+    final outcome = await _edit.save(confirm: _confirm);
+    if (!mounted || outcome != ProfileModelSaveOutcome.saved) return;
+    _allowPop = true;
+    Navigator.pop(context, true);
   }
 
   @override
@@ -248,6 +215,22 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                     key: const Key('profile-model-error'),
                   ),
                 ),
+              if (_edit.canReview || _edit.reviewing)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: WingSpacing.lg,
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: _edit.canReview ? _reviewChanges : null,
+                      child: StudioActionLabel(
+                        'Review changes',
+                        busy: _edit.reviewing,
+                      ),
+                    ),
+                  ),
+                ),
               if (_notice != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(
@@ -274,11 +257,7 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                         onSelected: (selection) {
                           final choice = selection.choice;
                           if (_saving || choice == null) return;
-                          setState(() {
-                            _selected = choice;
-                            _error = null;
-                            _notice = null;
-                          });
+                          _edit.select(choice);
                         },
                         onRefresh: _refreshChoices,
                         scopeLabel: 'Models for $_profileName',
@@ -307,7 +286,9 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                     ),
                     FilledButton(
                       key: const Key('profile-model-save'),
-                      onPressed: _dirty && !_saving ? _save : null,
+                      onPressed: _dirty && !_saving && !_edit.reviewing
+                          ? _save
+                          : null,
                       child: StudioActionLabel('Save default', busy: _saving),
                     ),
                   ],
@@ -319,12 +300,4 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
       ),
     );
   }
-}
-
-ModelChoice? _choiceFrom(Map<String, dynamic> value) {
-  final provider = value['provider']?.toString().trim() ?? '';
-  final model = value['model']?.toString().trim() ?? '';
-  return provider.isEmpty || model.isEmpty
-      ? null
-      : ModelChoice(provider: provider, model: model);
 }

@@ -5,7 +5,9 @@ import '../theme/wing_theme.dart';
 import '../theme/wing_icons.dart';
 import '../widgets/workspace_action_menu.dart';
 
-import '../services/profile_workspace_controller.dart';
+import '../models/chat_list_view.dart';
+import '../models/browser_actions.dart';
+import '../services/chat_browser_data.dart';
 
 const _projectColors = <String>[
   'hsl(0 68% 58%)',
@@ -37,82 +39,59 @@ const _projectIcons = <String, IconData>{
   'bug': Icons.bug_report_outlined,
 };
 
-enum _ProjectAction { rename, appearance, delete }
-
 Future<void> showProjectActions(
   BuildContext context,
-  ProfileWorkspaceController controller,
-  Map<String, dynamic> project,
+  BrowserActionSession session,
 ) async {
-  final current = controller.current;
-  if (current == null) return;
-  final owner = current.scope;
-  final captured = Map<String, dynamic>.from(project);
-  final id = captured['id']?.toString().trim() ?? '';
-  if (id.isEmpty) return;
-  final rawName = captured['name']?.toString().trim();
-  final name = rawName == null || rawName.isEmpty
-      ? 'Untitled project'
-      : rawName;
-
-  final choice =
-      await showWorkspaceActionMenu(context, name, owner.profileName, [
-        ('new', 'New chat', WingIcons.newChat, true),
-        ('rename', 'Rename', Icons.edit_outlined, true),
-        ('appearance', 'Appearance', Icons.palette_outlined, true),
-        ('delete', 'Delete', Icons.delete_outline, true),
-      ], keyPrefix: 'project-action');
+  final choice = await showWorkspaceActionMenu(
+    context,
+    session.title,
+    session.scope.profileName,
+    [
+      for (final choice in session.choices)
+        (
+          choice.action == BrowserAction.newChat ? 'new' : choice.action.name,
+          choice.label,
+          switch (choice.action) {
+            BrowserAction.newChat => WingIcons.newChat,
+            BrowserAction.rename => Icons.edit_outlined,
+            BrowserAction.appearance => Icons.palette_outlined,
+            _ => Icons.delete_outline,
+          },
+          choice.enabled,
+        ),
+    ],
+    keyPrefix: 'project-action',
+  );
   if (choice == null || !context.mounted) return;
   if (choice == 'new') {
-    final resource = controller.current;
-    if (resource == null || resource.scope != owner) {
-      throw StateError('Profile changed. Open the menu again.');
+    if (!await session.perform(BrowserAction.newChat) &&
+        session.state.error != null) {
+      throw StateError(session.state.error!);
     }
-    final target = resource.projects.firstWhere(
-      (project) => project['id'] == id,
-      orElse: () =>
-          throw StateError('Project is unavailable. Open the menu again.'),
-    );
-    await controller.createChat(inProject: target, owner: owner);
     return;
   }
-  final action = _ProjectAction.values.byName(choice);
-
+  final action = BrowserAction.values.byName(choice);
   await showDialog<void>(
     context: context,
     builder: (context) => _ProjectDialog(
       action: action,
-      initialName: name,
-      initialColor: captured['color']?.toString() ?? '',
-      initialIcon: captured['icon']?.toString() ?? '',
-      submit: (name, color, icon) => switch (action) {
-        _ProjectAction.rename => controller.updateProject(
-          owner,
-          id,
-          name: name,
-        ),
-        _ProjectAction.appearance => controller.updateProject(
-          owner,
-          id,
-          color: color,
-          icon: icon,
-        ),
-        _ProjectAction.delete => controller.deleteProject(owner, id),
-      },
+      initialName: session.title,
+      initialColor: session.project!.color,
+      initialIcon: session.project!.icon,
+      session: session,
     ),
   );
 }
 
 Widget projectAvatar(
   BuildContext context,
-  Map<String, dynamic> project, {
+  BrowserProject project, {
   double size = 36,
 }) {
   final scheme = Theme.of(context).colorScheme;
-  final color =
-      _parseProjectColor(project['color']?.toString()) ?? scheme.secondary;
-  final icon =
-      _projectIcons[project['icon']?.toString()] ?? Icons.folder_outlined;
+  final color = _parseProjectColor(project.color) ?? scheme.secondary;
+  final icon = _projectIcons[project.icon] ?? Icons.folder_outlined;
   return Container(
     width: size,
     height: size,
@@ -125,23 +104,20 @@ Widget projectAvatar(
   );
 }
 
-typedef _ProjectSubmit =
-    Future<void> Function(String name, String color, String icon);
-
 class _ProjectDialog extends StatefulWidget {
   const _ProjectDialog({
     required this.action,
     required this.initialName,
     required this.initialColor,
     required this.initialIcon,
-    required this.submit,
+    required this.session,
   });
 
-  final _ProjectAction action;
+  final BrowserAction action;
   final String initialName;
   final String initialColor;
   final String initialIcon;
-  final _ProjectSubmit submit;
+  final BrowserActionSession session;
 
   @override
   State<_ProjectDialog> createState() => _ProjectDialogState();
@@ -153,66 +129,61 @@ class _ProjectDialogState extends State<_ProjectDialog> {
   );
   late String _color = widget.initialColor;
   late String _icon = widget.initialIcon;
-  bool _submitting = false;
-  String? _error;
+  bool get _pending => widget.session.state.submitting;
+  String? get _failure => widget.session.state.error;
+  @override
+  void initState() {
+    super.initState();
+    widget.session.addListener(_changed);
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
+    widget.session.removeListener(_changed);
     _name.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
-    final name = _name.text.trim();
-    if (_submitting || widget.action == _ProjectAction.rename && name.isEmpty) {
-      return;
-    }
-    setState(() {
-      _submitting = true;
-      _error = null;
-    });
-    try {
-      await widget.submit(name, _color, _icon);
-      if (mounted) Navigator.pop(context);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _submitting = false;
-        final message = error is StateError ? error.message.toString() : '';
-        _error =
-            message.startsWith('Profile changed.') ||
-                message.startsWith('Project is unavailable.')
-            ? message
-            : 'The project change was not acknowledged. Check the connection and try again.';
-      });
-    }
+    final saved = await widget.session.perform(
+      widget.action,
+      name: _name.text,
+      color: _color,
+      icon: _icon,
+    );
+    if (saved && mounted) Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: !_submitting,
+    canPop: !_pending,
     child: AlertDialog(
       scrollable: true,
       title: Text(switch (widget.action) {
-        _ProjectAction.rename => 'Rename project',
-        _ProjectAction.appearance => 'Project appearance',
-        _ProjectAction.delete => 'Delete project?',
+        BrowserAction.rename => 'Rename project',
+        BrowserAction.appearance => 'Project appearance',
+        BrowserAction.delete => 'Delete project?',
+        _ => throw StateError('Unsupported project dialog'),
       }),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (widget.action == _ProjectAction.rename)
+          if (widget.action == BrowserAction.rename)
             TextField(
               key: const ValueKey('project-name-field'),
               controller: _name,
               autofocus: true,
-              enabled: !_submitting,
+              enabled: !_pending,
               maxLength: 200,
               onSubmitted: (_) => _save(),
               decoration: const InputDecoration(labelText: 'Project name'),
             )
-          else if (widget.action == _ProjectAction.appearance) ...[
+          else if (widget.action == BrowserAction.appearance) ...[
             const Text('Color'),
             const SizedBox(height: 8),
             Wrap(
@@ -223,7 +194,7 @@ class _ProjectDialogState extends State<_ProjectDialog> {
                   key: const ValueKey('project-color-none'),
                   selected: _color.isEmpty,
                   label: 'Default color',
-                  onPressed: _submitting
+                  onPressed: _pending
                       ? null
                       : () => setState(() => _color = ''),
                   child: const Icon(Icons.block, size: 20),
@@ -233,7 +204,7 @@ class _ProjectDialogState extends State<_ProjectDialog> {
                     key: ValueKey('project-color-$index'),
                     selected: _color == _projectColors[index],
                     label: 'Color ${index + 1}',
-                    onPressed: _submitting
+                    onPressed: _pending
                         ? null
                         : () => setState(() => _color = _projectColors[index]),
                     child: DecoratedBox(
@@ -257,9 +228,7 @@ class _ProjectDialogState extends State<_ProjectDialog> {
                   key: const ValueKey('project-icon-none'),
                   selected: _icon.isEmpty,
                   label: 'Default icon',
-                  onPressed: _submitting
-                      ? null
-                      : () => setState(() => _icon = ''),
+                  onPressed: _pending ? null : () => setState(() => _icon = ''),
                   child: const Icon(Icons.folder_outlined, size: 20),
                 ),
                 for (final entry in _projectIcons.entries)
@@ -267,7 +236,7 @@ class _ProjectDialogState extends State<_ProjectDialog> {
                     key: ValueKey('project-icon-${entry.key}'),
                     selected: _icon == entry.key,
                     label: entry.key,
-                    onPressed: _submitting
+                    onPressed: _pending
                         ? null
                         : () => setState(() => _icon = entry.key),
                     child: Icon(entry.value, size: 20),
@@ -278,32 +247,33 @@ class _ProjectDialogState extends State<_ProjectDialog> {
             Text(
               'Remove "${widget.initialName}" from Hermes? Its chats will remain in Recents and All chats. Files on the host will not be deleted.',
             ),
-          if (_error != null) ...[
+          if (_failure != null) ...[
             const SizedBox(height: 12),
-            StudioError(_error!),
+            StudioError(_failure!),
           ],
         ],
       ),
       actions: [
         TextButton(
-          onPressed: _submitting ? null : () => Navigator.pop(context),
+          onPressed: _pending ? null : () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
         FilledButton(
           key: ValueKey(switch (widget.action) {
-            _ProjectAction.rename => 'project-rename-save',
-            _ProjectAction.appearance => 'project-appearance-save',
-            _ProjectAction.delete => 'project-delete-confirm',
+            BrowserAction.rename => 'project-rename-save',
+            BrowserAction.appearance => 'project-appearance-save',
+            BrowserAction.delete => 'project-delete-confirm',
+            _ => throw StateError('Unsupported project dialog'),
           }),
-          style: widget.action == _ProjectAction.delete
+          style: widget.action == BrowserAction.delete
               ? FilledButton.styleFrom(
                   backgroundColor: Theme.of(context).colorScheme.error,
                 )
               : null,
-          onPressed: _submitting ? null : _save,
+          onPressed: _pending ? null : _save,
           child: StudioActionLabel(
-            widget.action == _ProjectAction.delete ? 'Delete' : 'Save',
-            busy: _submitting,
+            widget.action == BrowserAction.delete ? 'Delete' : 'Save',
+            busy: _pending,
           ),
         ),
       ],

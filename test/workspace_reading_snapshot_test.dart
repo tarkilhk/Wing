@@ -1,19 +1,184 @@
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/chat_runtime.dart';
+import 'package:wing/core/models/transcript_message.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/server_connection_status.dart';
 import 'package:wing/core/services/workspace_snapshot_store.dart';
+import 'package:wing/core/widgets/profile_message.dart';
+import 'package:wing/core/widgets/user_message_attachment.dart';
+import 'package:wing/core/models/user_message_content.dart';
+import 'helpers/pump_markdown_widget.dart';
 import 'profile_workspace_controller_test.dart' show Host;
 
 void main() {
+  testWidgets(
+    'cached transcript preserves display meaning without live authority',
+    (tester) async {
+      const storageKey = 'workspace_reading_v1_display-semantics';
+      SharedPreferences.setMockInitialValues({
+        storageKey: jsonEncode({
+          'selected': 'a',
+          'profiles': [
+            {
+              'name': 'a',
+              'sessions': [],
+              'projects': [],
+              'chats': [
+                {'id': 'durable-chat', 'title': 'Cached chat', 'messages': []},
+              ],
+            },
+          ],
+        }),
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
+      final runtimes = WorkspaceRuntimeFixture();
+      ProfileWorkspaceController owner() => ProfileWorkspaceController(
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'display',
+            label: 'Display',
+            host: 'unused',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
+        ),
+        connectionIdentity: 'display-semantics',
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: Host().gateway,
+        runtimeFactory: runtimes.create,
+      );
+      final original = owner();
+      final cached = original.current!.chats.values.single;
+      final runtime = runtimes.forChat(cached);
+      runtime.receiveApproval({
+        'request_id': 'uncached-input',
+        'command': 'Review',
+      });
+      final originalChat = cached;
+
+      originalChat.reading.installSavedHistory([
+        {
+          'id': 1,
+          'role': 'user',
+          'content': 'Hidden context',
+          'display_kind': 'hidden',
+          'pending_approval': {'request_id': 'excluded'},
+        },
+        {
+          'id': 2,
+          'role': 'user',
+          'content': 'Model-facing context',
+          'display_kind': 'steer',
+          'display_content': 'Keep searching',
+        },
+        {
+          'id': 3,
+          'role': 'user',
+          'content': 'Finished result',
+          'display_kind': 'async_delegation_complete',
+          'display_metadata': {'task_count': 2, 'unrelated': 'excluded'},
+        },
+        {'id': 4, 'role': 'system', 'content': 'review:Review completed'},
+        {
+          'id': 5,
+          'role': 'user',
+          'content': '',
+          'submitted_attachments': const [
+            UserMessageAttachment(
+              name: 'Original report.pdf',
+              target: '@file:/server/report.pdf',
+              isImage: false,
+            ),
+            UserMessageAttachment(
+              name: 'Shared photo.jpg',
+              target: '/server/photo.jpg',
+              isImage: true,
+            ),
+          ],
+        },
+      ]);
+      original.dispose();
+      await tester.runAsync(
+        () => Future<void>(() async {
+          while (true) {
+            await preferences.reload();
+            final saved = jsonDecode(preferences.getString(storageKey)!);
+            if ((saved['profiles'][0]['chats'][0]['messages'] as List).length ==
+                5) {
+              return;
+            }
+            await Future<void>.delayed(Duration.zero);
+          }
+        }).timeout(const Duration(seconds: 10)),
+      );
+      final restored = owner();
+      addTearDown(restored.dispose);
+      final chat = restored.current!.chats.values.single;
+      expect(chat.runtime.runtimeId, 'durable-chat');
+      expect(chat.runtime.offline, isTrue);
+      expect(chat.runtime.execution, ChatExecution.idle);
+      expect(chat.runtime.approval, isNull);
+      expect(chat.runtime.questions, isNull);
+      expect(chat.runtime.secureInput, isNull);
+      expect(preferences.getString(storageKey), isNot(contains('excluded')));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: Column(
+                children: [
+                  for (final row in chat.reading.messages)
+                    ProfileMessage(message: TranscriptMessage.fromRow(row)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Hidden context'), findsNothing);
+      expect(find.text('Model-facing context'), findsNothing);
+      expect(find.text('steered'), findsOneWidget);
+      expect(find.text('Keep searching'), findsOneWidget);
+      expect(find.text('2 background agents finished'), findsOneWidget);
+      expect(find.text('Hermes review'), findsOneWidget);
+      expect(find.text('Review completed'), findsNothing);
+      expect(find.byType(UserMessageAttachmentTile), findsNWidgets(2));
+      expect(find.text('Original report.pdf'), findsOneWidget);
+      expect(find.text('Shared photo.jpg'), findsOneWidget);
+      expect(find.text('Preview unavailable'), findsOneWidget);
+      await tester.tap(find.text('Hermes review'));
+      await tester.pumpAndSettle();
+      expect(find.text('Review completed'), findsOneWidget);
+      Navigator.of(tester.element(find.text('Review completed'))).pop();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('View result'));
+      await tester.pumpAndSettle();
+      await tester.settleMarkdown();
+      expect(find.text('Finished result'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'cold notification retains cached reading, offline outbox and fresh draft',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final host = Host()..running = false;
       final connection = SavedConnection(
         id: 'claw',
@@ -24,19 +189,23 @@ void main() {
       );
       ProfileWorkspaceController owner(String identity) =>
           ProfileWorkspaceController(
-            connection: connection,
+            access: ConnectionAccess(
+              connection: connection,
+              dashboardOAuth: null,
+            ),
             connectionIdentity: identity,
             preferences: preferences,
+            appPreferences: appPreferences,
             gatewayFactory: host.gateway,
           );
       var controller = owner('verified');
       final starting = controller.initialize();
       await tester.pump();
       await starting;
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       final key = chat.key;
       await controller.updateDraft(chat, 'My unsent thought');
-      expect(chat.messages.single['content'], 'a completed');
+      expect(chat.reading.messages.single['content'], 'a completed');
       controller.dispose();
       controller = owner('verified');
       expect(controller.current!.sessions, isNotEmpty);
@@ -49,12 +218,15 @@ void main() {
       );
       await controller.openNotification(key);
       expect(
-        controller.notificationChat!.messages.single['content'],
+        controller.notificationChat!.reading.messages.single['content'],
         'a completed',
       );
-      expect(controller.notificationChat!.draft, 'My unsent thought');
-      expect(controller.notificationChat!.offlineSnapshot, isTrue);
-      expect(controller.notificationChat!.opening, isTrue);
+      expect(
+        controller.notificationChat!.composer.observation.text,
+        'My unsent thought',
+      );
+      expect(controller.notificationChat!.runtime.offline, isTrue);
+      expect(controller.notificationChat!.runtime.opening, isTrue);
       expect(controller.error, isNull);
       expect(
         controller.connectionStatus.phase,
@@ -62,10 +234,16 @@ void main() {
       );
       final offlineChat = controller.notificationChat!;
       await controller.send(offlineChat);
-      expect(offlineChat.draft, isEmpty);
-      expect(offlineChat.queuedPrompts.single.text, 'My unsent thought');
-      expect(offlineChat.queuedPrompts.single.submissionUncertain, isFalse);
-      expect(offlineChat.messages.single['content'], 'a completed');
+      expect(offlineChat.composer.observation.text, isEmpty);
+      expect(
+        offlineChat.composer.observation.queue.single.text,
+        'My unsent thought',
+      );
+      expect(
+        offlineChat.composer.observation.queue.single.submissionUncertain,
+        isFalse,
+      );
+      expect(offlineChat.reading.messages.single['content'], 'a completed');
       final waiting = (await controller.savedDraft(key))!;
       expect(waiting.text, isEmpty);
       expect(waiting.queuedPrompts.single.text, 'My unsent thought');
@@ -83,13 +261,16 @@ void main() {
         ServerConnectionPhase.disconnected,
       );
       expect(controller.notificationChat!.key, key);
-      expect(controller.notificationChat!.draft, 'Fresh thought while offline');
       expect(
-        controller.notificationChat!.queuedPrompts.single.text,
+        controller.notificationChat!.composer.observation.text,
+        'Fresh thought while offline',
+      );
+      expect(
+        controller.notificationChat!.composer.observation.queue.single.text,
         'My unsent thought',
       );
       expect(
-        controller.notificationChat!.messages.single['content'],
+        controller.notificationChat!.reading.messages.single['content'],
         'a completed',
       );
       expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
@@ -105,20 +286,29 @@ void main() {
       for (
         var attempt = 0;
         attempt < 20 &&
-            (controller.current!.chat!.sendingPrompt ||
-                controller.current!.chat!.queuedPrompts.isNotEmpty);
+            (controller.current!.chat!.composer.observation.sending ||
+                controller
+                    .current!
+                    .chat!
+                    .composer
+                    .observation
+                    .queue
+                    .isNotEmpty);
         attempt++
       ) {
         await tester.runAsync(() => Future<void>.delayed(Duration.zero));
         await tester.pump(const Duration(milliseconds: 10));
       }
       final resumedChat = controller.current!.chat!;
-      expect(resumedChat.draft, 'Fresh thought while offline');
-      expect(resumedChat.offlineSnapshot, isFalse);
-      expect(resumedChat.sendingPrompt, isFalse);
-      expect(resumedChat.queuedPrompts, isEmpty);
       expect(
-        resumedChat.messages.any(
+        resumedChat.composer.observation.text,
+        'Fresh thought while offline',
+      );
+      expect(resumedChat.runtime.offline, isFalse);
+      expect(resumedChat.composer.observation.sending, isFalse);
+      expect(resumedChat.composer.observation.queue, isEmpty);
+      expect(
+        resumedChat.reading.messages.any(
           (message) => message['content'] == 'a completed',
         ),
         isTrue,

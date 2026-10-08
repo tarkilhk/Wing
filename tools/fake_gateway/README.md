@@ -4,6 +4,31 @@ This local-only fixture exercises the Dashboard and Desktop Gateway contracts
 used by the Android application. All sessions, credentials, prompts, files, and
 responses are synthetic.
 
+The fixture implements the retained client subset of stock Hermes; it cannot
+establish real-server durability, concurrency or capability support. The removed
+experimental recovery ledger, its capability advertisement and exclusive probes
+are retired. Supported prompt acknowledgements use stock `status: streaming`;
+unknown submit parameters fail with code 4000. The explicit disconnect selector
+below is a local test control.
+
+Contract pin for this cleanup: `44533f11e397b78f2569c41dc0eba9502304dd74`.
+Inspected `tui_gateway/methods_session.py`, `methods_prompt.py`, `ws.py` and
+`contracts/prompt_voice.py`, `contracts/common.py`, `contracts/base.py`.
+Model-options producer was inspected at
+`23a20a218dc82b005b0ea3af776604e76d6d8c4a`; model rows use string IDs with
+provider `slug`/`name`. Reinspect latest stock before changing any contract.
+The minimal ready payload describes only fixture skin; it advertises no
+unimplemented recovery, change-event or heartbeat capability.
+
+Small offline guards and their positive/negative CLI proofs run through the
+mandatory offline QA gate:
+
+```sh
+python3 tools/architecture/rules/fixture_model_catalog.py
+python3 tools/architecture/rules/retired_fixture_recovery.py
+python3 -m unittest discover -s tools/qa -p 'test_architecture_fixture_guards.py' -v
+```
+
 ## Run
 
 From the repository root, using a Python environment for development dependencies:

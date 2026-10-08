@@ -1,3 +1,7 @@
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/chat_runtime.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -94,22 +98,32 @@ class _BackgroundHost extends Host {
 void main() {
   late _BackgroundHost host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileChat chat;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     host = _BackgroundHost();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'background-work-test',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
-    chat = await controller.createChat();
+    chat = await controller.createChat(canDispatch: () => true);
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   test(
     'refresh is scoped and a stale read cannot replace a newer list',
@@ -173,7 +187,10 @@ void main() {
   );
 
   test('session info authoritatively hydrates side-task history', () {
-    chat.status = ProfileTurnStatus.idle;
+    emitChatEvent(controller, chat, 'session.info', {
+      'open_requests': [],
+      'running': false,
+    });
     host.event('a', 'session.info', {
       'side_tasks': {
         'retention': 'live_session',
@@ -220,7 +237,7 @@ void main() {
       SideQuestionDeliveryState.failed,
     );
     expect(chat.sideQuestionDeliveries[2].resultTruncated, isTrue);
-    expect(chat.status, ProfileTurnStatus.idle);
+    expect(chat.runtime.execution, ChatExecution.idle);
 
     host.event('a', 'session.info', {'model': 'fixture-model'});
     expect(chat.sideQuestionDeliveries, hasLength(3));
@@ -243,8 +260,8 @@ void main() {
     };
     await controller.reconnect(chat.key.workspace);
     expect(chat.sideQuestionDeliveries.single.taskId, 'recovered');
-    expect(chat.busy, isTrue);
-    expect(chat.status, ProfileTurnStatus.running);
+    expect(chat.runtime.blocksTurnAdmission, isTrue);
+    expect(chat.runtime.execution, ChatExecution.running);
 
     host.sideTasks = const {'retention': 'live_session', 'tasks': <Object>[]};
     await controller.reconnect(chat.key.workspace);
@@ -286,11 +303,11 @@ void main() {
       });
       host.includeSideTasks = false;
       host.running = false;
-      chat.runtimeId = 'old-runtime';
+      host.runtimeForResume['a'] = 'a-new-runtime';
 
       await controller.reconnect(chat.key.workspace);
 
-      expect(chat.runtimeId, 'a-runtime');
+      expect(chat.runtime.runtimeId, 'a-new-runtime');
       expect(chat.sideQuestionDeliveries, isEmpty);
     },
   );
@@ -306,7 +323,10 @@ void main() {
         'processes': [_process('bg-1', 'exited')],
       };
 
-      expect(await controller.stopProcess(chat, 'bg-1'), isTrue);
+      expect(
+        await controller.stopProcess(chat, 'bg-1', canDispatch: () => true),
+        isTrue,
+      );
       expect(chat.processes.single.status, GatewayProcessStatus.exited);
       expect(host.calls.where((call) => call.$2 == 'process.kill').single.$3, {
         'session_id': 'a-runtime',
@@ -319,7 +339,10 @@ void main() {
       };
       await controller.refreshProcesses(chat);
       host.killResponse = {'status': 'error', 'session_id': 'bg-1'};
-      expect(await controller.stopProcess(chat, 'bg-1'), isFalse);
+      expect(
+        await controller.stopProcess(chat, 'bg-1', canDispatch: () => true),
+        isFalse,
+      );
       expect(chat.processes.single.isRunning, isTrue);
       expect(chat.processesError, contains('did not confirm'));
 
@@ -327,7 +350,10 @@ void main() {
       host.listResponse = {
         'processes': [_process('bg-1', 'exited')],
       };
-      expect(await controller.stopProcess(chat, 'bg-1'), isTrue);
+      expect(
+        await controller.stopProcess(chat, 'bg-1', canDispatch: () => true),
+        isTrue,
+      );
 
       host.listResponse = {
         'processes': [_process('bg-1', 'running')],
@@ -337,7 +363,10 @@ void main() {
         'status': 'already_exited',
         'session_id': 'another-process',
       };
-      expect(await controller.stopProcess(chat, 'bg-1'), isFalse);
+      expect(
+        await controller.stopProcess(chat, 'bg-1', canDispatch: () => true),
+        isFalse,
+      );
     },
   );
 
@@ -349,8 +378,15 @@ void main() {
       };
       await controller.refreshProcesses(chat);
       final pending = host.pendingKill = Completer<Map<String, dynamic>>();
-      final first = controller.stopProcess(chat, 'bg-1');
-      expect(await controller.stopProcess(chat, 'bg-1'), isFalse);
+      final first = controller.stopProcess(
+        chat,
+        'bg-1',
+        canDispatch: () => true,
+      );
+      expect(
+        await controller.stopProcess(chat, 'bg-1', canDispatch: () => true),
+        isFalse,
+      );
 
       await controller.refreshProcesses(chat);
       host.listResponse = {
@@ -365,9 +401,14 @@ void main() {
       await controller.refreshProcesses(chat);
       final scopedPending = host.pendingKill =
           Completer<Map<String, dynamic>>();
-      final scoped = controller.stopProcess(chat, 'bg-1');
+      final scoped = controller.stopProcess(
+        chat,
+        'bg-1',
+        canDispatch: () => true,
+      );
 
-      chat.runtimeId = 'replacement-runtime';
+      host.runtimeForResume['a'] = 'replacement-runtime';
+      await controller.openSession(chat.key);
       scopedPending.complete({'status': 'killed', 'session_id': 'bg-1'});
       expect(await scoped, isFalse);
     },
@@ -405,7 +446,10 @@ void main() {
     await controller.refreshProcesses(chat);
     host.listFails = true;
 
-    expect(await controller.stopProcess(chat, 'bg-1'), isTrue);
+    expect(
+      await controller.stopProcess(chat, 'bg-1', canDispatch: () => true),
+      isTrue,
+    );
     expect(chat.processes.single.isRunning, isTrue);
     expect(chat.processesError, contains('acknowledged'));
   });
@@ -414,13 +458,18 @@ void main() {
     'loop and heartbeat actions use the shared scoped control RPC',
     () async {
       expect(
-        await controller.controlSession(chat, SessionControlAction.loopPause),
+        await controller.controlSession(
+          chat,
+          SessionControlAction.loopPause,
+          canDispatch: () => true,
+        ),
         isTrue,
       );
       expect(
         await controller.controlSession(
           chat,
           SessionControlAction.heartbeatClear,
+          canDispatch: () => true,
         ),
         isTrue,
       );

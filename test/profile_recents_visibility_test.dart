@@ -1,3 +1,7 @@
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
@@ -51,10 +55,17 @@ void main() {
   test('Recents excludes the observed oneshot technical run', () async {
     SharedPreferences.setMockInitialValues({});
     final fixture = TechnicalSessionsFixture();
+    final preferences = await SharedPreferences.getInstance();
+    final appPreferences = AppPreferences(preferences);
+    addTearDown(appPreferences.dispose);
     final controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'technical-recents',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: fixture.gateway,
     );
     addTearDown(controller.dispose);
@@ -68,28 +79,34 @@ void main() {
     test('Recents excludes a loaded oneshot run (running=$running)', () async {
       SharedPreferences.setMockInitialValues({});
       final fixture = TechnicalSessionsFixture();
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: identityTestConnection(),
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
         connectionIdentity: 'loaded-technical',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: fixture.gateway,
       );
       addTearDown(controller.dispose);
       await controller.initialize();
       final resource = controller.current!;
-      final chat = ProfileChat(
+      final chat = await openFixtureChat(
+        controller: controller,
         key: ProfileSessionKey(resource.scope, 'technical-run'),
-        runtimeId: 'technical-runtime',
         title: 'Technical command',
-        source: 'oneshot',
+        select: false,
       );
-      chat.messages.add({
-        'role': 'assistant',
-        'content': 'Result',
-        'timestamp': fixture.now,
-      });
-      if (running) chat.status = ProfileTurnStatus.running;
-      resource.chats['technical-run'] = chat;
+      chat.reading.installSavedHistory([
+        ...chat.reading.messages,
+        {'role': 'assistant', 'content': 'Result', 'timestamp': fixture.now},
+      ]);
+      if (running) emitChatEvent(controller, chat, 'message.start');
+
       expect(controller.recentChats(), isEmpty);
     });
   }
@@ -106,10 +123,17 @@ void main() {
           'last_active': fixture.now,
         },
       ];
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: identityTestConnection(),
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
         connectionIdentity: 'live-technical',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: fixture.gateway,
       );
       addTearDown(controller.dispose);
@@ -135,10 +159,17 @@ void main() {
             'last_active': fixture.now,
           },
         ];
+        final preferences = await SharedPreferences.getInstance();
+        final appPreferences = AppPreferences(preferences);
+        addTearDown(appPreferences.dispose);
         final controller = ProfileWorkspaceController(
-          connection: identityTestConnection(),
+          access: ConnectionAccess(
+            connection: identityTestConnection(),
+            dashboardOAuth: null,
+          ),
           connectionIdentity: 'automation-$source',
-          preferences: await SharedPreferences.getInstance(),
+          preferences: preferences,
+          appPreferences: appPreferences,
           gatewayFactory: fixture.gateway,
         );
         addTearDown(controller.dispose);
@@ -183,10 +214,17 @@ void main() {
           'last_active': fixture.now,
         },
       ];
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: identityTestConnection(),
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
         connectionIdentity: 'user-sources',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: fixture.gateway,
       );
       addTearDown(controller.dispose);
@@ -228,10 +266,17 @@ void main() {
             'last_active': fixture.now,
           },
       ]);
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: identityTestConnection(),
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
         connectionIdentity: 'internal-page',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: fixture.gateway,
       );
       addTearDown(controller.dispose);

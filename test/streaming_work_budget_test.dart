@@ -1,3 +1,6 @@
+import 'package:wing/core/models/chat_runtime.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -16,18 +19,25 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({});
     final host = Host();
+    final preferences = await SharedPreferences.getInstance();
+    final appPreferences = AppPreferences(preferences);
+    addTearDown(appPreferences.dispose);
     final controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'live-streaming-work-budget',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     addTearDown(controller.dispose);
     await controller.initialize();
-    final chat = await controller.createChat();
-    chat.messages = [
+    final chat = await controller.createChat(canDispatch: () => true);
+    chat.reading.installSavedHistory([
       {'id': 1, 'role': 'assistant', 'content': 'Saved **answer**'},
-    ];
+    ]);
     host.event('a', 'message.start');
     await tester.pumpWidget(
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
@@ -55,8 +65,8 @@ void main() {
       if (i % 4 == 0) await tester.enterText(field, 'New draft $i');
       await tester.pump(const Duration(milliseconds: 10));
     }
-    expect(chat.streaming, chunks.join());
-    expect(chat.draft, 'New draft 116');
+    expect(chat.reading.streaming, chunks.join());
+    expect(chat.composer.observation.text, 'New draft 116');
     await tester.settleMarkdown();
     expect(savedBuilds, 0);
     expect(
@@ -72,10 +82,10 @@ void main() {
     ];
     host.event('a', 'message.complete');
     await tester.pump();
-    expect(chat.streaming, isEmpty);
-    expect(chat.messages.last['content'], chunks.join());
-    expect(chat.status, ProfileTurnStatus.completed);
-    expect(chat.draft, 'New draft 116');
+    expect(chat.reading.streaming, isEmpty);
+    expect(chat.reading.messages.last['content'], chunks.join());
+    expect(chat.runtime.execution, ChatExecution.completed);
+    expect(chat.composer.observation.text, 'New draft 116');
     await tester.settleMarkdown();
     expect(
       tester
@@ -90,23 +100,30 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({});
     final host = Host();
+    final preferences = await SharedPreferences.getInstance();
+    final appPreferences = AppPreferences(preferences);
+    addTearDown(appPreferences.dispose);
     final controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'streaming-work-budget',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     addTearDown(controller.dispose);
     await controller.initialize();
-    final chat = await controller.createChat();
-    chat.messages = [
+    final chat = await controller.createChat(canDispatch: () => true);
+    chat.reading.installSavedHistory([
       for (var i = 1; i <= 20; i++)
         {
           'id': i,
           'role': i.isEven ? 'assistant' : 'user',
           'content': 'Saved message $i with **formatted** content.',
         },
-    ];
+    ]);
     host.event('a', 'message.start');
     host.event('a', 'message.delta', {'text': 'Live answer'});
     await tester.pumpWidget(
@@ -136,7 +153,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 16));
     }
     debugPrint('Streaming 30 deltas: $savedBuilds saved Markdown builds');
-    expect(chat.streaming, 'Live answer${'.' * 30}');
+    expect(chat.reading.streaming, 'Live answer${'.' * 30}');
     expect(
       savedBuilds,
       0,

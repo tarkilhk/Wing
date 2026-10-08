@@ -1,7 +1,15 @@
+import '../models/chat_output.dart';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import '../presentation/tool_call_presentation.dart';
+import '../presentation/saved_activity.dart';
+import 'profile_execution_activity.dart';
+import 'profile_saved_agents.dart';
+import 'profile_tool_call.dart';
 import 'profile_activity_tabs.dart';
-import '../models/answer_versions.dart';
-import '../models/review_notice.dart';
+import '../models/transcript_message.dart';
+import '../models/transcript_timeline.dart';
 import 'profile_review_notice_card.dart';
 import 'profile_transcript_disclosure.dart';
 
@@ -13,16 +21,12 @@ class ProfileActivitySection extends StatelessWidget {
     this.subtitle,
     this.initiallyExpanded = false,
     this.tabs = const [],
-    this.thinking,
-    this.toolCount = 0,
   });
 
   final List<Widget> children;
   final Widget? subtitle;
   final bool initiallyExpanded;
   final List<ProfileActivityTab> tabs;
-  final Widget? thinking;
-  final int toolCount;
 
   @override
   Widget build(BuildContext context) => ProfileTranscriptDisclosure(
@@ -35,8 +39,8 @@ class ProfileActivitySection extends StatelessWidget {
         tabs: [
           if (children.isNotEmpty)
             ProfileActivityTab(
-              id: 'tools',
-              label: toolCount > 0 ? 'Tools $toolCount' : 'Tools',
+              id: 'timeline',
+              label: 'Timeline',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: children,
@@ -44,7 +48,6 @@ class ProfileActivitySection extends StatelessWidget {
             ),
           ...tabs,
         ],
-        thinking: thinking,
       ),
     ],
   );
@@ -54,75 +57,114 @@ class ProfileActivitySection extends StatelessWidget {
 class ProfileToolActivitySection extends StatelessWidget {
   const ProfileToolActivitySection({
     super.key,
-    required this.groups,
+    required this.section,
     this.expandedMessageId,
     this.focusedMessageKey,
     this.showLatestReview = false,
     this.currentActivity = const [],
     this.tabs = const [],
-    this.thinking,
     this.liveToolCount = 0,
+    this.loadImage,
+    this.onOpenResource,
+    this.onShareResource,
   });
-  final List<List<Map<String, dynamic>>> groups;
+  final TranscriptTimelineSection section;
   final int? expandedMessageId;
   final GlobalKey? focusedMessageKey;
   final bool showLatestReview;
   final List<Widget> currentActivity;
   final List<ProfileActivityTab> tabs;
-  final Widget? thinking;
   final int liveToolCount;
+  final Future<Uint8List> Function(String)? loadImage;
+  final Future<void> Function(ChatOutput)? onOpenResource;
+  final Future<void> Function(ChatOutput)? onShareResource;
 
   @override
   Widget build(BuildContext context) {
-    final latestReview = reviewMessageText(groups.last.last);
+    final latestReview = section.latestReview;
     if (showLatestReview && latestReview != null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (groups.length > 1)
+          if (section.precedingLatestReview case final preceding?)
             ProfileToolActivitySection(
-              groups: groups.sublist(0, groups.length - 1),
+              section: preceding,
+              loadImage: loadImage,
+              onOpenResource: onOpenResource,
+              onShareResource: onShareResource,
             ),
           ProfileReviewNoticeRow(text: latestReview),
         ],
       );
     }
-    final rows = groups.expand((group) => group);
-    final count = rows.where((row) => row['role'] == 'tool').length;
-    final reviews = rows.where((row) => reviewMessageText(row) != null).length;
+    final count = section.toolCount;
+    final total = count + liveToolCount;
+    final reviews = section.reviewCount;
     final expanded =
         expandedMessageId != null &&
-        groups.any(
-          (group) => group.any((message) => message['id'] == expandedMessageId),
-        );
+        section.containsMessage(expandedMessageId!);
+    final saved = SavedActivity(
+      section.groups.expand((group) => group.toolResults),
+    );
+    final supplied = tabs.map((tab) => tab.id).toSet();
     return ProfileActivitySection(
-      tabs: tabs,
-      thinking: thinking,
-      toolCount: count > 0 ? count : liveToolCount,
+      tabs: [
+        ...tabs,
+        if (saved.todos.isNotEmpty && !supplied.contains('tasks'))
+          ProfileActivityTab(
+            id: 'tasks',
+            label: 'Tasks ${saved.todos.length}',
+            child: ProfileTodoPanel(todos: saved.todos, embedded: true),
+          ),
+        if (saved.agents.isNotEmpty && !supplied.contains('agents'))
+          ProfileActivityTab(
+            id: 'agents',
+            label: 'Agents ${saved.agents.length}',
+            child: ProfileSavedAgents(agents: saved.agents),
+          ),
+      ],
       initiallyExpanded: expanded,
       subtitle: Text(
         [
-          if (count > 0) '$count tool ${count == 1 ? 'call' : 'calls'}',
+          if (total > 0) '$total tool ${total == 1 ? 'call' : 'calls'}',
           if (reviews > 0) '$reviews ${reviews == 1 ? 'review' : 'reviews'}',
         ].join(' · '),
       ),
       children: [
-        for (final group in groups)
-          if (reviewMessageText(group.last) case final review?)
+        for (final group in section.groups)
+          if (group.isReasoning)
+            ProfileReasoningDisclosure(
+              key:
+                  group.messages.first.emptyAssistant &&
+                      expandedMessageId != null &&
+                      group.containsMessage(expandedMessageId!)
+                  ? focusedMessageKey
+                  : ValueKey((
+                      'saved-reasoning',
+                      group.messages.first.presentationId,
+                    )),
+              text: group.messages.first.reasoning,
+              initiallyExpanded:
+                  group.messages.first.emptyAssistant &&
+                  expandedMessageId != null &&
+                  group.containsMessage(expandedMessageId!),
+            )
+          else if (group.reviewText case final review?)
             ProfileReviewNoticeRow(
-              key: group.last['id'] == expandedMessageId
+              key: group.messages.last.message.id == expandedMessageId
                   ? focusedMessageKey
                   : null,
               text: review,
             )
           else
             ProfileToolActivity(
-              messages: group,
-              initiallyExpanded: group.any(
-                (message) =>
-                    expandedMessageId != null &&
-                    message['id'] == expandedMessageId,
-              ),
+              results: group.toolResults,
+              loadImage: loadImage,
+              onOpenResource: onOpenResource,
+              onShareResource: onShareResource,
+              initiallyExpanded:
+                  expandedMessageId != null &&
+                  group.containsMessage(expandedMessageId!),
               focusedMessageId: expandedMessageId,
               focusedMessageKey: focusedMessageKey,
             ),
@@ -132,135 +174,59 @@ class ProfileToolActivitySection extends StatelessWidget {
   }
 }
 
-class ProfileTranscriptSection {
-  ProfileTranscriptSection(this.groups);
-  final List<List<Map<String, dynamic>>> groups;
-
-  Iterable<Map<String, dynamic>> get messages =>
-      groups.expand((group) => group);
-  bool get isTool => groups.last.last['role'] == 'tool';
-  bool get isActivity => isTool || reviewMessageText(groups.last.last) != null;
-}
-
-/// Empty assistant rows can separate tool cards without displaying anything.
-/// Keep those card boundaries inside one section, leaving visible prose outside.
-List<ProfileTranscriptSection> groupTranscriptSections(
-  List<Map<String, dynamic>> rows,
-) {
-  final sections = <ProfileTranscriptSection>[];
-  for (final group in groupTranscriptRows(rows)) {
-    final row = group.last;
-    if (row['role'] == 'assistant' &&
-        (row['display_content'] ?? row['content'] ?? '').toString().isEmpty) {
-      continue;
-    }
-    final activity = row['role'] == 'tool' || reviewMessageText(row) != null;
-    if (activity && sections.isNotEmpty && sections.last.isActivity) {
-      sections.last.groups.add(group);
-    } else {
-      sections.add(ProfileTranscriptSection([group]));
-    }
-  }
-  return sections;
-}
-
-/// Disclosure for contiguous tool results. Never contains approvals or questions.
+/// Contiguous outputs retain their transcript grouping and focus identities;
+/// every call has its own readable disclosure inside the Timeline tab.
 class ProfileToolActivity extends StatelessWidget {
-  const ProfileToolActivity({
+  ProfileToolActivity({
     super.key,
-    required this.messages,
+    required Iterable<TranscriptToolResult> results,
     this.initiallyExpanded = false,
     this.focusedMessageId,
     this.focusedMessageKey,
-  });
-  final List<Map<String, dynamic>> messages;
+    this.loadImage,
+    this.onOpenResource,
+    this.onShareResource,
+  }) : results = List.unmodifiable(results);
+  final List<TranscriptToolResult> results;
   final bool initiallyExpanded;
   final int? focusedMessageId;
   final GlobalKey? focusedMessageKey;
+  final Future<Uint8List> Function(String)? loadImage;
+  final Future<void> Function(ChatOutput)? onOpenResource;
+  final Future<void> Function(ChatOutput)? onShareResource;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final name = messages.length == 1
-        ? messages.single['tool_name']?.toString() ?? 'Tool result'
-        : '${messages.length} tool results';
-    return ProfileTranscriptDisclosure(
-      initiallyExpanded: initiallyExpanded,
-      maintainState: false,
-      icon: Icons.terminal_rounded,
-      label: name,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ProfileActivityGuide(
-          inset: 0,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final message in messages)
-                Container(
-                  key:
-                      focusedMessageId != null &&
-                          message['id'] == focusedMessageId
-                      ? focusedMessageKey
-                      : null,
-                  decoration:
-                      focusedMessageId != null &&
-                          message['id'] == focusedMessageId
-                      ? BoxDecoration(
-                          color: colors.primaryContainer.withValues(alpha: .45),
-                          border: Border.all(color: colors.primary, width: 2),
-                          borderRadius: BorderRadius.circular(6),
-                        )
-                      : null,
-                  padding: const EdgeInsets.only(top: 4, bottom: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (messages.length > 1)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Text(
-                            message['tool_name']?.toString() ?? 'Tool result',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w400,
-                              color: colors.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      SelectableText(
-                        (message['display_content'] ?? message['content'] ?? '')
-                            .toString(),
-                        style: TextStyle(
-                          fontSize: 13,
-                          height: 1.4,
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
+        for (final result in results)
+          Container(
+            key: focusedMessageId != null && result.id == focusedMessageId
+                ? focusedMessageKey
+                : result.id == null
+                ? null
+                : ValueKey(('saved-tool', result.id)),
+            decoration:
+                focusedMessageId != null && result.id == focusedMessageId
+                ? BoxDecoration(
+                    color: colors.primaryContainer.withValues(alpha: .45),
+                    border: Border.all(color: colors.primary, width: 2),
+                    borderRadius: BorderRadius.circular(6),
+                  )
+                : null,
+            child: ProfileToolCall(
+              call: ToolCallPresentation.saved(result),
+              initiallyExpanded:
+                  initiallyExpanded &&
+                  (focusedMessageId == null || result.id == focusedMessageId),
+              loadImage: loadImage,
+              onOpenResource: onOpenResource,
+              onShareResource: onShareResource,
+            ),
           ),
-        ),
       ],
     );
   }
-}
-
-/// Chronological groups; non-tool messages always remain individual entries.
-List<List<Map<String, dynamic>>> groupTranscriptRows(
-  List<Map<String, dynamic>> rows,
-) {
-  final groups = <List<Map<String, dynamic>>>[];
-  for (final row in rows) {
-    if (isHiddenAnswerMessage(row)) continue;
-    if (row['role'] == 'tool' &&
-        groups.isNotEmpty &&
-        groups.last.last['role'] == 'tool') {
-      groups.last.add(row);
-    } else {
-      groups.add([row]);
-    }
-  }
-  return groups;
 }

@@ -165,6 +165,10 @@ def main():
         shell('cmd', 'statusbar', 'collapse')
         shell('am', 'force-stop', package)
         shell('pm', 'grant', package, 'android.permission.POST_NOTIFICATIONS')
+        # Wing's startup microphone prompt otherwise takes foreground focus
+        # before this monitoring-only fixture starts work. Permission denial and
+        # retry are exercised separately by the native voice-permission driver.
+        shell('pm', 'grant', package, 'android.permission.RECORD_AUDIO')
         shell('input', 'keyevent', 'KEYCODE_WAKEUP')
         shell('wm', 'dismiss-keyguard')
         launch()

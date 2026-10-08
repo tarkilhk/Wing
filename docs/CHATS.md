@@ -14,6 +14,6 @@ While Hermes is working, the composer can **Steer**, **Queue** or **Stop**. The 
 
 ## Revisit the result
 
-Use **Find in chat** to search older messages, **Outputs** to browse files, or the answer actions to edit, regenerate or branch into another chat. Model changes show Hermes warnings before you confirm them.
+Use the pencil beside a sent message to edit it. The time sits above the Edit and Copy icons beside its bubble. In the editor, confirm **Replace and resend** to replace that turn and all later history; this requires an idle, connected chat. Use **Find in chat** to search older messages, **Outputs** to browse files, or the answer actions to regenerate or branch into another chat. Model changes show Hermes warnings before you confirm them.
 
 [Explore Wing](FEATURES.md) · [Conversation details](CONVERSATION_ACTIONS_AND_READING.md)

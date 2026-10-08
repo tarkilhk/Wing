@@ -9,7 +9,13 @@ import 'authenticated_web_socket.dart';
 import 'connection_manager.dart';
 
 typedef ProviderConsoleCommand =
-    Future<String> Function(String profile, String command, {bool confirm});
+    Future<String> Function(
+      String profile,
+      String command, {
+      bool confirm,
+      required bool Function() canDispatch,
+      required void Function() onDispatched,
+    });
 typedef ProviderConsoleConnect =
     Future<WebSocketChannel> Function(String profile);
 
@@ -55,8 +61,11 @@ class ProviderConsole {
     String profile,
     String command, {
     bool confirm = false,
+    required bool Function() canDispatch,
+    required void Function() onDispatched,
   }) async {
     if (_closed ||
+        !canDispatch() ||
         !HermesProfile.isCanonicalName(profile) ||
         profile == 'current') {
       throw const ProviderRecoveryFailure(
@@ -94,7 +103,7 @@ class ProviderConsole {
             return connected;
           })
           .timeout(const Duration(seconds: 20));
-      if (_closed) {
+      if (_closed || !canDispatch()) {
         throw const ProviderRecoveryFailure(
           'The connection was closed. Check status before retrying.',
         );
@@ -114,6 +123,10 @@ class ProviderConsole {
             if (type == 'ready') {
               if (ready || frame['profile'] != profile) {
                 throw const FormatException();
+              }
+              if (_closed || !canDispatch()) {
+                fail('The selected recovery route was closed before dispatch.');
+                return;
               }
               ready = true;
               socket.sink.add(jsonEncode({'type': 'input', 'line': command}));
@@ -145,7 +158,14 @@ class ProviderConsole {
                 if (!sawConfirmation || confirmed || !confirm) {
                   throw const FormatException();
                 }
+                if (_closed || !canDispatch()) {
+                  fail(
+                    'The selected recovery route was closed before renewal.',
+                  );
+                  return;
+                }
                 confirmed = true;
+                onDispatched();
                 socket.sink.add(
                   jsonEncode({'type': 'confirm', 'command': command}),
                 );

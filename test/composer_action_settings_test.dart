@@ -1,7 +1,8 @@
+import 'package:wing/core/models/app_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wing/core/models/composer_action.dart';
+import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/widgets/composer_action_settings.dart';
 
 void main() {
@@ -10,9 +11,11 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
+    final owner = AppPreferences(preferences);
+    addTearDown(owner.dispose);
     Future<void> show() => tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: ComposerActionSettings(preferences: preferences)),
+        home: Scaffold(body: ComposerActionSettings(preferences: owner)),
       ),
     );
     await show();
@@ -24,7 +27,10 @@ void main() {
     );
     await tester.tap(find.widgetWithText(ChoiceChip, 'Queue'));
     await tester.pumpAndSettle();
-    expect(preferences.getString(ComposerAction.preferenceKey), 'queue');
+    expect(
+      preferences.getString(AppPreferenceField.runningAction.storageKey),
+      'queue',
+    );
     await tester.pumpWidget(const SizedBox());
     await show();
     expect(

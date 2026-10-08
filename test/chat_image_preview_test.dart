@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_message.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:image/image.dart' as img;
 import 'package:wing/core/widgets/chat_image_preview.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
+import 'package:wing/core/widgets/resource_filename.dart';
 import 'helpers/pump_markdown_widget.dart';
 
 void main() {
@@ -16,10 +18,10 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ProfileMessage(
-            message: const {
+            message: TranscriptMessage.fromRow(const {
               'role': 'assistant',
               'content': '![Result chart](/srv/chart.png)',
-            },
+            }),
             loadAttachmentImage: (_) async => Uint8List.fromList(
               img.encodePng(img.Image(width: 120, height: 80)),
             ),
@@ -74,7 +76,12 @@ void main() {
     );
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: fallback)));
     expect(find.textContaining('could not be previewed'), findsOneWidget);
-    await tester.tap(find.text('Open in browser'));
+    expect(
+      tester.getSize(find.byType(ResourceViewerAction)),
+      const Size(32, 32),
+    );
+    expect(find.text('Open in browser'), findsNothing);
+    await tester.tap(find.byTooltip('Open in browser'));
     expect(opened, isTrue);
   });
 }

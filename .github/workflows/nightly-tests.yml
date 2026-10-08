@@ -1,0 +1,50 @@
+name: Nightly Exhaustive Tests
+
+on:
+  schedule:
+    - cron: '0 19 * * *' # 03:00 Singapore time.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-tests-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  exhaustive:
+    name: Complete product and architecture proof coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Flutter
+        uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: '3.44.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Complete exhaustive test suite
+        run: python3 scripts/test.py --full
+
+      - name: Check workspace search owner fixtures
+        run: dart run tools/architecture/tests/workspace_search_owner_test.dart
+      - name: Canonical profile discovery writer fixtures
+        run: dart run tools/architecture/tests/profile_discovery_writer_test.dart
+      - name: Saved-prompt journal admission fixtures
+        run: dart run tools/architecture/tests/saved_prompt_journal_admission_test.dart
+      - name: Retired answer versions namespace fixtures
+        run: dart run tools/architecture/tests/retired_answer_versions_namespace_test.dart
+      - name: Compact activity density fixtures
+        run: dart run tools/architecture/tests/activity_density_test.dart
+      - name: Current stock tool event fixtures
+        run: dart run tools/architecture/tests/current_tool_events_test.dart

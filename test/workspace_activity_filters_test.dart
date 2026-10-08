@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -123,20 +125,27 @@ void main() {
   });
   late _ActivityHost host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     host = _ActivityHost();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Host',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Host',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       connectionIdentity: 'activity-filter-test',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
@@ -171,7 +180,10 @@ void main() {
     await controller.refreshRecents();
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {

@@ -19,4 +19,8 @@ Wing checks profile access, live chat and history before you tap **Save and open
 
 Choose a profile, create a chat and send a short message. Reopen the chat to see its saved history. From there, try [chat controls, files, voice and more](FEATURES.md).
 
+If a saved profile is unavailable, Chats offers the available profiles directly.
+On a short screen or with enlarged text, scroll below the filters to reach these
+choices, then choose a profile to reopen the workspace.
+
 If something does not connect, the check screen shows which part needs attention. [Connection help](SELF_HOSTING.md#connection-help) covers the usual fixes. [Good to know](KNOWN_LIMITATIONS.md) explains offline reading and notifications.

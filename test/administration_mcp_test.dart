@@ -1,3 +1,4 @@
+import 'package:wing/core/services/profile_connectors_session.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_connectors_page.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/services/mcp_error.dart';
+import 'package:wing/core/screens/administration/admin_connector_routes.dart';
 import 'package:wing/core/services/mcp_oauth.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'support/administration_fixture.dart';
@@ -17,7 +19,14 @@ AdministrationFixture fixtureWith(Map<String, dynamic> result) {
     if (path == 'mcp/servers') {
       return {
         'servers': [
-          {'name': 'aspire', 'auth': 'oauth'},
+          {
+            'name': 'aspire',
+            'auth': 'oauth',
+            'transport': 'http',
+            'enabled': true,
+            'source': 'config',
+            'plugin': null,
+          },
         ],
       };
     }
@@ -44,7 +53,7 @@ AdministrationFixture fixtureWith(Map<String, dynamic> result) {
 Future<McpLoopback> fakeLoopback(
   Uri target,
   Future<bool> Function(Uri) receive,
-) async => McpLoopback(redirectUri: target, close: () async {});
+) async => McpLoopback(close: () async {});
 
 Map<String, dynamic> started(Map<String, dynamic> params) => {
   'ok': true,
@@ -77,9 +86,11 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: AdminMcpSignIn(
-            profile: fixture.server.profile('personal'),
-            name: 'aspire',
-            bindLoopback: fakeLoopback,
+            createFlow: () => McpOAuth(
+              profile: fixture.server.profile('personal'),
+              name: 'aspire',
+              bindLoopback: fakeLoopback,
+            ),
           ),
         ),
       );
@@ -147,8 +158,13 @@ void main() {
         MaterialApp(
           theme: wingTheme(Brightness.dark),
           home: AdminConnectorDetail(
-            profile: fixture.server.profile('personal'),
-            name: 'aspire',
+            createRoute: () {
+              final parent = ProfileConnectorsSession(
+                fixture.server.profile('personal'),
+              );
+              addTearDown(parent.dispose);
+              return parent.openDetail('aspire', signInOnOpen: false);
+            },
           ),
         ),
       );
@@ -201,9 +217,11 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             home: AdminMcpSignIn(
-              profile: fixture.server.profile('personal'),
-              name: 'aspire',
-              bindLoopback: fakeLoopback,
+              createFlow: () => McpOAuth(
+                profile: fixture.server.profile('personal'),
+                name: 'aspire',
+                bindLoopback: fakeLoopback,
+              ),
             ),
           ),
         );
@@ -231,7 +249,7 @@ void main() {
     final response = <String, dynamic>{
       'ok': true,
       'tools': [
-        {'name': 'fixture_tool'},
+        {'name': 'fixture_tool', 'description': ''},
       ],
       'prompts': 2,
       'resources': 1,
@@ -240,8 +258,13 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: AdminConnectorDetail(
-          profile: fixture.server.profile('personal'),
-          name: 'aspire',
+          createRoute: () {
+            final parent = ProfileConnectorsSession(
+              fixture.server.profile('personal'),
+            );
+            addTearDown(parent.dispose);
+            return parent.openDetail('aspire', signInOnOpen: false);
+          },
         ),
       ),
     );
@@ -335,18 +358,26 @@ void main() {
                   child: child!,
                 ),
                 home: reload || reconnect
-                    ? AdminConnectorsPage(
-                        profile: fixture.server.profile('personal'),
-                      )
+                    ? profileConnectorsPage(fixture.server.profile('personal'))
                     : signIn
                     ? AdminMcpSignIn(
-                        profile: fixture.server.profile('personal'),
-                        name: 'aspire',
-                        bindLoopback: fakeLoopback,
+                        createFlow: () => McpOAuth(
+                          profile: fixture.server.profile('personal'),
+                          name: 'aspire',
+                          bindLoopback: fakeLoopback,
+                        ),
                       )
                     : AdminConnectorDetail(
-                        profile: fixture.server.profile('personal'),
-                        name: 'aspire',
+                        createRoute: () {
+                          final parent = ProfileConnectorsSession(
+                            fixture.server.profile('personal'),
+                          );
+                          addTearDown(parent.dispose);
+                          return parent.openDetail(
+                            'aspire',
+                            signInOnOpen: false,
+                          );
+                        },
                       ),
               ),
             ),

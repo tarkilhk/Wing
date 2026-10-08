@@ -1,3 +1,7 @@
+import 'package:wing/core/models/chat_runtime.dart';
+import '../test/support/composer_fixture.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:io';
 import 'dart:convert';
 
@@ -18,7 +22,7 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_connection_identity.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_workspace_registry.dart';
-import 'package:wing/core/services/text_size_preference.dart';
+import 'package:wing/core/models/app_preferences.dart';
 import 'package:wing/core/services/versions_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
@@ -76,8 +80,8 @@ void main() {
       await tester.tap(find.text('Extra large'));
       await _settle(tester);
       expect(
-        harness.preferences.getString(TextSizePreference.preferenceKey),
-        TextSizePreference.extraLarge.storageValue,
+        harness.preferences.getString(AppPreferenceField.textSize.storageKey),
+        AppTextSizePreference.extraLarge.storageValue,
       );
       await captureJourney(tester, 'settings-large-text');
 
@@ -229,7 +233,12 @@ void main() {
       if (await source.exists()) await source.delete();
     });
     await harness.controller.addAttachment(original, source.path, fileName);
-    final staged = File(original.attachments.single.cachedPath).absolute;
+    final staged = File(
+      (await readComposerFixture(
+        chat: original,
+        preferences: harness.controller.preferences,
+      ))!.attachments.single.cachedPath,
+    ).absolute;
     final support = (await getApplicationSupportDirectory()).absolute;
     expect(staged.path, isNot(source.absolute.path));
     expect(
@@ -245,10 +254,13 @@ void main() {
     final connection = harness.controller.connection;
     final identity = harness.controller.connectionIdentity;
     await tester.pumpWidget(const SizedBox.shrink());
+    final restoredAppPreferences = AppPreferences(harness.preferences);
+    addTearDown(restoredAppPreferences.dispose);
     final restoredController = ProfileWorkspaceController(
-      connection: connection,
+      access: ConnectionAccess(connection: connection, dashboardOAuth: null),
       connectionIdentity: identity,
       preferences: harness.preferences,
+      appPreferences: restoredAppPreferences,
       gatewayFactory: harness.fixture.gateway,
     );
     addTearDown(restoredController.dispose);
@@ -260,9 +272,12 @@ void main() {
     await _settle(tester);
 
     final restored = restoredController.current!.chat!;
-    expect(restored.draft, draftText);
-    expect(restored.attachments.single.name, fileName);
-    expect(restored.attachments.single.error, contains('no longer available'));
+    expect(restored.composer.observation.text, draftText);
+    expect(restored.composer.observation.attachments.single.name, fileName);
+    expect(
+      restored.composer.observation.attachments.single.error,
+      contains('no longer available'),
+    );
     expect(find.text(fileName), findsOneWidget);
     expect(
       find.byTooltip(
@@ -286,28 +301,26 @@ void main() {
       harness.fixture.calls.where((call) => call.$2 == 'prompt.submit'),
       hasLength(submitsBefore),
     );
-    expect(restored.draft, draftText);
-    expect(restored.attachments.single.name, fileName);
+    expect(restored.composer.observation.text, draftText);
+    expect(restored.composer.observation.attachments.single.name, fileName);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('activity approvals and queued work keep their chat owner', (
     tester,
   ) async {
+    harness.fixture.resumedRuntimes[('personal', 'chat-0')] = 'runtime-running';
     await harness.launch(tester);
     await tester.tap(find.byKey(const ValueKey('chat-personal-chat-0')));
     await _settle(tester);
     final runningChat = harness.controller.current!.chat!;
-    // The base fixture reuses a runtime placeholder; live gateway IDs are unique.
-    runningChat.runtimeId = 'runtime-running';
     await tester.tap(find.byTooltip('Back to sessions'));
     await _settle(tester);
     await tester.tap(find.byKey(const ValueKey('chat-personal-chat-1')));
     await _settle(tester);
     final chat = harness.controller.current!.chat!;
 
-    chat.status = ProfileTurnStatus.running;
-    harness.controller.clearSearch();
+    emitChatEvent(harness.controller, chat, 'message.start');
     await tester.pump();
     await tester.enterText(
       find.byKey(const Key('profile-message-composer')),
@@ -316,13 +329,13 @@ void main() {
     await tester.pump();
     await _chooseComposerAction(tester, 'queue');
     expect(
-      chat.queuedPrompts.single.text,
+      chat.composer.observation.queue.single.text,
       'Queue this after the synthetic turn',
     );
     expect(find.byTooltip('Message actions'), findsNothing);
     await captureJourney(tester, 'queued-message');
 
-    harness.fixture.requestApproval('personal', chat.runtimeId);
+    harness.fixture.requestApproval('personal', chat.runtime.runtimeId);
     await tester.pump();
     expect(find.text('Approval needed'), findsWidgets);
     expect(find.text('echo isolated-roadmap-check'), findsOneWidget);
@@ -337,16 +350,19 @@ void main() {
 
     // The approved synthetic turn has ended; the server snapshot now owns
     // the next waiting state rather than the earlier local running flag.
-    chat.status = ProfileTurnStatus.idle;
+    emitChatEvent(harness.controller, chat, 'session.info', {
+      'open_requests': [],
+      'running': false,
+    });
     harness.fixture.liveSessions['personal'] = [
       {
-        'id': runningChat.runtimeId,
+        'id': runningChat.runtime.runtimeId,
         'session_key': 'chat-0',
         'status': 'working',
         'last_active': 2,
       },
       {
-        'id': chat.runtimeId,
+        'id': chat.runtime.runtimeId,
         'session_key': 'chat-1',
         'status': 'waiting',
         'last_active': 1,
@@ -366,7 +382,7 @@ void main() {
     await tester.tap(find.text('personal chat 1'));
     await _settle(tester);
     expect(harness.controller.current!.chat, same(chat));
-    expect(chat.queuedPrompts, isEmpty);
+    expect(chat.composer.observation.queue, isEmpty);
     final queuedSubmit = harness.fixture.calls.singleWhere(
       (call) => call.$2 == 'prompt.submit',
     );
@@ -471,7 +487,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('chat-personal-chat-0')));
     await _settle(tester);
     final chat = harness.controller.current!.chat!;
-    harness.fixture.deliverReview('personal', chat.runtimeId);
+    harness.fixture.deliverReview('personal', chat.runtime.runtimeId);
     await tester.pump();
     expect(find.text('Hermes review'), findsOneWidget);
     expect(find.text('Roadmap review needs a human check.'), findsNothing);
@@ -489,7 +505,7 @@ void main() {
     await _settle(tester);
     expect(find.byKey(const ValueKey('jump-to-latest')), findsOneWidget);
 
-    harness.fixture.requestVaultUnlock('personal', chat.runtimeId);
+    harness.fixture.requestVaultUnlock('personal', chat.runtime.runtimeId);
     await _settle(tester);
     final inputJump = find.byKey(const ValueKey('jump-to-latest'));
     expect(
@@ -499,8 +515,8 @@ void main() {
     await tester.tap(inputJump);
     await _settle(tester);
 
-    expect(chat.historyScrollOffset, closeTo(0, 1));
-    expect(chat.sensitivePrompt?.requestId, 'roadmap-vault-unlock');
+    expect(chat.reading.historyScrollOffset, closeTo(0, 1));
+    expect(chat.runtime.secureInput?.requestId, 'roadmap-vault-unlock');
     expect(find.text('Unlock Roadmap Vault'), findsOneWidget);
     await captureJourney(tester, 'vault-unlock');
     const vaultPassword = 'isolated-roadmap-vault-secret';
@@ -517,7 +533,7 @@ void main() {
     );
     await _settle(tester);
     await tester.tap(sensitiveSubmit);
-    await _pumpUntil(tester, () => chat.sensitivePrompt == null);
+    await _pumpUntil(tester, () => chat.runtime.secureInput == null);
     await _settle(tester);
     expect(harness.fixture.sensitiveResponses.single, {
       'id': 'roadmap-vault-unlock',
@@ -525,8 +541,8 @@ void main() {
       'profile': 'personal',
     });
     expect(find.text('Unlock Roadmap Vault'), findsNothing);
-    expect(chat.draft, isNot(contains(vaultPassword)));
-    expect(chat.messages.toString(), isNot(contains(vaultPassword)));
+    expect(chat.composer.observation.text, isNot(contains(vaultPassword)));
+    expect(chat.reading.messages.toString(), isNot(contains(vaultPassword)));
     expect(
       [
         for (final key in harness.preferences.getKeys())
@@ -573,7 +589,7 @@ void main() {
       (request) => request.$1 == 'subagent.steer',
     );
     expect(steerRequest.$2, {
-      'session_id': chat.runtimeId,
+      'session_id': chat.runtime.runtimeId,
       'subagent_id': 'roadmap-child',
       'text': 'Check the Android route',
       'profile': 'personal',
@@ -613,7 +629,7 @@ void main() {
           request.$1 == 'session.control' &&
           request.$2['action'] == 'goal.pause',
     );
-    expect(goalRequest.$2['session_id'], chat.runtimeId);
+    expect(goalRequest.$2['session_id'], chat.runtime.runtimeId);
     expect(goalRequest.$2['profile'], 'personal');
     Navigator.of(tester.element(find.byType(BottomSheet).last)).pop();
     await _settle(tester);
@@ -653,17 +669,17 @@ void main() {
           request.$1 == 'session.control' &&
           request.$2['action'] == 'loop.pause',
     );
-    expect(loopRequest.$2['session_id'], chat.runtimeId);
+    expect(loopRequest.$2['session_id'], chat.runtime.runtimeId);
     expect(loopRequest.$2['profile'], 'personal');
     final processRequest = harness.fixture.supervisionRequests.singleWhere(
       (request) => request.$1 == 'process.kill',
     );
     expect(processRequest.$2, {
-      'session_id': chat.runtimeId,
+      'session_id': chat.runtime.runtimeId,
       'process_id': 'roadmap-process-running',
       'profile': 'personal',
     });
-    expect(chat.draft, 'Keep this supervision draft');
+    expect(chat.composer.observation.text, 'Keep this supervision draft');
     expect(tester.takeException(), isNull);
   });
 
@@ -922,20 +938,20 @@ void main() {
       (request) => request.$1 == 'prompt.submit',
     );
     expect(editSubmit.$2, {
-      'session_id': source.runtimeId,
+      'session_id': source.runtime.runtimeId,
       'text': 'Corrected emulator prompt',
       'truncate_before_row_id': 3,
       'confirm_truncate': true,
       'confirm_empty_truncate': true,
       'profile': 'personal',
     });
-    expect(source.status, ProfileTurnStatus.running);
-    harness.fixture.completeAnswerAction('personal', source.runtimeId);
+    expect(source.runtime.execution, ChatExecution.running);
+    harness.fixture.completeAnswerAction('personal', source.runtime.runtimeId);
     await _settle(tester);
-    expect(source.draft, 'Keep this unrelated draft');
+    expect(source.composer.observation.text, 'Keep this unrelated draft');
     expect(find.text('Corrected emulator prompt'), findsOneWidget);
 
-    final sourceAnswerId = answerMessageId(source.messages.last)!;
+    final sourceAnswerId = answerMessageId(source.reading.messages.last)!;
     final sourceActions = find.byKey(
       ValueKey('answer-actions-$sourceAnswerId'),
     );
@@ -959,7 +975,7 @@ void main() {
                   .where((request) => request.$1 == 'prompt.submit')
                   .length >
               submitsBeforeRegenerate &&
-          !source.changingAnswer,
+          !source.runtime.changingAnswer,
     );
     expect(harness.controller.current!.chat, same(source));
     expect(
@@ -971,10 +987,10 @@ void main() {
     final regeneratedSubmit = harness.fixture.answerActionRequests
         .where((request) => request.$1 == 'prompt.submit')
         .last;
-    expect(regeneratedSubmit.$2['session_id'], source.runtimeId);
+    expect(regeneratedSubmit.$2['session_id'], source.runtime.runtimeId);
     expect(regeneratedSubmit.$2['text'], 'Corrected emulator prompt');
     expect(regeneratedSubmit.$2['profile'], 'personal');
-    harness.fixture.completeAnswerAction('personal', source.runtimeId);
+    harness.fixture.completeAnswerAction('personal', source.runtime.runtimeId);
     await _settle(tester);
     expect(find.byTooltip('Previous answer'), findsNothing);
     expect(find.byTooltip('Next answer'), findsNothing);
@@ -984,12 +1000,12 @@ void main() {
     await tester.tapAt(Offset.zero);
     await _settle(tester);
     expect(harness.controller.current!.chat, same(source));
-    expect(source.draft, 'Keep this unrelated draft');
+    expect(source.composer.observation.text, 'Keep this unrelated draft');
 
     final submitsBeforeBranch = harness.fixture.answerActionRequests
         .where((request) => request.$1 == 'prompt.submit')
         .length;
-    final regeneratedAnswerId = answerMessageId(source.messages.last)!;
+    final regeneratedAnswerId = answerMessageId(source.reading.messages.last)!;
     final regeneratedActions = find.byKey(
       ValueKey('answer-actions-$regeneratedAnswerId'),
     );
@@ -1002,13 +1018,13 @@ void main() {
     );
     await _pumpUntil(tester, () => harness.controller.current!.chat != source);
     final ordinaryBranch = harness.controller.current!.chat!;
-    await _pumpUntil(tester, () => !source.changingAnswer);
+    await _pumpUntil(tester, () => !source.runtime.changingAnswer);
     await _settle(tester);
     final ordinaryBranchRequest = harness.fixture.answerActionRequests
         .where((request) => request.$1 == 'session.branch')
         .last;
     expect(ordinaryBranchRequest.$2, {
-      'session_id': source.runtimeId,
+      'session_id': source.runtime.runtimeId,
       'count': 4,
       'profile': 'personal',
     });
@@ -1041,9 +1057,9 @@ void main() {
           harness.fixture.answerActionRequests.any(
             (request) =>
                 request.$1 == 'prompt.submit' &&
-                request.$2['session_id'] == forked.runtimeId,
+                request.$2['session_id'] == forked.runtime.runtimeId,
           ) &&
-          !source.changingAnswer,
+          !source.runtime.changingAnswer,
     );
     await _settle(tester);
     await captureJourney(tester, 'forked-chat');
@@ -1053,7 +1069,7 @@ void main() {
         .toList();
     expect(forkSubmits, hasLength(1));
     expect(forkSubmits.single.$2, {
-      'session_id': forked.runtimeId,
+      'session_id': forked.runtime.runtimeId,
       'text': 'Continue in emulator fork',
       'profile': 'personal',
     });
@@ -1061,18 +1077,18 @@ void main() {
         .where((request) => request.$1 == 'session.branch')
         .last;
     expect(forkBranchRequest.$2, {
-      'session_id': source.runtimeId,
+      'session_id': source.runtime.runtimeId,
       'count': 4,
       'profile': 'personal',
     });
-    expect(source.draft, isEmpty);
+    expect(source.composer.observation.text, isEmpty);
     expect(forked.parentSessionId, source.key.sessionId);
     await tester.tap(find.byTooltip('Chat actions'));
     await _settle(tester);
     await tester.tap(find.text('Parent chat'));
     await _settle(tester);
     expect(harness.controller.current!.chat, same(source));
-    expect(source.draft, isEmpty);
+    expect(source.composer.observation.text, isEmpty);
     expect(
       harness.fixture.calls.where(
         (request) => request.$2 == 'session.answer_versions',
@@ -1085,6 +1101,8 @@ void main() {
 
 class _RoadmapHarness {
   final SharedPreferences preferences;
+  final AppPreferences appPreferences;
+  Future<void> Function()? _unmount;
   final ConnectionManager connectionManager;
   final RoadmapEmulatorFixture fixture;
   final ProfileWorkspaceRegistry registry;
@@ -1094,6 +1112,7 @@ class _RoadmapHarness {
 
   _RoadmapHarness({
     required this.preferences,
+    required this.appPreferences,
     required this.connectionManager,
     required this.fixture,
     required this.registry,
@@ -1143,22 +1162,27 @@ class _RoadmapHarness {
       dashboardPortOverride: dashboard.port,
       apiKey: '',
     );
-    await connectionManager.importConnections([
-      connection,
-    ], replaceExisting: true);
+    await connectionManager.importConnections(
+      [connection],
+      replaceExisting: true,
+      canCommit: () => true,
+    );
     await preferences.setString('last_connection_id', connection.id);
     final fixture = RoadmapEmulatorFixture();
+    final appPreferences = AppPreferences(preferences);
     final registry = ProfileWorkspaceRegistry(
       identities: ProfileConnectionIdentity(credentialStore: credentialStore),
       create: (saved, identity) => ProfileWorkspaceController(
-        connection: saved,
+        access: ConnectionAccess(connection: saved, dashboardOAuth: null),
         connectionIdentity: identity,
         preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: fixture.gateway,
       ),
     );
     final harness = _RoadmapHarness(
       preferences: preferences,
+      appPreferences: appPreferences,
       connectionManager: connectionManager,
       fixture: fixture,
       registry: registry,
@@ -1170,9 +1194,14 @@ class _RoadmapHarness {
   }
 
   Future<void> launch(WidgetTester tester) async {
+    _unmount = () => tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(
       journeyCaptureBoundary(
-        WingApp(connManager: connectionManager, profileControllers: registry),
+        WingApp(
+          connManager: connectionManager,
+          profileControllers: registry,
+          appPreferences: appPreferences,
+        ),
       ),
     );
     await _pumpUntil(
@@ -1190,9 +1219,12 @@ class _RoadmapHarness {
   /// their transport owners injected. The app's ordinary navigation is covered
   /// by the other journeys; this shell cannot contact a real server.
   Future<void> launchAdministration(WidgetTester tester) async {
+    _unmount = () => tester.pumpWidget(const SizedBox.shrink());
     await controller.initialize();
     final base = AdministrationFixture('Roadmap fixture');
     final server = AdministrationRepository(
+      ownedMutation: base.server.ownedMutation,
+      settingsWrite: base.server.settingsWrite,
       connectionId: controller.connection.id,
       connectionIdentity: controller.connectionIdentity,
       connectionLabel: controller.connection.label,
@@ -1273,7 +1305,7 @@ class _RoadmapHarness {
                   }, contains(selected));
                   update(() => destination = selected);
                 },
-                connection: controller.connection,
+                access: controller.access,
                 connectionStatus: controller.connectionStatus,
                 versionsControllerFactory: (_) =>
                     VersionsController(gateway: server.gateway('default')),
@@ -1311,7 +1343,9 @@ class _RoadmapHarness {
   }
 
   Future<void> dispose() async {
+    await _unmount?.call();
     registry.dispose();
+    appPreferences.dispose();
     await dashboard.close(force: true);
     expect(unexpectedRequests, isEmpty);
   }

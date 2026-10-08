@@ -9,20 +9,20 @@ import 'package:http/io_client.dart' show IOClient;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../models/connection.dart';
-import '../models/session.dart';
+import '../models/connection_import_result.dart';
+import '../models/dashboard_oauth_grant.dart';
+import 'connection_access.dart';
+import 'dashboard_oauth_session.dart';
 import 'dashboard_read_transport.dart';
 
 // Re-export for convenience
 export '../models/connection.dart';
-export '../models/session.dart';
 
 /// Injectable secret storage boundary used by [ConnectionManager].
 ///
 /// The production implementation is backed by Android Keystore through
 /// `flutter_secure_storage`; tests use a deterministic in-memory fake.
 abstract interface class CredentialStore {
-  String? readCached(String key);
-
   Future<String?> read(String key);
 
   Future<void> write(String key, String value);
@@ -38,22 +38,13 @@ class FlutterSecureCredentialStore implements CredentialStore {
   );
 
   final FlutterSecureStorage _storage;
-  final Map<String, String> _cache = <String, String>{};
 
   FlutterSecureCredentialStore({FlutterSecureStorage? storage})
     : _storage = storage ?? FlutterSecureStorage(aOptions: _androidOptions);
 
   @override
-  String? readCached(String key) => _cache[key];
-
-  @override
   Future<String?> read(String key) async {
     final value = await _storage.read(key: key);
-    if (value == null) {
-      _cache.remove(key);
-    } else {
-      _cache[key] = value;
-    }
     return value;
   }
 
@@ -65,7 +56,6 @@ class FlutterSecureCredentialStore implements CredentialStore {
   @override
   Future<void> delete(String key) async {
     await _storage.delete(key: key);
-    _cache.remove(key);
   }
 }
 
@@ -90,6 +80,12 @@ class DashboardHttpException implements Exception {
 
   @override
   String toString() => 'HTTP $statusCode';
+}
+
+/// Exact stock session-detail absence, distinct from a missing profile or route.
+/// No server prose or response payload is retained in this failure.
+class DashboardSessionNotFound extends DashboardHttpException {
+  const DashboardSessionNotFound(String endpoint) : super(404, endpoint);
 }
 
 /// Authentication failed before the API request could be dispatched.
@@ -126,33 +122,30 @@ class DashboardResponseTooLargeException implements Exception {
   final int maxBytes;
 
   const DashboardResponseTooLargeException(this.maxBytes);
-
-  @override
-  String toString() => 'Response exceeds the $maxBytes byte limit';
 }
 
 class _ConnectionCredentials {
   final String apiKey;
   final String? dashboardPassword;
   final Map<String, String> gatewayHeaders;
-  final DashboardOAuthSession? dashboardOAuth;
+  final DashboardOAuthGrant? dashboardGrant;
 
   const _ConnectionCredentials({
     required this.apiKey,
     required this.dashboardPassword,
     this.gatewayHeaders = const <String, String>{},
-    this.dashboardOAuth,
+    this.dashboardGrant,
   });
 
   bool get isEmpty =>
       apiKey.isEmpty &&
       dashboardPassword == null &&
       gatewayHeaders.isEmpty &&
-      dashboardOAuth == null;
+      dashboardGrant == null;
 
   String encode() => jsonEncode(<String, Object>{
     if (apiKey.isNotEmpty) 'api_key': apiKey,
-    if (dashboardOAuth != null) 'dashboard_oauth': dashboardOAuth!.toMap(),
+    if (dashboardGrant != null) 'dashboard_oauth': dashboardGrant!.toMap(),
     'dashboard_password': ?dashboardPassword,
     if (gatewayHeaders.isNotEmpty) 'gateway_headers': gatewayHeaders,
   });
@@ -177,16 +170,14 @@ class _ConnectionCredentials {
           headers[entry.key] = entry.value as String;
         }
       }
-      final password = (dashboardPassword as String?)?.trim();
+      final password = dashboardPassword as String?;
       return _ConnectionCredentials(
         apiKey: (apiKey as String?) ?? '',
-        dashboardPassword: password == null || password.isEmpty
-            ? null
-            : password,
+        dashboardPassword: password,
         gatewayHeaders: validateGatewayHeaders(headers),
-        dashboardOAuth: map['dashboard_oauth'] == null
+        dashboardGrant: map['dashboard_oauth'] == null
             ? null
-            : DashboardOAuthSession.fromMap(
+            : DashboardOAuthGrant.fromMap(
                 map['dashboard_oauth'] as Map<String, dynamic>,
               ),
       );
@@ -198,12 +189,12 @@ class _ConnectionCredentials {
   }
 
   static _ConnectionCredentials fromConnection(SavedConnection connection) {
-    final password = connection.dashboardPassword?.trim();
+    final password = connection.dashboardPassword;
     return _ConnectionCredentials(
       apiKey: connection.apiKey,
-      dashboardPassword: password == null || password.isEmpty ? null : password,
+      dashboardPassword: password,
       gatewayHeaders: connection.gatewayHeaders,
-      dashboardOAuth: connection.dashboardOAuth,
+      dashboardGrant: connection.dashboardGrant,
     );
   }
 }
@@ -227,6 +218,10 @@ class ConnectionManager {
 
   final SharedPreferences prefs;
   final CredentialStore _credentialStore;
+  final DashboardOAuthSession Function(DashboardOAuthGrant) _createOAuthSession;
+
+  static DashboardOAuthSession _newOAuthSession(DashboardOAuthGrant grant) =>
+      DashboardOAuthSession(grant);
   static const String _journalKey = 'connection_transaction_v1';
   static final _persistenceStates =
       Expando<Expando<_ConnectionPersistenceState>>();
@@ -266,18 +261,18 @@ class ConnectionManager {
 
   Map<String, DashboardOAuthSession> get _sessions => _state.sessions;
 
-  DashboardOAuthSession? _bindSession(
-    String id,
-    DashboardOAuthSession? stored,
-  ) {
+  DashboardOAuthSession? _bindSession(String id, DashboardOAuthGrant? stored) {
     if (stored == null) {
-      _sessions.remove(id);
+      _sessions.remove(id)?.retire();
       return null;
     }
     final cached = _sessions[id];
-    final session = cached?.id == stored.id && cached?.baseUrl == stored.baseUrl
+    final session =
+        cached?.currentGrant.id == stored.id &&
+            cached?.currentGrant.baseUrl == stored.baseUrl
         ? cached!
-        : stored;
+        : _createOAuthSession(stored);
+    if (cached != null && !identical(cached, session)) cached.retire();
     _sessions[id] = session;
     session.persist = () => _withPersistenceLock(() async {
       // A deleted/replaced connection must never be resurrected by an in-flight refresh.
@@ -290,8 +285,8 @@ class ConnectionManager {
         );
       }
       final credentials = _ConnectionCredentials.decode(encoded);
-      if (credentials.dashboardOAuth?.id != session.id ||
-          credentials.dashboardOAuth?.baseUrl != session.baseUrl) {
+      if (credentials.dashboardGrant?.id != session.currentGrant.id ||
+          credentials.dashboardGrant?.baseUrl != session.currentGrant.baseUrl) {
         throw const CredentialStorageException(
           'This sign-in has been replaced.',
         );
@@ -303,7 +298,7 @@ class ConnectionManager {
             apiKey: credentials.apiKey,
             dashboardPassword: credentials.dashboardPassword,
             gatewayHeaders: credentials.gatewayHeaders,
-            dashboardOAuth: session,
+            dashboardGrant: session.currentGrant,
           ),
         },
       );
@@ -314,14 +309,25 @@ class ConnectionManager {
   /// Synchronous readers of nonempty storage must first call [initialize],
   /// or share a preferences/store pair that has already been initialized.
   /// [create] and asynchronous reads/mutations establish that safe state.
-  ConnectionManager(this.prefs, {CredentialStore? credentialStore})
-    : _credentialStore = credentialStore ?? _sharedCredentialStore;
+  ConnectionManager(
+    this.prefs, {
+    CredentialStore? credentialStore,
+    DashboardOAuthSession Function(DashboardOAuthGrant) createOAuthSession =
+        _newOAuthSession,
+  }) : _credentialStore = credentialStore ?? _sharedCredentialStore,
+       _createOAuthSession = createOAuthSession;
 
   static Future<ConnectionManager> create(
     SharedPreferences prefs, {
     CredentialStore? credentialStore,
+    DashboardOAuthSession Function(DashboardOAuthGrant) createOAuthSession =
+        _newOAuthSession,
   }) async {
-    final manager = ConnectionManager(prefs, credentialStore: credentialStore);
+    final manager = ConnectionManager(
+      prefs,
+      credentialStore: credentialStore,
+      createOAuthSession: createOAuthSession,
+    );
     await manager.initialize();
     return manager;
   }
@@ -334,7 +340,9 @@ class ConnectionManager {
     _state.blocked = true;
     try {
       final journal = await _credentialStore.read(_journalKey);
-      if (journal != null) await _rollbackJournal(journal);
+      if (journal != null) {
+        await _rollbackJournal(journal);
+      }
       await _loadSnapshot();
       _state.blocked = false;
     } catch (_) {
@@ -355,6 +363,35 @@ class ConnectionManager {
       );
     }
     return List<SavedConnection>.of(snapshot);
+  }
+
+  /// Captures the current authority without constructing a second refresh owner.
+  /// Label/icon edits and token rotation keep authority; replaced credentials or
+  /// endpoints cannot revive access through an older immutable descriptor.
+  ConnectionAccess accessFor(SavedConnection connection) {
+    final current = getConnections().where((c) => c.id == connection.id);
+    if (current.length != 1 ||
+        _authority(current.single) != _authority(connection)) {
+      throw StateError('This connection access has been replaced.');
+    }
+    return ConnectionAccess(
+      connection: connection,
+      dashboardOAuth: _sessions[connection.id],
+    );
+  }
+
+  static String _authority(SavedConnection connection) {
+    final metadata = connection.toMap()
+      ..remove('label')
+      ..remove('icon');
+    return jsonEncode([
+      metadata,
+      connection.apiKey,
+      connection.dashboardPassword,
+      canonicalGatewayHeaders(connection.gatewayHeaders),
+      connection.dashboardGrant?.id,
+      connection.dashboardGrant?.baseUrl,
+    ]);
   }
 
   /// Reads secrets from durable storage under the same lock as mutations.
@@ -384,13 +421,15 @@ class ConnectionManager {
   }
 
   SavedConnection _hydrate(SavedConnection connection, String? encoded) {
-    if (encoded == null) return connection;
+    if (encoded == null) {
+      return connection;
+    }
     final credentials = _ConnectionCredentials.decode(encoded);
     return connection.copyWith(
       apiKey: credentials.apiKey,
       dashboardPassword: credentials.dashboardPassword,
       gatewayHeaders: credentials.gatewayHeaders,
-      dashboardOAuth: credentials.dashboardOAuth,
+      dashboardGrant: credentials.dashboardGrant,
       clearDashboardPassword: credentials.dashboardPassword == null,
     );
   }
@@ -399,20 +438,28 @@ class ConnectionManager {
     List<SavedConnection> connections, {
     Set<String> replaced = const {},
   }) {
+    final prior = {
+      for (final connection in _state.snapshot ?? <SavedConnection>[])
+        connection.id: connection,
+    };
+    for (final connection in connections) {
+      final previous = prior[connection.id];
+      if (previous != null && _authority(previous) != _authority(connection)) {
+        _sessions.remove(connection.id)?.retire();
+      }
+    }
     for (final id in replaced) {
-      _sessions.remove(id);
+      _sessions.remove(id)?.retire();
     }
     final present = connections.map((connection) => connection.id).toSet();
-    _sessions.removeWhere((id, _) => !present.contains(id));
-    _state.snapshot = [
-      for (final connection in connections)
-        connection.copyWith(
-          dashboardOAuth: _bindSession(
-            connection.id,
-            connection.dashboardOAuth,
-          ),
-        ),
-    ];
+    for (final id
+        in _sessions.keys.where((id) => !present.contains(id)).toList()) {
+      _sessions.remove(id)?.retire();
+    }
+    for (final connection in connections) {
+      _bindSession(connection.id, connection.dashboardGrant);
+    }
+    _state.snapshot = List<SavedConnection>.of(connections);
   }
 
   /// Writes a whole set of connections at once, preserving their ids.
@@ -420,9 +467,10 @@ class ConnectionManager {
   /// A durable secure-store journal protects the complete import, including
   /// overwritten IDs and removed secrets. Until the journal is deleted and its
   /// absence verified, interruption restores the previous complete set.
-  Future<void> importConnections(
+  Future<ConnectionImportResult> importConnections(
     List<SavedConnection> incoming, {
     required bool replaceExisting,
+    required bool Function() canCommit,
   }) => _withPersistenceLock(() async {
     final current = getConnections();
 
@@ -448,6 +496,12 @@ class ConnectionManager {
         ordered.length) {
       throw const FormatException('Imported connection IDs must be unique.');
     }
+    final currentIds = current.map((connection) => connection.id).toSet();
+    final added = ordered.where((c) => !currentIds.contains(c.id)).length;
+    final updated = ordered.length - added;
+    if (!canCommit()) {
+      throw StateError('Connection import was canceled before admission.');
+    }
     await _commitTransaction(
       connections: next,
       credentials: {
@@ -460,6 +514,11 @@ class ConnectionManager {
           ),
       },
       replaced: ordered.map((connection) => connection.id).toSet(),
+    );
+    return ConnectionImportResult(
+      added: added,
+      updated: updated,
+      removed: removed.length,
     );
   });
 
@@ -478,7 +537,7 @@ class ConnectionManager {
     String? dashboardPassword,
     String? cloudInstanceId,
     String? cloudOrganization,
-    DashboardOAuthSession? dashboardOAuth,
+    DashboardOAuthGrant? dashboardGrant,
     Map<String, String> gatewayHeaders = const <String, String>{},
   }) => _withPersistenceLock(() async {
     final normalized = SavedConnection.normalizeHostAndPort(host, port);
@@ -499,7 +558,7 @@ class ConnectionManager {
       dashboardPassword: dashboardPassword,
       cloudInstanceId: cloudInstanceId,
       cloudOrganization: cloudOrganization,
-      dashboardOAuth: dashboardOAuth,
+      dashboardGrant: dashboardGrant,
       gatewayHeaders: gatewayHeaders,
     );
     final current = getConnections();
@@ -509,7 +568,6 @@ class ConnectionManager {
       nextCredentials: _ConnectionCredentials.fromConnection(conn),
       connections: current,
     );
-    _bindSession(conn.id, conn.dashboardOAuth);
     return conn;
   });
 
@@ -531,12 +589,14 @@ class ConnectionManager {
     String? dashboardPassword,
     String? cloudInstanceId,
     String? cloudOrganization,
-    DashboardOAuthSession? dashboardOAuth,
+    DashboardOAuthGrant? dashboardGrant,
     Map<String, String?>? gatewayHeaders,
   }) => _withPersistenceLock(() async {
     final current = getConnections();
     final idx = current.indexWhere((c) => c.id == connId);
-    if (idx < 0) return;
+    if (idx < 0) {
+      return;
+    }
 
     final normalized = SavedConnection.normalizeHostAndPort(host, port);
     final gateway = gatewayPrefix?.trim();
@@ -553,7 +613,7 @@ class ConnectionManager {
       label: label,
       cloudInstanceId: cloudInstanceId,
       cloudOrganization: cloudOrganization,
-      dashboardOAuth: dashboardOAuth,
+      dashboardGrant: dashboardGrant,
       icon: icon,
       host: normalized.host,
       port: normalized.port,
@@ -593,7 +653,9 @@ class ConnectionManager {
   ) => _withPersistenceLock(() async {
     final current = getConnections();
     final index = current.indexWhere((connection) => connection.id == connId);
-    if (index < 0) throw StateError('Connection no longer exists.');
+    if (index < 0) {
+      throw StateError('Connection no longer exists.');
+    }
     current[index] = current[index].copyWith(icon: icon);
     try {
       await _saveAll(current);
@@ -611,63 +673,12 @@ class ConnectionManager {
     }
   });
 
-  /// Updates the dashboard port + basic-auth credentials on an existing
-  /// connection. Empty strings clear the corresponding field.
-  Future<void> updateDashboardAuth(
-    String connId, {
-    int? dashboardPort,
-    required String username,
-    required String password,
-    String? gatewayPrefix,
-    String? dashboardPrefix,
-    bool? dashboardProxied,
-  }) => _withPersistenceLock(() async {
-    final current = getConnections();
-    final idx = current.indexWhere((c) => c.id == connId);
-    if (idx < 0) return;
-    final u = username.trim();
-    final p = password.trim();
-    final gateway = gatewayPrefix?.trim();
-    final dashboard = dashboardPrefix?.trim();
-    current[idx] = current[idx].copyWith(
-      gatewayPrefix: gateway == null || gateway.isEmpty ? null : gateway,
-      clearGatewayPrefix: gateway != null && gateway.isEmpty,
-      dashboardPrefix: dashboard == null || dashboard.isEmpty
-          ? null
-          : dashboard,
-      clearDashboardPrefix: dashboard != null && dashboard.isEmpty,
-      dashboardProxied: dashboardProxied,
-      dashboardPortOverride: dashboardPort,
-      clearDashboardPort: dashboardPort == null,
-      dashboardUsername: u.isEmpty ? null : u,
-      clearDashboardUsername: u.isEmpty,
-      dashboardPassword: p.isEmpty ? null : p,
-      clearDashboardPassword: p.isEmpty,
-    );
-    await _commitCredentialAndMetadata(
-      connectionId: connId,
-      nextCredentials: _ConnectionCredentials.fromConnection(current[idx]),
-      connections: current,
-    );
-  });
-
-  Future<void> updateApiKey(String connId, String apiKey) =>
-      _withPersistenceLock(() async {
-        final current = getConnections();
-        final idx = current.indexWhere((c) => c.id == connId);
-        if (idx < 0) return;
-        current[idx] = current[idx].copyWith(apiKey: apiKey);
-        await _commitCredentialAndMetadata(
-          connectionId: connId,
-          nextCredentials: _ConnectionCredentials.fromConnection(current[idx]),
-          connections: current,
-        );
-      });
-
   Future<void> deleteConnection(String id) => _withPersistenceLock(() async {
     final current = getConnections();
     final index = current.indexWhere((connection) => connection.id == id);
-    if (index < 0) return;
+    if (index < 0) {
+      return;
+    }
     current.removeWhere((c) => c.id == id);
     await _commitCredentialAndMetadata(
       connectionId: id,
@@ -736,7 +747,9 @@ class ConnectionManager {
     try {
       for (final id in credentials.keys) {
         final encoded = await _credentialStore.read(_credentialKey(id));
-        if (encoded != null) _ConnectionCredentials.decode(encoded);
+        if (encoded != null) {
+          _ConnectionCredentials.decode(encoded);
+        }
         originals[id] = encoded;
       }
     } catch (_) {
@@ -780,7 +793,7 @@ class ConnectionManager {
             dashboardPassword: bundle.dashboardPassword,
             clearDashboardPassword: bundle.dashboardPassword == null,
             gatewayHeaders: bundle.gatewayHeaders,
-            dashboardOAuth: bundle.dashboardOAuth,
+            dashboardGrant: bundle.dashboardGrant,
           )
         else
           connection,
@@ -811,7 +824,9 @@ class ConnectionManager {
     final originals = data['credentials'] as Map<String, dynamic>;
     for (final entry in originals.entries) {
       final encoded = entry.value as String?;
-      if (encoded != null) _ConnectionCredentials.decode(encoded);
+      if (encoded != null) {
+        _ConnectionCredentials.decode(encoded);
+      }
     }
     // Preserve recovery intent even if journal deletion previously completed.
     await _writeJournal(journal);
@@ -904,487 +919,6 @@ class ConnectionManager {
   }
 }
 
-class ApiHealthCheckResult {
-  final bool isHealthy;
-  final Uri endpoint;
-  final int? statusCode;
-
-  const ApiHealthCheckResult._({
-    required this.isHealthy,
-    required this.endpoint,
-    this.statusCode,
-  });
-
-  const ApiHealthCheckResult.success(Uri endpoint)
-    : this._(isHealthy: true, endpoint: endpoint);
-
-  const ApiHealthCheckResult.httpFailure(Uri endpoint, int statusCode)
-    : this._(isHealthy: false, endpoint: endpoint, statusCode: statusCode);
-
-  const ApiHealthCheckResult.networkFailure(Uri endpoint)
-    : this._(isHealthy: false, endpoint: endpoint);
-
-  String userMessage({required bool apiKeyProvided}) {
-    if (isHealthy) return '';
-    if (statusCode == 401 || statusCode == 403) {
-      return apiKeyProvided
-          ? 'API key was rejected by $endpoint (HTTP $statusCode).'
-          : 'Server requires an API key. Enter your API_SERVER_KEY.';
-    }
-    if (statusCode == 404) {
-      return 'Gateway endpoint $endpoint returned HTTP 404. Check the Gateway '
-          'path prefix and reverse-proxy routes.';
-    }
-    if (statusCode case final code?) {
-      return 'Gateway endpoint $endpoint returned HTTP $code.';
-    }
-    return 'Cannot reach Gateway endpoint $endpoint.';
-  }
-}
-
-/// HTTP client for the Hermes Gateway API Server (port 8642).
-///
-/// Uses Bearer token auth. Same pattern as hermes-desktop.
-class ApiClient {
-  final http.Client _http;
-  final String baseUrl;
-  final String _apiKey;
-
-  /// How long a single request may take before the UI may surface an error.
-  ///
-  /// A gateway on a dead keep-alive socket can otherwise hang forever while
-  /// the server already answered or closed the connection; every read path
-  /// uses this bound so the user always gets a loadable error state.
-  static const Duration requestTimeout = Duration(seconds: 20);
-
-  // Keep the public parameter name `apiKey` while storing it privately.
-  ApiClient({
-    required String baseUrl,
-    required String apiKey,
-    String pathPrefix = '',
-    http.Client? httpClient,
-  }) : _apiKey = apiKey,
-       baseUrl = SavedConnection.joinBaseUrl(baseUrl, pathPrefix),
-       _http = httpClient ?? _freshClient();
-
-  /// Builds a client that does not pool keep-alive sockets.
-  ///
-  /// dart:io's pooled connections go stale silently (the server closed an
-  /// idle connection; the client only notices on the *next* request, which
-  /// then hangs). Home/tablet/LAN gateways are cheap to reconnect to, so a
-  /// fresh TCP connection per request is a fair price for never wedging the
-  /// session list on a stale socket.
-  static http.Client _freshClient() {
-    final io = HttpClient()..idleTimeout = Duration.zero;
-    return IOClient(io);
-  }
-
-  Map<String, String> get _headers => {
-    'Authorization': 'Bearer $_apiKey',
-    'Content-Type': 'application/json',
-  };
-
-  // ── Session listing ──────────────────────────────────────────────────
-
-  Future<List<Session>> getSessions({Duration timeout = requestTimeout}) async {
-    final res = await _http
-        .get(Uri.parse('$baseUrl/api/sessions'), headers: _headers)
-        .timeout(timeout);
-    if (res.statusCode != 200) {
-      throw Exception('HTTP ${res.statusCode}: ${res.body}');
-    }
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    final list = data['data'] as List? ?? [];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map((s) => Session.fromJson(s))
-        .toList();
-  }
-
-  // ── Messages ─────────────────────────────────────────────────────────
-
-  Future<List<Map<String, dynamic>>> getMessages(String sessionId) async {
-    final res = await _http.get(
-      Uri.parse('$baseUrl/api/sessions/$sessionId/messages'),
-      headers: _headers,
-    );
-    if (res.statusCode != 200) {
-      throw Exception('HTTP ${res.statusCode}: ${res.body}');
-    }
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    final list = data['data'] as List? ?? [];
-    return list.whereType<Map<String, dynamic>>().toList();
-  }
-
-  Future<void> deleteSession(String sessionId) async {
-    final encodedId = Uri.encodeComponent(sessionId);
-    final res = await _http.delete(
-      Uri.parse('$baseUrl/api/sessions/$encodedId'),
-      headers: _headers,
-    );
-    // Treat a stale local row as already synced: the remote no longer has it,
-    // so the UI can safely remove it from history.
-    if (res.statusCode == 404) return;
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw Exception('HTTP ${res.statusCode}: ${res.body}');
-    }
-  }
-
-  // ── Models ───────────────────────────────────────────────────────────
-
-  Future<List<String>> getModels() async {
-    final res = await _http.get(
-      Uri.parse('$baseUrl/v1/models'),
-      headers: _headers,
-    );
-    if (res.statusCode != 200) {
-      return ['hermes-agent'];
-    }
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    final list = data['data'] as List? ?? [];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map((m) => (m['id'] as String?) ?? 'hermes-agent')
-        .toList();
-  }
-
-  // ── Health check ─────────────────────────────────────────────────────
-
-  Future<ApiHealthCheckResult> checkHealth() async {
-    final healthEndpoint = Uri.parse('$baseUrl/health');
-    var activeEndpoint = healthEndpoint;
-    try {
-      final health = await _http
-          .get(healthEndpoint, headers: _headers)
-          .timeout(const Duration(seconds: 5));
-      if (health.statusCode != 200) {
-        return ApiHealthCheckResult.httpFailure(
-          healthEndpoint,
-          health.statusCode,
-        );
-      }
-
-      // /health may be intentionally public on some deployments. Confirm that
-      // the saved API key can also reach an authenticated endpoint before the
-      // add/update connection dialogs accept it as valid.
-      final sessionsEndpoint = Uri.parse('$baseUrl/api/sessions');
-      activeEndpoint = sessionsEndpoint;
-      final sessions = await _http
-          .get(sessionsEndpoint, headers: _headers)
-          .timeout(const Duration(seconds: 5));
-      if (sessions.statusCode != 200) {
-        return ApiHealthCheckResult.httpFailure(
-          sessionsEndpoint,
-          sessions.statusCode,
-        );
-      }
-      return ApiHealthCheckResult.success(sessionsEndpoint);
-    } catch (_) {
-      return ApiHealthCheckResult.networkFailure(activeEndpoint);
-    }
-  }
-
-  Future<bool> healthCheck() async => (await checkHealth()).isHealthy;
-
-  // ── Generic HTTP helpers (for Dashboard API compatibility) ────────────
-
-  Future<Map<String, dynamic>> apiGet(String endpoint) async {
-    final res = await _http.get(
-      Uri.parse('$baseUrl/$endpoint'),
-      headers: _headers,
-    );
-    if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
-    return jsonDecode(res.body) as Map<String, dynamic>;
-  }
-
-  Future<List<dynamic>> apiGetList(String endpoint) async {
-    final res = await _http.get(
-      Uri.parse('$baseUrl/$endpoint'),
-      headers: _headers,
-    );
-    if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
-    return jsonDecode(res.body) as List<dynamic>;
-  }
-
-  Future<Map<String, dynamic>> apiPost(
-    String endpoint, {
-    Map<String, dynamic>? body,
-  }) async {
-    final res = await _http.post(
-      Uri.parse('$baseUrl/$endpoint'),
-      headers: _headers,
-      body: body != null ? jsonEncode(body) : null,
-    );
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw Exception('HTTP ${res.statusCode}');
-    }
-    return jsonDecode(res.body) as Map<String, dynamic>;
-  }
-
-  Future<void> apiDelete(String endpoint) async {
-    final res = await _http.delete(
-      Uri.parse('$baseUrl/$endpoint'),
-      headers: _headers,
-    );
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw Exception('HTTP ${res.statusCode}');
-    }
-  }
-
-  // ── Dashboard-compatible helpers (port 9119 endpoints, may not work on API server) ──
-
-  Future<Map<String, dynamic>> getModelInfo() => apiGet('api/model/info');
-  Future<Map<String, dynamic>> getModelOptions() => apiGet('api/model/options');
-  Future<List<Map<String, dynamic>>> getSkills() async {
-    final data = await apiGetList('api/skills');
-    return data.whereType<Map<String, dynamic>>().toList();
-  }
-
-  Future<Map<String, dynamic>> setModel(
-    String scope,
-    String provider,
-    String model,
-  ) => apiPost(
-    'api/model/set',
-    body: {'scope': scope, 'provider': provider, 'model': model},
-  );
-
-  void close() => _http.close();
-}
-
-typedef ToolProgressCallback = void Function(Map<String, dynamic> progress);
-
-/// SSE streaming chat client for the Gateway API Server.
-class GatewayChatClient {
-  final ApiClient _api;
-  final String _baseUrl;
-  StreamSubscription<String>? _activeStreamSubscription;
-  Completer<void>? _activeStreamCompletion;
-  bool _activeStreamCancelled = false;
-
-  GatewayChatClient(this._api) : _baseUrl = _api.baseUrl;
-
-  /// Generate a client-side session ID: `mob-<timestamp>-<uuid>`.
-  static String generateSessionId() {
-    return 'mob-${DateTime.now().millisecondsSinceEpoch}-${const Uuid().v4()}';
-  }
-
-  /// Build OpenAI chat-completions messages, preserving prior history and
-  /// ensuring the newly typed user message is present exactly once at the end.
-  static List<Map<String, dynamic>> buildChatCompletionMessages({
-    required String message,
-    List<Map<String, dynamic>>? history,
-    String? imageDataUrl,
-  }) {
-    final messages = <Map<String, dynamic>>[];
-    if (history != null && history.isNotEmpty) {
-      for (final msg in history) {
-        final role = (msg['role'] == 'agent' || msg['role'] == 'assistant')
-            ? 'assistant'
-            : 'user';
-        final content = msg['content'];
-        if (content == null || (content is String && content.isEmpty)) {
-          continue;
-        }
-        messages.add({'role': role, 'content': content});
-      }
-    }
-
-    final latest = message.trim();
-    final latestContent = imageDataUrl == null
-        ? latest
-        : <Map<String, dynamic>>[
-            if (latest.isNotEmpty) {'type': 'text', 'text': latest},
-            {
-              'type': 'image_url',
-              'image_url': {'url': imageDataUrl},
-            },
-          ];
-    final alreadyLast =
-        imageDataUrl == null &&
-        messages.isNotEmpty &&
-        messages.last['role'] == 'user' &&
-        messages.last['content'] == latest;
-    if ((latest.isNotEmpty || imageDataUrl != null) && !alreadyLast) {
-      messages.add({'role': 'user', 'content': latestContent});
-    }
-    return messages;
-  }
-
-  /// Parse one SSE frame. Returns streamed text token, or null for non-token
-  /// frames. Hermes tool progress frames are delivered via [onToolProgress].
-  static String? parseSseFrame(
-    String frame, {
-    ToolProgressCallback? onToolProgress,
-  }) {
-    String eventType = '';
-    final dataLines = <String>[];
-
-    for (final rawLine in frame.split('\n')) {
-      final line = rawLine.trimRight();
-      if (line.isEmpty || line.startsWith(':')) continue;
-      if (line.startsWith('event:')) {
-        eventType = line.substring(6).trim();
-      } else if (line.startsWith('data:')) {
-        dataLines.add(line.substring(5).trimLeft());
-      }
-    }
-
-    if (dataLines.isEmpty) return null;
-    final data = dataLines.join('\n').trim();
-    if (data.isEmpty || data == '[DONE]') return null;
-
-    try {
-      final parsed = jsonDecode(data);
-      if (eventType == 'hermes.tool.progress') {
-        if (parsed is Map<String, dynamic>) onToolProgress?.call(parsed);
-        return null;
-      }
-
-      if (parsed is Map<String, dynamic>) {
-        final choices = parsed['choices'] as List?;
-        if (choices != null && choices.isNotEmpty && choices.first is Map) {
-          final first = choices.first as Map;
-          final delta = first['delta'];
-          if (delta is Map) {
-            final content = delta['content'];
-            if (content != null && content.toString().isNotEmpty) {
-              return content.toString();
-            }
-          }
-        }
-      }
-    } catch (_) {
-      return null;
-    }
-    return null;
-  }
-
-  /// Send a message and stream the assistant response token-by-token.
-  Future<void> sendMessageStreaming({
-    required String message,
-    required String sessionId,
-    String? model,
-    List<Map<String, dynamic>>? history,
-    String? imageDataUrl,
-    required void Function(String token) onToken,
-    ToolProgressCallback? onToolProgress,
-    required void Function() onDone,
-    required void Function(String error) onError,
-  }) async {
-    final messages = buildChatCompletionMessages(
-      message: message,
-      history: history,
-      imageDataUrl: imageDataUrl,
-    );
-
-    final body = {
-      'model': model ?? 'hermes-agent',
-      'messages': messages,
-      'stream': true,
-    };
-
-    final headers = {..._api._headers, 'X-Hermes-Session-Id': sessionId};
-    final completion = Completer<void>();
-    _activeStreamCompletion = completion;
-    _activeStreamCancelled = false;
-
-    try {
-      final request = http.Request(
-        'POST',
-        Uri.parse('$_baseUrl/v1/chat/completions'),
-      );
-      request.headers.addAll(headers);
-      request.body = jsonEncode(body);
-
-      final response = await _api._http.send(request);
-
-      if (_activeStreamCancelled ||
-          !identical(_activeStreamCompletion, completion)) {
-        final subscription = response.stream.listen((_) {});
-        await subscription.cancel();
-        return;
-      }
-
-      if (response.statusCode != 200) {
-        final errorBody = await response.stream.bytesToString();
-        String errorMsg;
-        try {
-          final err = jsonDecode(errorBody);
-          errorMsg =
-              err['error']?['message'] ??
-              err['message'] ??
-              'HTTP ${response.statusCode}';
-        } catch (_) {
-          errorMsg = 'HTTP ${response.statusCode}';
-        }
-        onError(errorMsg);
-        return;
-      }
-
-      String buffer = '';
-      _activeStreamSubscription = response.stream
-          .transform(utf8.decoder)
-          .listen(
-            (chunk) {
-              if (_activeStreamCancelled) return;
-              buffer += chunk;
-              while (buffer.contains('\n\n')) {
-                final eventEnd = buffer.indexOf('\n\n');
-                final frame = buffer.substring(0, eventEnd);
-                buffer = buffer.substring(eventEnd + 2);
-
-                final token = parseSseFrame(
-                  frame,
-                  onToolProgress: onToolProgress,
-                );
-                if (token != null && token.isNotEmpty) onToken(token);
-              }
-            },
-            onError: (Object error, StackTrace stackTrace) {
-              if (!completion.isCompleted) {
-                completion.completeError(error, stackTrace);
-              }
-            },
-            onDone: () {
-              if (!completion.isCompleted) completion.complete();
-            },
-            cancelOnError: true,
-          );
-      await completion.future;
-
-      if (!_activeStreamCancelled) onDone();
-    } catch (e) {
-      if (!_activeStreamCancelled) onError(e.toString());
-    } finally {
-      if (identical(_activeStreamCompletion, completion)) {
-        _activeStreamSubscription = null;
-        _activeStreamCompletion = null;
-        _activeStreamCancelled = false;
-      }
-    }
-  }
-
-  /// Cancels the current SSE response. The Hermes API server treats the
-  /// resulting client disconnect as an agent interrupt.
-  Future<bool> cancelActiveMessage() async {
-    final completion = _activeStreamCompletion;
-    if (completion == null) return false;
-
-    _activeStreamCancelled = true;
-    final subscription = _activeStreamSubscription;
-    if (subscription != null) {
-      await subscription.cancel();
-    }
-    if (!completion.isCompleted) completion.complete();
-    return true;
-  }
-
-  void abort() {
-    _api.close();
-  }
-}
-
 /// Client for the Hermes Dashboard REST API.
 ///
 /// Explicit auth modes, picked by connection configuration:
@@ -1420,6 +954,7 @@ class _NoRedirectClient extends http.BaseClient {
 }
 
 class DashboardClient {
+  bool _closed = false;
   final http.Client _http;
   final String _baseUrl;
   final bool _proxied;
@@ -1481,7 +1016,9 @@ class DashboardClient {
   void _resetAuth(Map<String, String> rejectedHeaders) {
     String? header(String name) {
       for (final entry in rejectedHeaders.entries) {
-        if (entry.key.toLowerCase() == name) return entry.value;
+        if (entry.key.toLowerCase() == name) {
+          return entry.value;
+        }
       }
       return null;
     }
@@ -1489,18 +1026,21 @@ class DashboardClient {
     // Parallel profile requests may finish after another request has already
     // renewed the session. Only invalidate the credentials actually rejected;
     // retain any newer credentials and the shared in-flight renewal.
-    if (_oauth != null &&
-        header('authorization') == 'Bearer ${_oauth.accessToken}') {
-      _oauth.invalidate();
+    _oauth?.invalidateRejectedBearer(header('authorization'));
+    if (header('cookie') == _cookie) {
+      _cookie = null;
     }
-    if (header('cookie') == _cookie) _cookie = null;
-    if (header('x-hermes-session-token') == _token) _token = null;
+    if (header('x-hermes-session-token') == _token) {
+      _token = null;
+    }
   }
 
   /// Returns the session cookie, reusing a cached value or an in-flight login.
   Future<String> _getCookie() {
     final cached = _cookie;
-    if (cached != null) return Future.value(cached);
+    if (cached != null) {
+      return Future.value(cached);
+    }
     return _cookieInFlight ??= _login();
   }
 
@@ -1548,7 +1088,9 @@ class DashboardClient {
   /// Returns the SPA session token, reusing a cached value or an in-flight fetch.
   Future<String> _getToken() {
     final cached = _token;
-    if (cached != null) return Future.value(cached);
+    if (cached != null) {
+      return Future.value(cached);
+    }
     return _tokenInFlight ??= _fetchToken();
   }
 
@@ -1565,11 +1107,21 @@ class DashboardClient {
       final match = RegExp(
         r'window\.__HERMES_SESSION_TOKEN__="([^"]+)";',
       ).firstMatch(res.body);
-      if (match == null) throw Exception('Session token not found');
+      if (match == null) {
+        throw Exception('Session token not found');
+      }
       _token = match.group(1)!;
       return _token!;
     } finally {
       _tokenInFlight = null;
+    }
+  }
+
+  void _requireCurrentAccess() {
+    if (_closed || _oauth?.isActive == false) {
+      throw DashboardRequestNotSentException(
+        StateError('This connection access has been retired.'),
+      );
     }
   }
 
@@ -1579,13 +1131,14 @@ class DashboardClient {
       if (session == null) {
         throw const CloudAccessException(
           'Sign in to Hermes Cloud again from this connection’s settings.',
-          signInRequired: true,
         );
       }
       final bearer = await session.bearerFor(_baseUrl);
       return {..._jsonHeaders, 'Authorization': 'Bearer $bearer'};
     }
-    if (_proxied) return _jsonHeaders;
+    if (_proxied) {
+      return _jsonHeaders;
+    }
     if (_usesPasswordAuth) {
       return {
         ..._gatewayHeaders,
@@ -1614,6 +1167,7 @@ class DashboardClient {
   /// ticket is passed to the WebSocket URL.
   Future<String> mintWebSocketTicket({bool retried = false}) async {
     final headers = await _authHeaders();
+    _requireCurrentAccess();
     final res = await _http.post(
       Uri.parse('$_baseUrl/api/auth/ws-ticket'),
       headers: headers,
@@ -1635,9 +1189,13 @@ class DashboardClient {
 
   Map<String, dynamic> _decodeMapResponse(http.Response res) {
     final trimmed = res.body.trim();
-    if (trimmed.isEmpty) return <String, dynamic>{};
+    if (trimmed.isEmpty) {
+      return <String, dynamic>{};
+    }
     final decoded = jsonDecode(trimmed);
-    if (decoded is Map<String, dynamic>) return decoded;
+    if (decoded is Map<String, dynamic>) {
+      return decoded;
+    }
     return {'data': decoded};
   }
 
@@ -1647,6 +1205,7 @@ class DashboardClient {
     bool retried = false,
   }) async {
     final headers = await _authHeaders().timeout(readTimeout);
+    _requireCurrentAccess();
     final uri = Uri.parse(
       '$_baseUrl/api/$endpoint',
     ).replace(queryParameters: queryParameters);
@@ -1656,6 +1215,19 @@ class DashboardClient {
       return apiGet(endpoint, queryParameters: queryParameters, retried: true);
     }
     if (res.statusCode != 200) {
+      if (res.statusCode == 404 &&
+          RegExp(r'^sessions/[^/?#]+$').hasMatch(endpoint)) {
+        try {
+          final error = jsonDecode(res.body);
+          if (error is Map &&
+              error.length == 1 &&
+              error['detail'] == 'Session not found') {
+            throw DashboardSessionNotFound(endpoint);
+          }
+        } on FormatException {
+          // An invalid response never establishes session absence.
+        }
+      }
       throw DashboardHttpException(res.statusCode, endpoint);
     }
     return _decodeMapResponse(res);
@@ -1668,6 +1240,7 @@ class DashboardClient {
     bool retried = false,
   }) async {
     final headers = await _authHeaders().timeout(readTimeout);
+    _requireCurrentAccess();
     final uri = Uri.parse(
       '$_baseUrl/api/$endpoint',
     ).replace(queryParameters: queryParameters);
@@ -1697,28 +1270,6 @@ class DashboardClient {
     return res;
   }
 
-  Future<List<dynamic>> apiGetList(
-    String endpoint, {
-    bool retried = false,
-  }) async {
-    final headers = await _authHeaders();
-    final res = await _http.get(
-      Uri.parse('$_baseUrl/api/$endpoint'),
-      headers: headers,
-    );
-    if (res.statusCode == 401 && !retried) {
-      _resetAuth(headers);
-      return apiGetList(endpoint, retried: true);
-    }
-    if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
-    final decoded = jsonDecode(res.body);
-    if (decoded is List<dynamic>) return decoded;
-    if (decoded is Map<String, dynamic> && decoded['data'] is List<dynamic>) {
-      return decoded['data'] as List<dynamic>;
-    }
-    throw Exception('Expected list response');
-  }
-
   Future<Map<String, dynamic>> apiPost(
     String endpoint, {
     Map<String, dynamic>? body,
@@ -1736,6 +1287,7 @@ class DashboardClient {
       }
       rethrow;
     }
+    _requireCurrentAccess();
     final res = await _http.post(
       Uri.parse('$_baseUrl/api/$endpoint'),
       headers: headers,
@@ -1751,20 +1303,13 @@ class DashboardClient {
     return _decodeMapResponse(res);
   }
 
-  Future<void> apiDelete(
-    String endpoint, {
-    Map<String, dynamic>? body,
-    bool retried = false,
-  }) async {
-    await apiDeleteResult(endpoint, body: body, retried: retried);
-  }
-
   Future<Map<String, dynamic>> apiDeleteResult(
     String endpoint, {
     Map<String, dynamic>? body,
     bool retried = false,
   }) async {
     final headers = await _authHeaders();
+    _requireCurrentAccess();
     final res = await _http.delete(
       Uri.parse('$_baseUrl/api/$endpoint'),
       headers: headers,
@@ -1786,6 +1331,7 @@ class DashboardClient {
     bool retried = false,
   }) async {
     final headers = await _authHeaders();
+    _requireCurrentAccess();
     final res = await _http.patch(
       Uri.parse('$_baseUrl/api/$endpoint'),
       headers: headers,
@@ -1805,38 +1351,90 @@ class DashboardClient {
     String endpoint, {
     Map<String, dynamic>? body,
     bool retried = false,
-  }) async {
-    final headers = await _authHeaders();
-    final res = await _http.put(
-      Uri.parse('$_baseUrl/api/$endpoint'),
-      headers: headers,
-      body: body != null ? jsonEncode(body) : null,
+  }) => _apiWrite('PUT', endpoint, body: body, retried: retried);
+
+  /// Owned commands supply exact route authority. Authentication and a 401
+  /// refresh cannot turn a retired command into a new HTTP write.
+  Future<Map<String, dynamic>> apiWriteOwned(
+    String method,
+    String endpoint, {
+    required Map<String, dynamic> body,
+    required bool Function() canDispatch,
+    required void Function() onDispatched,
+  }) {
+    var dispatched = false;
+    void dispatchOnce() {
+      if (dispatched) return;
+      dispatched = true;
+      onDispatched();
+    }
+
+    return _apiWrite(
+      method,
+      endpoint,
+      body: body,
+      retried: false,
+      canDispatch: canDispatch,
+      onDispatched: dispatchOnce,
     );
+  }
+
+  Future<Map<String, dynamic>> _apiWrite(
+    String method,
+    String endpoint, {
+    Map<String, dynamic>? body,
+    required bool retried,
+    bool Function()? canDispatch,
+    void Function()? onDispatched,
+  }) async {
+    if (!const {'PUT', 'POST', 'PATCH', 'DELETE'}.contains(method)) {
+      throw ArgumentError.value(method);
+    }
+    if (canDispatch != null && (_closed || !canDispatch())) {
+      throw DashboardRequestNotSentException(
+        StateError('Owned command retired.'),
+      );
+    }
+    final Map<String, String> headers;
+    try {
+      headers = await _authHeaders();
+    } catch (error) {
+      if (canDispatch != null) throw DashboardRequestNotSentException(error);
+      rethrow;
+    }
+    final encoded = body != null ? jsonEncode(body) : null;
+    _requireCurrentAccess();
+    if (canDispatch != null && (_closed || !canDispatch())) {
+      throw DashboardRequestNotSentException(
+        StateError('Owned command retired.'),
+      );
+    }
+    final uri = Uri.parse('$_baseUrl/api/$endpoint');
+    final response = switch (method) {
+      'PUT' => _http.put(uri, headers: headers, body: encoded),
+      'POST' => _http.post(uri, headers: headers, body: encoded),
+      'PATCH' => _http.patch(uri, headers: headers, body: encoded),
+      'DELETE' => _http.delete(uri, headers: headers, body: encoded),
+      _ => throw ArgumentError.value(method),
+    };
+    onDispatched?.call();
+    final res = await response;
     if (res.statusCode == 401 && !retried) {
       _resetAuth(headers);
-      return apiPut(endpoint, body: body, retried: true);
+      return _apiWrite(
+        method,
+        endpoint,
+        body: body,
+        retried: true,
+        canDispatch: canDispatch,
+        onDispatched: onDispatched,
+      );
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('HTTP ${res.statusCode}');
     }
     return _decodeMapResponse(res);
   }
-
-  Future<Map<String, dynamic>> getModelInfo() => apiGet('model/info');
-  Future<Map<String, dynamic>> getModelOptions() => apiGet('model/options');
-  Future<List<Map<String, dynamic>>> getSkills() async {
-    final data = await apiGetList('skills');
-    return data.whereType<Map<String, dynamic>>().toList();
-  }
-
-  Future<Map<String, dynamic>> setModel(
-    String scope,
-    String provider,
-    String model,
-  ) => apiPost(
-    'model/set',
-    body: {'scope': scope, 'provider': provider, 'model': model},
-  );
 
   /// Current cron API, with structured rejection details and a timeout scoped
   /// to the synchronous trigger operation. No transport retry after uncertainty.
@@ -1854,7 +1452,9 @@ class DashboardClient {
       ..headers.addAll(
         await _authHeaders().timeout(const Duration(seconds: 45)),
       );
-    if (body != null) request.body = jsonEncode(body);
+    if (body != null) {
+      request.body = jsonEncode(body);
+    }
     final timeout =
         method == 'POST' &&
             RegExp(r'^cron/jobs/[^/]+/trigger$').hasMatch(endpoint)
@@ -1872,7 +1472,9 @@ class DashboardClient {
       Object? detail;
       try {
         final decoded = jsonDecode(response.body);
-        if (decoded is Map) detail = decoded['detail'];
+        if (decoded is Map) {
+          detail = decoded['detail'];
+        }
       } on FormatException {
         // HTML proxy errors are not safe or useful UI copy.
       }
@@ -1882,6 +1484,7 @@ class DashboardClient {
   }
 
   void close() {
+    _closed = true;
     _reads.close();
     _http.close();
   }

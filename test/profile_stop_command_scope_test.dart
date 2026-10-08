@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -100,22 +102,32 @@ class _ScopedProcessHost extends Host {
 void main() {
   late _ScopedProcessHost host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileChat chat;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     host = _ScopedProcessHost();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'stop-command-scope',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
-    chat = await controller.createChat();
+    chat = await controller.createChat(canDispatch: () => true);
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   Future<void> send(String command) async {
     await controller.updateDraft(chat, command);
@@ -133,9 +145,12 @@ void main() {
     expect(host.statuses['other-profile'], 'running');
     expect(host.statuses['owned-exited'], 'exited');
     expect(host.processCalls.any((call) => call.$1 == 'process.stop'), isFalse);
-    expect(chat.draft, isEmpty);
-    expect(chat.error, isNull);
-    expect(chat.messages.last['content'], 'Background processes stopped: 2');
+    expect(chat.composer.observation.text, isEmpty);
+    expect(chat.runtime.error, isNull);
+    expect(
+      chat.reading.messages.last['content'],
+      'Background processes stopped: 2',
+    );
   });
 
   test('/interrupt leaves background processes running', () async {
@@ -156,8 +171,8 @@ void main() {
       ]);
       expect(host.statuses['owned-1'], 'running');
       expect(host.statuses['sibling'], 'running');
-      expect(chat.draft, '/stop');
-      expect(chat.error, contains('could not be confirmed'));
+      expect(chat.composer.observation.text, '/stop');
+      expect(chat.runtime.error, contains('could not be confirmed'));
     },
   );
 
@@ -170,9 +185,9 @@ void main() {
       expect(host.statuses['owned-2'], 'running');
       expect(host.statuses['sibling'], 'running');
       expect(host.statuses['other-profile'], 'running');
-      expect(chat.draft, '/stop');
-      expect(chat.error, contains('stop could not be confirmed'));
-      expect(chat.messages.last['content'], 'Interrupt requested.');
+      expect(chat.composer.observation.text, '/stop');
+      expect(chat.runtime.error, contains('stop could not be confirmed'));
+      expect(chat.reading.messages.last['content'], 'Interrupt requested.');
     },
   );
 
@@ -181,8 +196,8 @@ void main() {
     await send('/stop');
     expect(host.processCalls.map((call) => call.$1), ['session.interrupt']);
     expect(host.statuses['owned-1'], 'running');
-    expect(chat.draft, '/stop');
-    expect(chat.error, 'Interrupt rejected');
+    expect(chat.composer.observation.text, '/stop');
+    expect(chat.runtime.error, 'Interrupt rejected');
   });
 
   test(
@@ -192,7 +207,8 @@ void main() {
       final started = host.listStarted = Completer<void>();
       final stopping = send('/stop');
       await started.future;
-      chat.runtimeId = 'replacement-runtime';
+      host.runtimeForResume['a'] = 'replacement-runtime';
+      await controller.openSession(chat.key);
       delayed.complete({'processes': <Object>[]});
       await stopping;
 
@@ -200,9 +216,9 @@ void main() {
         host.processCalls.where((call) => call.$1 == 'process.kill'),
         isEmpty,
       );
-      expect(chat.draft, '/stop');
-      expect(chat.error, contains('could not be confirmed'));
-      expect(chat.messages.last['content'], 'Interrupt requested.');
+      expect(chat.composer.observation.text, '/stop');
+      expect(chat.runtime.error, contains('could not be confirmed'));
+      expect(chat.reading.messages.last['content'], 'Interrupt requested.');
     },
   );
 
@@ -233,9 +249,9 @@ void main() {
         isEmpty,
       );
       expect(host.statuses['owned-1'], 'running');
-      expect(chat.draft, '/stop');
-      expect(chat.error, contains('could not be confirmed'));
-      expect(chat.messages.last['content'], 'Interrupt requested.');
+      expect(chat.composer.observation.text, '/stop');
+      expect(chat.runtime.error, contains('could not be confirmed'));
+      expect(chat.reading.messages.last['content'], 'Interrupt requested.');
     },
   );
 
@@ -249,9 +265,12 @@ void main() {
         'session.interrupt',
         'process.list',
       ]);
-      expect(chat.draft, isEmpty);
-      expect(chat.error, isNull);
-      expect(chat.messages.last['content'], 'Background processes stopped: 0');
+      expect(chat.composer.observation.text, isEmpty);
+      expect(chat.runtime.error, isNull);
+      expect(
+        chat.reading.messages.last['content'],
+        'Background processes stopped: 0',
+      );
     },
   );
 }

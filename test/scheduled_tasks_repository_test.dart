@@ -1,10 +1,331 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/scheduled_task.dart';
+import 'package:wing/core/models/scheduled_task_edit.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/scheduled_tasks_repository.dart';
 import 'support/scheduled_tasks_fixture.dart';
 
 void main() {
+  for (final operation in ['update', 'pause', 'resume', 'trigger', 'delete']) {
+    for (final failure in ['missing', 'offline', 'duplicate', 'wrong owner']) {
+      test('$operation refuses $failure membership before dispatch', () async {
+        final fixture = ScheduledTasksFixture();
+        final repository = ScheduledTasksRepository(fixture.profile);
+        final baseline = (await repository.list()).first;
+        switch (failure) {
+          case 'missing':
+            fixture.jobs.remove(baseline.id);
+          case 'offline':
+            fixture.failList = true;
+          case 'duplicate':
+            fixture.jobs['duplicate'] = taskJson();
+          case 'wrong owner':
+            fixture.jobs[baseline.id] = taskJson(profile: 'work');
+        }
+        final Future<Object?> request = switch (operation) {
+          'update' => repository.update(
+            TaskEditIntent(baseline: baseline, values: {'name': 'Draft'}),
+          ),
+          'delete' => repository.delete(baseline.id),
+          _ => repository.action(baseline.id, operation),
+        };
+        await expectLater(request, throwsA(isA<TaskPreflightFailure>()));
+        expect(fixture.mutations, 0);
+      });
+    }
+  }
+
+  test(
+    'same-field conflict preserves the server value without a write',
+    () async {
+      final fixture = ScheduledTasksFixture();
+      final repository = ScheduledTasksRepository(fixture.profile);
+      final baseline = await repository.get('morning');
+      fixture.jobs['morning']!['name'] = 'Another client';
+      await expectLater(
+        repository.update(
+          TaskEditIntent(baseline: baseline, values: {'name': 'My draft'}),
+        ),
+        throwsA(
+          isA<TaskEditConflict>().having((e) => e.fields, 'fields', ['name']),
+        ),
+      );
+      expect(fixture.jobs['morning']!['name'], 'Another client');
+      expect(fixture.mutations, 0);
+    },
+  );
+
+  test('already applied desired edit needs no write or conflict', () async {
+    final fixture = ScheduledTasksFixture();
+    final repository = ScheduledTasksRepository(fixture.profile);
+    final baseline = await repository.get('morning');
+    fixture.jobs['morning']!['name'] = 'My draft';
+    expect(
+      (await repository.update(
+        TaskEditIntent(baseline: baseline, values: {'name': 'My draft'}),
+      )).name,
+      'My draft',
+    );
+    expect(fixture.mutations, 0);
+  });
+
+  test(
+    'already applied one-shot instant needs no write across stock UTC spelling',
+    () async {
+      final fixture = ScheduledTasksFixture();
+      fixture.jobs['morning']!['schedule'] = {
+        'kind': 'once',
+        'run_at': '2026-10-05T09:45:00+00:00',
+      };
+      final repository = ScheduledTasksRepository(fixture.profile);
+      final baseline = await repository.get('morning');
+      await fixture.send('PUT', 'cron/jobs/morning', {}, {
+        'updates': {'schedule': '2026-10-04T09:45:00.000Z'},
+      });
+      final mutations = fixture.mutations;
+      final result = await repository.update(
+        TaskEditIntent(
+          baseline: baseline,
+          values: {'schedule': '2026-10-04T09:45:00.000Z'},
+        ),
+      );
+      expect(result.schedule['kind'], 'once');
+      expect(
+        DateTime.parse(result.schedule['run_at'] as String),
+        DateTime.utc(2026, 10, 4, 9, 45),
+      );
+      expect(fixture.mutations, mutations);
+      expect(
+        fixture.admin.requests.where((request) => request.$1 == 'PUT'),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'reselecting the same one-shot instant does not dispatch a schedule write',
+    () async {
+      final fixture = ScheduledTasksFixture();
+      fixture.jobs['morning']!['schedule'] = {
+        'kind': 'once',
+        'run_at': '2026-10-04T09:45:00+00:00',
+      };
+      final repository = ScheduledTasksRepository(fixture.profile);
+      final baseline = await repository.get('morning');
+      final result = await repository.update(
+        TaskEditIntent(
+          baseline: baseline,
+          values: {'schedule': '2026-10-04T09:45:00.000Z'},
+        ),
+      );
+      expect(result.scheduleInput, '2026-10-04T09:45:00+00:00');
+      expect(fixture.mutations, 0);
+    },
+  );
+
+  test(
+    'a distinct remote one-shot instant still conflicts at microsecond precision',
+    () async {
+      final fixture = ScheduledTasksFixture();
+      fixture.jobs['morning']!['schedule'] = {
+        'kind': 'once',
+        'run_at': '2026-10-04T09:45:00+00:00',
+      };
+      final repository = ScheduledTasksRepository(fixture.profile);
+      final baseline = await repository.get('morning');
+      fixture.jobs['morning']!['schedule'] = {
+        'kind': 'once',
+        'run_at': '2026-10-04T09:45:00.000001+00:00',
+      };
+      await expectLater(
+        repository.update(
+          TaskEditIntent(
+            baseline: baseline,
+            values: {'schedule': '2026-10-04T09:45:00.000002Z'},
+          ),
+        ),
+        throwsA(
+          isA<TaskEditConflict>().having((error) => error.fields, 'fields', [
+            'schedule',
+          ]),
+        ),
+      );
+      expect(fixture.mutations, 0);
+    },
+  );
+
+  test('model edit conflicts when its provider changed externally', () async {
+    final fixture = ScheduledTasksFixture();
+    fixture.jobs['morning']!.addAll({
+      'model': 'old-model',
+      'provider': 'anthropic',
+    });
+    final repository = ScheduledTasksRepository(fixture.profile);
+    final baseline = await repository.get('morning');
+    fixture.jobs['morning']!['provider'] = 'openai';
+    await expectLater(
+      repository.update(
+        TaskEditIntent(baseline: baseline, values: {'model': 'new-model'}),
+      ),
+      throwsA(
+        isA<TaskEditConflict>().having((e) => e.fields, 'fields', ['provider']),
+      ),
+    );
+    expect(fixture.mutations, 0);
+  });
+
+  test('opening edit snapshot survives nested source changes', () {
+    final source = taskJson()
+      ..['schedule'] = {'kind': 'interval', 'minutes': 30};
+    final baseline = ScheduledTask.fromJson(source);
+    (source['schedule'] as Map)['minutes'] = 45;
+    source['name'] = 'External change';
+    expect(baseline.scheduleInput, 'every 30m');
+    expect(baseline.name, 'Morning briefing');
+    expect(baseline.changes({'schedule': 'every 30m', 'name': 'Draft'}), {
+      'name': 'Draft',
+    });
+  });
+
+  for (final operation in [
+    'update',
+    'pause',
+    'resume',
+    'trigger',
+    'create',
+    'instantiate',
+  ]) {
+    test('$operation rejects a contradictory dispatched owner', () async {
+      final fixture = ScheduledTasksFixture();
+      Future<Map<String, dynamic>> handler(
+        String method,
+        String path,
+        Map<String, String> query,
+        Map<String, dynamic>? body,
+      ) async {
+        if (method != 'GET') {
+          fixture.mutations++;
+          return taskJson(profile: 'work');
+        }
+        fixture.intercept = null;
+        try {
+          return await fixture.send(method, path, query, body);
+        } finally {
+          fixture.intercept = handler;
+        }
+      }
+
+      fixture.intercept = handler;
+      final repository = ScheduledTasksRepository(fixture.profile);
+      final Future<Object?> request = switch (operation) {
+        'update' => repository.update(
+          TaskEditIntent(
+            baseline: ScheduledTask.fromJson(taskJson()),
+            values: {'name': 'Draft'},
+          ),
+        ),
+        'create' => repository.create({'name': 'Draft'}),
+        'instantiate' => repository.instantiate(
+          (await repository.templates()).singleWhere(
+            (template) => template.key == 'morning-brief',
+          ),
+          {'time': '09:00'},
+        ),
+        _ => repository.action('morning', operation),
+      };
+      await expectLater(request, throwsA(isA<TaskMutationUncertain>()));
+      expect(fixture.mutations, 1);
+    });
+  }
+
+  test(
+    'cached task moved to another profile is refused before dispatch',
+    () async {
+      final fixture = ScheduledTasksFixture(samples: false);
+      final personal = taskJson()
+        ..addAll({'profile': 'personal', 'profile_name': 'personal'});
+      final work = taskJson()
+        ..addAll({'profile': 'work', 'profile_name': 'work'});
+      var moved = false;
+      var writes = 0;
+      fixture.intercept = (method, path, query, body) async {
+        if (path == 'profiles') {
+          return {
+            'profiles': [
+              {'name': 'personal'},
+              {'name': 'work'},
+              {'name': 'default', 'is_default': true},
+            ],
+          };
+        }
+        if (path == 'profiles/active') {
+          return {'current': 'default', 'active': 'default'};
+        }
+        if (method == 'GET' && path == 'cron/jobs') {
+          expect(query['profile'], 'personal');
+          return {
+            'data': moved
+                ? <Map<String, dynamic>>[]
+                : [
+                    {...personal},
+                  ],
+          };
+        }
+        if (method == 'POST' && path == 'cron/jobs/morning/pause') {
+          writes++;
+          // Stock Hermes treats the supplied profile as a hint. After a move,
+          // this route resolves the task in work and would mutate that store.
+          final resolved = moved ? work : personal;
+          resolved.addAll({'state': 'paused', 'enabled': false});
+          return {...resolved};
+        }
+        throw StateError('Unexpected scheduled-task request: $method $path');
+      };
+      final repository = ScheduledTasksRepository(fixture.profile);
+      final cached = (await repository.list()).single;
+      moved = true;
+
+      await expectLater(
+        repository.action(cached.id, 'pause'),
+        throwsA(isA<AdministrationFailure>()),
+      );
+      expect(writes, 0);
+      expect(work['state'], 'scheduled');
+    },
+  );
+
+  for (final owner in <Map<String, dynamic>>[
+    {},
+    {'profile': 'personal'},
+    {'profile_name': 'personal'},
+    {'profile': 'personal', 'profile_name': 'work'},
+  ]) {
+    test(
+      'task read rejects incomplete or contradictory owner $owner',
+      () async {
+        final fixture = ScheduledTasksFixture(samples: false);
+        fixture.jobs['morning'] = taskJson()
+          ..remove('profile')
+          ..remove('profile_name')
+          ..addAll(owner);
+        await expectLater(
+          ScheduledTasksRepository(fixture.profile).get('morning'),
+          throwsFormatException,
+        );
+      },
+    );
+  }
+
+  test('task read accepts matching explicit profile ownership', () async {
+    final fixture = ScheduledTasksFixture(samples: false);
+    fixture.jobs['morning'] = taskJson()
+      ..addAll({'profile': 'personal', 'profile_name': 'personal'});
+    expect(
+      (await ScheduledTasksRepository(fixture.profile).get('morning')).id,
+      'morning',
+    );
+  });
+
   test(
     'current mixed run records preserve source, preview and status title',
     () async {
@@ -114,7 +435,12 @@ void main() {
     expect((await repo.list()).single.id, 'a/b +');
     await repo.get('a/b +');
     await repo.runs('a/b +', limit: 1000);
-    await repo.update('a/b +', {'name': 'Renamed'});
+    await repo.update(
+      TaskEditIntent(
+        baseline: await repo.get('a/b +'),
+        values: {'name': 'Renamed'},
+      ),
+    );
     await repo.action('a/b +', 'pause');
     await repo.action('a/b +', 'resume');
     await repo.action('a/b +', 'trigger');
@@ -136,11 +462,13 @@ void main() {
     () async {
       final f = ScheduledTasksFixture();
       final repo = ScheduledTasksRepository(f.profile);
-      final template = (await repo.templates()).single;
+      final template = (await repo.templates()).singleWhere(
+        (template) => template.key == 'morning-brief',
+      );
       expect(template.initialValues['deliver'], 'local');
       await repo.instantiate(template, {
         ...template.initialValues,
-        'topic': 'Calendar',
+        'time': '09:00',
       });
       expect(f.admin.requests.last.$3['profile'], 'personal');
       f.missingProfile = true;

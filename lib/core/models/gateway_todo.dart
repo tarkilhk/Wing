@@ -3,17 +3,11 @@ import 'dart:convert';
 enum GatewayTodoStatus { pending, inProgress, completed, cancelled }
 
 class GatewayTodo {
-  final String id;
   final String content;
   final String? parent;
   final GatewayTodoStatus status;
 
-  const GatewayTodo({
-    required this.id,
-    required this.content,
-    required this.status,
-    this.parent,
-  });
+  const GatewayTodo({required this.content, required this.status, this.parent});
 }
 
 class GatewayTodoSnapshot {
@@ -44,7 +38,6 @@ class GatewayTodoSnapshot {
       final parent = item['parent']?.toString().trim();
       todos.add(
         GatewayTodo(
-          id: id,
           content: content,
           status: status,
           parent: parent == null || parent.isEmpty || parent == id

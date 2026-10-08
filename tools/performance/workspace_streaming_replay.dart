@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 // Offline profile fixture. Native draft storage is excluded: preferences use
 // an isolated in-memory store. Rendering, controller events and composer input
 // run through the real workspace. No gateway performs network requests.
@@ -5,10 +7,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:math' as math;
-import 'dart:ui' show FramePhase, FrameTiming;
+import 'dart:ui' show FramePhase, FrameTiming, ViewPadding;
 
 import 'package:flutter/foundation.dart';
 import 'package:wing/core/services/performance_instrumentation.dart';
+import 'package:wing/core/services/completion_diagnostics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -73,13 +76,25 @@ void main() {
 }
 
 class _ReplayGateway extends ProfileBrowserFixture {
-  List<Map<String, dynamic>> rows = [
-    {
-      'id': 1,
-      'role': 'user',
-      'content': 'Show the fixed synthetic mixed answer.',
-    },
-  ];
+  _ReplayGateway({int? historyCount})
+    : rows = historyCount == null
+          ? [
+              {
+                'id': 1,
+                'role': 'user',
+                'content': 'Show the fixed synthetic mixed answer.',
+              },
+            ]
+          : [
+              for (var index = 1; index <= historyCount; index++)
+                {
+                  'id': index,
+                  'role': index.isOdd ? 'user' : 'assistant',
+                  'content': 'Offline synthetic history row $index.',
+                },
+            ];
+
+  List<Map<String, dynamic>> rows;
 
   @override
   List<Map<String, dynamic>> historyRows(String profile, String id) => rows;
@@ -109,6 +124,8 @@ class WorkspaceStreamingReplay extends StatefulWidget {
 class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     with WidgetsBindingObserver {
   ProfileWorkspaceController? controller;
+  final _pendingRetiredControllers = <ProfileWorkspaceController>{};
+  AppPreferences? _appPreferences;
   ProfileChat? _chat;
   _ReplayGateway? _fixture;
   ProfileGateway? _gateway;
@@ -121,6 +138,13 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
   var _prepared = false;
   var _collecting = false;
   var _run = 0;
+  ProfileWorkspaceController? _probeOwner;
+  Stopwatch? _probeWatch;
+  var _probeNotifications = 0;
+  var _probing = false;
+  int? _idleHistoryCount;
+  (Size, ViewPadding, double, double)? _probeGeometry;
+  bool _probeFocusAtStart = false;
 
   Map<String, Object?> ready() => {
     'prepared': _prepared,
@@ -128,8 +152,8 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     'running': _running,
     'keyboard': mounted && View.of(context).viewInsets.bottom > 0,
     'composerFocused': _composer?.widget.focusNode.hasFocus ?? false,
-    'draft': _chat?.composerText,
-    'sourceCharacters': _chat?.streaming.length ?? 0,
+    'draft': _chat?.composer.observation.displayedText,
+    'sourceCharacters': _chat?.reading.streaming.length ?? 0,
     'nativeDraftStorage': false,
   };
 
@@ -139,7 +163,14 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addTimingsCallback(_timings);
     if (kProfileMode) {
-      for (final action in ['ready', 'prepare', 'replay']) {
+      for (final action in [
+        'ready',
+        'prepare',
+        'replay',
+        'prepareIdle',
+        'startProbe',
+        'stopProbe',
+      ]) {
         developer.registerExtension('ext.wingReplay.$action', (
           _,
           parameters,
@@ -148,6 +179,11 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
             final result = switch (action) {
               'prepare' => await prepare(),
               'replay' => await replay(label: parameters['label'] ?? ''),
+              'prepareIdle' => await prepareIdle(
+                int.tryParse(parameters['historyCount'] ?? '') ?? -1,
+              ),
+              'startProbe' => startProbe(),
+              'stopProbe' => await stopProbe(),
               _ => ready(),
             };
             return developer.ServiceExtensionResponse.result(
@@ -169,6 +205,8 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
       _frames.addAll(frames);
     }
   }
+
+  void _countProbeNotification() => _probeNotifications++;
 
   void _requireMounted() {
     if (!mounted) {
@@ -232,6 +270,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     }
     _canceled = true;
     _prepared = false;
+    if (_probing) _clearProbe();
     if (_abort case final abort? when !abort.isCompleted) {
       abort.complete();
     }
@@ -272,7 +311,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     final segmentsMatch = workspaceReplayMatchesSegments(
       source,
       elements.map((element) => element.widget),
-      streaming: _chat!.busy,
+      streaming: _chat!.runtime.blocksTurnAdmission,
     );
     var editableMarkers = 0;
     var paragraphMarkers = 0;
@@ -296,7 +335,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
       'bodyCount': bodies.length,
       'expectedSegments': splitMarkdownCodeBlocks(
         source,
-        streaming: _chat!.busy,
+        streaming: _chat!.runtime.blocksTurnAdmission,
       ).length,
       'mountedProse': elements
           .where((element) => element.widget is BlockReusingMarkdownBody)
@@ -360,18 +399,48 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     );
   }
 
+  Future<void> _awaitIdleRendered() async {
+    for (var attempt = 0; attempt < 150; attempt++) {
+      await _endFrame();
+      if (_idleRendererReady()) return;
+      await _wait(const Duration(milliseconds: 20));
+    }
+    throw StateError('Idle history renderer did not settle');
+  }
+
   void _emit(String type, Map<String, dynamic> data) {
     _gateway!.onEvent!(
-      StreamEvent(type: type, sessionId: _chat!.runtimeId, data: data),
+      StreamEvent(type: type, sessionId: _chat!.runtime.runtimeId, data: data),
     );
   }
 
   // Tests may omit the physical keyboard precondition; the VM extension always
   // uses it. Preparation and renderer checks are outside measured intervals.
   Future<Map<String, Object?>> prepare({bool requireKeyboard = true}) async {
+    return _prepare(requireKeyboard: requireKeyboard);
+  }
+
+  Future<Map<String, Object?>> prepareIdle(
+    int historyCount, {
+    bool requireKeyboard = true,
+  }) async {
+    if (historyCount != 2 && historyCount != 50) {
+      throw StateError('Idle history must contain 2 or 50 rows');
+    }
+    return _prepare(
+      requireKeyboard: requireKeyboard,
+      historyCount: historyCount,
+    );
+  }
+
+  Future<Map<String, Object?>> _prepare({
+    required bool requireKeyboard,
+    int? historyCount,
+  }) async {
     if (_preparing || _running) {
       throw StateError('Replay already active');
     }
+    _clearProbe();
     _preparing = true;
     _prepared = false;
     _canceled = false;
@@ -380,35 +449,65 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
       final old = controller;
       controller = null;
       _composer = null;
+      if (old != null) _retireAfterDetachedFrame(old);
       setState(() {});
       await _endFrame();
-      old?.dispose();
+      if (old != null) _disposeRetiredController(old);
       // This offline profile benchmark intentionally excludes native draft
       // storage and must never read or mutate the installed app's preferences.
+      if (!mounted) throw StateError('Replay unmounted');
+      // Journals remain sample-local: an old controller may finish a retained
+      // reading-copy write after disposal. The device preference owner itself
+      // is shared across the entire replay root and never replaces its store.
       // ignore: invalid_use_of_visible_for_testing_member
       SharedPreferences.setMockInitialValues({});
-      final fixture = _fixture = _ReplayGateway();
+      final preferences = await SharedPreferences.getInstance();
+      if (!mounted) throw StateError('Replay unmounted');
+      _appPreferences ??= AppPreferences(preferences);
+      final fixture = _fixture = _ReplayGateway(historyCount: historyCount);
+      _idleHistoryCount = historyCount;
       final next = ProfileWorkspaceController(
-        connection: SavedConnection(
-          id: 'qa-render-replay',
-          label: 'Offline replay',
-          host: 'localhost',
-          port: 1,
-          apiKey: '',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'qa-render-replay',
+            label: 'Offline replay',
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
         ),
         connectionIdentity: 'qa-render-replay',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: _appPreferences!,
         gatewayFactory: fixture.gateway,
       );
       controller = next;
       await next.initialize();
-      _chat = await next.createChat();
+      if (!mounted) throw StateError('Replay unmounted');
+      final resource = next.current;
+      final preparation = _abort;
+      _chat = await next.createChat(
+        canDispatch: () =>
+            mounted &&
+            !_canceled &&
+            _preparing &&
+            identical(_abort, preparation) &&
+            identical(controller, next) &&
+            identical(next.current, resource),
+      );
+      if (!mounted) throw StateError('Replay unmounted');
       _gateway = next.current!.gateway;
       await next.refreshHistory(_chat!);
+      if (!mounted) throw StateError('Replay unmounted');
       setState(() {});
-      _emit('message.start', {});
-      _emit('message.delta', {'text': streamingReplayInitial()});
-      await _awaitRendered(streamingReplayInitial());
+      if (historyCount == null) {
+        _emit('message.start', {});
+        _emit('message.delta', {'text': streamingReplayInitial()});
+        await _awaitRendered(streamingReplayInitial());
+      } else {
+        await _awaitIdleRendered();
+      }
       if (!mounted) {
         throw StateError('Replay unmounted');
       }
@@ -432,6 +531,16 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
       );
       _composer!.widget.focusNode.requestFocus();
       await _endFrame();
+      if (historyCount != null) {
+        await _endFrame();
+        await _wait(const Duration(milliseconds: 150));
+        if (_chat!.runtime.blocksTurnAdmission ||
+            _chat!.reading.streaming.isNotEmpty ||
+            _chat!.composer.observation.displayedText.isNotEmpty ||
+            _chat!.reading.messages.length != historyCount) {
+          throw StateError('Idle history or composer did not settle');
+        }
+      }
       if (!mounted) {
         throw StateError('Replay unmounted');
       }
@@ -462,8 +571,167 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     }
   }
 
+  void _retireAfterDetachedFrame(ProfileWorkspaceController retired) {
+    if (!_pendingRetiredControllers.add(retired)) return;
+    unawaited(_disposeRetiredControllerAfterFrame(retired));
+  }
+
+  Future<void> _disposeRetiredControllerAfterFrame(
+    ProfileWorkspaceController retired,
+  ) async {
+    await WidgetsBinding.instance.endOfFrame;
+    _disposeRetiredController(retired);
+  }
+
+  void _disposeRetiredController(ProfileWorkspaceController retired) {
+    if (_pendingRetiredControllers.remove(retired)) retired.dispose();
+  }
+
+  Map<String, Object?> startProbe() {
+    if (!_prepared || _canceled || _running || _preparing || _probing) {
+      throw StateError('Prepare an idle profile before starting the probe');
+    }
+    final owner = controller;
+    final chat = _chat;
+    final view = View.of(context);
+    if (owner == null ||
+        chat == null ||
+        _idleHistoryCount == null ||
+        !identical(owner.current?.chat, chat) ||
+        chat.runtime.blocksTurnAdmission ||
+        chat.reading.streaming.isNotEmpty ||
+        chat.composer.observation.displayedText.isNotEmpty ||
+        !(_composer?.widget.focusNode.hasFocus ?? false) ||
+        view.viewInsets.bottom <= 0 ||
+        !_idleRendererReady()) {
+      throw StateError(
+        'Idle profile, empty focused composer and keyboard required',
+      );
+    }
+    CompletionDiagnostics.reset();
+    _frames.clear();
+    _probeNotifications = 0;
+    _probeOwner = owner;
+    owner.addListener(_countProbeNotification);
+    _probeWatch = Stopwatch()..start();
+    _probeGeometry = (
+      view.physicalSize,
+      view.viewInsets,
+      view.devicePixelRatio,
+      _textScaleAt14(),
+    );
+    _probeFocusAtStart = _composer!.widget.focusNode.hasFocus;
+    _collecting = true;
+    _probing = true;
+    return {'started': true};
+  }
+
+  Future<Map<String, Object?>> stopProbe() async {
+    if (!_probing) throw StateError('Start the probe before stopping it');
+    try {
+      await _endFrame();
+      await _wait(const Duration(milliseconds: 150));
+      final elapsedUs = _probeWatch?.elapsedMicroseconds ?? 0;
+      _collecting = false;
+      if (!mounted) throw StateError('Replay unmounted');
+      final chat = _chat!;
+      final view = View.of(context);
+      final draft = chat.composer.observation.displayedText;
+      final currentGeometry = (
+        view.physicalSize,
+        view.viewInsets,
+        view.devicePixelRatio,
+        _textScaleAt14(),
+      );
+      final expected = 'test ' * 40;
+      final diagnostic = CompletionDiagnostics.snapshot();
+      final totals = diagnostic['totals'] as Map<String, dynamic>? ?? const {};
+      final transcriptBuilds =
+          (totals['transcript.build_setup_sync']
+                  as Map<String, dynamic>?)?['count']
+              as int? ??
+          0;
+      final groupSyncs =
+          (totals['transcript.group_sync'] as Map<String, dynamic>?)?['count']
+              as int? ??
+          0;
+      final frames = _frames
+          .map(
+            (frame) => {
+              'buildUs': frame.buildDuration.inMicroseconds,
+              'rasterUs': frame.rasterDuration.inMicroseconds,
+              'buildStartUs': frame.timestampInMicroseconds(
+                FramePhase.buildStart,
+              ),
+            },
+          )
+          .toList();
+      return {
+        'historyRows': _idleHistoryCount!,
+        'elapsedUs': elapsedUs,
+        'workspaceNotifications': _probeNotifications,
+        'draftCharacters': draft.length,
+        'expectedDraftVerified': draft.toLowerCase() == expected,
+        'keyboardHeightPx': view.viewInsets.bottom,
+        'keyboardHeightStartPx': _probeGeometry?.$2.bottom ?? 0,
+        'physicalWidthPx': view.physicalSize.width,
+        'physicalHeightPx': view.physicalSize.height,
+        'devicePixelRatio': view.devicePixelRatio,
+        'textScaleAt14': _textScaleAt14(),
+        'focused': _probeFocusAtStart && _composer!.widget.focusNode.hasFocus,
+        'geometryStable': _probeGeometry == currentGeometry,
+        'settled':
+            !chat.runtime.blocksTurnAdmission && chat.reading.streaming.isEmpty,
+        'renderReady': _idleRendererReady(),
+        'diagnosticsEnabled': diagnostic['enabled'] == true,
+        'transcript.build_setup_sync': transcriptBuilds,
+        'transcript.group_sync': groupSyncs,
+        'frames': frames,
+      };
+    } finally {
+      _prepared = false;
+      _clearProbe();
+    }
+  }
+
+  bool _idleRendererReady() {
+    final latestRow = 'Offline synthetic history row $_idleHistoryCount.';
+    final elements = _walk(context as Element).toList();
+    final latestMessage = elements.any(
+      (element) =>
+          element.widget is MarkdownMessageContent &&
+          !(element.widget as MarkdownMessageContent).streaming &&
+          (element.widget as MarkdownMessageContent).data == latestRow,
+    );
+    return latestMessage &&
+        elements.whereType<RenderObjectElement>().any((element) {
+          final render = element.renderObject;
+          return render is RenderParagraph &&
+                  render.hasSize &&
+                  render.text.toPlainText().contains(latestRow) ||
+              render is RenderEditable &&
+                  render.hasSize &&
+                  (render.text?.toPlainText().contains(latestRow) ?? false);
+        });
+  }
+
+  void _clearProbe() {
+    _collecting = false;
+    _probing = false;
+    _probeOwner?.removeListener(_countProbeNotification);
+    _probeOwner = null;
+    _probeWatch?.stop();
+    _probeWatch = null;
+    _probeGeometry = null;
+  }
+
   Future<Map<String, Object?>> replay({String label = ''}) async {
-    if (!_prepared || _running || _preparing) {
+    if (!_prepared ||
+        _canceled ||
+        _running ||
+        _preparing ||
+        _probing ||
+        _idleHistoryCount != null) {
       throw StateError('Prepare before replay');
     }
     _running = true;
@@ -477,8 +745,8 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
           chat == null ||
           !owner.initialized ||
           !identical(owner.current?.chat, chat) ||
-          !chat.busy ||
-          chat.streaming != streamingReplayInitial() ||
+          !chat.runtime.blocksTurnAdmission ||
+          chat.reading.streaming != streamingReplayInitial() ||
           !_rendered(streamingReplayInitial())) {
         throw StateError(
           'Prepared source or selected chat changed; prepare again',
@@ -594,7 +862,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
           )
           .toList();
       await _awaitRendered(finalSource);
-      final exactSource = _chat!.messages.any(
+      final exactSource = _chat!.reading.messages.any(
         (row) => row['role'] == 'assistant' && row['content'] == finalSource,
       );
       return {
@@ -610,11 +878,11 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
         'sourceCodeUnits': finalSource.length,
         'source': finalSource,
         'initialSource': streamingReplayInitial(),
-        'draft': _chat!.composerText,
+        'draft': _chat!.composer.observation.displayedText,
         'exactFinalSource': exactSource,
         'finalRendererReady': _rendered(finalSource),
         'rendererMetrics': renderedReadiness(finalSource),
-        'completed': !_chat!.busy,
+        'completed': !_chat!.runtime.blocksTurnAdmission,
         'geometryStable': geometryStable,
         'focusHeld': focusHeld,
         'keyboardStartPx': keyboardStart,
@@ -627,7 +895,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
         'nativeDraftStorage': false,
         'valid':
             exactSource &&
-            !_chat!.busy &&
+            !_chat!.runtime.blocksTurnAdmission &&
             _rendered(finalSource) &&
             geometryStable &&
             focusHeld &&
@@ -653,13 +921,18 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
 
   @override
   void dispose() {
+    _clearProbe();
     _canceled = true;
     if (_abort case final abort? when !abort.isCompleted) {
       abort.complete();
     }
     WidgetsBinding.instance.removeObserver(this);
+    for (final retired in _pendingRetiredControllers.toList()) {
+      _disposeRetiredController(retired);
+    }
     WidgetsBinding.instance.removeTimingsCallback(_timings);
     controller?.dispose();
+    _appPreferences?.dispose();
     super.dispose();
   }
 }

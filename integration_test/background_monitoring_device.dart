@@ -3,7 +3,12 @@
 /// engine; only Hermes transport responses are fixtures. No model calls.
 library;
 
+import 'package:wing/core/models/app_preferences.dart';
+import 'package:wing/core/services/app_preferences.dart';
+
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
+import '../test/support/composer_fixture.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -80,10 +85,20 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
     port: 1,
     apiKey: '',
   );
-  await manager.importConnections([connection], replaceExisting: true);
+  await manager.importConnections(
+    [connection],
+    replaceExisting: true,
+    canCommit: () => true,
+  );
   await preferences.setString('last_connection_id', connection.id);
-  await preferences.setBool(completionNotificationsKey, true);
-  await preferences.setBool(attentionNotificationsKey, true);
+  await preferences.setBool(
+    AppPreferenceField.completedNotifications.storageKey,
+    true,
+  );
+  await preferences.setBool(
+    AppPreferenceField.attentionNotifications.storageKey,
+    true,
+  );
   final host = NotificationCoverageHost();
   final app = GlobalKey<WingAppState>();
   final sink = PluginTurnNotificationSink(
@@ -94,12 +109,14 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
   await sink.initialize();
   var alerts = 0;
   final generation = DateTime.now().microsecondsSinceEpoch.toString();
+  final appPreferences = AppPreferences(preferences);
   final registry = ProfileWorkspaceRegistry(
     identities: ProfileConnectionIdentity(credentialStore: secrets),
     create: (saved, identity) => ProfileWorkspaceController(
-      connection: saved,
+      access: ConnectionAccess(connection: saved, dashboardOAuth: null),
       connectionIdentity: identity,
       preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
       onAttention: (chat) async {
         final id = 240001 + alerts;
@@ -124,11 +141,22 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
   final chats = <String, ProfileChat>{};
   for (final profile in ['a', 'b']) {
     await controller.switchProfile(profile);
-    chats[profile] = await controller.createChat()
-      ..title = profile == 'a' ? 'First task' : 'Second task';
+    final chat = await controller.createChat(canDispatch: () => true);
+    emitChatEvent(controller, chat, 'session.title', {
+      'session_id': chat.key.sessionId,
+      'title': profile == 'a' ? 'First task' : 'Second task',
+    });
+    chats[profile] = chat;
   }
   await controller.switchProfile('a');
-  runApp(WingApp(key: app, connManager: manager, profileControllers: registry));
+  runApp(
+    WingApp(
+      key: app,
+      connManager: manager,
+      profileControllers: registry,
+      appPreferences: appPreferences,
+    ),
+  );
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 18765);
   await for (final request in server) {
     try {
@@ -143,17 +171,17 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
         if (state == 'working') host.workingProfiles.add(profile);
         if (state == 'waiting') host.waitingProfiles.add(profile);
         if (state == 'working') {
-          if (chat.pendingQuestion != null) {
+          if (chat.runtime.pendingQuestion != null) {
             await controller.clarify(chat, 'Continue');
           } else {
-            chat.draft = 'Native fixture work';
+            chat.composer.editText('Native fixture work');
             await controller.send(chat);
           }
         } else {
           host.gateways[profile]!.onEvent!(
             StreamEvent(
               type: state == 'waiting' ? 'clarify' : 'message.complete',
-              sessionId: chat.runtimeId,
+              sessionId: chat.runtime.runtimeId,
               data: state == 'waiting'
                   ? {'request_id': 'question-$profile', 'question': 'Continue?'}
                   : {
@@ -171,8 +199,14 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
       if (request.method == 'POST' && request.uri.path == '/alerts') {
         final enabled =
             jsonDecode(await utf8.decoder.bind(request).join()) as bool;
-        await preferences.setBool(completionNotificationsKey, enabled);
-        await preferences.setBool(attentionNotificationsKey, enabled);
+        await preferences.setBool(
+          AppPreferenceField.completedNotifications.storageKey,
+          enabled,
+        );
+        await preferences.setBool(
+          AppPreferenceField.attentionNotifications.storageKey,
+          enabled,
+        );
         app.currentState!.refreshPreferences();
       }
       await preferences.reload();
@@ -192,8 +226,14 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
           'active': registry.hasActiveChats,
           'lifecycle': WidgetsBinding.instance.lifecycleState?.name,
           'enabled':
-              (preferences.getBool(completionNotificationsKey) ?? true) ||
-              (preferences.getBool(attentionNotificationsKey) ?? true),
+              (preferences.getBool(
+                    AppPreferenceField.completedNotifications.storageKey,
+                  ) ??
+                  true) ||
+              (preferences.getBool(
+                    AppPreferenceField.attentionNotifications.storageKey,
+                  ) ??
+                  true),
         }),
       );
     } catch (_) {

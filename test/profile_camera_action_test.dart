@@ -1,3 +1,6 @@
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -17,15 +20,22 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({});
     final fixture = ProfileActionsFixture();
+    final preferences = await SharedPreferences.getInstance();
+    final appPreferences = AppPreferences(preferences);
+    addTearDown(appPreferences.dispose);
     final controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'camera-action',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: fixture.gateway,
     );
     addTearDown(controller.dispose);
     await controller.initialize();
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     final started = Completer<ProfileSessionKey>();
     final release = Completer<void>();
 

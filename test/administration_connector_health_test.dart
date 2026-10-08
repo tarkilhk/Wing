@@ -1,3 +1,4 @@
+import 'package:wing/core/models/health_finding.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';

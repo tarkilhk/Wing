@@ -4,6 +4,7 @@ import 'package:wing/core/services/performance_instrumentation.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
 import 'package:wing/core/widgets/block_reusing_markdown_body.dart';
 import 'package:wing/core/widgets/markdown_code_block.dart';
+import 'package:wing/core/widgets/source_code_block.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 
 import 'helpers/pump_markdown_widget.dart';
@@ -58,7 +59,9 @@ void main() {
       final parser = tester.state<BackgroundMarkdownContentState>(
         find.byType(BackgroundMarkdownContent),
       );
-      final codeState = tester.state(find.byType(MarkdownCodeBlock));
+      await tester.tap(find.byTooltip('Wrap lines'));
+      await tester.pump();
+      final codeState = tester.state(find.byType(SourceCodeBlock));
       final parses = parser.parsesCompleted;
       final acceptedNodes = tester
           .widgetList<BlockReusingMarkdownBody>(
@@ -88,7 +91,8 @@ void main() {
         expect(completedBodies[index].parsedNodes, same(acceptedNodes[index]));
       }
       expect(parser.pending, isFalse);
-      expect(tester.state(find.byType(MarkdownCodeBlock)), same(codeState));
+      expect(tester.state(find.byType(SourceCodeBlock)), same(codeState));
+      expect(find.byTooltip('Scroll horizontally'), findsOneWidget);
       expect(
         tester
             .widget<MarkdownCodeBlock>(find.byType(MarkdownCodeBlock))

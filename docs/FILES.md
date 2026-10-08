@@ -6,6 +6,12 @@ In the composer, choose **Camera**, **Photos** or **Files**. You can also share 
 
 A draft can hold up to **10 attachments** and **64 MiB** in total. Generic files are limited to **16 MiB each**. Wing shows an error if a selection is too large; your Hermes server or provider may have a smaller limit.
 
+If Wing cannot prepare a selected photo, it shows the reason and keeps your existing draft. Choose a JPEG, PNG or WebP image within the processing limits and try again.
+
+Photos are cleaned of private metadata before upload. Large discarded metadata,
+appended capture information and damaged optional orientation metadata do not
+block a photo; unreadable orientation leaves the pixels in their stored position.
+
 ## Open a result
 
 Tap an assistant file or media result to preview it. Wing supports images, PDFs, Markdown, diagrams and common audio/video formats. **Download** lets you choose where Android saves the file; downloads are capped at **32 MiB**. Older server file links may no longer be available.

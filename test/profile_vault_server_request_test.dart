@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -22,16 +24,22 @@ void main() {
       (tester) async {
         SharedPreferences.setMockInitialValues({});
         final preferences = await SharedPreferences.getInstance();
+        final appPreferences = AppPreferences(preferences);
+        addTearDown(appPreferences.dispose);
         final host = Host();
         final controller = ProfileWorkspaceController(
-          connection: identityTestConnection(),
+          access: ConnectionAccess(
+            connection: identityTestConnection(),
+            dashboardOAuth: null,
+          ),
           connectionIdentity: 'vault-wire-test',
           preferences: preferences,
+          appPreferences: appPreferences,
           gatewayFactory: host.gateway,
         );
         addTearDown(controller.dispose);
         await controller.initialize();
-        final chat = await controller.createChat();
+        final chat = await controller.createChat(canDispatch: () => true);
         await tester.pumpWidget(
           MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
         );
@@ -72,7 +80,7 @@ void main() {
           'id': 'srq-vault-test',
           'method': 'vault.save_login',
           'params': {
-            'session_id': chat.runtimeId,
+            'session_id': chat.runtime.runtimeId,
             'origin': 'https://example.test',
             'site': 'Example',
           },
@@ -97,7 +105,7 @@ void main() {
             'method': 'event',
             'params': {
               'type': 'request.cancel',
-              'sid': chat.runtimeId,
+              'sid': chat.runtime.runtimeId,
               'payload': {
                 'id': 'srq-vault-test',
                 'method': 'vault.save_login',
@@ -109,7 +117,7 @@ void main() {
             host.calls.where((call) => call.$2 == 'request.answer'),
             isEmpty,
           );
-          expect(chat.error, contains('expired'));
+          expect(chat.runtime.error, contains('expired'));
         } else {
           final button = find.byKey(
             Key(
@@ -139,11 +147,14 @@ void main() {
             expect(value, '');
           }
         }
-        expect(chat.sensitivePrompt, isNull);
+        expect(chat.runtime.secureInput, isNull);
         expect(password, findsNothing);
-        expect(chat.draft, isNot(contains('dummy-vault-password')));
         expect(
-          chat.messages.toString(),
+          chat.composer.observation.text,
+          isNot(contains('dummy-vault-password')),
+        );
+        expect(
+          chat.reading.messages.toString(),
           isNot(contains('dummy-vault-password')),
         );
         expect(

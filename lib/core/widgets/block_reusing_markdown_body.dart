@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
 
 import 'package:flutter/cupertino.dart';
 
@@ -142,7 +141,8 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
     final cupertino =
         widget.styleSheetTheme == MarkdownStyleSheetBaseTheme.cupertino ||
         (widget.styleSheetTheme == MarkdownStyleSheetBaseTheme.platform &&
-            (Platform.isIOS || Platform.isMacOS));
+            (Theme.of(context).platform == TargetPlatform.iOS ||
+                Theme.of(context).platform == TargetPlatform.macOS));
     final fallback = cupertino
         ? MarkdownStyleSheet.fromCupertinoTheme(CupertinoTheme.of(context))
         : MarkdownStyleSheet.fromTheme(Theme.of(context));

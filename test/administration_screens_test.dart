@@ -1,16 +1,23 @@
+import 'package:wing/core/services/profile_tool_setup_session.dart';
+import 'package:wing/core/screens/administration/admin_provider_credentials.dart';
+import 'package:wing/core/models/settings_edit.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_settings_page.dart';
 import 'package:wing/core/screens/administration/admin_memory_page.dart';
-import 'package:wing/core/screens/administration/admin_providers_page.dart';
-import 'package:wing/core/screens/administration/admin_widgets.dart';
 import 'package:wing/core/screens/administration/admin_tool_setup_page.dart';
+import 'package:wing/core/screens/administration/admin_skills_page.dart';
+import 'package:wing/core/services/profile_skills_session.dart';
+import 'package:wing/core/widgets/tool_activity_details.dart';
+import 'package:wing/core/widgets/resource_filename.dart';
+import 'package:flutter/services.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'support/administration_fixture.dart';
+import 'helpers/pump_markdown_widget.dart';
 
-const _fields = [
+final _fields = [
   AdminField(
     'memory.memory_char_limit',
     'Memory budget',
@@ -19,6 +26,156 @@ const _fields = [
   ),
 ];
 void main() {
+  testWidgets('Hub preview uses shared skill instructions without installing', (
+    tester,
+  ) async {
+    final fixture = AdministrationFixture();
+    fixture.override = (_, path, _, _) async => switch (path) {
+      'skills/hub/official' => {
+        'skills': [
+          {
+            'name': 'review',
+            'description': 'Review supplied sources.',
+            'source': 'Example',
+            'identifier': 'example/review',
+          },
+        ],
+      },
+      'skills/hub/preview' => {
+        'identifier': 'example/review',
+        'name': 'review',
+        'source': 'Example',
+        'trust_level': 'community',
+        'skill_md': '# Review\n\nInspect every source.',
+      },
+      _ => throw StateError('Unexpected request $path'),
+    };
+    final session = ProfileSkillsSession.hub(
+      fixture.server.profile('personal'),
+    );
+    addTearDown(session.dispose);
+    await session.refresh();
+    final route = session.openPreview(session.state.catalog.single);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        home: AdminSkillPreview(session: session, route: route),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.settleMarkdown();
+    expect(find.byType(SkillDocumentViewer), findsOneWidget);
+    expect(find.text('Review'), findsOneWidget);
+    expect(find.byTooltip('Install skill'), findsOneWidget);
+    expect(find.byTooltip('Edit instructions'), findsNothing);
+    expect(fixture.requests.every((request) => request.$1 == 'GET'), isTrue);
+    expect(tester.takeException(), isNull);
+  });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'administration uses the shared skill viewer ${brightness.name} $scale',
+        (tester) async {
+          const raw =
+              '---\nname: research\ndescription: Review the evidence.\nmetadata:\n  version: 1.0\n  author: Example\n  hermes:\n    tags: [research, evidence]\nlicense: MIT\n---\n# Research\n\nRead the **original** evidence.\n';
+          final fixture = AdministrationFixture();
+          fixture.override = (_, path, _, _) async => switch (path) {
+            'skills' => {
+              'data': [
+                {
+                  'name': 'research',
+                  'description': 'Review the evidence.',
+                  'provenance': 'agent',
+                  'usage': 2,
+                  'enabled': true,
+                },
+              ],
+            },
+            'skills/content' => {
+              'name': 'research',
+              'content': raw,
+              'path': '/workspace/skills/research/SKILL.md',
+            },
+            _ => throw StateError('Unexpected request $path'),
+          };
+          final session = ProfileSkillsSession.library(
+            fixture.server.profile('personal'),
+          );
+          addTearDown(session.dispose);
+          await session.refresh();
+          final route = session.openSkill(session.state.installed.single);
+          String? copied;
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            (call) async {
+              if (call.method == 'Clipboard.setData') {
+                copied = (call.arguments as Map)['text'] as String;
+              }
+              return null;
+            },
+          );
+          addTearDown(
+            () => tester.binding.defaultBinaryMessenger
+                .setMockMethodCallHandler(SystemChannels.platform, null),
+          );
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: AdminSkillDetail(session: session, route: route),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.settleMarkdown();
+          expect(find.byType(SkillDocumentViewer), findsOneWidget);
+          expect(find.text('Research'), findsOneWidget);
+          expect(find.text('Review the evidence.'), findsOneWidget);
+          expect(find.text('Version'), findsOneWidget);
+          expect(find.text('MIT'), findsOneWidget);
+          expect(find.text('evidence'), findsOneWidget);
+          expect(find.byTooltip('Edit instructions'), findsOneWidget);
+          expect(find.byTooltip('Archive skill'), findsOneWidget);
+          expect(find.text('Edit instructions'), findsNothing);
+          await tester.tap(
+            find.descendant(
+              of: find.byType(ResourceViewerAppBar),
+              matching: find.text('research'),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.text('/workspace/skills/research/SKILL.md'),
+            findsOneWidget,
+          );
+          await tester.tapAt(const Offset(5, 400));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Copy skill instructions'));
+          await tester.pump();
+          expect(copied, raw);
+          await tester.tap(find.byTooltip('Show raw content'));
+          await tester.pumpAndSettle();
+          expect(find.text(raw), findsOneWidget);
+          await tester.tap(find.byTooltip('Edit instructions'));
+          await tester.pumpAndSettle();
+          expect(find.byType(AdminSkillEditor), findsOneWidget);
+          expect(session.state.edit!.draft, raw);
+          expect(
+            fixture.requests.every((request) => request.$1 == 'GET'),
+            isTrue,
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
   testWidgets('managed provider selection explains required sign-in', (
     tester,
   ) async {
@@ -34,17 +191,24 @@ void main() {
       if (method == 'PUT' && path == 'tools/toolsets/stt/provider') {
         return {
           'ok': true,
+          'name': 'stt',
           'provider': 'Nous Subscription',
           'needs_nous_auth': true,
         };
       }
       return {
+        'name': 'stt',
+        'has_category': true,
         'active_provider': null,
         'providers': [
           {
             'name': 'Nous Subscription',
             'status': 'needs_auth',
             'requires_nous_auth': true,
+            'is_active': false,
+            'badge': '',
+            'tag': '',
+            'env_vars': [],
           },
         ],
       };
@@ -53,8 +217,11 @@ void main() {
       MaterialApp(
         theme: wingTheme(Brightness.dark),
         home: AdminToolSetupPage(
-          profile: fixture.server.profile('personal'),
-          name: 'stt',
+          createSession: () => ProfileToolSetupSession(
+            fixture.server.profile('personal'),
+            tool: 'stt',
+          ),
+          onCredential: (_, _) async {},
         ),
       ),
     );
@@ -67,35 +234,6 @@ void main() {
     );
     expect(find.textContaining('could not be confirmed'), findsNothing);
   });
-  testWidgets(
-    'late operation refresh after leaving a page does not load or set state',
-    (tester) async {
-      late VoidCallback refresh;
-      var reads = 0;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: AdminLoad(
-              load: () async {
-                reads++;
-                return <String, dynamic>{};
-              },
-              builder: (_, _, reload) {
-                refresh = reload;
-                return const Text('Loaded');
-              },
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.pumpWidget(const SizedBox.shrink());
-      refresh();
-      await tester.pumpAndSettle();
-      expect(reads, 1);
-      expect(tester.takeException(), isNull);
-    },
-  );
   testWidgets(
     'save confirmation stays above editor actions with the keyboard open',
     (tester) async {

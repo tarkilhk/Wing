@@ -1,40 +1,14 @@
+import 'connection_access.dart';
 import 'dart:typed_data';
 
 import 'connection_manager.dart';
 import 'gateway_endpoint.dart';
-
-class RemoteDirectory {
-  final String path;
-  final String? branch;
-
-  const RemoteDirectory({required this.path, this.branch});
-}
-
-class RemoteFileEntry {
-  final String name;
-  final String path;
-  final bool isDirectory;
-
-  const RemoteFileEntry({
-    required this.name,
-    required this.path,
-    required this.isDirectory,
-  });
-
-  factory RemoteFileEntry.fromJson(Map<String, dynamic> json) =>
-      RemoteFileEntry(
-        name: json['name'] as String? ?? '',
-        path: json['path'] as String? ?? '',
-        isDirectory: json['isDirectory'] == true,
-      );
-}
 
 class RemoteTextPreview {
   final String path;
   final String text;
   final String language;
   final String mimeType;
-  final int byteSize;
   final bool binary;
   final bool truncated;
 
@@ -43,7 +17,6 @@ class RemoteTextPreview {
     required this.text,
     required this.language,
     required this.mimeType,
-    required this.byteSize,
     required this.binary,
     required this.truncated,
   });
@@ -54,23 +27,20 @@ class RemoteTextPreview {
         text: json['text'] as String? ?? '',
         language: json['language'] as String? ?? 'text',
         mimeType: json['mimeType'] as String? ?? 'text/plain',
-        byteSize: (json['byteSize'] as num?)?.toInt() ?? 0,
         binary: json['binary'] == true,
         truncated: json['truncated'] == true,
       );
 }
 
-class RemoteFileDownload {
+final class RemoteFileDownload {
   final String filename;
   final Uint8List bytes;
 
   RemoteFileDownload({required this.filename, required List<int> bytes})
-    : bytes = Uint8List.fromList(bytes);
+    : bytes = Uint8List.fromList(bytes).asUnmodifiableView();
 }
 
 abstract class RemoteFilesDataSource {
-  Future<RemoteDirectory> defaultDirectory();
-  Future<List<RemoteFileEntry>> listDirectory(String path);
   Future<RemoteTextPreview> readText(
     String path, {
     required String profileName,
@@ -81,31 +51,6 @@ abstract class RemoteFilesDataSource {
     required String profileName,
     required String storedSessionId,
   });
-}
-
-/// Binds remote file requests to the profile and saved chat that exposed them.
-class OwnedRemoteFiles {
-  final RemoteFilesDataSource source;
-  final String profileName;
-  final String storedSessionId;
-
-  const OwnedRemoteFiles({
-    required this.source,
-    required this.profileName,
-    required this.storedSessionId,
-  });
-
-  Future<RemoteTextPreview> readText(String path) => source.readText(
-    path,
-    profileName: profileName,
-    storedSessionId: storedSessionId,
-  );
-
-  Future<RemoteFileDownload> download(String path) => source.download(
-    path,
-    profileName: profileName,
-    storedSessionId: storedSessionId,
-  );
 }
 
 class RemoteFilesClient implements RemoteFilesDataSource {
@@ -119,7 +64,8 @@ class RemoteFilesClient implements RemoteFilesDataSource {
     this.maxDownloadBytes = defaultMaxDownloadBytes,
   });
 
-  factory RemoteFilesClient.fromConnection(SavedConnection connection) {
+  factory RemoteFilesClient.fromConnection(ConnectionAccess access) {
+    final connection = access.connection;
     final baseUri = Uri.parse(normalizedGatewayBaseUrl(connection));
     return RemoteFilesClient(
       dashboard: DashboardClient(
@@ -130,44 +76,11 @@ class RemoteFilesClient implements RemoteFilesDataSource {
         proxied: connection.dashboardProxied,
         username: connection.dashboardUsername,
         password: connection.dashboardPassword,
-        dashboardOAuth: connection.dashboardOAuth,
+        dashboardOAuth: access.dashboardOAuth,
         requiresOAuth: connection.isCloud,
         gatewayHeaders: connection.gatewayHeaders,
       ),
     );
-  }
-
-  @override
-  Future<RemoteDirectory> defaultDirectory() async {
-    final data = await dashboard.apiGet('fs/default-cwd');
-    return RemoteDirectory(
-      path: data['cwd'] as String? ?? '/',
-      branch: data['branch'] as String?,
-    );
-  }
-
-  @override
-  Future<List<RemoteFileEntry>> listDirectory(String path) async {
-    final data = await dashboard.apiGet(
-      'fs/list',
-      queryParameters: {'path': path},
-    );
-    final error = data['error'] as String?;
-    if (error != null && error.isNotEmpty) {
-      throw Exception('Could not read directory: $error');
-    }
-    final entries = (data['entries'] as List<dynamic>? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .map(RemoteFileEntry.fromJson)
-        .toList();
-    entries.sort(
-      (left, right) => left.isDirectory == right.isDirectory
-          ? left.name.toLowerCase().compareTo(right.name.toLowerCase())
-          : left.isDirectory
-          ? -1
-          : 1,
-    );
-    return entries;
   }
 
   @override

@@ -1,3 +1,5 @@
+import 'package:wing/core/models/app_preferences.dart';
+import 'package:wing/core/services/app_preferences.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -8,13 +10,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/native_notification_sink.dart';
-import 'package:wing/core/services/turn_notification_service.dart'
-    show notificationPreviewsKey;
 import 'package:wing/main.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
+
+const _nativeNotifications = MethodChannel(NativeNotificationSink.channelName);
 
 void main() {
   testWidgets(
@@ -36,12 +38,18 @@ Future<void> checkDisconnectedNotification(
   SharedPreferences.setMockInitialValues({
     'notification_permission_requested': true,
     'microphone_permission_requested': true,
-    notificationPreviewsKey: !hidePreviews,
+    AppPreferenceField.notificationPreviews.storageKey: !hidePreviews,
   });
   final preferences = await SharedPreferences.getInstance();
+  final appPreferences = AppPreferences(preferences);
+  addTearDown(appPreferences.dispose);
   final manager = await ConnectionManager.create(preferences);
   final connection = identityTestConnection();
-  await manager.importConnections([connection], replaceExisting: true);
+  await manager.importConnections(
+    [connection],
+    replaceExisting: true,
+    canCommit: () => true,
+  );
   final shown = <Map<dynamic, dynamic>>[];
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -56,15 +64,13 @@ Future<void> checkDisconnectedNotification(
       _ => null,
     },
   );
-  messenger.setMockMethodCallHandler(NativeNotificationSink.channel, (
-    call,
-  ) async {
+  messenger.setMockMethodCallHandler(_nativeNotifications, (call) async {
     if (call.method == 'show') shown.add(call.arguments as Map);
     return call.method == 'initialize' ? [] : null;
   });
   addTearDown(() {
     messenger.setMockMethodCallHandler(plugin, null);
-    messenger.setMockMethodCallHandler(NativeNotificationSink.channel, null);
+    messenger.setMockMethodCallHandler(_nativeNotifications, null);
   });
   final host = Host()
     ..running = false
@@ -74,13 +80,14 @@ Future<void> checkDisconnectedNotification(
     WingApp(
       key: app,
       connManager: manager,
+      appPreferences: appPreferences,
       gatewayFactory: (_, scope) => host.gateway(scope),
     ),
   );
   await tester.pumpAndSettle();
   final controller = await app.currentState!.profileController(connection);
   await controller.initialize();
-  final chat = await controller.createChat();
+  final chat = await controller.createChat(canDispatch: () => true);
   final request = <String, dynamic>{
     'request_id': 'background-once',
     'command': "print('WING-N06-ONCE')",
@@ -91,9 +98,9 @@ Future<void> checkDisconnectedNotification(
   await tester.pumpAndSettle();
   final notice = shown.last;
   if (hidePreviewsAfterPosting) {
-    await preferences.setBool(notificationPreviewsKey, false);
+    await appPreferences.setNotificationPreviews(false);
   }
-  expect(chat.approval?['request_id'], 'background-once');
+  expect(chat.runtime.approval?.requestId, 'background-once');
   tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
   host.connectFailures = 20;
   host.gateways['a']!.onConnectionChanged!(false);
@@ -101,7 +108,7 @@ Future<void> checkDisconnectedNotification(
   unawaited(
     messenger
         .handlePlatformMessage(
-          NativeNotificationSink.channel.name,
+          _nativeNotifications.name,
           const StandardMethodCodec().encodeMethodCall(
             MethodCall('interaction', {
               'payload': notice['payload'],
@@ -138,11 +145,11 @@ Future<void> checkDisconnectedNotification(
       .where((call) => call.$2 == 'approval.respond')
       .toList();
   expect(decisions, isEmpty);
-  expect(chat.approval?['request_id'], 'background-once');
+  expect(chat.runtime.approval?.requestId, 'background-once');
   if (!expectsReview) {
-    expect(chat.notificationActionErrorRequestId, 'background-once');
+    expect(chat.runtime.decisionErrorRequestId, 'background-once');
   }
-  final reported = expectsReview || chat.notificationActionError != null;
+  final reported = expectsReview || chat.runtime.decisionError != null;
   tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
   await tester.pumpWidget(const SizedBox.shrink());
   expect(

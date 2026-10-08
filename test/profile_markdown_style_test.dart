@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_message.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -107,12 +108,15 @@ void main() {
               ).copyWith(textScaler: TextScaler.linear(scale)),
               child: child!,
             ),
-            home: const Scaffold(
+            home: Scaffold(
               body: SafeArea(
                 child: SingleChildScrollView(
                   padding: EdgeInsets.all(16),
                   child: ProfileMessage(
-                    message: {'role': 'assistant', 'content': sample},
+                    message: TranscriptMessage.fromRow({
+                      'role': 'assistant',
+                      'content': sample,
+                    }),
                   ),
                 ),
               ),

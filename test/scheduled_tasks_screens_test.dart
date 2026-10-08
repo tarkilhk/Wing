@@ -1,3 +1,5 @@
+import 'package:wing/core/models/profile_session_key.dart';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -9,18 +11,28 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/administration/admin_scheduled_task_detail_page.dart';
 import 'package:wing/core/screens/administration/admin_scheduled_task_editor_page.dart';
 import 'package:wing/core/screens/administration/admin_scheduled_tasks_page.dart';
-import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/screens/administration/scheduled_task_widgets.dart';
 import 'package:wing/core/services/scheduled_tasks_controller.dart';
 import 'package:wing/core/services/scheduled_tasks_repository.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/studio_selection_tile.dart';
 import 'support/scheduled_tasks_fixture.dart';
 
 void main() {
   const capture = bool.fromEnvironment('CAPTURE_SCHEDULED_TASKS');
   setUpAll(() async {
-    if (!capture) return;
-    const root = String.fromEnvironment('CAPTURE_FONT_DIR');
+    final config = File('.dart_tool/package_config.json').absolute;
+    final packages =
+        (jsonDecode(await config.readAsString()) as Map)['packages'] as List;
+    final flutter = packages.cast<Map>().singleWhere(
+      (package) => package['name'] == 'flutter',
+    );
+    final packageRoot = Directory.fromUri(
+      config.uri.resolve(flutter['rootUri'] as String),
+    );
+    final sdkRoot = packageRoot.parent.parent;
+    final root = '${sdkRoot.path}/bin/cache/artifacts/material_fonts';
     for (final f in {
       'Roboto': 'Roboto-Regular.ttf',
       'MaterialIcons': 'MaterialIcons-Regular.otf',
@@ -45,7 +57,7 @@ void main() {
     WidgetTester tester,
     Widget page, {
     Brightness brightness = Brightness.light,
-    WorkspaceAccent accent = WorkspaceAccent.mint,
+    WorkspaceAccent accent = WorkspaceAccent.teal,
     double width = 390,
     double scale = 1,
     double keyboard = 0,
@@ -76,7 +88,8 @@ void main() {
   Widget list({Future<void> Function(ProfileSessionKey)? open}) =>
       AdminScheduledTasksPage(
         profile: fixture.profile,
-        preferences: prefs,
+        acquireController: () =>
+            ScheduledTasksController.acquire(fixture.profile, prefs),
         onOpenSession: open ?? (_) async {},
       );
   Future<ScheduledTasksController> controller() async {
@@ -87,6 +100,48 @@ void main() {
     await c.refresh();
     addTearDown(c.dispose);
     return c;
+  }
+
+  Future<ScheduledTasksController> openTaskEditor(
+    WidgetTester tester, {
+    Brightness brightness = Brightness.light,
+    double width = 390,
+    double scale = 1,
+  }) async {
+    final retained = ScheduledTasksController.acquire(fixture.profile, prefs);
+    addTearDown(retained.release);
+    await retained.refresh();
+    await show(
+      tester,
+      Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(
+                builder: (_) => AdminTaskRoute(
+                  profile: fixture.profile,
+                  acquireController: () =>
+                      ScheduledTasksController.acquire(fixture.profile, prefs),
+                  title: 'Edit task',
+                  taskId: 'morning',
+                  builder: (controller, task) => AdminScheduledTaskEditorPage(
+                    controller: controller,
+                    original: task,
+                  ),
+                ),
+              ),
+            ),
+            child: const Text('Open task editor'),
+          ),
+        ),
+      ),
+      brightness: brightness,
+      width: width,
+      scale: scale,
+    );
+    await tester.tap(find.text('Open task editor'));
+    await tester.pumpAndSettle();
+    return retained;
   }
 
   Future<void> screenshot(WidgetTester tester, String name) async {
@@ -201,6 +256,432 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   testWidgets(
+    'task route refresh preserves externally changed fields on name-only save',
+    (tester) async {
+      fixture.jobs['morning']!.addAll({
+        'prompt': 'Opening instructions',
+        'schedule': {'kind': 'interval', 'minutes': 30},
+        'model': 'claude-sonnet-4-5',
+        'provider': 'anthropic',
+      });
+      final retained = ScheduledTasksController.acquire(fixture.profile, prefs);
+      addTearDown(retained.release);
+      await retained.refresh();
+      await show(
+        tester,
+        Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => AdminTaskRoute(
+                    profile: fixture.profile,
+                    acquireController: () => ScheduledTasksController.acquire(
+                      fixture.profile,
+                      prefs,
+                    ),
+                    title: 'Edit task',
+                    taskId: 'morning',
+                    builder: (controller, selectedTask) =>
+                        AdminScheduledTaskEditorPage(
+                          controller: controller,
+                          original: selectedTask,
+                        ),
+                  ),
+                ),
+              ),
+              child: const Text('Open task editor'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open task editor'));
+      await tester.pumpAndSettle();
+
+      fixture.jobs['morning']!.addAll({
+        'prompt': 'New instructions from another client',
+        'schedule': {'kind': 'interval', 'minutes': 45},
+        'deliver': 'telegram',
+        'model': 'new-external-model',
+        'provider': 'openai',
+      });
+      await retained.refresh();
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Name (optional)'),
+        'Only edited name',
+      );
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+
+      final writes = fixture.admin.requests
+          .where((r) => r.$1 == 'PUT')
+          .toList();
+      expect(writes, hasLength(1));
+      expect(writes.single.$4!['updates'], {'name': 'Only edited name'});
+      expect(
+        fixture.jobs['morning']!['prompt'],
+        'New instructions from another client',
+      );
+      expect(fixture.jobs['morning']!['schedule'], {
+        'kind': 'interval',
+        'minutes': 45,
+      });
+      expect(fixture.jobs['morning']!['deliver'], 'telegram');
+      expect(fixture.jobs['morning']!['model'], 'new-external-model');
+      expect(fixture.jobs['morning']!['provider'], 'openai');
+      expect(find.text('Open task editor'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'task conflict review keeps the draft and explicitly recovers in the pushed editor',
+    (tester) async {
+      final retained = ScheduledTasksController.acquire(fixture.profile, prefs);
+      addTearDown(retained.release);
+      await retained.refresh();
+      await show(
+        tester,
+        Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => AdminTaskRoute(
+                    profile: fixture.profile,
+                    acquireController: () => ScheduledTasksController.acquire(
+                      fixture.profile,
+                      prefs,
+                    ),
+                    title: 'Edit task',
+                    taskId: 'morning',
+                    builder: (controller, selectedTask) =>
+                        AdminScheduledTaskEditorPage(
+                          controller: controller,
+                          original: selectedTask,
+                        ),
+                  ),
+                ),
+              ),
+              child: const Text('Open task editor'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open task editor'));
+      await tester.pumpAndSettle();
+      final name = find.widgetWithText(TextFormField, 'Name (optional)');
+      await tester.enterText(name, 'My retained name');
+      fixture.jobs['morning']!.addAll({
+        'name': 'Name from another client',
+        'prompt': 'New unedited instructions',
+      });
+      await retained.refresh();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+
+      // Real refusal/draft/route prerequisites precede the missing recovery.
+      expect(fixture.mutations, 0);
+      expect(fixture.jobs['morning']!['name'], 'Name from another client');
+      expect(
+        tester.widget<TextFormField>(name).controller!.text,
+        'My retained name',
+      );
+      expect(find.byType(AdminScheduledTaskEditorPage), findsOneWidget);
+      expect(find.textContaining('changed on Hermes'), findsOneWidget);
+      expect(find.text('Review changes').hitTestable(), findsOneWidget);
+
+      await tester.tap(find.text('Review changes'));
+      await tester.pumpAndSettle();
+      expect(find.text('My retained name'), findsWidgets);
+      expect(find.text('Name from another client'), findsOneWidget);
+      await tester.tap(find.text('Keep mine'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply decisions'));
+      await tester.pumpAndSettle();
+      expect(fixture.mutations, 0);
+      expect(
+        tester.widget<TextFormField>(name).controller!.text,
+        'My retained name',
+      );
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+
+      final writes = fixture.admin.requests
+          .where((r) => r.$1 == 'PUT')
+          .toList();
+      expect(writes, hasLength(1));
+      expect(writes.single.$3['profile'], 'personal');
+      expect(writes.single.$4!['updates'], {'name': 'My retained name'});
+      expect(fixture.jobs['morning']!['prompt'], 'New unedited instructions');
+      expect(find.text('Open task editor'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'cancelling task conflict review keeps dirty fields and still refuses the stale baseline',
+    (tester) async {
+      await openTaskEditor(tester);
+      final name = find.widgetWithText(TextFormField, 'Name (optional)');
+      await tester.enterText(name, 'My draft');
+      fixture.jobs['morning']!['name'] = 'Remote name';
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      expect(fixture.mutations, 0);
+      await tester.tap(find.text('Review changes'));
+      await tester.pumpAndSettle();
+      expect(find.text('Remote name'), findsOneWidget);
+      await tester.tap(find.text('Keep mine'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Review task changes'), findsNothing);
+      expect(tester.widget<TextFormField>(name).controller!.text, 'My draft');
+      expect(fixture.mutations, 0);
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      expect(fixture.mutations, 0);
+      expect(find.textContaining('changed on Hermes'), findsOneWidget);
+      expect(find.byType(AdminScheduledTaskEditorPage), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'task conflict Use server adopts only the reviewed field before Save',
+    (tester) async {
+      await openTaskEditor(tester);
+      final name = find.widgetWithText(TextFormField, 'Name (optional)');
+      final prompt = find.widgetWithText(TextFormField, 'Instructions');
+      await tester.enterText(name, 'My name');
+      await tester.ensureVisible(prompt);
+      await tester.enterText(prompt, 'My retained instructions');
+      fixture.jobs['morning']!['name'] = 'Remote name';
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      expect(fixture.mutations, 0);
+      await tester.tap(find.text('Review changes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use server'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply decisions'));
+      await tester.pumpAndSettle();
+      expect(fixture.mutations, 0);
+      expect(
+        tester.widget<TextFormField>(name).controller!.text,
+        'Remote name',
+      );
+      expect(
+        tester.widget<TextFormField>(prompt).controller!.text,
+        'My retained instructions',
+      );
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      final write = fixture.admin.requests.singleWhere((r) => r.$1 == 'PUT');
+      expect(write.$4!['updates'], {'prompt': 'My retained instructions'});
+      expect(fixture.jobs['morning']!['name'], 'Remote name');
+      expect(find.text('Open task editor'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'script-only task review explains and explicitly discards unsupported instructions',
+    (tester) async {
+      await openTaskEditor(tester);
+      final name = find.widgetWithText(TextFormField, 'Name (optional)');
+      final prompt = find.widgetWithText(TextFormField, 'Instructions');
+      await tester.enterText(name, 'My name');
+      await tester.ensureVisible(prompt);
+      await tester.enterText(prompt, 'My retained instructions');
+      fixture.jobs['morning']!.addAll({
+        'name': 'Remote name',
+        'no_agent': true,
+        'script': 'server-owned.sh',
+      });
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      expect(fixture.mutations, 0);
+      expect(
+        tester.widget<TextFormField>(prompt).controller!.text,
+        'My retained instructions',
+      );
+      await tester.tap(find.text('Review changes'));
+      await tester.pumpAndSettle();
+      final keepPrompt = find.byKey(
+        const ValueKey('task-conflict-prompt-mine'),
+      );
+      await tester.ensureVisible(keepPrompt);
+      await tester.pumpAndSettle();
+      expect(tester.widget<StudioSelectionTile>(keepPrompt).onChanged, isNull);
+      expect(
+        find.textContaining('discard your instructions edit'),
+        findsOneWidget,
+      );
+      final serverPrompt = find.byKey(
+        const ValueKey('task-conflict-prompt-server'),
+      );
+      await tester.ensureVisible(serverPrompt);
+      await tester.tap(serverPrompt);
+      await tester.pump();
+      final keepName = find.byKey(const ValueKey('task-conflict-name-mine'));
+      await tester.ensureVisible(keepName);
+      await tester.tap(keepName);
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Apply decisions'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      await tester.tap(find.text('Apply decisions'));
+      await tester.pumpAndSettle();
+      expect(find.text('Review task changes'), findsNothing);
+      expect(fixture.mutations, 0);
+      expect(tester.widget<TextFormField>(name).controller!.text, 'My name');
+      expect(tester.widget<TextFormField>(prompt).enabled, false);
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      final write = fixture.admin.requests.singleWhere((r) => r.$1 == 'PUT');
+      expect(write.$4!['updates'], {'name': 'My name'});
+      expect(fixture.jobs['morning']!['no_agent'], true);
+      expect(fixture.jobs['morning']!['script'], 'server-owned.sh');
+      expect(find.text('Open task editor'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'dirty pushed task Back stays or explicitly discards without any write',
+    (tester) async {
+      await openTaskEditor(tester);
+      final name = find.widgetWithText(TextFormField, 'Name (optional)');
+      await tester.enterText(name, 'Unsaved name');
+      await tester.pump();
+      final guard = find.descendant(
+        of: find.byType(AdminScheduledTaskEditorPage),
+        matching: find.byWidgetPredicate((widget) => widget is PopScope),
+      );
+      expect(tester.widget<PopScope>(guard).canPop, false);
+      expect(
+        tester.widget<TextFormField>(name).controller!.text,
+        'Unsaved name',
+      );
+      expect(fixture.mutations, 0);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Discard your changes?'), findsOneWidget);
+      expect(fixture.mutations, 0);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AdminScheduledTaskEditorPage), findsOneWidget);
+      expect(
+        tester.widget<TextFormField>(name).controller!.text,
+        'Unsaved name',
+      );
+      expect(fixture.jobs['morning']!['name'], 'Morning briefing');
+      expect(fixture.mutations, 0);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AdminScheduledTaskEditorPage), findsNothing);
+      expect(find.text('Open task editor'), findsOneWidget);
+      expect(fixture.jobs['morning']!['name'], 'Morning briefing');
+      expect(fixture.mutations, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'task conflict review is reachable in ${brightness.name} at ${scale}x',
+        (tester) async {
+          await openTaskEditor(
+            tester,
+            brightness: brightness,
+            width: 320,
+            scale: scale,
+          );
+          final name = find.widgetWithText(TextFormField, 'Name (optional)');
+          await tester.ensureVisible(name);
+          await tester.enterText(name, 'My draft');
+          fixture.jobs['morning']!['name'] = 'Remote name';
+          await tester.tap(find.text('Save changes'));
+          await tester.pumpAndSettle();
+          final review = find.text('Review changes').hitTestable();
+          expect(review, findsOneWidget);
+          expect(fixture.mutations, 0);
+          await tester.tap(review);
+          await tester.pumpAndSettle();
+          final mine = find.byKey(const ValueKey('task-conflict-name-mine'));
+          await tester.ensureVisible(mine);
+          await tester.pumpAndSettle();
+          expect(mine.hitTestable(), findsOneWidget);
+          expect(tester.getSize(mine).height, greaterThanOrEqualTo(48));
+          await tester.tap(mine);
+          await tester.pumpAndSettle();
+          final apply = find.text('Apply decisions').hitTestable();
+          expect(apply, findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await screenshot(tester, 'conflict-${brightness.name}-${scale}x');
+          await tester.tap(apply);
+          await tester.pumpAndSettle();
+          expect(fixture.mutations, 0);
+          await tester.ensureVisible(name);
+          expect(
+            tester.widget<TextFormField>(name).controller!.text,
+            'My draft',
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'task editor keeps the draft when another client changes the edited field',
+    (tester) async {
+      final retained = ScheduledTasksController.acquire(fixture.profile, prefs);
+      addTearDown(retained.release);
+      await show(
+        tester,
+        AdminTaskRoute(
+          profile: fixture.profile,
+          acquireController: () =>
+              ScheduledTasksController.acquire(fixture.profile, prefs),
+          title: 'Edit task',
+          taskId: 'morning',
+          builder: (controller, selectedTask) => AdminScheduledTaskEditorPage(
+            controller: controller,
+            original: selectedTask,
+          ),
+        ),
+      );
+      fixture.jobs['morning']!['name'] = 'Name from another client';
+      await retained.refresh();
+      await tester.pumpAndSettle();
+      final name = find.widgetWithText(TextFormField, 'Name (optional)');
+      await tester.enterText(name, 'My unsaved name');
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+
+      expect(fixture.mutations, 0);
+      expect(fixture.jobs['morning']!['name'], 'Name from another client');
+      expect(find.byType(AdminScheduledTaskEditorPage), findsOneWidget);
+      expect(find.textContaining('changed on Hermes'), findsOneWidget);
+      expect(
+        tester.widget<TextFormField>(name).controller!.text,
+        'My unsaved name',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'edit name does not re-anchor schedule or erase advanced settings',
     (tester) async {
       fixture.jobs['morning']!['schedule'] = {
@@ -288,20 +769,13 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Morning briefing').last);
       await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byType(TextFormField).first,
-        'Calendar and weather',
-      );
+      await tester.enterText(find.byType(TextFormField).first, '09:00');
       await tester.tap(find.text('Create task'));
       await tester.pumpAndSettle();
       final request = fixture.admin.requests.firstWhere(
         (r) => r.$2 == 'cron/blueprints/instantiate',
       );
-      expect(request.$4!['values'], {
-        'topic': 'Calendar and weather',
-        'time': '09:00',
-        'deliver': 'local',
-      });
+      expect(request.$4!['values'], {'time': '09:00', 'deliver': 'local'});
     },
   );
   for (final brightness in Brightness.values) {
@@ -511,6 +985,161 @@ void main() {
     final write = fixture.admin.requests.firstWhere((r) => r.$1 == 'PUT');
     expect(write.$4!['updates'], {'name': 'Renamed once'});
   });
+
+  for (final example in [
+    (label: 'expired', instant: '2025-11-02T01:30:00-04:00'),
+    (label: 'far future', instant: '2046-10-03T09:45:00+08:00'),
+  ]) {
+    for (final cancelTime in [false, true]) {
+      testWidgets(
+        '${example.label} once picker cancellation preserves exact schedule at ${cancelTime ? 'time' : 'date'} step',
+        (tester) async {
+          fixture.jobs['morning']!['schedule'] = {
+            'kind': 'once',
+            'run_at': example.instant,
+          };
+          final c = await controller();
+          await show(
+            tester,
+            AdminScheduledTaskEditorPage(
+              controller: c,
+              original: c.task('morning'),
+              now: () => DateTime(2026, 10, 3, 12),
+            ),
+          );
+          // The date is localized, while the trailing timezone label is stable.
+          final dateButton = find.ancestor(
+            of: find.textContaining(' · Phone time'),
+            matching: find.byType(OutlinedButton),
+          );
+          await tester.ensureVisible(dateButton);
+          await tester.tap(dateButton);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), null);
+          final dialog = tester.widget<DatePickerDialog>(
+            find.byType(DatePickerDialog),
+          );
+          expect(
+            dialog.initialDate,
+            example.label == 'expired' ? DateTime(2026, 10, 3) : DateTime(2036),
+          );
+          expect(dialog.firstDate, DateTime(2026, 10, 3));
+          expect(dialog.lastDate, DateTime(2036));
+          if (cancelTime) {
+            await tester.tap(find.text('OK'));
+            await tester.pumpAndSettle();
+            expect(find.byType(TimePickerDialog), findsOneWidget);
+          }
+          await tester.tap(find.text('Cancel'));
+          await tester.pumpAndSettle();
+          expect(fixture.mutations, 0);
+          expect(
+            fixture.jobs['morning']!['schedule']['run_at'],
+            example.instant,
+          );
+          expect(
+            tester
+                .widget<PopScope>(
+                  find.descendant(
+                    of: find.byType(AdminScheduledTaskEditorPage),
+                    matching: find.byWidgetPredicate(
+                      (widget) => widget is PopScope,
+                    ),
+                  ),
+                )
+                .canPop,
+            true,
+          );
+          await tester.ensureVisible(
+            find.widgetWithText(TextFormField, 'Name (optional)'),
+          );
+          await tester.enterText(
+            find.widgetWithText(TextFormField, 'Name (optional)'),
+            'After cancel',
+          );
+          await tester.tap(find.text('Save changes'));
+          await tester.pumpAndSettle();
+          final write = fixture.admin.requests.singleWhere(
+            (request) => request.$1 == 'PUT',
+          );
+          expect(write.$4!['updates'], {'name': 'After cancel'});
+          expect(
+            fixture.jobs['morning']!['schedule']['run_at'],
+            example.instant,
+          );
+          expect(tester.takeException(), null);
+        },
+      );
+    }
+    testWidgets(
+      '${example.label} once picker commits only explicit date and time selection',
+      (tester) async {
+        fixture.jobs['morning']!['schedule'] = {
+          'kind': 'once',
+          'run_at': example.instant,
+        };
+        final c = await controller();
+        await show(
+          tester,
+          AdminScheduledTaskEditorPage(
+            controller: c,
+            original: c.task('morning'),
+            now: () => DateTime(2026, 10, 3, 12),
+          ),
+        );
+        final dateButton = find.ancestor(
+          of: find.textContaining(' · Phone time'),
+          matching: find.byType(OutlinedButton),
+        );
+        await tester.ensureVisible(dateButton);
+        await tester.tap(dateButton);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), null);
+        if (example.label == 'expired') {
+          await tester.tap(find.text('4').hitTestable());
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+        final time = tester
+            .widget<TimePickerDialog>(find.byType(TimePickerDialog))
+            .initialTime;
+        final selected = example.label == 'expired'
+            ? DateTime(2026, 10, 4)
+            : DateTime(2036);
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+        expect(fixture.mutations, 0);
+        await tester.tap(find.text('Save changes'));
+        await tester.pumpAndSettle();
+        final write = fixture.admin.requests.singleWhere(
+          (request) => request.$1 == 'PUT',
+        );
+        expect(write.$4!['updates'], {
+          'schedule': DateTime(
+            selected.year,
+            selected.month,
+            selected.day,
+            time.hour,
+            time.minute,
+          ).toUtc().toIso8601String(),
+        });
+        final observed = c.task('morning')!;
+        expect(observed.schedule['kind'], 'once');
+        expect(
+          DateTime.parse(observed.schedule['run_at'] as String),
+          DateTime(
+            selected.year,
+            selected.month,
+            selected.day,
+            time.hour,
+            time.minute,
+          ).toUtc(),
+        );
+        expect(tester.takeException(), null);
+      },
+    );
+  }
 
   testWidgets('pushed narrow task titles grow with large text', (tester) async {
     await show(

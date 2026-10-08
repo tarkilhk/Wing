@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/administration_repository.dart';
 
 import '../../models/scheduled_task.dart';
@@ -212,37 +211,25 @@ Future<void> performTaskAction(
   BuildContext context,
   ScheduledTasksController controller,
   ScheduledTask task,
-  String action,
+  TaskAction action,
 ) async {
-  if (controller.blocked(task.id)) return;
-  if (action == 'delete' &&
+  final choice = controller.actionChoice(task, action);
+  if (choice?.enabled != true) return;
+  final prompt = choice!.confirmation;
+  if (prompt != null &&
       !await adminConfirm(
         context,
-        'Delete ${task.title}?',
-        'Remove this schedule from ${controller.repository.profile.label}. This does not stop work that is already running.',
-        action: 'Delete task',
+        prompt.title,
+        prompt.message,
+        action: prompt.buttonLabel,
       )) {
     return;
   }
   if (!context.mounted) return;
-  if (action == 'trigger' &&
-      !task.enabled &&
-      !await adminConfirm(
-        context,
-        'Resume and run?',
-        'This runs ${task.title} now and resumes its schedule on the server.',
-        action: 'Resume and run',
-      )) {
-    return;
-  }
   try {
-    if (action == 'delete') {
-      await controller.delete(task);
-    } else {
-      await controller.act(task, action);
-    }
+    await controller.perform(task, action);
   } catch (_) {
-    /* The controller retains the operation-specific result. */
+    /* The retained owner publishes the result. */
   }
 }
 
@@ -269,23 +256,19 @@ class TaskMenu extends StatelessWidget {
                 task.title,
                 controller.repository.profile.label,
                 [
-                  ('edit', 'Edit task', Icons.edit_outlined, true),
-                  if (task.canPause)
-                    ('pause', 'Pause schedule', Icons.pause_rounded, true),
-                  if (task.canResume)
+                  for (final choice in controller.actions(task))
                     (
-                      'resume',
-                      'Resume schedule',
-                      Icons.play_arrow_rounded,
-                      true,
+                      choice.kind.name,
+                      choice.label,
+                      switch (choice.kind) {
+                        TaskAction.edit => Icons.edit_outlined,
+                        TaskAction.pause => Icons.pause_rounded,
+                        TaskAction.resume => Icons.play_arrow_rounded,
+                        TaskAction.trigger => Icons.bolt_outlined,
+                        TaskAction.remove => Icons.delete_outline,
+                      },
+                      choice.enabled,
                     ),
-                  (
-                    'trigger',
-                    task.enabled ? 'Run now' : 'Resume and run',
-                    Icons.bolt_outlined,
-                    task.canRun,
-                  ),
-                  ('delete', 'Delete task', Icons.delete_outline, true),
                 ],
                 keyPrefix: 'task',
               );
@@ -293,7 +276,14 @@ class TaskMenu extends StatelessWidget {
               if (result == 'edit') {
                 onEdit();
               } else {
-                await performTaskAction(context, controller, task, result);
+                await performTaskAction(
+                  context,
+                  controller,
+                  task,
+                  TaskAction.values.singleWhere(
+                    (action) => action.name == result,
+                  ),
+                );
               }
             },
     ),
@@ -310,24 +300,21 @@ class TaskUncertainty extends StatelessWidget {
   final String id;
   @override
   Widget build(BuildContext context) {
-    if (!controller.uncertain.containsKey(id) || controller.busy.contains(id)) {
-      return const SizedBox.shrink();
-    }
+    final notice = controller.pendingNotice(id);
+    if (notice == null) return const SizedBox.shrink();
     return TaskMessage(
-      controller.uncertain[id]?['action'] == 'registration'
-          ? 'Your task was saved, but scheduler registration failed. Review the saved task before creating another.'
-          : 'A previous request has an unknown outcome. Review the tasks and recent runs before making another request.',
+      notice,
       error: true,
       action: TextButton(
         child: const Text('Review request'),
         onPressed: () async {
-          await controller.refresh();
-          if (!context.mounted || !controller.uncertain.containsKey(id)) return;
+          final prompt = await controller.reviewPrompt(id);
+          if (!context.mounted || prompt == null) return;
           final acknowledged = await adminConfirm(
             context,
-            'Have you reviewed the result?',
-            'The previous request may have reached Hermes. Allowing another request can create duplicate work. This only clears the pending notice; it does not repeat the request.',
-            action: 'I have reviewed it',
+            prompt.title,
+            prompt.message,
+            action: prompt.buttonLabel,
           );
           if (acknowledged) {
             try {
@@ -350,13 +337,13 @@ class AdminTaskRoute extends StatefulWidget {
   const AdminTaskRoute({
     super.key,
     required this.profile,
-    required this.preferences,
+    required this.acquireController,
     required this.title,
     required this.builder,
     this.taskId,
   });
   final ProfileAdministration profile;
-  final SharedPreferences preferences;
+  final ScheduledTasksController Function() acquireController;
   final String title;
   final String? taskId;
   final Widget Function(ScheduledTasksController, ScheduledTask?) builder;
@@ -365,10 +352,7 @@ class AdminTaskRoute extends StatefulWidget {
 }
 
 class _AdminTaskRouteState extends State<AdminTaskRoute> {
-  late final controller = ScheduledTasksController.acquire(
-    widget.profile,
-    widget.preferences,
-  );
+  late final controller = widget.acquireController();
   @override
   void initState() {
     super.initState();

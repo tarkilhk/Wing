@@ -1,5 +1,8 @@
+import '../test/support/composer_fixture.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:flutter/widgets.dart';
+import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/models/chat_notification_content.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,7 +10,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/main.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/connection_manager.dart';
-import 'package:wing/core/services/profile_selection_store.dart';
 import 'package:wing/core/services/profile_connection_identity.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 
@@ -31,13 +33,28 @@ void main() {
         dashboardPortOverride: port,
         apiKey: '',
       );
-      await manager.importConnections([connection], replaceExisting: false);
-      await preferences.setString('last_connection_id', connection.id);
-      await ProfileSelectionStore(preferences).write(
-        await ProfileConnectionIdentity().resolve(connection),
-        'android-qa-a',
+      await manager.importConnections(
+        [connection],
+        replaceExisting: false,
+        canCommit: () => true,
       );
-      await tester.pumpWidget(WingApp(connManager: manager));
+      await preferences.setString('last_connection_id', connection.id);
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
+      expect(
+        (await appPreferences
+                .admitProfileSelection(
+                  await ProfileConnectionIdentity().resolve(connection),
+                  'android-qa-a',
+                )
+                .settled)
+            .confirmed,
+        isTrue,
+      );
+      addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+      await tester.pumpWidget(
+        WingApp(connManager: manager, appPreferences: appPreferences),
+      );
       Future<void> until(bool Function() condition, {int seconds = 30}) async {
         final deadline = DateTime.now().add(Duration(seconds: seconds));
         while (!condition() && DateTime.now().isBefore(deadline)) {
@@ -66,7 +83,10 @@ void main() {
       );
       await controller.openSession(key);
       final chat = controller.current!.chat!;
-      chat.title = 'Notification QA: tap to reopen profile A';
+      emitChatEvent(controller, chat, 'session.title', {
+        'session_id': chat.key.sessionId,
+        'title': 'Notification QA: tap to reopen profile A',
+      });
       expect(await controller.switchProfile('android-qa-b'), isTrue);
       await tester.pumpAndSettle();
       await controller.onAttention!(

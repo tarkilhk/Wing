@@ -69,7 +69,7 @@ class DashboardReadTransport {
             streamed.contentLength! > maxBytes) {
       await streamed.stream.listen(null).cancel();
       if (abort.isCompleted) throw http.RequestAbortedException(request.url);
-      throw DashboardReadTooLarge(maxBytes!);
+      throw const DashboardReadTooLarge();
     }
     final result = Completer<http.Response>();
     final bytes = BytesBuilder(copy: false);
@@ -80,7 +80,7 @@ class DashboardReadTransport {
         if (result.isCompleted) return;
         received += chunk.length;
         if (maxBytes != null && received > maxBytes) {
-          result.completeError(DashboardReadTooLarge(maxBytes));
+          result.completeError(const DashboardReadTooLarge());
           unawaited(subscription.cancel());
         } else {
           bytes.add(chunk);
@@ -124,6 +124,5 @@ class DashboardReadTransport {
 }
 
 class DashboardReadTooLarge implements Exception {
-  const DashboardReadTooLarge(this.maxBytes);
-  final int maxBytes;
+  const DashboardReadTooLarge();
 }

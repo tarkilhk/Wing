@@ -1,3 +1,5 @@
+import 'package:wing/core/models/dashboard_oauth_grant.dart';
+import 'package:wing/core/services/dashboard_oauth_session.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -14,21 +16,13 @@ String _key(String id) =>
 class _Secrets implements CredentialStore {
   _Secrets([Map<String, String>? durable]) : values = durable ?? {};
   final Map<String, String> values;
-  final cache = <String, String>{};
   Future<void> Function(String operation, String key, String? value)? before;
   Future<void> Function(String operation, String key, String? value)? after;
 
   @override
-  String? readCached(String key) => cache[key];
-  @override
   Future<String?> read(String key) async {
     await before?.call('read', key, null);
     final value = values[key];
-    if (value == null) {
-      cache.remove(key);
-    } else {
-      cache[key] = value;
-    }
     await after?.call('read', key, value);
     return value;
   }
@@ -44,7 +38,6 @@ class _Secrets implements CredentialStore {
   Future<void> delete(String key) async {
     await before?.call('delete', key, null);
     values.remove(key);
-    cache.remove(key);
     await after?.call('delete', key, null);
   }
 }
@@ -90,7 +83,7 @@ SavedConnection _connection(
   String id,
   String host,
   String secret, {
-  DashboardOAuthSession? oauth,
+  DashboardOAuthGrant? oauth,
 }) => SavedConnection(
   id: id,
   label: id,
@@ -101,15 +94,28 @@ SavedConnection _connection(
   dashboardPassword: secret.isEmpty ? null : 'password-$secret',
   gatewayHeaders: secret.isEmpty ? {} : {'X-Access-Secret': 'header-$secret'},
   cloudInstanceId: oauth == null ? null : 'cloud-$id',
-  dashboardOAuth: oauth,
+  dashboardGrant: oauth,
 );
 
-Future<ConnectionManager> _seed(_Preferences prefs, _Secrets store) async {
-  final manager = await ConnectionManager.create(prefs, credentialStore: store);
-  await manager.importConnections([
-    _connection('a', 'old-a.example', 'old-a'),
-    _connection('removed', 'old-removed.example', 'old-removed'),
-  ], replaceExisting: true);
+Future<ConnectionManager> _seed(
+  _Preferences prefs,
+  _Secrets store, {
+  http.Client Function()? oauthClient,
+}) async {
+  final manager = await ConnectionManager.create(
+    prefs,
+    credentialStore: store,
+    createOAuthSession: (grant) =>
+        DashboardOAuthSession(grant, createClient: oauthClient),
+  );
+  await manager.importConnections(
+    [
+      _connection('a', 'old-a.example', 'old-a'),
+      _connection('removed', 'old-removed.example', 'old-removed'),
+    ],
+    replaceExisting: true,
+    canCommit: () => true,
+  );
   return manager;
 }
 
@@ -170,7 +176,11 @@ void main() {
           }
         };
         await expectLater(
-          manager.importConnections(_incoming, replaceExisting: true),
+          manager.importConnections(
+            _incoming,
+            replaceExisting: true,
+            canCommit: () => true,
+          ),
           throwsA(isA<CredentialStorageException>()),
         );
         expect(failed, true);
@@ -203,7 +213,11 @@ void main() {
           prefs.failWrite = true;
         }
         await expectLater(
-          manager.importConnections(_incoming, replaceExisting: true),
+          manager.importConnections(
+            _incoming,
+            replaceExisting: true,
+            canCommit: () => true,
+          ),
           throwsA(isA<CredentialStorageException>()),
         );
         _expectOriginals(manager);
@@ -239,7 +253,11 @@ void main() {
         }
       };
       await expectLater(
-        manager.importConnections(_incoming, replaceExisting: true),
+        manager.importConnections(
+          _incoming,
+          replaceExisting: true,
+          canCommit: () => true,
+        ),
         throwsA(isA<CredentialStorageException>()),
       );
       expect(store.values, contains(_journalKey));
@@ -337,7 +355,11 @@ void main() {
       }
     };
     await expectLater(
-      manager.importConnections(_incoming, replaceExisting: true),
+      manager.importConnections(
+        _incoming,
+        replaceExisting: true,
+        canCommit: () => true,
+      ),
       throwsA(isA<CredentialStorageException>()),
     );
     expect(manager.getConnections, throwsA(isA<CredentialStorageException>()));
@@ -378,7 +400,11 @@ void main() {
       };
       Object? failure;
       try {
-        await manager.importConnections(_incoming, replaceExisting: true);
+        await manager.importConnections(
+          _incoming,
+          replaceExisting: true,
+          canCommit: () => true,
+        );
       } catch (error) {
         failure = error;
       }
@@ -396,9 +422,11 @@ void main() {
       final prefs = _Preferences();
       final store = _Secrets();
       final manager = await _seed(prefs, store);
-      await manager.importConnections([
-        _connection('a', 'new-a.example', 'new-a'),
-      ], replaceExisting: false);
+      await manager.importConnections(
+        [_connection('a', 'new-a.example', 'new-a')],
+        replaceExisting: false,
+        canCommit: () => true,
+      );
       expect(manager.getConnections().last.apiKey, 'old-removed');
       final cold = await ConnectionManager.create(
         prefs,
@@ -429,6 +457,7 @@ void main() {
       final importing = manager.importConnections(
         _incoming,
         replaceExisting: true,
+        canCommit: () => true,
       );
       await entered.future;
       _expectOriginals(manager);
@@ -438,7 +467,29 @@ void main() {
         readSettled = true;
         return result;
       });
-      final update = other.updateApiKey('a', 'post-import');
+      final admitted = _incoming.first;
+      final update = other.updateConnection(
+        admitted.id,
+        admitted.label,
+        Uri(
+          scheme: admitted.useHttps ? 'https' : 'http',
+          host: admitted.host,
+        ).toString(),
+        admitted.port,
+        'post-import',
+        icon: admitted.icon,
+        gatewayPrefix: admitted.gatewayPrefix,
+        dashboardPrefix: admitted.dashboardPrefix,
+        dashboardProxied: admitted.dashboardProxied,
+        desktopGatewayUrl: admitted.desktopGatewayUrl,
+        dashboardPort: admitted.dashboardPortOverride,
+        dashboardUsername: admitted.dashboardUsername,
+        dashboardPassword: admitted.dashboardPassword,
+        cloudInstanceId: admitted.cloudInstanceId,
+        cloudOrganization: admitted.cloudOrganization,
+        dashboardGrant: admitted.dashboardGrant,
+        gatewayHeaders: admitted.gatewayHeaders,
+      );
       final icon = other.updateConnectionIcon('a', ConnectionIcon.home);
       final deletion = other.deleteConnection('added');
       final saving = other.saveConnection(
@@ -476,14 +527,10 @@ void main() {
       () async {
         final prefs = _Preferences();
         final store = _Secrets();
-        final manager = await _seed(prefs, store);
-        final session = DashboardOAuthSession(
-          id: 'grant',
-          baseUrl: 'https://cloud.example',
-          accessToken: 'old-access',
-          refreshToken: 'old-refresh',
-          expiresAt: DateTime.utc(2020),
-          createClient: () => MockClient(
+        final manager = await _seed(
+          prefs,
+          store,
+          oauthClient: () => MockClient(
             (_) async => http.Response(
               jsonEncode({
                 'provider': 'nous',
@@ -499,9 +546,23 @@ void main() {
             ),
           ),
         );
-        await manager.importConnections([
-          _connection('cloud', 'cloud.example', '', oauth: session),
-        ], replaceExisting: false);
+        final initialGrant = DashboardOAuthGrant(
+          id: 'grant',
+          baseUrl: 'https://cloud.example',
+          accessToken: 'old-access',
+          refreshToken: 'old-refresh',
+          expiresAt: DateTime.utc(2020),
+        );
+        await manager.importConnections(
+          [_connection('cloud', 'cloud.example', '', oauth: initialGrant)],
+          replaceExisting: false,
+          canCommit: () => true,
+        );
+        final session = manager
+            .accessFor(
+              manager.getConnections().firstWhere((c) => c.id == 'cloud'),
+            )
+            .dashboardOAuth!;
         final entered = Completer<void>();
         final release = Completer<void>();
         store.after = (operation, key, value) async {
@@ -513,20 +574,24 @@ void main() {
             await release.future;
           }
         };
-        final replacement = DashboardOAuthSession(
+        final replacement = DashboardOAuthGrant(
           id: 'grant',
-          baseUrl: session.baseUrl,
+          baseUrl: session.currentGrant.baseUrl,
           accessToken: 'import-access',
           refreshToken: 'import-refresh',
           expiresAt: DateTime.now().add(const Duration(hours: 1)),
         );
-        final importing = manager.importConnections([
-          ..._incoming,
-          if (replaceCloud)
-            _connection('cloud', 'cloud.example', '', oauth: replacement),
-        ], replaceExisting: replaceCloud);
+        final importing = manager.importConnections(
+          [
+            ..._incoming,
+            if (replaceCloud)
+              _connection('cloud', 'cloud.example', '', oauth: replacement),
+          ],
+          replaceExisting: replaceCloud,
+          canCommit: () => true,
+        );
         await entered.future;
-        final renewing = session.bearerFor(session.baseUrl);
+        final renewing = session.bearerFor(session.currentGrant.baseUrl);
         // Attach the rejection observer before releasing the queue.
         final renewalExpectation = replaceCloud
             ? expectLater(renewing, throwsA(isA<CloudAccessException>()))

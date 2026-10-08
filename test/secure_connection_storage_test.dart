@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -6,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class _FaultInjectingCredentialStore implements CredentialStore {
   final Map<String, String> values = <String, String>{};
-  final Map<String, String> _cache = <String, String>{};
 
   int reads = 0;
   int writes = 0;
@@ -18,7 +19,6 @@ class _FaultInjectingCredentialStore implements CredentialStore {
   Future<void> delete(String key) async {
     deletes += 1;
     values.remove(key);
-    _cache.remove(key);
   }
 
   @override
@@ -27,21 +27,12 @@ class _FaultInjectingCredentialStore implements CredentialStore {
     if (_failCredentialReadBack &&
         key.startsWith('connection_credentials_v1.')) {
       _failCredentialReadBack = false;
-      _cache.remove(key);
       return null;
     }
 
     final value = values[key];
-    if (value == null) {
-      _cache.remove(key);
-    } else {
-      _cache[key] = value;
-    }
     return value;
   }
-
-  @override
-  String? readCached(String key) => _cache[key];
 
   @override
   Future<void> write(String key, String value) async {
@@ -91,6 +82,72 @@ void _expectNoPlaintextCredentials(SharedPreferences prefs) {
 }
 
 void main() {
+  test(
+    'password bytes remain exact in access, secure save and cold reload',
+    () async {
+      for (final password in [' test password ', '   ', '']) {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final store = _FaultInjectingCredentialStore();
+        final manager = await ConnectionManager.create(
+          prefs,
+          credentialStore: store,
+        );
+        final saved = await manager.saveConnection(
+          'Private',
+          'https://agent.example',
+          443,
+          '',
+          dashboardUsername: 'operator',
+          dashboardPassword: password,
+        );
+        expect(manager.accessFor(saved).connection.dashboardPassword, password);
+        expect(manager.getConnections().single.dashboardPassword, password);
+        final encodedId = base64Url
+            .encode(utf8.encode(saved.id))
+            .replaceAll('=', '');
+        final encoded = store.values['connection_credentials_v1.$encodedId']!;
+        expect((jsonDecode(encoded) as Map)['dashboard_password'], password);
+        await manager.loadConnectionsWithSecrets();
+        expect(manager.getConnections().single.dashboardPassword, password);
+        expect(manager.accessFor(saved).connection.dashboardPassword, password);
+        final descriptor = manager.accessFor(saved).connection;
+        final loginBodies = <Map<String, dynamic>>[];
+        final client = DashboardClient(
+          host: descriptor.host,
+          useHttps: true,
+          port: descriptor.dashboardPort,
+          username: descriptor.dashboardUsername,
+          password: descriptor.dashboardPassword,
+          httpClient: MockClient((request) async {
+            if (request.url.path == '/auth/password-login') {
+              loginBodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+              return http.Response(
+                '{}',
+                200,
+                headers: {'set-cookie': 'hermes_session_at=test-session'},
+              );
+            }
+            if (request.url.path == '/') {
+              return http.Response(
+                'window.__HERMES_SESSION_TOKEN__="test-local";',
+                200,
+              );
+            }
+            return http.Response('{}', 200);
+          }),
+        );
+        await client.apiGet('profiles');
+        client.close();
+        if (password.isNotEmpty) {
+          expect(loginBodies.single['password'], password);
+        } else {
+          expect(loginBodies, isEmpty);
+        }
+      }
+    },
+  );
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
@@ -215,15 +272,78 @@ void main() {
     expect(updated.dashboardPassword, 'synthetic-password-new');
     _expectNoPlaintextCredentials(prefs);
 
-    await manager.updateApiKey(original.id, '');
-    await manager.updateDashboardAuth(original.id, username: '', password: '');
+    await manager.updateConnection(
+      updated.id,
+      updated.label,
+      Uri(
+        scheme: updated.useHttps ? 'https' : 'http',
+        host: updated.host,
+      ).toString(),
+      updated.port,
+      '',
+      icon: updated.icon,
+      gatewayPrefix: updated.gatewayPrefix,
+      dashboardPrefix: updated.dashboardPrefix,
+      dashboardProxied: updated.dashboardProxied,
+      desktopGatewayUrl: updated.desktopGatewayUrl,
+      dashboardPort: updated.dashboardPortOverride,
+      dashboardUsername: updated.dashboardUsername,
+      dashboardPassword: updated.dashboardPassword,
+      cloudInstanceId: updated.cloudInstanceId,
+      cloudOrganization: updated.cloudOrganization,
+      dashboardGrant: updated.dashboardGrant,
+      gatewayHeaders: updated.gatewayHeaders,
+    );
+    await manager.updateConnection(
+      updated.id,
+      updated.label,
+      Uri(
+        scheme: updated.useHttps ? 'https' : 'http',
+        host: updated.host,
+      ).toString(),
+      updated.port,
+      '',
+      icon: updated.icon,
+      gatewayPrefix: updated.gatewayPrefix,
+      dashboardPrefix: updated.dashboardPrefix,
+      dashboardProxied: updated.dashboardProxied,
+      desktopGatewayUrl: updated.desktopGatewayUrl,
+      dashboardPort: updated.dashboardPortOverride,
+      dashboardUsername: '',
+      dashboardPassword: '',
+      cloudInstanceId: updated.cloudInstanceId,
+      cloudOrganization: updated.cloudOrganization,
+      dashboardGrant: updated.dashboardGrant,
+      gatewayHeaders: updated.gatewayHeaders,
+    );
     updated = manager.getConnections().single;
     expect(updated.apiKey, isEmpty);
     expect(updated.dashboardPassword, isNull);
     expect(store.values, isEmpty);
     _expectNoPlaintextCredentials(prefs);
 
-    await manager.updateApiKey(original.id, 'synthetic-api-restored');
+    await manager.updateConnection(
+      updated.id,
+      updated.label,
+      Uri(
+        scheme: updated.useHttps ? 'https' : 'http',
+        host: updated.host,
+      ).toString(),
+      updated.port,
+      'synthetic-api-restored',
+      icon: updated.icon,
+      gatewayPrefix: updated.gatewayPrefix,
+      dashboardPrefix: updated.dashboardPrefix,
+      dashboardProxied: updated.dashboardProxied,
+      desktopGatewayUrl: updated.desktopGatewayUrl,
+      dashboardPort: updated.dashboardPortOverride,
+      dashboardUsername: updated.dashboardUsername,
+      dashboardPassword: updated.dashboardPassword,
+      cloudInstanceId: updated.cloudInstanceId,
+      cloudOrganization: updated.cloudOrganization,
+      dashboardGrant: updated.dashboardGrant,
+      gatewayHeaders: updated.gatewayHeaders,
+    );
     expect(store.values, hasLength(1));
     await manager.deleteConnection(original.id);
     expect(manager.getConnections(), isEmpty);
@@ -317,11 +437,32 @@ void main() {
       'synthetic-api-stable',
       dashboardPassword: 'synthetic-password-stable',
     );
-    final id = manager.getConnections().single.id;
+    final captured = manager.getConnections().single;
 
     store.failNextRead = true;
     await expectLater(
-      manager.updateApiKey(id, 'synthetic-api-rejected'),
+      manager.updateConnection(
+        captured.id,
+        captured.label,
+        Uri(
+          scheme: captured.useHttps ? 'https' : 'http',
+          host: captured.host,
+        ).toString(),
+        captured.port,
+        'synthetic-api-rejected',
+        icon: captured.icon,
+        gatewayPrefix: captured.gatewayPrefix,
+        dashboardPrefix: captured.dashboardPrefix,
+        dashboardProxied: captured.dashboardProxied,
+        desktopGatewayUrl: captured.desktopGatewayUrl,
+        dashboardPort: captured.dashboardPortOverride,
+        dashboardUsername: captured.dashboardUsername,
+        dashboardPassword: captured.dashboardPassword,
+        cloudInstanceId: captured.cloudInstanceId,
+        cloudOrganization: captured.cloudOrganization,
+        dashboardGrant: captured.dashboardGrant,
+        gatewayHeaders: captured.gatewayHeaders,
+      ),
       throwsA(isA<CredentialStorageException>()),
     );
 

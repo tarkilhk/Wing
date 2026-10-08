@@ -2,6 +2,8 @@
 /// Fixtures are generated locally; this target never connects to Hermes.
 library;
 
+import 'package:wing/core/services/chat_outputs_session.dart';
+
 import 'dart:convert';
 import 'dart:math';
 
@@ -35,7 +37,7 @@ class _StudioPreviewApp extends StatefulWidget {
 
 class _StudioPreviewAppState extends State<_StudioPreviewApp> {
   Brightness _brightness = Brightness.dark;
-  WorkspaceAccent _accent = WorkspaceAccent.mint;
+  WorkspaceAccent _accent = WorkspaceAccent.teal;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -236,12 +238,10 @@ Widget _contentExecutionScreen() {
         const ProfileTodoPanel(
           todos: [
             GatewayTodo(
-              id: 'native-reading-one',
               content: 'Inspect the wide table and code controls',
               status: GatewayTodoStatus.completed,
             ),
             GatewayTodo(
-              id: 'native-reading-two',
               content: 'Open and return from the SVG preview',
               status: GatewayTodoStatus.inProgress,
               parent: 'native-reading-one',
@@ -268,46 +268,47 @@ const _qaText = 'Hermes native linked output bytes.\n';
 
 Widget _localOutputsScreen() => ChatOutputsScreen(
   chatTitle: 'Local native QA',
-  loadHistory: (offset) async => ProfileHistoryPage(
-    'local-native-qa',
-    const [
-      {'id': 1, 'role': 'assistant', 'content': 'Saved $_qaMarkdownPath'},
-    ],
-    offset,
-    500,
-    isComplete: true,
+  createSession: () => ChatOutputsSession(
+    loadHistory: (offset) async => ProfileHistoryPage(
+      'local-native-qa',
+      const [
+        {'id': 1, 'role': 'assistant', 'content': 'Saved $_qaMarkdownPath'},
+      ],
+      offset,
+      500,
+      isComplete: true,
+    ),
+    readText: (path) async {
+      final text = switch (path) {
+        _qaMarkdownPath => _qaMarkdown,
+        _qaTextPath => _qaText,
+        _ => throw StateError('Unknown local QA path'),
+      };
+      return RemoteTextPreview(
+        path: path,
+        text: text,
+        language: path == _qaMarkdownPath ? 'markdown' : 'text',
+        mimeType: path == _qaMarkdownPath
+            ? 'text/markdown; charset=utf-8'
+            : 'text/plain; charset=utf-8',
+        binary: false,
+        truncated: false,
+      );
+    },
+    download: (path) async {
+      final text = switch (path) {
+        _qaMarkdownPath => _qaMarkdown,
+        _qaTextPath => _qaText,
+        _ => throw StateError('Unknown local QA path'),
+      };
+      return RemoteFileDownload(
+        filename: path == _qaMarkdownPath
+            ? 'hermes-native-link-source-20260913.md'
+            : 'hermes-native-linked-report-20260913.txt',
+        bytes: utf8.encode(text),
+      );
+    },
   ),
-  readText: (path) async {
-    final text = switch (path) {
-      _qaMarkdownPath => _qaMarkdown,
-      _qaTextPath => _qaText,
-      _ => throw StateError('Unknown local QA path'),
-    };
-    return RemoteTextPreview(
-      path: path,
-      text: text,
-      language: path == _qaMarkdownPath ? 'markdown' : 'text',
-      mimeType: path == _qaMarkdownPath
-          ? 'text/markdown; charset=utf-8'
-          : 'text/plain; charset=utf-8',
-      byteSize: utf8.encode(text).length,
-      binary: false,
-      truncated: false,
-    );
-  },
-  download: (path) async {
-    final text = switch (path) {
-      _qaMarkdownPath => _qaMarkdown,
-      _qaTextPath => _qaText,
-      _ => throw StateError('Unknown local QA path'),
-    };
-    return RemoteFileDownload(
-      filename: path == _qaMarkdownPath
-          ? 'hermes-native-link-source-20260913.md'
-          : 'hermes-native-linked-report-20260913.txt',
-      bytes: utf8.encode(text),
-    );
-  },
 );
 
 Uint8List _pdf() {

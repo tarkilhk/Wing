@@ -11,7 +11,6 @@ import json
 import re
 import subprocess
 import time
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from trace_streaming_cpu import rpc, require, sanitize_cpu
@@ -44,16 +43,14 @@ def keyboard_preflight(client, input_mode):
     else:
         ime = adb(client, 'shell', 'settings', 'get', 'secure', 'default_input_method').decode()
         require('com.touchtype.swiftkey.beta/' in ime)
-    name = '/data/local/tmp/wing-replay-keyboard.xml'
-    try:
-        adb(client, 'shell', 'uiautomator', 'dump', '--compressed', name)
-        nodes = ET.fromstring(adb(client, 'exec-out', 'cat', name)).iter('node')
-        fields = [n for n in nodes if n.attrib.get('class') == 'android.widget.EditText'
-                  and n.attrib.get('package') == PACKAGE]
-        require(len(fields) == 1 and fields[0].attrib.get('focused') == 'true')
-        require(not fields[0].attrib.get('text', ''))
-    finally:
-        adb(client, 'shell', 'rm', '-f', name)
+    # The fixture locates exactly one composer and reports its actual editable
+    # state. Android's accessibility root can be null while SwiftKey is visible;
+    # use the owning editable and native IME visibility as independent checks.
+    ready = rpc(client, 'ext.wingReplay.ready', isolateId=client.isolate)
+    require(ready['prepared'] and ready['keyboard'] and ready['composerFocused']
+            and ready['draft'] == '')
+    native = adb(client, 'shell', 'dumpsys', 'input_method').decode()
+    require(re.search(r'\bmInputShown=true\b', native) is not None)
 
 
 def native_typing(client, input_mode):

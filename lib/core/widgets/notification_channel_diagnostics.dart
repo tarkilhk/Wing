@@ -12,7 +12,7 @@ class NotificationChannelDiagnostics extends StatefulWidget {
 class _NotificationChannelDiagnosticsState
     extends State<NotificationChannelDiagnostics>
     with WidgetsBindingObserver {
-  List<Map<String, dynamic>> _blocked = const [];
+  List<NativeNotificationChannel> _blocked = const [];
   @override
   void initState() {
     super.initState();
@@ -33,14 +33,10 @@ class _NotificationChannelDiagnosticsState
 
   Future<void> _load() async {
     try {
-      final rows = await NativeNotificationSink.channel
-          .invokeListMethod<dynamic>('channels');
+      final rows = await NativeNotificationSink.blockedChannels();
       if (!mounted) return;
       setState(() {
-        _blocked = (rows ?? const [])
-            .map((v) => Map<String, dynamic>.from(v as Map))
-            .where((v) => v['blocked'] == true)
-            .toList();
+        _blocked = rows;
       });
     } catch (_) {
       /* Unavailable outside Android. */
@@ -53,17 +49,14 @@ class _NotificationChannelDiagnosticsState
       for (final channel in _blocked)
         ListTile(
           leading: const Icon(Icons.notifications_off_outlined),
-          title: Text('${channel['name']} blocked'),
+          title: Text('${channel.name} blocked'),
           subtitle: const Text(
             'Enable this category in Android notification settings.',
           ),
           trailing: const Icon(Icons.open_in_new),
           onTap: () async {
             try {
-              await NativeNotificationSink.channel.invokeMethod<void>(
-                'openChannelSettings',
-                channel['id'],
-              );
+              await NativeNotificationSink.openChannelSettings(channel);
             } catch (_) {
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(

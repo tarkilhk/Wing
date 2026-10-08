@@ -1,15 +1,17 @@
+import 'package:wing/core/models/notification_input.dart';
+import 'package:wing/core/services/app_preferences.dart';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/chat_notification_content.dart';
 import 'package:wing/core/models/notification_focus.dart';
 import 'package:wing/core/services/chat_notification_coordinator.dart';
-import 'package:wing/core/services/turn_notification_service.dart';
 import 'support/recording_turn_notification_sink.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late SharedPreferences prefs;
+  late AppPreferences appPreferences;
   late RecordingTurnNotificationSink sink;
   late ChatNotificationCoordinator notices;
   const chat =
@@ -43,9 +45,36 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(prefs);
     sink = RecordingTurnNotificationSink();
-    notices = ChatNotificationCoordinator(prefs, sink);
+    notices = ChatNotificationCoordinator(
+      prefs,
+      sink,
+      appPreferences: appPreferences,
+    );
   });
+  tearDown(() => appPreferences.dispose());
+  test(
+    'input observations detach retained choices before queued delivery',
+    () async {
+      final choices = ['once', 'deny'];
+      final captured = NotificationInput(
+        focus: const NotificationFocus('approval', 'captured'),
+        content: ChatNotificationContent.approval('run', 'Run'),
+        choices: choices,
+      );
+      final source = [captured];
+      final delivery = inputs(source);
+      choices.add('always');
+      source.clear();
+      await delivery;
+      expect(sink.shown.single.focus?.identity, 'approval:captured');
+      expect(sink.shown.single.choices, ['once', 'deny']);
+      expect(notices.inputFor(chat)?.choices, ['once', 'deny']);
+      expect(() => captured.choices.add('always'), throwsUnsupportedError);
+    },
+  );
+
   test(
     'restoration silently redraws only the current unread revision',
     () async {
@@ -53,7 +82,11 @@ void main() {
       await reply('latest');
       final posted = sink.shown.last;
       sink = RecordingTurnNotificationSink();
-      notices = ChatNotificationCoordinator(prefs, sink);
+      notices = ChatNotificationCoordinator(
+        prefs,
+        sink,
+        appPreferences: appPreferences,
+      );
       await notices.restore(owns: (_) => true);
       expect(sink.shown, hasLength(1));
       expect(sink.shown.single.id, posted.id);
@@ -74,7 +107,11 @@ void main() {
         await notices.dismissed(chat, sink.shown.single.revision!);
       }
       sink = RecordingTurnNotificationSink();
-      notices = ChatNotificationCoordinator(prefs, sink);
+      notices = ChatNotificationCoordinator(
+        prefs,
+        sink,
+        appPreferences: appPreferences,
+      );
       await notices.restore(owns: (_) => true);
       expect(sink.shown, isEmpty);
     });
@@ -83,17 +120,25 @@ void main() {
     'restoration respects current preview and category preferences',
     () async {
       await inputs([approval('a')]);
-      await prefs.setBool(notificationPreviewsKey, false);
+      await appPreferences.setNotificationPreviews(false);
       sink = RecordingTurnNotificationSink();
-      notices = ChatNotificationCoordinator(prefs, sink);
+      notices = ChatNotificationCoordinator(
+        prefs,
+        sink,
+        appPreferences: appPreferences,
+      );
       await notices.restore(owns: (_) => true);
       expect(sink.shown.single.choices, isEmpty);
       expect(sink.shown.single.body, 'Approval needed');
       expect(sink.shown.single.pending, '1 approval');
       expect(sink.shown.single.alert, isFalse);
-      await prefs.setBool(attentionNotificationsKey, false);
+      await appPreferences.setAttentionNotifications(false);
       sink = RecordingTurnNotificationSink();
-      notices = ChatNotificationCoordinator(prefs, sink);
+      notices = ChatNotificationCoordinator(
+        prefs,
+        sink,
+        appPreferences: appPreferences,
+      );
       await notices.restore(owns: (_) => true);
       expect(sink.shown, isEmpty);
       expect(sink.cancelled, hasLength(1));
@@ -104,12 +149,20 @@ void main() {
     () async {
       await reply('a');
       sink = RecordingTurnNotificationSink();
-      notices = ChatNotificationCoordinator(prefs, sink);
+      notices = ChatNotificationCoordinator(
+        prefs,
+        sink,
+        appPreferences: appPreferences,
+      );
       await notices.restore(owns: (_) => false);
       expect(sink.shown, isEmpty);
       expect(sink.cancelled, hasLength(1));
       expect(notices.resultFor(chat), isNull);
-      notices = ChatNotificationCoordinator(prefs, sink);
+      notices = ChatNotificationCoordinator(
+        prefs,
+        sink,
+        appPreferences: appPreferences,
+      );
       await notices.restore(owns: (_) => true);
       expect(sink.shown, isEmpty);
     },
@@ -164,7 +217,11 @@ void main() {
     () async {
       await inputs([approval('a')]);
       await notices.dismissed(chat, sink.shown.last.revision!);
-      notices = ChatNotificationCoordinator(prefs, sink);
+      notices = ChatNotificationCoordinator(
+        prefs,
+        sink,
+        appPreferences: appPreferences,
+      );
       final count = sink.shown.length;
       await inputs([approval('a')]);
       expect(sink.shown, hasLength(count));
@@ -186,7 +243,7 @@ void main() {
     },
   );
   test('preview-off hides approval details and permission controls', () async {
-    await prefs.setBool(notificationPreviewsKey, false);
+    await appPreferences.setNotificationPreviews(false);
     await inputs([approval('a')]);
     expect(sink.shown.last.choices, isEmpty);
     expect(sink.shown.last.expandedBody, 'Approval needed');
@@ -203,7 +260,11 @@ void main() {
     () async {
       await reply('a');
       await notices.read(chat, 'answer:a');
-      notices = ChatNotificationCoordinator(prefs, sink);
+      notices = ChatNotificationCoordinator(
+        prefs,
+        sink,
+        appPreferences: appPreferences,
+      );
       expect(notices.resultFor(chat), isNull);
       final other = jsonEncode({
         ...jsonDecode(chat) as Map<String, dynamic>,

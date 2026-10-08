@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_message.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -22,6 +23,7 @@ Finder inlineImage() => find.descendant(
 );
 
 Future<void> settleImages(WidgetTester tester) async {
+  await tester.pump();
   await tester.pump();
   for (final element in find.byType(Image).evaluate()) {
     final image = element.widget as Image;
@@ -75,7 +77,10 @@ void main() {
     home: Scaffold(
       body: SingleChildScrollView(
         child: ProfileMessage(
-          message: {'role': 'assistant', 'content': content},
+          message: TranscriptMessage.fromRow({
+            'role': 'assistant',
+            'content': content,
+          }),
           loadAttachmentImage: load,
           onOpenRemoteFile: open,
           onDownloadRemoteFile: download,
@@ -147,7 +152,7 @@ void main() {
     await settleImages(tester);
     expect(
       tester.widget<ChatImagePreview>(find.byType(ChatImagePreview)).bytes,
-      same(bytes),
+      orderedEquals(bytes),
     );
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -180,7 +185,7 @@ void main() {
     final preview = tester.widget<ChatImagePreview>(
       find.byType(ChatImagePreview),
     );
-    expect(preview.bytes, same(bytes));
+    expect(preview.bytes, orderedEquals(bytes));
   });
 
   testWidgets('failed read retries; stale result cannot replace a new target', (
@@ -200,7 +205,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('This image could not be previewed.'), findsOneWidget);
-    await tester.tap(find.text('Retry image'));
+    await tester.tap(find.byTooltip('Retry image'));
     await tester.pump();
     expect(calls, 2);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
@@ -226,11 +231,11 @@ void main() {
       ),
     );
     await settleImages(tester);
-    expect(find.text('Retry image'), findsOneWidget);
-    await tester.tap(find.text('Retry image'));
+    expect(find.byTooltip('Retry image'), findsOneWidget);
+    await tester.tap(find.byTooltip('Retry image'));
     await settleImages(tester);
     expect(calls, 2);
-    expect(find.text('Retry image'), findsNothing);
+    expect(find.byTooltip('Retry image'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -299,10 +304,10 @@ void main() {
               body: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: ProfileMessage(
-                  message: const {
+                  message: TranscriptMessage.fromRow(const {
                     'role': 'assistant',
                     'content': 'MEDIA:/srv/bouquet.jpg',
-                  },
+                  }),
                   loadAttachmentImage: (_) async =>
                       throw StateError('unavailable'),
                   onDownloadRemoteFile: (_) async => false,
@@ -312,9 +317,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        final retry = tester.getRect(
-          find.widgetWithText(OutlinedButton, 'Retry image'),
-        );
+        final retry = tester.getRect(find.byTooltip('Retry image'));
         final download = tester.getRect(find.byTooltip('Download image'));
         expect(retry.overlaps(download), isFalse);
         expect(download.height, greaterThanOrEqualTo(48));
@@ -349,13 +352,13 @@ void main() {
                 body: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: ProfileMessage(
-                    message: const {
+                    message: TranscriptMessage.fromRow(const {
                       'role': 'assistant',
                       'content':
                           '**Windflower · S\$66**\n\n'
                           'A mixed bouquet in warm pastels.\n\n'
                           'MEDIA:/srv/daily-surprise-bouquet.jpg',
-                    },
+                    }),
                     loadAttachmentImage: (_) async => bytes,
                     onOpenRemoteFile: (_) async {},
                     onDownloadRemoteFile: (_) async => false,

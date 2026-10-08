@@ -1,3 +1,5 @@
+import 'package:wing/core/services/profile_overview_session.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -89,6 +91,7 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final fixture = AdministrationDesignFixture();
+      final overviewPreferences = await SharedPreferences.getInstance();
       fixture.jobs.addAll([
         taskJson(id: 'running', name: 'Working now', state: 'running'),
         taskJson(id: 'next', name: 'Actual next task')
@@ -96,14 +99,20 @@ void main() {
         taskJson(id: 'later', name: 'Later task')
           ..['next_run_at'] = '2026-09-19T01:00:00Z',
       ]);
+      final session = ProfileOverviewSession(
+        fixture.server.profile('personal'),
+        overviewPreferences,
+        refreshWorkspace: () async {},
+      );
+      addTearDown(session.dispose);
+      unawaited(session.load());
       await tester.pumpWidget(
         MaterialApp(
           theme: wingTheme(Brightness.dark),
           home: Scaffold(
             body: AdminProfileOverview(
-              profile: fixture.server.profile('personal'),
               metadata: null,
-              preferences: await SharedPreferences.getInstance(),
+              session: session,
               selector: const Text('Personal'),
               search: const TextField(
                 decoration: InputDecoration(hintText: 'Search settings'),

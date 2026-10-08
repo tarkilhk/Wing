@@ -1,3 +1,4 @@
+import 'package:wing/core/services/owned_remote_files.dart';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -19,6 +20,15 @@ class _StreamingClient extends http.BaseClient {
 }
 
 void main() {
+  test('downloaded file facts copy and reject byte mutation', () {
+    final original = <int>[1, 2, 3];
+    final file = RemoteFileDownload(filename: 'report.txt', bytes: original);
+    original[0] = 9;
+    expect(file.bytes, [1, 2, 3]);
+    expect(() => file.bytes[0] = 9, throwsUnsupportedError);
+    expect(file.bytes, [1, 2, 3]);
+  });
+
   DashboardClient dashboardWith(
     Future<http.Response> Function(http.Request request) handler,
   ) => DashboardClient(
@@ -27,24 +37,6 @@ void main() {
     proxied: true,
     httpClient: MockClient(handler),
   );
-
-  test('loads the default working directory', () async {
-    final dashboard = dashboardWith((request) async {
-      expect(request.method, 'GET');
-      expect(request.url.path, '/api/fs/default-cwd');
-      return http.Response(
-        jsonEncode({'cwd': '/srv/project', 'branch': 'main'}),
-        200,
-      );
-    });
-    final client = RemoteFilesClient(dashboard: dashboard);
-
-    final root = await client.defaultDirectory();
-
-    expect(root.path, '/srv/project');
-    expect(root.branch, 'main');
-    client.close();
-  });
 
   test('owned file access keeps the original profile and saved chat', () async {
     final requests = <http.Request>[];
@@ -73,6 +65,7 @@ void main() {
       source: client,
       profileName: 'original-profile',
       storedSessionId: 'original-chat',
+      release: client.close,
     );
 
     await owned.readText('../exports/report.txt');
@@ -115,33 +108,6 @@ void main() {
       throwsA(isA<DashboardHttpException>()),
     );
     expect(requests, 1);
-    client.close();
-  });
-
-  test('lists directories before files and preserves server paths', () async {
-    final dashboard = dashboardWith((request) async {
-      expect(request.url.path, '/api/fs/list');
-      expect(request.url.queryParameters['path'], '/srv/project');
-      return http.Response(
-        jsonEncode({
-          'entries': [
-            {
-              'name': 'README.md',
-              'path': '/srv/project/README.md',
-              'isDirectory': false,
-            },
-            {'name': 'lib', 'path': '/srv/project/lib', 'isDirectory': true},
-          ],
-        }),
-        200,
-      );
-    });
-    final client = RemoteFilesClient(dashboard: dashboard);
-
-    final entries = await client.listDirectory('/srv/project');
-
-    expect(entries.map((entry) => entry.name), ['lib', 'README.md']);
-    expect(entries.first.isDirectory, isTrue);
     client.close();
   });
 

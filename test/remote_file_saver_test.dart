@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:wing/core/services/owned_remote_files.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,6 +29,22 @@ class _Picker extends FilePickerPlatform {
     if (error != null) throw error!;
     return destination;
   }
+}
+
+class _Files implements RemoteFilesDataSource {
+  final pending = Completer<RemoteFileDownload>();
+  @override
+  Future<RemoteTextPreview> readText(
+    String path, {
+    required String profileName,
+    required String storedSessionId,
+  }) => throw UnimplementedError();
+  @override
+  Future<RemoteFileDownload> download(
+    String path, {
+    required String profileName,
+    required String storedSessionId,
+  }) => pending.future;
 }
 
 void main() {
@@ -80,4 +98,61 @@ void main() {
       expect(picker.data, isEmpty);
     },
   );
+
+  test(
+    'a held download rechecks route admission before opening a picker',
+    () async {
+      final source = _Files();
+      var current = true;
+      var releases = 0;
+      final owner = OwnedRemoteFiles(
+        source: source,
+        profileName: 'captured-profile',
+        storedSessionId: 'captured-chat',
+        release: () => releases++,
+      );
+      final pending = owner.downloadAndSave(
+        'report.txt',
+        admitPresentation: () => current,
+      );
+      current = false;
+      source.pending.complete(file);
+      expect(await pending, isFalse);
+      expect(picker.filename, isNull);
+      owner.dispose();
+      expect(releases, 1);
+    },
+  );
+  for (final scenario in ['admitted', 'changed route', 'disposed owner']) {
+    test(
+      'resource sharing rechecks captured owner after download: $scenario',
+      () async {
+        final source = _Files();
+        final owner = OwnedRemoteFiles(
+          source: source,
+          profileName: 'captured-profile',
+          storedSessionId: 'captured-chat',
+          release: () {},
+        );
+        var current = true;
+        RemoteFileDownload? delivered;
+        final pending = owner.downloadAndShare(
+          'report.txt',
+          admitPresentation: () => current,
+          deliver: (file) async {
+            delivered = file;
+          },
+        );
+        if (scenario == 'changed route') current = false;
+        if (scenario == 'disposed owner') owner.dispose();
+        final completion = scenario == 'disposed owner'
+            ? expectLater(pending, throwsStateError)
+            : pending;
+        source.pending.complete(file);
+        await completion;
+        expect(delivered, scenario == 'admitted' ? same(file) : isNull);
+        owner.dispose();
+      },
+    );
+  }
 }

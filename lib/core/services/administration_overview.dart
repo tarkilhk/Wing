@@ -1,25 +1,121 @@
 import 'package:flutter/foundation.dart';
 
+import '../models/model_choice.dart';
+import '../models/provider_access.dart';
 import 'administration_repository.dart';
 import 'health_snapshot.dart';
 
 /// Independent observations for one captured profile. A failed refresh retains
 /// its previous observation, never an invented empty/default configuration.
 class AdministrationObservation {
-  Map<String, dynamic>? data;
-  DateTime? checkedAt;
-  String? error;
-  bool loading = false;
+  AdministrationObservation({
+    Map<String, dynamic>? data,
+    this.checkedAt,
+    this.error,
+    this.loading = false,
+  }) : data = data == null
+           ? null
+           : _immutableObservationValue(data) as Map<String, dynamic>;
+
+  AdministrationObservation._retained(
+    this.data,
+    this.checkedAt,
+    this.error,
+    this.loading,
+  );
+
+  final Map<String, dynamic>? data;
+  final DateTime? checkedAt;
+  final String? error;
+  final bool loading;
+  static const _retainError = Object();
+
+  AdministrationObservation copyWith({
+    bool? loading,
+    Object? error = _retainError,
+  }) => AdministrationObservation._retained(
+    data,
+    checkedAt,
+    identical(error, _retainError) ? this.error : error as String?,
+    loading ?? this.loading,
+  );
+
+  Map<String, dynamic> healthSnapshot() => {
+    'data': data,
+    'checkedAt': checkedAt?.toUtc().toIso8601String(),
+    'error': error,
+  };
+
+  factory AdministrationObservation.fromHealth(Map value) =>
+      AdministrationObservation(
+        data: value['data'] == null
+            ? null
+            : Map<String, dynamic>.from(value['data'] as Map),
+        checkedAt: healthSnapshotTime(value['checkedAt']),
+        error: value['error'] as String?,
+      );
+}
+
+Object? _immutableObservationValue(Object? value) => switch (value) {
+  Map value => Map<String, dynamic>.unmodifiable({
+    for (final entry in value.entries)
+      entry.key as String: _immutableObservationValue(entry.value),
+  }),
+  List value => List<dynamic>.unmodifiable(
+    value.map(_immutableObservationValue),
+  ),
+  null || String() || bool() || num() => value,
+  _ => throw const FormatException('Invalid observation value'),
+};
+
+/// A passive projection of the overview's single cached model observation.
+/// A failed refresh can expose its last confirmed model without inventing one.
+class ModelAccessObservation {
+  const ModelAccessObservation({
+    this.model,
+    this.loading = false,
+    this.unavailable = false,
+  });
+
+  final ConfiguredModel? model;
+  final bool loading;
+  final bool unavailable;
+
+  static ModelAccessObservation fromObservation(
+    AdministrationObservation? observation,
+  ) {
+    if (observation == null) return const ModelAccessObservation();
+    ConfiguredModel? model;
+    var unavailable = observation.error != null;
+    final data = observation.data;
+    if (data != null) {
+      try {
+        model = ConfiguredModel.fromInfo(data);
+      } on FormatException {
+        unavailable = true;
+      }
+    }
+    return ModelAccessObservation(
+      model: model,
+      loading: observation.loading,
+      unavailable: unavailable,
+    );
+  }
 }
 
 class AdministrationOverview extends ChangeNotifier {
   AdministrationOverview(this.profile);
   final ProfileAdministration profile;
-  final observations = <String, AdministrationObservation>{};
+  final _observations = <String, AdministrationObservation>{};
+  Map<String, AdministrationObservation> get observations =>
+      Map.unmodifiable(_observations);
+  ModelAccessObservation get modelAccess =>
+      ModelAccessObservation.fromObservation(observations['model']);
 
   /// Last probe results for this profile's enabled connectors. Null means the
   /// request did not establish a result; false means Hermes reported failure.
-  Map<String, bool?> connectorChecks = const {};
+  Map<String, bool?> _connectorChecks = const {};
+  Map<String, bool?> get connectorChecks => _connectorChecks;
   bool _disposed = false;
   final _generations = <String, int>{};
   static const endpoints = {
@@ -38,7 +134,7 @@ class AdministrationOverview extends ChangeNotifier {
       for (final entry in observations.entries)
         if ({'model', 'access', 'tools', 'connectors'}.contains(entry.key))
           entry.key: {
-            ...healthObservationSnapshot(entry.value),
+            ...entry.value.healthSnapshot(),
             'data': entry.value.data == null
                 ? null
                 : _healthData(entry.key, entry.value.data!),
@@ -48,14 +144,17 @@ class AdministrationOverview extends ChangeNotifier {
   };
 
   void restoreHealth(Map snapshot) {
-    for (final entry in (snapshot['observations'] as Map).entries) {
-      final observation = AdministrationObservation();
-      restoreHealthObservation(observation, entry.value as Map);
-      observations[entry.key as String] = observation;
-    }
-    connectorChecks = Map<String, bool?>.from(
+    final restored = <String, AdministrationObservation>{
+      for (final entry in (snapshot['observations'] as Map).entries)
+        entry.key as String: AdministrationObservation.fromHealth(
+          entry.value as Map,
+        ),
+    };
+    final connectors = Map<String, bool?>.unmodifiable(
       snapshot['connectorChecks'] as Map,
     );
+    _observations.addAll(restored);
+    _connectorChecks = connectors;
   }
 
   Map<String, dynamic> _healthData(String key, Map<String, dynamic> data) {
@@ -93,6 +192,7 @@ class AdministrationOverview extends ChangeNotifier {
   }
 
   Future<void> refresh({Set<String>? keys, bool testConnectors = false}) async {
+    if (_disposed) return;
     await Future.wait([
       for (final entry in endpoints.entries)
         if (keys == null || keys.contains(entry.key))
@@ -111,15 +211,17 @@ class AdministrationOverview extends ChangeNotifier {
     int generation, {
     required bool testConnectors,
   }) async {
-    final observation = observations.putIfAbsent(
+    final observation = _observations.putIfAbsent(
       key,
       AdministrationObservation.new,
     );
-    observation.loading = true;
-    observation.error = null;
+    _observations[key] = observation.copyWith(loading: true, error: null);
     if (!_disposed) notifyListeners();
     try {
-      final data = await profile.read(endpoint);
+      final data =
+          _immutableObservationValue(await profile.read(endpoint))
+              as Map<String, dynamic>;
+      if (key == 'model') ConfiguredModel.fromInfo(data);
       // Validate collection shape before replacing the last good observation.
       final collection = switch (key) {
         'skills' || 'tools' => 'data',
@@ -128,6 +230,11 @@ class AdministrationOverview extends ChangeNotifier {
         _ => null,
       };
       if (collection != null) administrationRows(data[collection]);
+      if (key == 'access') {
+        for (final row in administrationRows(data['providers'])) {
+          ProviderAccess.validateIdentity(row);
+        }
+      }
       if (_disposed || generation != _generations[key]) return;
       if (key == 'connectors') {
         final results = <String, bool?>{};
@@ -151,16 +258,22 @@ class AdministrationOverview extends ChangeNotifier {
           }
         }
         if (_disposed || generation != _generations[key]) return;
-        connectorChecks = Map.unmodifiable(results);
+        _connectorChecks = Map.unmodifiable(results);
       }
-      observation.data = data;
-      observation.checkedAt = DateTime.now();
+      _observations[key] = AdministrationObservation._retained(
+        data,
+        DateTime.now(),
+        null,
+        true,
+      );
     } catch (error) {
       if (_disposed || generation != _generations[key]) return;
-      observation.error = administrationError(error);
+      _observations[key] = _observations[key]!.copyWith(
+        error: administrationError(error),
+      );
     } finally {
       if (!_disposed && generation == _generations[key]) {
-        observation.loading = false;
+        _observations[key] = _observations[key]!.copyWith(loading: false);
         notifyListeners();
       }
     }

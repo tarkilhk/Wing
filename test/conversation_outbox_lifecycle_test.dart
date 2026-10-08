@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -11,6 +13,7 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 
 import 'profile_workspace_controller_test.dart' show Host;
+import 'support/composer_fixture.dart' show readComposerFixture;
 
 class _DelayedAttachmentDraftService extends AttachmentDraftService {
   _DelayedAttachmentDraftService({required super.cacheDirectoryProvider});
@@ -68,18 +71,23 @@ class _FailingDraftStore extends ComposerDraftStore {
 ProfileWorkspaceController _controller(
   SharedPreferences preferences,
   Host host, {
+  required AppPreferences appPreferences,
   ComposerDraftStore? draftStore,
   AttachmentDraftService? attachmentService,
 }) => ProfileWorkspaceController(
   connectionIdentity: 'outbox-test',
-  connection: SavedConnection(
-    id: 'host',
-    label: 'Host',
-    host: 'unused',
-    port: 1,
-    apiKey: '',
+  access: ConnectionAccess(
+    connection: SavedConnection(
+      id: 'host',
+      label: 'Host',
+      host: 'unused',
+      port: 1,
+      apiKey: '',
+    ),
+    dashboardOAuth: null,
   ),
   preferences: preferences,
+  appPreferences: appPreferences,
   gatewayFactory: host.gateway,
   draftStore: draftStore,
   attachmentService: attachmentService,
@@ -104,54 +112,76 @@ void main() {
   test('offline Send survives restart and reconnect drains FIFO', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
+    final appPreferences = AppPreferences(preferences);
+    addTearDown(appPreferences.dispose);
     final host = Host()..running = false;
-    var controller = _controller(preferences, host);
+    var controller = _controller(
+      preferences,
+      host,
+      appPreferences: appPreferences,
+    );
     await controller.initialize();
-    final chat = await controller.createChat();
+    final chat = await controller.createChat(canDispatch: () => true);
     host.discoveryFailure = const SocketException('Offline');
     controller.networkUnavailable();
     await controller.updateDraft(chat, 'first waiting message');
     await controller.send(chat);
     await controller.updateDraft(chat, 'second waiting message');
     await controller.send(chat);
-    expect(chat.draft, isEmpty);
-    expect(chat.queuedPrompts.map((item) => item.text), [
+    expect(chat.composer.observation.text, isEmpty);
+    expect(chat.composer.observation.queue.map((item) => item.text), [
       'first waiting message',
       'second waiting message',
     ]);
     expect(
-      chat.queuedPrompts.every((item) => !item.submissionUncertain),
+      chat.composer.observation.queue.every(
+        (item) => !item.submissionUncertain,
+      ),
       isTrue,
     );
-    expect(chat.queuePaused, isFalse);
+    expect(chat.composer.observation.paused, isFalse);
     expect(_submitted(host), isEmpty);
     final key = chat.key;
     controller.dispose();
 
-    controller = _controller(preferences, host);
+    controller = _controller(preferences, host, appPreferences: appPreferences);
     addTearDown(controller.dispose);
     await controller.openNotification(key);
     final restored = controller.notificationChat!;
-    expect(restored.draft, isEmpty);
-    expect(restored.queuedPrompts.map((item) => item.text), [
+    expect(restored.composer.observation.text, isEmpty);
+    expect(restored.composer.observation.queue.map((item) => item.text), [
       'first waiting message',
       'second waiting message',
     ]);
-    expect(restored.queuePaused, isFalse);
+    expect(restored.composer.observation.paused, isFalse);
     expect(_submitted(host), isEmpty);
     host.discoveryFailure = null;
-    await controller.resumeConnection();
+    host.promptSubmitStarted = Completer<void>();
+    host.promptSubmitDelay = Completer<void>();
+    final recovery = controller.resumeConnection();
+    await host.promptSubmitStarted!.future;
+    // An accepted prompt occupies the server until its actual completion.
+    host.running = true;
+    host.promptSubmitDelay!.complete();
+    await recovery;
+    host.promptSubmitStarted = null;
+    host.promptSubmitDelay = null;
     expect(_submitted(host), ['first waiting message']);
-    expect(restored.queuedPrompts.map((item) => item.text), [
+    expect(restored.composer.observation.queue.map((item) => item.text), [
       'second waiting message',
     ]);
+    host.running = false;
     host.event('a', 'message.complete', {'text': 'First answer'});
-    await _until(() => _submitted(host).length == 2 && !restored.sendingPrompt);
+    await _until(
+      () =>
+          _submitted(host).length == 2 &&
+          !restored.composer.observation.sending,
+    );
     expect(_submitted(host), [
       'first waiting message',
       'second waiting message',
     ]);
-    expect(restored.queuedPrompts, isEmpty);
+    expect(restored.composer.observation.queue, isEmpty);
   });
 
   test(
@@ -159,11 +189,17 @@ void main() {
     () async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final host = Host()..running = false;
-      final controller = _controller(preferences, host);
+      final controller = _controller(
+        preferences,
+        host,
+        appPreferences: appPreferences,
+      );
       addTearDown(controller.dispose);
       await controller.initialize();
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'first');
       host.promptSubmitStarted = Completer<void>();
       host.promptSubmitDelay = Completer<void>();
@@ -174,12 +210,12 @@ void main() {
       await controller.updateDraft(chat, 'third');
       await controller.send(chat);
       await controller.updateDraft(chat, 'fresh editable thought');
-      expect(chat.queuedPrompts.map((item) => item.text), [
+      expect(chat.composer.observation.queue.map((item) => item.text), [
         'first',
         'second',
         'third',
       ]);
-      expect(chat.queuedPrompts.first.submissionUncertain, isTrue);
+      expect(chat.composer.observation.queue.first.submissionUncertain, isTrue);
       expect(_submitted(host), ['first']);
       final storedBeforeAck = await ComposerDraftStore(
         preferences,
@@ -195,8 +231,11 @@ void main() {
       await sending;
       host.promptSubmitStarted = null;
       host.promptSubmitDelay = null;
-      expect(chat.draft, 'fresh editable thought');
-      expect(chat.queuedPrompts.map((item) => item.text), ['second', 'third']);
+      expect(chat.composer.observation.text, 'fresh editable thought');
+      expect(chat.composer.observation.queue.map((item) => item.text), [
+        'second',
+        'third',
+      ]);
       final storedAfterAck = await ComposerDraftStore(
         preferences,
         connectionIdentity: 'outbox-test',
@@ -207,12 +246,18 @@ void main() {
         'third',
       ]);
       host.event('a', 'message.complete', {'text': 'First answer'});
-      await _until(() => _submitted(host).length == 2 && !chat.sendingPrompt);
+      await _until(
+        () =>
+            _submitted(host).length == 2 && !chat.composer.observation.sending,
+      );
       host.event('a', 'message.complete', {'text': 'Second answer'});
-      await _until(() => _submitted(host).length == 3 && !chat.sendingPrompt);
+      await _until(
+        () =>
+            _submitted(host).length == 3 && !chat.composer.observation.sending,
+      );
       expect(_submitted(host), ['first', 'second', 'third']);
-      expect(chat.draft, 'fresh editable thought');
-      expect(chat.queuedPrompts, isEmpty);
+      expect(chat.composer.observation.text, 'fresh editable thought');
+      expect(chat.composer.observation.queue, isEmpty);
       expect(
         host.calls
             .where((call) => call.$2 == 'prompt.submit')
@@ -227,6 +272,8 @@ void main() {
     () async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final host = Host()..running = false;
       final store = ComposerDraftStore(
         preferences,
@@ -241,7 +288,11 @@ void main() {
           queuedPrompts: [QueuedPromptDraft(text: 'waiting $session')],
         );
       }
-      final controller = _controller(preferences, host);
+      final controller = _controller(
+        preferences,
+        host,
+        appPreferences: appPreferences,
+      );
       addTearDown(controller.dispose);
       await controller.initialize();
       expect(controller.current!.chat, isNull);
@@ -251,8 +302,8 @@ void main() {
       );
       for (final session in ['first-cached', 'second-uncached']) {
         final chat = controller.current!.chats[session]!;
-        expect(chat.draft, 'editable $session');
-        expect(chat.queuedPrompts, isEmpty);
+        expect(chat.composer.observation.text, 'editable $session');
+        expect(chat.composer.observation.queue, isEmpty);
         expect(
           host.calls.any(
             (call) =>
@@ -269,17 +320,24 @@ void main() {
     () async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final host = Host()..running = false;
       final store = _FailingDraftStore(preferences);
-      final controller = _controller(preferences, host, draftStore: store);
+      final controller = _controller(
+        preferences,
+        host,
+        appPreferences: appPreferences,
+        draftStore: store,
+      );
       addTearDown(controller.dispose);
       await controller.initialize();
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'must not be lost');
       store.failWrites = true;
       await expectLater(controller.send(chat), throwsStateError);
-      expect(chat.draft, 'must not be lost');
-      expect(chat.queuedPrompts, isEmpty);
+      expect(chat.composer.observation.text, 'must not be lost');
+      expect(chat.composer.observation.queue, isEmpty);
       expect(_submitted(host), isEmpty);
     },
   );
@@ -287,6 +345,8 @@ void main() {
   test('a deleted waiting conversation never blocks another outbox', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
+    final appPreferences = AppPreferences(preferences);
+    addTearDown(appPreferences.dispose);
     final host = Host()
       ..running = false
       ..expireUnsubmittedResume = true;
@@ -304,21 +364,28 @@ void main() {
         queuedPrompts: [QueuedPromptDraft(text: 'waiting $session')],
       );
     }
-    final controller = _controller(preferences, host);
+    final controller = _controller(
+      preferences,
+      host,
+      appPreferences: appPreferences,
+    );
     addTearDown(controller.dispose);
     await controller.initialize();
     expect(_submitted(host), ['waiting valid']);
     final missing = controller.current!.chats['same']!;
-    expect(missing.draft, 'editable same');
-    expect(missing.offlineSnapshot, isTrue);
-    expect(missing.queuePaused, isTrue);
-    expect(missing.queuedPrompts.single.text, 'waiting same');
-    expect(missing.error, contains('no longer available'));
+    expect(missing.composer.observation.text, 'editable same');
+    expect(missing.runtime.offline, isTrue);
+    expect(missing.composer.observation.paused, isTrue);
+    expect(missing.composer.observation.queue.single.text, 'waiting same');
+    expect(missing.runtime.error, contains('no longer available'));
     final saved = await store.read(profileName: 'a', sessionId: 'same');
     expect(saved!.queuePaused, isTrue);
     expect(saved.queuedPrompts.single.text, 'waiting same');
     expect(controller.current!.reconnectError, isNull);
-    expect(controller.current!.chats['valid']!.queuedPrompts, isEmpty);
+    expect(
+      controller.current!.chats['valid']!.composer.observation.queue,
+      isEmpty,
+    );
     expect(host.sessionCreates, 0);
     await controller.resumeConnection();
     expect(_submitted(host), ['waiting valid']);
@@ -329,19 +396,22 @@ void main() {
     () async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final cache = await Directory.systemTemp.createTemp('wing-outbox-files-');
       addTearDown(() => cache.delete(recursive: true));
       final host = Host()..running = false;
       final controller = _controller(
         preferences,
         host,
+        appPreferences: appPreferences,
         attachmentService: AttachmentDraftService(
           cacheDirectoryProvider: () async => cache,
         ),
       );
       addTearDown(controller.dispose);
       await controller.initialize();
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       Future<void> stage(String name) async {
         final file = await File(
           '${cache.path}/source-$name',
@@ -350,24 +420,37 @@ void main() {
       }
 
       await stage('outgoing.txt');
-      final outgoingFile = chat.attachments.single;
+      final outgoingFile = (await readComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+      ))!.attachments.single;
       await controller.updateDraft(chat, 'outgoing with a file');
       host.promptSubmitStarted = Completer<void>();
       host.promptSubmitDelay = Completer<void>();
       final sending = controller.send(chat);
       await host.promptSubmitStarted!.future;
-      expect(chat.attachments, isEmpty);
+      expect(chat.composer.observation.attachments, isEmpty);
       expect(controller.canAddAttachment(chat), isTrue);
       await stage('fresh.txt');
-      final freshFile = chat.attachments.single;
+      final freshFile = (await readComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+      ))!.attachments.single;
       await controller.updateDraft(chat, 'fresh composer with a file');
-      expect(chat.queuedPrompts.first.attachments, [same(outgoingFile)]);
+      expect(
+        chat.composer.observation.queue.first.attachments.map(
+          (file) => file.id,
+        ),
+        [outgoingFile.id],
+      );
       host.promptSubmitDelay!.complete();
       await sending;
       host.promptSubmitStarted = null;
       host.promptSubmitDelay = null;
-      expect(chat.attachments, [same(freshFile)]);
-      expect(chat.draft, 'fresh composer with a file');
+      expect(chat.composer.observation.attachments.map((file) => file.id), [
+        freshFile.id,
+      ]);
+      expect(chat.composer.observation.text, 'fresh composer with a file');
       expect(await File(outgoingFile.cachedPath).exists(), isFalse);
       expect(await File(freshFile.cachedPath).exists(), isTrue);
       final saved = await ComposerDraftStore(
@@ -381,10 +464,13 @@ void main() {
       final beforeLocalEdits = host.calls.length;
       expect(controller.canAddAttachment(chat), isTrue);
       await stage('offline.txt');
-      final offlineFile = chat.attachments.last;
-      await controller.removeAttachment(chat, offlineFile);
-      await controller.removeAttachment(chat, freshFile);
-      expect(chat.attachments, isEmpty);
+      final offlineFile = (await readComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+      ))!.attachments.last;
+      await controller.removeAttachment(chat, offlineFile.id);
+      await controller.removeAttachment(chat, freshFile.id);
+      expect(chat.composer.observation.attachments, isEmpty);
       expect(await File(offlineFile.cachedPath).exists(), isFalse);
       expect(await File(freshFile.cachedPath).exists(), isFalse);
       expect(host.calls, hasLength(beforeLocalEdits));
@@ -396,6 +482,8 @@ void main() {
     () async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final cache = await Directory.systemTemp.createTemp(
         'wing-outbox-preparing-',
       );
@@ -407,11 +495,12 @@ void main() {
       final controller = _controller(
         preferences,
         host,
+        appPreferences: appPreferences,
         attachmentService: service,
       );
       addTearDown(controller.dispose);
       await controller.initialize();
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'Use the requested file');
       final file = await File(
         '${cache.path}/source.txt',
@@ -422,27 +511,30 @@ void main() {
         'requested.txt',
       );
       await service.started.future;
-      expect(chat.preparingAttachments, isTrue);
+      expect(chat.composer.observation.preparing, isTrue);
       try {
         await controller.send(chat);
         await expectLater(
-          controller.queuePrompt(chat, chat.draft),
+          controller.queuePrompt(chat, chat.composer.observation.text),
           throwsStateError,
         );
-        expect(chat.draft, 'Use the requested file');
-        expect(chat.queuedPrompts, isEmpty);
+        expect(chat.composer.observation.text, 'Use the requested file');
+        expect(chat.composer.observation.queue, isEmpty);
         expect(_submitted(host), isEmpty);
         expect(host.calls.where((call) => call.$2 == 'file.attach'), isEmpty);
       } finally {
         service.finish.complete();
         await preparing;
       }
-      expect(chat.preparingAttachments, isFalse);
-      final attachment = chat.attachments.single;
+      expect(chat.composer.observation.preparing, isFalse);
+      final attachment = (await readComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+      ))!.attachments.single;
       await controller.send(chat);
-      expect(chat.draft, isEmpty);
-      expect(chat.attachments, isEmpty);
-      expect(chat.queuedPrompts, isEmpty);
+      expect(chat.composer.observation.text, isEmpty);
+      expect(chat.composer.observation.attachments, isEmpty);
+      expect(chat.composer.observation.queue, isEmpty);
       expect(
         host.calls.where((call) => call.$2 == 'file.attach'),
         hasLength(1),
@@ -458,29 +550,38 @@ void main() {
     () async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final host = Host()..running = false;
-      var controller = _controller(preferences, host);
+      var controller = _controller(
+        preferences,
+        host,
+        appPreferences: appPreferences,
+      );
       addTearDown(() => controller.dispose());
       await controller.initialize();
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(chat, 'delivery unknown');
       host.promptSubmitFails = true;
       await controller.send(chat);
-      expect(chat.draft, isEmpty);
-      expect(chat.queuedPrompts.single.text, 'delivery unknown');
-      expect(chat.queuedPrompts.single.submissionUncertain, isTrue);
-      expect(chat.queuePaused, isTrue);
+      expect(chat.composer.observation.text, isEmpty);
+      expect(chat.composer.observation.queue.single.text, 'delivery unknown');
+      expect(
+        chat.composer.observation.queue.single.submissionUncertain,
+        isTrue,
+      );
+      expect(chat.composer.observation.paused, isTrue);
       await controller.updateDraft(chat, 'later message');
       await controller.send(chat);
       await controller.updateDraft(chat, 'independent composer');
       host.promptSubmitFails = false;
       await controller.reconnect(chat.key.workspace);
       expect(_submitted(host), ['delivery unknown']);
-      expect(chat.queuedPrompts.map((item) => item.text), [
+      expect(chat.composer.observation.queue.map((item) => item.text), [
         'delivery unknown',
         'later message',
       ]);
-      expect(chat.draft, 'independent composer');
+      expect(chat.composer.observation.text, 'independent composer');
       await expectLater(controller.resumeQueue(chat), throwsStateError);
       final stored = await ComposerDraftStore(
         preferences,
@@ -490,16 +591,23 @@ void main() {
       expect(stored.queuedPrompts.first.submissionUncertain, isTrue);
       expect(stored.queuePaused, isTrue);
       controller.dispose();
-      controller = _controller(preferences, host);
+      controller = _controller(
+        preferences,
+        host,
+        appPreferences: appPreferences,
+      );
       await controller.initialize();
       final restarted = controller.current!.chats[chat.key.sessionId]!;
-      expect(restarted.draft, 'independent composer');
-      expect(restarted.queuedPrompts.map((item) => item.text), [
+      expect(restarted.composer.observation.text, 'independent composer');
+      expect(restarted.composer.observation.queue.map((item) => item.text), [
         'delivery unknown',
         'later message',
       ]);
-      expect(restarted.queuedPrompts.first.submissionUncertain, isTrue);
-      expect(restarted.queuePaused, isTrue);
+      expect(
+        restarted.composer.observation.queue.first.submissionUncertain,
+        isTrue,
+      );
+      expect(restarted.composer.observation.paused, isTrue);
       expect(_submitted(host), ['delivery unknown']);
     },
   );

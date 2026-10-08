@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/services/network_availability.dart';
 import 'package:wing/core/widgets/read_recovery.dart';
-import 'package:wing/core/screens/administration/admin_widgets.dart';
 
 Future<void> resume(WidgetTester tester) async {
   tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
@@ -79,50 +78,4 @@ void main() {
     await networkReturn(tester);
     expect(calls, 3);
   });
-
-  for (final temporary in [true, false]) {
-    testWidgets(
-      'AdminLoad retries temporary=$temporary and retains edited content',
-      (tester) async {
-        var calls = 0;
-        var fail = false;
-        late VoidCallback reload;
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: AdminLoad(
-                load: () async {
-                  calls++;
-                  if (fail) {
-                    if (temporary) throw TimeoutException('offline');
-                    throw const FormatException('invalid response');
-                  }
-                  return {'value': 'saved'};
-                },
-                builder: (_, data, retry) {
-                  reload = retry;
-                  return TextFormField(initialValue: data['value'] as String);
-                },
-              ),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-        await tester.enterText(find.byType(TextFormField), 'unsaved draft');
-        fail = true;
-        reload();
-        await tester.pumpAndSettle();
-        expect(calls, 2);
-        expect(find.text('unsaved draft'), findsOneWidget);
-        fail = false;
-        await resume(tester);
-        await tester.pumpAndSettle();
-        expect(calls, temporary ? 3 : 2);
-        expect(find.text('unsaved draft'), findsOneWidget);
-        await resume(tester);
-        await tester.pumpAndSettle();
-        expect(calls, temporary ? 3 : 2);
-      },
-    );
-  }
 }

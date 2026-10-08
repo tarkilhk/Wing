@@ -1,3 +1,6 @@
+import 'package:wing/core/services/profile_supervision_session.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
@@ -17,6 +20,8 @@ class _BackgroundFixture extends ProfileActionsFixture {
   String loopStatus = 'active';
   String heartbeatStatus = 'active';
   bool heartbeatPresent = true;
+  bool exitCodeSupplied = true;
+  String runningOutput = 'waiting for work\n';
 
   List<Map<String, dynamic>> get processes => [
     if (running)
@@ -24,7 +29,7 @@ class _BackgroundFixture extends ProfileActionsFixture {
         'session_id': 'proc-running',
         'command': 'dart run worker.dart',
         'cwd': '/workspace',
-        'output_tail': 'waiting for work\n',
+        'output_tail': runningOutput,
         'status': 'running',
         'uptime_seconds': 125,
         'pid': 4321,
@@ -36,7 +41,7 @@ class _BackgroundFixture extends ProfileActionsFixture {
       'command': 'dart test',
       'output_tail': 'All tests passed.\n',
       'status': 'exited',
-      'exit_code': 0,
+      if (exitCodeSupplied) 'exit_code': 0,
       'uptime_seconds': 9,
     },
   ];
@@ -117,22 +122,35 @@ class _BackgroundFixture extends ProfileActionsFixture {
 void main() {
   late _BackgroundFixture fixture;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileChat chat;
+  late ProfileSupervisionSession supervision;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     fixture = _BackgroundFixture();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'background-work-panel',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: fixture.gateway,
     );
     await controller.initialize();
-    chat = await controller.createChat();
+    chat = await controller.createChat(canDispatch: () => true);
+    supervision = ProfileSupervisionSession(controller: controller, chat: chat);
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    supervision.dispose();
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   Future<void> showPanel(
     WidgetTester tester, {
@@ -154,8 +172,7 @@ void main() {
           body: ListView(
             children: [
               ProfileBackgroundWorkPanel(
-                controller: controller,
-                chat: chat,
+                session: supervision,
                 initiallyExpanded: true,
               ),
             ],
@@ -174,7 +191,9 @@ void main() {
     await showPanel(tester);
     await tester.tap(find.text('dart run worker.dart'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Stop process'));
+    await tester.ensureVisible(find.byTooltip('Stop process'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Stop process'));
     await tester.pumpAndSettle();
 
     final stop = fixture.requests.singleWhere(
@@ -194,9 +213,11 @@ void main() {
 
     await tester.tap(find.text('dart run worker.dart'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Stop process'));
+    await tester.ensureVisible(find.byTooltip('Stop process'));
     await tester.pumpAndSettle();
-    expect(find.text('dart run worker.dart'), findsOneWidget);
+    await tester.tap(find.byTooltip('Stop process'));
+    await tester.pumpAndSettle();
+    expect(find.text('dart run worker.dart'), findsWidgets);
     expect(
       find.text('The server did not confirm that the process stopped.'),
       findsOneWidget,
@@ -204,15 +225,64 @@ void main() {
 
     await tester.tap(find.text('dart test'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Dismiss'));
+    await tester.ensureVisible(find.byTooltip('Dismiss'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Dismiss'));
+    await tester.ensureVisible(find.byTooltip('Dismiss'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Dismiss'));
     await tester.pumpAndSettle();
     expect(find.text('dart test'), findsNothing);
     expect(
       fixture.requests.where((request) => request.$1 == 'process.kill'),
       hasLength(1),
     );
+  });
+
+  testWidgets('process text actions serve command and output, not metadata', (
+    tester,
+  ) async {
+    await showPanel(tester);
+    await tester.tap(find.text('dart run worker.dart'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Copy Command'), findsOneWidget);
+    expect(find.byTooltip('Copy Recent output'), findsOneWidget);
+    expect(find.byTooltip('Open Command'), findsNothing);
+    expect(find.byTooltip('Open Recent output'), findsNothing);
+    expect(find.byTooltip('Copy PID'), findsNothing);
+    expect(find.byTooltip('Stop process'), findsOneWidget);
+    expect(
+      find.text('Latest received output; not a complete transcript'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an exited process without an exit code stays unqualified', (
+    tester,
+  ) async {
+    fixture.exitCodeSupplied = false;
+    await showPanel(tester);
+    await tester.tap(find.text('dart test'));
+    await tester.pumpAndSettle();
+    expect(find.text('Exited'), findsWidgets);
+    expect(find.text('Completed'), findsNothing);
+    expect(find.text('Process exited; exit code not supplied'), findsOneWidget);
+    expect(find.byTooltip('Dismiss'), findsOneWidget);
+    expect(find.byTooltip('Stop process'), findsNothing);
+  });
+
+  testWidgets('an empty process receipt has no text action toolbar', (
+    tester,
+  ) async {
+    fixture.runningOutput = '';
+    await showPanel(tester);
+    await tester.tap(find.text('dart run worker.dart'));
+    await tester.pumpAndSettle();
+    expect(find.text('Latest received output is empty'), findsOneWidget);
+    expect(find.text('Empty text'), findsNothing);
+    expect(find.byTooltip('Copy Recent output'), findsNothing);
+    expect(find.byTooltip('Open Recent output'), findsNothing);
+    expect(find.byTooltip('Stop process'), findsOneWidget);
   });
 
   testWidgets('keeps recurring controls usable on a narrow large-text phone', (
@@ -226,9 +296,11 @@ void main() {
     expect(find.text('Waiting for the current response'), findsOneWidget);
     expect(find.text('Deferred while the goal is active'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Pause loop'));
+    await tester.ensureVisible(find.byTooltip('Pause loop'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Pause loop'));
+    await tester.ensureVisible(find.byTooltip('Pause loop'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Pause loop'));
     await tester.pumpAndSettle();
     expect(
       fixture.requests.any(
@@ -239,9 +311,11 @@ void main() {
       isTrue,
     );
 
-    await tester.ensureVisible(find.text('Clear heartbeat'));
+    await tester.ensureVisible(find.byTooltip('Clear heartbeat'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Clear heartbeat'));
+    await tester.ensureVisible(find.byTooltip('Clear heartbeat'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Clear heartbeat'));
     await tester.pumpAndSettle();
     expect(find.text('Clear heartbeat?'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Clear'));
@@ -264,6 +338,8 @@ void main() {
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byTooltip('Chat actions'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Chat actions'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Background work').last);
@@ -271,6 +347,6 @@ void main() {
 
     expect(find.text('Check the release queue'), findsOneWidget);
     expect(find.text('Report deployment health'), findsOneWidget);
-    expect(find.text('dart run worker.dart'), findsOneWidget);
+    expect(find.text('dart run worker.dart'), findsWidgets);
   });
 }

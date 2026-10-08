@@ -7,9 +7,10 @@ This charter owns the appearance of new and existing UI. [Feature guides](FEATUR
 ## Owner decisions
 
 - Use Studio's restrained sans typography, grouped lists and small rectangular controls.
-- Keep search at the top of Chats. Put New chat at the bottom for reach on large phones.
-- Preserve the refined Activity and tool-call presentation and interaction. Restyle cautiously without rebuilding its information structure.
-- Use the compact context ring beside the model selector, confirmed by the owner after comparing it with the fuse. Do not allocate a row to token-count text or retain the fuse alongside it.
+- Keep search at the top of Chats. Put New chat at the bottom for reach on large phones. While a saved profile needs repair, put its notices and profile choices in the list scroll area below search and filters so the full repair action remains reachable at 320 dp/200% text. Preserve the ordinary fixed progress and retry presentation once a profile is admitted. `test/profile_selection_repair_view_test.dart` exercises direct choice reachability, 48 dp targets, held saves and failed-save recovery in both themes and text sizes; rendered reachability needs behavioral verification.
+- Activity information follows [USER-VALUE-FIRST](#user-value-first-activity): curate the requested intent, reported achievement and useful payloads within Studio framing.
+- Activity details follow the [accepted activity family](#accepted-activity-detail-family). Extend its shared components and verify the family together.
+- Use the compact context ring beside the model selector, confirmed by the owner after comparing it with the fuse. Do not allocate a row to token-count text or retain the fuse alongside it. The owner's 7 October refinement selects option A: show the percentage inside a 32 dp ring (up to 40 dp at enlarged text), in a 48 dp target, and open a 320 dp anchored popover above it. Center the digits and percent sign together using Roboto's cap-height baseline on the ring's canvas. Keep used/max tokens, percentage full, a 6 dp composition bar, aligned estimated category counts and supplied compression count compact. The bar represents category estimates; it never replaces measured occupancy. At enlarged text, put each category count below its full-width label and scroll the panel when needed. Preserve composer focus/keyboard, outside-tap dismissal and keyboard access; a chat change retires its open panel. Unknown occupancy uses a centered dash and broken neutral ring. The design exploration and owner selection are archived on local branch `prototype/context-window-studio` at `c655aa4`, under `plans/prototypes/context-window-studio`. Do not repeat the model or introduce a large duplicate gauge/account-limit card.
 - Keep familiar model/reasoning selection and Queue, Steer and Fork flows.
 - Design dark mode fully and use coherent accents throughout.
 - Administration opens directly on Profile without tabs. A pharmacy-cross action in the top bar opens the dedicated Health route. Keep the selected connection visible and classify each operation by its actual ownership. See the [administration handoff](design/2026-09-14-administration-handoff.md) for navigation and unsupported memory/MCP writes.
@@ -21,7 +22,15 @@ The chat list follows these rules.
 This supersedes earlier Chats-specific instructions for profile chips, a separate
 Projects section, Recents, separators, and the header's duplicated filters.
 Use the compact Status / Profile / Project row, five colored status dots and
-a continuous grouped list with three-chat previews. The owner’s 20 September
+a continuous grouped list with three-chat previews.
+Selected filters use a rounded accent inset from the bar, with padding inside
+the tint. Distribute Status / Profile / Project in equal-width slots between
+equal-width icon slots at both ends, centering each label in its slot. Keep
+Clear all filters fixed at the right gutter. On narrow screens and at enlarged
+text sizes, stack the filters with equal full-width targets and centered labels.
+Project filter choices use the same saved project icon and color as their list
+headings. Profile home groups retain their outlined mixed-shapes icon.
+The owner’s 20 September
 update uses “Show more” to reveal ten additional chats in that group per tap;
 the action disappears when every matching chat in the group is visible.
 The owner’s 20 September
@@ -188,8 +197,9 @@ Use quiet separators before Hermes instances and Hermes administration, without
 section headings. Hermes instances is the saved-server collection; use Add
 instance, Edit instance and Instance name in its setup flow. Removing an instance
 removes its saved connection, not the deployed server. Hermes analytics opens the
-existing usage dashboard directly, with a profile-only scope picker. Health ends
-with its Server and Profile checks and has no Usage row.
+existing usage dashboard directly, with a profile-only scope picker. Health has
+no Usage row. Its order is Host, Server, Profile, as specified in the Health
+refinement below.
 
 Keep hamburger navigation and projects scoped inside Chats. Use compact connection/profile text below the page title. Search stays below this scope. Projects, pins and recents use full-width rows, grouped where helpful, with thin separators.
 
@@ -213,6 +223,20 @@ On 15 September 2026, the owner replaced the full-width New chat shelf with a 56
 
 Use 16 dp page gutters, a 4 dp spacing grid, 6 dp action corners, 8 dp group/composer corners, 24-28 sp page titles, 16 sp body text and 12-13 sp metadata. Primary action paint can be about 40 dp high inside a minimum 48 dp touch area. Text scaling must allow rows and controls to grow. Keep established compact activity density; improve touch areas without adding visible card padding.
 
+The owner's 7 October density refinement makes compact spacing a requirement
+throughout Studio. Avoid generous empty space, oversized card padding, tall
+passive rows and separate lines for facts that fit together legibly. Use 8–12 dp
+group insets, 4–8 dp between related facts and 12–16 dp between sections as the
+starting point. Prefer aligned label/value/meter rows and short metadata lines
+over spreading the same observation across several padded blocks. Keep one
+timestamp at its owning section and remove repeated headings and captions.
+Passive observations do not need the height of interactive controls. Preserve
+the documented control targets (48 dp generally, with the accepted compact
+activity-detail exception), readable typography and full values; at narrow widths or
+enlarged text, wrap and grow the content rather than shrinking it or clipping it.
+Whitespace must support grouping, reading or action reachability. Review the
+actual phone layout for unnecessary vertical gaps in both themes.
+
 On 18 September 2026, the owner split the shared screen header into two targets:
 the connection icon and LED open the existing status/retry sheet, while the name
 opens an anchored dropdown matching its displayed scope: connection-only headers
@@ -223,7 +247,18 @@ Use the standard Studio popup surface and selected background tint. This applies
 to Chats, conversations, Activity, Administration, Health and administration
 drill-downs.
 
-Use Android's Roboto sans typography explicitly across component themes and monospace for code. Keep the existing compact Activity geometry. Its tabs, badges and disclosures are deliberate density exceptions to the general control dimensions.
+Tool and saved-agent headers use `CompactActivityRow`: zero vertical padding,
+no minimum height and no gaps between rows. The owner’s 8 October tool refinement
+uses exactly two single-line text rows: action, then one useful input detail (or
+an exception). Ellipsize both at the available width, including enlarged text;
+full titles and inputs remain readable on expansion. URLs in the subtitle omit
+the HTTP(S) prefix. Timing remains beside the title, with a dash when backend
+timing is unavailable. Saved-agent goals retain their wrapping. Keep any expanded-detail spacing
+inside the detail content. The [density guard](../tools/architecture/rules/activity_density.md)
+and rendered activity-tab tests enforce this exception without banning padding
+in settings, forms or action controls.
+
+Use Android's Roboto sans typography explicitly across component themes and monospace for code. Keep the existing compact Activity geometry. Its tabs, badges, disclosures and [accepted detail toolbars](#accepted-activity-detail-family) are deliberate density exceptions to the general control dimensions.
 
 ## Selection controls
 
@@ -245,12 +280,55 @@ The selection audit covers App settings and composer preferences; Activity filte
 
 ## Conversation preservation
 
+The owner's 9 October selected slim message rail keeps controls beside the sent
+user bubble, with a wider rectangular bubble and no extra leading inset. Center
+local `HH:mm` above icon-only Edit → Copy across the space from the bubble edge
+to the screen edge. Align the time at the top and the icon pair at the bottom,
+with a small 4 dp inset at both ends. Keep the two icons visually close rather
+than spreading them to the centers of their touch boxes. The selected paired
+controls and standalone Copy use 48 × 48 dp targets. The paired rail reserves
+88 dp including the outer gutter; its targets extend 8 dp into the bubble’s
+12 dp padding without covering message text. Full-date accessibility,
+text scaling, disabled Edit and attachment/copy behavior remain intact. The
+message renderer owns this geometry; the workspace passes edit visibility and
+intent. The transcript gives user rows the trailing viewport gutter so the full
+Copy target receives taps rather than merely painting outside a padded row.
+Other transcript content retains the ordinary 16 dp gutters.
+Keep Fork and Regenerate on answers;
+do not add another Edit there or enable editing in Find's reading window.
+The saved-message editor uses a compact Studio header with icon-only close,
+one scrollable message/warning area and a fixed Replace and resend footer.
+Use the shared surfaces, borders, typography, spacing and control corners;
+keep the footer above keyboard insets at 320 dp/200% text. Pending work disables
+editing and dismissal; rejected work retains the correction and shows its error.
+
 Network continuity uses a shared LED on the left of each server identity, quiet
 bounded recovery, retained conversation state, and immediate notification
 navigation with cached reading where available. Use these rules for
 connection cues, accessible status targets and recovery journeys.
 
 Keep the existing Activity disclosure, tool counts, Tools/Tasks/Agents/Work tabs when available, thinking disclosure, nested tool rows, guide line, selection, expansion state, scroll anchoring and copyable details. Do not add extra outer cards, timeline dots or permanent rows simply because the raster mockup draws them. Use the current component geometry as the baseline and apply color/type/border refinements. Approvals and questions remain outside collapsible tool results.
+
+The owner-approved readable activity change replaces generic tool-result group
+headers and the extra Current tools disclosure with individual action rows in
+Tools. Each compact row carries an action title, target, exception notice and
+right-aligned duration when supplied. Actual backend starts permit approximate
+receipt-based counters. Expanded details show relevant content, including the
+exact analyzed image, followed by selectable/copyable Raw details. Use semantic
+status colors with text for running work and exceptions. Completed/success/
+unchanged notices stay out of ordinary tool headers. Restore saved Tasks and
+Agents from delivered history, with passive output disclosures for past agents.
+Preserve category
+selection, guide and anchored expansion. Contract: [tool activity](TOOL_ACTIVITY.md).
+
+The owner's subsequent 7 October refinement requires zero vertical padding in
+tool-call headers and saved-agent rows. Size them to their text, with no minimum
+row height or inter-row gaps; keep icons and disclosure arrows at 16 dp. These
+Activity disclosures are a deliberate exception to standard action heights.
+Preserve target, exception and supplied timing. A saved agent with no nonblank
+summary or error is passive text without an arrow or expansion action; keep its
+full goal readable. Live agent rows opening the control sheet retain their
+existing action dimensions.
 
 Task status icons follow upstream desktop: a green filled-circle tick for
 completed, a spinner for in progress, a muted dashed circle for pending and a
@@ -262,7 +340,7 @@ commit `603007ead347608c81bf95fd7b40c3fff9e4bed5`, desktop
 `apps/desktop/src/app/chat/composer/status-stack/status-row.tsx`, on 19 September
 2026. The change uses the existing client task states and requires no API changes.
 
-Keep activity status and queued-message controls above the composer. Preserve the two-row composer: draft first, then attachment/capture controls, the compact model/reasoning selector and Send/Stop. Preserve existing voice states and attachment options.
+Keep activity status and queued-message controls above the composer. Preserve the two-row composer: draft and dictation first, then attachment/capture controls, context, the compact model controls and Send/Stop. Controls wrap at enlarged text without shrinking touch targets. Preserve existing voice states and attachment options.
 
 The activity summary occupies no space while idle, after completion or after
 cancellation. Keep notices for ongoing work, active subagents, input requests,
@@ -272,15 +350,17 @@ Update visible status text in place; omit transitions when reduced motion is
 enabled. Neither notice reserves an empty row. Brief connection interruptions
 retain the existing two-second grace period before showing a notice.
 
-The model/reasoning selector opens Intelligence. Model selection retains search and collapsible groups by actual technical provider route. Selecting a model returns to Intelligence; Apply confirms the selection for this chat. Keep existing busy/loading/disabled rules and full route identifiers in the picker.
+The model selector opens one compact Models ledger on the current chat's provider tab, with its selected model first and visible. Keep the active provider tab in view even when it occurs late in the catalog. The small handle shares the 36dp title row instead of reserving its own row. Search uses compact 13dp text in a 36dp field, provider tabs are 32dp high, and single-line model rows are 36dp with 2dp inner vertical padding. This picker is an explicit owner-requested exception to the general 48dp action target: info, close, refresh and footer controls use 36dp targets with Material tap-target padding disabled. Do not let inherited button minimums add blank space. The footer is 44dp including its 4dp top/bottom inset. The sheet fits short lists; long lists scroll within its bounded height. Provider headings appear only in All; a selected provider uses one supplied In/Out price header with token units when needed. Rows grow for enlarged text. Each info action opens a content-sized model card showing supplied facts and the full route identifier. Missing facts are omitted. Starting a search searches all providers; an explicit tab narrows it. Selecting a model stays in the ledger; Apply commits all draft settings for this chat.
 
-Model catalog choices use the shared chooser in Chat, profile defaults, helper and fallback settings, scheduled tasks, and image/video tool settings. Search stays above the list and opens matching provider groups. The selected row is tinted, and provider plus model form its identity. Refresh keeps the pending choice and search text; a saved choice missing from the current catalog remains visible with an availability note. Automatic helper routing and a scheduled task's Profile default are separate named choices. Each editor has one labelled action: Chat Apply, profile Save default, helper Set helper model, fallback Add/Save fallback, tool Use model, or task Use in task. Task Save performs the server write for the entire task. A failed save keeps the pending choice visible. The catalog filter policy stays specific to each setting. Speech model IDs remain editable fields because the server does not expose a speech model catalog through this route.
+The reasoning control is a circuit-brain icon with a tiny current-level badge inside a 36dp target, following the owner-requested compact model-control exception. Its normal popup is 218 × 108dp: four columns, two rows, no heading or close row. Compact labels retain full accessible names and tooltips. Enlarge the popup for larger text. Omit Off when the backend disallows it. Fast uses a lightning icon, tinted/filled for On and neutral/outlined for Off; the picker includes the On/Off label. Omit controls without supplied availability. The footer keeps these controls, More (manual model ID/provider access), and Apply. The composer has one small inline model/reasoning/fast cluster with 14dp icons, 12sp labels and 32dp targets: chip icon plus the short model name, circuit brain plus the first reasoning letter (Min/Med/Max for the three matching levels), and a lightning icon reflecting observed fast mode. Model opens the same picker; lightning toggles fast immediately. Thinking uses Send's held-pointer interaction: ordinary taps do nothing, hold opens a narrow vertical level selector, sliding previews, release applies, and sliding away cancels. Keyboard and accessibility retain explicit level choices. A chat change, busy/disabled transition, resize or backgrounding retires the held selector. Full model ID, reasoning name and fast state remain accessible. Picker changes still wait for Apply. Preserve busy/loading/disabled rules and independent context, attachment, voice and send actions.
+
+Model catalog choices use the shared chooser in Chat, profile defaults, helper and fallback settings, scheduled tasks, and image/video tool settings. Search stays above the list and shows matching provider groups. The selected row is tinted, and provider plus model form its identity. Refresh keeps the pending choice and search text; a saved choice missing from the current catalog remains visible with an availability note. Automatic helper routing and a scheduled task's Profile default are separate named choices. Each editor has one labelled action: Chat Apply, profile Save default, helper Set helper model, fallback Add/Save fallback, tool Use model, or task Use in task. Task Save performs the server write for the entire task. A failed save keeps the pending choice visible. The catalog filter policy stays specific to each setting. Speech model IDs remain editable fields because the server does not expose a speech model catalog through this route.
 
 Tool model lists put the current or pending selection first, with an explicit Selected label for the saved model and Pending selection for a choice awaiting Use model. Tool setup provider lists put selected providers first with an accent border, tinted card, and visible Selected label; this border is an explicit exception to the general selection rule. Web names search and extraction selections separately. Keep the image/video provider controls and speech provider dropdown otherwise unchanged.
 
 Preserve the current Send/Steer/Queue/Stop and Enter behavior. Preserve the message-actions entry points present in the implementation baseline, including long-press. Do not restore controls removed by later approved UX work. Fork, Steer and Queue remain one-shot choices with current eligibility rules, never persistent composer modes. Preserve queued-message review, edit, delete and pause/resume behavior. Do not show unavailable actions as usable in a running chat.
 
-The later owner-approved [held-slide composer actions](COMPOSER_ACTION_GESTURE.md) supersede the earlier busy-button interaction. Preserve the resting arrow, held-action animation, vertical selector, cancellation and accessibility behavior, and device default-action preference. Its existing geometry is an explicit exception to the general control-corner tokens. Preserve the Markdown scrollbar gutters and subtle thumb styling added alongside this work.
+The later owner-approved [held-slide composer actions](COMPOSER_ACTION_GESTURE.md) supersede the earlier busy-button interaction. The owner's 8 October refinement shows a tappable Stop without a held column while a connected turn is working with no draft. Typing the first character or adding an attachment restores the arrow and configured action column. Use the brief vertical glide and settling bounce for both transitions, plus the column's staggered upward reveal; reduced motion switches immediately. Preserve held-action selection, cancellation, accessibility and the device default-action preference. Its existing geometry is an explicit exception to the general control-corner tokens. Preserve the Markdown scrollbar gutters and subtle thumb styling added alongside this work.
 
 ## Context indicator, selected ring
 
@@ -374,6 +454,23 @@ configuration and usage bars describe reported costs, never inferred activity.
 
 The owner-approved 18 September Health revision replaces the combined verdict
 with Server and Profile groups on the standalone Hermes health destination.
+The owner's 7 October server-resource design refinement adds a separate Host
+group before Server, followed by Profile. Host owns machine identity, compact
+CPU/memory/disk meters, uptime and load context. Its refresh reads resources;
+Server refresh still runs diagnostics, and Profile refresh still checks the
+selected profile. Host uses one section-owned observation time and a compact
+group with inline label/value/meter rows and subordinate machine facts. Use
+Studio surfaces, corners and accents; resource warning colors require actual
+reported pressure. The supplied reference establishes density and hierarchy,
+not a replacement palette or component system. The owner accepted the compact
+inline design and requested a single loading animation: keep the Host refresh
+spinner and omit the separate linear loading bar. Preserve the compact layout
+while optional readings are unavailable, and wrap values at enlarged text.
+The [Host resources contract](ADMINISTRATION.md#host-resources) records the
+reusable connection-owned loader and independent alert-threshold evaluation.
+The accepted exploration is archived on local branch
+`prototype/server-health-studio` at `6b5484b`, under
+`plans/prototypes/server-health-studio`; its fixtures remain synthetic.
 Server rows own Doctor, audit and Logs. The owner-approved 19 September update
 removes the runtime-profile label. The Server refresh icon is labelled
 Run all diagnostics and shows the same progress spinner as Profile while running.
@@ -426,8 +523,279 @@ Use [Testing](TESTING.md) for render entry points. Review actual widgets with re
 2. Drawer and connection/profile switching: clear active destination and scope, with consistent selection and accent treatment.
 3. Dense settings and administration: apply Studio to forms, disclosures, toggles and primary/secondary/destructive actions without wasting vertical space. Include Connections and its repair flow.
 4. Attention and recovery states: distinguish approvals, questions, reconnecting, uncertain submission, failure, loading and empty results. Keep the action needed to continue visible.
-5. Reading and output details: long Markdown, code, tables, file rows and previews should share readable typography and accents. Preserve existing Activity/tool geometry and behavior.
+5. Reading and output details: long Markdown, code, tables, file rows and viewers share readable typography and accents. Apply the activity field/action decisions within the shared geometry.
 
 Use light/dark pairs and enlarged-text examples in verification. Inspect drawer/scope switching, repair/attention states, reading/output details and composer states in the rendered UI. A generated larger-text study does not substitute for layout verification.
 
 Audit every screen, dialog, sheet, menu, form and custom control for legacy styling. Standard widgets must inherit Studio component themes; custom decorations must consume the shared tokens. Keep intentional geometry exceptions for the refined activity/tool presentation and content-specific previews. Record the audit and validation evidence with the implementation. Backend contracts, persistence, state transitions, shortcuts and eligibility rules remain unchanged unless the owner approves a specific behavior change.
+
+## Activity Tasks and Agents refinement, 7 October 2026
+
+The owner requested the other two Activity tabs be made as readable as Tools.
+Keep the existing tabs, selected state, guide, backend order and parent task
+indentation. Tasks use 14 sp selectable content and a separate 12 sp explicit
+status line, with progress/cancellation counts above the list. No editable
+checkboxes or invented task timing. Agents use 14 sp goals, an explicit status
+line with backend-supported timing, readable current activity and quiet
+model/tool-count metadata. A row opens the existing detail sheet with full task,
+output, steer/interrupt controls and a copyable backend Details disclosure.
+Preserve loading, refresh, retry, uncertainty and control eligibility. Use Studio
+semantic tokens and at least 48 dp rows; enlarged text wraps statuses/metadata
+without hiding reachable controls. See [the activity contract](TOOL_ACTIVITY.md).
+
+
+## Native reasoning timeline, 9 October 2026
+
+Activity's Timeline tab contains native reasoning between tool calls, using the
+same compact two-line row geometry and shared detail frame. Reasoning has one
+line of supplied text beneath its title. The shared circuit-brain glyph from the
+reasoning selector identifies both live and saved reasoning, distinct from
+Hindsight's head-shaped glyph. The shared row keeps every leading glyph at 16 dp.
+Active streamed text uses Thinking;
+sealed or saved text uses Reasoning. Expand to read the received Markdown, with
+exact-copy and actual-overflow viewer icons. Native event source and any
+separately supplied reasoning preview remain in Raw details. Omit invented
+insight counts and reasoning timing. There is no separate Thinking footer.
+Tasks, Agents and Work retain their selection and controls; live Activity keeps
+its existing location above the composer. Saved reasoning-only messages remain
+at their backend position. Live and saved segmentation need not match.
+
+## Activity information and typography, 8 October 2026
+
+The [information-design research](design/2026-10-08-activity-information-design.md)
+records primary sources and distinguishes their findings from Wing's choices.
+For Activity work, follow
+[design-wing-activity](../tools/agent_skills/design-wing-activity/SKILL.md).
+This charter is the authoritative presentation policy; the skill supplies the
+executable decision and verification process.
+
+### Backend API coverage
+
+Every product observation in a screen or design prototype must have a supported
+stock Hermes API acquisition path available to Wing. Before displaying a field,
+record its endpoint or received API event/tool receipt, response field, meaning
+and scope. Parse declared metadata from API-returned document content; derive
+totals only from compatible API observations with explicit period and coverage.
+Use actual captured API responses for real-data previews. Build optional widgets
+only for API-supported observations; render them only when useful returned data
+exists. Omit their heading, frame, actions and reserved space together when data
+is absent. Unsupported metrics do not receive placeholder or unavailable cards.
+Required loading/recovery flows retain their existing error handling. Publish a
+populated design preview only after its API samples have been captured.
+
+Stock source inspection establishes API contracts; actual product observations
+come through those APIs. SSH, server filesystem/database reads and internal
+Python calls do not qualify as data-acquisition paths for Wing or its prototypes.
+Finding a real server value does not establish that Wing can obtain it. A warning
+label does not authorize displaying unsupported fields. Keep designs within
+verified stock API capabilities unless the owner explicitly changes that scope.
+
+### USER-VALUE-FIRST Activity
+
+Every visible item must provide a conscious user signal or value: understand
+intent, assess actual achievement, reuse a payload, inspect a useful resource,
+or recover from a problem. The main card is a curated account of the work. Raw
+backend fields remain available through **Raw details** for technical inspection.
+Assign every field and action deliberately; a received key alone does not earn
+main-card space or a copy/viewer control.
+
+Show the requested operation and actual reported result as distinct facts. Use
+the supplied skill name as the main operation title and **Result** for its
+response. Keep code with its output, requested file ranges with the content
+received, Find/Replace with any supplied diff, and a vision question with its
+image and actual receipt or analysis. A native image receipt establishes that
+an image was loaded for the agent; it does not establish an analysis. Display
+errors, warnings, meaningful no-change outcomes and partial/truncated results
+where the user assesses achievement. Only backend observations establish
+counts, timing, verification, changes, exit codes and analysis; qualify unknown
+or last-received output.
+
+Use the following placement rules when making the exhaustive decision table:
+
+| Information | Placement and user value |
+| --- | --- |
+| Meaningful request, source, command, prompt, authored reasoning or returned payload | Main content: explains intent or supplies something the user can understand/reuse |
+| Timeout, context, limit, offset and similar execution options | Quiet inline title metadata, following the compact Read file arrangement; wrap under the title at enlarged text |
+| Reported failure, warning, changed/no-change result, partial content or server truncation | Visible result context when it affects what happened or the user's next action |
+| Routine `dirs_created`, duplicate `resolved_path`, technical matches-format descriptions | Raw details: backend bookkeeping does not add user value to the main result |
+| Skipped lint / no linter available, routine status booleans and other diagnostic plumbing | Raw details; surface a concrete actionable diagnostic when one is actually reported |
+| Supplied extra/unknown fields | Assess individually against user value; retain exact technical evidence in Raw details |
+
+Treat repeated facts as one item. File identity belongs to its resource header,
+not a repeated options card and content heading. File-search matches group by
+supplied path and line labels; the excerpts carry the useful result. File checks
+keep actual write verification, syntax findings and semantic diagnostics
+separate rather than implying broader correctness. Web-source host identity
+stays quiet beside its excerpt and source actions. Unknown tools show selected
+meaningful request/result content with exact Raw details available.
+
+The maintained [field decisions](design/activity-field-policy.md) account for each
+stock tool contract; use them before changing selection.
+
+File labels show **the filename only, on one line with end ellipsis**, across
+activity summaries, resource headers and viewer titles. Tap the name to reveal
+the exact full supplied path in a small popup anchored to that name or tap.
+Use a backend-supplied absolute path when available; a relative locator stays
+relative until the backend resolves it. Display shortening never changes the
+identity used for opening, loading, sharing or copying. Keep full paths in the
+popup and Raw details, rather than expanding routine labels across several rows.
+URLs retain meaningful source/host identity. Backend fields still require
+semantic validation: source text or contradictory search locations do not earn
+file actions merely because they appear in a path slot.
+
+This policy covers tools, Tasks, live/saved Agents, reasoning, goals, loops,
+heartbeats and background processes. Keep task states and parent indentation
+passive, with the established status glyphs. Agent task/output, goal contracts,
+recurring prompts, process commands and output tails receive the same field and
+action decisions as tool payloads. Preserve backend-qualified availability and
+control eligibility. An exited process without an exit code does not establish
+command success. Keep cancellation, steering, retry and other actual lifecycle
+controls within their existing authorization and recovery flows.
+
+Live and saved subagent headings identify the task with its first sentence,
+omitting the ending period. Cap headings at two lines with end ellipsis at every
+text size; a task without a sentence-ending period uses the same two-line cap.
+Periods within filenames, URLs and decimal values remain part of the sentence.
+The expanded Task contains the complete original backend instructions, with its
+existing scrolling, viewer and exact-copy actions. Shortening the heading never
+shortens the task payload or creates an authored summary.
+
+Saved-agent lifecycle status appears once, under the task heading, in both
+collapsed and expanded rows. Do not repeat it as a detail-card footer. Keep
+distinct errors and result qualifications (partial output, iteration limits,
+schema failures) with the expanded result, including when no output was supplied.
+A separate full-screen or modal viewer must retain its own necessary context.
+
+Skill reads use the skill's supplied name and purpose as their compact document
+card. The name stays on one line with end ellipsis; tapping it reveals the actual
+source path when supplied. One header owns eye, eligible share and exact-content
+copy. The eye opens received instructions, not an invented file or a new read.
+Keep full instructions in that Markdown viewer, with raw/formatted switching
+inside it. Supplied tags, author, version and license are quiet viewer context;
+omit missing fields and technical readiness bookkeeping. If no description was
+supplied, use a bounded excerpt of the actual instructions. Setup problems and
+unchanged/binary receipts retain their explicit states. Historical reads do not
+gain editing controls or an invented active state.
+Activity and Hermes administration skill reads use the same document viewer
+component and declaration selection. Administration retains its captured profile,
+read recovery and eligible edit/archive/uninstall actions; those controls do not
+appear on historical activity receipts. Do not build a second skill document UI.
+
+### Activity actions and viewers
+
+Use one icon vocabulary: **eye** opens a fuller viewer or useful resource,
+**copy** copies meaningful reusable content, **share** shares an eligible
+resource, and **wrap** controls literal text wrapping where useful. All actions
+are icon-only with precise scope-specific accessible names and tooltips,
+temporary feedback and reachable targets. Keep the stable relative order
+**wrap → eye → share → copy**, omitting ineligible actions; copy stays at the
+trailing edge. Keep controls
+adjacent to the payload/resource they affect; at enlarged text move that action
+row below its full-width title instead of squeezing text between icons.
+
+| Action | Eligibility and scope |
+| --- | --- |
+| Eye | A useful file/image/source resource, or received text with actual layout overflow that benefits from a fuller viewer. Short nonresource results have no eye; eligibility follows rendered overflow rather than character count. Use the same eye glyph rather than a second fullscreen vocabulary. |
+| Copy | A meaningful reusable request/result/excerpt/command/source. Copy its exact supplied content, retaining original receipt text when display formatting differs. Options, status booleans and routine plumbing have no copy control. |
+| Share | An actual shareable resource with its existing pending/error recovery. |
+| Wrap | Literal source/output whose long lines benefit from wrapping. Prose reflows without this control. |
+
+Each payload has one action for each useful purpose. Combine resource and
+content controls when they address the same read/result scope: one eye and one
+copy, without duplicate resource/content copy or viewer buttons. Put resource
+identifiers/URLs in their viewer and Raw details rather than adding a path/link
+copy beside the payload's copy. Distinct useful edit payloads such as Find,
+Replace and a supplied diff may each have their own scoped controls. A file eye
+can open the full backend file even when the returned excerpt is short; use
+that resource eye rather than adding a second body eye.
+
+Raw/formatted switching belongs inside the fuller viewer. Keep the main card
+focused on reading and action. Markdown receipts render formatted; other source
+files, replacement strings, patches and logs stay literal, including their
+Markdown-looking characters. Remove only stock receipt line-number prefixes
+for Markdown display and retain the exact numbered receipt for copy. A viewer
+copies its exact supplied content in either mode and preserves save/download,
+share recovery and supplied partial-file facts. Opening or scrolling received
+content does not imply fetching content omitted by the server.
+
+Full file viewers use the same compact 32 dp action targets and 16 dp glyphs as
+activity details. Keep the filename on one line and move actions below it at
+enlarged text. Separate viewer chrome from authored content with a neutral header
+rule and a document surface using Studio's shared border, corners and 8 dp
+framing. Formatted Markdown and its raw mode share that document frame; avoid
+adding another frame around source/image renderers that already own one.
+
+### Accepted activity detail family
+
+The owner's spacing and typography refinements on 8 October establish the
+shared framing below. **Read options is the visible 8 dp spacing reference**
+for every activity detail. These accepted properties do not establish blanket
+approval of every earlier layout, action or implementation constant; apply
+USER-VALUE-FIRST selection within this family.
+
+| Property | Shared rule |
+| --- | --- |
+| Visible insets | 8 dp on all four sides for resource/section headers, content, images, metadata and footers |
+| Compact toolbars | 32 dp high at ordinary text size, plus the 1 dp section separator; grow for wrapped/enlarged text |
+| Detail icon controls | 32 × 32 dp targets with 16 dp glyphs and 8 dp icon insets; scoped exception to Studio's general 48 dp control rule |
+| Inset ownership | Labels own their 8 dp vertical framing; buttons own their icon inset. Avoid a second vertical toolbar inset or extra trailing inset after the final icon |
+| Outer geometry | 4 dp vertical spacing around expanded details; full available width aligned with the activity's leading icon |
+| Surface and separators | Shared Studio raised/content surfaces, card corners and thin section rules across every family |
+| Typography | Shared label style for headings/quiet facts, Roboto body for explanations, monospace for code, commands, paths, source and console output |
+| Ordinary completion | Completed with the same muted color and outlined check icon, including backend-confirmed success |
+| Exceptions and result context | Explicit errors/warnings carry semantic accents; reported diffs retain +/- markers and colors; supplied exit codes and image receipts stay quiet context |
+
+The current implementation uses a shared **160 dp maximum inline text viewport**.
+This is a changeable implementation default, not an owner-approved immutable
+value. Short text uses its natural height; all received text remains available
+by scrolling. Keep the single viewport within the shared 8 dp framing, with
+no separate Preview or expansion footer. Keep code/table horizontal scrolling
+local while prose and surrounding controls reflow. Preserve explicit server
+truncation and partial-file facts. A useful-only eye supplies a fuller view
+when the inline content overflows.
+
+Shared framing belongs to `ActivityDetailsCard`, `ActivityDetailContent`,
+`ActivityDetailSection`, `ActivityDetailStatus` and `ActivityDetailAction` in
+[the activity renderer](../lib/core/widgets/tool_activity_details.dart).
+`ToolActivityDetailsView` composes facts within that frame. Extend these owners
+rather than styling each family independently. Measure visible text/icon edges
+as well as widget bounds: matching Padding values alone does not establish
+matching appearance. Align the image's actual leading edge with text content.
+
+Use hierarchy, spacing and proximity before introducing another font family.
+Render authored Markdown where headings, lists, links, tables and code fences
+help understanding. Keep literal payloads exact for selection/copy, and use
+tabular figures for comparable counts/timings. A font change needs actual phone
+comparisons of punctuation and ambiguous characters. Color remains a secondary
+cue alongside readable statuses, glyphs and literal diff markers.
+
+### Family acceptance procedure
+
+For each Activity design change, complete the skill's decision/render process
+before claiming completion or uniformity:
+
+1. Build a decision table for **every affected family, received field and
+   candidate action**. State its user signal/value, main/metadata/Raw placement,
+   exact action scope and eligibility. Account for empty, short, overflowing,
+   partial and failed states, including intentionally omitted actions. Compare
+   at least two plausible arrangements internally before selecting one.
+2. Give shared framing one production owner and implement the selected table.
+   Inspect nested renderers and inherited defaults, including all four visible
+   insets, image alignment, font roles, toolbar geometry and footer wording,
+   icon/color. Content paragraph/list spacing is distinct from shared framing.
+3. For a reported inconsistency, reproduce the actual symptom with a focused
+   family-level regression when feasible. Check the relevant geometry, colors,
+   action eligibility and exact payload behavior. A left coordinate alone is
+   partial evidence; retain loading, failures and recovery in the review.
+4. Compare actual affected family members together at ordinary phone size in
+   **both themes**, then at **320 dp/200% text in both themes**. Include long
+   metadata, short and overflowing content, resources, errors and partial data.
+   Verify the served preview bytes match the newly generated captures and that
+   comparison layouts do not resize members unevenly or overflow. Test icon
+   reachability, payload copy and useful viewer opening where applicable.
+5. Record the specific field/action decisions and rendered properties checked,
+   with remaining discrepancies or unverified states. Test counts, skill usage,
+   token usage and one isolated screenshot do not establish design quality or
+   family acceptance. Contrast and assistive-technology behavior require their
+   own checks; captures alone do not establish accessibility conformance.
+   A renewed owner report reopens acceptance; investigate the reported state.

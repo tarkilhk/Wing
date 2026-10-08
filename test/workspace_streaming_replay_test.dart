@@ -12,8 +12,9 @@ import '../tools/performance/workspace_streaming_replay.dart';
 import 'helpers/pump_markdown_widget.dart';
 
 Future<WorkspaceStreamingReplayState> _preparedWorkspace(
-  WidgetTester tester,
-) async {
+  WidgetTester tester, {
+  int? historyCount,
+}) async {
   tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
   tester.view.physicalSize = const Size(390, 800);
   tester.view.devicePixelRatio = 1;
@@ -28,14 +29,15 @@ Future<WorkspaceStreamingReplayState> _preparedWorkspace(
   );
   Map<String, Object?>? result;
   Object? failure;
-  final pending = key.currentState!
-      .prepare(requireKeyboard: false)
-      .then((value) {
-        result = value;
-      })
-      .catchError((Object error) {
-        failure = error;
-      });
+  final preparation = historyCount == null
+      ? key.currentState!.prepare(requireKeyboard: false)
+      : key.currentState!.prepareIdle(historyCount, requireKeyboard: false);
+  final pending = preparation.then<void>(
+    (value) => result = value,
+    onError: (Object error) {
+      failure = error;
+    },
+  );
   for (
     var attempt = 0;
     attempt < 200 && result == null && failure == null;
@@ -48,6 +50,17 @@ Future<WorkspaceStreamingReplayState> _preparedWorkspace(
   expect(result, isNotNull);
   await pending;
   return key.currentState!;
+}
+
+bool _canAddListener(ChangeNotifier notifier) {
+  void listener() {}
+  try {
+    notifier.addListener(listener);
+    notifier.removeListener(listener);
+    return true;
+  } on FlutterError {
+    return false;
+  }
 }
 
 void main() {
@@ -82,7 +95,9 @@ void main() {
     tester,
   ) async {
     final state = await _preparedWorkspace(tester);
-    state.controller!.current!.chat!.streaming += 'Unexpected input';
+    state.controller!.current!.chat!.reading.appendStreaming(
+      'Unexpected input',
+    );
     await expectLater(
       state.replay(),
       throwsA(
@@ -133,6 +148,37 @@ void main() {
     },
   );
 
+  testWidgets(
+    'aborted replacement disposes the old controller after its view detaches',
+    (tester) async {
+      final state = await _preparedWorkspace(tester, historyCount: 2);
+      final oldController = state.controller!;
+      addTearDown(() {
+        if (_canAddListener(oldController)) oldController.dispose();
+      });
+
+      final preparing = state.prepareIdle(50, requireKeyboard: false);
+      expect(find.byType(ProfileWorkspaceScreen), findsOneWidget);
+      state.didChangeAppLifecycleState(AppLifecycleState.paused);
+      await expectLater(
+        preparing,
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('canceled'),
+          ),
+        ),
+      );
+      expect(_canAddListener(oldController), isTrue);
+
+      await tester.pump();
+      expect(find.byType(ProfileWorkspaceScreen), findsNothing);
+      expect(_canAddListener(oldController), isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('offline replay prepares the real workspace and composer', (
     tester,
   ) async {
@@ -172,8 +218,8 @@ void main() {
     expect(result!['nativeDraftStorage'], isFalse);
     expect(find.byType(ProfileWorkspaceScreen), findsOneWidget);
     final chat = key.currentState!.controller!.current!.chat!;
-    expect(chat.busy, isTrue);
-    expect(chat.streaming, streamingReplayInitial());
+    expect(chat.runtime.blocksTurnAdmission, isTrue);
+    expect(chat.reading.streaming, streamingReplayInitial());
     final rendered = key.currentState!.renderedReadiness(
       streamingReplayInitial(),
     );
@@ -189,11 +235,14 @@ void main() {
       'Physical typing equivalent',
     );
     await tester.pump();
-    expect(chat.composerText, 'Physical typing equivalent');
+    expect(
+      chat.composer.observation.displayedText,
+      'Physical typing equivalent',
+    );
     key.currentState!.controller!.current!.gateway.onEvent!(
       StreamEvent(
         type: 'message.delta',
-        sessionId: chat.runtimeId,
+        sessionId: chat.runtime.runtimeId,
         data: {'text': 'A deterministic appended paragraph.'},
       ),
     );
@@ -211,5 +260,64 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     expect(workspaceReplayDeltaCount * workspaceReplayIntervalUs, 20000000);
+  });
+
+  testWidgets('idle probe accepts only short or long saved-history fixtures', (
+    tester,
+  ) async {
+    final state = await _preparedWorkspace(tester, historyCount: 2);
+    expect(state.controller!.current!.chat!.reading.messages, hasLength(2));
+    expect(state.controller!.current!.chat!.reading.streaming, isEmpty);
+    expect(
+      state.controller!.current!.chat!.runtime.blocksTurnAdmission,
+      isFalse,
+    );
+    await expectLater(
+      state.prepareIdle(3, requireKeyboard: false),
+      throwsStateError,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('idle probe exports counts and expected draft check only', (
+    tester,
+  ) async {
+    final state = await _preparedWorkspace(tester, historyCount: 50);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pump();
+    final started = state.startProbe();
+    expect(started['started'], isTrue);
+    await tester.enterText(
+      find.byKey(const Key('profile-message-composer')),
+      'Test ${'test ' * 39}',
+    );
+    await tester.pump();
+    Map<String, Object?>? report;
+    Object? failure;
+    final stopping = state.stopProbe().then<void>(
+      (value) => report = value,
+      onError: (Object error) {
+        failure = error;
+      },
+    );
+    for (
+      var attempt = 0;
+      attempt < 20 && report == null && failure == null;
+      attempt++
+    ) {
+      await tester.pump(const Duration(milliseconds: 20));
+      await tester.settleMarkdown();
+    }
+    expect(failure, isNull);
+    await stopping;
+    expect(report, isNotNull);
+    expect(report!['draftCharacters'], 200);
+    expect(report!['expectedDraftVerified'], isTrue);
+    expect(report, isNot(contains('draft')));
+    expect(report, isNot(contains('source')));
+    expect(report, contains('transcript.build_setup_sync'));
+    expect(report, contains('transcript.group_sync'));
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 }

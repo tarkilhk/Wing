@@ -1,6 +1,5 @@
 import 'studio_action_label.dart';
 import 'studio_error.dart';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
@@ -157,7 +156,18 @@ class _GatewaySensitivePromptPanelState
               if (_error != null) setState(() => _error = null);
             },
             onSubmitted: (value) {
-              if (!savesLogin && _canSubmit) _respond(_responseValue);
+              if (!savesLogin &&
+                  widget.request.canRespond(
+                    value: _controller.text,
+                    password: _passwordController.text,
+                  )) {
+                _respond(
+                  widget.request.responseValue(
+                    value: _controller.text,
+                    password: _passwordController.text,
+                  ),
+                );
+              }
             },
           ),
           if (savesLogin) ...[
@@ -180,7 +190,17 @@ class _GatewaySensitivePromptPanelState
                 if (_error != null) setState(() => _error = null);
               },
               onSubmitted: (_) {
-                if (_canSubmit) _respond(_responseValue);
+                if (widget.request.canRespond(
+                  value: _controller.text,
+                  password: _passwordController.text,
+                )) {
+                  _respond(
+                    widget.request.responseValue(
+                      value: _controller.text,
+                      password: _passwordController.text,
+                    ),
+                  );
+                }
               },
             ),
           ],
@@ -212,8 +232,18 @@ class _GatewaySensitivePromptPanelState
                 ]),
                 builder: (context, _) => FilledButton(
                   key: const Key('sensitive-prompt-submit'),
-                  onPressed: _enabled && _canSubmit
-                      ? () => _respond(_responseValue)
+                  onPressed:
+                      _enabled &&
+                          widget.request.canRespond(
+                            value: _controller.text,
+                            password: _passwordController.text,
+                          )
+                      ? () => _respond(
+                          widget.request.responseValue(
+                            value: _controller.text,
+                            password: _passwordController.text,
+                          ),
+                        )
                       : null,
                   child: StudioActionLabel(
                     request.kind == GatewaySensitivePromptKind.vaultSaveLogin
@@ -228,32 +258,5 @@ class _GatewaySensitivePromptPanelState
         ],
       ),
     );
-  }
-
-  bool get _canSubmit {
-    if (widget.request.kind == GatewaySensitivePromptKind.vaultSaveLogin) {
-      return _controller.text.trim().isNotEmpty &&
-          _passwordController.text.isNotEmpty;
-    }
-    if (widget.request.kind == GatewaySensitivePromptKind.vaultCode) {
-      return _normalizedCode.isNotEmpty;
-    }
-    return _controller.text.isNotEmpty;
-  }
-
-  String get _normalizedCode =>
-      _controller.text.replaceAll(RegExp(r'[\s-]'), '');
-
-  String get _responseValue {
-    if (widget.request.kind == GatewaySensitivePromptKind.vaultSaveLogin) {
-      return jsonEncode({
-        'identifier': _controller.text.trim(),
-        'password': _passwordController.text,
-      });
-    }
-    if (widget.request.kind == GatewaySensitivePromptKind.vaultCode) {
-      return _normalizedCode;
-    }
-    return _controller.text;
   }
 }

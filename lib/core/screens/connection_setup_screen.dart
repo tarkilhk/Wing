@@ -4,8 +4,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/hermes_cloud.dart';
 import '../widgets/studio_selection_tile.dart';
 
-import '../models/connection_address.dart';
-import '../services/connection_manager.dart';
+import '../models/connection_setup.dart';
+import '../services/connection_setup_session.dart';
+import '../models/connection.dart';
 import '../services/connection_setup_probe.dart';
 import '../theme/wing_theme.dart';
 import '../widgets/compact_switch.dart';
@@ -19,31 +20,13 @@ import 'connection_guide_screen.dart';
 
 /// One dashboard address, an explicit sign-in, and a provisional access check.
 class ConnectionSetupScreen extends StatefulWidget {
-  const ConnectionSetupScreen({
-    required this.onSave,
-    required this.onSaveIcon,
-    this.initialConnection,
-    this.cloud,
-    this.savedConnections = const [],
-    this.createProbe = DashboardConnectionProbe.new,
-    super.key,
-  }) : assert(initialConnection == null || onSaveIcon != null);
+  const ConnectionSetupScreen({required this.createSession, super.key});
 
-  final SavedConnection? initialConnection;
-  final HermesCloud? cloud;
-  final List<SavedConnection> savedConnections;
-  final Future<SavedConnection> Function(SavedConnection candidate) onSave;
-
-  /// Existing connections save appearance independently of access verification.
-  /// New instances keep their icon in the draft until the final save.
-  final Future<void> Function(ConnectionIcon icon)? onSaveIcon;
-  final ConnectionProbe Function(SavedConnection) createProbe;
+  final ConnectionSetupSession Function() createSession;
 
   @override
   State<ConnectionSetupScreen> createState() => _ConnectionSetupScreenState();
 }
-
-enum _Step { choose, address, cloud, signIn, check, review }
 
 class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
   final _addressForm = GlobalKey<FormState>();
@@ -54,224 +37,100 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
   late final TextEditingController _username;
   late final TextEditingController _password;
   late final TextEditingController _name;
-  late final ConnectionSetupProbe _probe;
-  late _AccessSettings _access;
-  late ConnectionIcon _icon;
-  _Step _step = _Step.choose;
-  late final HermesCloud _cloud;
-  CloudDiscovery? _discovery;
-  List<CloudOrganization> _organizations = const [];
-  CloudInstance? _instance;
-  String? _organization;
-  DashboardOAuthSession? _cloudSession;
-  String? _cloudError;
-  bool _cloudBusy = false;
-  bool _cloudRoute = false;
-  int _cloudGeneration = 0;
-
-  SavedConnection? get _alreadySaved {
-    if (_editing || _instance == null) return null;
-    for (final saved in widget.savedConnections) {
-      if (saved.cloudInstanceId == _instance!.id &&
-          saved.cloudOrganization == _organization) {
-        return saved;
-      }
-    }
-    return null;
-  }
-
-  SavedConnection? _checkedConnection;
+  late final ConnectionSetupSession _session;
+  ConnectionSetupState get _state => _session.value;
+  ConnectionSetupCheck get _probe => _state.check;
+  ConnectionSetupAccess get _access => _state.draft.access;
+  ConnectionIcon get _icon => _state.draft.icon;
+  ConnectionSetupStep get _step => _state.step;
+  CloudDiscovery? get _discovery => _state.discovery;
+  List<CloudOrganization> get _organizations => _state.organizations;
+  CloudInstance? get _instance => _state.instance;
+  String? get _organization => _state.organization;
+  String? get _cloudError => _state.cloudError;
+  String? get _saveError => _state.saveError;
+  SavedConnection? get _alreadySaved => _state.alreadySaved;
+  bool get _cloudBusy => _state.cloudBusy;
+  bool get _cloudRoute => _state.cloudRoute;
+  bool get _saving => _state.saving;
+  bool get _leaving => _state.leaving;
+  bool get _editing => _state.editing;
   bool _revealPassword = false;
-  bool _dirty = false;
-  bool _saving = false;
-  bool _leaving = false;
   bool _confirmingExit = false;
-  String? _saveError;
-
-  bool get _editing => widget.initialConnection != null;
+  bool _popScheduled = false;
 
   @override
   void initState() {
     super.initState();
-    final initial = widget.initialConnection;
-    _cloud = widget.cloud ?? HermesCloud();
-    _cloudRoute = initial?.isCloud ?? false;
-    _step = _cloudRoute
-        ? _Step.cloud
-        : initial == null
-        ? _Step.choose
-        : _Step.address;
-    _icon = initial?.icon ?? ConnectionIcon.server;
-    _address = TextEditingController(
-      text: initial == null
-          ? ''
-          : SavedConnection.joinBaseUrl(
-              '${initial.useHttps ? 'https' : 'http'}://${initial.host}:${initial.dashboardPort}',
-              initial.dashboardPrefix ?? '',
-            ),
-    );
-    if (_cloudRoute) {
-      _organization = initial!.cloudOrganization;
-      _instance = CloudInstance(
-        id: initial.cloudInstanceId!,
-        name: initial.label,
-        state: 'unknown',
-        dashboardUrl: _address.text,
-      );
-      _discovery = CloudDiscovery(instances: [_instance!]);
-    }
-    _username = TextEditingController(text: initial?.dashboardUsername ?? '');
-    _password = TextEditingController(text: initial?.dashboardPassword ?? '');
-    _name = TextEditingController(text: initial?.label ?? '');
-    _access = _AccessSettings(
-      proxied: initial?.dashboardProxied ?? false,
-      chatUrl: initial?.desktopGatewayUrl ?? '',
-      headers: initial?.gatewayHeaders ?? const {},
-    );
-    _probe = ConnectionSetupProbe(createProbe: widget.createProbe)
-      ..addListener(_probeChanged);
+    _session = widget.createSession();
+    _address = TextEditingController(text: _state.draft.address);
+    _username = TextEditingController(text: _state.draft.username);
+    _password = TextEditingController(text: _state.draft.password);
+    _name = TextEditingController(text: _state.draft.name);
+    _session.addListener(_changed);
   }
 
-  void _probeChanged() {
+  void _changed() {
     if (!mounted) return;
-    setState(() {
-      if (_step == _Step.check && !_probe.checking && _probe.verified) {
-        _step = _Step.review;
-        _toTop();
-      }
-    });
-  }
-
-  void _toTop() {
-    if (_scroll.hasClients) _scroll.jumpTo(0);
-  }
-
-  void _go(_Step step) {
-    FocusManager.instance.primaryFocus?.unfocus();
-    if (step != _Step.review) {
-      _probe.cancel();
-      _checkedConnection = null;
+    final previousStep = _renderedStep;
+    for (final entry in [
+      (_address, _state.draft.address),
+      (_username, _state.draft.username),
+      (_password, _state.draft.password),
+      (_name, _state.draft.name),
+    ]) {
+      if (entry.$1.text != entry.$2) entry.$1.text = entry.$2;
     }
-    setState(() {
-      _step = step;
-      _saveError = null;
-    });
-    _toTop();
+    setState(() {});
+    if (previousStep != _step) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      if (_scroll.hasClients) _scroll.jumpTo(0);
+    }
+    if (_leaving && !_popScheduled) {
+      _popScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.of(context).pop(_state.result);
+      });
+    }
   }
 
+  ConnectionSetupStep? _renderedStep;
   void _continue() {
-    if (!_addressForm.currentState!.validate()) return;
-    final address = ConnectionAddress.parse(_address.text);
-    _address.text = address.url;
-    if (_name.text.isEmpty) _name.text = address.host;
-    _go(_Step.signIn);
-  }
-
-  Future<void> _customSetup() async {
-    final result = await Navigator.of(context).push<_AccessSettings>(
-      MaterialPageRoute(builder: (_) => _CustomSetupScreen(initial: _access)),
-    );
-    if (result == null || !mounted) return;
-    setState(() {
-      _access = result;
-      _dirty = true;
-    });
-    _go(_Step.signIn);
+    if (_addressForm.currentState!.validate()) _session.continueAddress();
   }
 
   Future<void> _check() async {
-    if (_probe.checking) return;
     if (!_cloudRoute &&
-        _step == _Step.signIn &&
+        _step == ConnectionSetupStep.signIn &&
         !_signInForm.currentState!.validate()) {
       return;
     }
-    final address = ConnectionAddress.parse(_address.text);
-    final candidate = SavedConnection(
-      id: widget.initialConnection?.id ?? 'new-connection',
-      label: _name.text.trim(),
-      host: address.host,
-      port: address.port,
-      useHttps: address.useHttps,
-      apiKey: '',
-      cloudInstanceId: _cloudRoute ? _instance!.id : null,
-      cloudOrganization: _cloudRoute ? _organization : null,
-      dashboardOAuth: _cloudRoute ? _cloudSession : null,
-      dashboardPortOverride: address.port,
-      dashboardPrefix: address.path,
-      dashboardProxied: _access.proxied,
-      dashboardUsername: _cloudRoute || _access.proxied
-          ? null
-          : _username.text.trim(),
-      dashboardPassword: _cloudRoute || _access.proxied ? null : _password.text,
-      desktopGatewayUrl: _access.chatUrl.isEmpty ? null : _access.chatUrl,
-      gatewayHeaders: _access.headers,
-    );
-    _go(_Step.check);
-    _checkedConnection = candidate;
-    await _probe.check(candidate);
+    await _session.check();
   }
 
   Future<void> _save() async {
-    if (_saving || !_probe.verified || !_nameForm.currentState!.validate()) {
-      return;
-    }
-    final candidate = _checkedConnection!.copyWith(
-      label: _name.text.trim(),
-      icon: _icon,
-    );
-    setState(() {
-      _saving = true;
-      _saveError = null;
-    });
-    try {
-      final saved = await widget.onSave(candidate);
-      if (!mounted) return;
-      _leave(saved);
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _saving = false;
-          _saveError =
-              'Couldn’t save this connection on this device. Your details are still here. Try saving again.';
-        });
-      }
-    }
+    if (_nameForm.currentState!.validate()) await _session.save();
   }
 
-  void _leave([SavedConnection? result]) {
-    setState(() => _leaving = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) Navigator.of(context).pop(result);
-    });
+  Future<void> _customSetup() async {
+    final edit = _session.beginAccessEdit();
+    final result = await Navigator.of(context).push<ConnectionSetupAccessInput>(
+      MaterialPageRoute(
+        builder: (_) => _CustomSetupScreen(
+          initial: edit.initial,
+          validateAddress: _session.validateAddress,
+        ),
+      ),
+    );
+    if (result != null && mounted) {
+      _session.applyAccess(result, edit: edit);
+    }
   }
 
   Future<void> _back() async {
-    if (_saving || _leaving || _confirmingExit) return;
-    if (_cloudBusy) {
-      _cloudGeneration++;
-      await _cloud.cancel();
-      if (!mounted) return;
-      setState(() => _cloudBusy = false);
-      return;
-    }
-    if (_step == _Step.check || _step == _Step.review) {
-      _go(_cloudRoute ? _Step.cloud : _Step.signIn);
-      return;
-    }
-    if (_step == _Step.signIn) {
-      _go(_Step.address);
-      return;
-    }
-    if (!_editing && (_step == _Step.address || _step == _Step.cloud)) {
-      _cloudGeneration++;
-      _go(_Step.choose);
-      return;
-    }
-    if (!_dirty) {
-      _leave();
-      return;
-    }
+    if (_confirmingExit) return;
+    final result = await _session.back();
+    if (!mounted || result != ConnectionSetupBack.discard) return;
     _confirmingExit = true;
     final discard = await showDialog<bool>(
       context: context,
@@ -291,15 +150,13 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
       ),
     );
     _confirmingExit = false;
-    if (discard == true && mounted) _leave();
+    if (discard == true && mounted) _session.discard();
   }
 
   @override
   void dispose() {
-    _cloudGeneration++;
-    _cloud.close();
-    _probe.removeListener(_probeChanged);
-    _probe.dispose();
+    _session.removeListener(_changed);
+    _session.dispose();
     for (final controller in [_address, _username, _password, _name]) {
       controller.dispose();
     }
@@ -309,10 +166,13 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _renderedStep = _step;
     final step = switch (_step) {
-      _Step.choose || _Step.address || _Step.cloud => 1,
-      _Step.signIn => 2,
-      _Step.check || _Step.review => 3,
+      ConnectionSetupStep.choose ||
+      ConnectionSetupStep.address ||
+      ConnectionSetupStep.cloud => 1,
+      ConnectionSetupStep.signIn => 2,
+      ConnectionSetupStep.check || ConnectionSetupStep.review => 3,
     };
     return PopScope(
       canPop: _leaving,
@@ -324,7 +184,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           leading: BackButton(onPressed: _saving ? null : _back),
           title: Text(_editing ? 'Edit instance' : 'Add instance'),
           actions: [
-            if (_step != _Step.review)
+            if (_step != ConnectionSetupStep.review)
               Padding(
                 padding: const EdgeInsets.only(right: 16),
                 child: Center(
@@ -386,12 +246,12 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
                               ),
                               const SizedBox(height: 24),
                               switch (_step) {
-                                _Step.choose => _chooseStep(),
-                                _Step.cloud => _cloudStep(),
-                                _Step.address => _addressStep(),
-                                _Step.signIn => _signInStep(),
-                                _Step.check => _checkStep(),
-                                _Step.review => _reviewStep(),
+                                ConnectionSetupStep.choose => _chooseStep(),
+                                ConnectionSetupStep.cloud => _cloudStep(),
+                                ConnectionSetupStep.address => _addressStep(),
+                                ConnectionSetupStep.signIn => _signInStep(),
+                                ConnectionSetupStep.check => _checkStep(),
+                                ConnectionSetupStep.review => _reviewStep(),
                               },
                             ],
                           ),
@@ -470,10 +330,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
                     : 'Connect with a dashboard address',
               ),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                _cloudRoute = cloud;
-                _go(cloud ? _Step.cloud : _Step.address);
-              },
+              onTap: () => _session.chooseSource(cloud: cloud),
             ),
           ),
         ),
@@ -482,95 +339,9 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
     ],
   );
 
-  Future<void> _discoverCloud({bool switchAccount = false}) async {
-    if (_cloudBusy) return;
-    final generation = ++_cloudGeneration;
-    setState(() {
-      _cloudBusy = true;
-      _cloudError = null;
-      if (switchAccount) {
-        _discovery = null;
-        _instance = null;
-        _organization = null;
-        _organizations = const [];
-        _cloudSession = null;
-      }
-    });
-    try {
-      final result = await _cloud.discover(
-        organization: switchAccount ? null : _organization,
-        switchAccount: switchAccount,
-      );
-      if (!mounted || generation != _cloudGeneration) return;
-      setState(() {
-        if (result != null) {
-          _discovery = result;
-          if (result.organizations.isNotEmpty) {
-            _organizations = result.organizations;
-          }
-          _instance = null;
-          _cloudSession = null;
-          _organization = result.organization?.id;
-        }
-      });
-    } catch (error) {
-      if (mounted && generation == _cloudGeneration) {
-        setState(() {
-          _cloudError = error is CloudAccessException
-              ? error.message
-              : 'Couldn’t reach Nous Portal. Try again.';
-        });
-      }
-    } finally {
-      if (mounted && generation == _cloudGeneration) {
-        setState(() => _cloudBusy = false);
-      }
-    }
-  }
-
-  Future<void> _continueCloud() async {
-    if (_cloudBusy) return;
-    if (_discovery == null || _discovery!.organizations.isNotEmpty) {
-      await _discoverCloud();
-      return;
-    }
-    final instance = _instance;
-    if (instance?.canConnect != true) return;
-    if (_alreadySaved case final saved?) {
-      _leave(saved);
-      return;
-    }
-    final generation = ++_cloudGeneration;
-    setState(() {
-      _cloudBusy = true;
-      _cloudError = null;
-    });
-    try {
-      final session = await _cloud.signIn(instance!);
-      if (!mounted || generation != _cloudGeneration || session == null) return;
-      _cloudSession = session;
-      _address.text = instance.dashboardUrl!;
-      if (!_editing) _name.text = instance.name;
-      _access = const _AccessSettings();
-      _username.clear();
-      _password.clear();
-      _dirty = true;
-      setState(() => _cloudBusy = false);
-      await _check();
-    } catch (error) {
-      if (mounted && generation == _cloudGeneration) {
-        setState(() {
-          _cloudError = error is CloudAccessException
-              ? error.message
-              : 'Couldn’t sign in to this Hermes. Try again.';
-        });
-      }
-    } finally {
-      if (mounted && generation == _cloudGeneration) {
-        setState(() => _cloudBusy = false);
-      }
-    }
-  }
+  Future<void> _discoverCloud({bool switchAccount = false}) =>
+      _session.refreshCloud(switchAccount: switchAccount);
+  Future<void> _continueCloud() => _session.continueCloud();
 
   Future<void> _openPortal() async {
     try {
@@ -584,10 +355,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
       /* Show an actionable error without platform details. */
     }
     if (mounted) {
-      setState(
-        () => _cloudError =
-            'Couldn’t open Nous Portal. Visit portal.nousresearch.com in your browser.',
-      );
+      _session.portalOpenFailed();
     }
   }
 
@@ -640,9 +408,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
       else if (_discovery!.organizations.isNotEmpty)
         RadioGroup<String>(
           groupValue: _organization,
-          onChanged: _cloudBusy
-              ? (_) {}
-              : (value) => setState(() => _organization = value),
+          onChanged: _cloudBusy ? (_) {} : _session.selectOrganization,
           child: Column(
             children: [
               for (final org in _discovery!.organizations)
@@ -670,15 +436,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
       else
         RadioGroup<String>(
           groupValue: _instance?.id,
-          onChanged: (value) {
-            if (_cloudBusy) return;
-            setState(() {
-              _instance = _discovery!.instances.firstWhere(
-                (i) => i.id == value,
-              );
-              _cloudError = null;
-            });
-          },
+          onChanged: _session.selectInstance,
           child: Column(
             children: [
               for (final instance in _discovery!.instances)
@@ -712,16 +470,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
             ),
             if (_organizations.length > 1 && _discovery!.organizations.isEmpty)
               TextButton(
-                onPressed: _cloudBusy
-                    ? null
-                    : () => setState(() {
-                        _discovery = CloudDiscovery(
-                          organizations: _organizations,
-                        );
-                        _organization = null;
-                        _instance = null;
-                        _cloudError = null;
-                      }),
+                onPressed: _cloudBusy ? null : _session.changeOrganization,
                 child: const Text('Change organization'),
               ),
             TextButton(
@@ -769,16 +518,9 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           textInputAction: TextInputAction.next,
           autocorrect: false,
           enableSuggestions: false,
-          onChanged: (_) => _dirty = true,
+          onChanged: _session.editAddress,
           onFieldSubmitted: (_) => _continue(),
-          validator: (value) {
-            try {
-              ConnectionAddress.parse(value ?? '');
-              return null;
-            } on FormatException catch (error) {
-              return error.message;
-            }
-          },
+          validator: _session.validateAddress,
         ),
         const SizedBox(height: 24),
         _panel(
@@ -821,14 +563,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
     context,
     connectionName: _name.text.trim(),
     initialIcon: _icon,
-    onSave: (icon) async {
-      if (widget.onSaveIcon != null) await widget.onSaveIcon!(icon);
-      if (!mounted) return;
-      setState(() {
-        _icon = icon;
-        if (!_editing) _dirty = true;
-      });
-    },
+    onSave: _session.setIcon,
   );
 
   Widget _destination() => Padding(
@@ -908,10 +643,8 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
               textInputAction: TextInputAction.next,
               autocorrect: false,
               enableSuggestions: false,
-              onChanged: (_) => _dirty = true,
-              validator: (value) => value == null || value.trim().isEmpty
-                  ? 'Enter your dashboard username.'
-                  : null,
+              onChanged: _session.editUsername,
+              validator: _session.validateUsername,
             ),
             const SizedBox(height: 20),
             TextFormField(
@@ -936,11 +669,9 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
                   ),
                 ),
               ),
-              onChanged: (_) => _dirty = true,
+              onChanged: _session.editPassword,
               onFieldSubmitted: (_) => _check(),
-              validator: (value) => value == null || value.isEmpty
-                  ? 'Enter your dashboard password.'
-                  : null,
+              validator: _session.validatePassword,
             ),
             const SizedBox(height: 16),
             Text(
@@ -948,7 +679,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
-          if (_address.text.startsWith('http:')) ...[
+          if (_state.unencrypted) ...[
             const SizedBox(height: 16),
             Text(
               'HTTP does not encrypt this connection. Use a trusted private network or an HTTPS address.',
@@ -959,7 +690,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Custom setup'),
-            subtitle: Text(_access.description),
+            subtitle: Text(_accessDescription(_access)),
             trailing: const Icon(Icons.chevron_right),
             onTap: _customSetup,
           ),
@@ -998,7 +729,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
         if (_probe.failedStage == ConnectionCheck.chat) ...[
           const SizedBox(height: 12),
           Text(
-            'If you use a reverse proxy, check WebSocket forwarding for ${ConnectionAddress.parse(_access.chatUrl.isEmpty ? _address.text : _access.chatUrl).path}/api/ws.',
+            'If you use a reverse proxy, check WebSocket forwarding for ${_state.chatPath}/api/ws.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
@@ -1011,7 +742,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
               child: SelectableText(
                 [
                   'Dashboard: ${_address.text}',
-                  'Live chat: ${ConnectionAddress.parse(_access.chatUrl.isEmpty ? _address.text : _access.chatUrl).socketUrl}',
+                  'Live chat: ${_state.chatSocketUrl}',
                   if (_probe.httpStatus != null) 'HTTP ${_probe.httpStatus}',
                   if (_probe.checkedAt != null)
                     'Checked: ${_probe.checkedAt!.toLocal()}',
@@ -1022,7 +753,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           ],
         ),
         TextButton(
-          onPressed: () => _go(_cloudRoute ? _Step.cloud : _Step.signIn),
+          onPressed: _session.editSignIn,
           child: Text(
             _cloudRoute
                 ? 'Sign in to Hermes Cloud again'
@@ -1119,11 +850,9 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
             errorMaxLines: 3,
           ),
           textInputAction: TextInputAction.done,
-          onChanged: (_) => _dirty = true,
+          onChanged: _session.editName,
           onFieldSubmitted: (_) => _save(),
-          validator: (value) => value == null || value.trim().isEmpty
-              ? 'Give this instance a name.'
-              : null,
+          validator: _session.validateName,
         ),
         const SizedBox(height: 24),
         ListTile(
@@ -1139,7 +868,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
         const SizedBox(height: 16),
         if (!_editing)
           Text(
-            'Opens with profile ${_probe.discovery!.serverPreferred.label}',
+            'Opens with profile ${_probe.preferredProfileLabel!}',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         const SizedBox(height: 16),
@@ -1161,37 +890,28 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
   );
 
   Widget _footer() {
-    if (_step == _Step.choose) return const SizedBox.shrink();
+    if (_step == ConnectionSetupStep.choose) return const SizedBox.shrink();
     final (label, action) = switch (_step) {
-      _Step.choose => ('Continue', _continue),
-      _Step.cloud => (
+      ConnectionSetupStep.choose => ('Continue', _continue),
+      ConnectionSetupStep.cloud => (
         _alreadySaved == null ? 'Continue' : 'Open instance',
         _continueCloud,
       ),
-      _Step.address => ('Continue', _continue),
-      _Step.signIn => ('Check connection', _check),
-      _Step.check =>
+      ConnectionSetupStep.address => ('Continue', _continue),
+      ConnectionSetupStep.signIn => ('Check connection', _check),
+      ConnectionSetupStep.check =>
         _probe.checking
-            ? (
-                'Cancel check',
-                () => _go(_cloudRoute ? _Step.cloud : _Step.signIn),
-              )
+            ? ('Cancel check', _session.editSignIn)
             : ('Try again', _check),
-      _Step.review => (_editing ? 'Save changes' : 'Save and open', _save),
+      ConnectionSetupStep.review => (
+        _editing ? 'Save changes' : 'Save and open',
+        _save,
+      ),
     };
     return FilledButton(
       key: const Key('connection-primary'),
       style: FilledButton.styleFrom(minimumSize: const Size(48, 52)),
-      onPressed:
-          _saving ||
-              _cloudBusy ||
-              (_step == _Step.cloud &&
-                  _discovery != null &&
-                  (_discovery!.organizations.isNotEmpty
-                      ? _organization == null
-                      : _instance?.canConnect != true))
-          ? null
-          : action,
+      onPressed: _state.canAdvance ? action : null,
       child: StudioActionLabel(label, busy: _saving || _cloudBusy),
     );
   }
@@ -1230,32 +950,25 @@ class _CapabilityRow extends StatelessWidget {
   );
 }
 
-class _AccessSettings {
-  const _AccessSettings({
-    this.proxied = false,
-    this.chatUrl = '',
-    this.headers = const {},
-  });
-  final bool proxied;
-  final String chatUrl;
-  final Map<String, String> headers;
-
-  String get description {
-    final configured = [
-      if (proxied) 'Proxy sign-in',
-      if (chatUrl.isNotEmpty) 'Separate chat address',
-      if (headers.isNotEmpty)
-        '${headers.length} access ${headers.length == 1 ? 'header' : 'headers'}',
-    ];
-    return configured.isEmpty
-        ? 'Only if your administrator gave you extra settings'
-        : configured.join(' · ');
-  }
+String _accessDescription(ConnectionSetupAccess access) {
+  final configured = [
+    if (access.proxied) 'Proxy sign-in',
+    if (access.chatUrl.isNotEmpty) 'Separate chat address',
+    if (access.headers.isNotEmpty)
+      '${access.headers.length} access ${access.headers.length == 1 ? 'header' : 'headers'}',
+  ];
+  return configured.isEmpty
+      ? 'Only if your administrator gave you extra settings'
+      : configured.join(' · ');
 }
 
 class _CustomSetupScreen extends StatefulWidget {
-  const _CustomSetupScreen({required this.initial});
-  final _AccessSettings initial;
+  const _CustomSetupScreen({
+    required this.initial,
+    required this.validateAddress,
+  });
+  final ConnectionSetupAccess initial;
+  final String? Function(String?) validateAddress;
 
   @override
   State<_CustomSetupScreen> createState() => _CustomSetupScreenState();
@@ -1266,9 +979,9 @@ class _CustomSetupScreenState extends State<_CustomSetupScreen> {
   late final _chat = TextEditingController(text: widget.initial.chatUrl);
   late bool _separate = widget.initial.chatUrl.isNotEmpty;
   late bool _proxied = widget.initial.proxied;
-  late Map<String, String?> _headers = {
-    for (final key in widget.initial.headers.keys) key: null,
-  };
+  late GatewayHeaderEdit _headers = GatewayHeaderEdit.retaining(
+    widget.initial.headers.keys,
+  );
   late bool _showHeaders = widget.initial.headers.isNotEmpty;
 
   @override
@@ -1284,10 +997,11 @@ class _CustomSetupScreenState extends State<_CustomSetupScreen> {
     }
     Navigator.pop(
       context,
-      _AccessSettings(
+      ConnectionSetupAccessInput(
         proxied: _proxied,
-        chatUrl: _separate ? ConnectionAddress.parse(_chat.text).url : '',
-        headers: resolveGatewayHeaderUpdate(widget.initial.headers, _headers),
+        separateChat: _separate,
+        chatAddress: _chat.text,
+        headerEdits: _headers,
       ),
     );
   }
@@ -1356,14 +1070,7 @@ class _CustomSetupScreenState extends State<_CustomSetupScreen> {
                         helperMaxLines: 4,
                         errorMaxLines: 5,
                       ),
-                      validator: (value) {
-                        try {
-                          ConnectionAddress.parse(value ?? '');
-                          return null;
-                        } on FormatException catch (error) {
-                          return error.message;
-                        }
-                      },
+                      validator: widget.validateAddress,
                     ),
                   ),
                   const SizedBox(height: 12),

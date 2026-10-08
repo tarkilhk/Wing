@@ -32,14 +32,16 @@ List<Element> _browserElements() {
 Map<String, Object?> _snapshot() {
   final elements = _browserElements();
   final browser = elements.first.widget as ProfileWorkspaceBrowser;
-  final controller = browser.controller;
+  final observation =
+      (elements.first as StatefulElement).state as BrowserWorkspaceObservation;
+  final workspace = observation.workspace;
   final errors = elements.map((e) => e.widget).whereType<StudioError>();
   // Never export chat text, profile names, connection addresses or credentials.
   return {
-    'initialized': controller.initialized,
-    'profiles': controller.discovery?.profiles.length ?? 0,
-    'connection': controller.connectionStatus.description,
-    'controllerError': controller.error != null,
+    'initialized': workspace.initialized,
+    'profiles': workspace.profiles.length,
+    'connection': browser.connectionStatus.description,
+    'controllerError': workspace.error != null,
     'loading': elements.any((e) => e.widget is LinearProgressIndicator),
     'visibleErrors': errors.length,
     'profileLoadingErrors': errors

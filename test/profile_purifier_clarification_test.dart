@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -75,15 +77,22 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       SharedPreferences.setMockInitialValues({});
       final host = Host();
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: identityTestConnection(),
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
         connectionIdentity: 'test-identity',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: host.gateway,
       );
       addTearDown(controller.dispose);
       await controller.initialize();
-      final chat = await controller.createChat();
+      final chat = await controller.createChat(canDispatch: () => true);
       await tester.pumpWidget(
         MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
       );
@@ -110,7 +119,10 @@ void main() {
               'jsonrpc': '2.0',
               'id': 'purifier-request',
               'method': 'clarify',
-              'params': {'session_id': chat.runtimeId, 'questions': batch},
+              'params': {
+                'session_id': chat.runtime.runtimeId,
+                'questions': batch,
+              },
             }),
           );
           await delivered.future.timeout(const Duration(seconds: 2));
@@ -163,7 +175,7 @@ void main() {
         });
         expect(tester.takeException(), isNull);
       }
-      expect(chat.clarification, isNull);
+      expect(chat.runtime.questions, isNull);
       expect(find.byKey(const Key('clarify-continue')), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     });

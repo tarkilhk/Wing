@@ -1,3 +1,5 @@
+import 'package:wing/core/models/model_catalog.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -5,7 +7,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/profile_gateway.dart';
-import 'package:wing/core/widgets/model_chooser.dart';
 
 import 'support/existing_backend_login.dart';
 
@@ -168,14 +169,14 @@ void main() {
         id: owner,
       );
       final gateway = ProfileGateway.forConnection(
-        connection,
+        ConnectionAccess(connection: connection, dashboardOAuth: null),
         WorkspaceScope(connectionId: connection.id, profileName: profile),
       );
       addTearDown(gateway.close);
       await gateway.requireProfile();
-      final options = ModelChoice.fromOptions(
+      final options = ModelCatalog.fromOptions(
         await gateway.read('model/options'),
-      );
+      ).choices;
       final requestedProvider = environment['WING_PHONE_LUNA_PROVIDER'];
       final matches = options
           .where(
@@ -379,7 +380,13 @@ void main() {
             if (value is num) numericUsage[key] = value;
           }
         }
-        if (event.isComplete && !terminal.isCompleted) {
+        if (const {
+              'message.complete',
+              'error',
+              'turn.end',
+              'turn.error',
+            }.contains(event.type) &&
+            !terminal.isCompleted) {
           turnCancellation.active = false;
           terminalType = event.type;
           final status = event.data['status'];

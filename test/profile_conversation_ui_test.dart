@@ -1,3 +1,9 @@
+import 'package:wing/core/services/web_preview.dart';
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/transcript_message.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -28,12 +34,12 @@ void main() {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: ProfileMessage(
-                message: {
+                message: TranscriptMessage.fromRow({
                   'id': 1,
                   'role': role,
                   'content': content,
                   'tool_name': 'terminal',
-                },
+                }),
                 streaming: streaming,
               ),
             ),
@@ -45,8 +51,8 @@ void main() {
   }
 
   test('only explicit web URLs can launch', () {
-    expect(ProfileMessage.externalLink('https://example.com/path'), isNotNull);
-    expect(ProfileMessage.externalLink('http://host:9119/docs'), isNotNull);
+    expect(externalWebLink('https://example.com/path'), isNotNull);
+    expect(externalWebLink('http://host:9119/docs'), isNotNull);
     for (final uri in [
       'file:///etc/passwd',
       'javascript:alert(1)',
@@ -57,7 +63,7 @@ void main() {
       'https://user:password@example.com',
       'https:missing-host',
     ]) {
-      expect(ProfileMessage.externalLink(uri), isNull, reason: uri);
+      expect(externalWebLink(uri), isNull, reason: uri);
     }
   });
 
@@ -170,10 +176,10 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ProfileMessage(
-            message: const {
+            message: TranscriptMessage.fromRow(const {
               'role': 'assistant',
               'content': '[Open report](../exports/final-report.pdf)',
-            },
+            }),
             onOpenRemoteFile: (output) async => openedPath = output.path,
           ),
         ),
@@ -195,10 +201,10 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ProfileMessage(
-            message: const {
+            message: TranscriptMessage.fromRow(const {
               'role': 'assistant',
               'content': '[Missing report](/srv/removed/report.pdf)',
-            },
+            }),
             onOpenRemoteFile: (_) async =>
                 throw const DashboardHttpException(401, 'files/read'),
           ),
@@ -223,9 +229,9 @@ void main() {
     tester,
   ) async {
     await message(tester, '**raw output**\nexit code 0', role: 'tool');
-    expect(find.text('terminal'), findsOneWidget);
+    expect(find.text('Ran command'), findsOneWidget);
     expect(find.textContaining('exit code 0'), findsNothing);
-    await tester.tap(find.text('terminal'));
+    await tester.tap(find.text('Ran command'));
     await tester.pumpAndSettle();
     expect(find.text('**raw output**\nexit code 0'), findsOneWidget);
     expect(find.bySubtype<MarkdownBody>(), findsNothing);
@@ -233,14 +239,21 @@ void main() {
 
   group('conversation controls', () {
     late ProfileWorkspaceController controller;
+    late AppPreferences appPreferences;
     late ProfileHistoryFixture host;
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
       host = ProfileHistoryFixture();
+      final preferences = await SharedPreferences.getInstance();
+      appPreferences = AppPreferences(preferences);
       controller = ProfileWorkspaceController(
-        connection: identityTestConnection(),
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
         connectionIdentity: 'conversation-test',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: host.gateway,
       );
       await controller.initialize();
@@ -248,12 +261,15 @@ void main() {
         ProfileSessionKey(controller.current!.scope, 'chat-0'),
       );
     });
-    tearDown(() => controller.dispose());
+    tearDown(() {
+      controller.dispose();
+      appPreferences.dispose();
+    });
     Future<void> show(WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
       );
-      if (controller.current!.chat!.busy) {
+      if (controller.current!.chat!.runtime.blocksTurnAdmission) {
         await tester.pump(const Duration(milliseconds: 300));
       } else {
         await tester.pumpAndSettle();
@@ -379,16 +395,18 @@ void main() {
       tester,
     ) async {
       final chat = controller.current!.chat!;
-      chat.status = ProfileTurnStatus.running;
-      chat.streaming = 'A partial response';
-      chat.mainActivity = ProfileMainActivity.writing;
+      emitChatEvent(controller, chat, 'message.start');
+      emitChatEvent(controller, chat, 'message.delta', {
+        'text': 'A partial response',
+      });
       await show(tester);
       expect(find.text('Writing response…'), findsOneWidget);
-      expect(find.byTooltip('Steer'), findsOneWidget);
+      expect(find.byTooltip('Stop'), findsOneWidget);
       expect(find.byTooltip('Send'), findsNothing);
       expect(find.text('Draft your next message'), findsOneWidget);
       await tester.enterText(find.byType(TextField), 'For later');
       await tester.pump();
+      expect(find.byTooltip('Steer'), findsOneWidget);
       final gesture = await tester.startGesture(
         tester.getCenter(find.byTooltip('Steer')),
       );
@@ -404,7 +422,7 @@ void main() {
         (call) => call.$2 == 'session.interrupt',
       );
       expect(interrupt.$3['profile'], 'personal');
-      expect(chat.draft, 'For later');
+      expect(chat.composer.observation.text, 'For later');
       expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -416,11 +434,14 @@ void main() {
       await tester.drag(list, const Offset(0, 550));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('jump-to-latest')), findsOneWidget);
-      final count = controller.current!.chat!.messages.length;
+      final count = controller.current!.chat!.reading.messages.length;
       await tester.tap(find.byKey(const ValueKey('jump-to-latest')));
       await tester.pumpAndSettle();
-      expect(controller.current!.chat!.historyScrollOffset, closeTo(0, 1));
-      expect(controller.current!.chat!.messages.length, count);
+      expect(
+        controller.current!.chat!.reading.historyScrollOffset,
+        closeTo(0, 1),
+      );
+      expect(controller.current!.chat!.reading.messages.length, count);
       expect(find.byKey(const ValueKey('jump-to-latest')), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     });

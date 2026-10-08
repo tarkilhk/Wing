@@ -1,3 +1,6 @@
+import '../test/support/composer_fixture.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -62,7 +65,7 @@ class _QueueFixture extends ProfileActionsFixture {
       gateways[chat.key.workspace.profileName]!.onEvent!(
         StreamEvent(
           type: 'turn.end',
-          sessionId: chat.runtimeId,
+          sessionId: chat.runtime.runtimeId,
           data: {'status': 'completed'},
         ),
       );
@@ -141,32 +144,42 @@ void main() {
     await tester.ensureVisible(row);
     await tester.longPress(row);
     await frames(tester);
-    expect(chat.composerText, original);
+    expect(chat.composer.observation.displayedText, original);
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('Queue'), findsOneWidget);
     expect(find.text('Steer'), findsOneWidget);
   }
 
+  late AppPreferences appPreferences;
   setUp(() async {
     convertedSurface = false;
     SharedPreferences.setMockInitialValues({});
     fixture = _QueueFixture();
+    final fixturePreferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(fixturePreferences);
     controller = ProfileWorkspaceController(
-      connection: SavedConnection(
-        id: 'queue-device',
-        label: 'Queue device QA',
-        host: 'unused',
-        port: 1,
-        apiKey: '',
+      appPreferences: appPreferences,
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'queue-device',
+          label: 'Queue device QA',
+          host: 'unused',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       connectionIdentity: 'isolated-queued-message-device-test',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: fixturePreferences,
       gatewayFactory: fixture.gateway,
     );
     await controller.initialize();
-    chat = await controller.createChat();
-    chat.title = 'Queued message device check';
-    chat.status = ProfileTurnStatus.running;
+    chat = await controller.createChat(canDispatch: () => true);
+    emitChatEvent(controller, chat, 'session.title', {
+      'session_id': chat.key.sessionId,
+      'title': 'Queued message device check',
+    });
+    emitChatEvent(controller, chat, 'message.start');
     await controller.queuePrompt(chat, 'Review the layout');
     await controller.queuePrompt(chat, 'Then check the tests');
     await controller.updateDraft(
@@ -175,13 +188,20 @@ void main() {
     );
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   testWidgets(
     'long press opens the native keyboard; Queue restores text and files',
     (tester) async {
       final bufferedFile = await file('draft-notes.txt');
-      chat.attachments.add(bufferedFile);
+      await restoreComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+        appendAttachments: [bufferedFile],
+      );
       await launch(tester);
       expect(find.byTooltip('Message actions'), findsNothing);
       expect(find.byIcon(Icons.more_horiz), findsNothing);
@@ -220,12 +240,17 @@ void main() {
       await frames(tester);
       await tester.tap(find.text('Queue'));
       await frames(tester);
-      expect(chat.queuedPrompts.map((prompt) => prompt.text), [
+      expect(chat.composer.observation.queue.map((prompt) => prompt.text), [
         'Review spacing first\nThen check contrast.',
         'Then check the tests',
       ]);
-      expect(chat.composerText, 'My unfinished draft\nKeep this second line.');
-      expect(chat.attachments, [same(bufferedFile)]);
+      expect(
+        chat.composer.observation.displayedText,
+        'My unfinished draft\nKeep this second line.',
+      );
+      expect(chat.composer.observation.attachments.map((file) => file.id), [
+        bufferedFile.id,
+      ]);
       expect(await File(bufferedFile.cachedPath).exists(), isTrue);
       expect(fixture.submissions, isEmpty);
       await capture(tester, 'queue-02-restored-draft');
@@ -242,8 +267,11 @@ void main() {
     await frames(tester);
     await tester.tap(find.text('Cancel'));
     await frames(tester);
-    expect(chat.queuedPrompts.first.text, 'Review the layout');
-    expect(chat.composerText, 'My unfinished draft\nKeep this second line.');
+    expect(chat.composer.observation.queue.first.text, 'Review the layout');
+    expect(
+      chat.composer.observation.displayedText,
+      'My unfinished draft\nKeep this second line.',
+    );
     expect(find.byTooltip('Delete queued message'), findsNothing);
     expect(fixture.steers, isEmpty);
     expect(fixture.submissions, isEmpty);
@@ -265,14 +293,17 @@ void main() {
       ),
     );
     await frames(tester);
-    expect(chat.queuedPrompts, hasLength(2));
-    expect(chat.composerText, 'Review the layout');
+    expect(chat.composer.observation.queue, hasLength(2));
+    expect(chat.composer.observation.displayedText, 'Review the layout');
     await tester.tap(find.byTooltip('Delete queued message'));
     await frames(tester);
     await tester.tap(find.text('Delete'));
     await frames(tester);
-    expect(chat.queuedPrompts.single.text, 'Then check the tests');
-    expect(chat.composerText, 'My unfinished draft\nKeep this second line.');
+    expect(chat.composer.observation.queue.single.text, 'Then check the tests');
+    expect(
+      chat.composer.observation.displayedText,
+      'My unfinished draft\nKeep this second line.',
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -281,14 +312,18 @@ void main() {
     (tester) async {
       fixture.steerReply = Completer<Map<String, dynamic>>();
       final bufferedFile = await file('steer-buffer.txt');
-      chat.attachments.add(bufferedFile);
+      await restoreComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+        appendAttachments: [bufferedFile],
+      );
       await launch(tester);
       await edit(tester, 'Review the layout');
       await tester.enterText(composer, 'Focus on spacing now');
       await frames(tester);
       await tester.tap(find.text('Steer'));
       await frames(tester);
-      expect(chat.queueMutating, isTrue);
+      expect(chat.composer.observation.saving, isTrue);
       expect(
         tester
             .widget<OutlinedButton>(
@@ -300,7 +335,7 @@ void main() {
       expect(tester.widget<TextField>(composer).enabled, isFalse);
       expect(fixture.steers, hasLength(1));
       expect(fixture.steers.single['text'], 'Focus on spacing now');
-      expect(fixture.steers.single['session_id'], chat.runtimeId);
+      expect(fixture.steers.single['session_id'], chat.runtime.runtimeId);
       final pending =
           await ComposerDraftStore(
             controller.preferences,
@@ -313,9 +348,17 @@ void main() {
       expect(pending.queuedPrompts.first.text, 'Review the layout');
       fixture.steerReply!.complete({'status': 'queued'});
       await frames(tester);
-      expect(chat.queuedPrompts.single.text, 'Then check the tests');
-      expect(chat.composerText, 'My unfinished draft\nKeep this second line.');
-      expect(chat.attachments, [same(bufferedFile)]);
+      expect(
+        chat.composer.observation.queue.single.text,
+        'Then check the tests',
+      );
+      expect(
+        chat.composer.observation.displayedText,
+        'My unfinished draft\nKeep this second line.',
+      );
+      expect(chat.composer.observation.attachments.map((file) => file.id), [
+        bufferedFile.id,
+      ]);
       expect(fixture.submissions, isEmpty);
       expect(find.text('steered'), findsOneWidget);
       await capture(tester, 'queue-04-steered');
@@ -333,8 +376,11 @@ void main() {
     await frames(tester);
     await tester.tap(find.text('Steer'));
     await frames(tester);
-    expect(chat.queuedPrompts, hasLength(2));
-    expect(chat.composerText, 'Keep this edited instruction');
+    expect(chat.composer.observation.queue, hasLength(2));
+    expect(
+      chat.composer.observation.displayedText,
+      'Keep this edited instruction',
+    );
     expect(find.text('Hermes rejected the steering message.'), findsOneWidget);
     fixture.steerReply = Completer<Map<String, dynamic>>();
     await tester.tap(find.text('Steer'));
@@ -343,10 +389,16 @@ void main() {
       StateError('Device test connection lost'),
     );
     await frames(tester);
-    expect(chat.queuedPrompts.first.text, 'Review the layout');
-    expect(chat.composerText, 'Keep this edited instruction');
-    expect(chat.queuePaused, isTrue);
-    expect(chat.draft, 'My unfinished draft\nKeep this second line.');
+    expect(chat.composer.observation.queue.first.text, 'Review the layout');
+    expect(
+      chat.composer.observation.displayedText,
+      'Keep this edited instruction',
+    );
+    expect(chat.composer.observation.paused, isTrue);
+    expect(
+      chat.composer.observation.text,
+      'My unfinished draft\nKeep this second line.',
+    );
     expect(find.text('steered'), findsNothing);
     expect(fixture.submissions, isEmpty);
     await capture(tester, 'queue-05-failed-steer');
@@ -363,7 +415,10 @@ void main() {
       fixture.finish(chat);
       await frames(tester);
       expect(fixture.submissions, isEmpty);
-      expect(chat.composerText, 'Send only this edited version');
+      expect(
+        chat.composer.observation.displayedText,
+        'Send only this edited version',
+      );
       expect(
         tester
             .widget<OutlinedButton>(
@@ -379,8 +434,14 @@ void main() {
         fixture.submissions.single['text'],
         'Send only this edited version',
       );
-      expect(chat.queuedPrompts.single.text, 'Then check the tests');
-      expect(chat.composerText, 'My unfinished draft\nKeep this second line.');
+      expect(
+        chat.composer.observation.queue.single.text,
+        'Then check the tests',
+      );
+      expect(
+        chat.composer.observation.displayedText,
+        'My unfinished draft\nKeep this second line.',
+      );
       expect(tester.takeException(), isNull);
     },
   );
@@ -389,9 +450,13 @@ void main() {
     'queued attachments survive editing at large text with the keyboard',
     (tester) async {
       final queuedFile = await file('queued-review.txt');
-      chat.attachments.add(queuedFile);
+      await restoreComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+        appendAttachments: [queuedFile],
+      );
       await controller.updateDraft(chat, 'Review this file');
-      await controller.queuePrompt(chat, chat.draft);
+      await controller.queuePrompt(chat, chat.composer.observation.text);
       await controller.updateDraft(chat, 'Buffered draft');
       await launch(tester, scale: 2, light: true);
       final row = find.text('Review this file · queued-review.txt');
@@ -412,10 +477,16 @@ void main() {
       );
       await tester.tap(find.text('Queue'));
       await frames(tester);
-      expect(chat.queuedPrompts.last.text, 'Check the attached notes');
-      expect(chat.queuedPrompts.last.attachments, [same(queuedFile)]);
+      expect(
+        chat.composer.observation.queue.last.text,
+        'Check the attached notes',
+      );
+      expect(
+        chat.composer.observation.queue.last.attachments.map((file) => file.id),
+        [queuedFile.id],
+      );
       expect(await File(queuedFile.cachedPath).exists(), isTrue);
-      expect(chat.composerText, 'Buffered draft');
+      expect(chat.composer.observation.displayedText, 'Buffered draft');
       expect(tester.takeException(), isNull);
     },
   );

@@ -1,111 +1,54 @@
 import 'package:flutter/material.dart';
 import '../../models/usage_analytics.dart';
 import '../../models/usage_cost.dart';
-import '../../services/administration_repository.dart';
-import '../../services/usage_analytics.dart';
+import '../../services/usage_analytics_session.dart';
 import '../../theme/wing_theme.dart';
 import 'admin_widgets.dart';
 import '../../widgets/read_recovery.dart';
-import '../../services/workspace_connection_failure.dart';
 import 'usage_charts.dart';
 
 class UsageDashboard extends StatefulWidget {
-  final ProfileAdministration profile;
-  const UsageDashboard({super.key, required this.profile});
+  final UsageAnalyticsSession Function() createSession;
+  const UsageDashboard({super.key, required this.createSession});
   @override
   State<UsageDashboard> createState() => _UsageDashboardState();
 }
 
 class _UsageDashboardState extends State<UsageDashboard> {
-  late UsageAnalyticsReader _reader;
-  final _cache = <int, UsageAnalyticsResult>{};
-  final _pending = <int>{};
+  late final UsageAnalyticsSession _session;
   final _modelColors = <String, int>{};
-  UsageDaily? _year;
-  String? _yearError;
-  bool _yearLoading = false;
-  bool _yearRetryable = false;
-  int _days = 7;
   String? _selected;
   bool _breakdownModels = true;
   bool _breakdownCost = false;
   bool _trendModels = false;
   bool _trendCost = false;
-  UsageAnalyticsResult? get _data => _cache[_days];
+  int get _days => _session.state.days;
 
   @override
   void initState() {
     super.initState();
-    _reader = UsageAnalyticsReader(widget.profile);
-    _loadYear();
-    _load();
+    _session = widget.createSession();
+    _session.addListener(_changed);
+    _session.load();
   }
 
-  Future<void> _loadYear({bool refresh = false}) async {
-    if (_yearLoading) return;
-    setState(() => _yearLoading = true);
-    try {
-      final year = await _reader.loadYear(refresh: refresh);
-      if (!mounted) return;
-      setState(() {
-        _year = year;
-        _yearError = null;
-        _yearRetryable = false;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      _yearRetryable = isTemporaryWorkspaceFailure(error);
-      setState(
-        () => _yearError = _year == null
-            ? 'Could not load the activity year. Use Refresh to retry.'
-            : 'Could not refresh the activity year. Showing retained activity; use Refresh to retry.',
-      );
-    } finally {
-      if (mounted) setState(() => _yearLoading = false);
-    }
+  void _changed() {
+    if (mounted) setState(() {});
   }
 
-  Future<void> _refresh() async {
-    await Future.wait([_loadYear(refresh: true), _load()]);
-  }
-
-  Future<void> _load({bool failedOnly = false}) async {
-    final days = _days;
-    if (_pending.contains(days)) return;
-    setState(() => _pending.add(days));
-    final result = await _reader.load(
-      days,
-      retry: failedOnly ? _cache[days] : null,
-    );
-    if (!mounted) return;
-    final old = _cache[days];
-    setState(() {
-      _pending.remove(days);
-      _cache[days] = UsageAnalyticsResult(
-        models: result.models ?? old?.models,
-        daily: result.daily ?? old?.daily,
-        modelsError: result.modelsError,
-        dailyError: result.dailyError,
-        modelsRetryable: result.modelsRetryable,
-        dailyRetryable: result.dailyRetryable,
-        loadedAt: result.modelsError != null || result.dailyError != null
-            ? old?.loadedAt ?? result.loadedAt
-            : result.loadedAt,
-      );
-    });
+  @override
+  void dispose() {
+    _session.removeListener(_changed);
+    _session.dispose();
+    super.dispose();
   }
 
   void _period(int days) {
     setState(() {
-      _days = days;
       _selected = null;
       Tooltip.dismissAllToolTips();
     });
-    if (!_cache.containsKey(days)) {
-      _load();
-    } else if (_data!.needsRecovery) {
-      _load(failedOnly: true);
-    }
+    _session.selectPeriod(days);
   }
 
   String _number(num? value) => value == null
@@ -116,32 +59,23 @@ class _UsageDashboardState extends State<UsageDashboard> {
   Widget _quiet(String text) =>
       Text(text, style: Theme.of(context).textTheme.bodySmall);
 
-  bool get _needsRecovery =>
-      _yearRetryable && !_yearLoading ||
-      _data?.needsRecovery == true && !_pending.contains(_days);
-
-  Future<void> _recover() async {
-    await Future.wait([
-      if (_yearRetryable && !_yearLoading) _loadYear(),
-      if (_data?.needsRecovery == true && !_pending.contains(_days))
-        _load(failedOnly: true),
-    ]);
-  }
-
   @override
   Widget build(BuildContext context) => ReadRecovery(
-    shouldRetry: () => _needsRecovery,
-    retry: _recover,
+    shouldRetry: () => _session.state.needsRecovery,
+    retry: _session.recover,
     child: _buildContent(context),
   );
 
   Widget _buildContent(BuildContext context) {
-    final data = _data;
+    final observation = _session.state;
+    final data = observation.data;
     final models = data?.models;
     final daily = data?.daily;
     final summary = models?.costs;
-    final loading = _pending.contains(_days) || _yearLoading;
-    final selected = _year?.days.where((d) => d.id == _selected).firstOrNull;
+    final loading = observation.loading;
+    final selected = observation.year?.days
+        .where((d) => d.id == _selected)
+        .firstOrNull;
     final costTitle = summary?.isMixed == true
         ? 'Estimated usage value'
         : summary?.hasSubscription == true
@@ -237,20 +171,21 @@ class _UsageDashboardState extends State<UsageDashboard> {
           ],
         ),
         const SizedBox(height: 8),
-        if (_yearError != null) AdminNotice.error(_yearError!),
-        if (_year?.days.isNotEmpty == true)
+        if (observation.yearError != null)
+          AdminNotice.error(observation.yearError!),
+        if (observation.year?.days.isNotEmpty == true)
           UsageCalendar(
-            daily: _year!,
+            daily: observation.year!,
             periodDates: daily?.reportedDates ?? const {},
             selected: _selected,
             onSelected: (day) =>
                 setState(() => _selected = _selected == day.id ? null : day.id),
           )
-        else if (_year?.days.isEmpty == true)
+        else if (observation.year?.days.isEmpty == true)
           _quiet('No recorded daily usage in the past year.')
         else
           _quiet(
-            _yearLoading
+            observation.yearLoading
                 ? 'Loading activity year…'
                 : 'Activity year unavailable. Period totals may still be available.',
           ),
@@ -301,7 +236,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
         Align(
           alignment: Alignment.centerRight,
           child: TextButton.icon(
-            onPressed: loading ? null : _refresh,
+            onPressed: loading ? null : _session.refresh,
             icon: const Icon(Icons.refresh, size: 18),
             label: Text(loading ? 'Refreshing…' : 'Refresh'),
           ),

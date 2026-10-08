@@ -2,14 +2,15 @@ import '../widgets/notification_channel_diagnostics.dart';
 import 'package:flutter/material.dart';
 import '../widgets/compact_switch.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/voice_preferences_session.dart';
 
 import '../config/support_wing.dart';
 import '../theme/profile_workspace_theme.dart';
 import '../theme/wing_theme.dart';
-import '../services/turn_notification_service.dart';
 import '../services/background_monitoring_service.dart';
-import '../services/device_preference.dart';
+import '../services/app_preferences.dart';
+import '../models/app_preferences.dart';
+import '../theme/app_preferences_rendering.dart';
 import '../widgets/studio_error.dart';
 import '../widgets/support_wing_section.dart';
 import '../widgets/text_size_settings_card.dart';
@@ -23,21 +24,19 @@ class AppSettingsContent extends StatefulWidget {
   const AppSettingsContent({
     super.key,
     required this.preferences,
+    required this.createVoiceSession,
     required this.onChanged,
     this.enableNotifications,
     this.backgroundMonitoringState,
     this.openMonitoringBatterySettings,
-    this.openHermesVoiceSettings,
-    this.hermesVoiceProfileLabel,
   });
 
-  final SharedPreferences preferences;
+  final AppPreferences preferences;
+  final VoicePreferencesSession Function() createVoiceSession;
   final VoidCallback onChanged;
   final Future<void> Function()? enableNotifications;
   final ValueListenable<BackgroundMonitoringState>? backgroundMonitoringState;
   final Future<void> Function()? openMonitoringBatterySettings;
-  final VoidCallback? openHermesVoiceSettings;
-  final String? hermesVoiceProfileLabel;
 
   @override
   State<AppSettingsContent> createState() => _AppSettingsContentState();
@@ -45,41 +44,6 @@ class AppSettingsContent extends StatefulWidget {
 
 class _AppSettingsContentState extends State<AppSettingsContent> {
   bool _requesting = false;
-  bool _saving = false;
-  late final Map<String, Object?> _confirmed;
-
-  @override
-  void initState() {
-    super.initState();
-    _confirmed = {
-      for (final key in [
-        'theme_mode',
-        WorkspaceAccent.preferenceKey,
-        completionNotificationsKey,
-        attentionNotificationsKey,
-        notificationPreviewsKey,
-      ])
-        key: widget.preferences.get(key),
-    };
-  }
-
-  Future<void> _save(String key, Object value) async {
-    if (_saving) return;
-    setState(() => _saving = true);
-    try {
-      await saveDevicePreference(widget.preferences, key, value);
-      if (!mounted) return;
-      setState(() => _confirmed[key] = value);
-      widget.onChanged();
-    } catch (_) {
-      if (mounted) {
-        showStudioError(context, 'Could not save the setting. Please retry.');
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
   Future<void> _notifications() async {
     setState(() => _requesting = true);
     try {
@@ -109,11 +73,15 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final accent = WorkspaceAccent.fromName(
-      _confirmed[WorkspaceAccent.preferenceKey] as String?,
-    );
-    final mode = _confirmed['theme_mode'] as String? ?? 'system';
+  Widget build(BuildContext context) =>
+      ValueListenableBuilder<AppPreferencesState>(
+        valueListenable: widget.preferences.state,
+        builder: (context, state, _) => _buildSettings(context, state),
+      );
+
+  Widget _buildSettings(BuildContext context, AppPreferencesState state) {
+    final accent = state.values.accent?.appearance ?? WorkspaceAccent.teal;
+    final mode = state.theme.selected;
     return SafeArea(
       top: false,
       child: SingleChildScrollView(
@@ -124,6 +92,23 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (state.reloadControl.visible)
+                  Card(
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.refresh),
+                          title: const Text('Reload settings'),
+                          subtitle: state.reloadControl.error == null
+                              ? null
+                              : StudioError(state.reloadControl.error!),
+                          onTap: state.reloadControl.invoke,
+                        ),
+                        if (state.reloadControl.busy)
+                          const LinearProgressIndicator(),
+                      ],
+                    ),
+                  ),
                 _SettingsSection(
                   title: 'Appearance',
                   child: Card(
@@ -135,7 +120,14 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _AppearancePreview(mode: mode, accent: accent),
+                              _AppearancePreview(
+                                mode: mode?.name ?? 'unconfigured',
+                                accent: accent,
+                              ),
+                              if (state.needsAppearanceRepair)
+                                const StudioError(
+                                  'Saved appearance settings need repair. Choose the affected settings below.',
+                                ),
                               const SizedBox(height: 16),
                               Text(
                                 'Theme',
@@ -148,30 +140,40 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                                 children: [
                                   for (final option in [
                                     (
-                                      'system',
+                                      AppThemePreference.system,
                                       'System',
                                       Icons.brightness_auto_outlined,
                                     ),
                                     (
-                                      'light',
+                                      AppThemePreference.light,
                                       'Light',
                                       Icons.light_mode_outlined,
                                     ),
-                                    ('dark', 'Dark', Icons.dark_mode_outlined),
+                                    (
+                                      AppThemePreference.dark,
+                                      'Dark',
+                                      Icons.dark_mode_outlined,
+                                    ),
                                   ])
                                     ChoiceChip(
                                       showCheckmark: false,
-                                      key: ValueKey('theme-${option.$1}'),
+                                      key: ValueKey('theme-${option.$1.name}'),
                                       avatar: Icon(option.$3, size: 18),
                                       label: Text(option.$2),
                                       selected: mode == option.$1,
-                                      onSelected: _saving
+                                      onSelected: state.theme.choose == null
                                           ? null
                                           : (_) =>
-                                                _save('theme_mode', option.$1),
+                                                state.theme.choose!(option.$1),
                                     ),
                                 ],
                               ),
+                              if (state.theme.notice != null)
+                                StudioError(state.theme.notice!),
+                              if (state.theme.error != null)
+                                StudioError(state.theme.error!),
+                              if (state.theme.busy)
+                                const LinearProgressIndicator(),
                               const SizedBox(height: 20),
                               Text(
                                 'Accent color',
@@ -182,37 +184,38 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                                 spacing: 8,
                                 runSpacing: 8,
                                 children: [
-                                  for (final choice in WorkspaceAccent.values)
+                                  for (final choice
+                                      in AppAccentPreference.values)
                                     ChoiceChip(
                                       showCheckmark: false,
                                       key: ValueKey('accent-${choice.name}'),
-                                      label: Text(choice.label),
-                                      selected: accent == choice,
+                                      label: Text(choice.appearance.label),
+                                      selected: state.accent.selected == choice,
                                       avatar: CircleAvatar(
                                         radius: 8,
                                         backgroundColor:
                                             Theme.of(context).brightness ==
                                                 Brightness.dark
-                                            ? choice.dark
-                                            : choice.light,
+                                            ? choice.appearance.dark
+                                            : choice.appearance.light,
                                       ),
-                                      onSelected: _saving
+                                      onSelected: state.accent.choose == null
                                           ? null
-                                          : (_) => _save(
-                                              WorkspaceAccent.preferenceKey,
-                                              choice.name,
-                                            ),
+                                          : (_) => state.accent.choose!(choice),
                                     ),
                                 ],
                               ),
+                              if (state.accent.notice != null)
+                                StudioError(state.accent.notice!),
+                              if (state.accent.error != null)
+                                StudioError(state.accent.error!),
+                              if (state.accent.busy)
+                                const LinearProgressIndicator(),
                             ],
                           ),
                         ),
                         const Divider(height: 1),
-                        TextSizeSettingsCard(
-                          preferences: widget.preferences,
-                          onChanged: (_) => widget.onChanged(),
-                        ),
+                        TextSizeSettingsCard(preferences: widget.preferences),
                       ],
                     ),
                   ),
@@ -229,43 +232,20 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                     child: Card(
                       child: Column(
                         children: [
-                          CompactSwitchListTile(
-                            title: const Text('Completed work'),
-                            value:
-                                _confirmed[completionNotificationsKey]
-                                    as bool? ??
-                                true,
-                            onChanged: _saving
-                                ? null
-                                : (value) =>
-                                      _save(completionNotificationsKey, value),
+                          _PreferenceSwitch(
+                            title: 'Completed work',
+                            control: state.completedNotifications,
                           ),
-                          CompactSwitchListTile(
-                            title: const Text('Needs attention'),
-                            subtitle: const Text(
-                              'Questions, approvals and failed turns.',
-                            ),
-                            value:
-                                _confirmed[attentionNotificationsKey]
-                                    as bool? ??
-                                true,
-                            onChanged: _saving
-                                ? null
-                                : (value) =>
-                                      _save(attentionNotificationsKey, value),
+                          _PreferenceSwitch(
+                            title: 'Needs attention',
+                            subtitle: 'Questions, approvals and failed turns.',
+                            control: state.attentionNotifications,
                           ),
-                          CompactSwitchListTile(
-                            title: const Text('Show message previews'),
-                            subtitle: const Text(
-                              'Include reply and question text in alerts.',
-                            ),
-                            value:
-                                _confirmed[notificationPreviewsKey] as bool? ??
-                                true,
-                            onChanged: _saving
-                                ? null
-                                : (value) =>
-                                      _save(notificationPreviewsKey, value),
+                          _PreferenceSwitch(
+                            title: 'Show message previews',
+                            subtitle:
+                                'Include reply and question text in alerts.',
+                            control: state.notificationPreviews,
                           ),
                           if (widget.backgroundMonitoringState != null) ...[
                             ValueListenableBuilder<BackgroundMonitoringState>(
@@ -379,9 +359,7 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                       onTap: () => Navigator.of(context).push<void>(
                         MaterialPageRoute(
                           builder: (_) => VoicePreferencesPage(
-                            preferences: widget.preferences,
-                            openHermesSettings: widget.openHermesVoiceSettings,
-                            hermesProfileLabel: widget.hermesVoiceProfileLabel,
+                            createSession: widget.createVoiceSession,
                           ),
                         ),
                       ),
@@ -524,4 +502,57 @@ class _AppearancePreview extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PreferenceSwitch extends StatelessWidget {
+  const _PreferenceSwitch({
+    required this.title,
+    required this.control,
+    this.subtitle,
+  });
+  final String title;
+  final String? subtitle;
+  final AppPreferenceControl<bool> control;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      if (control.selected case final bool selected)
+        CompactSwitchListTile(
+          title: Text(title),
+          subtitle: subtitle == null ? null : Text(subtitle!),
+          value: selected,
+          onChanged: control.choose,
+        )
+      else
+        ListTile(
+          title: Text(title),
+          subtitle: Wrap(
+            spacing: 8,
+            children: [
+              for (final option in [(true, 'On'), (false, 'Off')])
+                ChoiceChip(
+                  showCheckmark: false,
+                  selected: false,
+                  label: Text(option.$2),
+                  onSelected: control.choose == null
+                      ? null
+                      : (_) => control.choose!(option.$1),
+                ),
+            ],
+          ),
+        ),
+      if (control.notice != null)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: StudioError(control.notice!),
+        ),
+      if (control.error != null)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: StudioError(control.error!),
+        ),
+      if (control.busy) const LinearProgressIndicator(),
+    ],
+  );
 }

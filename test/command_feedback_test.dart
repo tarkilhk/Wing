@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -19,22 +21,32 @@ const _approval = 'Approval mode: smart (persistent profile setting).';
 void main() {
   late CommandHost host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileChat chat;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     host = CommandHost();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
-      connection: identityTestConnection(),
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
       connectionIdentity: 'command-feedback',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
-    chat = await controller.createChat();
+    chat = await controller.createChat(canDispatch: () => true);
     host.respond = (_, _) async => {'type': 'exec', 'output': _approval};
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
   Future<void> history(List<Map<String, dynamic>> rows) async {
     host.historyMessages = rows;
@@ -113,24 +125,24 @@ void main() {
     () async {
       final prompt = {'id': 1, 'role': 'user', 'content': 'Check the plan'};
       await history([prompt]);
-      chat.draft = '/approvals smart';
+      chat.composer.editText('/approvals smart');
       await controller.send(chat);
-      final firstNotice = chat.messages.last['id'];
-      chat.draft = '/approvals smart';
+      final firstNotice = chat.reading.messages.last['id'];
+      chat.composer.editText('/approvals smart');
       await controller.send(chat);
-      final secondNotice = chat.messages.last['id'];
+      final secondNotice = chat.reading.messages.last['id'];
       expect(secondNotice, isNot(firstNotice));
 
       final nextPrompt = {'id': 2, 'role': 'user', 'content': 'Continue'};
       await history([prompt, nextPrompt]);
       await controller.refreshHistory(chat);
-      expect(chat.messages.map((row) => row['id']), [
+      expect(chat.reading.messages.map((row) => row['id']), [
         1,
         firstNotice,
         secondNotice,
         2,
       ]);
-      expect(chat.nextHistoryOffset, isNull);
+      expect(chat.reading.nextHistoryOffset, isNull);
       expect(
         host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
         isEmpty,
@@ -147,7 +159,7 @@ void main() {
     await tester.tap(find.byTooltip('Send'));
     await frames(tester);
     expect(chat.yolo, isTrue);
-    expect(chat.messages, isEmpty);
+    expect(chat.reading.messages, isEmpty);
     expect(
       find.descendant(
         of: find.byType(SnackBar),
@@ -160,7 +172,7 @@ void main() {
     await frames(tester);
     expect(find.byType(SnackBar), findsNothing);
     await controller.refreshHistory(chat);
-    expect(chat.messages, isEmpty);
+    expect(chat.reading.messages, isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -175,9 +187,9 @@ void main() {
             'content': 'The plan is ready.',
           };
           await history([before]);
-          chat.draft = '/approvals smart';
+          chat.composer.editText('/approvals smart');
           await controller.send(chat);
-          chat.draft = '/yolo';
+          chat.composer.editText('/yolo');
           expect(await controller.send(chat), isNull);
           final after = {
             'id': 2,

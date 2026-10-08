@@ -21,6 +21,7 @@ PERFORMANCE_MARKERS = (
     b"ext.wingLive.",
     b"ext.wingReplay.",
     b"ext.wingPerf.",
+    b"ext.wingNavigationSoak.",
 )
 
 

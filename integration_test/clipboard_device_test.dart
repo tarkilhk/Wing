@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -12,6 +14,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 
 import '../test/support/profile_actions_fixture.dart';
+import '../test/support/composer_fixture.dart';
 
 /// Opt-in probe of the phone's current image clip; never contacts a gateway.
 void main() {
@@ -39,24 +42,40 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final fixture = ProfileActionsFixture();
+      final fixturePreferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(fixturePreferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: SavedConnection(
-          id: 'clipboard-device-qa',
-          label: 'Clipboard device QA',
-          host: 'unused',
-          port: 1,
-          apiKey: '',
+        appPreferences: appPreferences,
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'clipboard-device-qa',
+            label: 'Clipboard device QA',
+            host: 'unused',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
         ),
         connectionIdentity: 'isolated-clipboard-device-qa',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: fixturePreferences,
         gatewayFactory: fixture.gateway,
       );
       await controller.initialize();
-      final chat = await controller.createChat();
-      chat.title = 'Image attachment check';
-      chat.status = ProfileTurnStatus.completed;
+      final chat = await controller.createChat(canDispatch: () => true);
+      emitChatEvent(controller, chat, 'session.title', {
+        'session_id': chat.key.sessionId,
+        'title': 'Image attachment check',
+      });
+      emitChatEvent(controller, chat, 'message.start');
+      emitChatEvent(controller, chat, 'session.info', {
+        'open_requests': [],
+        'running': false,
+      });
       addTearDown(() async {
-        await controller.attachments.removeAll(chat.attachments);
+        for (final file in chat.composer.observation.attachments) {
+          await controller.removeAttachment(chat, file.id);
+        }
         controller.dispose();
       });
       await tester.pumpWidget(
@@ -72,12 +91,19 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Paste'), findsOneWidget);
       await tester.tap(find.text('Paste'));
-      for (var frame = 0; frame < 150 && chat.attachments.isEmpty; frame++) {
+      for (
+        var frame = 0;
+        frame < 150 && chat.composer.observation.attachments.isEmpty;
+        frame++
+      ) {
         await tester.pump(const Duration(milliseconds: 100));
       }
-      expect(chat.attachments, hasLength(1));
-      expect(chat.attachments.single.sanitized, isTrue);
-      final pasted = chat.attachments.single;
+      expect(chat.composer.observation.attachments, hasLength(1));
+      final pasted = (await readComposerFixture(
+        chat: chat,
+        preferences: fixturePreferences,
+      ))!.attachments.single;
+      expect(pasted.sanitized, isTrue);
       await controller.addAttachment(
         chat,
         pasted.cachedPath,
@@ -102,7 +128,10 @@ void main() {
       ).writeAsBytes(screenshot);
       await tester.tap(find.byTooltip('Remove ${pasted.name}'));
       await tester.pumpAndSettle();
-      expect(chat.attachments.single.name, 'Selected photo.png');
+      expect(
+        chat.composer.observation.attachments.single.name,
+        'Selected photo.png',
+      );
     },
     skip: !const bool.fromEnvironment('HERMES_CLIPBOARD_DEVICE_TEST'),
   );

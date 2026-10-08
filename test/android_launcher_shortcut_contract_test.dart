@@ -71,7 +71,10 @@ void main() {
       expect(gradle, contains('manifestPlaceholders["appLabel"] = "Wing"'));
       expect(gradle, contains('else ".dev"'));
       expect(gradle, contains('applicationIdSuffix = ".perfqa"'));
-      expect(gradle, contains('manifestPlaceholders["appLabel"] = "Wing Perf QA"'));
+      expect(
+        gradle,
+        contains('manifestPlaceholders["appLabel"] = "Wing Perf QA"'),
+      );
       expect(gradle, contains('applicationId.set(variant.applicationId)'));
       expect(gradle, contains('addGeneratedSourceDirectory'));
       expect(gradle, isNot(contains('wing_application_id')));

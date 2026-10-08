@@ -1,3 +1,6 @@
+import 'support/composer_fixture.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -20,6 +23,7 @@ void main() {
   late Directory cache;
   late Host host;
   late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
   late ProfileChat chat;
   late SharedPreferences preferences;
   final png = image.encodePng(image.Image(width: 3, height: 2));
@@ -28,32 +32,42 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     cache = await Directory.systemTemp.createTemp('hermes-paste-test-');
     host = Host();
     controller = ProfileWorkspaceController(
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Host',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Host',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       connectionIdentity: 'paste-test',
       preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: host.gateway,
       attachmentService: AttachmentDraftService(
         cacheDirectoryProvider: () async => cache,
       ),
     );
     await controller.initialize();
-    chat = await controller.createChat();
-    chat.status = ProfileTurnStatus.completed;
+    chat = await controller.createChat(canDispatch: () => true);
+    emitChatEvent(controller, chat, 'message.start');
+    emitChatEvent(controller, chat, 'session.info', {
+      'open_requests': [],
+      'running': false,
+    });
   });
 
   tearDown(() async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(ImageClipboard.channel, null);
     controller.dispose();
+    appPreferences.dispose();
     await cache.delete(recursive: true);
   });
 
@@ -62,7 +76,10 @@ void main() {
     () async {
       await controller.updateDraft(chat, 'Describe this');
       await controller.addPastedImage(chat, () async => png);
-      final draft = chat.attachments.single;
+      final draft = (await readComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+      ))!.attachments.single;
       expect(draft.isImage, isTrue);
       expect(draft.sanitized, isTrue);
       expect(draft.name, 'Pasted image.png');
@@ -70,14 +87,14 @@ void main() {
         image.decodeImage(await File(draft.cachedPath).readAsBytes())!.width,
         3,
       );
-      expect(chat.draft, 'Describe this');
+      expect(chat.composer.observation.text, 'Describe this');
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
       final store = ComposerDraftStore(
         preferences,
         connectionIdentity: 'paste-test',
       );
       expect(store.summaries(profileName: 'a').single.attachmentCount, 1);
-      await controller.removeAttachment(chat, draft);
+      await controller.removeAttachment(chat, draft.id);
       expect(await File(draft.cachedPath).exists(), isFalse);
     },
   );
@@ -88,11 +105,11 @@ void main() {
       final read = Completer<Uint8List>();
       final pending = controller.addPastedImage(chat, () => read.future);
       expect(controller.canAddAttachment(chat), isFalse);
-      final other = await controller.createChat();
+      final other = await controller.createChat(canDispatch: () => true);
       read.complete(png);
       await pending;
-      expect(chat.attachments, hasLength(1));
-      expect(other.attachments, isEmpty);
+      expect(chat.composer.observation.attachments, hasLength(1));
+      expect(other.composer.observation.attachments, isEmpty);
       expect(controller.canAddAttachment(chat), isTrue);
     },
   );
@@ -117,8 +134,8 @@ void main() {
         ),
         throwsStateError,
       );
-      expect(chat.draft, 'Keep this');
-      expect(chat.attachments, isEmpty);
+      expect(chat.composer.observation.text, 'Keep this');
+      expect(chat.composer.observation.attachments, isEmpty);
       expect(await cache.list().toList(), isEmpty);
       expect(controller.canAddAttachment(chat), isTrue);
     },
@@ -132,7 +149,10 @@ void main() {
       controller.addPastedImage(chat, () async => png),
       throwsA(isA<AttachmentDraftException>()),
     );
-    expect(chat.attachments, hasLength(maxRemoteAttachmentDrafts));
+    expect(
+      chat.composer.observation.attachments,
+      hasLength(maxRemoteAttachmentDrafts),
+    );
   });
 
   Future<void> show(WidgetTester tester) async {
@@ -168,12 +188,12 @@ void main() {
         await tester.tap(find.byTooltip('Remove Pasted image.png'));
         // The callback returns before its file deletion finishes. Let that
         // operation complete before tearDown removes the same cache directory.
-        while (chat.queueMutating) {
+        while (chat.composer.observation.saving) {
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }
       });
       await tester.pumpAndSettle();
-      expect(chat.attachments.single.name, 'picked.jpg');
+      expect(chat.composer.observation.attachments.single.name, 'picked.jpg');
     },
   );
 
@@ -207,7 +227,7 @@ void main() {
       }
     });
     await tester.pumpAndSettle();
-    expect(chat.attachments.single.isImage, isTrue);
+    expect(chat.composer.observation.attachments.single.isImage, isTrue);
     expect(
       find.byKey(const ValueKey('composer-image-thumbnail')),
       findsOneWidget,
@@ -228,8 +248,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(chat.draft, 'Keep this');
-      expect(chat.attachments, isEmpty);
+      expect(chat.composer.observation.text, 'Keep this');
+      expect(chat.composer.observation.attachments, isEmpty);
       expect(find.textContaining('Unable to paste this image'), findsOneWidget);
     },
   );
@@ -271,7 +291,7 @@ void main() {
     });
     await tester.pumpAndSettle();
     expect(calls, ['hasImage', 'readImage']);
-    expect(chat.attachments, hasLength(1));
+    expect(chat.composer.observation.attachments, hasLength(1));
   });
 
   testWidgets('ordinary text still pastes at the selection', (tester) async {
@@ -298,7 +318,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Paste'));
     await tester.pumpAndSettle();
-    expect(chat.draft, 'Copied text');
-    expect(chat.attachments, isEmpty);
+    expect(chat.composer.observation.text, 'Copied text');
+    expect(chat.composer.observation.attachments, isEmpty);
   });
 }

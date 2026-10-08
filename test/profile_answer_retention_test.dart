@@ -1,3 +1,8 @@
+import 'package:wing/core/models/transcript_timeline.dart';
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -8,7 +13,7 @@ import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
-import 'package:wing/core/widgets/markdown_code_block.dart';
+import 'package:wing/core/widgets/source_code_block.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 
@@ -39,7 +44,7 @@ class _Rendering {
         .map((element) => element.state)
         .toList();
     background = descendants(BackgroundMarkdownContent);
-    code = descendants(MarkdownCodeBlock);
+    code = descendants(SourceCodeBlock);
     selectable = descendants(SelectableText);
     expect(background, isNotEmpty);
     expect(code, isNotEmpty);
@@ -78,24 +83,30 @@ Future<
 _open(WidgetTester tester, String source) async {
   SharedPreferences.setMockInitialValues({});
   final host = _HistoryHost();
+  final preferences = await SharedPreferences.getInstance();
+  final appPreferences = AppPreferences(preferences);
+  addTearDown(appPreferences.dispose);
   final controller = ProfileWorkspaceController(
-    connection: identityTestConnection(),
+    access: ConnectionAccess(
+      connection: identityTestConnection(),
+      dashboardOAuth: null,
+    ),
     connectionIdentity: 'answer-retention',
-    preferences: await SharedPreferences.getInstance(),
+    preferences: preferences,
+    appPreferences: appPreferences,
     gatewayFactory: host.gateway,
   );
   addTearDown(controller.dispose);
   await controller.initialize();
-  final chat = ProfileChat(
+  final chat = await openFixtureChat(
+    controller: controller,
     key: ProfileSessionKey(controller.current!.scope, 'chat-0'),
-    runtimeId: 'runtime',
     title: 'Mixed response',
   );
-  controller.current!.chats['chat-0'] = chat;
-  controller.current!.selectedSession = 'chat-0';
+
   await controller.refreshHistory(chat);
-  chat.status = ProfileTurnStatus.running;
-  chat.streaming = source;
+  emitChatEvent(controller, chat, 'message.start');
+  chat.reading.updateStreaming(source);
   tester.view.physicalSize = const Size(360, 760);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -124,8 +135,18 @@ Widget _screen(
               key: ValueKey(chat.key),
               chat: chat,
               controller: controller,
-              messageBuilder: (row, {required bool streaming}) =>
-                  ProfileMessage(message: row, streaming: streaming),
+              onLoadOlder: () => controller.loadOlderMessages(chat),
+              timeline: TranscriptTimeline.project(
+                [...chat.reading.messages, ?chat.reading.streamingMessage],
+                presentationId: chat.reading.messagePresentationId,
+                liveMessageIndex: chat.reading.streamingMessage == null
+                    ? null
+                    : chat.reading.messages.length,
+              ),
+              messageBuilder: (row) => ProfileMessage(
+                message: row.message,
+                streaming: row.streaming,
+              ),
               tail: const [],
             ),
           ),
@@ -151,21 +172,27 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final host = _HistoryHost();
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: identityTestConnection(),
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
         connectionIdentity: 'answer-retention',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: host.gateway,
       );
       addTearDown(controller.dispose);
       await controller.initialize();
-      final chat = ProfileChat(
+      final chat = await openFixtureChat(
+        controller: controller,
         key: ProfileSessionKey(controller.current!.scope, 'chat-0'),
-        runtimeId: 'runtime',
         title: 'Mixed response',
       );
-      controller.current!.chats['chat-0'] = chat;
-      controller.current!.selectedSession = 'chat-0';
+
       await controller.refreshHistory(chat);
       tester.view.physicalSize = const Size(360, 760);
       tester.view.devicePixelRatio = 1;
@@ -174,8 +201,8 @@ void main() {
       const finalParagraph =
           'Final extra tokens are available after completion.';
       final finalSource = '$source$finalParagraph';
-      chat.status = ProfileTurnStatus.running;
-      chat.streaming = source;
+      emitChatEvent(controller, chat, 'message.start');
+      chat.reading.updateStreaming(source);
       final draft = TextEditingController(text: 'Fresh composer text');
       final draftFocus = FocusNode();
       addTearDown(draft.dispose);
@@ -189,7 +216,7 @@ void main() {
       final draftState = tester.state(
         find.byKey(const ValueKey('answer-retention-draft')),
       );
-      final lastCode = find.byType(MarkdownCodeBlock).last;
+      final lastCode = find.byType(SourceCodeBlock).last;
       final wrap = find.descendant(
         of: lastCode,
         matching: find.byTooltip('Wrap lines'),
@@ -220,15 +247,15 @@ void main() {
       controller.current!.gateway.onEvent!(
         StreamEvent(
           type: 'message.complete',
-          sessionId: chat.runtimeId,
+          sessionId: chat.runtime.runtimeId,
           data: {'status': 'completed', 'text': finalSource},
         ),
       );
       await tester.pump();
       await tester.settleMarkdown();
-      expect(chat.streaming, isEmpty);
-      expect(chat.messages.last['id'], isNull);
-      expect(chat.messages.last['content'], finalSource);
+      expect(chat.reading.streaming, isEmpty);
+      expect(chat.reading.messages.last['id'], isNull);
+      expect(chat.reading.messages.last['content'], finalSource);
       expect(find.text(finalParagraph, findRichText: true), findsOneWidget);
       initial.expectRetainedBy(_Rendering(tester, finalSource));
       for (final state
@@ -238,33 +265,37 @@ void main() {
       expect(tester.getTopLeft(lastCode).dy, closeTo(readingPosition, 1));
       expect(
         find.descendant(
-          of: find.byType(MarkdownCodeBlock).last,
+          of: find.byType(SourceCodeBlock).last,
           matching: find.byTooltip('Scroll horizontally'),
         ),
         findsOneWidget,
       );
 
-      controller.clearSearch();
+      await tester.pumpWidget(screen());
       await tester.pump();
       await tester.settleMarkdown();
       initial.expectRetainedBy(_Rendering(tester, finalSource));
       expect(tester.getTopLeft(lastCode).dy, closeTo(readingPosition, 1));
 
       historyGate.complete();
-      for (var attempt = 0; attempt < 200 && chat.historyLoading; attempt++) {
+      for (
+        var attempt = 0;
+        attempt < 200 && chat.reading.historyLoading;
+        attempt++
+      ) {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 10)),
         );
         await tester.pump();
       }
-      expect(chat.historyLoading, isFalse);
-      expect(chat.historyError, isNull);
-      expect(chat.messages.last['id'], 2);
+      expect(chat.reading.historyLoading, isFalse);
+      expect(chat.reading.historyError, isNull);
+      expect(chat.reading.messages.last['id'], 2);
       await tester.settleMarkdown();
       initial.expectRetainedBy(_Rendering(tester, finalSource));
       expect(tester.getTopLeft(lastCode).dy, closeTo(readingPosition, 1));
 
-      controller.clearSearch();
+      await tester.pumpWidget(screen());
       await tester.pump();
       await tester.settleMarkdown();
       initial.expectRetainedBy(_Rendering(tester, finalSource));
@@ -292,7 +323,7 @@ void main() {
         ),
       );
       final copy = find.descendant(
-        of: find.byType(MarkdownCodeBlock).last,
+        of: find.byType(SourceCodeBlock).last,
         matching: find.byTooltip('Copy code'),
       );
       await tester.ensureVisible(copy);
@@ -347,7 +378,7 @@ void main() {
       fixture.controller.current!.gateway.onEvent!(
         StreamEvent(
           type: 'message.interim',
-          sessionId: fixture.chat.runtimeId,
+          sessionId: fixture.chat.runtime.runtimeId,
           data: {'text': source},
         ),
       );
@@ -359,11 +390,10 @@ void main() {
       fixture.controller.current!.gateway.onEvent!(
         StreamEvent(
           type: 'message.delta',
-          sessionId: fixture.chat.runtimeId,
+          sessionId: fixture.chat.runtime.runtimeId,
           data: {'text': nextSource},
         ),
       );
-      fixture.controller.clearSearch();
       await tester.pump();
       await tester.settleMarkdown();
       final next = _Rendering(tester, nextSource);
@@ -373,16 +403,15 @@ void main() {
         findsOneWidget,
       );
 
-      final other = ProfileChat(
+      final other = await openFixtureChat(
+        controller: fixture.controller,
         key: ProfileSessionKey(fixture.controller.current!.scope, 'other-chat'),
-        runtimeId: 'other-runtime',
         title: 'Different conversation',
       );
       // Deliberately equal source text must not transfer renderer ownership.
-      other.status = ProfileTurnStatus.running;
-      other.streaming = nextSource;
-      fixture.controller.current!.chats['other-chat'] = other;
-      fixture.controller.current!.selectedSession = 'other-chat';
+      emitChatEvent(fixture.controller, other, 'message.start');
+      other.reading.updateStreaming(nextSource);
+
       await tester.pumpWidget(_screen(fixture.controller, other));
       await tester.settleMarkdown();
       final switched = _Rendering(tester, nextSource);
@@ -408,14 +437,16 @@ void main() {
       fixture.controller.current!.gateway.onEvent!(
         StreamEvent(
           type: 'message.interim',
-          sessionId: fixture.chat.runtimeId,
+          sessionId: fixture.chat.runtime.runtimeId,
           data: {'text': source},
         ),
       );
       await tester.pump();
       await tester.settleMarkdown();
       initial.expectRetainedBy(_Rendering(tester, source));
-      final interim = fixture.chat.messages.last;
+      final interim = fixture.chat.reading.messages.last;
+      final interimToken = fixture.chat.reading.messagePresentationId(interim);
+      final retainedInterim = Map<String, dynamic>.from(interim);
       final gate = Completer<void>();
       addTearDown(() {
         if (!gate.isCompleted) gate.complete();
@@ -428,7 +459,7 @@ void main() {
       fixture.controller.current!.gateway.onEvent!(
         StreamEvent(
           type: 'message.complete',
-          sessionId: fixture.chat.runtimeId,
+          sessionId: fixture.chat.runtime.runtimeId,
           data: {
             'text': source,
             'response_previewed': true,
@@ -444,17 +475,26 @@ void main() {
       );
       await tester.pump();
       await tester.settleMarkdown();
-      expect(fixture.chat.busy, isFalse);
-      expect(fixture.chat.messages.last, same(interim));
+      expect(fixture.chat.runtime.blocksTurnAdmission, isFalse);
       expect(
-        fixture.chat.messages.where((row) => row['role'] == 'assistant'),
+        fixture.chat.reading.messagePresentationId(
+          fixture.chat.reading.messages.last,
+        ),
+        same(interimToken),
+      );
+      expect(interim, retainedInterim);
+      expect(interim['content'], source);
+      expect(
+        fixture.chat.reading.messages.where(
+          (row) => row['role'] == 'assistant',
+        ),
         hasLength(1),
       );
       initial.expectRetainedBy(_Rendering(tester, source));
       gate.complete();
       for (
         var attempt = 0;
-        attempt < 200 && fixture.chat.historyLoading;
+        attempt < 200 && fixture.chat.reading.historyLoading;
         attempt++
       ) {
         await tester.runAsync(
@@ -462,11 +502,13 @@ void main() {
         );
         await tester.pump();
       }
-      expect(fixture.chat.historyLoading, isFalse);
-      expect(fixture.chat.historyError, isNull);
-      expect(fixture.chat.messages.last['id'], 2);
+      expect(fixture.chat.reading.historyLoading, isFalse);
+      expect(fixture.chat.reading.historyError, isNull);
+      expect(fixture.chat.reading.messages.last['id'], 2);
       expect(
-        fixture.chat.messages.where((row) => row['role'] == 'assistant'),
+        fixture.chat.reading.messages.where(
+          (row) => row['role'] == 'assistant',
+        ),
         hasLength(1),
       );
       await tester.settleMarkdown();

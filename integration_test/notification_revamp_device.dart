@@ -2,14 +2,17 @@
 /// install this fixture under the production package. Hermes is entirely fake.
 library;
 
+import 'package:wing/core/models/app_preferences.dart';
+import 'package:wing/core/services/app_preferences.dart';
+
 import 'dart:async';
+import '../test/support/composer_fixture.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
-import 'package:wing/core/services/turn_notification_service.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/main.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
@@ -30,9 +33,19 @@ Future<void> main() async {
     port: 1,
     apiKey: '',
   );
-  await manager.importConnections([connection], replaceExisting: true);
-  await prefs.setBool(completionNotificationsKey, true);
-  await prefs.setBool(attentionNotificationsKey, true);
+  await manager.importConnections(
+    [connection],
+    replaceExisting: true,
+    canCommit: () => true,
+  );
+  await prefs.setBool(
+    AppPreferenceField.completedNotifications.storageKey,
+    true,
+  );
+  await prefs.setBool(
+    AppPreferenceField.attentionNotifications.storageKey,
+    true,
+  );
   await prefs.setBool('notification_permission_requested', true);
   await prefs.setBool('microphone_permission_requested', true);
   final savedHistory = prefs.getString('notification_qa_reply_history');
@@ -81,6 +94,7 @@ Future<void> main() async {
   final app = GlobalKey<WingAppState>();
   runApp(
     WingApp(
+      appPreferences: AppPreferences(prefs),
       key: app,
       connManager: manager,
       gatewayFactory: (_, scope) => host.gateway(scope),
@@ -90,16 +104,22 @@ Future<void> main() async {
   final controller = await app.currentState!.profileController(connection);
   await controller.initialize();
   await controller.switchProfile('a');
-  final chat = await controller.createChat()
-    ..title = 'Website refresh';
+  final chat = await controller.createChat(canDispatch: () => true);
+  emitChatEvent(controller, chat, 'session.title', {
+    'session_id': chat.key.sessionId,
+    'title': 'Website refresh',
+  });
   final chatGateway = host.gateways['a']!;
   await controller.switchProfile('b');
-  final other = await controller.createChat()
-    ..title = 'Weekly report';
+  final other = await controller.createChat(canDispatch: () => true);
+  emitChatEvent(controller, other, 'session.title', {
+    'session_id': other.key.sessionId,
+    'title': 'Weekly report',
+  });
   final otherGateway = host.gateways['b']!;
   void event(ProfileChat target, String type, Map<String, dynamic> data) {
     (identical(target, chat) ? chatGateway : otherGateway).onEvent!(
-      StreamEvent(type: type, sessionId: target.runtimeId, data: data),
+      StreamEvent(type: type, sessionId: target.runtime.runtimeId, data: data),
     );
   }
 
@@ -112,7 +132,7 @@ Future<void> main() async {
           : const {};
       switch (request.uri.path) {
         case '/work':
-          other.draft = 'Prepare the weekly report';
+          other.composer.editText('Prepare the weekly report');
           await controller.send(other);
         case '/approval':
           final id = 'qa-${++sequence}';
@@ -138,8 +158,8 @@ Future<void> main() async {
             ],
           });
         case '/reply':
-          if (!chat.busy) {
-            chat.draft = 'Update the website';
+          if (!chat.runtime.blocksTurnAdmission) {
+            chat.composer.editText('Update the website');
             await controller.send(chat);
           }
           final answer =
@@ -171,7 +191,7 @@ Future<void> main() async {
         case '/remote':
           host.pendingApprovals!.clear();
           host.notificationActiveSessions = [
-            {'id': chat.runtimeId, 'session_key': chat.key.sessionId},
+            {'id': chat.runtime.runtimeId, 'session_key': chat.key.sessionId},
           ];
           host.notificationReplay = {
             'open_requests': [],
@@ -180,7 +200,10 @@ Future<void> main() async {
             'truncated': false,
           };
         case '/preview':
-          await prefs.setBool(notificationPreviewsKey, data['enabled'] == true);
+          await prefs.setBool(
+            AppPreferenceField.notificationPreviews.storageKey,
+            data['enabled'] == true,
+          );
           app.currentState!.refreshPreferences();
         case '/stop':
           event(other, 'message.complete', {
@@ -216,7 +239,7 @@ Future<void> main() async {
       request.response.write(
         jsonEncode({
           'ready': true,
-          'runtime': chat.runtimeId,
+          'runtime': chat.runtime.runtimeId,
           'pending': host.pendingApprovals,
           'decisions': host.calls
               .where(
@@ -228,19 +251,20 @@ Future<void> main() async {
           'lifecycle': WidgetsBinding.instance.lifecycleState?.name,
           'chat_visible': controller.visible,
           'selected_chat': controller.current?.chat?.key.sessionId,
-          'read_target': chat.notificationReadTarget?.toJson(),
+          'read_target': chat.reading.notificationReadTarget?.toJson(),
           'read_guards': {
-            'opening': chat.opening,
-            'offline_snapshot': chat.offlineSnapshot,
-            'history_loading': chat.historyLoading,
-            'history_error': chat.historyError,
-            'history_session': chat.historySessionId,
+            'opening': chat.runtime.opening,
+            'offline_snapshot': chat.runtime.offline,
+            'history_loading': chat.reading.historyLoading,
+            'history_error': chat.reading.historyError,
+            'history_session': chat.reading.historySessionId,
             'selected_is_target': identical(controller.current?.chat, chat),
           },
-          'notification_focus': chat.notificationFocus?.toJson(),
-          'notification_focus_generation': chat.notificationFocusGeneration,
+          'notification_focus': chat.reading.notificationFocus?.toJson(),
+          'notification_focus_generation':
+              chat.reading.notificationFocusGeneration,
           'message_rows': [
-            for (final row in chat.messages)
+            for (final row in chat.reading.messages)
               {
                 'id': row['id'],
                 'role': row['role'],

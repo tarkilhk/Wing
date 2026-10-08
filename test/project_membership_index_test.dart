@@ -1,3 +1,6 @@
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -66,24 +69,34 @@ class MembershipFixture extends ProfilePagingFixture {
 void main() {
   late MembershipFixture fixture;
   late ProfileWorkspaceController owner;
+  late AppPreferences appPreferences;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     fixture = MembershipFixture();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     owner = ProfileWorkspaceController(
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Host',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Host',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       connectionIdentity: 'membership-owner',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: fixture.gateway,
     );
     await owner.initialize();
   });
-  tearDown(() => owner.dispose());
+  tearDown(() {
+    owner.dispose();
+    appPreferences.dispose();
+  });
 
   Future<ProfileChat> open(String id) async {
     final chat = (await owner.openSession(
@@ -161,7 +174,12 @@ void main() {
     final chat = await open('chat-124');
     expect(chat.projectId, 'p99');
     fixture.project = 'p4';
-    await owner.updateProject(owner.current!.scope, 'p99', name: 'Renamed');
+    await owner.updateProject(
+      owner.current!.scope,
+      'p99',
+      name: 'Renamed',
+      canDispatch: () => true,
+    );
     await open('chat-124');
     expect(chat.projectId, 'p4');
     expect(treeReads(), 2);

@@ -1,3 +1,4 @@
+import 'support/color_contrast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -33,7 +34,6 @@ void main() {
         WingSpacing.md,
         WingSpacing.lg,
         WingSpacing.xl,
-        WingSpacing.xxl,
       ];
 
       for (final step in scale) {
@@ -46,14 +46,12 @@ void main() {
 
     test('radii grow from control to sheet', () {
       expect(WingRadius.sm, lessThan(WingRadius.md));
-      expect(WingRadius.md, lessThan(WingRadius.lg));
-      expect(WingRadius.lg, lessThan(WingRadius.xl));
+      expect(WingRadius.md, lessThan(WingRadius.xl));
     });
 
     test('motion durations stay inside the roadmap 150-250ms budget', () {
       expect(WingMotion.fast.inMilliseconds, greaterThanOrEqualTo(100));
       expect(WingMotion.standard.inMilliseconds, inInclusiveRange(150, 250));
-      expect(WingMotion.emphasized.inMilliseconds, lessThanOrEqualTo(400));
       expect(WingMotion.standard, greaterThan(WingMotion.fast));
     });
   });
@@ -74,25 +72,11 @@ void main() {
       expect(light.brightness, Brightness.light);
     });
 
-    test(
-      'Studio pairs Teal across themes and preserves saved Mint choices',
-      () {
-        final savedAccent = WorkspaceAccent.fromName('mint');
-        expect(savedAccent.label, 'Teal');
-        expect(WingTokens.dark().accent, savedAccent.dark);
-        expect(WingTokens.light().accent, savedAccent.light);
-        expect(WorkspaceAccent.fromName(null), savedAccent);
-      },
-    );
-
-    test('status colors resolve from a semantic status enum', () {
-      final tokens = WingTokens.dark();
-
-      expect(tokens.colorForStatus(WingStatus.running), tokens.running);
-      expect(tokens.colorForStatus(WingStatus.blocked), tokens.blocked);
-      expect(tokens.colorForStatus(WingStatus.failed), tokens.danger);
-      expect(tokens.colorForStatus(WingStatus.completed), tokens.success);
-      expect(tokens.colorForStatus(WingStatus.idle), tokens.muted);
+    test('Studio pairs the canonical Teal choice across themes', () {
+      final savedAccent = WorkspaceAccent.teal;
+      expect(savedAccent.label, 'Teal');
+      expect(WingTokens.dark().accent, savedAccent.dark);
+      expect(WingTokens.light().accent, savedAccent.light);
     });
 
     test('lerp keeps a valid token set mid-animation', () {

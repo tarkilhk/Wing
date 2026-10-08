@@ -1,3 +1,4 @@
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -80,7 +81,7 @@ void main() {
     'existing default profile exposes scoped administration read contracts',
     () async {
       final gateway = ProfileGateway.forConnection(
-        connection,
+        ConnectionAccess(connection: connection, dashboardOAuth: null),
         WorkspaceScope(connectionId: connection.id, profileName: 'default'),
       );
       addTearDown(gateway.close);

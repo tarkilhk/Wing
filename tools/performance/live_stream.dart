@@ -1,3 +1,5 @@
+import 'package:wing/core/models/model_catalog.dart';
+import 'package:wing/core/models/profile_session_key.dart';
 // Profile-only full-app observer. Mutations target explicitly named QA chats,
 // created here or manually created and adopted after selecting Luna.
 // flutter build apk --profile --dart-define=WING_PERF_INSTRUMENTATION=true -t tools/performance/live_stream.dart
@@ -18,7 +20,6 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/completion_diagnostics.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
-import 'package:wing/core/widgets/model_chooser.dart';
 import 'package:wing/main.dart' as app;
 
 const _prompts = {
@@ -34,6 +35,16 @@ const _prompts = {
       'headings, paragraphs, nested lists, a small Markdown table, ordinary '
       'links to https://example.com and six fenced Dart code examples. '
       'Finish with the exact sentence: Wing mixed QA complete.',
+  'workflow':
+      'Review this Flutter design without tools, files, memories or delegation: '
+      'a workspace owner coordinates chat I/O, a composer owns unsent drafts, '
+      'a reading owner exposes immutable history, and widgets render observations '
+      'and forward commands. Give a practical change plan for adding a model '
+      'picker while preserving these boundaries. Use about 500 words, headings, '
+      'a responsibility table and two short Dart examples. Explain how to keep '
+      'a late settings read from overwriting a reconnected chat and how to protect '
+      'the change with one focused regression. '
+      'Finish with the exact sentence: Wing workflow QA complete.',
 };
 
 Iterable<Element> _walk(Element element) sync* {
@@ -88,16 +99,24 @@ class _Owned {
   int responseBaseCount = 0;
 
   String? get finalResponse {
-    for (var i = chat.messages.length - 1; i >= responseBaseCount; i--) {
-      if (chat.messages[i]['role'] == 'assistant') {
-        return answerMessageText(chat.messages[i]);
+    for (
+      var i = chat.reading.messages.length - 1;
+      i >= responseBaseCount;
+      i--
+    ) {
+      if (chat.reading.messages[i]['role'] == 'assistant') {
+        return answerMessageText(chat.reading.messages[i]);
       }
     }
     return null;
   }
 
-  String get sentinel =>
-      mode == 'mixed' ? 'Wing mixed QA complete.' : 'Wing prose QA complete.';
+  String get sentinel => switch (mode) {
+    'prose' => 'Wing prose QA complete.',
+    'mixed' => 'Wing mixed QA complete.',
+    'workflow' => 'Wing workflow QA complete.',
+    _ => throw StateError('Stage an owned QA workload first'),
+  };
 }
 
 bool _isSelected(_Owned item) {
@@ -130,7 +149,7 @@ class _Measurement {
   void sample() {
     final now = developer.Timeline.now;
     final chat = owned.chat;
-    final length = chat.streaming.length;
+    final length = chat.reading.streaming.length;
     if (length != previousLength) {
       sourceChanges++;
       previousLength = length;
@@ -138,7 +157,9 @@ class _Measurement {
       if (length > 0) firstTextUs ??= now;
       if (length > 0) latestSourceObservedUs = now;
     }
-    if (!chat.busy && maximumLength > 0) completedUs ??= now;
+    if (!chat.runtime.blocksTurnAdmission && maximumLength > 0) {
+      completedUs ??= now;
+    }
     if (now - _lastRenderSample < 100000) return;
     _lastRenderSample = now;
     renderedCharacters = 0;
@@ -149,8 +170,8 @@ class _Measurement {
     final root = WidgetsBinding.instance.rootElement;
     final selected = _isSelected(owned);
     if (root != null && maximumLength > 0 && selected) {
-      final source = chat.streaming.isNotEmpty
-          ? chat.streaming
+      final source = chat.reading.streaming.isNotEmpty
+          ? chat.reading.streaming
           : owned.finalResponse;
       final bodies = _walk(root).where(
         (e) =>
@@ -193,7 +214,9 @@ class _Measurement {
         latestReadyLagUs = now - latestSourceObservedUs!;
         _lastReadySourceObservedUs = latestSourceObservedUs;
       }
-      if (!chat.busy && renderReady && owned.finalResponse != null) {
+      if (!chat.runtime.blocksTurnAdmission &&
+          renderReady &&
+          owned.finalResponse != null) {
         finalReadyUs ??= now;
       }
     }
@@ -203,9 +226,9 @@ class _Measurement {
       'renderedProseCharacters': renderedCharacters,
       'pendingParses': pendingParses,
       'renderReady': renderReady,
-      'draftCharacters': chat.composerText.length,
+      'draftCharacters': chat.composer.observation.displayedText.length,
       'selected': selected,
-      'busy': chat.busy,
+      'busy': chat.runtime.blocksTurnAdmission,
       'latestResponseMounted': latestResponseMounted,
     });
   }
@@ -270,17 +293,18 @@ void main() {
     return {
       'selected': selected,
       'luna': RegExp(r'^gpt-\d+\.\d+-luna$').hasMatch(item.chat.model ?? ''),
-      'busy': item.chat.busy,
-      'status': item.chat.status.name,
-      'sourceCharacters': item.chat.streaming.length,
-      'savedMessages': item.chat.messages.length,
-      'draftCharacters': item.chat.composerText.length,
+      'reasoningEffort': item.chat.reasoningEffort,
+      'busy': item.chat.runtime.blocksTurnAdmission,
+      'status': item.chat.runtime.execution.name,
+      'sourceCharacters': item.chat.reading.streaming.length,
+      'savedMessages': item.chat.reading.messages.length,
+      'draftCharacters': item.chat.composer.observation.displayedText.length,
       'draftPreserved': item.preservedDraft == null
           ? null
-          : item.preservedDraft == item.chat.composerText,
-      'chatError': item.chat.error != null,
+          : item.preservedDraft == item.chat.composer.observation.displayedText,
+      'chatError': item.chat.runtime.error != null,
       'controllerError': item.controller.error != null,
-      'toolActivityCount': item.chat.toolActivities.length,
+      'toolActivityCount': item.chat.runtime.toolActivities.length,
       'subagentCount': item.chat.subagents.length,
       'composerBoundsPx': selected ? _composerBounds() : null,
       'dispatching': item.dispatching,
@@ -362,6 +386,7 @@ void main() {
                 'luna': luna,
                 'model': chat?.model,
                 'provider': chat?.provider,
+                'reasoningEffort': chat?.reasoningEffort,
                 'composerBoundsPx': _composerBounds(),
               }),
             );
@@ -369,6 +394,13 @@ void main() {
           stage = 'adopt';
           if (chat == null || !knownTitle || !luna) {
             throw StateError('Select a named QA Luna chat');
+          }
+          stage = 'read_reasoning';
+          await controller.loadIntelligence(chat);
+          if (!identical(_controller(), controller) ||
+              !identical(_visibleChat(controller), chat) ||
+              chat.reasoningEffort != 'low') {
+            throw StateError('QA chat did not confirm low reasoning');
           }
           var slot = owned.indexWhere((item) => identical(item.chat, chat));
           if (slot < 0) {
@@ -383,15 +415,15 @@ void main() {
           final controller = _controller();
           if (!controller.initialized ||
               controller.current == null ||
-              _visibleChat(controller)?.busy == true) {
+              _visibleChat(controller)?.runtime.blocksTurnAdmission == true) {
             throw StateError('Wait for the current chat');
           }
           final resource = controller.current!;
           stage = 'read_options';
           final choices =
-              ModelChoice.fromOptions(
+              ModelCatalog.fromOptions(
                     await resource.gateway.read('model/options'),
-                  )
+                  ).choices
                   .where(
                     (c) =>
                         RegExp(r'^gpt-\d+\.\d+-luna$').hasMatch(c.model) &&
@@ -445,9 +477,24 @@ void main() {
               chat.provider != choice.provider) {
             throw StateError('Resume did not confirm Luna');
           }
+          // Stock create/resume info omits reasoning. The session-scoped
+          // config.get read, owned by the controller, is the actual readback.
+          stage = 'read_reasoning';
+          await controller.loadIntelligence(chat);
+          if (!identical(_controller(), controller) ||
+              !identical(_visibleChat(controller), chat) ||
+              chat.reasoningEffort != 'low') {
+            throw StateError('QA chat did not confirm low reasoning');
+          }
           final item = _Owned(controller, chat);
           owned.add(item);
-          chat.title = title;
+          await controller.mutateSession(
+            chat.key,
+            changes: {'title': title},
+            canDispatch: () =>
+                identical(controller.current, resource) &&
+                identical(resource.chats[chat.key.sessionId], chat),
+          );
           return developer.ServiceExtensionResponse.result(
             jsonEncode({
               'slot': owned.length - 1,
@@ -468,21 +515,24 @@ void main() {
         if (action == 'stage' || action == 'submit') {
           final prompt = _prompts[parameters['mode']];
           if (prompt == null ||
-              item.chat.busy ||
+              item.chat.runtime.blocksTurnAdmission ||
               item.dispatching ||
               _visibleChat(item.controller) != item.chat ||
-              item.chat.composerText.isNotEmpty ||
-              item.chat.attachments.isNotEmpty ||
-              item.chat.queuedPrompts.isNotEmpty ||
-              !RegExp(r'^gpt-\d+\.\d+-luna$').hasMatch(item.chat.model ?? '')) {
-            throw StateError('Owned Luna chat must be selected and empty');
+              item.chat.composer.observation.displayedText.isNotEmpty ||
+              item.chat.composer.observation.attachments.isNotEmpty ||
+              item.chat.composer.observation.queue.isNotEmpty ||
+              !RegExp(r'^gpt-\d+\.\d+-luna$').hasMatch(item.chat.model ?? '') ||
+              item.chat.reasoningEffort != 'low') {
+            throw StateError(
+              'Owned Luna chat with low reasoning must be selected and empty',
+            );
           }
           await item.controller.updateDraft(item.chat, prompt);
           if (!_isSelected(item)) {
             throw StateError('QA chat changed while staging the prompt');
           }
           item.mode = parameters['mode'];
-          item.responseBaseCount = item.chat.messages.length;
+          item.responseBaseCount = item.chat.reading.messages.length;
           item.preservedDraft = null;
           if (action == 'submit') {
             item.dispatching = true;
@@ -501,7 +551,9 @@ void main() {
           }
         }
         if (action == 'cancel') await item.controller.stop(item.chat);
-        if (action == 'markDraft') item.preservedDraft = item.chat.composerText;
+        if (action == 'markDraft') {
+          item.preservedDraft = item.chat.composer.observation.displayedText;
+        }
         if (action == 'start') {
           if (!_isSelected(item)) {
             throw StateError('Select and adopt the mounted QA chat');

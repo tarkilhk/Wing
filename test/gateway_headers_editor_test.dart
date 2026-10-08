@@ -20,6 +20,29 @@ void main() {
     }
   });
 
+  test(
+    'header edit retains hidden secrets without exposing or normalizing bytes',
+    () {
+      final rows = <GatewayHeaderDraft>[
+        const GatewayHeaderDraft(
+          savedName: 'X-Access',
+          name: ' x-access ',
+          value: '',
+        ),
+      ];
+      final edit = GatewayHeaderEdit(rows);
+      rows.clear();
+      expect(edit.update, {'x-access': null});
+      expect(edit.resolve({'X-Access': ' exact secret '}), {
+        'X-Access': ' exact secret ',
+      });
+      expect(edit.nameError(0), isNull);
+      expect(edit.valueError(0), isNull);
+      expect(() => edit.rows.clear(), throwsUnsupportedError);
+      expect(() => edit.update!.clear(), throwsUnsupportedError);
+    },
+  );
+
   testWidgets('emits saved keep, replacement and removal', (tester) async {
     final values = <Map<String, String?>>[];
     await tester.pumpWidget(
@@ -27,7 +50,7 @@ void main() {
         home: Scaffold(
           body: GatewayHeadersEditor(
             savedNames: const {'CF-Access-Client-Id'},
-            onChanged: values.add,
+            onChanged: (edit) => values.add(edit.update!),
           ),
         ),
       ),
@@ -52,7 +75,7 @@ void main() {
             key: formKey,
             child: GatewayHeadersEditor(
               savedNames: const {'X-Saved'},
-              onChanged: values.add,
+              onChanged: (edit) => values.add(edit.update!),
             ),
           ),
         ),
@@ -84,7 +107,7 @@ void main() {
         body: GatewayHeadersEditor(
           savedNames: names,
           enabled: enabled,
-          onChanged: values.add,
+          onChanged: (edit) => values.add(edit.update!),
         ),
       ),
     );
@@ -122,7 +145,7 @@ void main() {
               key: formKey,
               child: GatewayHeadersEditor(
                 savedNames: const {},
-                onChanged: values.add,
+                onChanged: (edit) => values.add(edit.update!),
               ),
             ),
           ),

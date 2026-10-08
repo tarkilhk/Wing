@@ -2,7 +2,7 @@ import 'helpers/pump_markdown_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/widgets/block_reusing_markdown_body.dart';
-import 'package:wing/core/widgets/markdown_code_block.dart';
+import 'package:wing/core/widgets/source_code_block.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 
 void main() {
@@ -65,7 +65,7 @@ Growing tail''';
     expect(selection.textInside(editable.widget.controller.text), 'prefix');
 
     final code = tester
-        .widgetList<MarkdownCodeBlock>(find.byType(MarkdownCodeBlock))
+        .widgetList<SourceCodeBlock>(find.byType(SourceCodeBlock))
         .toList();
     final elements = [
       for (final widget in code) tester.element(find.byWidget(widget)),
@@ -81,7 +81,7 @@ Growing tail''';
     var closedProseBuilds = 0;
     final original = debugOnRebuildDirtyWidget;
     debugOnRebuildDirtyWidget = (element, builtOnce) {
-      if (element.widget is MarkdownCodeBlock) codeBuilds++;
+      if (element.widget is SourceCodeBlock) codeBuilds++;
       if (element.widget case BlockReusingMarkdownBody(
         data: final data,
       ) when fixedData.contains(data)) {
@@ -110,7 +110,7 @@ Growing tail''';
       reason: 'Completed prose segments must remain outside stream rebuilds.',
     );
     final after = tester
-        .widgetList<MarkdownCodeBlock>(find.byType(MarkdownCodeBlock))
+        .widgetList<SourceCodeBlock>(find.byType(SourceCodeBlock))
         .toList();
     for (var index = 0; index < code.length; index++) {
       expect(after[index], same(code[index]));

@@ -1,74 +1,88 @@
+import '../models/chat_output.dart';
 import 'dart:math' as math;
+import 'dart:typed_data';
+
+import '../presentation/tool_call_presentation.dart';
+import 'profile_tool_call.dart';
+import 'tool_activity_details.dart';
+import '../presentation/tool_activity_details.dart';
 
 import 'package:flutter/material.dart';
 
 import '../models/gateway_activity.dart';
+import '../models/chat_runtime.dart';
 import '../models/gateway_todo.dart';
 import '../theme/wing_theme.dart';
 import 'profile_transcript_disclosure.dart';
-import 'profile_activity_tabs.dart';
+import 'compact_activity_row.dart';
+import 'activity_time.dart';
+import 'chat_model_controls.dart';
 
-class ProfileLiveToolActivity extends StatelessWidget {
-  final List<GatewayToolActivity> activities;
-
-  const ProfileLiveToolActivity({super.key, required this.activities});
+/// Native event order is supplied by the owners; rendering never sorts it.
+class ProfileExecutionActivity extends StatelessWidget {
+  const ProfileExecutionActivity({
+    super.key,
+    required this.entries,
+    this.loadImage,
+    this.onOpenResource,
+    this.onShareResource,
+  });
+  final List<ChatActivityEntry> entries;
+  final Future<Uint8List> Function(String)? loadImage;
+  final Future<void> Function(ChatOutput)? onOpenResource;
+  final Future<void> Function(ChatOutput)? onShareResource;
 
   @override
-  Widget build(BuildContext context) => ProfileTranscriptDisclosure(
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final entry in entries)
+        switch (entry) {
+          ChatToolEntry(:final activity) => ProfileLiveToolActivity(
+            key: ValueKey(('activity-tool', entry.identity)),
+            activities: [activity],
+            loadImage: loadImage,
+            onOpenResource: onOpenResource,
+            onShareResource: onShareResource,
+          ),
+          ChatReasoningEntry() => ProfileReasoningDisclosure(
+            key: ValueKey(('activity-reasoning', entry.identity)),
+            text: entry.text,
+            running: entry.running,
+            source: entry.source,
+            availableText: entry.availableText,
+          ),
+        },
+    ],
+  );
+}
+
+class ProfileLiveToolActivity extends StatelessWidget {
+  final Iterable<GatewayToolActivity> activities;
+  final Future<Uint8List> Function(String)? loadImage;
+  final Future<void> Function(ChatOutput)? onOpenResource;
+  final Future<void> Function(ChatOutput)? onShareResource;
+
+  const ProfileLiveToolActivity({
+    super.key,
+    required this.activities,
+    this.loadImage,
+    this.onOpenResource,
+    this.onShareResource,
+  });
+
+  @override
+  Widget build(BuildContext context) => Column(
     key: const ValueKey('live-tool-activity'),
-    icon: activities.any((activity) => !activity.isTerminal)
-        ? Icons.pending_outlined
-        : Icons.terminal_rounded,
-    label: 'Current tools',
-    summary: Text(
-      activities.any((activity) => !activity.isTerminal)
-          ? '${activities.where((activity) => !activity.isTerminal).length} running'
-          : '${activities.length} tool ${activities.length == 1 ? 'call' : 'calls'}',
-    ),
+    crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       for (final activity in activities)
-        ProfileTranscriptDisclosure(
-          key: ValueKey(('live-tool', activity.toolId ?? activity.name)),
-          maintainState: false,
-          isError: activity.isFailed,
-          icon: activity.isFailed
-              ? Icons.error_outline
-              : activity.isTerminal
-              ? Icons.flag_outlined
-              : Icons.pending_outlined,
-          label: activity.displayName,
-          summary: Text(activity.statusLabel),
-          children: [
-            ProfileActivityGuide(
-              inset: 0,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (activity.detail case final detail?)
-                    SelectableText(
-                      detail,
-                      style: const TextStyle(fontSize: 13, height: 1.4),
-                    ),
-                  if (activity.arguments case final arguments?) ...[
-                    const SizedBox(height: 8),
-                    const Text('Arguments'),
-                    SelectableText(
-                      arguments,
-                      style: const TextStyle(fontSize: 13, height: 1.4),
-                    ),
-                  ],
-                  if (activity.result case final result?) ...[
-                    const SizedBox(height: 8),
-                    const Text('Result'),
-                    SelectableText(
-                      result,
-                      style: const TextStyle(fontSize: 13, height: 1.4),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
+        ProfileToolCall(
+          key: ValueKey(('live-tool', activity.toolId)),
+          call: ToolCallPresentation.live(activity),
+          loadImage: loadImage,
+          onOpenResource: onOpenResource,
+          onShareResource: onShareResource,
         ),
     ],
   );
@@ -89,30 +103,49 @@ class ProfileTodoPanel extends StatelessWidget {
     final completed = todos
         .where((todo) => todo.status == GatewayTodoStatus.completed)
         .length;
+    final pending = todos
+        .where((todo) => todo.status == GatewayTodoStatus.pending)
+        .length;
+    final working = todos
+        .where((todo) => todo.status == GatewayTodoStatus.inProgress)
+        .length;
+    final cancelled = todos
+        .where((todo) => todo.status == GatewayTodoStatus.cancelled)
+        .length;
     final children = <Widget>[
-      for (final todo in todos)
-        ListTile(
-          dense: true,
-          minTileHeight: 32,
-          minVerticalPadding: 0,
-          minLeadingWidth: 16,
-          horizontalTitleGap: 8,
-          contentPadding: EdgeInsets.only(
-            left: todo.parent == null
-                ? (embedded ? 0 : 12)
-                : (embedded ? 12 : 24),
-            right: 0,
-          ),
-          leading: _TodoStatusIcon(status: todo.status),
-          title: SelectableText(
-            todo.content,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.4,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ActivityDetailFacts(
+        facts: [
+          [
+            '$completed of ${todos.length} completed',
+            if (working > 0) '$working in progress',
+            if (pending > 0) '$pending pending',
+            if (cancelled > 0) '$cancelled cancelled',
+          ].join(' · '),
+        ],
+      ),
+      ActivityDetailsCard(
+        children: [
+          for (final todo in todos)
+            Padding(
+              padding: EdgeInsets.only(left: todo.parent == null ? 0 : 12),
+              child: ActivityDetailSection(
+                copyable: false,
+                viewable: false,
+                leading: _TodoStatusIcon(status: todo.status),
+                block: ToolDetailBlock(
+                  label:
+                      '${todo.parent == null ? '' : 'Subtask · '}${switch (todo.status) {
+                        GatewayTodoStatus.pending => 'Pending',
+                        GatewayTodoStatus.inProgress => 'In progress',
+                        GatewayTodoStatus.completed => 'Completed',
+                        GatewayTodoStatus.cancelled => 'Cancelled',
+                      }}',
+                  text: todo.content,
+                ),
+              ),
             ),
-          ),
-        ),
+        ],
+      ),
     ];
     if (embedded) {
       return Column(
@@ -144,6 +177,7 @@ class _TodoStatusIcon extends StatelessWidget {
       GatewayTodoStatus.cancelled => 'Cancelled task',
     };
     return Semantics(
+      container: true,
       label: label,
       child: ExcludeSemantics(
         child: SizedBox.square(
@@ -156,7 +190,7 @@ class _TodoStatusIcon extends StatelessWidget {
               padding: const EdgeInsets.all(1),
               child: CircularProgressIndicator(
                 strokeWidth: 1.5,
-                color: tokens.muted,
+                color: tokens.accent,
                 value: MediaQuery.disableAnimationsOf(context) ? 0.75 : null,
               ),
             ),
@@ -203,42 +237,85 @@ class _PendingTaskPainter extends CustomPainter {
 class ProfileReasoningDisclosure extends StatelessWidget {
   final String text;
   final bool running;
+  final bool initiallyExpanded;
+  final String? source;
+  final String? availableText;
 
   const ProfileReasoningDisclosure({
     super.key,
     required this.text,
     this.running = false,
+    this.initiallyExpanded = false,
+    this.source,
+    this.availableText,
   });
 
   @override
-  Widget build(BuildContext context) => ProfileTranscriptDisclosure(
+  Widget build(BuildContext context) => CompactActivityRow(
     key: const ValueKey('reasoning-disclosure'),
-    label: running ? 'Thinking' : 'Thought',
-    icon: running ? Icons.pending_outlined : Icons.psychology_outlined,
-    children: [
-      ProfileActivityGuide(
-        inset: 0,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 4, bottom: 8),
-          child: SelectableText(
-            text,
-            style: const TextStyle(fontSize: 13, height: 1.4),
-          ),
+    icon: CircuitBrainIcon(color: WingTokens.of(context).muted),
+    initiallyExpanded: initiallyExpanded,
+    time: const ActivityTime(),
+    lines: [
+      Text(
+        running ? 'Thinking' : 'Reasoning',
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          height: 1.3,
+        ),
+      ),
+      Text(
+        text.trimLeft().split('\n').first,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 12,
+          height: 1.5,
+          color: WingTokens.of(context).muted,
         ),
       ),
     ],
+    details: [
+      ActivityDetailsCard(
+        children: [
+          ActivityDetailSection(
+            block: ToolDetailBlock(
+              label: 'Reasoning',
+              text: text,
+              markdown: true,
+              copyable: true,
+            ),
+          ),
+        ],
+      ),
+      if (source != null || availableText != null)
+        ProfileTranscriptDisclosure(
+          label: 'Raw details',
+          icon: Icons.data_object,
+          maintainState: false,
+          children: [
+            ActivityDetailsCard(
+              children: [
+                if (source != null)
+                  ActivityDetailSection(
+                    copyable: false,
+                    viewable: false,
+                    block: ToolDetailBlock(label: 'Source', text: source!),
+                  ),
+                if (availableText != null)
+                  ActivityDetailSection(
+                    block: ToolDetailBlock(
+                      label: 'Available reasoning',
+                      text: availableText!,
+                      markdown: true,
+                      copyable: true,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+    ],
   );
-}
-
-String profileMessageReasoning(Map<String, dynamic> message) {
-  for (final key in [
-    '_gateway_reasoning',
-    'reasoning',
-    'reasoning_content',
-    'reasoning_details',
-  ]) {
-    final value = message[key];
-    if (value is String && value.trim().isNotEmpty) return value;
-  }
-  return '';
 }

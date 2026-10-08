@@ -5,14 +5,19 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    branches: ['**']
 
 permissions:
   contents: read
 
+concurrency:
+  group: quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
-    name: Analyze, Test & Compile Android
+    # This check name must match the required status in the main ruleset.
+    name: Analyze & Test
     runs-on: ubuntu-24.04
     timeout-minutes: 45
 
@@ -63,6 +68,37 @@ jobs:
       - name: Verify source version
         run: python3 scripts/release.py check
 
+      - name: Test offline QA tooling
+        run: python3 -m unittest discover -s tools/qa -p 'test_*.py' -v
+
+      - name: Load preceding architecture baseline
+        env:
+          BASELINE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          mkdir -p build
+          if [ -n "$BASELINE_REF" ] && git cat-file -e "$BASELINE_REF:tools/architecture/baseline.json" 2>/dev/null; then
+            git show "$BASELINE_REF:tools/architecture/baseline.json" > build/architecture-baseline-reference.json
+          else
+            cp tools/architecture/baseline.json build/architecture-baseline-reference.json
+          fi
+
+      - name: Check all Dart source contracts
+        run: python3 scripts/check_commit_linters.py --dart-only --baseline-reference "build/architecture-baseline-reference.json"
+
+      - name: Check workspace search owner fixtures
+        run: dart run tools/architecture/tests/workspace_search_owner_test.dart
+      - name: Check authored checkout census
+        run: python3 tools/architecture/rules/authored_census.py
+
+      - name: Check authored fixture model catalog
+        run: python3 tools/architecture/rules/fixture_model_catalog.py
+
+      - name: Reject retired fixture recovery contracts
+        run: python3 tools/architecture/rules/retired_fixture_recovery.py
+
+      - name: Reject retired native resources
+        run: python3 tools/architecture/rules/native_retired_resources.py
+
       # ── Step 1: Static analysis ──────────────────────────
       - name: Static analysis
         id: analyze
@@ -72,12 +108,11 @@ jobs:
           exit ${PIPESTATUS[0]}
 
       # ── Step 2: Run tests ────────────────────────────────
-      - name: Run tests
+      - name: Run product tests and required checker proofs
         id: test
-        continue-on-error: true
-        run: |
-          flutter test --no-pub --reporter=expanded 2>&1 | tee test_output.txt
-          exit ${PIPESTATUS[0]}
+        env:
+          TEST_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 scripts/test.py --changed-since "$TEST_BASE_REF" --skip-linters
 
       - name: Test opt-in performance measurements
         run: flutter test --no-pub --dart-define=WING_PERF_INSTRUMENTATION=true test/performance_instrumentation_test.dart test/markdown_inline_parser_test.dart test/markdown_parse_worker_test.dart test/background_markdown_content_test.dart test/background_markdown_message_test.dart
@@ -97,14 +132,38 @@ jobs:
 
       - name: Test native Android boundaries on the JVM
         id: native_test
-        continue-on-error: true
         run: |
           (cd android && ./gradlew :app:testDebugUnitTest --no-daemon) 2>&1 | tee native_test_output.txt
           exit ${PIPESTATUS[0]}
 
+      - name: Check native share provider and queue boundaries
+        run: python3 tools/architecture/native_share/provider_boundary.py
+
+      - name: Prove native share guard fixtures
+        run: python3 tools/architecture/native_share/prove_boundary.py
+
+      - name: Native notification retired action
+        run: python3 tools/architecture/native_notification/retired_action.py
+
+      - name: Native notification guard fixtures
+        run: python3 tools/architecture/native_notification/prove_boundary.py
+      - name: Retired native declarations
+        run: python3 tools/architecture/native_notification/retired_declaration.py
+      - name: Retired native declaration fixtures
+        run: python3 tools/architecture/native_notification/prove_declarations.py
+
+      - name: Native voice file boundary
+        run: python3 tools/architecture/native_voice/file_api_boundary.py
+
+      - name: Check native voice permission lifecycle ownership
+        run: python3 tools/architecture/native_voice/permission_lifecycle.py
+
+      - name: Native voice guard fixtures
+        run: python3 tools/architecture/native_voice/prove_boundary.py
+
       # ── Step 3: Summary & failure report ─────────────────
       - name: Failure summary
-        if: steps.analyze.outcome != 'success' || steps.test.outcome != 'success' || steps.android_build.outcome != 'success' || steps.native_test.outcome != 'success'
+        if: always() && (steps.analyze.outcome != 'success' || steps.test.outcome != 'success' || steps.android_build.outcome != 'success' || steps.native_test.outcome != 'success')
         run: |
           echo "## Quality checks failed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -112,7 +171,11 @@ jobs:
           if [ "${{ steps.analyze.outcome }}" != "success" ]; then
             echo "### Static analysis failed" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            cat analyze_output.txt >> $GITHUB_STEP_SUMMARY
+            if [ -f analyze_output.txt ]; then
+              cat analyze_output.txt >> $GITHUB_STEP_SUMMARY
+            else
+              echo "Static analysis did not run; see the earlier failed step." >> $GITHUB_STEP_SUMMARY
+            fi
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           else
@@ -123,7 +186,7 @@ jobs:
           if [ "${{ steps.test.outcome }}" != "success" ]; then
             echo "### Tests failed" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            cat test_output.txt >> $GITHUB_STEP_SUMMARY
+            echo "See the product test step log for the complete failure report." >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           else
             echo "### All tests passed" >> $GITHUB_STEP_SUMMARY
@@ -132,13 +195,17 @@ jobs:
           for check in android_build native_test; do
             echo "### $check" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            cat "${check}_output.txt" >> $GITHUB_STEP_SUMMARY
+            if [ -f "${check}_output.txt" ]; then
+              cat "${check}_output.txt" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "No output captured; see the step status." >> $GITHUB_STEP_SUMMARY
+            fi
             echo '```' >> $GITHUB_STEP_SUMMARY
           done
 
       # ── Step 4: Pass/fail enforcement ────────────────────
       - name: Enforce checks
-        if: steps.analyze.outcome != 'success' || steps.test.outcome != 'success' || steps.android_build.outcome != 'success' || steps.native_test.outcome != 'success'
+        if: always() && (steps.analyze.outcome != 'success' || steps.test.outcome != 'success' || steps.android_build.outcome != 'success' || steps.native_test.outcome != 'success')
         run: |
           echo "──────────────────────────────────────────────"
           echo "Quality gate blocked - see summary above."

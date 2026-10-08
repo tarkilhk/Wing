@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -18,10 +20,17 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final host = NotificationCoverageHost();
       final notices = <ProfileNotification>[];
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final owner = ProfileWorkspaceController(
-        connection: identityTestConnection(),
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
         connectionIdentity: 'outage-investigation',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: host.gateway,
         onAttention: (notice) async => notices.add(notice),
       );
@@ -97,10 +106,17 @@ void main() {
         SharedPreferences.setMockInitialValues({});
         final host = NotificationCoverageHost();
         final notices = <ProfileNotification>[];
+        final preferences = await SharedPreferences.getInstance();
+        final appPreferences = AppPreferences(preferences);
+        addTearDown(appPreferences.dispose);
         final owner = ProfileWorkspaceController(
-          connection: identityTestConnection(),
+          access: ConnectionAccess(
+            connection: identityTestConnection(),
+            dashboardOAuth: null,
+          ),
           connectionIdentity: 'outage-safeguard',
-          preferences: await SharedPreferences.getInstance(),
+          preferences: preferences,
+          appPreferences: appPreferences,
           gatewayFactory: host.gateway,
           onAttention: (notice) async => notices.add(notice),
         );
@@ -154,10 +170,17 @@ void main() {
       final host = NotificationCoverageHost();
       final notices = <ProfileNotification>[];
       final delivered = Completer<void>();
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final owner = ProfileWorkspaceController(
-        connection: identityTestConnection(),
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
         connectionIdentity: 'outage-delivery',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: host.gateway,
         onAttention: (notice) async {
           notices.add(notice);
@@ -201,10 +224,17 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final host = NotificationCoverageHost();
       final notices = <ProfileNotification>[];
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final owner = ProfileWorkspaceController(
-        connection: identityTestConnection(),
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
         connectionIdentity: 'cold-idle',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: host.gateway,
         onAttention: (notice) async => notices.add(notice),
       );

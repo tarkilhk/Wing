@@ -5,11 +5,8 @@ import '../../widgets/server_connection_label.dart';
 import '../../widgets/workspace_picker.dart';
 import 'package:flutter/material.dart';
 
-import '../../services/administration_repository.dart';
 import '../../widgets/studio_error.dart';
 import '../../widgets/studio_action_label.dart';
-import '../../widgets/read_recovery.dart';
-import '../../services/workspace_connection_failure.dart';
 
 /// Inherit all Studio component states and the selected app accent.
 ThemeData administrationTheme(ThemeData base) => base;
@@ -125,24 +122,6 @@ class AdminGroup extends StatelessWidget {
           children[i],
         ],
       ],
-    ),
-  );
-}
-
-class AdminSectionLabel extends StatelessWidget {
-  const AdminSectionLabel(this.label, {super.key});
-  final String label;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(0, 20, 0, 8),
-    child: Semantics(
-      header: true,
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      ),
     ),
   );
 }
@@ -348,118 +327,6 @@ class AdminNotice extends StatelessWidget {
       ],
     ),
   );
-}
-
-/// Retains the last observation on refresh failure and never renders failure as empty.
-class AdminLoad extends StatefulWidget {
-  final bool expand;
-  final Future<Map<String, dynamic>> Function() load;
-  final Widget Function(BuildContext, Map<String, dynamic>, VoidCallback)
-  builder;
-  const AdminLoad({
-    super.key,
-    required this.load,
-    required this.builder,
-    this.expand = true,
-  });
-  @override
-  State<AdminLoad> createState() => _AdminLoadState();
-}
-
-class _AdminLoadState extends State<AdminLoad> {
-  Map<String, dynamic>? _data;
-  DateTime? _checkedAt;
-  String? _error;
-  bool _loading = true;
-  bool _retryable = false;
-  int _generation = 0;
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    if (!mounted) return;
-    final generation = ++_generation;
-    setState(() {
-      _loading = true;
-      _error = null;
-      _retryable = false;
-    });
-    try {
-      final data = await widget.load();
-      if (mounted && generation == _generation) {
-        setState(() {
-          _data = data;
-          _checkedAt = DateTime.now();
-        });
-      }
-    } catch (e) {
-      if (mounted && generation == _generation) {
-        setState(() {
-          _error = administrationError(e);
-          _retryable = isTemporaryWorkspaceFailure(e);
-        });
-      }
-    } finally {
-      if (mounted && generation == _generation) {
-        setState(() => _loading = false);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => ReadRecovery(
-    shouldRetry: () => !_loading && _retryable,
-    retry: _load,
-    child: _body(context),
-  );
-
-  Widget _body(BuildContext context) => Column(
-    mainAxisSize: widget.expand ? MainAxisSize.max : MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      if (_loading) const LinearProgressIndicator(),
-      if (_error != null)
-        if (widget.expand)
-          Flexible(child: SingleChildScrollView(child: _failure(context)))
-        else
-          _failure(context),
-      if (_data != null)
-        if (widget.expand)
-          Expanded(key: const ValueKey('content'), child: _content(context))
-        else
-          KeyedSubtree(
-            key: const ValueKey('content'),
-            child: _content(context),
-          ),
-    ],
-  );
-
-  Widget _failure(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: AdminNotice.error(
-      '${_data == null ? '' : 'Last checked ${TimeOfDay.fromDateTime(_checkedAt!).format(context)}. '}$_error',
-      retry: _loading ? null : _load,
-    ),
-  );
-
-  Widget _content(BuildContext context) {
-    try {
-      return widget.builder(context, _data!, _load);
-    } on FormatException {
-      return AdminNotice.error(
-        'The server returned an invalid response.',
-        retry: _load,
-      );
-    } on TypeError {
-      return AdminNotice.error(
-        'The server returned an incomplete response.',
-        retry: _load,
-      );
-    }
-  }
 }
 
 /// Bring a failed/partial save into view without moving focus into an input.

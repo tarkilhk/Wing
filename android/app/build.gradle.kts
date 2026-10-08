@@ -52,6 +52,8 @@ val hasReleaseSigning = keystoreProperties.containsKey("storeFile")
 // Opt in only for Wing development APKs. Ordinary debug builds retain
 // their separate Dev identity and debug signing key.
 val notificationQa = providers.gradleProperty("notificationQa").orNull == "true"
+val nativeShareQa = providers.gradleProperty("nativeShareQa").orNull == "true"
+check(!nativeShareQa || notificationQa) { "Native share QA requires the isolated notification QA package" }
 val wingDevelopment = providers.gradleProperty("wingDevelopment").orNull == "true"
 check(!(notificationQa && wingDevelopment)) { "Notification QA must use its isolated package" }
 check(!wingDevelopment || signingEnvironment.keys.all {
@@ -61,6 +63,7 @@ check(!wingDevelopment || signingEnvironment.keys.all {
 }
 
 android {
+   buildFeatures { buildConfig = true }
    namespace = "com.tarkilhk.wing"
    compileSdk = 36
 
@@ -71,6 +74,7 @@ android {
    }
 
    defaultConfig {
+       buildConfigField("boolean", "NATIVE_SHARE_QA", "false")
        check(flutter.versionCode > minimumInstalledVersionCode) {
            "versionCode ${flutter.versionCode} must be greater than " +
                "$minimumInstalledVersionCode to upgrade the accepted Wing APK"
@@ -101,6 +105,7 @@ android {
            // verifies the packaged arm64 code against that scheme.
            applicationIdSuffix = if (notificationQa) ".notificationqa" else ".dev"
            versionNameSuffix = "-dev"
+           buildConfigField("boolean", "NATIVE_SHARE_QA", nativeShareQa.toString())
            manifestPlaceholders["appLabel"] = "Wing Dev"
            if (wingDevelopment) {
                signingConfig = signingConfigs.getByName("release")

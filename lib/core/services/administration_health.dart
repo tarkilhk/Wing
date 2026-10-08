@@ -2,39 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../models/hermes_profile.dart';
+import '../models/health_finding.dart';
+import '../models/administration_operation.dart';
+import 'administration_operation_session.dart';
 import '../models/provider_access.dart';
 import 'administration_overview.dart';
 import 'administration_repository.dart';
 import 'scheduled_tasks_controller.dart';
 import 'server_connection_status.dart';
-import 'workspace_connection_failure.dart';
 import 'health_snapshot.dart';
-
-enum AdministrationHealthStatus { healthy, warning, failure, unknown }
-
-class AdministrationHealthFinding {
-  const AdministrationHealthFinding({
-    required this.title,
-    required this.detail,
-    required this.status,
-    this.destination,
-    this.checkedAt,
-    this.stale = false,
-  });
-  final String title, detail;
-  final AdministrationHealthStatus status;
-  final String? destination;
-  final DateTime? checkedAt;
-  final bool stale;
-}
-
-/// An explicit access check remains attached to its captured workspace.
-class AdministrationProfileHealthObservation {
-  const AdministrationProfileHealthObservation(this.scope, this.finding);
-  final WorkspaceScope scope;
-  final AdministrationHealthFinding? finding;
-}
 
 /// Connection-owned, bounded observations. Reading this model never performs
 /// diagnostics or duplicates the selected profile's overview requests.
@@ -60,15 +36,17 @@ class AdministrationHealth extends ChangeNotifier {
   AdministrationHealthFinding? get _profileChecks => _profileState.checks;
   Timer? _expiry;
   bool _disposed = false;
+  int _notificationDepth = 0;
   AdministrationObservation get _readiness => _profileState.readiness;
   final _diagnosticGenerations = <String, int>{};
-  final _diagnosticTimers = <String, Timer>{};
-  final _diagnostics = <String, AdminDiagnosticObservation>{};
+  final _operations = <String, AdministrationOperationSession>{};
+  final _operationListeners = <String, VoidCallback>{};
   final _diagnosticScopes = <String, String>{};
   final _diagnosticAttempts = <String, DateTime>{};
   final _attemptedGenerations = <String, int>{};
-  final _pendingScopes = <String, String>{};
   final _starting = <String>{};
+  final _startErrors = <String, String>{};
+  String? diagnosticStartError(String path) => _startErrors[path];
   DateTime? _serverCheckedAt;
   DateTime? _serverRefreshStartedAt;
   final _serverRefreshGenerations = <String, int>{};
@@ -83,16 +61,18 @@ class AdministrationHealth extends ChangeNotifier {
 
   bool get serverChecking =>
       _starting.isNotEmpty ||
-      _diagnostics.values.any((value) => value.status['running'] == true);
+      diagnostics.values.any(
+        (value) => value.running == true && !value.resultUnavailable,
+      );
 
   bool get serverCheckIncomplete =>
       diagnosticPaths.any((path) {
-        final value = _diagnostics[path];
+        final value = diagnostics[path];
         final attempted = _diagnosticAttempts[path];
         return value == null ||
             value.readError != null ||
-            value.status['running'] != false ||
-            value.status['exit_code'] is! int ||
+            value.running != false ||
+            value.exitCode == null ||
             value.checkedAt == null ||
             (_attemptedGenerations[path] != null &&
                 _observedGenerations[path] != _attemptedGenerations[path]) ||
@@ -101,13 +81,13 @@ class AdministrationHealth extends ChangeNotifier {
       _serverRefreshStartedAt != null;
 
   /// Only a refresh of both diagnostics advances the shared completion time.
-  void beginServerRefresh() {
+  void _beginServerRefresh() {
     _serverRefreshStartedAt = _now();
     _serverRefreshGenerations
       ..clear()
       ..addEntries(
         diagnosticPaths.map(
-          (path) => MapEntry(path, diagnosticGeneration(path) + 1),
+          (path) => MapEntry(path, (_diagnosticGenerations[path] ?? 0) + 1),
         ),
       );
     _changed();
@@ -142,28 +122,33 @@ class AdministrationHealth extends ChangeNotifier {
         _overview!.connectorChecks.values.any((value) => value == null);
   }
 
-  AdministrationOverview? get overview => _overview;
+  ModelAccessObservation get modelAccess =>
+      _overview?.modelAccess ?? const ModelAccessObservation();
   String? get profileName => _overview?.profile.name;
-  Map<String, AdminDiagnosticObservation> get diagnostics =>
-      Map.unmodifiable(_diagnostics);
+  Map<String, AdminDiagnosticObservation> get diagnostics => Map.unmodifiable({
+    for (final entry in _operations.entries)
+      entry.key: entry.value.state.observation,
+  });
+  AdministrationOperationSession? diagnosticOperation(String path) =>
+      _operations[path];
   Set<String> get starting => Set.unmodifiable(_starting);
   String? diagnosticScope(String path) => _diagnosticScopes[path];
-  bool get isDisposed => _disposed;
   bool hasAttemptedDiagnostic(String path) =>
       _diagnosticAttempts.containsKey(path);
-  void recordDiagnosticAttempt(String path) {
+  void _recordDiagnosticAttempt(String path) {
     if (_disposed || !_starting.contains(path)) return;
     _diagnosticAttempts[path] = _now();
-    _attemptedGenerations[path] = diagnosticGeneration(path);
+    _attemptedGenerations[path] = _diagnosticGenerations[path]!;
     _changed();
   }
 
   bool diagnosticNeedsRefresh(String path) {
-    final observation = _diagnostics[path];
+    final observation = diagnostics[path];
     return canStartDiagnostic(path) &&
         (observation == null
             ? !hasAttemptedDiagnostic(path)
-            : healthSnapshotExpired(observation.checkedAt, _now()));
+            : observation.terminal &&
+                  healthSnapshotExpired(observation.checkedAt, _now()));
   }
 
   Map<String, dynamic> snapshot() => {
@@ -183,7 +168,7 @@ class AdministrationHealth extends ChangeNotifier {
     'profiles': {
       for (final entry in _profiles.entries)
         entry.key: {
-          'readiness': healthObservationSnapshot(entry.value.readiness),
+          'readiness': entry.value.readiness.healthSnapshot(),
           'tasks': entry.value.tasks == null
               ? null
               : healthFindingSnapshot(entry.value.tasks!),
@@ -194,11 +179,11 @@ class AdministrationHealth extends ChangeNotifier {
         },
     },
     'diagnostics': {
-      for (final entry in _diagnostics.entries)
+      for (final entry in diagnostics.entries)
         entry.key: {
           'name': entry.value.action.name,
           'pid': entry.value.action.pid,
-          'status': entry.value.status,
+          'status': diagnosticStatusSnapshot(entry.value),
           'checkedAt': entry.value.checkedAt?.toUtc().toIso8601String(),
           'readError': entry.value.readError,
           'scope': _diagnosticScopes[entry.key],
@@ -225,8 +210,7 @@ class AdministrationHealth extends ChangeNotifier {
     }
     for (final entry in (value['profiles'] as Map).entries) {
       final state = _ProfileHealthState();
-      restoreHealthObservation(
-        state.readiness,
+      state.readiness = AdministrationObservation.fromHealth(
         entry.value['readiness'] as Map,
       );
       state.tasks = restoreHealthFinding(entry.value['tasks']);
@@ -248,20 +232,21 @@ class AdministrationHealth extends ChangeNotifier {
         healthSnapshotTime(saved['checkedAt']),
         readError: saved['readError'] as String?,
       );
-      _diagnostics[path] = observation;
       _diagnosticScopes[path] =
           saved['scope'] as String? ?? server.connectionLabel;
       _observedGenerations[path] = saved['generation'] as int;
-      final generation = _diagnosticGenerations[path]!;
-      if (observation.status['running'] != false ||
-          observation.status['exit_code'] is! int) {
-        // Resume observation of this exact run, never POST another start.
-        _diagnosticTimers[path] = Timer(
-          Duration.zero,
-          () => _refreshDiagnostic(path, action, generation),
-        );
-      }
+      _installOperation(
+        path,
+        AdministrationOperationSession(
+          server,
+          action,
+          initial: observation,
+          now: _now,
+        ),
+        _diagnosticGenerations[path]!,
+      );
     }
+    _changed();
   }
 
   bool isStale(DateTime? at) =>
@@ -306,8 +291,7 @@ class AdministrationHealth extends ChangeNotifier {
     final state = _profiles.putIfAbsent(profile.name, _ProfileHealthState.new);
     final readiness = state.readiness;
     final generation = ++state.generation;
-    readiness.loading = true;
-    readiness.error = null;
+    state.readiness = readiness.copyWith(loading: true, error: null);
     _changed();
     try {
       final data = await profile.rpc('setup.status');
@@ -316,14 +300,19 @@ class AdministrationHealth extends ChangeNotifier {
         throw const FormatException('Incomplete profile readiness');
       }
       if (_disposed || generation != state.generation) return;
-      readiness.data = {'provider_configured': data['provider_configured']};
-      readiness.checkedAt = _now();
+      state.readiness = AdministrationObservation(
+        data: {'provider_configured': data['provider_configured']},
+        checkedAt: _now(),
+        loading: true,
+      );
     } on Object catch (error) {
       if (_disposed || generation != state.generation) return;
-      readiness.error = administrationError(error);
+      state.readiness = state.readiness.copyWith(
+        error: administrationError(error),
+      );
     } finally {
       if (!_disposed && generation == state.generation) {
-        readiness.loading = false;
+        state.readiness = state.readiness.copyWith(loading: false);
         _changed();
       }
     }
@@ -378,7 +367,6 @@ class AdministrationHealth extends ChangeNotifier {
     String? error,
     String? destination,
   }) {
-    final stale = isStale(at);
     final unknown = at == null || error != null;
     return AdministrationHealthFinding(
       title: title,
@@ -395,7 +383,6 @@ class AdministrationHealth extends ChangeNotifier {
           ? AdministrationHealthStatus.unknown
           : status,
       checkedAt: at,
-      stale: stale,
       destination: destination,
     );
   }
@@ -637,7 +624,7 @@ class AdministrationHealth extends ChangeNotifier {
   AdministrationHealthStatus get status {
     final values = [
       for (final finding in profileFindings) finding.status,
-      for (final observation in _diagnostics.values)
+      for (final observation in diagnostics.values)
         observation.failed
             ? AdministrationHealthStatus.failure
             : AdministrationHealthStatus.unknown,
@@ -653,141 +640,118 @@ class AdministrationHealth extends ChangeNotifier {
     return AdministrationHealthStatus.healthy;
   }
 
-  String get statusLabel => switch (status) {
-    AdministrationHealthStatus.failure =>
-      'Action required in reported findings',
-    AdministrationHealthStatus.warning => 'Setup or access needs attention',
-    AdministrationHealthStatus.unknown => 'Health observations are incomplete',
-    AdministrationHealthStatus.healthy => 'No issues in available observations',
-  };
-
-  String get diagnosticCoverage {
-    if (_diagnostics.isEmpty) return 'Doctor and security audit not run';
-    final unchecked = [
-      if (!_diagnostics.containsKey('ops/doctor')) 'Doctor not run',
-      if (!_diagnostics.containsKey('ops/security-audit'))
-        'Security audit not run',
-    ];
-    return [
-      ...unchecked,
-      'Diagnostic output needs review; completion does not establish runtime health',
-    ].join(' · ');
-  }
-
   bool canStartDiagnostic(String path) {
     if (_disposed || _starting.contains(path)) return false;
-    final previous = _diagnostics[path];
-    return previous == null ||
-        (previous.status['running'] == false &&
-            previous.status['exit_code'] is int);
+    final previous = _operations[path];
+    return previous == null || previous.state.canRunAgain;
   }
 
-  int? beginDiagnostic(String path, {String? scope}) {
-    if (!{'ops/doctor', 'ops/security-audit'}.contains(path)) {
-      throw ArgumentError('Unknown diagnostic');
-    }
-    if (!canStartDiagnostic(path)) return null;
+  Future<bool> startDiagnostic(AdministrationDiagnostic kind) async {
+    final path = kind.path;
+    if (!canStartDiagnostic(path)) return false;
     _starting.add(path);
-    if (scope != null) _pendingScopes[path] = scope;
+    _startErrors.remove(path);
     final generation = _diagnosticGenerations.update(
       path,
       (n) => n + 1,
       ifAbsent: () => 1,
     );
+    _recordDiagnosticAttempt(path);
     _changed();
-    return generation;
-  }
-
-  /// Track a started operation independently of its result screen.
-  void trackDiagnostic(
-    String path,
-    AdministrationAction action, {
-    required int generation,
-  }) {
-    if (_disposed || generation != _diagnosticGenerations[path]) return;
-    _diagnosticTimers.remove(path)?.cancel();
-    observeDiagnostic(
-      path,
-      AdminDiagnosticObservation(action, const {'running': true}, null),
-      generation: generation,
-    );
-    unawaited(_refreshDiagnostic(path, action, generation));
-  }
-
-  Future<void> _refreshDiagnostic(
-    String path,
-    AdministrationAction action,
-    int generation,
-  ) async {
-    if (_disposed || generation != _diagnosticGenerations[path]) return;
     try {
-      final status = await action.status(server);
-      if (_disposed || generation != _diagnosticGenerations[path]) return;
-      observeDiagnostic(
+      final action = await server.startDiagnostic(
         path,
-        AdminDiagnosticObservation(action, status, _now()),
-        generation: generation,
+        isActive: () =>
+            !_disposed && _diagnosticGenerations[path] == generation,
       );
-      if (status['running'] == true) {
-        _diagnosticTimers[path] = Timer(
-          const Duration(seconds: 3),
-          () => _refreshDiagnostic(path, action, generation),
+      if (_disposed || _diagnosticGenerations[path] != generation) return false;
+      if (action.name != kind.actionName) {
+        throw const AdministrationFailure(
+          'Operation started, but tracking is unavailable. Refresh its result.',
         );
       }
-    } catch (error) {
-      if (_disposed || generation != _diagnosticGenerations[path]) return;
-      final previous = _diagnostics[path]!;
-      observeDiagnostic(
+      _diagnosticScopes[path] = server.connectionLabel;
+      _installOperation(
         path,
-        AdminDiagnosticObservation(
-          action,
-          previous.status,
-          previous.checkedAt,
-          readError: administrationError(error),
-        ),
-        generation: generation,
+        AdministrationOperationSession(server, action, now: _now),
+        generation,
       );
-      if (isTemporaryWorkspaceFailure(error)) {
-        _diagnosticTimers[path] = Timer(
-          const Duration(seconds: 15),
-          () => _refreshDiagnostic(path, action, generation),
-        );
+      return true;
+    } catch (error) {
+      if (!_disposed && _diagnosticGenerations[path] == generation) {
+        _startErrors[path] = error is AdministrationFailure
+            ? error.message
+            : 'Could not confirm the diagnostic started. Check the connection.';
+      }
+      return false;
+    } finally {
+      if (!_disposed && _diagnosticGenerations[path] == generation) {
+        _starting.remove(path);
+        _changed();
       }
     }
   }
 
-  int diagnosticGeneration(String path) => _diagnosticGenerations[path] ?? 0;
+  bool get canRunAllDiagnostics => diagnosticPaths.every(canStartDiagnostic);
 
-  void observeDiagnostic(
-    String path,
-    AdminDiagnosticObservation value, {
-    required int generation,
-  }) {
-    if (_disposed || generation != _diagnosticGenerations[path]) return;
-    _diagnostics[path] = value;
-    _observedGenerations[path] = generation;
-    if (_pendingScopes[path] case final scope?) _diagnosticScopes[path] = scope;
-    _changed();
+  Future<List<String>> runAllDiagnostics() async {
+    if (!canRunAllDiagnostics) return const [];
+    _beginServerRefresh();
+    await Future.wait([
+      for (final kind in AdministrationDiagnostic.values) startDiagnostic(kind),
+    ]);
+    if (_disposed) return const [];
+    return List.unmodifiable([
+      for (final kind in AdministrationDiagnostic.values)
+        if (_startErrors[kind.path] case final error?) '${kind.title}: $error',
+    ]);
   }
 
-  void finishDiagnostic(String path, int generation) {
-    if (_disposed || generation != _diagnosticGenerations[path]) return;
-    _starting.remove(path);
-    _pendingScopes.remove(path);
-    _changed();
+  Future<void> refreshDiagnostics() async {
+    if (_disposed) return;
+    if (diagnosticPaths.every(diagnosticNeedsRefresh)) {
+      await runAllDiagnostics();
+    } else {
+      await Future.wait([
+        for (final kind in AdministrationDiagnostic.values)
+          if (diagnosticNeedsRefresh(kind.path)) startDiagnostic(kind),
+      ]);
+    }
+  }
+
+  void _installOperation(
+    String path,
+    AdministrationOperationSession operation,
+    int generation,
+  ) {
+    final previous = _operations.remove(path);
+    final listener = _operationListeners.remove(path);
+    if (listener != null) previous?.removeListener(listener);
+    previous?.dispose();
+    _operations[path] = operation;
+    void changed() {
+      if (_disposed ||
+          _diagnosticGenerations[path] != generation ||
+          !identical(_operations[path], operation)) {
+        return;
+      }
+      _observedGenerations[path] = generation;
+      _changed();
+    }
+
+    _operationListeners[path] = changed;
+    operation.addListener(changed);
   }
 
   void _changed() {
     if (_disposed) return;
-    final completed = diagnosticPaths
-        .map((path) => _diagnostics[path])
-        .toList();
+    final completed = diagnosticPaths.map((path) => diagnostics[path]).toList();
     if (completed.every(
       (value) =>
           value != null &&
           value.readError == null &&
-          value.status['running'] == false &&
-          value.status['exit_code'] is int &&
+          value.running == false &&
+          value.exitCode != null &&
           value.checkedAt != null,
     )) {
       final times = completed.map((value) => value!.checkedAt!).toList()
@@ -816,7 +780,13 @@ class AdministrationHealth extends ChangeNotifier {
     if (futureExpiries.isNotEmpty) {
       _expiry = Timer(futureExpiries.first.difference(_now()), _changed);
     }
-    notifyListeners();
+    ++_notificationDepth;
+    try {
+      notifyListeners();
+    } finally {
+      --_notificationDepth;
+      if (_disposed && _notificationDepth == 0) super.dispose();
+    }
   }
 
   Iterable<DateTime> _providerExpiries() sync* {
@@ -831,52 +801,23 @@ class AdministrationHealth extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
     _expiry?.cancel();
-    for (final timer in _diagnosticTimers.values) {
-      timer.cancel();
+    for (final entry in _operations.entries) {
+      entry.value.removeListener(_operationListeners[entry.key]!);
+      entry.value.dispose();
     }
-    _diagnosticTimers.clear();
+    _operations.clear();
+    _operationListeners.clear();
     _overview?.removeListener(_changed);
     connectionStatus?.removeListener(_changed);
-    super.dispose();
+    if (_notificationDepth == 0) super.dispose();
   }
 }
 
-/// A reported operation result, never a verdict that the server is healthy.
-class AdminDiagnosticObservation {
-  const AdminDiagnosticObservation(
-    this.action,
-    this.status,
-    this.checkedAt, {
-    this.readError,
-  });
-  final AdministrationAction action;
-  final Map<String, dynamic> status;
-  final DateTime? checkedAt;
-  final String? readError;
-  bool get failed =>
-      status['running'] == false &&
-      status['exit_code'] is int &&
-      status['exit_code'] != 0;
-  String get outcome => status['running'] == true
-      ? 'Running'
-      : status['running'] == false && status['exit_code'] == 0
-      ? 'Completed'
-      : failed
-      ? 'Failed'
-      : 'Outcome unavailable';
-  String get nextStep => status['running'] == true
-      ? 'The operation is still running. Open progress to check its result.'
-      : failed
-      ? 'The operation reported a failure. Review the output to see what completed before retrying.'
-      : status['running'] == false && status['exit_code'] == 0
-      ? 'The operation completed. Its output may still contain warnings or findings.'
-      : 'A final outcome has not been reported. Check progress to retrieve the result.';
-}
-
 class _ProfileHealthState {
-  final readiness = AdministrationObservation();
+  AdministrationObservation readiness = AdministrationObservation();
   AdministrationHealthFinding? tasks;
   bool taskLoading = false;
   String? taskError;

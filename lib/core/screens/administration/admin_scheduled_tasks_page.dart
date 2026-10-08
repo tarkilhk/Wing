@@ -1,13 +1,10 @@
-import 'dart:async';
-
+import '../../models/profile_session_key.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../services/profile_workspace_controller.dart'
-    show ProfileSessionKey;
 import '../../models/scheduled_task.dart';
 import '../../services/administration_repository.dart';
 import '../../services/scheduled_tasks_controller.dart';
+import '../../services/scheduled_task_detail_session.dart';
 import 'admin_widgets.dart';
 import 'admin_scheduled_task_detail_page.dart';
 import 'admin_scheduled_task_editor_page.dart';
@@ -17,11 +14,11 @@ class AdminScheduledTasksPage extends StatefulWidget {
   const AdminScheduledTasksPage({
     super.key,
     required this.profile,
-    required this.preferences,
+    required this.acquireController,
     required this.onOpenSession,
   });
   final ProfileAdministration profile;
-  final SharedPreferences preferences;
+  final ScheduledTasksController Function() acquireController;
   final Future<void> Function(ProfileSessionKey) onOpenSession;
   @override
   State<AdminScheduledTasksPage> createState() =>
@@ -30,41 +27,30 @@ class AdminScheduledTasksPage extends StatefulWidget {
 
 class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
     with WidgetsBindingObserver {
-  late final controller = ScheduledTasksController.acquire(
-    widget.profile,
-    widget.preferences,
-  );
+  late final controller = widget.acquireController();
   final search = TextEditingController();
-  String filter = 'All';
-  Timer? timer;
-  bool resumed = true;
+  TaskListFilter filter = TaskListFilter.all;
+  late final observation = ScheduledTasksObservation(
+    controller,
+    isVisible: () => mounted && ModalRoute.of(context)?.isCurrent == true,
+  );
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !controller.loading) controller.refresh();
-    });
-    timer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (resumed &&
-          mounted &&
-          ModalRoute.of(context)?.isCurrent == true &&
-          !controller.loading &&
-          controller.error == null) {
-        controller.refresh();
-      }
+      if (mounted) observation.start();
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    resumed = state == AppLifecycleState.resumed;
-    if (resumed) controller.refresh();
+    observation.resumed(state == AppLifecycleState.resumed);
   }
 
   @override
   void dispose() {
-    timer?.cancel();
+    observation.dispose();
     WidgetsBinding.instance.removeObserver(this);
     search.dispose();
     controller.release();
@@ -76,7 +62,7 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
     widget.profile,
     (context, profile) => AdminTaskRoute(
       profile: profile,
-      preferences: widget.preferences,
+      acquireController: controller.acquireLease,
       title: task == null ? 'New task' : 'Edit task',
       taskId: task?.id,
       builder: (controller, selectedTask) => AdminScheduledTaskEditorPage(
@@ -85,47 +71,15 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
       ),
     ),
   );
-  int rank(ScheduledTask t) => t.running
-      ? 0
-      : t.needsAttention
-      ? 1
-      : t.enabled && t.state != 'completed'
-      ? 2
-      : 3;
-
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: controller,
     builder: (context, _) {
-      final query = search.text.toLowerCase().trim();
-      final tasks =
-          (controller.tasks ?? [])
-              .where(
-                (t) =>
-                    '${t.title} ${t.prompt} ${t.scheduleLabel}'
-                        .toLowerCase()
-                        .contains(query) &&
-                    switch (filter) {
-                      'Active' => t.enabled && t.state != 'completed',
-                      'Paused' => t.paused || t.state == 'disabled',
-                      'Needs attention' => t.needsAttention,
-                      _ => true,
-                    },
-              )
-              .toList()
-            ..sort((a, b) {
-              final byRank = rank(a).compareTo(rank(b));
-              if (byRank != 0) return byRank;
-              if (rank(a) == 2) {
-                final time =
-                    (a.nextRun?.millisecondsSinceEpoch ?? 8640000000000000)
-                        .compareTo(
-                          b.nextRun?.millisecondsSinceEpoch ?? 8640000000000000,
-                        );
-                if (time != 0) return time;
-              }
-              return a.title.toLowerCase().compareTo(b.title.toLowerCase());
-            });
+      final tasks = visibleScheduledTasks(
+        controller.tasks ?? [],
+        search.text,
+        filter,
+      );
       return TaskPage(
         title: 'Scheduled tasks',
         scope: widget.profile.label,
@@ -186,17 +140,12 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    for (final value in [
-                      'All',
-                      'Active',
-                      'Paused',
-                      'Needs attention',
-                    ])
+                    for (final value in TaskListFilter.values)
                       Padding(
                         padding: const EdgeInsets.only(right: 8),
                         child: ChoiceChip(
                           showCheckmark: false,
-                          label: Text(value),
+                          label: Text(value.label),
                           selected: filter == value,
                           onSelected: (_) => setState(() => filter = value),
                         ),
@@ -246,7 +195,7 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
                         TextButton(
                           onPressed: () => setState(() {
                             search.clear();
-                            filter = 'All';
+                            filter = TaskListFilter.all;
                           }),
                           child: const Text('Clear filters'),
                         ),
@@ -284,7 +233,7 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
       widget.profile,
       (context, profile) => AdminTaskRoute(
         profile: profile,
-        preferences: widget.preferences,
+        acquireController: controller.acquireLease,
         title: 'Task details',
         taskId: task.id,
         builder: (controller, selectedTask) => AdminScheduledTaskDetailPage(
@@ -312,17 +261,7 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  !task.knownState
-                      ? 'Status unavailable'
-                      : task.state == 'completed'
-                      ? 'No further runs'
-                      : task.state == 'disabled'
-                      ? 'Schedule disabled'
-                      : task.paused
-                      ? 'Schedule paused'
-                      : task.running
-                      ? 'Working on it now'
-                      : taskTime(context, task.nextRun),
+                  task.listStatusText ?? taskTime(context, task.nextRun),
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w500,

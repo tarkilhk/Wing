@@ -5,7 +5,7 @@ Wing puts everyday profile settings, server checks and usage in three clear plac
 | Go to | Use it for |
 | --- | --- |
 | **Administration** | Models, identity, skills, provider access, MCP connectors and scheduled tasks for the selected profile. |
-| **Hermes health** | Server diagnostics and checks for the selected profile. |
+| **Hermes health** | Host resources, server diagnostics and checks for the selected profile. |
 | **Hermes analytics** | Activity, token usage and estimated costs. |
 
 Open these destinations from Wing's navigation drawer. The connection name and status open connection details; the server version opens Versions & updates. The rest of this guide records the exact controls and server boundaries for contributors.
@@ -54,6 +54,12 @@ stacks at narrow widths or enlarged text. Tool details combine
 separate enablement/setup/platform facts with the owning setup route. Skill library,
 Discover skills and Agent plugins remain distinct secondary destinations in the
 Browse and manage skills menu.
+Installed skill details reuse the same `SkillDocumentViewer` and received-document
+selection as Activity skill reads: formatted instructions, quiet declaration
+metadata, exact raw mode and exact-content copy. The administration session
+retains profile scope, refresh/recovery and eligible icon-only edit, archive or
+uninstall actions. Viewing does not issue edits. A content-only receipt does not
+invent a source path or file-sharing capability.
 Provider inventories use compact status/source/expiry rows and an explicit Add
 service key catalog. Account details offer renewal, sign-in, status checks and
 removal according to the observed credential source. Memory leads with retained entries and a
@@ -82,7 +88,8 @@ including after restarting the app. Detailed result pages retain their own times
 The health-result cache uses the v2 schema for these section records and count-based
 summaries; older cached Health snapshots are not restored. Other app data is unchanged.
 
-Health has two groups. Server owns Doctor, security audit and Logs. Its refresh icon
+Health has three groups in order: Host, Server, Profile. Host is described below.
+Server owns Doctor, security audit and Logs. Its refresh icon
 starts Doctor and security audit together, without opening their details or a
 confirmation dialog. It is disabled while either diagnostic is starting, running
 or has an uncertain completion. Each operation retains its own result; a failed
@@ -94,6 +101,11 @@ label. Diagnostic confirmations and results identify the server. Profile uses
 selection from the shared header,
 a refresh icon beside its heading, four stable rows (Model access, Tool setup, Connectors,
 Scheduled tasks). There is no global health verdict. Server diagnostics run on first entry and retain their separate progress and results.
+
+In diagnostic details, an unfinished or uncertain run shows its status-read time
+as “Last updated”; “Checked” appears only after confirmed completion. Doctor’s
+complete findings report is a completed check requiring attention; its stock
+exit code 1 does not by itself mean the diagnostic failed.
 
 Health owns its profile observations, so opening Administration first is unnecessary.
 Opening Health or selecting a profile reuses that profile’s saved results for 24 hours.
@@ -159,6 +171,11 @@ Profile snapshots contain health metadata rather than connector commands,
 environment values or provider secrets. Completed diagnostic details use their
 saved output without issuing another status request. An unfinished restored run
 resumes status reads for its saved action identity without launching a new process.
+If a valid server status no longer identifies that run, its unfinished outcome
+becomes unavailable and the Server spinner stops. The saved output remains
+reviewable; use the diagnostic's play action or Run all diagnostics to start fresh.
+Health does not automatically restart a lost unfinished run. Connection failures
+keep tracking the same run and do not enable a duplicate start.
 
 On Health entry, each completed server diagnostic at least 24 hours old runs
 again automatically; diagnostics with no prior attempt trigger their initial run.
@@ -233,6 +250,79 @@ The header dropdown offers profiles only; chart toggle icons precede their title
 and partial coverage is stated.
 Logs keeps server source, severity, submitted text search, a 100-line limit and
 explicit empty/error states.
+
+## Host resources
+
+Open Hermes health to see Host, then Server, then Profile. Host displays the
+connected machine's identity, compact CPU/memory/disk meters, boot uptime and
+load averages. CPU count and Python version appear only in machine details.
+Tap the machine row for available memory, free disk space and API-process
+details. The Host refresh icon reads resources only; it has one
+spinner, with no extra loading bar. The Server icon still runs diagnostics.
+
+Verified on 7 October 2026 against stock upstream
+[`05eecbcd972c8737ebc7722ea08aab47fb538043`](https://github.com/NousResearch/hermes-agent/commit/05eecbcd972c8737ebc7722ea08aab47fb538043):
+`hermes_cli/web_routers/status.py`, `gateway/memory_status.py` and
+`gateway/disk_status.py`. `GET /api/system/stats` supplies host identity and
+optional CPU usage, memory/disk bytes and percentages, load, boot uptime and
+API-process data. Disk describes the Hermes data volume; process memory is not
+the sum of all agents or gateways. A missing or malformed optional probe stays
+unavailable. `GET /api/status` independently supplies advisory pressure, which
+does not establish service availability. Memory pressure has its own heartbeat
+sample time and becomes unknown after 150 seconds; disk pressure is sampled live.
+No backend changes or older-server endpoint alternatives are required.
+
+`ProfileWorkspaceController.hostResources()` returns one connection-owned
+`HostResourcesSession`, shared by Health and other consumers. Its immutable
+`HostResourcesState` exposes separate `HostReading<HostSystemStats>` and
+`HostReading<HostPressureStatus>` values, receipt times and read errors. Failed
+refreshes retain the prior value and time, while `isCurrent` rejects error,
+stale and future-dated readings. The two endpoints complete independently;
+pressure failure does not suppress newly read usage metrics. Concurrent refreshes
+coalesce into one pair of reads. No resource data is persisted into the existing
+24-hour diagnostic cache.
+
+`watch(interval: ..., active: ...)` expresses each consumer's demand. Health
+uses 15 seconds and pauses its watch off-screen and outside the foreground.
+All active watches share the shortest requested cadence; closing or pausing one
+does not stop another. With no active watches there is no poll. Refresh on
+activation reuses any already pending read. Owners and in-flight reads retain
+the captured connection adapter; retirement prevents late publication and new
+dispatch. Consumers close their watches and remove their listeners. The workspace
+retires the host owner before its shared administration adapter.
+
+Future alerts reuse this observation through pure `HostThresholdPolicy`, without
+UI imports, extra endpoint reads or embedded notification behavior. Callers choose
+thresholds and the maximum age (30 seconds by default), then evaluate the stats
+reading with an explicit clock. For example:
+
+```dart
+final policy = HostThresholdPolicy([
+  HostThreshold(HostMetric.cpuPercent, 80),
+  HostThreshold(HostMetric.memoryUsedPercent, 85),
+  HostThreshold(HostMetric.diskUsedPercent, 90),
+  HostThreshold(HostMetric.loadOneMinutePerCpu, 1),
+]);
+final results = policy.evaluate(resources.state.stats, now: DateTime.now());
+```
+
+These example limits are not app defaults. Percent metrics use 0–100; load
+uses the selected 1/5/15-minute average divided by logical CPU count, where 1
+means one runnable unit per CPU. Each result is above, within or unknown.
+Only a value strictly above the limit is above; equality stays within. Missing
+CPU count makes normalized load unknown. Missing, expired, failed or future
+readings cannot clear an alert as healthy. Alert delivery, persistence and
+incident deduplication remain the consuming workflow's responsibility; this
+feature does not enable background notifications or save alert settings.
+
+`test/host_resources_session_test.dart` covers shared demand, independent endpoint
+outcomes, immutability, captured identity and retirement. `test/host_thresholds_test.dart`
+covers units, limits, freshness and unknown coverage. `test/host_health_view_test.dart`
+checks the compact view, independent resource refresh, a single loading indicator,
+visibility/background behavior, details and phone layouts in both themes at
+normal and 200% text. Render with `CAPTURE_HOST_HEALTH=true` and `CAPTURE_FONT_DIR`
+pointing to the Flutter SDK's `bin/cache/artifacts/material_fonts`; captures live
+in ignored `build/host-health/`.
 
 ## Current controls
 
@@ -390,7 +480,7 @@ Refresh failure retains the previous observation with its last-checked time. Mal
 
 Track background actions by returned name and PID. A same-name replacement is not the original action's success. Authenticated DELETE retries must preserve the request body and report the backend's real outcome.
 
-Usage supports **1D, 7D, 30D, 90D and 365D** using profile-scoped model and daily analytics reads plus a separately cached year-wide daily read. A single scrollable band of week columns browses a year ending at the latest returned server date. Previously loaded periods are cached while the page remains open, and Refresh reloads year and period data. Day/grouping/measure selection makes no network requests. Daily model history and daily API-equivalent costs are explicitly unavailable; the daily token-type chart is supported. Stock Hermes filters a rolling N × 24 hours, then groups session starts by server-local calendar date with per-row DST handling. It supplies no timezone or calendar cutoff dates. Wing preserves all returned date keys, including adjacent-year dates; trend counts span those keys and gaps between them have zero returned usage. Calendar padding outside the year response's recorded date span is unknown, with no invented zero counts. A separately loaded period can extend the grid without replacing year counts with period counts. The outline identifies exact dates returned for the selected period, not its calendar boundaries. First and last dates may be partial; daily records exclude auxiliary usage included in model totals. This contract was checked against stock upstream `8d30c4eaabd85edb77a02fef6c5388d9344ef80c` on 30 September 2026.
+Usage supports **1D, 7D, 30D, 90D and 365D** using profile-scoped model and daily analytics reads plus a separately cached year-wide daily read. A single scrollable band of week columns browses a year ending at the latest returned server date. Previously loaded periods are cached while the page remains open, and Refresh reloads year and period data. Day/grouping/measure selection makes no network requests. Daily model history and daily API-equivalent costs are explicitly unavailable; the daily token-type chart is supported. Stock Hermes filters a rolling N × 24 hours, then groups session starts by server-local calendar date with per-row DST handling. It supplies no timezone or calendar cutoff dates. Wing preserves all returned date keys, including adjacent-year dates; trend counts span those keys and gaps between them have zero returned usage. Calendar padding outside the year response's recorded date span is unknown, with no invented zero counts. A separately loaded period can extend the grid without replacing year counts with period counts. The outline surrounds the continuous span from the first through the last date returned for the selected period, including zero-usage days and gaps between returned dates. It does not infer calendar boundaries beyond that span. First and last dates may be partial; daily records exclude auxiliary usage included in model totals. This contract was checked against stock upstream `8d30c4eaabd85edb77a02fef6c5388d9344ef80c` on 30 September 2026.
 
 For `openai-codex` only, Wing multiplies the already-uncached input, cached input and output counters by published standard OpenAI API rates. Output includes reasoning; it is not charged again. Other providers, including paid OpenAI API routes, retain Hermes's estimate. This rule uses provider identity, never a zero cost or model-name prefix.
 

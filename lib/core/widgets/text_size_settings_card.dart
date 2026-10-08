@@ -1,47 +1,25 @@
-import 'studio_selection_tile.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../services/text_size_preference.dart';
+import '../models/app_preferences.dart';
+import '../services/app_preferences.dart';
+import '../theme/app_preferences_rendering.dart';
+import 'studio_selection_tile.dart';
 import 'studio_error.dart';
 
-/// App-wide text-size control. It stores only the selected display preference;
-/// connection, profile, and credential data never enter this namespace.
-class TextSizeSettingsCard extends StatefulWidget {
-  const TextSizeSettingsCard({
-    required this.preferences,
-    required this.onChanged,
-    super.key,
-  });
+class TextSizeSettingsCard extends StatelessWidget {
+  const TextSizeSettingsCard({required this.preferences, super.key});
+  final AppPreferences preferences;
 
-  final SharedPreferences preferences;
-  final ValueChanged<TextSizePreference> onChanged;
-
-  @override
-  State<TextSizeSettingsCard> createState() => _TextSizeSettingsCardState();
-}
-
-class _TextSizeSettingsCardState extends State<TextSizeSettingsCard> {
-  late final TextSizePreferenceStore _store;
-  late TextSizePreference _preference;
-
-  @override
-  void initState() {
-    super.initState();
-    _store = TextSizePreferenceStore(widget.preferences);
-    _preference = _store.read();
-  }
-
-  Future<void> _showPicker() {
-    var saving = false;
-    String? error;
-    return showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, updateSheet) => PopScope(
-          canPop: !saving,
+  Future<void> _showPicker(BuildContext context) => showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => ValueListenableBuilder<AppPreferencesState>(
+      valueListenable: preferences.state,
+      builder: (context, state, _) {
+        final control = state.textSize;
+        return PopScope(
+          canPop: !control.busy,
           child: SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -51,57 +29,36 @@ class _TextSizeSettingsCardState extends State<TextSizeSettingsCard> {
                 children: [
                   Text(
                     'Text size',
-                    style: Theme.of(sheetContext).textTheme.titleLarge,
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 8),
                   const Text('Follows your Android text size.'),
                   const SizedBox(height: 16),
                   Semantics(
                     label: 'Text size preview',
-                    child: const ExcludeSemantics(
+                    child: ExcludeSemantics(
                       child: Text('A little easier to read.'),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  RadioGroup<TextSizePreference>(
-                    groupValue: _preference,
+                  RadioGroup<AppTextSizePreference>(
+                    groupValue: control.selected,
                     onChanged: (value) async {
-                      if (saving || value == null) return;
-                      if (value == _preference) {
+                      final choose = control.choose;
+                      if (value == null || choose == null) return;
+                      final saved = await choose(value);
+                      if (saved && sheetContext.mounted) {
                         Navigator.of(sheetContext).pop();
-                        return;
-                      }
-                      updateSheet(() {
-                        saving = true;
-                        error = null;
-                      });
-                      try {
-                        await _store.save(value);
-                        if (!mounted) return;
-                        setState(() => _preference = value);
-                        widget.onChanged(value);
-                        if (sheetContext.mounted) {
-                          updateSheet(() => saving = false);
-                          Navigator.of(sheetContext).pop();
-                        }
-                      } catch (_) {
-                        if (sheetContext.mounted) {
-                          updateSheet(() {
-                            saving = false;
-                            error =
-                                'Could not save the text size. Please retry.';
-                          });
-                        }
                       }
                     },
                     child: Column(
                       children: [
-                        for (final preference in TextSizePreference.values)
-                          StudioRadioTile<TextSizePreference>(
+                        for (final preference in AppTextSizePreference.values)
+                          StudioRadioTile<AppTextSizePreference>(
                             contentPadding: EdgeInsets.zero,
                             minTileHeight: 48,
                             minVerticalPadding: 8,
-                            enabled: !saving,
+                            enabled: control.choose != null,
                             value: preference,
                             title: Text(preference.label),
                             subtitle: Text(preference.description),
@@ -109,32 +66,39 @@ class _TextSizeSettingsCardState extends State<TextSizeSettingsCard> {
                       ],
                     ),
                   ),
-                  if (saving) const LinearProgressIndicator(),
-                  if (error != null) StudioError(error!),
+                  if (control.notice != null) StudioError(control.notice!),
+                  if (control.error != null) StudioError(control.error!),
+                  if (control.busy) const LinearProgressIndicator(),
                 ],
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
+        );
+      },
+    ),
+  );
 
   @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Text size: ${_preference.label}',
+  Widget build(
+    BuildContext context,
+  ) => ValueListenableBuilder<AppPreferencesState>(
+    valueListenable: preferences.state,
+    builder: (context, state, _) => Semantics(
+      label: 'Text size: ${state.textSize.selected?.label ?? 'Choose a value'}',
       button: true,
-      onTap: _showPicker,
+      onTap: () => _showPicker(context),
       child: ExcludeSemantics(
         child: ListTile(
           leading: const Icon(Icons.format_size),
           title: const Text('Text size'),
-          subtitle: Text(_preference.label),
+          subtitle: Text(
+            state.textSize.selected?.label ??
+                'Choose a value to repair the saved setting',
+          ),
           trailing: const Icon(Icons.chevron_right),
-          onTap: _showPicker,
+          onTap: () => _showPicker(context),
         ),
       ),
-    );
-  }
+    ),
+  );
 }

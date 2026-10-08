@@ -283,16 +283,21 @@ void main() {
         text: 'Queued before mutation',
         attachments: [attachment],
       );
+      final queuedRecords = [queued];
       final captured = store.write(
         profileName: 'work',
         sessionId: 'target',
         text: 'Captured',
         attachments: [attachment],
-        queuedPrompts: [queued],
+        queuedPrompts: queuedRecords,
       );
       attachment.status = AttachmentDraftStatus.uploading;
       attachment.refText = '@later';
-      queued.submissionUncertain = true;
+      queuedRecords[0] = QueuedPromptDraft(
+        text: queued.text,
+        attachments: queued.attachments,
+        submissionUncertain: true,
+      );
       delay.complete();
       await Future.wait([older, captured]);
       final record =

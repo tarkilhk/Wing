@@ -9,15 +9,27 @@
   <img src="screenshots/conversation-dark.png" alt="Wing conversation with streamed reply and tool activity" width="285">
 </p>
 
-- **Find the right chat.** Search, pin and group conversations; filter by profile, project or status. Recents shows chats with messages from the last 24 hours alongside ongoing work, with All, Running and Needs input filters.
+- **Find the right chat.** Search, pin and group conversations; filter by profile, project or status. The Project filter lists projects and unassigned-chat groups belonging to the selected profiles; clear the Profile filter to see all profiles' projects. Recents shows chats with messages from the last 24 hours alongside ongoing work, with All, Running and Needs input filters.
 - **Keep browsing after changes.** Chat and project actions apply when Hermes confirms them. The list then refreshes in the background, keeping search, token counts and reading position available. Progress and Retry stay above the scrolling list; retrying a refresh does not repeat the action.
 - **Read the whole story.** Follow streamed replies, code, tables, tool activity and available reasoning. Find a message in a chat, open a result, or return to the latest reply.
-- **Stay oriented.** See the selected model, context usage and current work. Switch models with a clear confirmation when Hermes warns about the change.
+- **Understand each action.** Open Activity → Timeline for readable call titles,
+  targets, exception notices and available timings, with native reasoning between calls. Expand a call for its request
+  and reported result: code/output, file content, Find/Replace and returned diffs,
+  images/questions, search matches or readable tool data. Icon actions copy exact
+  text, preview or share files/images, expand long previews, open a full view and wrap code; explanation text
+  supports Markdown. Raw details retains selectable, copyable inputs and output.
+  Skill-update batches show each operation's action, affected file when supplied
+  and reported success.
+  Live elapsed counters start only from a backend tool start; saved timing appears
+  only when available. See [tool activity](TOOL_ACTIVITY.md).
+- **Stay oriented.** See the selected model, context percentage inside its ring and current work. While Hermes compresses the conversation, the status above the composer shows “Summarizing conversation…” until work resumes or compression finishes. Tap the ring for a compact breakdown of used/max tokens, estimated context categories and available compression count. Switch models with a clear confirmation when Hermes warns about the change.
 
 ## Keep work moving
 
-- **Choose what happens next.** Send a new message, steer active work, queue a follow-up or stop it. Edit a queued item before it sends. Drafts and staged files survive navigation and restart.
+- **Choose your model.** Browse a compact provider-filtered list and open model cards for supplied prices and account usage. The small brain control selects reasoning; lightning toggles fast mode where available. In the composer, tap the short model name to open the picker, tap lightning to toggle fast, or hold thinking, slide to a level and release to apply; slide away to cancel. Picker changes wait for Apply.
+- **Choose what happens next.** Send a new message, steer active work, queue a follow-up or stop it. An empty composer shows Stop while work is running; start typing to restore the send arrow and your usual held-action order. Hold, slide and release to choose another action. Edit a queued item before it sends. Drafts and staged files survive navigation and restart.
 - **Explore another direction.** Edit a saved message, regenerate an answer or branch into a separate conversation. Your Hermes server keeps the authoritative history.
+- **Follow delegated work.** In Activity → Tasks, read full task text with explicit status and subtask indentation. In Agents, see each goal, current activity and available timing; tap for live output, backend details and supported controls. Saved task and delegation results restore these tabs in past chats; historical agents expose output and delivered durations without live controls.
 - **Respond from your phone.** Review supported approvals and questions, inspect subagents and goals, and use local notifications for replies and requests while Wing is running.
 
 ## Use what is already on your phone

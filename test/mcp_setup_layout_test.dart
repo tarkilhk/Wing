@@ -7,8 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_connectors_page.dart';
 import 'package:wing/core/screens/administration/admin_mcp_setup_page.dart';
 import 'package:wing/core/services/mcp_oauth.dart';
-import 'package:wing/core/widgets/studio_select.dart';
 import 'package:wing/core/services/mcp_setup.dart';
+import 'package:wing/core/widgets/studio_select.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'support/administration_fixture.dart';
 
@@ -80,16 +80,17 @@ void main() {
                 ),
                 home: page != 'callback'
                     ? AdminMcpSetupPage(
-                        profile: fixture.server.profile('personal'),
+                        createSession: () =>
+                            McpSetupSession(fixture.server.profile('personal')),
                       )
                     : AdminMcpSignIn(
-                        profile: fixture.server.profile('personal'),
-                        name: 'aspire',
-                        openBrowser: (_) async => true,
-                        bindLoopback: (target, _) async => McpLoopback(
-                          redirectUri: target,
-                          close: () async {},
+                        createFlow: () => McpOAuth(
+                          profile: fixture.server.profile('personal'),
+                          name: 'aspire',
+                          bindLoopback: (target, _) async =>
+                              McpLoopback(close: () async {}),
                         ),
+                        openBrowser: (_) async => true,
                       ),
               ),
             ),

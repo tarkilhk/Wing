@@ -135,6 +135,7 @@ class ProfileBrowserFixture {
     ),
     get: (path, query) async {
       reads.add((path, query));
+      if (path == 'logs') return {'file': 'gui', 'lines': <String>[]};
       final offset = int.parse(query['offset'] ?? '0');
       final limit = int.parse(query['limit'] ?? '50');
       if (path.endsWith('/messages')) {
@@ -163,6 +164,9 @@ class ProfileBrowserFixture {
         if (failSearch) throw StateError('Search offline');
         return {'results': rows};
       }
+      if (path != 'sessions') {
+        throw StateError('Unhandled fixture GET: $path');
+      }
       final rows =
           sessions(scope.profileName)
               .where(
@@ -186,14 +190,12 @@ class ProfileBrowserFixture {
         throw StateError('Page offline');
       }
       if (failWork && scope.profileName == 'work') throw StateError('Offline');
-      return path == 'sessions'
-          ? {
-              'sessions': page,
-              'offset': offset,
-              'limit': limit,
-              'total': rows.length,
-            }
-          : {'messages': []};
+      return {
+        'sessions': page,
+        'offset': offset,
+        'limit': limit,
+        'total': rows.length,
+      };
     },
     rpc: (method, params) async {
       calls.add((scope.profileName, method, params));
@@ -255,11 +257,24 @@ class ProfileBrowserFixture {
       }
       if (method == 'session.resume' || method == 'session.create') {
         return {
-          'session_id': 'runtime',
-          'stored_session_id': 'new-chat',
+          'session_id': method == 'session.create'
+              ? 'runtime'
+              : (liveSessions[scope.profileName] ?? [])
+                        .where(
+                          (row) => row['session_key'] == params['session_id'],
+                        )
+                        .firstOrNull?['id'] ??
+                    'runtime-${params['session_id']}',
+          'stored_session_id': method == 'session.create'
+              ? 'new-chat'
+              : params['session_id'],
           'messages': [],
           'info': {
             'profile_name': scope.profileName,
+            if (method == 'session.resume')
+              'source': sessions(scope.profileName)
+                  .where((row) => row['id'] == params['session_id'])
+                  .firstOrNull?['source'],
             if (method == 'session.create') 'cwd': params['cwd'] ?? '/default',
           },
         };

@@ -1,3 +1,7 @@
+import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/services/connection_setup_session.dart';
+import 'package:wing/core/models/dashboard_oauth_grant.dart';
+import 'package:wing/core/services/dashboard_oauth_session.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -38,6 +42,7 @@ class _Cloud extends HermesCloud {
   Completer<CloudDiscovery?>? discovery;
   Completer<DashboardOAuthSession?>? signInResult;
   int signIns = 0;
+  DashboardOAuthSession? lastOwner;
   @override
   Future<CloudDiscovery?> discover({
     String? organization,
@@ -46,15 +51,19 @@ class _Cloud extends HermesCloud {
   @override
   Future<DashboardOAuthSession?> signIn(CloudInstance instance) async {
     signIns++;
-    return signInResult == null
+    final owner = signInResult == null
         ? DashboardOAuthSession(
-            id: 'grant',
-            baseUrl: instance.dashboardUrl!,
-            accessToken: 'secret-access',
-            refreshToken: 'secret-refresh',
-            expiresAt: DateTime.now().add(const Duration(hours: 1)),
+            DashboardOAuthGrant(
+              id: 'grant',
+              baseUrl: instance.dashboardUrl!,
+              accessToken: 'secret-access',
+              refreshToken: 'secret-refresh',
+              expiresAt: DateTime.now().add(const Duration(hours: 1)),
+            ),
           )
-        : signInResult!.future;
+        : await signInResult!.future;
+    lastOwner = owner;
+    return owner;
   }
 
   @override
@@ -119,12 +128,21 @@ Future<void> _pump(
           child: child!,
         ),
         home: ConnectionSetupScreen(
-          cloud: cloud,
-          savedConnections: saved,
-          initialConnection: initial,
-          onSaveIcon: initial == null ? null : (_) async {},
-          createProbe: (_) => probe ?? ConnectionProbeFixture(),
-          onSave: onSave ?? (candidate) async => candidate,
+          createSession: () => ConnectionSetupSession(
+            cloud: cloud,
+            savedConnections: () => saved,
+            initialAccess: initial == null
+                ? null
+                : ConnectionAccess(
+                    connection: initial,
+                    dashboardOAuth: initial.dashboardGrant == null
+                        ? null
+                        : DashboardOAuthSession(initial.dashboardGrant!),
+                  ),
+            onSaveIcon: initial == null ? null : (_) async {},
+            createProbe: (_) => probe ?? ConnectionProbeFixture(),
+            onSave: onSave ?? (candidate) async => candidate,
+          ),
         ),
       ),
     ),
@@ -218,13 +236,65 @@ void main() {
           await _tap(tester, 'Save and open');
           expect(saved!.label, 'Research assistant');
           expect(saved!.cloudInstanceId, 'research');
-          expect(saved!.dashboardOAuth!.accessToken, 'secret-access');
+          expect(saved!.dashboardGrant!.accessToken, 'secret-access');
           expect(saved!.dashboardPassword, isNull);
           expect(tester.takeException(), isNull);
         },
       );
     }
   }
+
+  for (final dispose in [false, true]) {
+    testWidgets(
+      'provisional sign-in retires on ${dispose ? 'route disposal' : 'instance refresh'}',
+      (tester) async {
+        final cloud = _Cloud();
+        await _pump(tester, cloud);
+        await _tap(tester, 'Hermes Cloud');
+        await _tap(tester, 'Continue');
+        await _tap(tester, 'Research assistant');
+        await _tap(tester, 'Continue');
+        final owner = cloud.lastOwner!;
+        expect(owner.isActive, isTrue);
+        if (dispose) {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpAndSettle();
+        } else {
+          await tester.tap(find.byType(BackButton));
+          await tester.pumpAndSettle();
+          await _tap(tester, 'Refresh');
+        }
+        expect(owner.isActive, isFalse);
+      },
+    );
+  }
+
+  testWidgets('late provisional sign-in after route disposal is retired', (
+    tester,
+  ) async {
+    final cloud = _Cloud()..signInResult = Completer<DashboardOAuthSession?>();
+    await _pump(tester, cloud);
+    await _tap(tester, 'Hermes Cloud');
+    await _tap(tester, 'Continue');
+    await _tap(tester, 'Research assistant');
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+    expect(cloud.signIns, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    final owner = DashboardOAuthSession(
+      DashboardOAuthGrant(
+        id: 'late-grant',
+        baseUrl: _instance.dashboardUrl!,
+        accessToken: 'test-access',
+        refreshToken: 'test-refresh',
+        expiresAt: DateTime.now().add(const Duration(hours: 1)),
+      ),
+    );
+    cloud.signInResult!.complete(owner);
+    await tester.pumpAndSettle();
+    expect(owner.isActive, isFalse);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'cancelled discovery cannot replace the route with late results',

@@ -1,11 +1,14 @@
 # Release checklist
 
-Complete this for a fixed release candidate. Record passed, failed or not applicable with a reason in the release notes or pull request. Use the [release guide](ANDROID_RELEASE_PLAN.md) for identity/signing and [Testing](TESTING.md) for live-server prerequisites.
+Complete this for a fixed candidate intended for publication. Record passed, failed or not applicable with a reason in the release notes or pull request. Use the [release guide](ANDROID_RELEASE_PLAN.md) for identity/signing and [Testing](TESTING.md) for live-server prerequisites.
+Local builds and phone installs follow
+[verification scope and stopping](TESTING.md#verification-scope-and-stopping);
+they do not require repeating this publication checklist.
 
 ## Automated checks
 
 - [ ] `flutter analyze --fatal-infos` passes.
-- [ ] `flutter test` passes; opt-in skips and their coverage limits are recorded.
+- [ ] `python3 scripts/test.py --full` passes; opt-in skips and their coverage limits are recorded.
 - [ ] `flutter pub outdated` has been reviewed and update decisions recorded.
 - [ ] The intended signed release artifact builds and passes package, version, certificate and non-debuggable checks.
 

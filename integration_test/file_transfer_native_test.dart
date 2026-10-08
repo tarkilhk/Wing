@@ -6,9 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/config_backup_io.dart';
-import 'package:wing/core/services/connection_manager.dart';
 
 /// Run with scripts/test_native_file_transfer.py on a disposable emulator.
 /// The host selects fixture files and dismisses native dialogs at the markers.
@@ -18,11 +16,24 @@ void main() {
   const contents = '{"probe":"Wing native file transfer — ✓"}';
   late ConfigBackupIo backupIo;
 
-  Future<Set<String>> fixtureCacheFiles() async {
+  Future<({Set<String> files, Set<String> stages})>
+  fixtureCacheInventory() async {
     final cache = await getTemporaryDirectory();
     final files = <String>{};
-    for (final file in cache.listSync().whereType<File>()) {
-      if (file.uri.pathSegments.last.startsWith('wing-config-')) {
+    final stages = <String>{};
+    for (final stage
+        in cache.listSync(followLinks: false).whereType<Directory>()) {
+      if (!stage.uri.pathSegments
+          .where((segment) => segment.isNotEmpty)
+          .last
+          .startsWith('wing-backup-')) {
+        continue;
+      }
+      stages.add(stage.path);
+      for (final file
+          in stage
+              .listSync(recursive: true, followLinks: false)
+              .whereType<File>()) {
         files.add(file.path);
       }
     }
@@ -44,26 +55,40 @@ void main() {
         }
       }
     }
-    return files;
+    return (files: files, stages: stages);
   }
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
-    backupIo = ConfigBackupIo(
-      connectionManager: ConnectionManager(
-        await SharedPreferences.getInstance(),
-      ),
-    );
-    final previousFiles = await fixtureCacheFiles();
+    backupIo = ConfigBackupIo();
+    final previous = await fixtureCacheInventory();
     addTearDown(() async {
-      final ownedFiles = (await fixtureCacheFiles()).difference(previousFiles);
-      for (final path in ownedFiles) {
+      final current = await fixtureCacheInventory();
+      for (final path in current.files.difference(previous.files)) {
         await File(path).delete();
       }
+      for (final path in current.stages.difference(previous.stages)) {
+        await Directory(path).delete(recursive: true);
+      }
+      final remaining = await fixtureCacheInventory();
       expect(
-        (await fixtureCacheFiles()).difference(previousFiles),
+        remaining.files.difference(previous.files),
         isEmpty,
         reason: 'Owned export and picker copies must be removed.',
+      );
+      expect(
+        remaining.stages.difference(previous.stages),
+        isEmpty,
+        reason: 'Owned export stages must be removed.',
+      );
+      expect(
+        remaining.files.containsAll(current.files.intersection(previous.files)),
+        isTrue,
+      );
+      expect(
+        remaining.stages.containsAll(
+          current.stages.intersection(previous.stages),
+        ),
+        isTrue,
       );
     });
   });
@@ -121,21 +146,25 @@ void main() {
   testWidgets('backup export opens Android sharing and handles dismissal', (
     _,
   ) async {
-    final directory = await getTemporaryDirectory();
-    final previousExports = directory
-        .listSync()
-        .whereType<File>()
-        .map((file) => file.path)
-        .toSet();
+    final previous = await fixtureCacheInventory();
     debugPrint('FILE_TRANSFER:share-cancel');
-    expect(await backupIo.deliverExport(contents), isNull);
-    final exports = directory
-        .listSync()
-        .whereType<File>()
+    expect(
+      await backupIo.deliverExport(contents, canDispatch: () => true),
+      isNull,
+    );
+    final current = await fixtureCacheInventory();
+    final ownedStages = current.stages.difference(previous.stages);
+    expect(ownedStages, hasLength(1));
+    final exports = ownedStages
+        .expand(
+          (path) => Directory(
+            path,
+          ).listSync(recursive: true, followLinks: false).whereType<File>(),
+        )
         .where(
           (file) =>
               file.uri.pathSegments.last.startsWith('wing-config-') &&
-              !previousExports.contains(file.path),
+              !previous.files.contains(file.path),
         )
         .toList();
     expect(exports, hasLength(1));

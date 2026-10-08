@@ -1,3 +1,7 @@
+import 'package:wing/core/widgets/deleted_chat_recovery_notice.dart';
+import 'package:wing/core/services/chat_browser_data.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,16 +36,23 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final fixture = _HomeFixture();
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: SavedConnection(
-          id: 'host',
-          label: 'Test',
-          host: 'localhost',
-          port: 1,
-          apiKey: '',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'host',
+            label: 'Test',
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
         ),
         connectionIdentity: 'home-navigation',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: fixture.gateway,
       );
       addTearDown(controller.dispose);
@@ -51,8 +62,15 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ProfileWorkspaceBrowser(
-            controller: controller,
-            newProject: () async {},
+            createData: () => ChatBrowserData(controller),
+            connectionLabel: controller.connection.label,
+            connectionIcon: controller.connection.icon,
+            connectionStatus: controller.connectionStatus,
+            createColors: controller.createProfileColors,
+            deletionRecovery: DeletedChatRecoveryNotice(
+              presentation: controller.deletedDraftCleanupPresentation,
+            ),
+            newProject: (_) async {},
           ),
         ),
       );
@@ -83,16 +101,23 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final fixture = _HomeFixture();
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: SavedConnection(
-          id: 'host',
-          label: 'Test',
-          host: 'localhost',
-          port: 1,
-          apiKey: '',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'host',
+            label: 'Test',
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
         ),
         connectionIdentity: 'home-navigation',
-        preferences: await SharedPreferences.getInstance(),
+        preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: fixture.gateway,
       );
       addTearDown(controller.dispose);
@@ -102,8 +127,15 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ProfileWorkspaceBrowser(
-            controller: controller,
-            newProject: () async {},
+            createData: () => ChatBrowserData(controller),
+            connectionLabel: controller.connection.label,
+            connectionIcon: controller.connection.icon,
+            connectionStatus: controller.connectionStatus,
+            createColors: controller.createProfileColors,
+            deletionRecovery: DeletedChatRecoveryNotice(
+              presentation: controller.deletedDraftCleanupPresentation,
+            ),
+            newProject: (_) async {},
           ),
         ),
       );

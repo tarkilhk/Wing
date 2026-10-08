@@ -2,18 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../models/connection.dart';
+import '../services/connection_access.dart';
 import '../services/versions_controller.dart';
 import '../widgets/backend_version_card.dart';
 
 class VersionsUpdatesScreen extends StatefulWidget {
-  const VersionsUpdatesScreen({
-    super.key,
-    this.connection,
-    this.controllerFactory,
-  });
+  const VersionsUpdatesScreen({super.key, this.access, this.controllerFactory});
 
-  final SavedConnection? connection;
+  final ConnectionAccess? access;
   final VersionsControllerFactory? controllerFactory;
 
   @override
@@ -23,7 +19,7 @@ class VersionsUpdatesScreen extends StatefulWidget {
 class _VersionsUpdatesScreenState extends State<VersionsUpdatesScreen> {
   late final _versions =
       (widget.controllerFactory ?? VersionsController.forConnection)(
-        widget.connection,
+        widget.access,
       );
 
   @override
@@ -59,13 +55,12 @@ class _VersionsUpdatesScreenState extends State<VersionsUpdatesScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
                   child: Text(
-                    widget.connection?.label ?? 'Hermes server',
+                    widget.access?.connection.label ?? 'Hermes server',
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                 ),
                 BackendVersionCard(
-                  gateway: server.gateway,
-                  connectionLabel: widget.connection?.label,
+                  connectionLabel: widget.access?.connection.label,
                   updateController: server,
                 ),
               ] else

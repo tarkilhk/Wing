@@ -1,3 +1,10 @@
+import 'package:wing/core/widgets/deleted_chat_recovery_notice.dart';
+import 'package:wing/core/models/chat_runtime.dart';
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/models/chat_list_status.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
@@ -90,9 +97,10 @@ class _ChatListReviewBinding extends AutomatedTestWidgetsFlutterBinding {
 
 class _CountingController extends ProfileWorkspaceController {
   _CountingController({
-    required super.connection,
+    required super.access,
     required super.connectionIdentity,
     required super.preferences,
+    required super.appPreferences,
     required super.gatewayFactory,
     super.onAttention,
   });
@@ -135,6 +143,7 @@ void main() {
   if (const bool.fromEnvironment('CHAT_LIST_REVIEW')) _ChatListReviewBinding();
   late TargetFixture fixture;
   late _CountingController controller;
+  late AppPreferences appPreferences;
   const capture = bool.fromEnvironment('CHAT_LIST_REVIEW');
   setUpAll(() async {
     if (!capture) return;
@@ -153,23 +162,32 @@ void main() {
   });
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
     fixture = TargetFixture();
     controller = _CountingController(
-      connection: SavedConnection(
-        id: 'host',
-        label: 'Demo server',
-        host: 'localhost',
-        port: 1,
-        apiKey: '',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Demo server',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
       ),
       connectionIdentity: 'target',
-      preferences: await SharedPreferences.getInstance(),
+      preferences: preferences,
+      appPreferences: appPreferences,
       gatewayFactory: fixture.gateway,
       onAttention: (_) async {},
     );
     await controller.initialize();
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+  });
   Future<void> show(
     WidgetTester tester, {
     Brightness brightness = Brightness.dark,
@@ -196,9 +214,16 @@ void main() {
           home: workspace
               ? ProfileWorkspaceScreen(controller: controller)
               : ProfileWorkspaceBrowser(
-                  controller: controller,
+                  createData: () => ChatBrowserData(controller),
+                  connectionLabel: controller.connection.label,
+                  connectionIcon: controller.connection.icon,
+                  connectionStatus: controller.connectionStatus,
+                  createColors: controller.createProfileColors,
+                  deletionRecovery: DeletedChatRecoveryNotice(
+                    presentation: controller.deletedDraftCleanupPresentation,
+                  ),
                   drawer: const Drawer(),
-                  newProject: () async {},
+                  newProject: (_) async {},
                 ),
         ),
       ),
@@ -329,6 +354,73 @@ void main() {
     expect(bar().selectedProfiles, isEmpty);
   });
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'project picker follows profile filter ${brightness.name} $scale',
+        (tester) async {
+          await show(tester, brightness: brightness, scale: scale);
+          final owner = controller.current!.scope;
+          await tester.tap(find.byKey(const ValueKey('chat-profile-work')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('chat-filter-project')));
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('chat-menu-work/p0')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('chat-menu-work/home')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('chat-menu-personal/p0')),
+            findsNothing,
+          );
+          expect(
+            find.byKey(const ValueKey('chat-menu-personal/home')),
+            findsNothing,
+          );
+          await screenshot(
+            tester,
+            '${brightness.name}-$scale-projects-filtered',
+          );
+          await tester.tap(find.text('Done'));
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byKey(const ValueKey('chat-profile-personal')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('chat-filter-project')));
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('chat-menu-personal/p0')),
+            findsOneWidget,
+          );
+          expect(find.byKey(const ValueKey('chat-menu-work/p0')), findsNothing);
+          await tester.tap(find.text('Done'));
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byKey(const ValueKey('chat-profile-personal')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('chat-filter-project')));
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('chat-menu-personal/p0')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('chat-menu-work/p0')),
+            findsOneWidget,
+          );
+          await tester.tap(find.text('Done'));
+          await tester.pumpAndSettle();
+          expect(controller.current!.scope, owner);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   testWidgets(
     'filters are independent, multi-select and clear leaves search intact',
     (tester) async {
@@ -380,22 +472,11 @@ void main() {
         tester.getTopLeft(first).dy,
         lessThan(tester.getTopLeft(second).dy),
       );
-      final resource = controller.browserResource('personal');
       fixture.rowUpdates['personal/session-1'] = {
         'last_active': fixture.now + 100,
         'title': 'Live title update',
       };
-      resource.sessions = [
-        for (final row in resource.sessions)
-          if (row['id'] == 'session-1')
-            {
-              ...row,
-              'last_active': fixture.now + 100,
-              'title': 'Live title update',
-            }
-          else
-            row,
-      ];
+      await controller.switchProfile('personal');
       await controller.refreshActivity();
       await tester.pumpAndSettle();
       expect(find.text('Live title update'), findsOneWidget);
@@ -426,12 +507,15 @@ void main() {
     tester,
   ) async {
     final owner = controller.browserResource('personal');
-    final chat = ProfileChat(
-      key: ProfileSessionKey(owner.scope, 'session-1'),
-      runtimeId: 'answer-runtime',
-      title: 'Summarize a research paper',
-    );
-    owner.chats[chat.key.sessionId] = chat;
+    final chat = (await tester.runAsync(
+      () => openFixtureChat(
+        controller: controller,
+        key: ProfileSessionKey(owner.scope, 'session-1'),
+        title: 'Summarize a research paper',
+        select: false,
+      ),
+    ))!;
+
     await show(tester, workspace: true);
     await select(tester, 'profile', 'personal');
     final first = find.byKey(const ValueKey('chat-personal-session-0'));
@@ -440,7 +524,7 @@ void main() {
     owner.gateway.onEvent!(
       StreamEvent(
         type: 'message.start',
-        sessionId: chat.runtimeId,
+        sessionId: chat.runtime.runtimeId,
         data: const {},
       ),
     );
@@ -449,7 +533,7 @@ void main() {
       owner.gateway.onEvent!(
         StreamEvent(
           type: 'message.delta',
-          sessionId: chat.runtimeId,
+          sessionId: chat.runtime.runtimeId,
           data: {'text': 'answer $i'},
         ),
       );
@@ -465,17 +549,17 @@ void main() {
       () => owner.gateway.onEvent!(
         StreamEvent(
           type: 'message.complete',
-          sessionId: chat.runtimeId,
+          sessionId: chat.runtime.runtimeId,
           data: const {'text': 'Completed answer'},
         ),
       ),
     );
-    expect(chat.status, ProfileTurnStatus.completed);
+    expect(chat.runtime.execution, ChatExecution.completed);
     expect(
       owner.sessions.singleWhere((row) => row['id'] == 'session-1')['title'],
       'Completed answer',
     );
-    expect(chat.error, isNull);
+    expect(chat.runtime.error, isNull);
     expect(find.text('Completed answer'), findsOneWidget);
     expect(tester.getTopLeft(second), initial);
     expect(tester.getTopLeft(first).dy, lessThan(tester.getTopLeft(second).dy));
@@ -485,17 +569,20 @@ void main() {
       tester,
     ) async {
       final owner = controller.browserResource(profile);
-      final chat = ProfileChat(
-        key: ProfileSessionKey(owner.scope, 'session-1'),
-        runtimeId: 'streaming-runtime',
-        title: 'Background answer',
-      );
-      owner.chats[chat.key.sessionId] = chat;
+      final chat = (await tester.runAsync(
+        () => openFixtureChat(
+          controller: controller,
+          key: ProfileSessionKey(owner.scope, 'session-1'),
+          title: 'Background answer',
+          select: false,
+        ),
+      ))!;
+
       await show(tester, workspace: true);
       void event(String type) => owner.gateway.onEvent!(
         StreamEvent(
           type: type,
-          sessionId: chat.runtimeId,
+          sessionId: chat.runtime.runtimeId,
           data: const {'text': 'more answer'},
         ),
       );
@@ -534,12 +621,15 @@ void main() {
     tester,
   ) async {
     final owner = controller.browserResource('personal');
-    final chat = ProfileChat(
-      key: ProfileSessionKey(owner.scope, 'session-1'),
-      runtimeId: 'row-runtime',
-      title: 'Live row',
-    );
-    owner.chats[chat.key.sessionId] = chat;
+    final chat = (await tester.runAsync(
+      () => openFixtureChat(
+        controller: controller,
+        key: ProfileSessionKey(owner.scope, 'session-1'),
+        title: 'Live row',
+        select: false,
+      ),
+    ))!;
+
     await show(tester, workspace: true);
     await select(tester, 'profile', 'personal');
     final unaffected = find.byKey(const ValueKey('chat-personal-session-0'));
@@ -550,7 +640,7 @@ void main() {
     owner.gateway.onEvent!(
       StreamEvent(
         type: 'message.start',
-        sessionId: chat.runtimeId,
+        sessionId: chat.runtime.runtimeId,
         data: const {},
       ),
     );
@@ -572,7 +662,7 @@ void main() {
       () => owner.gateway.onEvent!(
         StreamEvent(
           type: 'message.complete',
-          sessionId: chat.runtimeId,
+          sessionId: chat.runtime.runtimeId,
           data: const {'text': 'Done'},
         ),
       ),
@@ -586,14 +676,18 @@ void main() {
     );
   });
   test(
-    'arrangement reads sort fields only at explicit ordering boundaries',
+    'admitted scalar sort facts detach from wire and reorder only at explicit boundaries',
     () {
       final owner = controller.browserResource('personal');
       final first = _SortReadCounter({'id': 'a', 'started_at': 100});
       final second = _SortReadCounter({'id': 'b', 'started_at': 90});
       final entries = [
         for (final row in [first, second])
-          ChatListEntry(owner: owner, row: row, status: ChatListStatus.idle),
+          ChatListEntry.fromWire(
+            scope: owner.scope,
+            row: row,
+            status: ChatListStatus.idle,
+          ),
       ];
       final arrangement = ChatListArrangement();
       List<String> arranged() => arrangement
@@ -606,11 +700,19 @@ void main() {
       expect(first.sortReads + second.sortReads, greaterThan(0));
       first.sortReads = second.sortReads = 0;
       second['started_at'] = 200;
+      expect(entries[1].startedAt, 90);
+      entries[1] = ChatListEntry.fromWire(
+        scope: owner.scope,
+        row: second,
+        status: ChatListStatus.idle,
+      );
+      expect(second.sortReads, greaterThan(0));
+      first.sortReads = second.sortReads = 0;
       expect(arranged(), ['a', 'b']);
       expect(first.sortReads + second.sortReads, 0);
       arrangement.reset();
       expect(arranged(), ['b', 'a']);
-      expect(first.sortReads + second.sortReads, greaterThan(0));
+      expect(first.sortReads + second.sortReads, 0);
     },
   );
   testWidgets('unopened chat activity updates without rebuilding the index', (
@@ -706,27 +808,57 @@ void main() {
     expect(find.text('9.0k'), findsOneWidget);
     final list = find.byKey(const ValueKey('chat-list-false'));
     final originalList = tester.widget(list);
-    final owner = controller.browserResource('personal');
-    owner.sessions = [
-      for (final row in owner.sessions)
-        {...row, if (row['id'] == 'session-1') 'input_tokens': 2000},
-    ];
-    controller.clearSearch();
+    fixture.rowUpdates['personal/session-1'] = {'input_tokens': 2000};
+    await controller.switchProfile('personal');
     await tester.pumpAndSettle();
     expect(find.text('10.0k'), findsOneWidget);
     expect(find.text('2.5k'), findsOneWidget);
     expect(tester.widget(list), same(originalList));
   });
+  testWidgets(
+    'unread membership follows a canonical refresh in the mounted list',
+    (tester) async {
+      await show(tester, workspace: true, reducedMotion: true);
+      await select(tester, 'profile', 'personal');
+      await select(tester, 'status', 'unread');
+      final browserState = tester.state(find.byType(ProfileWorkspaceBrowser));
+      final row = find.byKey(const ValueKey('chat-personal-session-0'));
+      expect(row, findsOneWidget);
+
+      fixture.rowUpdates['personal/session-0'] = {'unread': false};
+      await controller.switchProfile('personal');
+      await tester.pumpAndSettle();
+      expect(row, findsNothing);
+      expect(
+        tester.state(find.byType(ProfileWorkspaceBrowser)),
+        same(browserState),
+      );
+
+      fixture.rowUpdates['personal/session-0'] = {'unread': true};
+      await controller.switchProfile('personal');
+      await tester.pumpAndSettle();
+      expect(row, findsOneWidget);
+      expect(
+        tester.state(find.byType(ProfileWorkspaceBrowser)),
+        same(browserState),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('status filter membership follows live row changes', (
     tester,
   ) async {
     final owner = controller.browserResource('personal');
-    final chat = ProfileChat(
-      key: ProfileSessionKey(owner.scope, 'session-1'),
-      runtimeId: 'filter-runtime',
-      title: 'Filtered chat',
-    );
-    owner.chats[chat.key.sessionId] = chat;
+    final chat = (await tester.runAsync(
+      () => openFixtureChat(
+        controller: controller,
+        key: ProfileSessionKey(owner.scope, 'session-1'),
+        title: 'Filtered chat',
+        select: false,
+      ),
+    ))!;
+
     await show(tester, workspace: true, reducedMotion: true);
     await select(tester, 'status', 'working');
     final row = find.byKey(const ValueKey('chat-personal-session-1'));
@@ -734,7 +866,7 @@ void main() {
     owner.gateway.onEvent!(
       StreamEvent(
         type: 'message.start',
-        sessionId: chat.runtimeId,
+        sessionId: chat.runtime.runtimeId,
         data: const {},
       ),
     );
@@ -745,7 +877,7 @@ void main() {
       () => owner.gateway.onEvent!(
         StreamEvent(
           type: 'message.complete',
-          sessionId: chat.runtimeId,
+          sessionId: chat.runtime.runtimeId,
           data: const {'text': 'Done'},
         ),
       ),
@@ -768,12 +900,15 @@ void main() {
           },
         ];
         final owner = controller.browserResource('personal');
-        final chat = ProfileChat(
-          key: ProfileSessionKey(owner.scope, 'session-1'),
-          runtimeId: 'answer-runtime',
-          title: 'Pending answer',
-        );
-        owner.chats[chat.key.sessionId] = chat;
+        final chat = (await tester.runAsync(
+          () => openFixtureChat(
+            controller: controller,
+            key: ProfileSessionKey(owner.scope, 'session-1'),
+            title: 'Pending answer',
+            select: false,
+          ),
+        ))!;
+
         if (boundary == 'entry') {
           await show(tester, workspace: true, settle: false);
         } else {
@@ -805,14 +940,14 @@ void main() {
         owner.gateway.onEvent!(
           StreamEvent(
             type: 'message.start',
-            sessionId: chat.runtimeId,
+            sessionId: chat.runtime.runtimeId,
             data: const {},
           ),
         );
         owner.gateway.onEvent!(
           StreamEvent(
             type: 'message.complete',
-            sessionId: chat.runtimeId,
+            sessionId: chat.runtime.runtimeId,
             data: const {'text': 'Completed answer'},
           ),
         );
@@ -1159,7 +1294,7 @@ void main() {
     await data.refresh(archivedOnly: false);
     expect(data.entries.length, 24);
     expect(data.entries.map((e) => e.key).toSet().length, 24);
-    expect(data.entries.where((e) => e.project?['id'] == 'p0').length, 12);
+    expect(data.entries.where((e) => e.project?.id == 'p0').length, 12);
     final grouped = groupChats(
       data.entries,
       ChatGrouping.project,
@@ -1179,8 +1314,8 @@ void main() {
           int value, {
           String project = 'p0',
           bool pinned = false,
-        }) => ChatListEntry(
-          owner: owner,
+        }) => ChatListEntry.fromWire(
+          scope: owner.scope,
           row: {
             'id': id,
             'last_active': value,
@@ -1190,7 +1325,7 @@ void main() {
             'pinned': pinned,
           },
           status: value > 100 ? ChatListStatus.needsInput : ChatListStatus.idle,
-          project: {'id': project, 'name': project},
+          project: BrowserProject(id: project, name: project),
         );
         final arrangement = ChatListArrangement();
         List<ChatListGroup> arrange(List<ChatListEntry> entries) =>
@@ -1223,8 +1358,8 @@ void main() {
         final owner = controller.browserResource('personal');
         final now = DateTime.now();
         ChatListEntry entry({required bool active, bool pinned = false}) =>
-            ChatListEntry(
-              owner: owner,
+            ChatListEntry.fromWire(
+              scope: owner.scope,
               row: {
                 'id': 'a',
                 'last_active':

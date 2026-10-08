@@ -1,3 +1,5 @@
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:collection';
 import 'dart:convert';
 
@@ -8,7 +10,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 
 import 'profile_workspace_controller_test.dart' show Host;
 
-/// Tracks whole-row traversal while allowing fixed-field snapshot projection.
+/// Tracks caller-owned traversal at admission and accidental later reuse.
 class _CountingMessage extends MapBase<String, dynamic> {
   _CountingMessage(this._data);
 
@@ -61,23 +63,29 @@ void main() {
       final initialSnapshot = jsonEncode(seed);
       SharedPreferences.setMockInitialValues({storageKey: initialSnapshot});
       final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       final controller = ProfileWorkspaceController(
-        connection: SavedConnection(
-          id: 'probe',
-          label: 'Probe',
-          host: 'unused',
-          port: 1,
-          apiKey: '',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'probe',
+            label: 'Probe',
+            host: 'unused',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
         ),
         connectionIdentity: 'controller-work',
         preferences: preferences,
+        appPreferences: appPreferences,
         gatewayFactory: Host().gateway,
       );
       final oversized = 'discarded history ' * 2200;
       final allRows = <_CountingMessage>[];
       final originalHistories = <ProfileChat, List<Map<String, dynamic>>>{};
       for (final chat in controller.current!.chats.values) {
-        chat.messages = [
+        final incoming = [
           for (var m = 0; m < 80; m++)
             _CountingMessage({
               'id': m,
@@ -87,8 +95,12 @@ void main() {
               'metadata': {'private': 'excluded from reading snapshot'},
             }),
         ];
-        originalHistories[chat] = chat.messages;
-        allRows.addAll(chat.messages.cast<_CountingMessage>());
+        chat.reading.installSavedHistory(incoming);
+        originalHistories[chat] = chat.reading.messages;
+        allRows.addAll(incoming);
+        for (final row in incoming) {
+          row.keyEnumerations = 0;
+        }
       }
 
       controller.dispose();
@@ -97,8 +109,8 @@ void main() {
         allRows.every((row) => row.keyEnumerations == 0),
         isTrue,
         reason:
-            'Preparing a reading snapshot must only project fixed fields; '
-            'whole-row JSON encoding belongs to the background worker.',
+            'After immutable admission, snapshot preparation must not revisit '
+            'caller-owned rows. Fixed fields and payload bounds are checked below.',
       );
 
       // Wait for the mocked platform write, rather than assuming a worker finishes
@@ -131,7 +143,7 @@ void main() {
       }
       expect(retainedCount, 150);
       for (final entry in originalHistories.entries) {
-        expect(entry.key.messages, same(entry.value));
+        expect(entry.key.reading.messages, same(entry.value));
         expect(entry.value, hasLength(80));
         expect(entry.value[79]['content'], same(oversized));
         expect(entry.value[79]['metadata'], {

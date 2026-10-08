@@ -81,6 +81,8 @@ void main() {
     Size size = const Size(800, 900),
     double textScale = 1,
   }) async {
+    final controller = BackendUpdateController(host.gateway);
+    addTearDown(controller.dispose);
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -95,7 +97,7 @@ void main() {
         home: Scaffold(
           body: SingleChildScrollView(
             child: BackendVersionCard(
-              gateway: host.gateway,
+              updateController: controller,
               connectionLabel: 'Production host',
             ),
           ),
@@ -318,11 +320,15 @@ void main() {
     );
   });
 
-  testWidgets('confirmation cannot start a replacement gateway', (
+  testWidgets('confirmation cannot cross the retained connection owner', (
     tester,
   ) async {
     final first = _UpdateHost();
     final second = _UpdateHost();
+    final firstController = BackendUpdateController(first.gateway);
+    final secondController = BackendUpdateController(second.gateway);
+    addTearDown(firstController.dispose);
+    addTearDown(secondController.dispose);
     late StateSetter replace;
     var current = first;
     await tester.pumpWidget(
@@ -331,7 +337,9 @@ void main() {
           builder: (context, setState) {
             replace = setState;
             return BackendVersionCard(
-              gateway: current.gateway,
+              updateController: current == first
+                  ? firstController
+                  : secondController,
               connectionLabel: current == first ? 'First host' : 'Second host',
             );
           },
@@ -357,12 +365,7 @@ void main() {
     final external = BackendUpdateController(host.gateway);
     await external.checkForUpdate();
     await tester.pumpWidget(
-      MaterialApp(
-        home: BackendVersionCard(
-          gateway: host.gateway,
-          updateController: external,
-        ),
-      ),
+      MaterialApp(home: BackendVersionCard(updateController: external)),
     );
     expect(find.text('1.2.3'), findsOneWidget);
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
@@ -383,17 +386,13 @@ void main() {
     addTearDown(firstController.dispose);
     addTearDown(secondController.dispose);
     late StateSetter replace;
-    var currentHost = first;
     var currentController = firstController;
     await tester.pumpWidget(
       MaterialApp(
         home: StatefulBuilder(
           builder: (context, setState) {
             replace = setState;
-            return BackendVersionCard(
-              gateway: currentHost.gateway,
-              updateController: currentController,
-            );
+            return BackendVersionCard(updateController: currentController);
           },
         ),
       ),
@@ -402,7 +401,6 @@ void main() {
     await openConfirmation(tester);
 
     replace(() {
-      currentHost = second;
       currentController = secondController;
     });
     await tester.pump();
@@ -413,34 +411,45 @@ void main() {
     expect(second.posts, isEmpty);
   });
 
-  testWidgets('late check response cannot cross gateway ownership', (
-    tester,
-  ) async {
-    final pending = Completer<Map<String, dynamic>>();
-    final first = _UpdateHost()..pendingCheck = pending;
-    final second = _UpdateHost()
-      ..checkResponse = {..._available, 'current_version': '4.5.6'};
-    await tester.pumpWidget(
-      MaterialApp(home: BackendVersionCard(gateway: first.gateway)),
-    );
-    await tester.pump();
+  testWidgets(
+    'late check response cannot cross retained connection ownership',
+    (tester) async {
+      final pending = Completer<Map<String, dynamic>>();
+      final first = _UpdateHost()..pendingCheck = pending;
+      final second = _UpdateHost()
+        ..checkResponse = {..._available, 'current_version': '4.5.6'};
+      final firstController = BackendUpdateController(first.gateway);
+      final secondController = BackendUpdateController(second.gateway);
+      addTearDown(firstController.dispose);
+      addTearDown(secondController.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BackendVersionCard(updateController: firstController),
+        ),
+      );
+      await tester.pump();
 
-    await tester.pumpWidget(
-      MaterialApp(home: BackendVersionCard(gateway: second.gateway)),
-    );
-    pending.complete(_available);
-    await tester.pump();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BackendVersionCard(updateController: secondController),
+        ),
+      );
+      pending.complete(_available);
+      await tester.pump();
 
-    expect(find.text('1.2.3'), findsNothing);
-    await tester.pumpAndSettle();
-    expect(find.text('4.5.6'), findsOneWidget);
-  });
+      expect(find.text('1.2.3'), findsNothing);
+      await tester.pumpAndSettle();
+      expect(find.text('4.5.6'), findsOneWidget);
+    },
+  );
 
   testWidgets('disposed card ignores a late check response', (tester) async {
     final pending = Completer<Map<String, dynamic>>();
     final host = _UpdateHost()..pendingCheck = pending;
+    final controller = BackendUpdateController(host.gateway);
+    addTearDown(controller.dispose);
     await tester.pumpWidget(
-      MaterialApp(home: BackendVersionCard(gateway: host.gateway)),
+      MaterialApp(home: BackendVersionCard(updateController: controller)),
     );
     await tester.pump();
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));

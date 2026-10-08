@@ -1,3 +1,6 @@
+import 'package:wing/core/services/profile_capabilities_session.dart';
+import 'package:wing/core/screens/administration/provider_recovery_routes.dart';
+import 'package:wing/core/models/settings_edit.dart';
 import 'dart:ui' show SemanticsAction;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,7 +9,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:wing/core/screens/administration/admin_identity_page.dart';
 import 'package:wing/core/screens/administration/admin_runtime_health.dart';
 import 'package:wing/core/services/administration_health.dart';
-import 'package:wing/core/screens/administration/admin_providers_page.dart';
+import 'package:wing/core/services/profile_identity_edit_session.dart';
 import 'package:wing/core/screens/administration/admin_settings_page.dart';
 import 'package:wing/core/screens/administration/admin_widgets.dart';
 import 'package:wing/core/screens/profile_capabilities_screen.dart';
@@ -178,8 +181,9 @@ void main() {
             body: FilledButton(
               onPressed: () => showAdminIdentityEditor(
                 context,
-                gateway: fixture.identityGateway(),
-                connectionLabel: 'Home server',
+                createSession: () => ProfileIdentityEditSession(
+                  fixture.server.profile('personal'),
+                ),
               ),
               child: const Text('Edit identity'),
             ),
@@ -230,7 +234,7 @@ void main() {
             ),
             child: child!,
           ),
-          home: AdminProviderDetail(profile: profile, providerId: 'research'),
+          home: providerRecoveryPage(profile: profile, providerId: 'research'),
         ),
       );
       await tester.pumpAndSettle();
@@ -268,7 +272,7 @@ void main() {
             child: child!,
           ),
           home: ProfileCapabilitiesScreen(
-            gateway: profile.gateway,
+            createSession: () => ProfileCapabilitiesSession(profile.gateway),
             connectionLabel: 'Home server',
             onToolSetup: (_) async {
               setup = true;

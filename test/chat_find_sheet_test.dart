@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/chat_reading_session.dart';
 import 'package:wing/core/widgets/chat_find_sheet.dart';
 
 ProfileHistoryPage page(
@@ -14,14 +15,21 @@ void main() {
   testWidgets('returns the source page and row ID for a selected match', (
     tester,
   ) async {
-    ChatFindResult? selected;
+    ProfileHistoryPage? selectedPage;
+    int? selectedRow;
+    bool? selected;
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
           builder: (context) => TextButton(
             onPressed: () async {
-              selected = await showChatFindSheet(
+              selected = await _showFind(
                 context,
+                show: (page, rowId) {
+                  selectedPage = page;
+                  selectedRow = rowId;
+                  return true;
+                },
                 loadHistory: (offset) async => page([
                   {
                     'id': 42,
@@ -46,9 +54,10 @@ void main() {
     await tester.tap(find.text('View in chat'));
     await tester.pumpAndSettle();
 
-    expect(selected?.rowId, 42);
-    expect(selected?.page.offset, 500);
-    expect(selected?.page.rows.single['content'], 'Find this saved answer');
+    expect(selected, isTrue);
+    expect(selectedRow, 42);
+    expect(selectedPage?.offset, 500);
+    expect(selectedPage?.rows.single['content'], 'Find this saved answer');
   });
 
   testWidgets('loads the recent page once and filters message text locally', (
@@ -57,7 +66,7 @@ void main() {
     var calls = 0;
     await tester.pumpWidget(
       MaterialApp(
-        home: ChatFindSheet(
+        home: _findSheet(
           loadHistory: (offset) async {
             calls++;
             expect(offset, 0);
@@ -92,7 +101,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: ChatFindSheet(
+        home: _findSheet(
           loadHistory: (offset) async => offset == 0
               ? page([
                   {
@@ -153,9 +162,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: ChatFindSheet(
-          loadHistory: (_) async => throw StateError('offline'),
-        ),
+        home: _findSheet(loadHistory: (_) async => throw StateError('offline')),
       ),
     );
     await tester.pump();
@@ -172,7 +179,7 @@ void main() {
     final longText = List.filled(12, 'needle line').join('\n');
     await tester.pumpWidget(
       MaterialApp(
-        home: ChatFindSheet(
+        home: _findSheet(
           loadHistory: (_) async => page([
             ...List.generate(
               100,
@@ -210,7 +217,7 @@ void main() {
     final longText = List.filled(200, 'needle detail').join('\n');
     await tester.pumpWidget(
       MaterialApp(
-        home: ChatFindSheet(
+        home: _findSheet(
           loadHistory: (_) async => page([
             {'id': 1, 'role': 'assistant', 'content': longText},
           ]),
@@ -235,7 +242,7 @@ void main() {
       var olderAttempts = 0;
       await tester.pumpWidget(
         MaterialApp(
-          home: ChatFindSheet(
+          home: _findSheet(
             loadHistory: (offset) async {
               if (offset == 0) {
                 return page([
@@ -295,7 +302,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: ChatFindSheet(
+        home: _findSheet(
           loadHistory: (offset) async => offset == 0
               ? page([
                   for (var i = 0; i < 500; i++)
@@ -334,7 +341,7 @@ void main() {
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       await tester.pumpWidget(
         MaterialApp(
-          home: ChatFindSheet(
+          home: _findSheet(
             loadHistory: (_) async => throw StateError('offline'),
           ),
         ),
@@ -358,7 +365,7 @@ void main() {
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       await tester.pumpWidget(
         MaterialApp(
-          home: ChatFindSheet(
+          home: _findSheet(
             loadHistory: (offset) async {
               if (offset > 0) throw StateError('offline');
               return page([
@@ -396,4 +403,34 @@ void main() {
       expect(find.text('Close'), findsOneWidget);
     },
   );
+}
+
+Widget _findSheet({
+  required Future<ProfileHistoryPage> Function(int) loadHistory,
+}) => ChatFindSheet(
+  createSession: () => ChatReadingSession(
+    _FindSource(loadHistory: loadHistory, showPage: (_, _) => true),
+  ),
+);
+
+Future<bool?> _showFind(
+  BuildContext context, {
+  required Future<ProfileHistoryPage> Function(int) loadHistory,
+  required bool Function(ProfileHistoryPage, int) show,
+}) => showChatFindSheet(
+  context,
+  createSession: () =>
+      ChatReadingSession(_FindSource(loadHistory: loadHistory, showPage: show)),
+);
+
+final class _FindSource extends ChangeNotifier implements ChatReadingSource {
+  _FindSource({required this.loadHistory, required this.showPage});
+  final Future<ProfileHistoryPage> Function(int) loadHistory;
+  final bool Function(ProfileHistoryPage, int) showPage;
+  @override
+  bool get current => true;
+  @override
+  Future<ProfileHistoryPage> load(int offset) => loadHistory(offset);
+  @override
+  bool show(ProfileHistoryPage page, int rowId) => showPage(page, rowId);
 }

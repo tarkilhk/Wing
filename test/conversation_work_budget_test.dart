@@ -1,3 +1,7 @@
+import 'support/composer_fixture.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,10 +21,17 @@ void main() {
       (tester) async {
         SharedPreferences.setMockInitialValues({});
         final fixture = ProfileHistoryFixture()..messageCount = 20;
+        final preferences = await SharedPreferences.getInstance();
+        final appPreferences = AppPreferences(preferences);
+        addTearDown(appPreferences.dispose);
         final controller = ProfileWorkspaceController(
-          connection: identityTestConnection(),
+          access: ConnectionAccess(
+            connection: identityTestConnection(),
+            dashboardOAuth: null,
+          ),
           connectionIdentity: 'conversation-work-budget',
-          preferences: await SharedPreferences.getInstance(),
+          preferences: preferences,
+          appPreferences: appPreferences,
           gatewayFactory: fixture.gateway,
         );
         addTearDown(controller.dispose);
@@ -31,8 +42,15 @@ void main() {
         final chat = controller.current!.chat!;
         if (editingQueue) {
           final prompt = QueuedPromptDraft(text: 'Original queued message');
-          chat.queuedPrompts.add(prompt);
-          await controller.beginQueuedPromptEdit(chat, prompt);
+          await restoreComposerFixture(
+            chat: chat,
+            preferences: controller.preferences,
+            appendQueued: [prompt],
+          );
+          await controller.beginQueuedPromptEdit(
+            chat,
+            chat.composer.observation.queue.single.id,
+          );
         }
         await tester.pumpWidget(
           MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
@@ -62,14 +80,17 @@ void main() {
           'Typing 30 edits: $messageBuilds message builds; '
           '${watch.elapsedMilliseconds} ms host debug elapsed',
         );
-        expect(chat.composerText, 'A draft ${'x' * 30}');
+        expect(chat.composer.observation.displayedText, 'A draft ${'x' * 30}');
         expect(
           workspaceUpdates,
           0,
           reason: 'Keystrokes must not wake workspace/monitoring observers.',
         );
         if (editingQueue) {
-          expect(chat.queuedPrompts.single.text, 'Original queued message');
+          expect(
+            chat.composer.observation.queue.single.text,
+            'Original queued message',
+          );
         } else {
           final savedDraft =
               await ComposerDraftStore(
@@ -79,7 +100,7 @@ void main() {
                 profileName: chat.key.workspace.profileName,
                 sessionId: chat.key.sessionId,
               );
-          expect(savedDraft!.text, chat.draft);
+          expect(savedDraft!.text, chat.composer.observation.text);
         }
         // Programmatic edits still reach the field through the composer listener.
         if (editingQueue) {

@@ -11,7 +11,8 @@ void main() {
 
   Future<void> show(
     WidgetTester tester, {
-    ComposerAction primary = ComposerAction.steer,
+    ComposerAction? primary = ComposerAction.steer,
+    ComposerAction? resting = ComposerAction.send,
     String? steerReason,
     double scale = 1,
     bool reduceMotion = false,
@@ -34,6 +35,7 @@ void main() {
             alignment: Alignment.bottomRight,
             child: ComposerActionButton(
               primary: primary,
+              resting: primary == null ? null : resting,
               unavailable: {
                 ComposerAction.steer: steerReason,
                 ComposerAction.stop: null,
@@ -64,6 +66,23 @@ void main() {
     return gesture;
   }
 
+  testWidgets('no configured primary requires a named choice before dispatch', (
+    tester,
+  ) async {
+    await show(tester, primary: null);
+    await tester.tap(find.byTooltip('Choose chat action'));
+    await tester.pumpAndSettle();
+    expect(selected, isEmpty);
+    expect(
+      find.byKey(const ValueKey('composer-keyboard-stop')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('composer-keyboard-stop')));
+    await tester.pumpAndSettle();
+    expect(selected, [ComposerAction.stop]);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('tap uses the configured primary without a popup', (
     tester,
   ) async {
@@ -75,6 +94,117 @@ void main() {
       findsNothing,
     );
   });
+
+  for (final reduced in [false, true]) {
+    testWidgets('Stop and typing transitions, reduced motion: $reduced', (
+      tester,
+    ) async {
+      await show(tester, reduceMotion: reduced);
+      await show(
+        tester,
+        primary: ComposerAction.stop,
+        resting: ComposerAction.stop,
+        reduceMotion: reduced,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 110));
+      expect(
+        find.byKey(const ValueKey('composer-button-icon-stop')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('composer-button-icon-send')),
+        reduced ? findsNothing : findsOneWidget,
+      );
+      await tester.pumpAndSettle();
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byTooltip('Stop')),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(
+        find.byKey(const ValueKey('composer-action-selector')),
+        findsNothing,
+      );
+      await gesture.cancel();
+      await show(tester, reduceMotion: reduced);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 110));
+      expect(
+        find.byKey(const ValueKey('composer-button-icon-send')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('composer-button-icon-stop')),
+        reduced ? findsNothing : findsOneWidget,
+      );
+      await tester.pumpAndSettle();
+      final typingGesture = await hold(tester);
+      expect(
+        tester
+            .getTopLeft(find.byKey(const ValueKey('composer-choice-steer')))
+            .dy,
+        greaterThan(
+          tester
+              .getTopLeft(find.byKey(const ValueKey('composer-choice-stop')))
+              .dy,
+        ),
+      );
+      await typingGesture.cancel();
+      expect(selected, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets(
+    'automatic Stop cancels a held choice even with the same primary',
+    (tester) async {
+      await show(tester, primary: ComposerAction.stop);
+      final gesture = await hold(tester, primary: 'Stop');
+      await show(
+        tester,
+        primary: ComposerAction.stop,
+        resting: ComposerAction.stop,
+      );
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(selected, isEmpty);
+      expect(
+        find.byKey(const ValueKey('composer-button-icon-stop')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('composer-action-selector')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    'automatic Stop exposes no alternative keyboard or screen reader actions',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      await show(
+        tester,
+        primary: ComposerAction.stop,
+        resting: ComposerAction.stop,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('composer-keyboard-stop')),
+        findsNothing,
+      );
+      final node = tester.getSemantics(find.byType(ComposerActionButton));
+      final ids = node.getSemanticsData().customSemanticsActionIds!;
+      expect(ids.map((id) => CustomSemanticsAction.getAction(id)!.label), [
+        'Stop',
+      ]);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(selected, [ComposerAction.stop]);
+      semantics.dispose();
+    },
+  );
 
   testWidgets('keyboard primary activation and action menu restore focus', (
     tester,

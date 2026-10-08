@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 
@@ -7,26 +5,36 @@ import '../models/attachment_draft.dart';
 
 /// One presentation for image drafts from the clipboard, picker, camera or share.
 class ComposerAttachmentTile extends StatelessWidget {
-  final AttachmentDraft draft;
+  final String name;
+  final String? error;
+  final AttachmentDraftKind kind;
+  final ImageProvider? previewImage;
   final VoidCallback? onRemove;
 
-  const ComposerAttachmentTile({super.key, required this.draft, this.onRemove});
+  const ComposerAttachmentTile({
+    super.key,
+    required this.name,
+    required this.kind,
+    required this.previewImage,
+    this.error,
+    this.onRemove,
+  }) : assert(kind != AttachmentDraftKind.image || previewImage != null);
 
   @override
   Widget build(BuildContext context) {
-    final error = draft.error == null
+    final warning = error == null
         ? null
         : Tooltip(
-            message: draft.error!,
+            message: error!,
             child: const Icon(Icons.warning_amber_rounded, size: 18),
           );
-    if (!draft.isImage) {
+    if (kind != AttachmentDraftKind.image) {
       return InputChip(
         showCheckmark: false,
-        avatar: error,
+        avatar: warning,
         label: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 180),
-          child: Text(draft.name, overflow: TextOverflow.ellipsis),
+          child: Text(name, overflow: TextOverflow.ellipsis),
         ),
         onDeleted: onRemove,
       );
@@ -42,11 +50,10 @@ class ComposerAttachmentTile extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: WingRadius.card,
-            child: Image.file(
-              File(draft.cachedPath),
-              cacheWidth: 256,
+            child: Image(
+              image: previewImage!,
               fit: BoxFit.cover,
-              semanticLabel: draft.name,
+              semanticLabel: name,
               errorBuilder: (context, error, stackTrace) => ColoredBox(
                 color: colors.surfaceContainerHighest,
                 child: const Center(child: Icon(Icons.broken_image_outlined)),
@@ -58,7 +65,7 @@ class ComposerAttachmentTile extends StatelessWidget {
               top: 0,
               right: 0,
               child: IconButton(
-                tooltip: 'Remove ${draft.name}',
+                tooltip: 'Remove $name',
                 onPressed: onRemove,
                 icon: Container(
                   padding: const EdgeInsets.all(3),
@@ -70,7 +77,7 @@ class ComposerAttachmentTile extends StatelessWidget {
                 ),
               ),
             ),
-          if (error != null)
+          if (warning != null)
             Positioned(
               left: 4,
               bottom: 4,
@@ -79,7 +86,10 @@ class ComposerAttachmentTile extends StatelessWidget {
                   color: colors.errorContainer,
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: Padding(padding: const EdgeInsets.all(3), child: error),
+                child: Padding(
+                  padding: const EdgeInsets.all(3),
+                  child: warning,
+                ),
               ),
             ),
         ],

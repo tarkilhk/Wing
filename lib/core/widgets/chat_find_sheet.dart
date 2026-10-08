@@ -4,38 +4,21 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 
-import '../models/answer_versions.dart';
-import '../models/transcript_notice.dart';
-import '../services/profile_gateway.dart';
+import '../models/chat_reading.dart';
+import '../services/chat_reading_session.dart';
 
-typedef ChatHistoryPageLoader = Future<ProfileHistoryPage> Function(int offset);
-
-class ChatFindResult {
-  final ProfileHistoryPage page;
-  final int rowId;
-
-  const ChatFindResult({required this.page, required this.rowId});
-}
-
-class _ChatFindRow {
-  final ProfileHistoryPage page;
-  final Map<String, dynamic> row;
-
-  const _ChatFindRow(this.page, this.row);
-}
-
-Future<ChatFindResult?> showChatFindSheet(
+Future<bool?> showChatFindSheet(
   BuildContext context, {
-  required ChatHistoryPageLoader loadHistory,
-}) => showModalBottomSheet<ChatFindResult>(
+  required ChatReadingSession Function() createSession,
+}) => showModalBottomSheet<bool>(
   context: context,
   isScrollControlled: true,
-  builder: (_) => ChatFindSheet(loadHistory: loadHistory),
+  builder: (_) => ChatFindSheet(createSession: createSession),
 );
 
 class ChatFindSheet extends StatefulWidget {
-  final ChatHistoryPageLoader loadHistory;
-  const ChatFindSheet({super.key, required this.loadHistory});
+  final ChatReadingSession Function() createSession;
+  const ChatFindSheet({super.key, required this.createSession});
 
   @override
   State<ChatFindSheet> createState() => _ChatFindSheetState();
@@ -43,95 +26,37 @@ class ChatFindSheet extends StatefulWidget {
 
 class _ChatFindSheetState extends State<ChatFindSheet> {
   final _query = TextEditingController();
-  final _history = <_ChatFindRow>[];
-  final _expanded = <Object>{};
-  int? _nextOffset = 0;
-  int? _retryOffset;
-  bool _loading = false;
-  String? _loadError;
+  late final _session = widget.createSession();
+  final _expanded = <ChatReadingMatch>{};
 
   @override
   void initState() {
     super.initState();
-    unawaited(_load(0));
+    unawaited(_session.start());
   }
 
-  Future<void> _load(int offset) async {
-    if (_loading) return;
-    setState(() {
-      _loading = true;
-      _loadError = null;
-      _retryOffset = null;
-    });
-    try {
-      final page = await widget.loadHistory(offset);
-      if (!mounted) return;
-      setState(() {
-        if (offset == 0) {
-          _history.clear();
-        }
-        final ids = _history.map((entry) => entry.row['id']).toSet();
-        final rows = page.rows
-            .where((row) => ids.add(row['id']))
-            .map((row) => _ChatFindRow(page, row))
-            .toList(growable: false);
-        if (offset == 0) {
-          _history.addAll(rows);
-        } else {
-          _history.insertAll(0, rows);
-        }
-        _nextOffset = page.nextOffset;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _retryOffset = offset;
-        _loadError = _history.isEmpty
-            ? "Couldn't search this chat. Check the Hermes connection, then try again."
-            : "Couldn't load older messages. Your current results are still here. Check the Hermes connection, then try again.";
-      });
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  List<_ChatFindRow> get _matches {
-    final query = _query.text.trim().toLowerCase();
-    if (query.isEmpty) return const [];
-    return _history.reversed
-        .where((entry) => _rowText(entry.row).toLowerCase().contains(query))
-        .toList(growable: false);
-  }
-
-  static String _rowText(Map<String, dynamic> row) {
-    if (isHiddenAnswerMessage(row)) return '';
-    final notice = transcriptNoticeText(row);
-    if (notice != null) {
-      return [notice, ?transcriptNoticeResult(row)].join('\n\n');
-    }
-    if (row['role'] == 'user') return answerMessageDisplayText(row);
-    final content = row['content'] ?? row['text'] ?? row['message'];
-    return content is String ? content : content?.toString() ?? '';
-  }
-
-  static Object _rowKey(Map<String, dynamic> row) =>
-      row['id'] ?? identityHashCode(row);
-
-  void _queryChanged(String _) {
-    setState(_expanded.clear);
+  void _queryChanged(String query) {
+    _expanded.clear();
+    _session.search(query);
   }
 
   @override
   void dispose() {
     _query.dispose();
+    _session.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
-    final query = _query.text.trim();
-    final matches = _matches;
-    final hasMore = _nextOffset != null;
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _session,
+    builder: (context, _) => _content(context, _session.observation),
+  );
+
+  Widget _content(BuildContext context, ChatReadingObservation state) {
+    final query = state.query;
+    final matches = state.matches;
+    final hasMore = state.hasMore;
     return Material(
       child: AnimatedPadding(
         duration: const Duration(milliseconds: 150),
@@ -158,15 +83,15 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                     ),
                   ),
                 ),
-                if (_loading && _history.isNotEmpty)
+                if (state.loading && state.hasLoadedMessages)
                   const LinearProgressIndicator(),
                 Expanded(
-                  child: _loading && _history.isEmpty
+                  child: state.loading && !state.hasLoadedMessages
                       ? const Center(child: CircularProgressIndicator())
-                      : _history.isEmpty && _loadError != null
+                      : !state.hasLoadedMessages && state.error != null
                       ? Padding(
                           padding: const EdgeInsets.all(16),
-                          child: StudioError(_loadError!),
+                          child: StudioError(state.error!),
                         )
                       : query.isEmpty
                       ? const _Message('Type to search this chat.')
@@ -180,11 +105,8 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                           itemCount: matches.length,
                           itemBuilder: (_, index) {
                             final entry = matches[index];
-                            final row = entry.row;
-                            final role = transcriptNoticeKind(row) != null
-                                ? 'system'
-                                : row['role']?.toString() ?? 'message';
-                            final key = _rowKey(row);
+                            final role = entry.role;
+                            final key = entry;
                             final expanded = _expanded.contains(key);
                             return ExpansionTile(
                               key: ValueKey((_query.text, key)),
@@ -202,7 +124,7 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                                     : Icons.smart_toy_outlined,
                               ),
                               title: Text(
-                                _rowText(row),
+                                entry.text,
                                 maxLines: 5,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -218,13 +140,14 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                                       8,
                                     ),
                                     child: TextButton.icon(
-                                      onPressed: row['id'] is int
-                                          ? () => Navigator.of(context).pop(
-                                              ChatFindResult(
-                                                page: entry.page,
-                                                rowId: row['id'] as int,
-                                              ),
-                                            )
+                                      onPressed:
+                                          entry.canSelect && !state.retired
+                                          ? () {
+                                              if (_session.select(entry) &&
+                                                  mounted) {
+                                                Navigator.of(context).pop(true);
+                                              }
+                                            }
                                           : null,
                                       icon: const Icon(Icons.open_in_new),
                                       label: const Text('View in chat'),
@@ -240,7 +163,7 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                                   ),
                                   child: Align(
                                     alignment: Alignment.centerLeft,
-                                    child: SelectableText(_rowText(row)),
+                                    child: SelectableText(entry.text),
                                   ),
                                 ),
                               ],
@@ -248,7 +171,7 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                           },
                         ),
                 ),
-                if (!_loading || _history.isNotEmpty)
+                if (!state.loading || state.hasLoadedMessages)
                   SafeArea(
                     top: false,
                     child: ConstrainedBox(
@@ -266,16 +189,16 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                                     ? '${_formatCount(matches.length)} matching ${matches.length == 1 ? 'message' : 'messages'} in loaded messages'
                                     : '${_formatCount(matches.length)} matching ${matches.length == 1 ? 'message' : 'messages'}',
                               ),
-                            if (_loadError != null && _history.isNotEmpty)
-                              StudioError(_loadError!),
-                            if (_loadError != null)
+                            if (state.error != null && state.hasLoadedMessages)
+                              StudioError(state.error!),
+                            if (state.error != null)
                               Wrap(
                                 alignment: WrapAlignment.center,
                                 children: [
                                   TextButton(
-                                    onPressed: _loading
+                                    onPressed: state.loading || state.retired
                                         ? null
-                                        : () => _load(_retryOffset ?? 0),
+                                        : _session.retry,
                                     child: const Text('Try again'),
                                   ),
                                   TextButton(
@@ -287,11 +210,11 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                               )
                             else if (query.isNotEmpty && hasMore)
                               TextButton(
-                                onPressed: _loading
+                                onPressed: state.loading || state.retired
                                     ? null
-                                    : () => _load(_nextOffset!),
+                                    : _session.loadOlder,
                                 child: Text(
-                                  _loading
+                                  state.loading
                                       ? 'Searching older messages…'
                                       : 'Search older messages',
                                 ),

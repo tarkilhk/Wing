@@ -1,3 +1,6 @@
+import 'package:wing/core/models/chat_runtime.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -7,7 +10,6 @@ import 'package:wing/core/models/gateway_sensitive_prompt.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_connection_identity.dart';
-import 'package:wing/core/services/profile_selection_store.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'support/message_content.dart';
 
@@ -32,9 +34,16 @@ Future<_LiveChat> _openLiveChat(WidgetTester tester, String profile) async {
     apiKey: '',
   );
   final identity = await ProfileConnectionIdentity().resolve(connection);
-  await ProfileSelectionStore(preferences).write(identity, profile);
+  final appPreferences = AppPreferences(preferences);
+  expect(
+    (await appPreferences.admitProfileSelection(identity, profile).settled)
+        .confirmed,
+    isTrue,
+  );
+  addTearDown(appPreferences.dispose);
   final controller = ProfileWorkspaceController(
-    connection: connection,
+    appPreferences: appPreferences,
+    access: ConnectionAccess(connection: connection, dashboardOAuth: null),
     connectionIdentity: identity,
     preferences: preferences,
   );
@@ -52,7 +61,7 @@ Future<_LiveChat> _openLiveChat(WidgetTester tester, String profile) async {
     isTrue,
     reason: '$profile must have a connected provider for this live test.',
   );
-  final chat = await controller.createChat();
+  final chat = await controller.createChat(canDispatch: () => true);
   await tester.pumpWidget(
     MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
   );
@@ -60,7 +69,7 @@ Future<_LiveChat> _openLiveChat(WidgetTester tester, String profile) async {
   addTearDown(() async {
     Object? stopFailure;
     try {
-      if (chat.busy || chat.commandRunning) {
+      if (chat.runtime.blocksTurnAdmission || chat.runtime.commandRunning) {
         await controller.stop(chat);
       }
     } catch (error) {
@@ -99,12 +108,12 @@ Future<void> _sendThroughUi(WidgetTester tester, String text) async {
   await tester.pump();
 }
 
-int _assistantCount(ProfileChat chat) => chat.messages
+int _assistantCount(ProfileChat chat) => chat.reading.messages
     .where((message) => message['role']?.toString() == 'assistant')
     .length;
 
 bool _hasStoredToolResult(ProfileChat chat) =>
-    chat.messages.any(isToolResultMessage);
+    chat.reading.messages.any(isToolResultMessage);
 
 class _TerminalToolProbe {
   final ProfileWorkspaceController controller;
@@ -120,7 +129,7 @@ class _TerminalToolProbe {
   void _observe() {
     observed =
         observed ||
-        chat.toolActivities.any(
+        chat.runtime.toolActivities.any(
           (activity) =>
               activity.isTerminal &&
               '${activity.name} ${activity.arguments} ${activity.result}'
@@ -146,11 +155,13 @@ void main() {
       );
       await _until(
         tester,
-        () => live.chat.sensitivePrompt != null || !live.chat.commandRunning,
+        () =>
+            live.chat.runtime.secureInput != null ||
+            !live.chat.runtime.commandRunning,
         reason:
             'UNSUPPORTED: default /gif-search did not emit its stock secret request.',
       );
-      final request = live.chat.sensitivePrompt;
+      final request = live.chat.runtime.secureInput;
       expect(
         request,
         isNotNull,
@@ -178,16 +189,16 @@ void main() {
       await _until(
         tester,
         () =>
-            live.chat.sensitivePrompt == null &&
-            !live.chat.sensitivePromptResponding &&
-            !live.chat.commandRunning &&
-            !live.chat.busy &&
-            live.chat.status == ProfileTurnStatus.completed,
-        reason: live.chat.error,
+            live.chat.runtime.secureInput == null &&
+            !live.chat.runtime.secureResponding &&
+            !live.chat.runtime.commandRunning &&
+            !live.chat.runtime.blocksTurnAdmission &&
+            live.chat.runtime.execution == ChatExecution.completed,
+        reason: live.chat.runtime.error,
       );
-      expect(live.chat.status, ProfileTurnStatus.completed);
-      expect(live.chat.error, isNull);
-      expect(live.chat.draft, isEmpty);
+      expect(live.chat.runtime.execution, ChatExecution.completed);
+      expect(live.chat.runtime.error, isNull);
+      expect(live.chat.composer.observation.text, isEmpty);
       expect(
         _assistantCount(live.chat),
         greaterThan(assistantCount),
@@ -218,10 +229,12 @@ void main() {
       );
       await _until(
         tester,
-        () => live.chat.sensitivePrompt != null || !live.chat.busy,
+        () =>
+            live.chat.runtime.secureInput != null ||
+            !live.chat.runtime.blocksTurnAdmission,
         reason: 'UNSUPPORTED: stock sudo handling emitted no request.',
       );
-      final request = live.chat.sensitivePrompt;
+      final request = live.chat.runtime.secureInput;
       expect(
         request,
         isNotNull,
@@ -253,10 +266,12 @@ void main() {
       await tester.tap(find.byKey(const Key('sensitive-prompt-cancel')));
       await _until(
         tester,
-        () => live.chat.sensitivePrompt == null && !live.chat.busy,
-        reason: live.chat.error,
+        () =>
+            live.chat.runtime.secureInput == null &&
+            !live.chat.runtime.blocksTurnAdmission,
+        reason: live.chat.runtime.error,
       );
-      expect(live.chat.status, ProfileTurnStatus.completed);
+      expect(live.chat.runtime.execution, ChatExecution.completed);
       expect(
         toolProbe.observed,
         isTrue,
@@ -284,11 +299,13 @@ void main() {
       );
       await _until(
         tester,
-        () => live.chat.sensitivePrompt != null || !live.chat.commandRunning,
+        () =>
+            live.chat.runtime.secureInput != null ||
+            !live.chat.runtime.commandRunning,
         reason:
             'UNSUPPORTED: default /gif-search did not emit its stock secret request.',
       );
-      final request = live.chat.sensitivePrompt;
+      final request = live.chat.runtime.secureInput;
       expect(
         request,
         isNotNull,
@@ -313,21 +330,21 @@ void main() {
       await _until(
         tester,
         () =>
-            live.chat.sensitivePrompt == null &&
-            !live.chat.sensitivePromptResponding &&
-            !live.chat.commandRunning &&
-            !live.chat.busy &&
-            live.chat.status == ProfileTurnStatus.completed,
+            live.chat.runtime.secureInput == null &&
+            !live.chat.runtime.secureResponding &&
+            !live.chat.runtime.commandRunning &&
+            !live.chat.runtime.blocksTurnAdmission &&
+            live.chat.runtime.execution == ChatExecution.completed,
         seconds: 370,
-        reason: live.chat.error,
+        reason: live.chat.runtime.error,
       );
       expect(
         DateTime.now().difference(promptObservedAt),
         greaterThanOrEqualTo(const Duration(seconds: 290)),
         reason: 'The secret card cleared before the stock timeout window.',
       );
-      expect(live.chat.error, isNull);
-      expect(live.chat.draft, isEmpty);
+      expect(live.chat.runtime.error, isNull);
+      expect(live.chat.composer.observation.text, isEmpty);
       expect(
         _assistantCount(live.chat),
         greaterThan(assistantCount),
@@ -361,10 +378,12 @@ void main() {
       );
       await _until(
         tester,
-        () => live.chat.approval != null || !live.chat.busy,
+        () =>
+            live.chat.runtime.approval != null ||
+            !live.chat.runtime.blocksTurnAdmission,
         reason: 'The bounded approval probe did not settle.',
       );
-      if (live.chat.approval == null) {
+      if (live.chat.runtime.approval == null) {
         expect(
           toolProbe.observed,
           isTrue,
@@ -383,13 +402,13 @@ void main() {
           '[sensitive-live] APPROVAL_AUTO_RESOLVED: smart mode completed the '
           'observed safe WhatIf tool call without a manual card.',
         );
-        expect(live.chat.busy, isFalse);
-        expect(live.chat.status, ProfileTurnStatus.completed);
-        expect(live.chat.error, isNull);
+        expect(live.chat.runtime.blocksTurnAdmission, isFalse);
+        expect(live.chat.runtime.execution, ChatExecution.completed);
+        expect(live.chat.runtime.error, isNull);
         return;
       }
       expect(
-        live.chat.approval!['command'].toString(),
+        live.chat.runtime.approval!.request.command.toString(),
         contains('hermes-approval-$nonce'),
       );
       await _until(
@@ -403,10 +422,12 @@ void main() {
       await tester.tap(find.text('Deny'));
       await _until(
         tester,
-        () => live.chat.approval == null && !live.chat.busy,
-        reason: live.chat.error,
+        () =>
+            live.chat.runtime.approval == null &&
+            !live.chat.runtime.blocksTurnAdmission,
+        reason: live.chat.runtime.error,
       );
-      expect(live.chat.status, ProfileTurnStatus.completed);
+      expect(live.chat.runtime.execution, ChatExecution.completed);
       expect(
         toolProbe.observed,
         isTrue,

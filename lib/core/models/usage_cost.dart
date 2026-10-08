@@ -33,16 +33,8 @@ class OpenAiModelPrice {
   final double input;
   final double cachedInput;
   final double output;
-  final DateTime verifiedOn;
-  final Uri source;
 
-  const OpenAiModelPrice._(
-    this.input,
-    this.cachedInput,
-    this.output,
-    this.verifiedOn,
-    this.source,
-  );
+  const OpenAiModelPrice._(this.input, this.cachedInput, this.output);
 
   factory OpenAiModelPrice._fromJson(Object? value) {
     if (value is! Map || value['usd_per_million'] is! Map) {
@@ -63,7 +55,7 @@ class OpenAiModelPrice {
         source.host != 'developers.openai.com') {
       throw const FormatException('Incomplete model price');
     }
-    return OpenAiModelPrice._(input, cachedInput, output, verifiedOn, source);
+    return OpenAiModelPrice._(input, cachedInput, output);
   }
 }
 
@@ -84,27 +76,31 @@ enum UsageCostUnavailable { price, tokens, reportedCost }
 /// Hermes analytics input is already uncached; output already includes reasoning.
 /// These estimates intentionally exclude cache writes and request-level surcharges.
 class ModelUsageCost {
-  final Map<String, dynamic> usage;
-  final OpenAiModelPrice? price;
+  final String model;
+  final bool isApiEquivalent;
+  final List<int?> tokenCounts;
   final double? inputCost;
   final double? cachedInputCost;
   final double? outputCost;
   final double? amount;
   final UsageCostUnavailable? unavailable;
 
-  bool get isApiEquivalent => usage['provider'] == 'openai-codex';
-  String get model =>
-      usage['model'] is String ? usage['model'] as String : 'Unknown model';
-
-  const ModelUsageCost._(
-    this.usage,
-    this.price,
+  ModelUsageCost._(
+    Map<String, dynamic> usage,
     this.inputCost,
     this.cachedInputCost,
     this.outputCost,
     this.amount,
     this.unavailable,
-  );
+  ) : model = usage['model'] is String
+          ? usage['model'] as String
+          : 'Unknown model',
+      isApiEquivalent = usage['provider'] == 'openai-codex',
+      tokenCounts = List.unmodifiable([
+        usageTokenCount(usage['input_tokens']),
+        usageTokenCount(usage['cache_read_tokens']),
+        usageTokenCount(usage['output_tokens']),
+      ]);
 
   factory ModelUsageCost.fromUsage(
     Map<String, dynamic> usage,
@@ -114,7 +110,6 @@ class ModelUsageCost {
       final amount = usageAmount(usage['estimated_cost']);
       return ModelUsageCost._(
         usage,
-        null,
         null,
         null,
         null,
@@ -130,7 +125,6 @@ class ModelUsageCost {
         null,
         null,
         null,
-        null,
         UsageCostUnavailable.price,
       );
     }
@@ -140,7 +134,6 @@ class ModelUsageCost {
     if (input == null || cached == null || output == null) {
       return ModelUsageCost._(
         usage,
-        price,
         null,
         null,
         null,
@@ -154,7 +147,6 @@ class ModelUsageCost {
     final amount = usageAmount(inputCost + cachedCost + outputCost);
     return ModelUsageCost._(
       usage,
-      price,
       inputCost,
       cachedCost,
       outputCost,

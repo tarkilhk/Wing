@@ -1,3 +1,7 @@
+import 'package:wing/core/services/chat_browser_data.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -106,35 +110,67 @@ void main() {
   late FilterHost host;
   late SharedPreferences prefs;
   late ProfileWorkspaceController controller;
+  late ChatBrowserData browser;
+  late AppPreferences appPreferences;
   ProfileWorkspaceController makeController([
     String identity = 'host-identity',
     String connectionId = 'host',
   ]) => ProfileWorkspaceController(
-    connection: SavedConnection(
-      id: connectionId,
-      label: 'Host',
-      host: 'localhost',
-      port: 1,
-      apiKey: '',
+    access: ConnectionAccess(
+      connection: SavedConnection(
+        id: connectionId,
+        label: 'Host',
+        host: 'localhost',
+        port: 1,
+        apiKey: '',
+      ),
+      dashboardOAuth: null,
     ),
     connectionIdentity: identity,
     preferences: prefs,
+    appPreferences: appPreferences,
     gatewayFactory: host.gateway,
   );
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(prefs);
     host = FilterHost();
     controller = makeController();
     await controller.initialize();
+    browser = ChatBrowserData(controller);
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    browser.dispose();
+    controller.dispose();
+    appPreferences.dispose();
+  });
 
-  test('missing and retired automated-only preferences default to chats', () {
-    expect(SessionVisibility.fromStored(null), SessionVisibility.chats);
-    expect(SessionVisibility.fromStored('automated'), SessionVisibility.chats);
-    expect(SessionVisibility.fromStored('all'), SessionVisibility.all);
-  });
+  test(
+    'missing visibility defaults to chats and malformed presence requires repair',
+    () async {
+      final key = SessionVisibility.preferenceKey('host');
+      expect(prefs.containsKey(key), isFalse);
+      expect(
+        appPreferences.visibilityFor('host').selected,
+        SessionVisibility.chats,
+      );
+      await prefs.setString(key, 'automated');
+      await appPreferences.reload();
+      expect(prefs.getString(key), 'automated');
+      expect(appPreferences.visibilityFor('host').selected, isNull);
+      expect(appPreferences.visibilityFor('host').notice, isNotNull);
+      await appPreferences.setConnectionVisibility(
+        'host',
+        SessionVisibility.all,
+      );
+      expect(prefs.getString(key), 'all');
+      expect(
+        appPreferences.visibilityFor('host').selected,
+        SessionVisibility.all,
+      );
+    },
+  );
 
   test(
     'Chats excludes automation before pagination and retains unknowns and branches',
@@ -169,23 +205,52 @@ void main() {
   });
 
   test(
-    'search uses the same exclusion and inclusion filters with profile ownership',
+    'browser search reads every profile and applies current source visibility in its projection',
     () async {
-      await controller.searchChats('run');
-      expect(controller.current!.searchResults, isEmpty);
+      await browser.search('run');
+      final requests = host.listRequests
+          .where((read) => read.$1 == 'sessions/search')
+          .toList();
+      expect(requests, hasLength(2));
       expect(
-        host.listRequests.last.$2['exclude_sources'],
-        'cron,tool,subagent,kanban,oneshot',
+        requests.map((read) => read.$2['profile']),
+        containsAll(['a', 'b']),
       );
+      expect(
+        requests.every(
+          (read) =>
+              !read.$2.containsKey('exclude_sources') &&
+              !read.$2.containsKey('sources'),
+        ),
+        isTrue,
+      );
+      for (final profile in ['a', 'b']) {
+        expect(browser.state.profiles[profile]!.searchMatches, {
+          'tool',
+          'subagent',
+          'kanban',
+          'oneshot',
+        });
+      }
+      expect(browser.project('run').entries, isEmpty);
       await controller.setSessionVisibility(SessionVisibility.all);
-      expect(controller.current!.searchResults.map((r) => r['id']), [
-        'tool',
-        'subagent',
-        'kanban',
-        'oneshot',
-      ]);
-      expect(host.listRequests.last.$2.containsKey('exclude_sources'), isFalse);
-      expect(host.listRequests.last.$2['profile'], 'a');
+      final visible = browser.project('run').entries;
+      expect(visible, hasLength(8));
+      for (final profile in ['a', 'b']) {
+        final scoped = visible.where((entry) => entry.profile == profile);
+        expect(
+          scoped.map((entry) => entry.id),
+          containsAll(['tool', 'subagent', 'kanban', 'oneshot']),
+        );
+        expect(
+          scoped.every((entry) => entry.scope.profileName == profile),
+          isTrue,
+        );
+      }
+      expect(
+        host.listRequests.where((read) => read.$1 == 'sessions/search'),
+        hasLength(2),
+      );
     },
   );
 
@@ -196,9 +261,24 @@ void main() {
       await controller.navigateProfile('b');
       expect(host.listRequests.last.$2['profile'], 'b');
       expect(host.listRequests.last.$2.containsKey('exclude_sources'), isFalse);
-      await controller.showArchived(true);
-      expect(host.listRequests.last.$2['archived'], 'only');
-      expect(host.listRequests.last.$2.containsKey('exclude_sources'), isFalse);
+      final browser = ChatBrowserData(controller);
+      addTearDown(browser.dispose);
+      await browser.refresh(archivedOnly: true);
+      expect(
+        host.listRequests
+            .where((request) => request.$1 == 'sessions')
+            .last
+            .$2['archived'],
+        'only',
+      );
+      expect(
+        host.listRequests
+            .where((request) => request.$1 == 'sessions')
+            .last
+            .$2
+            .containsKey('exclude_sources'),
+        isFalse,
+      );
       final restored = makeController();
       final reauthenticated = makeController('new-grant');
       final other = makeController('another-server', 'other-connection');
@@ -241,12 +321,18 @@ void main() {
           await gate.future;
         }
       };
-      final search = controller.searchChats('run');
+      final search = browser.search('run');
       await controller.setSessionVisibility(SessionVisibility.chats);
       gate.complete();
       await search;
-      expect(controller.current!.searchResults, isEmpty);
-      expect(controller.current!.searchLoading, isFalse);
+      expect(browser.project('run').entries, isEmpty);
+      expect(browser.state.searching, isFalse);
+      expect(
+        browser.state.profiles.values.every(
+          (profile) => profile.searchMatches.isNotEmpty,
+        ),
+        isTrue,
+      );
     },
   );
 
