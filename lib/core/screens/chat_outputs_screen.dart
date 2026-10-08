@@ -2,6 +2,7 @@ import '../widgets/studio_error.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/chat_output.dart';
 import '../services/chat_outputs_session.dart';
@@ -9,6 +10,7 @@ import '../services/file_open_error_message.dart';
 import '../services/remote_files_client.dart';
 import '../widgets/chat_image_preview.dart';
 import '../widgets/read_recovery.dart';
+import '../theme/wing_theme.dart';
 import '../widgets/markdown_code_block.dart';
 import '../widgets/markdown_message_content.dart';
 import '../widgets/web_output_preview.dart';
@@ -281,6 +283,41 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 actions: [
+                  if (isMarkdown) ...[
+                    IconButton(
+                      tooltip: showMarkdownSource
+                          ? 'Show formatted content'
+                          : 'Show Raw content',
+                      icon: Icon(
+                        showMarkdownSource
+                            ? Icons.notes_outlined
+                            : Icons.code_rounded,
+                      ),
+                      onPressed: () => setPreviewState(
+                        () => showMarkdownSource = !showMarkdownSource,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Copy content',
+                      icon: const Icon(Icons.copy_outlined),
+                      onPressed: () async {
+                        await Clipboard.setData(
+                          ClipboardData(text: preview.text),
+                        );
+                        if (!previewContext.mounted) return;
+                        ScaffoldMessenger.of(previewContext).showSnackBar(
+                          const SnackBar(content: Text('Content copied')),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      tooltip: 'Share file',
+                      icon: const Icon(Icons.share_outlined),
+                      onPressed: delivering
+                          ? null
+                          : () => deliverFile(_FileAction.share),
+                    ),
+                  ],
                   IconButton(
                     tooltip: 'Download',
                     icon: const Icon(Icons.download_outlined),
@@ -289,31 +326,6 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                         : () => deliverFile(_FileAction.save),
                   ),
                 ],
-                bottom: isMarkdown
-                    ? PreferredSize(
-                        preferredSize: Size.fromHeight(
-                          MediaQuery.textScalerOf(previewContext).scale(14) +
-                              48,
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                          child: SegmentedButton<bool>(
-                            showSelectedIcon: false,
-                            segments: const [
-                              ButtonSegment(
-                                value: false,
-                                label: Text('Rendered'),
-                              ),
-                              ButtonSegment(value: true, label: Text('Source')),
-                            ],
-                            selected: {showMarkdownSource},
-                            onSelectionChanged: (selection) => setPreviewState(
-                              () => showMarkdownSource = selection.single,
-                            ),
-                          ),
-                        ),
-                      )
-                    : null,
               ),
               body: ListView(
                 padding: const EdgeInsets.all(16),
@@ -342,10 +354,17 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                         ),
                       )
                     else
-                      MarkdownCodeBlock(
-                        code: preview.text,
-                        language: preview.language,
-                      ),
+                      isMarkdown
+                          ? SelectableText(
+                              preview.text,
+                              style: WingTokens.of(
+                                previewContext,
+                              ).typography.mono,
+                            )
+                          : MarkdownCodeBlock(
+                              code: preview.text,
+                              language: preview.language,
+                            ),
                   ],
                   if (isPdf)
                     FilledButton.icon(
@@ -388,13 +407,14 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                           ? null
                           : () => deliverFile(_FileAction.open),
                     ),
-                  FilledButton.icon(
-                    icon: const Icon(Icons.ios_share),
-                    label: const Text('Save or share'),
-                    onPressed: delivering
-                        ? null
-                        : () => deliverFile(_FileAction.share),
-                  ),
+                  if (!isMarkdown)
+                    FilledButton.icon(
+                      icon: const Icon(Icons.ios_share),
+                      label: const Text('Save or share'),
+                      onPressed: delivering
+                          ? null
+                          : () => deliverFile(_FileAction.share),
+                    ),
                 ],
               ),
             );

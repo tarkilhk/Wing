@@ -16,6 +16,7 @@ import 'helpers/pump_markdown_widget.dart';
 import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/models/transcript_message.dart';
 import 'package:wing/core/presentation/tool_call_presentation.dart';
+import 'package:wing/core/presentation/tool_activity_details.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/chat_inline_image.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
@@ -44,6 +45,147 @@ void main() {
           .load();
     }
   });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('read receipt is compact and formatted ${brightness.name} $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 1100);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final source =
+            '# Project notes\n\n**Current state:** [Review the evidence](docs/evidence.md). '
+            '${List.filled(15, 'Only reported facts appear here.').join(' ')}\n\n'
+            '${List.generate(40, (i) => '- Record $i: supplied details').join('\n')}\n\nLast received line';
+        final receipt = source
+            .split('\n')
+            .indexed
+            .map((line) => '${line.$1 + 1}|${line.$2}')
+            .join('\n');
+        final outer = ScrollController();
+        addTearDown(outer.dispose);
+        var opened = 0;
+        String? copied;
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copied = (call.arguments as Map)['text'] as String;
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+        final call = ToolCallPresentation.live(
+          GatewayToolActivity.fromGatewayEvent('tool.complete', {
+            'tool_id': 'read-markdown',
+            'name': 'read_file',
+            'args': {'path': 'trip/README.md', 'offset': 1, 'limit': 44},
+            'result': {
+              'content': receipt,
+              'total_lines': 80,
+              'next_offset': 45,
+              'truncated': true,
+            },
+          })!,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            home: MediaQuery(
+              data: MediaQueryData(
+                size: Size(scale == 1 ? 390 : 320, 1100),
+                textScaler: TextScaler.linear(scale),
+              ),
+              child: Scaffold(
+                body: SingleChildScrollView(
+                  controller: outer,
+                  child: RepaintBoundary(
+                    key: const ValueKey('read-receipt-capture'),
+                    child: ProfileToolCall(
+                      call: call,
+                      initiallyExpanded: true,
+                      onOpenResource: (_) async {
+                        opened++;
+                      },
+                      onShareResource: (_) async {},
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.settleMarkdown();
+        expect(find.byType(MarkdownMessageContent), findsOneWidget);
+        expect(
+          tester
+              .widget<MarkdownMessageContent>(
+                find.byType(MarkdownMessageContent),
+              )
+              .data,
+          source,
+        );
+        expect(find.text('Read content'), findsNothing);
+        expect(find.text('Read options'), findsNothing);
+        expect(find.text('Offset: 1 · Limit: 44'), findsOneWidget);
+        expect(find.byTooltip('Open Raw content'), findsNothing);
+        expect(find.byTooltip('Share file'), findsOneWidget);
+        await tester.tap(find.byTooltip('Copy content'));
+        await tester.pump();
+        expect(copied, receipt);
+        await tester.pump(const Duration(seconds: 2));
+        Future<void> captureRead(String mode) async {
+          if (!capture) return;
+          await tester.runAsync(() async {
+            final boundary = tester.renderObject<RenderRepaintBoundary>(
+              find.byKey(const ValueKey('read-receipt-capture')),
+            );
+            final rendered = await boundary.toImage(pixelRatio: 2);
+            final bytes = await rendered.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            final file = File(
+              'build/tool-results/read-$mode-${brightness.name}-${scale.toInt()}.png',
+            );
+            await file.parent.create(recursive: true);
+            await file.writeAsBytes(bytes!.buffer.asUint8List());
+            rendered.dispose();
+          });
+        }
+
+        await captureRead('formatted');
+        expect(find.byTooltip('Show Raw content'), findsNothing);
+        expect(find.text('Raw content'), findsNothing);
+        final viewport = find
+            .byKey(const ValueKey('activity-content-scroll'))
+            .first;
+        expect(tester.getSize(viewport).height, lessThanOrEqualTo(240));
+        final offset = outer.offset;
+        await tester.drag(viewport, const Offset(0, -120));
+        await tester.pumpAndSettle();
+        final receiptScroll = tester
+            .widget<SingleChildScrollView>(viewport)
+            .controller!;
+        expect(receiptScroll.offset, greaterThan(0));
+        expect(outer.offset, offset);
+        receiptScroll.jumpTo(receiptScroll.position.maxScrollExtent);
+        await tester.pump();
+        expect(opened, 0);
+        await captureRead('scrolled');
+        await tester.tap(find.byTooltip('Preview file'));
+        await tester.pumpAndSettle();
+        expect(opened, 1);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
   testWidgets('file and image resource actions retain exact owner targets', (
     tester,
   ) async {
@@ -314,6 +456,16 @@ void main() {
             ...call.activityDetails.request,
             ...call.activityDetails.response,
           ]) {
+            if (block.isReadContent) {
+              expect(find.byTooltip('Copy content'), findsOneWidget);
+              expect(find.text('Raw content'), findsNothing);
+              expect(find.byTooltip('Open Raw content'), findsNothing);
+              final viewport = find.byKey(
+                const ValueKey('activity-content-scroll'),
+              );
+              expect(tester.getSize(viewport).height, lessThanOrEqualTo(160));
+              continue;
+            }
             expect(find.byTooltip('Copy ${block.label}'), findsOneWidget);
             expect(find.text('Copy ${block.label}'), findsNothing);
             expect(tester.getTopLeft(find.text(block.label)).dx, cardLeft + 33);
@@ -366,8 +518,18 @@ void main() {
               tester.getTopLeft(body).dy,
               tester.getTopLeft(contentSurface).dy + 8,
             );
+            final visibleBody = block.format == ToolDetailFormat.prose
+                ? body
+                : find
+                      .ancestor(
+                        of: body,
+                        matching: find.byKey(
+                          const ValueKey('activity-content-scroll'),
+                        ),
+                      )
+                      .first;
             expect(
-              tester.getBottomLeft(body).dy,
+              tester.getBottomLeft(visibleBody).dy,
               tester.getBottomLeft(contentSurface).dy - 8,
             );
             expect(
@@ -382,10 +544,7 @@ void main() {
             if (scale == 1 && capture) {
               // Ahem substitutes square glyphs in uncaptured widget tests;
               // the ordinary inline fit is checked with actual Roboto renders.
-              expect(
-                tester.getTopLeft(find.text('Read options')).dy,
-                tester.getTopLeft(find.text('Offset: 1 · Limit: 5')).dy,
-              );
+              expect(find.text('Read options'), findsNothing);
               expect(
                 tester.getSize(find.byType(ToolActivityDetailsView)).height,
                 lessThan(400),

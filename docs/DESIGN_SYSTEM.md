@@ -545,10 +545,12 @@ Apply these rules to information-rich UI throughout Wing:
   edits with Find/Replace and only backend-reported diffs, and vision questions
   with the actual image and receipt or returned analysis. Unknown tools retain
   readable request/result data and exact Raw details.
-- Bound long inline text with an explicit Preview and icon-only expansion/full
-  view controls. Expansion reveals already returned data; server truncation is
-  reported separately. Code can wrap or scroll within its own region while
-  surrounding prose reflows. Do not shrink text to make a long line fit.
+- Bound literal source, logs and diffs in a vertically scrollable region of up
+  to 160 dp, inside the shared 8 dp framing. Wrapping and horizontal scrolling
+  remain local; do not let wrapped lines expand the activity to document height.
+  Other explanatory prose retains its bounded Preview/expansion controls.
+  Local scrolling exposes received data; server truncation stays explicit.
+  Do not shrink text to make a long line fit.
 - Actions represented by icons are icon-only, including every copy action.
   Provide precise accessible names/tooltips, temporary feedback and 48 dp
   targets, with the compact activity exceptions defined below. Reflow toolbars
@@ -600,18 +602,29 @@ references: an eye icon opens the named file/image, a share icon shares the file
 and a copy icon copies the exact target or section text. Use Wing glyphs and
 Studio tokens; labels belong in tooltips and accessibility names. These actions
 remain adjacent to the resource while text styling and density evolve. Original
-image tapping and section copy/wrap/full-view controls remain available.
+image tapping and applicable section copy/wrap/full-view controls remain available.
 
 Only backend observations establish requested operations and reported results.
 Keep backend error/warning/no-change facts explicit. Completion establishes
 neither successful execution nor a vision analysis; display neither unless
 the backend supplies it.
 
-Read-file cards use one compact Read options row with the supplied offset and
-limit beside its label. Remove the separate options body and its redundant
-section toolbar. At enlarged text, wrap options and move resource actions below
-the full-width path. Do not squeeze paths or reduce targets to force the ordinary
+Read-file cards have one file header: the exact path with supplied offset/limit
+as quiet metadata, and only eye, copy and share actions. Their insets still match
+the accepted Read options spacing. Do not repeat the file, add a separate options
+row or a second content toolbar. At enlarged text, wrap options and move resource
+actions below the full-width path. Do not squeeze paths or reduce targets to force the ordinary
 single-row arrangement.
+
+Markdown file receipts render formatted inside a vertically scrollable region
+of up to 240 dp; other file receipts stay literal in the 160 dp source region.
+Remove only stock receipt line-number prefixes for Markdown display, retaining
+the exact numbered receipt for activity copy. Keep supplied partial/range facts
+visible; formatting does not mean the whole file was read. No mode switch, raw
+toolbar, inline expansion or duplicate fullscreen action belongs in this card.
+The eye opens the existing file viewer; raw/formatted switching belongs there,
+alongside icon-only copy and share. The viewer copies its exact supplied file
+text in either mode and retains save/download and share error recovery.
 
 Review the activity family together before accepting any card: compare actual
 code, read, edit and vision renders side by side, then compare their dark and

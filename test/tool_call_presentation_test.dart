@@ -86,6 +86,16 @@ void main() {
       expect(read.resourceFor('https://user:password@example.org/x'), isNull);
       expect(read.response.single.numberedLines, isTrue);
       expect(read.response.single.markdown, isFalse);
+      const numberedMarkdown = '21|# Report\n22|\n23|**Ready**';
+      final markdownRead = completed(
+        'read_file',
+        {'content': numberedMarkdown},
+        args: {'path': '/workspace/report.md', 'offset': 21, 'limit': 3},
+      ).activityDetails.response.single;
+      expect(markdownRead.label, 'Raw content');
+      expect(markdownRead.markdown, isTrue);
+      expect(markdownRead.documentText, '# Report\n\n**Ready**');
+      expect(markdownRead.text, numberedMarkdown);
       expect(read.metadata, [
         'Total lines: 80',
         'File bytes: 912',

@@ -5,10 +5,15 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
+import 'helpers/pump_markdown_widget.dart';
 
 void main() {
   const activityKey = ValueKey('saved-activity');
   const thoughtKey = ValueKey('saved-thought');
+  final thoughtHeader = find.descendant(
+    of: find.byType(ListTile),
+    matching: find.text('Thought'),
+  );
 
   Future<void> show(WidgetTester tester, double scale) async {
     tester.view.physicalSize = const Size(360, 800);
@@ -98,11 +103,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('First result'), findsOneWidget);
       expect(find.text('Second result'), findsOneWidget);
-      await tester.ensureVisible(find.text('Thought'));
-      await tester.tap(find.text('Thought'));
+      await tester.ensureVisible(thoughtHeader);
+      await tester.tap(thoughtHeader);
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       expect(find.text('Checked the available options.'), findsOneWidget);
-      await tester.tap(find.text('Thought'));
+      await tester.tap(thoughtHeader);
       await tester.pumpAndSettle();
       expect(find.text('Checked the available options.'), findsNothing);
       expect(tester.takeException(), isNull);

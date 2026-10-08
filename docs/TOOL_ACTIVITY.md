@@ -462,12 +462,22 @@ shows the exact requested image/question and backend analysis or native image
 receipt. Search matches and other structured tool records use readable fields.
 Both live and saved calls use the same pure `ToolActivityDetails` projection.
 
-Local previews are bounded to 12 lines/1,600 characters. Icon controls expand the
-already received text, open a full read-only view, wrap/scroll literal text, copy
+Literal source, output and diffs use a vertically scrollable inline viewport
+of up to 160 dp, retaining all received text. Explanatory prose previews remain
+bounded to 12 lines/1,600 characters. Applicable icon controls expand the
+already received prose, open a full read-only view, wrap/scroll literal text, copy
 exact originals or open supplied HTTP sources. Markdown is limited to explanatory
-prose; source, logs and diffs remain literal. These display actions do not rerun a
+prose and Markdown file receipts; code files, logs and diffs remain literal. These display actions do not rerun a
 tool or request omitted file lines. Raw details retain exact input/output values.
 The existing profile-scoped image loader owns image access and original viewing.
+
+Read-file receipts have one compact path/range header with eye, copy and share
+icons. Markdown receipts render inline in a viewport of up to 240 dp, removing
+only the stock numbered-line prefixes for display; copy retains the original
+receipt. Other files use the literal viewport. There is no separate Read options
+or content toolbar. Raw/formatted switching lives only in the full Markdown
+file viewer, with icon-only copy/share. That viewer retains its own backend
+file read, truncation disclosure, relative links, download and delivery owner.
 
 Latest unmodified upstream main inspected on 8 October 2026:
 [`dde8800ed91c6e128064a17d5db914d74622594b`](https://github.com/NousResearch/hermes-agent/commit/dde8800ed91c6e128064a17d5db914d74622594b).
@@ -573,3 +583,12 @@ icon-only controls. Capture with `CAPTURE_ACTIVITY_FAMILY=true` and
 images are written to ignored `build/activity-family/`. Review alongside the
 code/read/edit/vision captures. Owner-level goal, process and subagent tests
 retain confirmations, admission, rejection feedback and last-received data.
+
+`test/profile_transcript_test.dart` and
+`test/profile_disclosure_layout_test.dart` protect disclosure anchoring and
+expansion through the shared frame, including 100%/200%/300% text. They target
+the outer reasoning ListTile separately from its repeated section label, wait
+for background Markdown completion before asserting prose, and inspect the
+12-line rich-text output preview instead of assuming the full receipt is inline.
+These are rendered and asynchronous properties requiring widget regressions;
+source linting cannot establish tap targets, scroll positions or worker completion.

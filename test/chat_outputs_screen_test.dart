@@ -128,14 +128,14 @@ void main() {
     expect(find.text('Appendix contents'), findsOneWidget);
     expect(
       tester.getRect(find.text('The six health checks')).top,
-      inInclusiveRange(100, 200),
+      inInclusiveRange(56, 156),
     );
     await tester.tap(find.text('Corrections', findRichText: true));
     await tester.pumpAndSettle();
     expect(reads, ['$folder/report.md', '$folder/details.md']);
     expect(
       tester.getRect(find.text('Exact correction targets')).top,
-      inInclusiveRange(100, 200),
+      inInclusiveRange(56, 156),
     );
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -1020,21 +1020,29 @@ void main() {
       expect(find.text('Release notes'), findsOneWidget);
       expect(find.text('Hermes'), findsNothing);
       expect(find.byType(ChatInlineImage), findsOneWidget);
+      expect(find.byTooltip('Share file'), findsOneWidget);
+      expect(find.text('Copy content'), findsNothing);
+      expect(find.text('Save or share'), findsNothing);
+      await tester.tap(find.byTooltip('Copy content'));
+      await tester.pump();
+      expect(copied, source);
       expect(
         find.text('Preview shortened by Hermes. Save the file to read it all.'),
         findsOneWidget,
       );
 
-      await tester.tap(find.text('Source'));
+      await tester.tap(find.byTooltip('Show Raw content'));
       await tester.pump();
       expect(find.byType(MarkdownMessageContent), findsNothing);
-      expect(find.byType(SourceCodeBlock), findsOneWidget);
-      expect(find.text('Rendered'), findsOneWidget);
-      await tester.tap(find.byTooltip('Copy code'));
+      expect(find.text(source), findsOneWidget);
+      expect(find.byTooltip('Show formatted content'), findsOneWidget);
+      expect(find.byTooltip('Share file'), findsOneWidget);
+      expect(find.text('Save or share'), findsNothing);
+      await tester.tap(find.byTooltip('Copy content'));
       await tester.pump();
       expect(copied, source);
 
-      await tester.tap(find.text('Rendered'));
+      await tester.tap(find.byTooltip('Show formatted content'));
       await tester.pump();
       expect(find.byType(MarkdownMessageContent), findsOneWidget);
     },
@@ -1100,6 +1108,61 @@ void main() {
     },
   );
 
+  testWidgets('Markdown share icon retains pending and retry behavior', (
+    tester,
+  ) async {
+    final firstDownload = Completer<RemoteFileDownload>();
+    var downloads = 0;
+    RemoteFileDownload? delivered;
+    final file = RemoteFileDownload(
+      filename: 'notes.md',
+      bytes: utf8.encode('# Notes'),
+    );
+    await tester.pumpWidget(
+      _screen(
+        loadHistory: () async => [
+          {'role': 'assistant', 'content': 'Saved /srv/notes.md'},
+        ],
+        readText: (path) async => RemoteTextPreview(
+          path: path,
+          text: '# Notes',
+          language: 'markdown',
+          mimeType: 'text/markdown',
+          binary: false,
+          truncated: false,
+        ),
+        download: (path) async {
+          expect(path, '/srv/notes.md');
+          downloads++;
+          return downloads == 1 ? firstDownload.future : file;
+        },
+        deliver: (value) async {
+          delivered = value;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('notes.md'));
+    await tester.pumpAndSettle();
+    final share = find.byTooltip('Share file');
+    IconButton button() => tester.widget<IconButton>(
+      find.ancestor(of: share, matching: find.byType(IconButton)).first,
+    );
+    await tester.tap(share);
+    await tester.pump();
+    expect(button().onPressed, isNull);
+    firstDownload.completeError(StateError('Unavailable'));
+    await tester.pumpAndSettle();
+    expect(button().onPressed, isNotNull);
+    expect(delivered, isNull);
+    await tester.tap(share);
+    await tester.pumpAndSettle();
+    expect(downloads, 2);
+    expect(delivered, same(file));
+    expect(button().onPressed, isNotNull);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'markdown detection accepts language and MIME but excludes binary',
     (tester) async {
@@ -1147,10 +1210,10 @@ void main() {
         await tester.pumpAndSettle();
         if (cases[index].binary) {
           expect(find.byType(MarkdownMessageContent), findsNothing);
-          expect(find.text('Source'), findsNothing);
+          expect(find.byTooltip('Show Raw content'), findsNothing);
         } else {
           expect(find.byType(MarkdownMessageContent), findsOneWidget);
-          expect(find.text('Source'), findsOneWidget);
+          expect(find.byTooltip('Show Raw content'), findsOneWidget);
         }
         await tester.pageBack();
         await tester.pumpAndSettle();

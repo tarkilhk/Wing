@@ -24,6 +24,14 @@ final class ToolDetailBlock {
   final bool numberedLines;
   final bool secondary;
   final String? resourceTarget;
+
+  bool get isReadContent => numberedLines && format == ToolDetailFormat.source;
+
+  /// Stock read_file's numbered receipt stays intact for raw viewing/copying.
+  /// Strip only its line-number decoration for the document renderer.
+  String get documentText => numberedLines
+      ? text.replaceAll(RegExp(r'^\d+\|', multiLine: true), '')
+      : text;
 }
 
 /// Pure tool-specific layout facts shared by live and saved activities.
@@ -313,24 +321,32 @@ final class ToolActivityDetails {
         ToolDetailBlock(
           label: nativeVision && detail.label == 'Result'
               ? 'Image receipt'
-              : name == 'read_file' && detail.label == 'Content'
-              ? 'Read content'
+              : name == 'read_file' && format == ToolDetailFormat.source
+              ? 'Raw content'
               : detail.label,
           text: text,
           format: format,
-          markdown: format == ToolDetailFormat.prose && detail.markdown,
+          markdown: name == 'read_file' && format == ToolDetailFormat.source
+              ? RegExp(
+                  r'\.(?:md|markdown)$',
+                  caseSensitive: false,
+                ).hasMatch(resourceTarget ?? '')
+              : format == ToolDetailFormat.prose && detail.markdown,
           link: detail.link,
           numberedLines: name == 'read_file',
         ),
       );
     }
     for (final key in ['content', 'output', 'stdout', 'stderr']) {
-      if (data[key] == '' &&
-          !response.any((block) => block.label == _label(key))) {
+      final label = name == 'read_file' && key == 'content'
+          ? 'Raw content'
+          : _label(key);
+      if (data[key] == '' && !response.any((block) => block.label == label)) {
         response.add(
           ToolDetailBlock(
-            label: _label(key),
+            label: label,
             text: '',
+            numberedLines: name == 'read_file' && key == 'content',
             format:
                 const [
                   'read_file',

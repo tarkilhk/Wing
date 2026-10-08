@@ -201,15 +201,27 @@ class ToolActivityDetailsView extends StatelessWidget {
       _ => Icons.check_circle_outline,
     };
     final blocks = [...details.request, ...details.response];
+    final readContent = blocks
+        .where((block) => block.isReadContent)
+        .firstOrNull;
     return ActivityDetailsCard(
       children: [
-        if (details.resourceTarget case final target?)
-          _ToolResourceRow(
-            target: target,
-            output: details.resourceFor(target),
+        if (readContent != null)
+          _ReadFileContent(
+            block: readContent,
+            details: details,
+            loadImage: loadImage,
             onOpen: onOpenResource,
             onShare: onShareResource,
           ),
+        if (readContent == null)
+          if (details.resourceTarget case final target?)
+            _ToolResourceRow(
+              target: target,
+              output: details.resourceFor(target),
+              onOpen: onOpenResource,
+              onShare: onShareResource,
+            ),
         for (final image in details.images) ...[
           if (image.target != details.resourceTarget)
             _ToolResourceRow(
@@ -229,7 +241,7 @@ class ToolActivityDetailsView extends StatelessWidget {
             ),
           ),
         ],
-        if (details.readOptions.isNotEmpty)
+        if (readContent == null && details.readOptions.isNotEmpty)
           Container(
             decoration: BoxDecoration(
               border: Border(top: BorderSide(color: colors.border)),
@@ -256,20 +268,21 @@ class ToolActivityDetailsView extends StatelessWidget {
           ),
         if (details.request.isEmpty && details.resourceTarget == null)
           _Message('No request details supplied'),
-        for (var i = 0; i < blocks.length; i++) ...[
-          if (blocks[i].resourceTarget case final target?)
-            _ToolResourceRow(
-              target: target,
-              output: details.resourceFor(target),
-              onOpen: onOpenResource,
-              onShare: onShareResource,
+        for (var i = 0; i < blocks.length; i++)
+          if (!identical(blocks[i], readContent)) ...[
+            if (blocks[i].resourceTarget case final target?)
+              _ToolResourceRow(
+                target: target,
+                output: details.resourceFor(target),
+                onOpen: onOpenResource,
+                onShare: onShareResource,
+              ),
+            ActivityDetailSection(
+              key: ValueKey((i, blocks[i].label)),
+              block: blocks[i],
+              loadImage: loadImage,
             ),
-          ActivityDetailSection(
-            key: ValueKey((i, blocks[i].label)),
-            block: blocks[i],
-            loadImage: loadImage,
-          ),
-        ],
+          ],
         if (details.response.isEmpty)
           _Message(
             call.outcome == ToolCallOutcome.running
@@ -311,11 +324,17 @@ class _ToolResourceRow extends StatefulWidget {
     required this.output,
     this.onOpen,
     this.onShare,
+    this.facts = const [],
+    this.copyText,
+    this.copyLabel = 'Copy path',
   });
   final String target;
   final ChatOutput? output;
   final Future<void> Function(ChatOutput)? onOpen;
   final Future<void> Function(ChatOutput)? onShare;
+  final List<String> facts;
+  final String? copyText;
+  final String copyLabel;
   @override
   State<_ToolResourceRow> createState() => _ToolResourceRowState();
 }
@@ -390,7 +409,10 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
                   )
                 : const Icon(Icons.share_outlined, size: 16),
           ),
-        ToolDetailCopyButton(label: 'Copy path', text: widget.target),
+        ToolDetailCopyButton(
+          label: widget.copyLabel,
+          text: widget.copyText ?? widget.target,
+        ),
       ],
     );
     final path = Padding(
@@ -404,14 +426,26 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
           ),
           const SizedBox(width: WingSpacing.sm),
           Expanded(
-            child: SelectableText(
-              widget.target.startsWith('data:')
-                  ? 'Attached image'
-                  : widget.target,
-              style: colors.typography.mono.copyWith(
-                fontSize: 12,
-                color: colors.muted,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(
+                  widget.target.startsWith('data:')
+                      ? 'Attached image'
+                      : widget.target,
+                  style: colors.typography.mono.copyWith(
+                    fontSize: 12,
+                    color: colors.muted,
+                  ),
+                ),
+                if (widget.facts.isNotEmpty)
+                  Text(
+                    widget.facts.join(' · '),
+                    style: colors.typography.label.copyWith(
+                      color: colors.muted,
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
@@ -433,6 +467,59 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
                 actions,
               ],
             ),
+    );
+  }
+}
+
+/// One compact file header and a bounded receipt. Only the full file viewer
+/// switches Markdown/source; the eye forwards the captured file intent.
+class _ReadFileContent extends StatelessWidget {
+  const _ReadFileContent({
+    required this.block,
+    required this.details,
+    this.loadImage,
+    this.onOpen,
+    this.onShare,
+  });
+  final ToolDetailBlock block;
+  final ToolActivityDetails details;
+  final Future<Uint8List> Function(String)? loadImage;
+  final Future<void> Function(ChatOutput)? onOpen;
+  final Future<void> Function(ChatOutput)? onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final formatted = block.markdown;
+    final target = details.resourceTarget;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (target != null)
+          _ToolResourceRow(
+            target: target,
+            output: details.resourceFor(target),
+            facts: details.readOptions,
+            onOpen: onOpen,
+            onShare: onShare,
+            copyText: block.text,
+            copyLabel: 'Copy content',
+          ),
+        ActivityDetailSection(
+          block: formatted
+              ? ToolDetailBlock(
+                  label: 'Content',
+                  text: block.documentText,
+                  markdown: true,
+                )
+              : block,
+          loadImage: loadImage,
+          documentPath: target,
+          onOpenRemoteFile: onOpen,
+          showHeader: target == null,
+          scrollInline: true,
+          maxInlineHeight: formatted ? 240 : 160,
+        ),
+      ],
     );
   }
 }
@@ -473,6 +560,11 @@ class ActivityDetailSection extends StatefulWidget {
     this.leading,
     this.actions = const [],
     this.initiallyCollapsed = false,
+    this.showHeader = true,
+    this.scrollInline = false,
+    this.maxInlineHeight = 160,
+    this.documentPath,
+    this.onOpenRemoteFile,
   });
   final Widget? leading;
   final List<Widget> actions;
@@ -480,6 +572,11 @@ class ActivityDetailSection extends StatefulWidget {
   final ToolDetailBlock block;
   final Future<Uint8List> Function(String)? loadImage;
   final bool full;
+  final bool showHeader;
+  final bool scrollInline;
+  final double maxInlineHeight;
+  final String? documentPath;
+  final Future<void> Function(ChatOutput)? onOpenRemoteFile;
   @override
   State<ActivityDetailSection> createState() => _ActivityDetailSectionState();
 }
@@ -488,19 +585,29 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
   bool _expanded = false;
   bool _wrap = true;
   late bool _collapsed = widget.initiallyCollapsed;
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final block = widget.block;
     final colors = WingTokens.of(context);
     final source = block.format != ToolDetailFormat.prose;
+    final scrollInline = !widget.full && (source || widget.scrollInline);
     final lines = block.text.split('\n');
     final excerpt = lines.take(12).join('\n');
     final preview = excerpt.length > 1600
         ? excerpt.substring(0, 1600)
         : excerpt;
-    final shortened = preview.length < block.text.length;
-    final text = widget.full || _expanded ? block.text : preview;
+    final shortened = !scrollInline && preview.length < block.text.length;
+    final text = widget.full || _expanded || scrollInline
+        ? block.text
+        : preview;
     final icon = switch (block.format) {
       ToolDetailFormat.diff => Icons.difference_outlined,
       ToolDetailFormat.source =>
@@ -519,7 +626,12 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
         style: TextStyle(fontSize: 12, color: colors.muted),
       );
     } else if (block.markdown && (!shortened || widget.full || _expanded)) {
-      body = MarkdownMessageContent(data: text, loadImage: widget.loadImage);
+      body = MarkdownMessageContent(
+        data: text,
+        loadImage: widget.loadImage,
+        documentPath: widget.documentPath,
+        onOpenRemoteFile: widget.onOpenRemoteFile,
+      );
     } else {
       final displayLines = text.split('\n');
       final content = SelectableText.rich(
@@ -546,116 +658,133 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
               child: content,
             );
     }
+    if (scrollInline) {
+      body = ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: widget.maxInlineHeight),
+        child: Scrollbar(
+          controller: _scroll,
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            key: const ValueKey('activity-content-scroll'),
+            controller: _scroll,
+            primary: false,
+            child: body,
+          ),
+        ),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: colors.border)),
-          ),
-          padding: _toolHorizontalInsets,
-          child: Row(
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: _toolVerticalInsets,
-                  child: Row(
-                    children: [
-                      widget.leading ??
-                          Icon(icon, size: 16, color: colors.muted),
-                      const SizedBox(width: WingSpacing.sm),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              block.label,
-                              style: colors.typography.label.copyWith(
-                                color: colors.onSurface,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            if (block.link case final link?)
+        if (widget.showHeader)
+          Container(
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: colors.border)),
+            ),
+            padding: _toolHorizontalInsets,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: _toolVerticalInsets,
+                    child: Row(
+                      children: [
+                        widget.leading ??
+                            Icon(icon, size: 16, color: colors.muted),
+                        const SizedBox(width: WingSpacing.sm),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                link.host,
+                                block.label,
                                 style: colors.typography.label.copyWith(
-                                  color: colors.muted,
+                                  color: colors.onSurface,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
-                          ],
+                              if (block.link case final link?)
+                                Text(
+                                  link.host,
+                                  style: colors.typography.label.copyWith(
+                                    color: colors.muted,
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              ...widget.actions,
-              if (widget.initiallyCollapsed && !widget.full)
-                ActivityDetailAction(
-                  label: '${_collapsed ? 'Expand' : 'Collapse'} ${block.label}',
-                  icon: _collapsed ? Icons.chevron_right : Icons.expand_more,
-                  onPressed: () => setState(() => _collapsed = !_collapsed),
-                ),
-              if (block.link case final link?)
-                IconButton(
-                  style: _toolActionStyle,
-                  tooltip: 'Open source',
-                  icon: const Icon(Icons.open_in_new, size: 16),
-                  onPressed: () async {
-                    final opened = await openWebPreview(link);
-                    if (!opened && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: StudioError('Could not open this source.'),
-                        ),
-                      );
-                    }
-                  },
-                ),
-              if (block.link case final link?)
-                ToolDetailCopyButton(
-                  label: 'Copy source link',
-                  text: link.toString(),
-                ),
-              if (source)
-                IconButton(
-                  style: _toolActionStyle,
-                  tooltip: _wrap
-                      ? 'Scroll ${block.label} horizontally'
-                      : 'Wrap ${block.label}',
-                  icon: Icon(
-                    _wrap ? Icons.swap_horiz : Icons.wrap_text,
-                    size: 16,
+                ...widget.actions,
+                if (widget.initiallyCollapsed && !widget.full)
+                  ActivityDetailAction(
+                    label:
+                        '${_collapsed ? 'Expand' : 'Collapse'} ${block.label}',
+                    icon: _collapsed ? Icons.chevron_right : Icons.expand_more,
+                    onPressed: () => setState(() => _collapsed = !_collapsed),
                   ),
-                  onPressed: () => setState(() => _wrap = !_wrap),
-                ),
-              if (!widget.full)
-                IconButton(
-                  style: _toolActionStyle,
-                  tooltip: 'Open ${block.label}',
-                  icon: const Icon(Icons.fullscreen, size: 16),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => Scaffold(
-                        appBar: AppBar(title: Text(block.label)),
-                        body: SingleChildScrollView(
-                          child: ActivityDetailSection(
-                            block: block,
-                            loadImage: widget.loadImage,
-                            full: true,
+                if (block.link case final link?)
+                  IconButton(
+                    style: _toolActionStyle,
+                    tooltip: 'Open source',
+                    icon: const Icon(Icons.open_in_new, size: 16),
+                    onPressed: () async {
+                      final opened = await openWebPreview(link);
+                      if (!opened && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: StudioError('Could not open this source.'),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                if (block.link case final link?)
+                  ToolDetailCopyButton(
+                    label: 'Copy source link',
+                    text: link.toString(),
+                  ),
+                if (source)
+                  IconButton(
+                    style: _toolActionStyle,
+                    tooltip: _wrap
+                        ? 'Scroll ${block.label} horizontally'
+                        : 'Wrap ${block.label}',
+                    icon: Icon(
+                      _wrap ? Icons.swap_horiz : Icons.wrap_text,
+                      size: 16,
+                    ),
+                    onPressed: () => setState(() => _wrap = !_wrap),
+                  ),
+                if (!widget.full)
+                  IconButton(
+                    style: _toolActionStyle,
+                    tooltip: 'Open ${block.label}',
+                    icon: const Icon(Icons.fullscreen, size: 16),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => Scaffold(
+                          appBar: AppBar(title: Text(block.label)),
+                          body: SingleChildScrollView(
+                            child: ActivityDetailSection(
+                              block: block,
+                              loadImage: widget.loadImage,
+                              full: true,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
+                ToolDetailCopyButton(
+                  label: 'Copy ${block.label}',
+                  text: block.text,
                 ),
-              ToolDetailCopyButton(
-                label: 'Copy ${block.label}',
-                text: block.text,
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         if (!_collapsed || widget.full) ActivityDetailContent(child: body),
         if (!_collapsed && shortened && !widget.full)
           Padding(

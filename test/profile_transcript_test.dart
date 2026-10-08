@@ -40,6 +40,10 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
   List<Widget> extraTail = [];
   final list = find.byKey(const ValueKey('profile-transcript'));
   final jump = find.byKey(const ValueKey('jump-to-latest'));
+  final thoughtHeader = find.descendant(
+    of: find.byType(ListTile),
+    matching: find.text('Thought'),
+  );
 
   Map<String, dynamic> row(int id) => {
     'id': id,
@@ -967,10 +971,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     await tester.pumpAndSettle();
     await capture?.call(tester, 'tool-before-expansion');
     await toggleInPlace(tester, header);
+    final output = chat.reading.messages.last['content'] as String;
     expect(
-      find.text(chat.reading.messages.last['content'] as String),
+      find.text(output.split('\n').take(12).join('\n'), findRichText: true),
       findsOneWidget,
     );
+    expect(find.text(output, findRichText: true), findsNothing);
     await capture?.call(tester, 'tool-after-expansion');
     await toggleInPlace(tester, header);
     await toggleInPlace(tester, header);
@@ -1022,7 +1028,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       expect(find.text('Result starts here'), findsNothing);
       await tester.tap(jump);
       await tester.pumpAndSettle();
-      final thought = find.text('Thought');
+      final thought = thoughtHeader;
       await tester.ensureVisible(thought);
       await tester.pumpAndSettle();
       await toggleInPlace(tester, thought);
@@ -1041,8 +1047,9 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     );
     extraTail = [const ProfileReasoningDisclosure(text: 'A short thought')];
     await show(tester);
-    final thought = find.text('Thought');
+    final thought = thoughtHeader;
     await toggleInPlace(tester, thought);
+    await tester.settleMarkdown();
     expect(find.text('A short thought'), findsOneWidget);
     await toggleInPlace(tester, thought);
     expect(chat.reading.historyScrollOffset, closeTo(0, 1));
