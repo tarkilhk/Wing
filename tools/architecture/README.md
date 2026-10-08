@@ -189,10 +189,23 @@ python3 tools/architecture/rules/stock_task_schedule_projection.py --input obser
 ```
 
 The separate YAML guard `rules/required_quality_gates.dart` has its own command
-and fixtures. It does not need a Dart graph or a migration exemption. The
-aggregate invokes the six graph rules, draft ownership, image codec confinement,
-image codec provenance, task view protocol and retired-declaration rules. The five Python fixture guards run against production through the mandatory
-offline QA suite and also have standalone commands. CI runs the graph and required-quality-gates commands, plus mandatory independent production commands for completed model/settings/overview/provider/memory views, owned writes, deleted-draft cleanup and authored model catalog fixtures. Completed connection setup, completed app preference views, visibility-key ownership, backup ownership and app preference construction each have a separate mandatory production command. The YAML guard rejects omitted, fixture-only, conditional or softened production steps. The separate authored-census Python guard runs explicitly in both workflows and has actual CLI fixtures in offline QA; it protects file-set coverage rather than declaration liveness.
+and fixtures. It does not need a Dart graph or a migration exemption. CI invokes
+`python3 scripts/check_commit_linters.py --dart-only` to run the aggregate and
+every independently owned Dart source check in one VM, sharing source parses
+and analysis summaries. A standalone rule is excluded only when the aggregate
+registers and executes it. New independent rules are discovered automatically;
+unsupported entry points fail verification. PRs pass the preceding baseline
+with `--baseline-reference` to the aggregate alone. Python runner proofs cover
+discovery, argument handling and failure propagation in both workflows.
+
+The YAML guard rejects omitted, fixture-only, conditional or softened source
+steps, and requires the consolidated Dart gate before PR host tests that use
+`--skip-linters`. Python census, retired-resource and fixture-catalog source
+checks remain explicit in both workflows. Native source checks run after Gradle
+setup supplies compiler dependencies; their separate fixture proofs remain
+mandatory. The authored-census guard protects file-set coverage rather than
+declaration liveness. Standalone Dart commands remain useful for focused checks;
+running the graph aggregate alone does not establish independent rule contracts.
 The independent Dart catalog-fixture guard is enforced through the ordinary host
 suite, including a full authored fixture scan and actual CLI exit proofs.
 The independent completed-model-view guard runs through its mandatory host

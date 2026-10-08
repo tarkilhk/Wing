@@ -6,9 +6,11 @@ import '../tools/architecture/dart_sdk.dart';
 import '../tools/architecture/rules/required_quality_gates.dart';
 
 const qaCommand = "python3 -m unittest discover -s tools/qa -p 'test_*.py' -v";
-const architectureCommand = 'dart run tools/architecture/check_all.dart';
+const sourceCommand = 'python3 scripts/check_commit_linters.py --dart-only';
+const boundSourceCommand =
+    '$sourceCommand --baseline-reference "build/architecture-baseline-reference.json"';
 const changedTestsCommand =
-    r'python3 scripts/test.py --changed-since "$TEST_BASE_REF"';
+    r'python3 scripts/test.py --changed-since "$TEST_BASE_REF" --skip-linters';
 const testBaseRef =
     r'${{ github.event.pull_request.base.sha || github.event.before }}';
 const nativeBoundaryCommand =
@@ -46,66 +48,6 @@ const nativeCommands = [
   voiceFixtureCommand,
 ];
 
-const independentGuards = [
-  'completed_model_view',
-  'public_owner_state',
-  'capabilities_view_dependencies',
-  'tool_setup_view_dependencies',
-  'reading_view_inputs',
-  'skills_view_dependencies',
-  'find_view_dependencies',
-  'connectors_view_dependencies',
-  'mcp_setup_view_dependencies',
-  'outputs_view_dependencies',
-  'download_file_value',
-  'logs_view_dependencies',
-  'connector_detail_mount',
-  'voice_view_dependencies',
-  'speech_synthesis_view_dependencies',
-  'plugins_view_dependencies',
-  'workspace_entry_key_owner',
-  'usage_view_dependencies',
-  'chat_runtime_observation',
-  'secure_reply_view_wire',
-  'shared_draft_view_dependencies',
-  'provider_recovery_view_dependencies',
-  'slash_completion_view_dependencies',
-  'resource_preview_view_dependencies',
-  'supervision_view_dependencies',
-  'workspace_voice_view_dependencies',
-  'browser_view_dependencies',
-  'project_actions_view_dependencies',
-  'row_actions_view_dependencies',
-  'browser_values',
-  'workspace_canonical_state',
-  'workspace_search_owner',
-  'transcript_history_dispatch',
-  'profile_discovery_writer',
-  'saved_prompt_journal_admission',
-  'current_tool_events',
-  'activity_density',
-  'retired_answer_versions_namespace',
-  'resume_durable_identity',
-  'intelligence_read_admission',
-  'settings_view_protocol',
-  'owned_model_mutation',
-  'overview_view_wire',
-  'provider_view_protocol',
-  'memory_view_protocol',
-  'deleted_draft_cleanup_boundary',
-  'model_catalog_fixture',
-  'dart_main_roots',
-  'completed_setup_view',
-  'app_preferences_view',
-  'visibility_key_owner',
-  'backup_owner_boundary',
-  'app_preferences_construction',
-  'profiles_management_view',
-  'profile_identity_view',
-  'profile_colours_view',
-  'browser_row_work',
-  'notification_journal_ack',
-];
 const fixtureCommands = [
   'dart run tools/architecture/tests/workspace_search_owner_test.dart',
   'dart run tools/architecture/tests/profile_discovery_writer_test.dart',
@@ -118,8 +60,8 @@ final independentCommands = [
   ...fixtureCommands,
   'python3 tools/architecture/rules/authored_census.py',
   'python3 tools/architecture/rules/native_retired_resources.py',
-  for (final guard in independentGuards)
-    'dart run tools/architecture/rules/$guard.dart',
+  'python3 tools/architecture/rules/fixture_model_catalog.py',
+  'python3 tools/architecture/rules/retired_fixture_recovery.py',
 ];
 
 void main() {
@@ -248,68 +190,122 @@ void main() {
     }
   });
 
-  test('actual CLI rejects fixture-only provider enforcement', () async {
-    final file = File('${root.path}/.github/workflows/pr-quality.yml');
-    const command =
-        'dart run tools/architecture/rules/provider_view_protocol.dart';
-    file.writeAsStringSync(
-      file.readAsStringSync().replaceFirst(
-        'run: $command',
-        'run: dart run tools/architecture/tests/provider_view_protocol_test.dart',
-      ),
-    );
-    final invalid = await Process.run('$sdk/bin/dart', [
-      'run',
-      'tools/architecture/rules/required_quality_gates.dart',
-      root.path,
-    ]);
-    expect(invalid.exitCode, 1);
-    expect(invalid.stderr, contains('independent-provider_view_protocol'));
-    _writeWorkflows(root);
-    final valid = await Process.run('$sdk/bin/dart', [
-      'run',
-      'tools/architecture/rules/required_quality_gates.dart',
-      root.path,
-    ]);
-    expect(valid.exitCode, 0, reason: '${valid.stdout}\n${valid.stderr}');
-  });
-
-  for (final name in const [
-    'completed_setup_view',
-    'app_preferences_view',
-    'visibility_key_owner',
-    'backup_owner_boundary',
-    'app_preferences_construction',
-    'profiles_management_view',
-    'profile_identity_view',
-    'profile_colours_view',
-    'browser_row_work',
-    'notification_journal_ack',
-  ]) {
-    test('actual CLI rejects omitted $name enforcement', () async {
-      final command = 'dart run tools/architecture/rules/$name.dart';
-      final initiallyValid = await runCli();
-      expect(initiallyValid.exitCode, 0);
+  test(
+    'consolidated source checks cannot be omitted or replaced by fixtures',
+    () async {
       for (final workflow in ['pr-quality.yml', 'release.yml']) {
-        final file = File('${root.path}/.github/workflows/$workflow');
-        final source = file.readAsStringSync();
-        expect(source.split('run: $command'), hasLength(2));
-        file.writeAsStringSync(
-          source.replaceFirst(
-            'run: $command',
-            'run: echo omitted production guard',
-          ),
-        );
-        final invalid = await runCli();
-        expect(invalid.exitCode, 1);
-        expect(invalid.stderr, contains('independent-$name'));
-        expect(invalid.stderr, contains(workflow));
+        final command = workflow == 'pr-quality.yml'
+            ? boundSourceCommand
+            : sourceCommand;
+        for (final replacement in [
+          'echo omitted source checks',
+          'dart run tools/architecture/tests/provider_view_protocol_test.dart',
+          '$command || true',
+          'echo "$command"',
+        ]) {
+          _writeWorkflows(root);
+          final file = File('${root.path}/.github/workflows/$workflow');
+          file.writeAsStringSync(
+            file.readAsStringSync().replaceFirst(
+              'run: $command',
+              'run: $replacement',
+            ),
+          );
+          final invalid = await runCli();
+          expect(invalid.exitCode, 1);
+          expect(invalid.stderr, contains('source-contracts'));
+          expect(invalid.stderr, contains(workflow));
+        }
         _writeWorkflows(root);
         final valid = await runCli();
         expect(valid.exitCode, 0, reason: '${valid.stdout}\n${valid.stderr}');
       }
-    });
-  }
+      // Keep literal source launches as independent acceptance/failure controls.
+      _writeWorkflows(root);
+      final sourceValid = await Process.run('$sdk/bin/dart', [
+        'run',
+        'tools/architecture/rules/required_quality_gates.dart',
+        root.path,
+      ]);
+      expect(sourceValid.exitCode, 0);
+      final file = File('${root.path}/.github/workflows/pr-quality.yml');
+      file.writeAsStringSync(
+        file.readAsStringSync().replaceFirst(
+          'run: $boundSourceCommand',
+          'run: echo omitted source checks',
+        ),
+      );
+      final sourceInvalid = await Process.run('$sdk/bin/dart', [
+        'run',
+        'tools/architecture/rules/required_quality_gates.dart',
+        root.path,
+      ]);
+      expect(sourceInvalid.exitCode, 1);
+      expect(sourceInvalid.stderr, contains('source-contracts'));
+    },
+  );
+
+  test('PR source checks require the preceding baseline and Dart-only scope', () {
+    final file = File('${root.path}/.github/workflows/pr-quality.yml');
+    for (final replacement in [
+      sourceCommand,
+      '$sourceCommand --baseline-reference "elsewhere.json"',
+      'python3 scripts/check_commit_linters.py --baseline-reference "build/architecture-baseline-reference.json"',
+      'continue-on-error: true\n        run: $boundSourceCommand',
+      'if: false\n        run: $boundSourceCommand',
+    ]) {
+      _writeWorkflows(root);
+      file.writeAsStringSync(
+        file.readAsStringSync().replaceFirst(
+          'run: $boundSourceCommand',
+          replacement.startsWith('continue') || replacement.startsWith('if:')
+              ? replacement
+              : 'run: $replacement',
+        ),
+      );
+      expect(
+        checkRequiredQualityGates(root),
+        contains(contains('source-contracts')),
+      );
+    }
+  });
+
+  test('external CI linters must precede the host tests', () {
+    final file = File('${root.path}/.github/workflows/pr-quality.yml');
+    const step =
+        '      - name: Source contracts\n        run: $boundSourceCommand\n';
+    final original = file.readAsStringSync();
+    expect(original, contains(step));
+    file.writeAsStringSync(original.replaceFirst(step, '') + step);
+    expect(checkRequiredQualityGates(root), contains(contains('host-tests')));
+  });
+
+  test(
+    'the shared linter runner proofs remain mandatory in both workflows',
+    () {
+      for (final workflow in ['pr-quality.yml', 'release.yml']) {
+        final command = workflow == 'pr-quality.yml'
+            ? 'python3 -m unittest discover -s scripts/tests -v'
+            : r'python3 -m unittest discover -s "$RELEASE_TOOLS/tests" -v';
+        for (final prefix in ['', 'continue-on-error: true', 'if: false']) {
+          _writeWorkflows(root);
+          final file = File('${root.path}/.github/workflows/$workflow');
+          file.writeAsStringSync(
+            file.readAsStringSync().replaceFirst(
+              'run: $command',
+              prefix.isEmpty
+                  ? 'run: echo omitted runner proofs'
+                  : '$prefix\n        run: $command',
+            ),
+          );
+          expect(
+            checkRequiredQualityGates(root),
+            contains(contains('linter-runner-tests')),
+          );
+        }
+      }
+    },
+  );
 
   test('both native commands must be real hard-failing steps', () {
     for (final command in nativeCommands) {
@@ -357,6 +353,14 @@ void main() {
       file.readAsStringSync().replaceFirst(
         'run: ./android/gradlew -p android :app:testDebugUnitTest --no-daemon',
         'if: false\n        run: ./android/gradlew -p android :app:testDebugUnitTest --no-daemon',
+      ),
+    );
+    expect(checkRequiredQualityGates(root), hasLength(nativeCommands.length));
+    _writeWorkflows(root);
+    file.writeAsStringSync(
+      file.readAsStringSync().replaceFirst(
+        'run: ./android/gradlew -p android :app:testDebugUnitTest --no-daemon',
+        'continue-on-error: true\n        run: ./android/gradlew -p android :app:testDebugUnitTest --no-daemon',
       ),
     );
     expect(checkRequiredQualityGates(root), hasLength(nativeCommands.length));
@@ -618,13 +622,15 @@ jobs:
   ${item.$2}:
     ${jobCondition == null ? '# mandatory job' : 'if: $jobCondition'}
     steps:
+      - name: Linter runner proofs
+        run: ${item.$1 == 'pr-quality.yml' ? 'python3 -m unittest discover -s scripts/tests -v' : r'python3 -m unittest discover -s "$RELEASE_TOOLS/tests" -v'}
       - name: Offline QA
         ${softFailure ? 'continue-on-error: true' : '# mandatory'}
         ${conditional ? "if: github.ref == 'refs/heads/example'" : '# unconditional'}
         run: |
           $qa
-      - name: Architecture
-        run: $architectureCommand
+      - name: Source contracts
+        run: ${item.$1 == 'pr-quality.yml' ? boundSourceCommand : sourceCommand}
 ${independentCommands.where((command) => item.$1 == 'release.yml' || !fixtureCommands.contains(command) || command.contains('workspace_search_owner_test.dart')).map((command) => '      - name: Independent production guard\n        run: $command').join('\n')}
       - name: Host tests
         ${item.$1 == 'pr-quality.yml' ? 'env:\n          TEST_BASE_REF: $testBaseRef' : '# exhaustive release'}

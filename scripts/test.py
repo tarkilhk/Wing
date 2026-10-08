@@ -139,6 +139,8 @@ def main():
     parser.add_argument('--concurrency', type=int, default=min(8, os.cpu_count() or 1))
     parser.add_argument('--full', action='store_true', help='Run every checker proof as well as product tests')
     parser.add_argument('--changed-since', help='Also require full verification when checking-tool inputs changed')
+    parser.add_argument('--skip-linters', action='store_true',
+                        help='Run host tests with source linters enforced in separate CI steps')
     args = parser.parse_args()
     if args.concurrency < 1:
         parser.error('concurrency must be positive')
@@ -168,7 +170,9 @@ def main():
     lint = None
     lint_logs = []
     try:
-        if not full:
+        if args.skip_linters:
+            print('Host tests only; current-source linters must run separately.', flush=True)
+        if not full and not args.skip_linters:
             lint_logs = [(archive / name).open('w') for name in ('linters.stdout', 'linters.stderr')]
             lint = subprocess.Popen([sys.executable, 'scripts/check_commit_linters.py'],
                                     cwd=ROOT, stdout=lint_logs[0], stderr=lint_logs[1],
@@ -265,6 +269,7 @@ def main():
                    'done': done, 'exit_code': result, 'source_before': before,
                    'source_after': after, 'concurrency': args.concurrency}
         summary['suite'] = 'full' if full else 'routine'
+        summary['linters'] = 'external' if args.skip_linters else ('proofs' if full else 'local')
         summary['scheduled_suites'] = plan['scheduled']
         (archive / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
         print(f'{summary["elapsed_seconds"]:.2f}s: {dict(counts)}; evidence {archive}', flush=True)
@@ -294,6 +299,7 @@ def main():
                 'source_before': before, 'source_after': after,
                 'concurrency': args.concurrency, 'interrupted': interrupted,
                 'suite': 'full' if full else 'routine',
+                'linters': 'external' if args.skip_linters else ('proofs' if full else 'local'),
             }, indent=2) + '\n')
 
 

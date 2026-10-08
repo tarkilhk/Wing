@@ -107,170 +107,32 @@ jobs:
       - name: Test offline QA tooling
         run: python3 -m unittest discover -s tools/qa -p 'test_*.py' -v
 
-      - name: Check architecture contracts
-        run: dart run tools/architecture/check_all.dart
+      - name: Check all Dart source contracts
+        run: python3 scripts/check_commit_linters.py --dart-only
 
-      - name: Check completed model views
-        run: dart run tools/architecture/rules/completed_model_view.dart
-
-      - name: Check completed owner observation declarations
-        run: dart run tools/architecture/rules/public_owner_state.dart
-
-      - name: Check capabilities view dependencies
-        run: dart run tools/architecture/rules/capabilities_view_dependencies.dart
-
-      - name: Check tool setup view dependencies
-        run: dart run tools/architecture/rules/tool_setup_view_dependencies.dart
-
-      - name: Check typed reading view inputs
-        run: dart run tools/architecture/rules/reading_view_inputs.dart
-
-      - name: Check skills view dependencies
-        run: dart run tools/architecture/rules/skills_view_dependencies.dart
-
-      - name: Check Find view dependencies
-        run: dart run tools/architecture/rules/find_view_dependencies.dart
-      - name: Check connectors_view_dependencies
-        run: dart run tools/architecture/rules/connectors_view_dependencies.dart
-      - name: Check mcp_setup_view_dependencies
-        run: dart run tools/architecture/rules/mcp_setup_view_dependencies.dart
-      - name: Check outputs_view_dependencies
-        run: dart run tools/architecture/rules/outputs_view_dependencies.dart
-      - name: Check download_file_value
-        run: dart run tools/architecture/rules/download_file_value.dart
-      - name: Check logs_view_dependencies
-        run: dart run tools/architecture/rules/logs_view_dependencies.dart
-      - name: Check connector_detail_mount
-        run: dart run tools/architecture/rules/connector_detail_mount.dart
-      - name: Check voice_view_dependencies
-        run: dart run tools/architecture/rules/voice_view_dependencies.dart
-      - name: Check speech_synthesis_view_dependencies
-        run: dart run tools/architecture/rules/speech_synthesis_view_dependencies.dart
-      - name: Check plugins_view_dependencies
-        run: dart run tools/architecture/rules/plugins_view_dependencies.dart
-      - name: Check workspace_entry_key_owner
-        run: dart run tools/architecture/rules/workspace_entry_key_owner.dart
-      - name: Check usage_view_dependencies
-        run: dart run tools/architecture/rules/usage_view_dependencies.dart
-      - name: Check chat_runtime_observation
-        run: dart run tools/architecture/rules/chat_runtime_observation.dart
-      - name: Check secure_reply_view_wire
-        run: dart run tools/architecture/rules/secure_reply_view_wire.dart
-      - name: Check shared_draft_view_dependencies
-        run: dart run tools/architecture/rules/shared_draft_view_dependencies.dart
-      - name: Check provider_recovery_view_dependencies
-        run: dart run tools/architecture/rules/provider_recovery_view_dependencies.dart
-      - name: Check slash_completion_view_dependencies
-        run: dart run tools/architecture/rules/slash_completion_view_dependencies.dart
-      - name: Check resource_preview_view_dependencies
-        run: dart run tools/architecture/rules/resource_preview_view_dependencies.dart
-      - name: Check supervision_view_dependencies
-        run: dart run tools/architecture/rules/supervision_view_dependencies.dart
-      - name: Check workspace_voice_view_dependencies
-        run: dart run tools/architecture/rules/workspace_voice_view_dependencies.dart
-      - name: Check browser_view_dependencies
-        run: dart run tools/architecture/rules/browser_view_dependencies.dart
-      - name: Check project_actions_view_dependencies
-        run: dart run tools/architecture/rules/project_actions_view_dependencies.dart
-      - name: Check row_actions_view_dependencies
-        run: dart run tools/architecture/rules/row_actions_view_dependencies.dart
-      - name: Check browser_values
-        run: dart run tools/architecture/rules/browser_values.dart
-      - name: Check canonical workspace state
-        run: dart run tools/architecture/rules/workspace_canonical_state.dart
-      - name: Check workspace search owner
-        run: dart run tools/architecture/rules/workspace_search_owner.dart
       - name: Check workspace search owner fixtures
         run: dart run tools/architecture/tests/workspace_search_owner_test.dart
-      - name: Check transcript history dispatch
-        run: dart run tools/architecture/rules/transcript_history_dispatch.dart
-      - name: Canonical profile discovery writer
-        run: dart run tools/architecture/rules/profile_discovery_writer.dart
       - name: Canonical profile discovery writer fixtures
         run: dart run tools/architecture/tests/profile_discovery_writer_test.dart
-      - name: Saved-prompt journal admission
-        run: dart run tools/architecture/rules/saved_prompt_journal_admission.dart
       - name: Saved-prompt journal admission fixtures
         run: dart run tools/architecture/tests/saved_prompt_journal_admission_test.dart
-      - name: Retired answer versions namespace
-        run: dart run tools/architecture/rules/retired_answer_versions_namespace.dart
       - name: Retired answer versions namespace fixtures
         run: dart run tools/architecture/tests/retired_answer_versions_namespace_test.dart
-      - name: Compact activity density
-        run: dart run tools/architecture/rules/activity_density.dart
       - name: Compact activity density fixtures
         run: dart run tools/architecture/tests/activity_density_test.dart
-      - name: Current stock tool events
-        run: dart run tools/architecture/rules/current_tool_events.dart
       - name: Current stock tool event fixtures
         run: dart run tools/architecture/tests/current_tool_events_test.dart
-      - name: Check notification resume identity
-        run: dart run tools/architecture/rules/resume_durable_identity.dart
-      - name: Check intelligence read admission
-        run: dart run tools/architecture/rules/intelligence_read_admission.dart
-
-      - name: Check settings views
-        run: dart run tools/architecture/rules/settings_view_protocol.dart
-
-      - name: Check owned write capabilities
-        run: dart run tools/architecture/rules/owned_model_mutation.dart
-
-      - name: Check profile overview
-        run: dart run tools/architecture/rules/overview_view_wire.dart
-
-      - name: Check provider views
-        run: dart run tools/architecture/rules/provider_view_protocol.dart
-
-      - name: Check memory views
-        run: dart run tools/architecture/rules/memory_view_protocol.dart
-
-      - name: Check deleted draft cleanup
-        run: dart run tools/architecture/rules/deleted_draft_cleanup_boundary.dart
-
-      - name: Check authored model catalog fixtures
-        run: dart run tools/architecture/rules/model_catalog_fixture.dart
-
-      - name: Check Dart executable root coverage
-        run: dart run tools/architecture/rules/dart_main_roots.dart
-
-      - name: Check completed connection setup view
-        run: dart run tools/architecture/rules/completed_setup_view.dart
-
-      - name: Check completed app preference views
-        run: dart run tools/architecture/rules/app_preferences_view.dart
-
-      - name: Check visibility preference ownership
-        run: dart run tools/architecture/rules/visibility_key_owner.dart
-
-      - name: Check backup ownership boundaries
-        run: dart run tools/architecture/rules/backup_owner_boundary.dart
-
-      - name: Check app preference owner construction
-        run: dart run tools/architecture/rules/app_preferences_construction.dart
-
-      - name: Check profiles management view ownership
-        run: dart run tools/architecture/rules/profiles_management_view.dart
-
-      - name: Check profile identity view ownership
-        run: dart run tools/architecture/rules/profile_identity_view.dart
-
-      - name: Check profile colours view ownership
-        run: dart run tools/architecture/rules/profile_colours_view.dart
-
-      - name: Guard browser row work
-        run: dart run tools/architecture/rules/browser_row_work.dart
-
-      - name: Guard notification journal acknowledgements
-        run: dart run tools/architecture/rules/notification_journal_ack.dart
-
       - name: Check authored checkout census
         run: python3 tools/architecture/rules/authored_census.py
 
+      - name: Check authored fixture model catalog
+        run: python3 tools/architecture/rules/fixture_model_catalog.py
+
+      - name: Reject retired fixture recovery contracts
+        run: python3 tools/architecture/rules/retired_fixture_recovery.py
+
       - name: Reject retired native resources
         run: python3 tools/architecture/rules/native_retired_resources.py
-
-      - name: Protect mandatory quality gates
-        run: dart run tools/architecture/rules/required_quality_gates.dart
 
       - name: Verify release tag and source
         run: |

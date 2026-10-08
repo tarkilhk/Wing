@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:yaml/yaml.dart';
 
 const _qaCommand = "python3 -m unittest discover -s tools/qa -p 'test_*.py' -v";
-const _architectureCommand = 'dart run tools/architecture/check_all.dart';
+const _sourceCommand = 'python3 scripts/check_commit_linters.py --dart-only';
+const _boundSourceCommand =
+    '$_sourceCommand --baseline-reference "build/architecture-baseline-reference.json"';
 const _changedTestsCommand =
-    r'python3 scripts/test.py --changed-since "$TEST_BASE_REF"';
+    r'python3 scripts/test.py --changed-since "$TEST_BASE_REF" --skip-linters';
 const _fullTestsCommand = 'python3 scripts/test.py --full';
 const _testBaseRef =
     r'${{ github.event.pull_request.base.sha || github.event.before }}';
@@ -67,75 +69,31 @@ List<String> checkRequiredQualityGates(Directory root) {
       final steps = (job['steps'] as List).whereType<Map>().toList();
       for (final gate in [
         ('offline-qa', _qaCommand),
-        ('architecture', _architectureCommand),
+        (
+          'linter-runner-tests',
+          target.$2 == 'quality'
+              ? 'python3 -m unittest discover -s scripts/tests -v'
+              : r'python3 -m unittest discover -s "$RELEASE_TOOLS/tests" -v',
+        ),
+        (
+          'source-contracts',
+          target.$2 == 'quality' ? _boundSourceCommand : _sourceCommand,
+        ),
         (
           'authored-census',
           'python3 tools/architecture/rules/authored_census.py',
         ),
-        for (final name in const [
-          'completed_model_view',
-          'public_owner_state',
-          'capabilities_view_dependencies',
-          'tool_setup_view_dependencies',
-          'reading_view_inputs',
-          'skills_view_dependencies',
-          'find_view_dependencies',
-          'connectors_view_dependencies',
-          'mcp_setup_view_dependencies',
-          'outputs_view_dependencies',
-          'download_file_value',
-          'logs_view_dependencies',
-          'connector_detail_mount',
-          'voice_view_dependencies',
-          'speech_synthesis_view_dependencies',
-          'plugins_view_dependencies',
-          'workspace_entry_key_owner',
-          'usage_view_dependencies',
-          'chat_runtime_observation',
-          'secure_reply_view_wire',
-          'shared_draft_view_dependencies',
-          'provider_recovery_view_dependencies',
-          'slash_completion_view_dependencies',
-          'resource_preview_view_dependencies',
-          'supervision_view_dependencies',
-          'workspace_voice_view_dependencies',
-          'browser_view_dependencies',
-          'project_actions_view_dependencies',
-          'row_actions_view_dependencies',
-          'browser_values',
-          'workspace_canonical_state',
-          'workspace_search_owner',
-          'transcript_history_dispatch',
-          'profile_discovery_writer',
-          'saved_prompt_journal_admission',
-          'current_tool_events',
-          'activity_density',
-          'retired_answer_versions_namespace',
-          'resume_durable_identity',
-          'intelligence_read_admission',
-          'settings_view_protocol',
-          'owned_model_mutation',
-          'overview_view_wire',
-          'provider_view_protocol',
-          'memory_view_protocol',
-          'deleted_draft_cleanup_boundary',
-          'model_catalog_fixture',
-          'dart_main_roots',
-          'completed_setup_view',
-          'app_preferences_view',
-          'visibility_key_owner',
-          'backup_owner_boundary',
-          'app_preferences_construction',
-          'profiles_management_view',
-          'profile_identity_view',
-          'profile_colours_view',
-          'browser_row_work',
-          'notification_journal_ack',
-        ])
-          ('independent-$name', 'dart run tools/architecture/rules/$name.dart'),
         (
           'native-retired-resources',
           'python3 tools/architecture/rules/native_retired_resources.py',
+        ),
+        (
+          'fixture-model-catalog',
+          'python3 tools/architecture/rules/fixture_model_catalog.py',
+        ),
+        (
+          'retired-fixture-recovery',
+          'python3 tools/architecture/rules/retired_fixture_recovery.py',
         ),
         for (final name in _fixtureNames)
           if (target.$2 == 'build' || name == 'workspace_search_owner')
@@ -176,7 +134,18 @@ List<String> checkRequiredQualityGates(Directory root) {
                   _mandatory(entry.$2['if']) &&
                   _runsFinalCommand(entry.$2['run'], gate.$2) &&
                   (gate.$2 != _changedTestsCommand ||
-                      _boundTestBase(entry.$2['env'])) &&
+                      (_boundTestBase(entry.$2['env']) &&
+                          steps
+                              .take(entry.$1)
+                              .any(
+                                (setup) =>
+                                    _hardFailure(setup['continue-on-error']) &&
+                                    _mandatory(setup['if']) &&
+                                    _runsFinalCommand(
+                                      setup['run'],
+                                      _boundSourceCommand,
+                                    ),
+                              ))) &&
                   (!native || steps.take(entry.$1).any(_nativeToolingReady)),
             );
         if (!protected) {
@@ -287,6 +256,7 @@ bool _allBranchPushes(Object? events) {
 /// These existing Gradle commands populate the pinned Kotlin compiler cache.
 /// This checks placement, not build success: absent tooling fails the native CLI.
 bool _nativeToolingReady(Map step) =>
+    _hardFailure(step['continue-on-error']) &&
     _mandatory(step['if']) &&
     step['run'] is String &&
     const {
@@ -327,13 +297,7 @@ bool _runsFinalCommand(Object? run, String required) {
       .toList();
   if (lines.length != 1) return false;
   final command = lines.single;
-  if (required != _architectureCommand) return command == required;
-  // The optional reference is generated by CI from the preceding commit. It
-  // must remain a quoted argument; shell operators cannot bypass this gate.
-  return command == required ||
-      RegExp(
-        '^${RegExp.escape(required)} --baseline-reference "[^"\r\n;|&]+"\$',
-      ).hasMatch(command);
+  return command == required;
 }
 
 void main(List<String> arguments) {

@@ -81,12 +81,13 @@ class TestCadence(unittest.TestCase):
         self.git('mv', 'tools/architecture/rules/example.dart', 'lib/renamed.dart')
         self.assertTrue(runner.full_for_changes(self.root, self.reference))
 
-    def run_verification(self, lint_exit, test_exit, mutate_source=False):
+    def run_verification(self, lint_exit, test_exit, mutate_source=False, skip_linters=False):
         self.write('.gitignore', 'build/\n')
         self.write('test/example_test.dart', 'void main() {}')
         self.write('scripts/check_commit_linters.py', '''
 from pathlib import Path
 import sys, time
+Path('build/linter-started').touch()
 started = Path('build/test-started')
 for _ in range(300):
     if started.exists(): break
@@ -127,7 +128,8 @@ else:
             (self.root / 'bin' / name).chmod(0o700)
         output, error = io.StringIO(), io.StringIO()
         with (mock.patch.object(runner, 'ROOT', self.root),
-              mock.patch('sys.argv', ['test.py', '--concurrency=2']),
+              mock.patch('sys.argv', ['test.py', '--concurrency=2'] +
+                         (['--skip-linters'] if skip_linters else [])),
               mock.patch.dict(os.environ, {'PATH': str(self.root / 'bin') + os.pathsep + os.environ['PATH']}),
               contextlib.redirect_stdout(output), contextlib.redirect_stderr(error)):
             result = runner.main()
@@ -139,6 +141,20 @@ else:
         self.assertEqual(result, 23)
         self.assertIn('fixture linter result', error)
         self.assertNotIn('Current-source linters passed.', output)
+        self.assertTrue((self.root / 'build/linter-started').exists())
+
+    def test_ci_external_linters_do_not_require_native_tooling_before_tests(self):
+        result, output, error = self.run_verification(23, 0, skip_linters=True)
+        self.assertEqual(result, 0)
+        self.assertFalse((self.root / 'build/linter-started').exists())
+        self.assertIn('current-source linters must run separately', output)
+        archive = Path(output.rsplit('evidence ', 1)[-1].strip())
+        self.assertEqual(json.loads((archive / 'summary.json').read_text())['linters'], 'external')
+
+    def test_external_linters_cannot_hide_product_failure(self):
+        result, output, error = self.run_verification(0, 7, skip_linters=True)
+        self.assertEqual(result, 7)
+        self.assertIn('Expected one button, found none', error)
 
     def test_product_failure_and_assertion_details_survive_passing_linters(self):
         result, output, error = self.run_verification(lint_exit=0, test_exit=7)

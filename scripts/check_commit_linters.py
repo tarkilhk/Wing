@@ -78,11 +78,32 @@ def staged_checkout(root, tree):
         yield target
 
 
-def dart_driver(root, destination):
+def dart_driver(root, destination, baseline_reference=None):
     aggregate = root / 'tools/architecture/check_all.dart'
+    aggregate_source = aggregate.read_text()
+    registrations = re.search(
+        r'^final\s+allRules\s*=\s*<String,\s*Rule>\s*\{(.*?)\n\};',
+        aggregate_source, re.DOTALL | re.MULTILINE)
+    if not registrations:
+        raise ValueError('Architecture aggregate registrations are unsupported.')
+    if not re.search(
+            r'^Future<void>\s+main\s*\(List<String>\s+(\w+)\)\s*'
+            r'=>\s*run\(\1,\s*allRules\);', aggregate_source, re.MULTILINE):
+        raise ValueError('Architecture aggregate execution is unsupported.')
+    # An import alone does not establish that the aggregate executes a rule.
+    # Recognize only its two existing registration forms, without comments.
+    entries = registrations.group(1)
+    # Dart block comments can nest. Conservatively keep every standalone rule
+    # when they appear, rather than trusting a regex to prove registration.
+    ambiguous = any(token in aggregate_source for token in ('/*', '"""', "'''"))
+    entries = '' if ambiguous else re.sub(r'//[^\n]*', '', entries)
     covered = {
         (aggregate.parent / path).resolve()
-        for path in re.findall(r"import '([^']+)' as \w+;", aggregate.read_text())
+        for path, alias in re.findall(r"import '([^']+)' as (\w+);", aggregate_source)
+        if re.search(
+            rf'\b{alias}\.id\s*:\s*(?:{alias}\.check\s*,|'
+            rf'\(\s*snapshot\s*\)\s*=>\s*{alias}\.check\s*'
+            r'\(\s*snapshot\s*,\s*snapshot\.root\s*\)\s*,)', entries)
     }
     commands = [('architecture', aggregate)]
     commands.extend((path.stem, path) for path in sorted(
@@ -94,6 +115,11 @@ def dart_driver(root, destination):
                f"import '{(aggregate.parent / 'semantic_context.dart').as_uri()}' as semantic;"]
     callbacks = []
     for index, (name, path) in enumerate(commands):
+        arguments = 'const <String>[]'
+        if path == aggregate and baseline_reference is not None:
+            # JSON escaping covers quotes/backslashes; Dart also interpolates $.
+            literal = json.dumps(str(baseline_reference)).replace('$', r'\$')
+            arguments = f'const <String>["--baseline-reference", {literal}]'
         source = path.read_text()
         signature = re.search(r'\b(Future<void>|void)\s+main\s*\(List<String>\s+\w+\)', source)
         if not signature:
@@ -109,7 +135,7 @@ def dart_driver(root, destination):
                     r'void\s+main\([^)]*\)\s*=>\s*run\(', source):
                 raise ValueError(f'{path.relative_to(root)}: unsupported asynchronous CLI wrapper.')
             await_call = 'await ' if signature.group(1).startswith('Future') else ''
-            call = f'{await_call}rule{index}.main(const <String>[]);'
+            call = f'{await_call}rule{index}.main({arguments});'
         callbacks.append(f"('{name}', () async {{ {call} }})")
     destination.write_text('\n'.join(imports) + '''
 Future<void> main() async {
@@ -143,6 +169,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--staged', action='store_true',
                         help='Check the Git index in an isolated checkout')
+    parser.add_argument('--dart-only', action='store_true',
+                        help='Run every Dart source check; CI runs native guards after Gradle setup')
+    parser.add_argument('--baseline-reference', type=Path,
+                        help='Reject aggregate architecture exemptions added since this baseline')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     try:
@@ -161,15 +191,17 @@ def main():
                 raise ValueError('Run flutter pub get before checking linters.')
             with tempfile.TemporaryDirectory(prefix='wing-lint-driver-') as directory:
                 driver = Path(directory) / 'check.dart'
-                count = dart_driver(source, driver)
+                reference = args.baseline_reference.resolve() if args.baseline_reference is not None else None
+                count = dart_driver(source, driver, reference)
                 result = checked([dart, f'--packages={config}', str(driver)], source)
                 if result:
                     return result
-                for guard in PYTHON_GUARDS:
+                guards = () if args.dart_only else PYTHON_GUARDS
+                for guard in guards:
                     result = checked([sys.executable, guard], source)
                     if result:
                         return result
-        print(f'Wing linters passed: {count} Dart commands and {len(PYTHON_GUARDS)} Python/native checks.')
+        print(f'Wing linters passed: {count} Dart commands and {len(guards)} Python/native checks.')
         return 0
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f'[WING_COMMIT_LINT_INPUT] {error}', file=sys.stderr)

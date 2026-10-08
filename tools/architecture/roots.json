@@ -6048,6 +6048,15 @@
       "purpose": "Nightly and manual complete product/checker proof verification",
       "source": "GitHub daily schedule; docs/TESTING.md",
       "status": "supported"
+    },
+    {
+      "id": "tool-check-commit-linters-tests",
+      "kind": "host-test",
+      "path": "scripts/tests/test_check_commit_linters.py",
+      "purpose": "Discover every Dart source guard, preserve baseline arguments and prove linter failure propagation and native dependency separation",
+      "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml: Python unittest discovery",
+      "status": "supported",
+      "selector": "unittest"
     }
   ],
   "files": [
@@ -13799,6 +13808,11 @@
     {
       "path": "test/architecture_source_parsing_test.dart",
       "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "scripts/tests/test_check_commit_linters.py",
+      "area": "scripts",
       "provenance": "intentional-untracked"
     }
   ],

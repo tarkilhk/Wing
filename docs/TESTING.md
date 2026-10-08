@@ -38,6 +38,18 @@ full suite. The nightly workflow also supports manual dispatch. Scheduling
 preserves every test but can delay finding a checking-tool regression until the
 next full run; checking the current app source is never deferred.
 
+CI runs the Dart source checks together with
+`python3 scripts/check_commit_linters.py --dart-only`, preserving each rule while
+sharing startup and analysis work. PR checks also bind the aggregate to the
+preceding architecture baseline with `--baseline-reference`. Python source
+checks run explicitly, and native source guards run after Gradle has supplied
+their compiler dependencies. PR host tests use `scripts/test.py --skip-linters`
+because these mandatory workflow steps enforce the linters separately. The
+workflow guard requires the Dart source gate before that host step and Gradle
+setup before each native gate. Local routine verification keeps all linters.
+Python runner tests prove source-check discovery, baseline handling, failure
+propagation and separation of native dependencies; they run in both workflows.
+
 Ordinary suites share generated Flutter
 batches, with separate lanes for pure tests, widget bindings and reviewed
 architecture wrappers. Additional transport fixtures require a source and

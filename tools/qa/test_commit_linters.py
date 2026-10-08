@@ -67,7 +67,9 @@ class CommitLintersIntegrationTest(unittest.TestCase):
         self._write(".dart_tool/package_config.json", "{}\n")
         self._write(
             "tools/architecture/check_all.dart",
-            "import 'dart:io';\nFuture<void> main(List<String> args) async {}\n",
+            "import 'cli.dart';\nimport 'model.dart';\n"
+            "final allRules = <String, Rule>{\n};\n"
+            "Future<void> main(List<String> args) => run(args, allRules);\n",
         )
         self._write(
             "tools/architecture/baseline.json",
