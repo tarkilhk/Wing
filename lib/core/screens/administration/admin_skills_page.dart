@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../models/profile_skills.dart';
+import '../../presentation/skill_document.dart';
+import '../../widgets/tool_activity_details.dart';
+import '../../theme/wing_theme.dart';
 import '../../services/profile_skills_session.dart';
 import '../../services/administration_operation_session.dart';
 import '../../widgets/studio_action_label.dart';
@@ -190,46 +193,79 @@ class _AdminSkillDetailState extends State<AdminSkillDetail> {
     },
   );
   @override
-  Widget build(BuildContext context) => AdminPage(
-    title: _route.skill.name,
-    scope: _session.scopeLabel,
-    child: _SkillsRead(
-      session: _session,
-      retry: () => _session.loadDetail(_route),
-      builder: (state) => ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          AdminNotice(
-            'Origin: ${_session.currentSkill(_route)?.provenance ?? _route.skill.provenance}',
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _session,
+    builder: (context, _) {
+      final state = _session.state;
+      final instructions = state.instructions;
+      if (instructions == null) {
+        return AdminPage(
+          title: _route.skill.name,
+          scope: _session.scopeLabel,
+          child: _SkillsRead(
+            session: _session,
+            retry: () => _session.loadDetail(_route),
+            builder: (_) => const SizedBox.shrink(),
           ),
-          SelectableText(state.instructions?.content ?? ''),
-          const SizedBox(height: 16),
-          if ((_session.currentSkill(_route) ?? _route.skill).editable)
-            Wrap(
-              spacing: 8,
-              children: [
-                OutlinedButton(
-                  onPressed: _session.canEdit(_route) ? _edit : null,
-                  child: const Text('Edit instructions'),
-                ),
-                TextButton(
-                  onPressed: _session.canEdit(_route) ? _archive : null,
-                  child: const Text('Archive skill'),
-                ),
-              ],
+        );
+      }
+      final current = _session.currentSkill(_route) ?? _route.skill;
+      final document = SkillDocument.fromReceived(
+        name: instructions.name,
+        content: instructions.content,
+        sourcePath: instructions.sourcePath,
+        description: current.description,
+      );
+      return SkillDocumentViewer(
+        document: document,
+        actions: [
+          if (current.editable) ...[
+            ActivityDetailAction(
+              label: 'Edit instructions',
+              icon: Icons.edit_outlined,
+              onPressed: _session.canEdit(_route) ? _edit : null,
             ),
-          if ((_session.currentSkill(_route) ?? _route.skill).uninstallable)
-            TextButton(
+            ActivityDetailAction(
+              label: 'Archive skill',
+              icon: Icons.archive_outlined,
+              onPressed: _session.canEdit(_route) ? _archive : null,
+            ),
+          ],
+          if (current.uninstallable)
+            ActivityDetailAction(
+              label: 'Uninstall Hub skill',
+              icon: Icons.delete_outline,
               onPressed: _session.canUninstall(_route) ? _uninstall : null,
-              child: const Text('Uninstall Hub skill'),
             ),
-          TextButton(
+          ActivityDetailAction(
+            label: 'Refresh skill',
+            icon: Icons.refresh,
             onPressed: state.busy ? null : () => _session.loadDetail(_route),
-            child: const Text('Refresh'),
           ),
         ],
-      ),
-    ),
+        bodyBuilder: (context, body) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(WingSpacing.sm),
+              child: Text(
+                '${_session.scopeLabel} · Origin: ${current.provenance}',
+                style: WingTokens.of(context).typography.label.copyWith(
+                  color: WingTokens.of(context).muted,
+                ),
+              ),
+            ),
+            Expanded(
+              child: _SkillsRead(
+                session: _session,
+                retry: () => _session.loadDetail(_route),
+                builder: (_) => body,
+              ),
+            ),
+          ],
+        ),
+      );
+    },
   );
 }
 
@@ -496,28 +532,60 @@ class _AdminSkillPreviewState extends State<AdminSkillPreview> {
     },
   );
   @override
-  Widget build(BuildContext context) => AdminPage(
-    title: 'Skill preview',
-    scope: _session.scopeLabel,
-    child: _SkillsRead(
-      session: _session,
-      retry: () => _session.loadPreview(_route),
-      builder: (state) => ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (state.preview case final preview?) ...[
-            Text(preview.name, style: Theme.of(context).textTheme.titleLarge),
-            AdminNotice('${preview.source} · ${preview.trust}'),
-            SelectableText(preview.content),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: state.canMutate ? _install : null,
-              child: StudioActionLabel('Install', busy: state.saving),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _session,
+    builder: (context, _) {
+      final state = _session.state;
+      final preview = state.preview;
+      if (preview == null) {
+        return AdminPage(
+          title: 'Skill preview',
+          scope: _session.scopeLabel,
+          child: _SkillsRead(
+            session: _session,
+            retry: () => _session.loadPreview(_route),
+            builder: (_) => const SizedBox.shrink(),
+          ),
+        );
+      }
+      final document = SkillDocument.fromReceived(
+        name: preview.name,
+        content: preview.content,
+        description: _route.skill.description,
+      );
+      return SkillDocumentViewer(
+        document: document,
+        actions: [
+          ActivityDetailAction(
+            label: 'Install skill',
+            icon: Icons.download_outlined,
+            busy: state.saving,
+            onPressed: state.canMutate ? _install : null,
+          ),
+        ],
+        bodyBuilder: (context, body) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(WingSpacing.sm),
+              child: Text(
+                '${_session.scopeLabel} · ${preview.source} · ${preview.trust}',
+                style: WingTokens.of(context).typography.label.copyWith(
+                  color: WingTokens.of(context).muted,
+                ),
+              ),
+            ),
+            Expanded(
+              child: _SkillsRead(
+                session: _session,
+                retry: () => _session.loadPreview(_route),
+                builder: (_) => body,
+              ),
             ),
           ],
-        ],
-      ),
-    ),
+        ),
+      );
+    },
   );
 }
 

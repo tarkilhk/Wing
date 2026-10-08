@@ -63,13 +63,18 @@ final class HubSkill {
 }
 
 final class SkillInstructions {
-  const SkillInstructions(this.name, this.content);
+  const SkillInstructions(this.name, this.content, this.sourcePath);
   final String name, content;
+  final String? sourcePath;
   static SkillInstructions decode(Map<String, dynamic> response, String name) {
     if (response['name'] != name || response['content'] is! String) {
       throw const FormatException('Invalid skill instructions');
     }
-    return SkillInstructions(name, response['content'] as String);
+    return SkillInstructions(
+      name,
+      response['content'] as String,
+      response['path'] is String ? response['path'] as String : null,
+    );
   }
 }
 

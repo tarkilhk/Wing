@@ -13938,6 +13938,16 @@
       "path": "lib/core/presentation/agent_task_presentation.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/skill_document.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/activity/skill_document_viewer.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {

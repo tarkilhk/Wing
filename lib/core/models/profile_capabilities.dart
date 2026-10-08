@@ -129,7 +129,12 @@ class ProfileCapability {
 class ProfileSkillInstructions {
   final String name;
   final String content;
-  const ProfileSkillInstructions({required this.name, required this.content});
+  const ProfileSkillInstructions({
+    required this.name,
+    required this.content,
+    required this.sourcePath,
+  });
+  final String? sourcePath;
 }
 
 class ProfileCapabilitiesState {

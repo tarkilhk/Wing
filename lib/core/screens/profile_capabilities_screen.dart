@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import '../models/profile_capabilities.dart';
 import '../services/profile_capabilities_session.dart';
 import '../widgets/compact_switch.dart';
+import '../presentation/skill_document.dart';
+import '../widgets/tool_activity_details.dart';
+import '../theme/wing_theme.dart';
 
 /// Controls the capabilities of the captured server profile, never a chat override.
 class ProfileCapabilitiesScreen extends StatefulWidget {
@@ -81,13 +84,29 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
     try {
       final instructions = await _session.instructions(name);
       if (!mounted || instructions == null) return;
+      final document = SkillDocument.fromReceived(
+        name: instructions.name,
+        content: instructions.content,
+        sourcePath: instructions.sourcePath,
+      );
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => Scaffold(
-            appBar: AppBar(title: Text(instructions.name)),
-            body: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: SelectableText(instructions.content),
+          builder: (_) => SkillDocumentViewer(
+            document: document,
+            bodyBuilder: (context, body) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(WingSpacing.sm),
+                  child: Text(
+                    '${widget.connectionLabel} · ${_session.profileName}',
+                    style: WingTokens.of(context).typography.label.copyWith(
+                      color: WingTokens.of(context).muted,
+                    ),
+                  ),
+                ),
+                Expanded(child: body),
+              ],
             ),
           ),
         ),

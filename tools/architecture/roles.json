@@ -1930,6 +1930,16 @@
       "role": "presentation",
       "feature": "chat-activity",
       "library": "lib/core/presentation/agent_task_presentation.dart"
+    },
+    "lib/core/presentation/skill_document.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/skill_document.dart"
+    },
+    "lib/core/widgets/activity/skill_document_viewer.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/tool_activity_details.dart"
     }
   }
 }

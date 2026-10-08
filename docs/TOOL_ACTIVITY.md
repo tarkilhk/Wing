@@ -578,3 +578,38 @@ The dispatch receipt's supplied `status` and `goals` were rechecked against stoc
 `tools/delegate_tool_dispatch.py` at upstream main
 [`aa74e184ea779994af642ab4f888e10a95415d90`](https://github.com/NousResearch/hermes-agent/commit/aa74e184ea779994af642ab4f888e10a95415d90)
 on 9 October 2026; this correction changes client presentation only.
+
+`SKILL_DOCUMENT_SCOPE` separates a main skill's identity/purpose card from its
+complete received instruction document. `SkillDocument` selects actual name,
+description, tags and typed author/version/license declarations; the shared
+resource header and text viewer own presentation and actions. Linked files,
+unchanged receipts and binary results do not become main-document cards. Copy
+always retains the original receipt, including front matter. The viewer never
+fetches or edits a newer skill; share uses only a supplied source locator through
+the existing captured resource owner.
+
+`test/tool_activity_state_test.dart` guards field meaning, missing/malformed
+declarations and exact content. `test/tool_activity_actions_test.dart` guards
+compact identity, path popup, raw/formatted scope, exact clipboard text and held
+sharing in both themes at ordinary/enlarged text. The skill specimen in
+`test/activity_family_test.dart` supplies actual compact-card and viewer captures.
+These received-content and runtime layout properties need behavioral evidence,
+not a static field-name ban. The stock main-document contract was inspected in
+`tools/skills_tool.py` at upstream commit `aa74e184ea779994af642ab4f888e10a95415d90`
+on 9 October 2026.
+The same revision's `hermes_cli/web_routers/skills.py` content route supplies
+`name`, raw `content` and actual `path`; administration receipt models retain
+that path for the shared name popup and relative document context. A missing
+locator never causes a client-generated path.
+
+`lib/core/presentation/skill_document.dart` is the single pure declaration owner.
+`SkillActivityDocument` only binds that document to its existing tool receipt;
+administration constructs the same value from its actual content/catalog reads.
+`SkillDocumentViewer` lives in the activity widget library's dedicated part and
+composes its common text viewer, action state and document frame. Activity,
+capability instruction details, installed-skill details and Hub previews all use
+that component. Administration adapters alone retain refresh, edit, archive,
+uninstall, install and read-recovery authority. No synthetic tool call is created
+for administration. `test/administration_screens_test.dart` and
+`test/profile_capabilities_screen_test.dart` guard the shared production entry
+points and preserve exact editor input without issuing a mutation on viewing.

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/presentation/tool_activity_details.dart';
+import 'package:wing/core/presentation/skill_document.dart';
 
 ToolActivityDetails project(
   String name,
@@ -8,6 +9,54 @@ ToolActivityDetails project(
 ) => ToolActivityDetails.project(name: name, input: args, output: result);
 
 void main() {
+  test(
+    'skill declaration tags match stock across activity and administration',
+    () {
+      for (final declaration in [
+        'tags: [review, evidence]',
+        'tags: review, evidence',
+        'tags: "[review, evidence]"',
+        'tags: [review, evidence]\nmetadata:\n  hermes:\n    tags: []',
+      ]) {
+        final document = SkillDocument.fromReceived(
+          name: 'review',
+          content: '---\n$declaration\n---\n# Review',
+        );
+        expect(document.tags, ['review', 'evidence']);
+        expect(() => document.tags.add('invented'), throwsUnsupportedError);
+      }
+      expect(
+        SkillDocument.fromReceived(
+          name: 'review',
+          content: '---\ntags: [review]\n---\n# Review',
+          tags: const [],
+        ).tags,
+        isEmpty,
+      );
+    },
+  );
+  test(
+    'front-matter-only skill retains identity, description and exact raw content',
+    () {
+      const content =
+          '---\nname: review\ndescription: Inspect actual evidence.\n---\n';
+      final detail = project(
+        'skill_view',
+        {'name': 'review'},
+        {
+          'success': true,
+          'name': 'review',
+          'description': 'Inspect actual evidence.',
+          'content': content,
+        },
+      );
+      expect(detail.skill!.document.name, 'review');
+      expect(detail.skill!.document.description, 'Inspect actual evidence.');
+      expect(detail.skill!.document.formattedContent, isEmpty);
+      expect(detail.response.single.copyText, content);
+      expect(identical(detail.response.single, detail.skill!.content), isTrue);
+    },
+  );
   test('main skill hides YAML from prose while preserving exact raw content', () {
     const raw =
         '---\nname: inspect-build\ndescription: Inspect a build\n---\n# Inspect build\n\nRead the logs.\n';
@@ -209,6 +258,11 @@ void main() {
       expect(detail.response.single.copyText, content);
       expect(detail.response.single.markdown, isTrue);
       expect(detail.response.single.resourceTarget, '/skills/actual/SKILL.md');
+      expect(detail.skill!.document.name, 'canonical-skill');
+      expect(detail.skill!.document.description, 'Catalog description');
+      expect(detail.skill!.document.tags, ['tag']);
+      expect(detail.skill!.document.metadata, isEmpty);
+      expect(identical(detail.skill!.content, detail.response.single), isTrue);
       expect(
         detail.response.any((b) => b.text.contains('Catalog description')),
         isFalse,
@@ -224,6 +278,7 @@ void main() {
       );
       expect(binary.response.single.copyable, isFalse);
       expect(binary.response.single.resourceTarget, isNull);
+      expect(binary.skill, isNull);
     },
   );
 
@@ -239,6 +294,7 @@ void main() {
     );
     expect(source.response.single.format, ToolDetailFormat.source);
     expect(source.response.single.markdown, isFalse);
+    expect(source.skill, isNull);
     final unchanged = project(
       'skill_view',
       {'name': 's'},
@@ -253,6 +309,39 @@ void main() {
     expect(unchanged.receiptStatus, 'Unchanged');
     expect(unchanged.response.single.copyable, isFalse);
     expect(unchanged.response.single.label, 'Result');
+    expect(unchanged.skill, isNull);
+  });
+
+  test('skill metadata is supplied, typed and separate from instructions', () {
+    const raw =
+        '---\nname: review\nversion: 1.0\nauthor: Example\nlicense: MIT\n---\n# Review\nRead the evidence.';
+    final detail = project(
+      'skill_view',
+      {'name': 'review'},
+      {
+        'name': 'review',
+        'content': raw,
+        'metadata': {
+          'version': '2.0',
+          'author': ['not a name'],
+        },
+        'tags': ['review', 10, '', 'evidence'],
+      },
+    );
+    expect(detail.skill!.document.tags, ['review', 'evidence']);
+    expect(detail.skill!.document.metadata, [
+      (label: 'Version', value: '2.0'),
+      (label: 'License', value: 'MIT'),
+    ]);
+    expect(detail.skill!.document.description, isNull);
+    expect(detail.skill!.content.copyText, raw);
+    final malformed = project(
+      'skill_view',
+      {'name': 'review'},
+      {'content': '---\nauthor: [\n---\n# Still readable'},
+    );
+    expect(malformed.skill!.document.metadata, isEmpty);
+    expect(malformed.skill!.content.text, '# Still readable');
   });
 
   test(

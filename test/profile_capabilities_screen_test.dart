@@ -7,6 +7,8 @@ import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/profile_capabilities_screen.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profiles_repository.dart';
+import 'package:wing/core/widgets/tool_activity_details.dart';
+import 'helpers/pump_markdown_widget.dart';
 
 final _scope = WorkspaceScope(connectionId: 'server-a', profileName: 'work');
 const _profiles = ProfileDiscovery(
@@ -218,6 +220,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Read instructions'));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
+      expect(find.byType(SkillDocumentViewer), findsOneWidget);
       expect(find.text('Read the original sources.'), findsOneWidget);
     },
   );

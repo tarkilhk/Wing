@@ -114,6 +114,7 @@ class ResourceViewerAppBar extends StatelessWidget
     implements PreferredSizeWidget {
   final String title;
   final String? target;
+  final String? resourceLabel;
   final List<Widget> actions;
   final bool stacked;
 
@@ -122,6 +123,7 @@ class ResourceViewerAppBar extends StatelessWidget
     required BuildContext context,
     required this.title,
     this.target,
+    this.resourceLabel,
     this.actions = const [],
   }) : stacked = MediaQuery.textScalerOf(context).scale(14) > 21;
 
@@ -146,7 +148,11 @@ class ResourceViewerAppBar extends StatelessWidget
               overflow: TextOverflow.ellipsis,
               style: tokens.typography.section,
             )
-          : ResourceFilename(target: target!, style: tokens.typography.section),
+          : ResourceFilename(
+              target: target!,
+              label: resourceLabel,
+              style: tokens.typography.section,
+            ),
       actions: stacked
           ? null
           : [

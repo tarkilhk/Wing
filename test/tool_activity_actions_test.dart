@@ -1,6 +1,7 @@
-import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/presentation/tool_activity_details.dart';
@@ -37,6 +38,121 @@ Future<void> pump(WidgetTester tester, Widget child) async {
 }
 
 void main() {
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'skill identity, purpose and exact viewer ${brightness.name} $scale',
+        (tester) async {
+          const source = '/workspace/skills/inspect-build/SKILL.md';
+          const raw =
+              '---\nname: inspect-build\nversion: 1.0\nauthor: Example\nlicense: MIT\n---\n# Inspect build\n\nRead the actual **error** before changing code.\n';
+          String? copied;
+          final shared = <String?>[];
+          final sharing = Completer<void>();
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            (call) async {
+              if (call.method == 'Clipboard.setData') {
+                copied = (call.arguments as Map)['text'] as String;
+              }
+              return null;
+            },
+          );
+          addTearDown(
+            () => tester.binding.defaultBinaryMessenger
+                .setMockMethodCallHandler(SystemChannels.platform, null),
+          );
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: SingleChildScrollView(
+                  child: ToolActivityDetailsView(
+                    call: call(
+                      'skill_view',
+                      {'name': 'inspect-build'},
+                      {
+                        'success': true,
+                        'name': 'inspect-build',
+                        'description': 'Inspect build output.',
+                        'tags': ['build', 'review'],
+                        '_source_path': source,
+                        'content': raw,
+                      },
+                    ),
+                    onShareResource: (output) {
+                      shared.add(output.target);
+                      return sharing.future;
+                    },
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('inspect-build'), findsOneWidget);
+          expect(find.text('Inspect build output.'), findsOneWidget);
+          expect(find.text('Inspect build'), findsNothing);
+          expect(find.text('Result'), findsNothing);
+          expect(find.byTooltip('Copy skill instructions'), findsOneWidget);
+          await tester.tap(find.byTooltip('Copy skill instructions'));
+          await tester.pump();
+          expect(copied, raw);
+          await tester.tap(find.byTooltip('Open skill instructions'));
+          await tester.pumpAndSettle();
+          await tester.settleMarkdown();
+          expect(find.text('Inspect build'), findsOneWidget);
+          expect(find.text('Version'), findsOneWidget);
+          expect(find.text('1.0'), findsOneWidget);
+          expect(find.text('Author'), findsOneWidget);
+          expect(find.text('Example'), findsOneWidget);
+          expect(find.text('License'), findsOneWidget);
+          expect(find.text('MIT'), findsOneWidget);
+          expect(find.text('build'), findsOneWidget);
+          expect(find.text('review'), findsOneWidget);
+          expect(find.byTooltip('Copy skill instructions'), findsOneWidget);
+          await tester.tap(find.text('inspect-build'));
+          await tester.pumpAndSettle();
+          expect(find.text(source), findsOneWidget);
+          await tester.tapAt(const Offset(5, 400));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Show raw content'));
+          await tester.pumpAndSettle();
+          expect(find.text(raw), findsOneWidget);
+          expect(find.text('Version'), findsNothing);
+          await tester.tap(find.byTooltip('Copy skill instructions'));
+          await tester.pump();
+          expect(copied, raw);
+          await tester.tap(find.byTooltip('Share file'));
+          await tester.pump();
+          expect(shared, [source]);
+          expect(
+            tester
+                .widget<ActivityDetailAction>(
+                  find.ancestor(
+                    of: find.byTooltip('Share file'),
+                    matching: find.byType(ActivityDetailAction),
+                  ),
+                )
+                .busy,
+            isTrue,
+          );
+          sharing.complete();
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
   testWidgets('all file headers keep one-line names and exact resource targets', (
     tester,
   ) async {

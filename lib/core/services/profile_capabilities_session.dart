@@ -190,6 +190,7 @@ class ProfileCapabilitiesSession extends ChangeNotifier {
     return ProfileSkillInstructions(
       name: name,
       content: result['content'] as String,
+      sourcePath: result['path'] is String ? result['path'] as String : null,
     );
   }
 

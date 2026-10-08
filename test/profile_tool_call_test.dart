@@ -717,13 +717,13 @@ void main() {
         null,
       ),
     );
-    await tester.ensureVisible(find.byTooltip('Copy Result'));
-    await tester.tap(find.byTooltip('Copy Result'));
+    await tester.ensureVisible(find.byTooltip('Copy skill instructions'));
+    await tester.tap(find.byTooltip('Copy skill instructions'));
     await tester.pump();
     expect(copied, text);
     await tester.pump(const Duration(seconds: 2));
-    await tester.ensureVisible(find.byTooltip('Open Result'));
-    await tester.tap(find.byTooltip('Open Result'));
+    await tester.ensureVisible(find.byTooltip('Open skill instructions'));
+    await tester.tap(find.byTooltip('Open skill instructions'));
     await tester.pumpAndSettle();
     expect(
       find.byType(MarkdownMessageContent).evaluate().length,

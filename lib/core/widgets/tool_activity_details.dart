@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../presentation/tool_activity_details.dart';
+import '../presentation/skill_document.dart';
 import '../presentation/tool_call_presentation.dart';
 import '../services/web_preview.dart';
 import '../services/file_open_error_message.dart';
@@ -14,6 +15,8 @@ import 'chat_inline_image.dart';
 import 'markdown_message_content.dart';
 import 'resource_filename.dart';
 import 'studio_error.dart';
+
+part 'activity/skill_document_viewer.dart';
 
 // Read options is the owner's reference for every activity section's frame.
 const _toolInsets = EdgeInsets.all(WingSpacing.sm);
@@ -195,6 +198,7 @@ class ToolActivityDetailsView extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = WingTokens.of(context);
     final details = call.activityDetails;
+    final skill = details.skill;
     final statusIcon = switch (call.outcome) {
       ToolCallOutcome.error => Icons.error_outline,
       ToolCallOutcome.warning => Icons.warning_amber_outlined,
@@ -216,6 +220,16 @@ class ToolActivityDetailsView extends StatelessWidget {
     final showResource = resource != null && !groupedSearch;
     return ActivityDetailsCard(
       children: [
+        if (skill != null)
+          _SkillActivityContent(
+            skill: skill,
+            loadImage: loadImage,
+            onOpen: onOpenResource,
+            onShare: onShareResource,
+            output: skill.content.resourceTarget == null
+                ? null
+                : details.resourceFor(skill.content.resourceTarget!),
+          ),
         if (fileContent != null && showResource)
           _FileActivityContent(
             block: fileContent,
@@ -241,13 +255,14 @@ class ToolActivityDetailsView extends StatelessWidget {
             headerBuilder: (context, onView) => _ToolResourceRow(
               target: image.target,
               output: details.resourceFor(image.target),
-              onViewImage: onView,
+              onViewReceipt: onView,
               onShare: onShareResource,
               facts: [image.label],
             ),
           ),
         for (var i = 0; i < blocks.length; i++)
-          if (!(resource != null && identical(blocks[i], fileContent))) ...[
+          if (!(resource != null && identical(blocks[i], fileContent)) &&
+              !identical(blocks[i], skill?.content)) ...[
             ActivityDetailSection(
               key: ValueKey((i, blocks[i].label)),
               block: blocks[i],
@@ -334,17 +349,22 @@ class _ToolResourceRow extends StatefulWidget {
     required this.output,
     this.onOpen,
     this.onShare,
-    this.onViewImage,
+    this.onViewReceipt,
     this.leadingActions = const [],
     this.facts = const [],
     this.copyText,
     this.copyLabel = 'Copy content',
+    this.label,
+    this.leadingIcon,
+    this.viewLabel,
   });
-  final String target;
+  final String? target;
+  final String? label, viewLabel;
+  final IconData? leadingIcon;
   final ChatOutput? output;
   final Future<void> Function(ChatOutput)? onOpen;
   final Future<void> Function(ChatOutput)? onShare;
-  final VoidCallback? onViewImage;
+  final VoidCallback? onViewReceipt;
   final List<Widget> leadingActions;
   final List<String> facts;
   final String? copyText;
@@ -389,25 +409,27 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
     final colors = WingTokens.of(context);
     final image =
         widget.output?.kind == ChatOutputKind.image ||
-        widget.target.startsWith('data:image/');
+        (widget.target?.startsWith('data:image/') ?? false);
     final output = widget.output;
     final busy = _opening || _sharing;
     final actions = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         ...widget.leadingActions,
-        if (widget.onViewImage != null ||
+        if (widget.onViewReceipt != null ||
             (output != null && widget.onOpen != null))
           IconButton(
             style: _toolActionStyle,
-            tooltip: image
-                ? 'Preview image'
-                : output?.kind == ChatOutputKind.link
-                ? 'Open link'
-                : 'Preview file',
+            tooltip:
+                widget.viewLabel ??
+                (image
+                    ? 'Preview image'
+                    : output?.kind == ChatOutputKind.link
+                    ? 'Open link'
+                    : 'Preview file'),
             onPressed: busy
                 ? null
-                : widget.onViewImage ?? () => _run(share: false),
+                : widget.onViewReceipt ?? () => _run(share: false),
             icon: _opening
                 ? const SizedBox(
                     width: 16,
@@ -438,7 +460,8 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
       child: Row(
         children: [
           Icon(
-            image ? Icons.image_outlined : Icons.description_outlined,
+            widget.leadingIcon ??
+                (image ? Icons.image_outlined : Icons.description_outlined),
             size: 16,
             color: colors.muted,
           ),
@@ -447,18 +470,29 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (widget.target.startsWith('data:'))
+                if (widget.target == null)
+                  Text(
+                    widget.label!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: colors.typography.body,
+                  )
+                else if (widget.target!.startsWith('data:'))
                   Text('Attached image', style: colors.typography.label)
                 else
                   ResourceFilename(
-                    target: widget.target,
-                    label: output?.kind == ChatOutputKind.link
-                        ? Uri.tryParse(widget.target)?.host
-                        : null,
-                    style: colors.typography.mono.copyWith(
-                      fontSize: 12,
-                      color: colors.muted,
-                    ),
+                    target: widget.target!,
+                    label:
+                        widget.label ??
+                        (output?.kind == ChatOutputKind.link
+                            ? Uri.tryParse(widget.target!)?.host
+                            : null),
+                    style: (widget.label == null
+                        ? colors.typography.mono.copyWith(
+                            fontSize: 12,
+                            color: colors.muted,
+                          )
+                        : colors.typography.body),
                   ),
                 if (widget.facts.isNotEmpty)
                   Text(
@@ -491,6 +525,63 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
             ),
     );
   }
+}
+
+/// Skill identity and purpose inline; received instructions stay in their viewer.
+class _SkillActivityContent extends StatelessWidget {
+  const _SkillActivityContent({
+    required this.skill,
+    required this.output,
+    this.loadImage,
+    this.onOpen,
+    this.onShare,
+  });
+  final SkillActivityDocument skill;
+  final ChatOutput? output;
+  final Future<Uint8List> Function(String)? loadImage;
+  final Future<void> Function(ChatOutput)? onOpen, onShare;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _ToolResourceRow(
+        target: skill.content.resourceTarget,
+        output: output,
+        label: skill.document.name,
+        leadingIcon: Icons.menu_book_outlined,
+        viewLabel: 'Open skill instructions',
+        onViewReceipt: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => SkillDocumentViewer(
+              document: skill.document,
+              output: output,
+              loadImage: loadImage,
+              onOpenRemoteFile: onOpen,
+              onShare: onShare,
+            ),
+          ),
+        ),
+        onShare: onShare,
+        copyText: skill.content.copyText,
+        copyLabel: 'Copy skill instructions',
+      ),
+      ActivityDetailSection(
+        block: skill.document.description == null
+            ? skill.content
+            : ToolDetailBlock(
+                label: skill.document.name,
+                text: skill.document.description!,
+              ),
+        showHeader: false,
+        copyable: false,
+        viewable: false,
+        loadImage: loadImage,
+        documentPath: skill.content.resourceTarget,
+        onOpenRemoteFile: onOpen,
+      ),
+    ],
+  );
 }
 
 /// One compact file header and a bounded receipt. Only the full file viewer
@@ -974,54 +1065,112 @@ class _ActivityTextViewer extends StatefulWidget {
     this.documentPath,
     this.onOpenRemoteFile,
     required this.copyable,
+    this.title,
+    this.copyLabel,
+    this.formattedHeader,
+    this.output,
+    this.onShare,
+    this.actions = const [],
+    this.bodyBuilder,
   });
   final ToolDetailBlock block;
   final Future<Uint8List> Function(String)? loadImage;
   final String? documentPath;
   final Future<void> Function(ChatOutput)? onOpenRemoteFile;
   final bool copyable;
+  final List<Widget> actions;
+  final Widget Function(BuildContext, Widget)? bodyBuilder;
+  final String? title, copyLabel;
+  final Widget? formattedHeader;
+  final ChatOutput? output;
+  final Future<void> Function(ChatOutput)? onShare;
   @override
   State<_ActivityTextViewer> createState() => _ActivityTextViewerState();
 }
 
 class _ActivityTextViewerState extends State<_ActivityTextViewer> {
   bool _raw = false;
+  bool _sharing = false;
+
+  Future<void> _share() async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
+    try {
+      await widget.onShare!(widget.output!);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: StudioError(fileOpenErrorMessage(error))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final block = widget.block;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(block.label),
+      appBar: ResourceViewerAppBar(
+        context: context,
+        title: widget.title ?? block.label,
+        target: widget.documentPath,
+        resourceLabel: widget.title,
         actions: [
+          ...widget.actions,
           if (block.markdown)
             ActivityDetailAction(
               label: _raw ? 'Show formatted content' : 'Show raw content',
               icon: _raw ? Icons.article_outlined : Icons.code_rounded,
               onPressed: () => setState(() => _raw = !_raw),
             ),
+          if (widget.output?.path != null && widget.onShare != null)
+            ActivityDetailAction(
+              label: 'Share file',
+              icon: Icons.share_outlined,
+              busy: _sharing,
+              onPressed: _share,
+            ),
           if (widget.copyable && block.copyable && block.copyText.isNotEmpty)
             ToolDetailCopyButton(
-              label: 'Copy ${block.label}',
+              label: widget.copyLabel ?? 'Copy ${block.label}',
               text: block.copyText,
             ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: ActivityDetailSection(
-          block: _raw
-              ? ToolDetailBlock(
-                  label: block.label,
-                  text: block.copyText,
-                  format: ToolDetailFormat.source,
-                )
-              : block,
-          loadImage: widget.loadImage,
-          documentPath: widget.documentPath,
-          onOpenRemoteFile: widget.onOpenRemoteFile,
-          full: true,
-          showHeader: false,
-          copyable: false,
-        ),
+      body: Builder(
+        builder: (context) {
+          final body = SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!_raw && widget.formattedHeader != null)
+                  widget.formattedHeader!,
+                ActivityDetailsCard(
+                  children: [
+                    ActivityDetailSection(
+                      block: _raw
+                          ? ToolDetailBlock(
+                              label: block.label,
+                              text: block.copyText,
+                              format: ToolDetailFormat.source,
+                            )
+                          : block,
+                      loadImage: widget.loadImage,
+                      documentPath: widget.documentPath,
+                      onOpenRemoteFile: widget.onOpenRemoteFile,
+                      full: true,
+                      showHeader: false,
+                      copyable: false,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+          return widget.bodyBuilder?.call(context, body) ?? body;
+        },
       ),
     );
   }

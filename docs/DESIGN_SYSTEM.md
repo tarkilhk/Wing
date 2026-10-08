@@ -607,6 +607,21 @@ distinct errors and result qualifications (partial output, iteration limits,
 schema failures) with the expanded result, including when no output was supplied.
 A separate full-screen or modal viewer must retain its own necessary context.
 
+Skill reads use the skill's supplied name and purpose as their compact document
+card. The name stays on one line with end ellipsis; tapping it reveals the actual
+source path when supplied. One header owns eye, eligible share and exact-content
+copy. The eye opens received instructions, not an invented file or a new read.
+Keep full instructions in that Markdown viewer, with raw/formatted switching
+inside it. Supplied tags, author, version and license are quiet viewer context;
+omit missing fields and technical readiness bookkeeping. If no description was
+supplied, use a bounded excerpt of the actual instructions. Setup problems and
+unchanged/binary receipts retain their explicit states. Historical reads do not
+gain editing controls or an invented active state.
+Activity and Hermes administration skill reads use the same document viewer
+component and declaration selection. Administration retains its captured profile,
+read recovery and eligible edit/archive/uninstall actions; those controls do not
+appear on historical activity receipts. Do not build a second skill document UI.
+
 ### Activity actions and viewers
 
 Use one icon vocabulary: **eye** opens a fuller viewer or useful resource,

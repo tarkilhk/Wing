@@ -54,6 +54,12 @@ stacks at narrow widths or enlarged text. Tool details combine
 separate enablement/setup/platform facts with the owning setup route. Skill library,
 Discover skills and Agent plugins remain distinct secondary destinations in the
 Browse and manage skills menu.
+Installed skill details reuse the same `SkillDocumentViewer` and received-document
+selection as Activity skill reads: formatted instructions, quiet declaration
+metadata, exact raw mode and exact-content copy. The administration session
+retains profile scope, refresh/recovery and eligible icon-only edit, archive or
+uninstall actions. Viewing does not issue edits. A content-only receipt does not
+invent a source path or file-sharing capability.
 Provider inventories use compact status/source/expiry rows and an explicit Add
 service key catalog. Account details offer renewal, sign-in, status checks and
 removal according to the observed credential source. Memory leads with retained entries and a

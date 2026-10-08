@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'skill_document.dart';
+
 import '../models/chat_output.dart';
 import '../services/web_preview.dart' show externalWebLink;
 
@@ -27,6 +29,13 @@ enum ToolActivityLayout { sections, file, search }
 enum ToolReceiptState { completed, warning, error }
 
 enum ToolDetailFormat { prose, source, diff }
+
+/// Tool selection binds the received document to its exact primary receipt block.
+final class SkillActivityDocument {
+  const SkillActivityDocument({required this.document, required this.content});
+  final SkillDocument document;
+  final ToolDetailBlock content;
+}
 
 /// A section of an observed request or receipt, never an inferred tool effect.
 final class ToolDetailBlock {
@@ -84,6 +93,7 @@ final class ToolActivityDetails {
       layout = p.layout,
       receiptState = p.state,
       receiptStatus = p.status,
+      skill = p.skill,
       intent = p.intent;
 
   final List<ToolDetailBlock> request, response;
@@ -95,6 +105,7 @@ final class ToolActivityDetails {
   final ToolActivityLayout layout;
   final ToolReceiptState? receiptState;
   final String? receiptStatus, intent;
+  final SkillActivityDocument? skill;
 
   ChatOutput? resourceFor(String target) {
     final image = images.any((image) => image.target == target);
@@ -205,6 +216,7 @@ final class _ToolProjection {
   final metadata = <String>[], headerFacts = <String>[];
   final images = <({String label, String target})>[];
   String? resourceTarget, status, intent;
+  SkillActivityDocument? skill;
   ToolActivityLayout layout = ToolActivityLayout.sections;
   ToolReceiptState? state;
   bool nativeVision = false;

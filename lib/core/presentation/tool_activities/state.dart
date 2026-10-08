@@ -100,22 +100,49 @@ void _skillView(_ToolProjection p) {
     // The main skill's YAML declaration is catalog metadata, not its prose.
     // Keep the exact received file in raw viewing/copying.
     final mainSkill = file == null || file.split('/').last == 'SKILL.md';
-    final display = mainSkill && content is String
-        ? content.replaceFirst(
-            RegExp(r'^---\r?\n.*?\r?\n---(?:\r?\n|$)', dotAll: true),
-            '',
+    final document =
+        mainSkill &&
+            content is String &&
+            data['success'] != false &&
+            _text(data['error']) == null
+        ? SkillDocument.fromReceived(
+            name: _text(data['name']) ?? p.intent ?? 'Skill',
+            content: content,
+            description: _text(data['description']),
+            tags: data['tags'] is List
+                ? (data['tags'] as List).whereType<String>().where(
+                    (tag) => tag.trim().isNotEmpty,
+                  )
+                : null,
+            metadata: data['metadata'] is Map ? data['metadata'] as Map : null,
+            sourcePath: _text(data['_source_path']),
           )
-        : content;
-    p.addResponse(
-      'Result',
-      display,
-      format: literal ? ToolDetailFormat.source : ToolDetailFormat.prose,
-      role: literal ? ToolDetailRole.code : ToolDetailRole.skill,
-      markdown: !literal,
-      copyable: true,
-      exactCopyText: content is String ? content : null,
-      target: _text(data['_source_path']),
-    );
+        : null;
+    if (document != null) {
+      final block = ToolDetailBlock(
+        label: 'Result',
+        text: document.formattedContent,
+        markdown: true,
+        role: ToolDetailRole.skill,
+        copyable: true,
+        exactCopyText: content as String,
+        resourceTarget: document.sourcePath,
+        showEmpty: true,
+      );
+      p.response.add(block);
+      p.skill = SkillActivityDocument(document: document, content: block);
+    } else {
+      p.addResponse(
+        'Result',
+        content,
+        format: literal ? ToolDetailFormat.source : ToolDetailFormat.prose,
+        role: literal ? ToolDetailRole.code : ToolDetailRole.skill,
+        markdown: !literal,
+        copyable: true,
+        exactCopyText: content is String ? content : null,
+        target: _text(data['_source_path']),
+      );
+    }
   }
   for (final key in ['setup_note', 'gateway_setup_hint', 'deps_note']) {
     p.warning(data[key], label: 'Setup');

@@ -380,6 +380,26 @@ void main() {
             ],
           ),
           'saved-agents': ProfileSavedAgents(agents: saved),
+          'skill': ToolActivityDetailsView(
+            call: ToolCallPresentation.live(
+              GatewayToolActivity.fromGatewayEvent('tool.complete', {
+                'tool_id': 'skill',
+                'name': 'skill_view',
+                'args': {'name': 'inspect-build'},
+                'result': {
+                  'success': true,
+                  'name': 'inspect-build',
+                  'description':
+                      'Inspect build output and find the first actionable error.',
+                  'tags': ['build', 'review'],
+                  '_source_path': '/workspace/skills/inspect-build/SKILL.md',
+                  'content':
+                      '---\nname: inspect-build\nversion: 1.0\nauthor: Example\nlicense: MIT\n---\n# Inspect build\n\n## When to use\nRead the actual build error before changing code.\n\n## Workflow\n1. Find the first failure.\n2. Check its source.\n3. Verify the fix.\n',
+                },
+              })!,
+            ),
+            onShareResource: (_) async {},
+          ),
           'dispatched-agents': ProfileSavedAgents(
             agents: SavedActivity(
               TranscriptTimeline.project(
@@ -699,6 +719,32 @@ void main() {
           }
           if (entry.key == 'agents') {
             Navigator.of(tester.element(find.text('Live output'))).pop();
+            await tester.pumpAndSettle();
+          }
+          if (entry.key == 'skill') {
+            await tester.tap(find.byTooltip('Open skill instructions'));
+            await tester.pumpAndSettle();
+            await tester.settleMarkdown();
+            expect(find.text('Inspect build'), findsOneWidget);
+            expect(find.text('License'), findsOneWidget);
+            expect(find.text('MIT'), findsOneWidget);
+            expect(tester.takeException(), isNull);
+            if (_capture) {
+              await tester.runAsync(() async {
+                final render =
+                    boundary.currentContext!.findRenderObject()!
+                        as RenderRepaintBoundary;
+                final picture = await render.toImage();
+                final bytes = await picture.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                await File(
+                  'build/activity-family/skill-viewer-${brightness.name}-${scale.toInt()}.png',
+                ).writeAsBytes(bytes!.buffer.asUint8List());
+                picture.dispose();
+              });
+            }
+            Navigator.of(tester.element(find.text('Inspect build'))).pop();
             await tester.pumpAndSettle();
           }
           await tester.pumpWidget(const SizedBox.shrink());
