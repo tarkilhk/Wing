@@ -88,7 +88,7 @@ class ProfileToolCall extends StatelessWidget {
       _ => colors.muted,
     };
     return CompactActivityRow(
-      icon: iconFor(call.name),
+      icon: Icon(iconFor(call.name)),
       lines: [
         Text(
           call.title,

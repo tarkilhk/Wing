@@ -161,6 +161,7 @@ Verified native reasoning contract: upstream `aa74e184ea779994af642ab4f888e10a95
 | Verbose hint, session ID and event sequence | Transport/presentation context; no additional main-card field | No operational user action; sequence is not an insight count |
 | Saved string reasoning and typed readable summary/text parts | Reasoning at the saved assistant message position | Ignore opaque/encrypted parts and signatures; absent readable text stays absent |
 | Expand | Shared compact Reasoning/Thinking row with the full received body | No extra panel or footer; empty rows omitted |
+| Reasoning glyph | Shared circuit-brain from the reasoning selector distinguishes reasoning from Hindsight memory's outlined head | Same glyph for active, sealed and saved reasoning; the title carries its phase |
 | Copy | Icon-only exact received reasoning text | One scoped payload copy; no derived summary copy |
 | Eye | Icon-only existing fuller text viewer | Actual layout overflow only; short prose has no eye |
 | Timing, counts, wrap and share | No native reasoning duration/insight count/resource | Omitted; prose reflows and has no literal wrapping toggle |

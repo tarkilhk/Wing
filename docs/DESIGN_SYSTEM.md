@@ -538,7 +538,10 @@ without hiding reachable controls. See [the activity contract](TOOL_ACTIVITY.md)
 
 Activity's Timeline tab contains native reasoning between tool calls, using the
 same compact two-line row geometry and shared detail frame. Reasoning has one
-line of supplied text beneath its title. Active streamed text uses Thinking;
+line of supplied text beneath its title. The shared circuit-brain glyph from the
+reasoning selector identifies both live and saved reasoning, distinct from
+Hindsight's head-shaped glyph. The shared row keeps every leading glyph at 16 dp.
+Active streamed text uses Thinking;
 sealed or saved text uses Reasoning. Expand to read the received Markdown, with
 exact-copy and actual-overflow viewer icons. Native event source and any
 separately supplied reasoning preview remain in Raw details. Omit invented

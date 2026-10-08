@@ -16,6 +16,7 @@ import '../theme/wing_theme.dart';
 import 'profile_transcript_disclosure.dart';
 import 'compact_activity_row.dart';
 import 'activity_time.dart';
+import 'chat_model_controls.dart';
 
 /// Native event order is supplied by the owners; rendering never sorts it.
 class ProfileExecutionActivity extends StatelessWidget {
@@ -252,7 +253,7 @@ class ProfileReasoningDisclosure extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CompactActivityRow(
     key: const ValueKey('reasoning-disclosure'),
-    icon: running ? Icons.pending_outlined : Icons.psychology_outlined,
+    icon: CircuitBrainIcon(color: WingTokens.of(context).muted),
     initiallyExpanded: initiallyExpanded,
     time: const ActivityTime(),
     lines: [

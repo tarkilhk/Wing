@@ -795,7 +795,11 @@ void main() {
             matching: find.byType(CompactActivityRow),
           ),
         );
-        expect(row.icon, entry.value, reason: entry.key);
+        expect(
+          tester.widget<Icon>(find.byWidget(row.icon)).icon,
+          entry.value,
+          reason: entry.key,
+        );
       }
       expect(tester.takeException(), isNull);
     },

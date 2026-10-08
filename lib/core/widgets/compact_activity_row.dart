@@ -17,7 +17,7 @@ class CompactActivityRow extends StatelessWidget {
     this.onExpansionChanged,
   });
 
-  final IconData icon;
+  final Widget icon;
   final List<Widget> lines;
   final ActivityTime time;
   final List<Widget> details;
@@ -29,7 +29,13 @@ class CompactActivityRow extends StatelessWidget {
     final header = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: WingTokens.of(context).muted),
+        SizedBox.square(
+          dimension: 16,
+          child: IconTheme(
+            data: IconThemeData(size: 16, color: WingTokens.of(context).muted),
+            child: icon,
+          ),
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Column(

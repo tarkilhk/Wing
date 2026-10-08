@@ -26,7 +26,7 @@ class ProfileSavedAgents extends StatelessWidget {
     final repeatedError =
         hasError && agent.summary?.trim() == agent.error?.trim();
     return CompactActivityRow(
-      icon: Icons.account_tree_outlined,
+      icon: const Icon(Icons.account_tree_outlined),
       lines: [
         Text(
           agentTaskHeading(agent.goal),

@@ -334,7 +334,7 @@ class _ProcessTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CompactActivityRow(
     key: ValueKey(('process', process.id)),
-    icon: Icons.terminal_rounded,
+    icon: const Icon(Icons.terminal_rounded),
     lines: [
       Text(process.command, style: WingTokens.of(context).typography.mono),
       Text(

@@ -24,6 +24,7 @@ import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
+import 'package:wing/core/widgets/chat_model_controls.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_workspace_controller_test.dart' show Host;
@@ -1321,9 +1322,9 @@ void main() {
         });
         owner.observeTool('tool.complete', {
           'tool_id': 'read',
-          'name': 'read_file',
-          'args': {'path': '/workspace/reports/contract.md'},
-          'result': 'Source received',
+          'name': 'hindsight_retain',
+          'args': {'content': 'Remember the verified native API.'},
+          'result': 'Memory retained',
           'duration_s': .195,
         });
         owner.observeReasoning('reasoning.available', {
@@ -1371,6 +1372,19 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(ProfileReasoningDisclosure), findsNWidgets(3));
         expect(find.byType(ProfileToolCall), findsNWidgets(2));
+        final memoryIcon = ProfileToolCall.iconFor('hindsight_retain');
+        expect(find.byIcon(memoryIcon), findsOneWidget);
+        for (var i = 0; i < 3; i++) {
+          final row = find.byType(ProfileReasoningDisclosure).at(i);
+          expect(
+            find.descendant(of: row, matching: find.byType(CircuitBrainIcon)),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: row, matching: find.byIcon(memoryIcon)),
+            findsNothing,
+          );
+        }
         expect(find.text('—'), findsNothing);
         expect(tester.takeException(), isNull);
         Future<void> capture(String state) async {
