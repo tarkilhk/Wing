@@ -945,6 +945,52 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     }
   }
 
+  testWidgets('scrolling activity content preserves chat reading position', (
+    tester,
+  ) async {
+    chat.reading.installSavedHistory([
+      ...List.generate(20, row),
+      {
+        'id': 100,
+        'role': 'tool',
+        'tool_name': 'Scrollable output',
+        'content': List.generate(100, (i) => 'Output line $i').join('\n'),
+      },
+    ]);
+    chat.reading.installSnapshot(
+      TranscriptReadingSnapshot(
+        messages: chat.reading.messages,
+        historySessionId: chat.reading.historySessionId,
+      ),
+    );
+    await show(tester);
+    await toggleInPlace(tester, find.text('Activity'));
+    final header = find.text('Scrollable output');
+    await tester.ensureVisible(header);
+    await tester.pumpAndSettle();
+    await toggleInPlace(tester, header);
+    final output = chat.reading.messages.last['content'] as String;
+    final pane = find
+        .ancestor(
+          of: find.text(output, findRichText: true),
+          matching: find.byKey(const ValueKey('activity-content-scroll')),
+        )
+        .first;
+    await tester.ensureVisible(pane);
+    await tester.pumpAndSettle();
+    final chatOffset = chat.reading.historyScrollOffset;
+    final headerTop = tester.getTopLeft(header).dy;
+    await tester.drag(pane, const Offset(0, -100));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<SingleChildScrollView>(pane).controller!.offset,
+      greaterThan(0),
+    );
+    expect(chat.reading.historyScrollOffset, closeTo(chatOffset, 1));
+    expect(tester.getTopLeft(header).dy, closeTo(headerTop, 1));
+    expect(find.text('Preview'), findsNothing);
+  });
+
   testWidgets('expanding long tool output keeps its header in place', (
     tester,
   ) async {
@@ -972,11 +1018,8 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     await capture?.call(tester, 'tool-before-expansion');
     await toggleInPlace(tester, header);
     final output = chat.reading.messages.last['content'] as String;
-    expect(
-      find.text(output.split('\n').take(12).join('\n'), findRichText: true),
-      findsOneWidget,
-    );
-    expect(find.text(output, findRichText: true), findsNothing);
+    expect(find.text(output, findRichText: true), findsOneWidget);
+    expect(find.text('Preview'), findsNothing);
     await capture?.call(tester, 'tool-after-expansion');
     await toggleInPlace(tester, header);
     await toggleInPlace(tester, header);

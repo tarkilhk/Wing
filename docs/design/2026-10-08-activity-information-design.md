@@ -103,17 +103,18 @@ These are Wing design choices informed by the findings and the owner's requests.
   choice.
 - Render Markdown for authored explanations and analyses where its headings,
   lists, emphasis, links or tables help reading. Preserve code fences. Render
-  file contents, replacement strings, patches and console output literally;
-  Markdown-looking characters in those values are data.
+  Markdown file receipts formatted; other file contents, replacement strings,
+  patches and console output literally. Markdown-looking characters in those values are data.
 - Give each expanded activity one grouped surface aligned with its leading
   icon. Use short, specific section labels for the requested operation and the
   reported result. Keep paths, timing, counts and status subordinate. Separate
   sections with thin rules or compact spacing instead of more nested cards.
 - Show enough content to understand the request and response. Offer icon-only
-  expansion, wrapping and full-view actions for lengthy text, plus secondary
-  raw details. Local previews must be identified as previews. Expanding them
-  reveals already returned content; it must not suggest that omitted backend
-  content has been fetched.
+  wrapping and full-view actions for lengthy text, plus secondary raw details.
+  The owner's subsequent refinement uses one 160 dp scrollable region for all
+  received activity text, including Markdown, with no separate Preview or
+  expansion footer. Server truncation remains explicit; scrolling does not
+  imply that omitted backend content has been fetched.
 - Keep copy and other icon-represented actions icon-only everywhere. Provide
   precise tooltips and accessible names, reachable targets and temporary
   feedback. Wrap or reposition toolbars when space is tight. Follow the charter's
@@ -125,14 +126,14 @@ These are Wing design choices informed by the findings and the owner's requests.
   convention, including backend-confirmed success; errors/warnings and supplied
   diff changes carry their explicit accents.
 - Preserve exact supplied values for selection and copying, regardless of
-  display wrapping or preview limits. Requested changes and reported changes
+  display wrapping or viewport limits. Requested changes and reported changes
   are separate facts. Show totals, exit codes, verification, diffs and analysis
   only when supplied by the backend; tool completion alone establishes none
   of them. Treat a native-vision image receipt as an image loaded for the agent,
   rather than inventing an analysis result.
 - Inspect rendered phone layouts in both themes at ordinary size and at
   320 dp/200% text. Check long paths, Markdown structure, dense toolbars, literal
-  output, errors and preview expansion. Keep horizontal scrolling inside the
+  output, errors and independent content scrolling. Keep horizontal scrolling inside the
   code or table region that needs it; prose and its surrounding controls reflow.
 
 ## Scope and limits

@@ -1,8 +1,9 @@
 import '../models/chat_output.dart';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../presentation/tool_call_presentation.dart';
+import '../presentation/tool_activity_details.dart';
 import '../theme/wing_theme.dart';
 import 'activity_time.dart';
 import 'compact_activity_row.dart';
@@ -128,34 +129,42 @@ class ProfileToolCall extends StatelessWidget {
           onShareResource: onShareResource,
         ),
         if (call.labels.length > 1)
-          for (final label in call.labels.skip(1))
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: SelectableText(
-                '${label.text}${label.preview.isEmpty ? '' : '\n${label.preview}'}',
-              ),
-            ),
+          ActivityDetailsCard(
+            children: [
+              for (final label in call.labels.skip(1))
+                ActivityDetailSection(
+                  block: ToolDetailBlock(
+                    label: label.text,
+                    text: label.preview,
+                  ),
+                ),
+            ],
+          ),
         ProfileTranscriptDisclosure(
           label: 'Raw details',
           icon: Icons.data_object,
           maintainState: false,
           children: [
-            _RawToolValue(label: 'Tool', value: call.name),
-            if (call.callId case final id?)
-              _RawToolValue(label: 'Call ID', value: id),
-            if (call.context case final context?)
-              _RawToolValue(label: 'Context', value: context),
-            if (call.summary case final summary?)
-              _RawToolValue(label: 'Summary', value: summary),
-            if (call.durationSeconds case final seconds?)
-              _RawToolValue(
-                label: 'Duration (seconds)',
-                value: seconds.toString(),
-              ),
-            if (call.arguments case final args?)
-              _RawToolValue(label: 'Inputs', value: args),
-            if (call.result case final result?)
-              _RawToolValue(label: 'Output', value: result),
+            ActivityDetailsCard(
+              children: [
+                _RawToolValue(label: 'Tool', value: call.name),
+                if (call.callId case final id?)
+                  _RawToolValue(label: 'Call ID', value: id),
+                if (call.context case final context?)
+                  _RawToolValue(label: 'Context', value: context),
+                if (call.summary case final summary?)
+                  _RawToolValue(label: 'Summary', value: summary),
+                if (call.durationSeconds case final seconds?)
+                  _RawToolValue(
+                    label: 'Duration (seconds)',
+                    value: seconds.toString(),
+                  ),
+                if (call.arguments case final args?)
+                  _RawToolValue(label: 'Inputs', value: args),
+                if (call.result case final result?)
+                  _RawToolValue(label: 'Output', value: result),
+              ],
+            ),
           ],
         ),
       ],
@@ -169,29 +178,11 @@ class _RawToolValue extends StatelessWidget {
   final String value;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Row(
-        children: [
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 12))),
-          IconButton(
-            tooltip: 'Copy $label',
-            iconSize: 16,
-            onPressed: () => Clipboard.setData(ClipboardData(text: value)),
-            icon: const Icon(Icons.copy_outlined),
-          ),
-        ],
-      ),
-      SelectableText(
-        value,
-        style: const TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 12,
-          height: 1.4,
-        ),
-      ),
-      const SizedBox(height: 8),
-    ],
+  Widget build(BuildContext context) => ActivityDetailSection(
+    block: ToolDetailBlock(
+      label: label,
+      text: value,
+      format: ToolDetailFormat.source,
+    ),
   );
 }

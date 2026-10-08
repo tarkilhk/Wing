@@ -462,17 +462,20 @@ shows the exact requested image/question and backend analysis or native image
 receipt. Search matches and other structured tool records use readable fields.
 Both live and saved calls use the same pure `ToolActivityDetails` projection.
 
-Literal source, output and diffs use a vertically scrollable inline viewport
-of up to 160 dp, retaining all received text. Explanatory prose previews remain
-bounded to 12 lines/1,600 characters. Applicable icon controls expand the
-already received prose, open a full read-only view, wrap/scroll literal text, copy
-exact originals or open supplied HTTP sources. Markdown is limited to explanatory
-prose and Markdown file receipts; code files, logs and diffs remain literal. These display actions do not rerun a
-tool or request omitted file lines. Raw details retain exact input/output values.
+Every activity text body uses the same vertically scrollable inline viewport
+of up to 160 dp, retaining all received text. There is no 12-line/character
+preview truncation, Preview row, Full text row or content-expansion control.
+Copy and the existing full-view icon remain in the section header. The full view
+shows the same received content in a page scroll; it never reruns the activity.
+Markdown is used for explanatory prose and Markdown file receipts; code files,
+logs and diffs remain literal. Wrapping and horizontal source/table scrolling
+stay within their own region. Server truncation and partial-file observations
+remain distinct from local scrolling. Raw details retain exact input/output
+values and use the same scrolling component, as do additional backend labels.
 The existing profile-scoped image loader owns image access and original viewing.
 
 Read-file receipts have one compact path/range header with eye, copy and share
-icons. Markdown receipts render inline in a viewport of up to 240 dp, removing
+icons. Markdown receipts render inline in the shared 160 dp viewport, removing
 only the stock numbered-line prefixes for display; copy retains the original
 receipt. Other files use the literal viewport. There is no separate Read options
 or content toolbar. Raw/formatted switching lives only in the full Markdown
@@ -491,7 +494,7 @@ analysis. Exit codes and server verification are shown only when supplied.
 Behavioral guards in `test/tool_call_presentation_test.dart` protect request/result
 fidelity, empty replacements/files, failed patches, reported limits, structured
 matches, native vision and absent exit codes. `test/profile_tool_call_test.dart`
-protects icon-only exact copy, leading-icon alignment, Markdown expansion/full
+protects icon-only exact copy, leading-icon alignment, Markdown scrolling/full
 view and rendered 390 dp/320 dp doubled-text cards in both themes. Runtime payload
 semantics, clipboard values and rendered reachability cannot be established by
 source linting alone. Existing compact-header, disclosure and live/history tests
@@ -589,6 +592,9 @@ retain confirmations, admission, rejection feedback and last-received data.
 expansion through the shared frame, including 100%/200%/300% text. They target
 the outer reasoning ListTile separately from its repeated section label, wait
 for background Markdown completion before asserting prose, and inspect the
-12-line rich-text output preview instead of assuming the full receipt is inline.
+full received rich-text output inside a bounded scrolling pane.
+`test/activity_family_test.dart` also guards source, diff, plain prose and
+Markdown together: identical viewport caps, no Preview rows, independent scrolling,
+exact copy, retained full view and four-sided framing across all activity families.
 These are rendered and asynchronous properties requiring widget regressions;
 source linting cannot establish tap targets, scroll positions or worker completion.

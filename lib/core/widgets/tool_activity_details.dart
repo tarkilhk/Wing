@@ -516,8 +516,6 @@ class _ReadFileContent extends StatelessWidget {
           documentPath: target,
           onOpenRemoteFile: onOpen,
           showHeader: target == null,
-          scrollInline: true,
-          maxInlineHeight: formatted ? 240 : 160,
         ),
       ],
     );
@@ -561,8 +559,6 @@ class ActivityDetailSection extends StatefulWidget {
     this.actions = const [],
     this.initiallyCollapsed = false,
     this.showHeader = true,
-    this.scrollInline = false,
-    this.maxInlineHeight = 160,
     this.documentPath,
     this.onOpenRemoteFile,
   });
@@ -573,8 +569,6 @@ class ActivityDetailSection extends StatefulWidget {
   final Future<Uint8List> Function(String)? loadImage;
   final bool full;
   final bool showHeader;
-  final bool scrollInline;
-  final double maxInlineHeight;
   final String? documentPath;
   final Future<void> Function(ChatOutput)? onOpenRemoteFile;
   @override
@@ -582,7 +576,6 @@ class ActivityDetailSection extends StatefulWidget {
 }
 
 class _ActivityDetailSectionState extends State<ActivityDetailSection> {
-  bool _expanded = false;
   bool _wrap = true;
   late bool _collapsed = widget.initiallyCollapsed;
   final _scroll = ScrollController();
@@ -598,16 +591,7 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
     final block = widget.block;
     final colors = WingTokens.of(context);
     final source = block.format != ToolDetailFormat.prose;
-    final scrollInline = !widget.full && (source || widget.scrollInline);
-    final lines = block.text.split('\n');
-    final excerpt = lines.take(12).join('\n');
-    final preview = excerpt.length > 1600
-        ? excerpt.substring(0, 1600)
-        : excerpt;
-    final shortened = !scrollInline && preview.length < block.text.length;
-    final text = widget.full || _expanded || scrollInline
-        ? block.text
-        : preview;
+    final text = block.text;
     final icon = switch (block.format) {
       ToolDetailFormat.diff => Icons.difference_outlined,
       ToolDetailFormat.source =>
@@ -625,7 +609,7 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
         'Empty text',
         style: TextStyle(fontSize: 12, color: colors.muted),
       );
-    } else if (block.markdown && (!shortened || widget.full || _expanded)) {
+    } else if (block.markdown) {
       body = MarkdownMessageContent(
         data: text,
         loadImage: widget.loadImage,
@@ -658,9 +642,9 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
               child: content,
             );
     }
-    if (scrollInline) {
+    if (!widget.full) {
       body = ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: widget.maxInlineHeight),
+        constraints: const BoxConstraints(maxHeight: 160),
         child: Scrollbar(
           controller: _scroll,
           thumbVisibility: true,
@@ -771,6 +755,8 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
                             child: ActivityDetailSection(
                               block: block,
                               loadImage: widget.loadImage,
+                              documentPath: widget.documentPath,
+                              onOpenRemoteFile: widget.onOpenRemoteFile,
                               full: true,
                             ),
                           ),
@@ -786,36 +772,6 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
             ),
           ),
         if (!_collapsed || widget.full) ActivityDetailContent(child: body),
-        if (!_collapsed && shortened && !widget.full)
-          Padding(
-            padding: _toolHorizontalInsets,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: _toolVerticalInsets,
-                    child: Text(
-                      _expanded ? 'Full text' : 'Preview',
-                      style: colors.typography.label.copyWith(
-                        color: colors.muted,
-                      ),
-                    ),
-                  ),
-                ),
-                IconButton(
-                  style: _toolActionStyle,
-                  tooltip: _expanded
-                      ? 'Collapse ${block.label}'
-                      : 'Expand ${block.label}',
-                  icon: Icon(
-                    _expanded ? Icons.unfold_less : Icons.unfold_more,
-                    size: 16,
-                  ),
-                  onPressed: () => setState(() => _expanded = !_expanded),
-                ),
-              ],
-            ),
-          ),
       ],
     );
   }

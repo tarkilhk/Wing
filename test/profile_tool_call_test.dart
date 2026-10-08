@@ -16,7 +16,6 @@ import 'helpers/pump_markdown_widget.dart';
 import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/models/transcript_message.dart';
 import 'package:wing/core/presentation/tool_call_presentation.dart';
-import 'package:wing/core/presentation/tool_activity_details.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/chat_inline_image.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
@@ -166,7 +165,7 @@ void main() {
         final viewport = find
             .byKey(const ValueKey('activity-content-scroll'))
             .first;
-        expect(tester.getSize(viewport).height, lessThanOrEqualTo(240));
+        expect(tester.getSize(viewport).height, lessThanOrEqualTo(160));
         final offset = outer.offset;
         await tester.drag(viewport, const Offset(0, -120));
         await tester.pumpAndSettle();
@@ -518,16 +517,14 @@ void main() {
               tester.getTopLeft(body).dy,
               tester.getTopLeft(contentSurface).dy + 8,
             );
-            final visibleBody = block.format == ToolDetailFormat.prose
-                ? body
-                : find
-                      .ancestor(
-                        of: body,
-                        matching: find.byKey(
-                          const ValueKey('activity-content-scroll'),
-                        ),
-                      )
-                      .first;
+            final visibleBody = find
+                .ancestor(
+                  of: body,
+                  matching: find.byKey(
+                    const ValueKey('activity-content-scroll'),
+                  ),
+                )
+                .first;
             expect(
               tester.getBottomLeft(visibleBody).dy,
               tester.getBottomLeft(contentSurface).dy - 8,
@@ -598,7 +595,7 @@ void main() {
     }
   }
 
-  testWidgets('long prose expands as Markdown and copies the original', (
+  testWidgets('long prose scrolls as Markdown without a Preview row', (
     tester,
   ) async {
     final text =
@@ -621,14 +618,33 @@ void main() {
         ),
       ),
     );
-    expect(find.text('Preview'), findsOneWidget);
-    expect(find.byType(MarkdownMessageContent), findsNothing);
-    await tester.ensureVisible(find.byTooltip('Expand Text'));
-    await tester.tap(find.byTooltip('Expand Text'));
-    await tester.pumpAndSettle();
     await tester.settleMarkdown();
+    expect(find.text('Preview'), findsNothing);
+    expect(find.text('Full text'), findsNothing);
+    expect(find.byTooltip('Expand Text'), findsNothing);
     expect(find.byType(MarkdownMessageContent), findsOneWidget);
-    expect(find.text('Full text'), findsOneWidget);
+    expect(
+      tester
+          .widget<MarkdownMessageContent>(find.byType(MarkdownMessageContent))
+          .data,
+      text,
+    );
+    final region = find.descendant(
+      of: find
+          .ancestor(
+            of: find.byType(MarkdownMessageContent),
+            matching: find.byType(ActivityDetailSection),
+          )
+          .first,
+      matching: find.byKey(const ValueKey('activity-content-scroll')),
+    );
+    expect(tester.getSize(region).height, lessThanOrEqualTo(160));
+    await tester.drag(region, const Offset(0, -100));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<SingleChildScrollView>(region).controller!.offset,
+      greaterThan(0),
+    );
     String? copied;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,

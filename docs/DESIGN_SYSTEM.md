@@ -533,8 +533,8 @@ Apply these rules to information-rich UI throughout Wing:
   descriptive labels, weight and spacing before adding font families. Keep
   metadata quieter than content; use tabular figures for comparable timings.
 - Render meaningful Markdown in explanations and analysis, retaining headings,
-  lists, tables, links and code fences. Source files, replacement text, patches
-  and logs remain literal, including Markdown-looking characters. Copy always
+  lists, tables, links and code fences. Markdown file receipts also render formatted; other source files, replacement
+  text, patches and logs remain literal, including Markdown-looking characters. Copy always
   preserves the supplied original rather than the formatted or shortened view.
 - Group related information on one surface. Expanded tool details start at the
   leading activity icon and use the available row width. Separate sections with
@@ -545,12 +545,14 @@ Apply these rules to information-rich UI throughout Wing:
   edits with Find/Replace and only backend-reported diffs, and vision questions
   with the actual image and receipt or returned analysis. Unknown tools retain
   readable request/result data and exact Raw details.
-- Bound literal source, logs and diffs in a vertically scrollable region of up
-  to 160 dp, inside the shared 8 dp framing. Wrapping and horizontal scrolling
-  remain local; do not let wrapped lines expand the activity to document height.
-  Other explanatory prose retains its bounded Preview/expansion controls.
-  Local scrolling exposes received data; server truncation stays explicit.
-  Do not shrink text to make a long line fit.
+- Every activity text body uses one vertically scrollable region of up to
+  160 dp, inside the shared 8 dp framing. Render all received content there,
+  including Markdown, without a separate Preview, Full text or expand/collapse
+  footer. Keep copy and the existing full-view icon in the section header.
+  File cards use their eye to open the full file viewer instead of a duplicate
+  fullscreen action. Wrapping and horizontal code/table scrolling stay local;
+  surrounding controls reflow. Do not shrink text to fit. Server-side truncation
+  and partial-file facts remain explicit; local scrolling never fetches missing data.
 - Actions represented by icons are icon-only, including every copy action.
   Provide precise accessible names/tooltips, temporary feedback and 48 dp
   targets, with the compact activity exceptions defined below. Reflow toolbars
@@ -577,7 +579,7 @@ accepted baseline for further work, not a set of independent tool designs.
 
 | Property | Accepted rule |
 | --- | --- |
-| Visible insets | 8 dp on all four sides, matching Read options, for resource/section headers, content, images, metadata, preview rows and footers |
+| Visible insets | 8 dp on all four sides, matching Read options, for resource/section headers, content, images, metadata and footers |
 | Compact toolbars | 32 dp high at ordinary text size, plus the 1 dp section separator; grow for wrapped/enlarged text |
 | Detail icon controls | 32 × 32 dp targets with 16 dp glyphs and 8 dp icon insets; this is the scoped exception to Studio's general 48 dp control rule |
 | Inset ownership | Labels own their 8 dp vertical framing; buttons own their icon inset. Add neither a second vertical toolbar inset nor an extra trailing inset after the final icon |
@@ -586,7 +588,8 @@ accepted baseline for further work, not a set of independent tool designs.
 | Typography | Shared label style for section headings and quiet facts, Roboto body style for explanations, monospace for code, paths, source and console output |
 | Ordinary completion | Completed with the same muted color and outlined check icon, including calls with backend-confirmed success |
 | Exceptions and result context | Explicit errors/warnings keep semantic accents; reported diff lines keep +/- markers and their colors. Supplied exit codes and native image receipts remain quiet context beside the status |
-| Actions | Icon-only preview, share, copy, wrapping, expansion and full view where applicable, with precise tooltips/accessibility names and preserved pending/retry behavior |
+| Actions | Icon-only resource eye, share, copy, wrapping and full view where applicable; no secondary text-preview expansion row. Preserve precise tooltips/accessibility names and pending/retry behavior |
+| Text viewport | One shared maximum of 160 dp for source, prose, Markdown, diffs, results, requests and Raw details across every activity; all received content is available by scrolling; short content uses its natural height |
 
 Shared framing belongs to `ActivityDetailsCard`, `ActivityDetailContent`, `ActivityDetailSection`,
 `ActivityDetailStatus` and `ActivityDetailAction` in
@@ -616,8 +619,8 @@ row or a second content toolbar. At enlarged text, wrap options and move resourc
 actions below the full-width path. Do not squeeze paths or reduce targets to force the ordinary
 single-row arrangement.
 
-Markdown file receipts render formatted inside a vertically scrollable region
-of up to 240 dp; other file receipts stay literal in the 160 dp source region.
+Markdown file receipts render formatted inside the same 160 dp scrolling region
+as every other activity text body; other file receipts stay literal.
 Remove only stock receipt line-number prefixes for Markdown display, retaining
 the exact numbered receipt for activity copy. Keep supplied partial/range facts
 visible; formatting does not mean the whole file was read. No mode switch, raw
@@ -644,8 +647,9 @@ state/control rows preserve the owner's action eligibility and confirmations.
 Unavailable or last-received output stays qualified; an exited process without
 an exit code never becomes a claimed successful command. Process command headers
 may be bounded, but their detail/copy source and the received output tail retain
-the exact supplied text. Long bodies use local previews rather than discarding
-received data.
+the exact supplied text. Long bodies scroll within the shared viewport without
+truncating received data or adding a Preview row. This includes Tasks, Agents, reasoning, goals, loops,
+heartbeats, processes, generic tools, extra backend labels and Raw details.
 
 Structured file-search matches group by supplied path with supplied line labels;
 copy preserves each exact excerpt. File checks distinguish write verification,

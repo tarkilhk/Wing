@@ -13,6 +13,7 @@ import 'package:wing/core/models/gateway_todo.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
 import 'package:wing/core/presentation/saved_activity.dart';
 import 'package:wing/core/presentation/tool_call_presentation.dart';
+import 'package:wing/core/presentation/tool_activity_details.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/profile_gateway.dart';
@@ -26,6 +27,7 @@ import 'package:wing/core/widgets/profile_saved_agents.dart';
 import 'package:wing/core/widgets/profile_subagent_panel.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/widgets/tool_activity_details.dart';
+import 'package:wing/core/widgets/markdown_message_content.dart';
 
 import 'helpers/pump_markdown_widget.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
@@ -158,6 +160,141 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets('all activity text scrolls ${brightness.name} $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        String? copied;
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copied = (call.arguments as Map)['text'] as String;
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+        for (final (format, markdown) in [
+          (ToolDetailFormat.prose, false),
+          (ToolDetailFormat.prose, true),
+          (ToolDetailFormat.source, false),
+          (ToolDetailFormat.diff, false),
+        ]) {
+          copied = null;
+          final text =
+              '# Supplied details\n\n${List.generate(50, (i) => '- Record $i: ${List.filled(8, 'long supplied text ').join()}').join('\n')}\n\nLast received line';
+          final block = ToolDetailBlock(
+            label: 'Content',
+            text: text,
+            format: format,
+            markdown: markdown,
+          );
+          final outer = ScrollController();
+          final boundary = GlobalKey();
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: boundary,
+              child: MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: Scaffold(
+                  body: SingleChildScrollView(
+                    controller: outer,
+                    child: ActivityDetailsCard(
+                      children: [
+                        ActivityDetailSection(block: block),
+                        const ActivityDetailStatus(label: 'Completed'),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.settleMarkdown();
+          await tester.pumpAndSettle();
+          if (_capture) {
+            await tester.runAsync(() async {
+              final rendered =
+                  await (boundary.currentContext!.findRenderObject()!
+                          as RenderRepaintBoundary)
+                      .toImage();
+              final data = await rendered.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              final file = File(
+                'build/activity-family/scroll-${format.name}-$markdown-${brightness.name}-${scale.toInt()}.png',
+              );
+              await file.parent.create(recursive: true);
+              await file.writeAsBytes(data!.buffer.asUint8List());
+              rendered.dispose();
+            });
+          }
+          expect(find.text('Preview'), findsNothing);
+          expect(find.text('Full text'), findsNothing);
+          expect(find.byTooltip('Expand Content'), findsNothing);
+          final region = find.byKey(const ValueKey('activity-content-scroll'));
+          expect(tester.getSize(region).height, 160);
+          final inline = tester
+              .widget<SingleChildScrollView>(region)
+              .controller!;
+          final source = markdown
+              ? tester
+                    .widget<MarkdownMessageContent>(
+                      find.byType(MarkdownMessageContent),
+                    )
+                    .data
+              : tester
+                    .widget<SelectableText>(find.byType(SelectableText))
+                    .textSpan!
+                    .toPlainText();
+          expect(source, text);
+          await tester.drag(region, const Offset(0, -100));
+          await tester.pumpAndSettle();
+          expect(inline.offset, greaterThan(0));
+          expect(outer.offset, 0);
+          inline.jumpTo(inline.position.maxScrollExtent);
+          await tester.pump();
+          expect(inline.offset, inline.position.maxScrollExtent);
+          await tester.tap(find.byTooltip('Copy Content'));
+          await tester.pump();
+          expect(copied, text);
+          await tester.pump(const Duration(seconds: 2));
+          await tester.tap(find.byTooltip('Open Content'));
+          await tester.pumpAndSettle();
+          await tester.settleMarkdown();
+          final full = find.byWidgetPredicate(
+            (widget) => widget is ActivityDetailSection && widget.full,
+          );
+          expect(full, findsOneWidget);
+          expect(tester.widget<ActivityDetailSection>(full).block.text, text);
+          expect(
+            find.descendant(
+              of: full,
+              matching: find.byKey(const ValueKey('activity-content-scroll')),
+            ),
+            findsNothing,
+          );
+          expect(find.byTooltip('Open Content'), findsNothing);
+          await tester.pumpWidget(const SizedBox.shrink());
+          outer.dispose();
+          expect(tester.takeException(), isNull);
+        }
+      });
       testWidgets('complete activity family ${brightness.name} $scale', (
         tester,
       ) async {
@@ -342,6 +479,8 @@ void main() {
             await tester.pumpAndSettle();
           }
           await tester.settleMarkdown();
+          expect(find.text('Preview'), findsNothing, reason: entry.key);
+          expect(find.text('Full text'), findsNothing, reason: entry.key);
           expect(
             find.byType(ActivityDetailsCard),
             findsWidgets,
@@ -396,6 +535,16 @@ void main() {
               matching: find.byType(ActivityDetailContent),
             );
             for (final content in contents.evaluate()) {
+              final pane = find.descendant(
+                of: find.byWidget(content.widget),
+                matching: find.byKey(const ValueKey('activity-content-scroll')),
+              );
+              expect(pane, findsOneWidget, reason: entry.key);
+              expect(
+                tester.getSize(pane).height,
+                lessThanOrEqualTo(160),
+                reason: entry.key,
+              );
               final colored = find
                   .descendant(
                     of: find.byWidget(content.widget),
